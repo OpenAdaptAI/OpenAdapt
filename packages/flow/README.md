@@ -339,17 +339,17 @@ below is hand-drawn):
 
 ```mermaid
 flowchart TD
-  n0("click at (214, 195)")
+  n0("click recorded visual target<br/><small>visual template + landmarks</small>")
   n1("type 'nurse.demo'")
-  n2("click at (214, 264)")
+  n2("click recorded visual target<br/><small>visual template + landmarks</small>")
   n3("type 'mockmed-demo-pass'")
-  n4("click 'Sign In'")
-  n5("click 'Open'")
-  n6("click 'New Encounter'")
-  n7("click 'Triage'")
-  n8("click at (344, 290)")
+  n4("click 'Sign In'<br/><small>visual template + landmarks</small>")
+  n5("click 'Open'<br/><small>visual template + landmarks</small>")
+  n6("click 'New Encounter'<br/><small>visual template + landmarks</small>")
+  n7("click 'Triage'<br/><small>visual template + landmarks</small>")
+  n8("click recorded visual target<br/><small>visual template + landmarks</small>")
   n9("type <note>")
-  n10("click 'Save Encounter'")
+  n10("click 'Save Encounter'<br/><small>visual template + landmarks</small>")
   n11{{"Success"}}
   n0 --> n1
   n1 --> n2
@@ -369,10 +369,12 @@ flowchart TD
 *Text summary (PyPI does not render Mermaid): the compiled MockMed triage
 bundle is eleven ordered steps, signing in, opening the patient, starting a new
 encounter, opening triage, typing the `<note>` parameter, and clicking Save
-Encounter, ending in a `Success` postcondition node (`n11`). The
-`irreversible` and `halt` style classes are the ones `visualize` reserves for
-write-shaped steps and halt points. The `--format html` output renders the same
-graph with per-step resolution-ladder and gate detail.*
+Encounter, ending in a `Success` postcondition node (`n11`). A recorder may
+retain the demonstration's click point as diagnostic evidence, but the graph
+deliberately names the compiled target by the evidence used to re-find it:
+DOM/accessibility where available, otherwise visual template, OCR, and nearby
+landmarks. The `--format html` output renders the same graph with each rung,
+identity gate, effect contract, and halt point expanded.*
 
 ## Benchmark
 
