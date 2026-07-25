@@ -35,6 +35,7 @@ export type StepState =
   | "running"
   | "verified"
   | "halted"
+  | "attention"
   | "failed";
 
 export interface AuthStatus {
@@ -320,7 +321,7 @@ export interface RunStep {
 
 export interface RunReport {
   ok: boolean;
-  outcome: "success" | "halt" | "unknown";
+  outcome: ExecutionOutcome;
   pre_action_refusal: false;
   error?: string;
   run_id: string;
@@ -346,6 +347,19 @@ export interface ExecutionRefusal {
 
 export type ExecutionResponse = RunReport | ExecutionRefusal;
 
+export type PreciseExecutionOutcome =
+  | "VERIFIED"
+  | "COMPLETED_UNVERIFIED"
+  | "HALTED"
+  | "FAILED"
+  | "ROLLED_BACK";
+
+export type ExecutionOutcome =
+  | PreciseExecutionOutcome
+  | "success"
+  | "halt"
+  | "unknown";
+
 export interface BrowserRuntimeStatus {
   workflow_id: string;
   state: "checking" | "installing" | "ready" | "error";
@@ -354,7 +368,15 @@ export interface BrowserRuntimeStatus {
 
 export interface ReplayProgress {
   workflow_id: string;
-  state: "running" | "halted" | "done" | "unknown" | "error";
+  state:
+    | "running"
+    | "halted"
+    | "done"
+    | "completed_unverified"
+    | "failed"
+    | "rolled_back"
+    | "unknown"
+    | "error";
   backend: TargetBackend | "configured";
 }
 

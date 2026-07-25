@@ -14,6 +14,26 @@ from engine.db import IndexDB
 from engine.dispatch import EngineDispatcher, EngineServices
 
 
+def _precise_report(
+    outcome: str,
+    *,
+    production_eligible: bool,
+    execution_completed: bool,
+) -> dict:
+    return {
+        "success": outcome == "VERIFIED",
+        "execution_outcome": outcome,
+        "production_eligible": production_eligible,
+        "execution_completed": execution_completed,
+        "outcome_envelope": {
+            "version": "openadapt.execution-outcome/v1",
+            "outcome": outcome,
+            "production_eligible": production_eligible,
+            "execution_completed": execution_completed,
+        },
+    }
+
+
 class FakeController:
     """Minimal recording controller stand-in."""
 
@@ -749,6 +769,75 @@ class TestLibraryCommands:
         states = [data["state"] for event, data in events if event == "replay_progress"]
         assert states == ["running", "unknown"]
         assert "done" not in states
+
+    @pytest.mark.parametrize(
+        (
+            "outcome",
+            "production_eligible",
+            "execution_completed",
+            "progress_state",
+        ),
+        [
+            ("VERIFIED", True, True, "done"),
+            ("COMPLETED_UNVERIFIED", False, True, "completed_unverified"),
+            ("HALTED", False, False, "halted"),
+            ("FAILED", False, False, "failed"),
+            ("ROLLED_BACK", False, True, "rolled_back"),
+        ],
+    )
+    def test_precise_outcomes_survive_dispatch(
+        self,
+        deps,
+        tmp_path: Path,
+        outcome: str,
+        production_eligible: bool,
+        execution_completed: bool,
+        progress_state: str,
+    ) -> None:
+        disp, db, events = deps
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        db.insert_bundle("bnd1", str(bundle), capture_id="cap1")
+
+        class Bridge:
+            def replay(self, _bundle, out_dir, *, config):
+                from engine.flow_bridge import FlowResult
+
+                (out_dir / "report.json").write_text(
+                    json.dumps(
+                        _precise_report(
+                            outcome,
+                            production_eligible=production_eligible,
+                            execution_completed=execution_completed,
+                        )
+                    )
+                )
+                returncode = 0 if outcome == "VERIFIED" else 1
+                return FlowResult(
+                    ok=returncode == 0,
+                    returncode=returncode,
+                    out_dir=out_dir,
+                )
+
+        disp.services._flow_bridge = Bridge()
+        result = disp.dispatch(
+            "replay_workflow",
+            {
+                "workflow_id": "bnd1",
+                "target": {
+                    "backend": "citrix",
+                    "rdp_readiness_text": "Patient Search",
+                },
+            },
+        )
+
+        assert result["outcome"] == outcome
+        assert result["ok"] is (outcome == "VERIFIED")
+        states = [data["state"] for event, data in events if event == "replay_progress"]
+        assert states == ["running", progress_state]
+        assert db.list_runs(limit=1)[0]["status"] == outcome
+        if outcome == "HALTED":
+            assert result["halt"]["reason"]
 
     def test_invocation_exception_reports_unknown_effect_state(self, deps, tmp_path: Path) -> None:
         disp, db, events = deps

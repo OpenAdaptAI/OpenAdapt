@@ -21,7 +21,47 @@ import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
 import { ReplayMonitor } from "../ui/ReplayMonitor";
 
 type ExecuteMode = "replay" | "run";
-type RunIssue = { message: string; preActionRefusal: boolean };
+type RunIssue = {
+  title: string;
+  message: string;
+  preActionRefusal: boolean;
+};
+
+function issueForReport(report: RunReport): RunIssue | null {
+  if (report.outcome === "COMPLETED_UNVERIFIED") {
+    return {
+      title: "Execution completed without sufficient verification",
+      message:
+        "The workflow finished, but its required evidence did not prove the intended business effect.",
+      preActionRefusal: false,
+    };
+  }
+  if (report.outcome === "FAILED") {
+    return {
+      title: "Execution failed",
+      message:
+        "A runtime or infrastructure failure prevented a verified outcome.",
+      preActionRefusal: false,
+    };
+  }
+  if (report.outcome === "ROLLED_BACK") {
+    return {
+      title: "Execution was rolled back",
+      message:
+        "The configured compensating action completed, so the requested effect was not reported as verified.",
+      preActionRefusal: false,
+    };
+  }
+  if (report.outcome === "unknown") {
+    return {
+      title: "Execution outcome needs verification",
+      message:
+        report.error || "Desktop could not classify the execution outcome.",
+      preActionRefusal: false,
+    };
+  }
+  return null;
+}
 
 export function WatchRun({
   workflowId,
@@ -52,6 +92,7 @@ export function WatchRun({
     if (next) {
       setReport(next);
       stepsRef.current = next.steps ?? [];
+      setRunIssue(issueForReport(next));
     }
   }
 
@@ -100,23 +141,18 @@ export function WatchRun({
       );
       if (response.outcome === "refused") {
         setRunIssue({
+          title: "Execution was refused before action",
           message: response.error,
           preActionRefusal: response.pre_action_refusal,
         });
       } else {
         setReport(response);
         stepsRef.current = response.steps ?? [];
-        if (response.outcome === "unknown") {
-          setRunIssue({
-            message:
-              response.error ||
-              "Desktop could not classify the execution outcome.",
-            preActionRefusal: false,
-          });
-        }
+        setRunIssue(issueForReport(response));
       }
     } catch (error) {
       setRunIssue({
+        title: "Engine connection ended unexpectedly",
         message:
           error instanceof Error
             ? error.message
@@ -218,11 +254,7 @@ export function WatchRun({
         {runIssue && (
           <Callout
             tone="warn"
-            title={
-              runIssue.preActionRefusal
-                ? "Execution was refused before action"
-                : "Execution outcome needs verification"
-            }
+            title={runIssue.title}
           >
             {runIssue.message}{" "}
             {runIssue.preActionRefusal

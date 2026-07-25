@@ -26,14 +26,32 @@ import time
 from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Callable, Literal, cast
 
 from loguru import logger
 
 FLOW_BIN = "openadapt-flow"
 EMBEDDED_FLOW_MODE = "__openadapt_flow__"
 EMBEDDED_FLOW_RECORD_MODE = "__openadapt_flow_record_config__"
-FlowOutcome = Literal["success", "halt", "unknown"]
+FlowOutcome = Literal[
+    "VERIFIED",
+    "COMPLETED_UNVERIFIED",
+    "HALTED",
+    "FAILED",
+    "ROLLED_BACK",
+    "success",
+    "halt",
+    "unknown",
+]
+PRECISE_FLOW_OUTCOMES = frozenset(
+    {
+        "VERIFIED",
+        "COMPLETED_UNVERIFIED",
+        "HALTED",
+        "FAILED",
+        "ROLLED_BACK",
+    }
+)
 
 
 class FlowNotAvailableError(RuntimeError):
@@ -485,18 +503,57 @@ class FlowBridge:
 
     @staticmethod
     def classify_outcome(returncode: int, report: dict) -> FlowOutcome:
-        """Classify only explicit Flow 1.22.0 success or halt evidence.
+        """Classify only explicit, internally consistent Flow outcomes.
 
-        Flow's connector defines success as exit 0 plus a true ``success``
-        field, and a halt from ``terminal_outcome == "halt"`` or a structured
-        ``halt`` record.  Desktop additionally rejects contradictory reports
-        (for example ``success: true`` together with a halt) as unknown.
+        Current runtimes must carry a matching precise outcome envelope:
+        only ``VERIFIED`` is a Desktop success. ``COMPLETED_UNVERIFIED``,
+        ``FAILED``, and ``ROLLED_BACK`` remain explicit non-success states.
+        Reports from earlier bundled runtimes retain the narrow legacy
+        success/halt classification.
         """
 
         halt = report.get("halt")
         explicit_halt = report.get("terminal_outcome") == "halt" or (
             isinstance(halt, dict) and bool(halt)
         )
+        precise = report.get("execution_outcome")
+        if precise is not None:
+            envelope = report.get("outcome_envelope")
+            if precise not in PRECISE_FLOW_OUTCOMES or not isinstance(envelope, dict):
+                return "unknown"
+            if (
+                envelope.get("version") != "openadapt.execution-outcome/v1"
+                or envelope.get("outcome") != precise
+            ):
+                return "unknown"
+            report_production = report.get("production_eligible")
+            report_completed = report.get("execution_completed")
+            envelope_production = envelope.get("production_eligible")
+            envelope_completed = envelope.get("execution_completed")
+            if (
+                not isinstance(report_production, bool)
+                or not isinstance(report_completed, bool)
+                or not isinstance(envelope_production, bool)
+                or not isinstance(envelope_completed, bool)
+                or report_production != envelope_production
+                or report_completed != envelope_completed
+            ):
+                return "unknown"
+            if precise == "VERIFIED":
+                if (
+                    returncode != 0
+                    or report.get("success") is not True
+                    or report_production is not True
+                    or report_completed is not True
+                    or explicit_halt
+                ):
+                    return "unknown"
+            elif report_production is not False:
+                return "unknown"
+            if precise == "COMPLETED_UNVERIFIED" and report_completed is not True:
+                return "unknown"
+            return cast(FlowOutcome, precise)
+
         terminal = report.get("terminal_outcome")
         explicit_success = (
             returncode == 0
@@ -523,6 +580,14 @@ class FlowBridge:
             return halt
         if report.get("terminal_outcome") == "halt":
             return {"outcome": "halt"}
+        envelope = report.get("outcome_envelope")
+        if (
+            report.get("execution_outcome") == "HALTED"
+            and isinstance(envelope, dict)
+            and envelope.get("version") == "openadapt.execution-outcome/v1"
+            and envelope.get("outcome") == "HALTED"
+        ):
+            return {"outcome": "HALTED"}
         if report.get("status") == "halt":
             return report
         return None

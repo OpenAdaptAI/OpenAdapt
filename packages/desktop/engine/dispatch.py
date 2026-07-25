@@ -212,12 +212,8 @@ class EngineDispatcher:
             "arm_qualification_identity": self.arm_qualification_identity,
             "set_qualification_identity": self.set_qualification_identity,
             "bind_qualification_effect": self.bind_qualification_effect,
-            "set_qualification_effect_verification": (
-                self.set_qualification_effect_verification
-            ),
-            "set_qualification_minimum_effect_tier": (
-                self.set_qualification_minimum_effect_tier
-            ),
+            "set_qualification_effect_verification": (self.set_qualification_effect_verification),
+            "set_qualification_minimum_effect_tier": (self.set_qualification_minimum_effect_tier),
             "certify_qualification": self.certify_qualification,
             # cloud sync / push
             "push_workflow": self.push_workflow,
@@ -560,11 +556,16 @@ class EngineDispatcher:
         except Exception:
             rep = None
         if rep:
+            report_outcome = rep.get("outcome")
             states = {s.get("state") for s in (rep.get("steps") or [])}
-            if rep.get("halt") or "halted" in states:
+            if report_outcome == "VERIFIED":
+                last_run_state = "verified"
+            elif report_outcome == "HALTED" or rep.get("halt") or "halted" in states:
                 last_run_state = "halted"
-            elif "failed" in states:
+            elif report_outcome == "FAILED" or "failed" in states:
                 last_run_state = "failed"
+            elif report_outcome in {"COMPLETED_UNVERIFIED", "ROLLED_BACK", "unknown"}:
+                last_run_state = "attention"
             elif states:
                 last_run_state = "verified"
         return {
@@ -777,6 +778,11 @@ class EngineDispatcher:
             error=error,
         )
         progress_state = {
+            "VERIFIED": "done",
+            "COMPLETED_UNVERIFIED": "completed_unverified",
+            "HALTED": "halted",
+            "FAILED": "failed",
+            "ROLLED_BACK": "rolled_back",
             "success": "done",
             "halt": "halted",
             "unknown": "unknown",
@@ -858,7 +864,17 @@ class EngineDispatcher:
         if not run_dir:
             return None
         stored_outcome = run.get("status")
-        outcome = stored_outcome if stored_outcome in {"success", "halt", "unknown"} else None
+        known_outcomes = {
+            "VERIFIED",
+            "COMPLETED_UNVERIFIED",
+            "HALTED",
+            "FAILED",
+            "ROLLED_BACK",
+            "success",
+            "halt",
+            "unknown",
+        }
+        outcome = stored_outcome if stored_outcome in known_outcomes else None
         return self._run_report(
             Path(run_dir),
             workflow_id,
@@ -885,7 +901,9 @@ class EngineDispatcher:
             outcome = FlowBridge.classify_outcome(inferred_returncode, report)
         halt = FlowBridge.read_halt(run_dir)
         halt_state = (
-            (halt or {}).get("state_id") if outcome == "halt" and isinstance(halt, dict) else None
+            (halt or {}).get("state_id")
+            if outcome in {"HALTED", "halt"} and isinstance(halt, dict)
+            else None
         )
 
         # openadapt-flow writes per-step outcomes under ``results`` (each with
@@ -900,15 +918,18 @@ class EngineDispatcher:
             steps = raw_steps if isinstance(raw_steps, list) else []
 
         halt_block = None
-        if outcome == "halt" and isinstance(halt, dict) and halt:
+        if outcome in {"HALTED", "halt"} and isinstance(halt, dict) and halt:
             rung = None
             for r in results or []:
                 if r.get("step_id") == halt_state:
                     rung = (r.get("resolution") or {}).get("rung")
             halt_block = {
                 "step_index": self._step_index(halt.get("state_id") or halt.get("step_index")),
-                "step_intent": halt.get("intent") or halt.get("step_intent") or "",
-                "reason": halt.get("reason", ""),
+                "step_intent": (
+                    halt.get("intent") or halt.get("step_intent") or "Execution halted"
+                ),
+                "reason": halt.get("reason")
+                or "The runtime halted before completing the workflow.",
                 "resolver_rung": halt.get("resolver_rung") or rung,
             }
 
@@ -925,7 +946,7 @@ class EngineDispatcher:
             cost = report.get("est_model_cost_usd")
 
         mapped = {
-            "ok": outcome == "success",
+            "ok": outcome == "VERIFIED",
             "outcome": outcome,
             "pre_action_refusal": False,
             "run_id": report.get("run_id") or run_id,
@@ -1122,9 +1143,7 @@ class EngineDispatcher:
                 step_id=str(params.get("step_id") or ""),
                 risk=str(params.get("risk") or ""),
                 explanation=(
-                    str(params["explanation"])
-                    if params.get("explanation") is not None
-                    else None
+                    str(params["explanation"]) if params.get("explanation") is not None else None
                 ),
                 policy_source=policy,
             )
@@ -1195,9 +1214,7 @@ class EngineDispatcher:
             self.services.db.update_bundle(
                 workflow_id,
                 status=(
-                    "certified"
-                    if result.get("certification_current")
-                    else "qualification_pending"
+                    "certified" if result.get("certification_current") else "qualification_pending"
                 ),
             )
             return result

@@ -486,6 +486,22 @@ class TestReportParsing:
             (0, {"success": True, "halt": {"outcome": "halt"}}, "unknown"),
             (0, {"success": "yes"}, "unknown"),
             (1, {"halt": "not-structured"}, "unknown"),
+            (
+                0,
+                {
+                    "success": True,
+                    "execution_outcome": "VERIFIED",
+                    "production_eligible": True,
+                    "execution_completed": True,
+                    "outcome_envelope": {
+                        "version": "openadapt.execution-outcome/v1",
+                        "outcome": "COMPLETED_UNVERIFIED",
+                        "production_eligible": True,
+                        "execution_completed": True,
+                    },
+                },
+                "unknown",
+            ),
         ],
     )
     def test_classifies_only_explicit_consistent_flow_outcomes(

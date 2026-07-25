@@ -1,6 +1,6 @@
 """Private process entry for canonical ``openadapt-flow record`` authoring.
 
-The shipped Flow 1.22.0 recorder accepts target selectors as command flags.
+The bundled Flow recorder accepts target selectors as command flags.
 Those values can contain PHI, so Desktop starts this helper with only a private
 request-file path in the operating-system process list. The helper reads and
 deletes that file, validates the closed target schema, reconstructs Flow's
