@@ -20,6 +20,21 @@ driver uses the capabilities available outside that boundary:
 - return action-delivery receipts separately from outcome verification; and
 - expose no structural capability when none is available.
 
+Consequential input uses a two-phase lease. OpenAdapt first acquires and proves
+the exact foreground Workspace window, captures a fresh readiness-checked
+frame, and re-runs target resolution and record identity on that frame. Under
+the backend input lock it captures once more and rejects any window, geometry,
+readiness, dimension, or decoded RGB-content change before the first input
+edge. Equivalent PNG encodings do not cause a false halt, while an intervening
+diagnostic capture invalidates rather than silently disarms the lease. The
+lease is consumed once per gesture, and a timeout after possible delivery is
+never blindly repeated.
+
+Exact full-window continuity is deliberately conservative: volatile remote
+chrome can over-halt. Any mask or protected-region relaxation is part of the
+specific application/environment qualification, not a permissive global
+default.
+
 `openadapt_flow/backends/remote_display.py` implements this contract on macOS
 (Quartz), and `openadapt_flow/backends/win32_window_client.py` provides the
 Windows-host client for the same backend (PrintWindow/BitBlt client-area

@@ -49,6 +49,7 @@ docs/LIMITS.md). This mirrors how WindowsBackend omits StructuralBackend.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import threading
 import time
@@ -60,6 +61,9 @@ from PIL import Image
 # pixel bytes (RGB or RGBA, row-major) that the backend wraps with the
 # reported (width, height).
 Framebuffer = tuple[Union["Image.Image", bytes], int, int]
+_LEASE_NONE = 0
+_LEASE_ARMED = 1
+_LEASE_INVALIDATED = 2
 
 
 @runtime_checkable
@@ -224,6 +228,8 @@ class FreeRDPBackend:
             raise ValueError("max_frame_age_s must be positive")
         self._readiness_probe = readiness_probe
         self._last_frame_monotonic: Optional[float] = None
+        self._last_frame_digest: Optional[bytes] = None
+        self._actuation_lease_state = _LEASE_NONE
         # Keep capture/geometry validation and a complete input gesture in one
         # critical section. A concurrent screenshot may otherwise replace the
         # coordinate lease between pointer-down and pointer-up.
@@ -259,10 +265,30 @@ class FreeRDPBackend:
             # Cache the viewport from the frame we actually encoded, so viewport
             # and screenshot can never disagree.
             self._viewport = img.size
-            buf = io.BytesIO()
-            img.convert("RGB").save(buf, format="PNG")
-            png = buf.getvalue()
+            png = self._png_bytes(img)
             self._last_frame_monotonic = time.monotonic()
+            self._last_frame_digest = self._canonical_frame_digest(img)
+            if self._actuation_lease_state == _LEASE_ARMED:
+                self._actuation_lease_state = _LEASE_INVALIDATED
+            return png
+
+    def acquire_actuation_frame(self) -> bytes:
+        """Capture readiness and arm a one-shot exact-content input lease.
+
+        A direct RDP transport is already the selected remote session; the
+        runtime re-resolves target and identity on this fresh frame.  The next
+        input captures again under ``_input_lock`` and refuses before delivery
+        when dimensions, readiness, or pixels changed.
+        """
+        with self._input_lock:
+            png = self.screenshot()
+            if self._readiness_probe is not None and not self._readiness_probe(png):
+                self._actuation_lease_state = _LEASE_INVALIDATED
+                raise RuntimeError(
+                    "RDP readiness probe rejected the fresh actuation frame "
+                    "(locked, disconnected, or unexpected session)"
+                )
+            self._actuation_lease_state = _LEASE_ARMED
             return png
 
     def wait_first_frame(self, *, retries: int = 20, settle_s: float = 0.25) -> bytes:
@@ -445,18 +471,37 @@ class FreeRDPBackend:
                 raise RuntimeError(
                     f"RDP input point {(x, y)!r} is outside framebuffer {current!r}"
                 )
-        if self._readiness_probe is not None:
+        if self._actuation_lease_state == _LEASE_INVALIDATED:
+            raise RuntimeError(
+                "RDP actuation lease was invalidated by another observation; "
+                "refusing input and requiring a fresh lease"
+            )
+        if self._readiness_probe is not None or (
+            self._actuation_lease_state == _LEASE_ARMED
+        ):
             # Evaluate readiness on the current framebuffer, not merely the
-            # resolver's leased image: a lock/disconnect can appear while the
-            # dimensions stay unchanged.
+            # resolver's leased image: a lock/disconnect or content change can
+            # appear while the dimensions stay unchanged.
             current_img = self._to_image(frame, current[0], current[1])
-            buf = io.BytesIO()
-            current_img.convert("RGB").save(buf, format="PNG")
-            if not self._readiness_probe(buf.getvalue()):
+            current_png = self._png_bytes(current_img)
+            if self._readiness_probe is not None and not self._readiness_probe(
+                current_png
+            ):
+                self._actuation_lease_state = _LEASE_INVALIDATED
                 raise RuntimeError(
                     "RDP readiness probe rejected the current frame "
                     "(locked, disconnected, or unexpected session); refusing input"
                 )
+            if self._actuation_lease_state == _LEASE_ARMED:
+                digest = self._canonical_frame_digest(current_img)
+                if self._last_frame_digest is None or digest != self._last_frame_digest:
+                    self._actuation_lease_state = _LEASE_INVALIDATED
+                    raise RuntimeError(
+                        "RDP frame content changed after target and identity "
+                        "resolution; refusing input and requiring a fresh "
+                        "actuation lease"
+                    )
+                self._actuation_lease_state = _LEASE_NONE
         # framebuffer/readiness work can block on the network; recheck at the
         # last common point before an input edge.
         self._assert_frame_fresh()
@@ -491,6 +536,21 @@ class FreeRDPBackend:
                 f"cannot interpret {len(data)} framebuffer bytes as {w}x{h} RGB/RGBA"
             )
         raise RuntimeError(f"unsupported framebuffer type: {type(frame)!r}")
+
+    @staticmethod
+    def _png_bytes(image: Image.Image) -> bytes:
+        buf = io.BytesIO()
+        image.convert("RGB").save(buf, format="PNG")
+        return buf.getvalue()
+
+    @staticmethod
+    def _canonical_frame_digest(image: Image.Image) -> bytes:
+        rgb = image.convert("RGB")
+        digest = hashlib.sha256()
+        digest.update(rgb.width.to_bytes(4, "big"))
+        digest.update(rgb.height.to_bytes(4, "big"))
+        digest.update(rgb.tobytes())
+        return digest.digest()
 
 
 # =============================================================================

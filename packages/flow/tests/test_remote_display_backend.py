@@ -65,6 +65,8 @@ class FakeClient:
         self.windows = [self.window]
         self._key_window_id = key_window_id
         self._hit_window_id = hit_window_id
+        self.frame_color = (11, 22, 33)
+        self.png_kwargs = {}
         self.calls: list[tuple] = []
 
     def input_trusted(self) -> bool:
@@ -90,9 +92,9 @@ class FakeClient:
         return self._hit_window_id or self.window.window_id
 
     def capture(self, window_id):
-        img = Image.new("RGB", self.px, (11, 22, 33))
+        img = Image.new("RGB", self.px, self.frame_color)
         buf = io.BytesIO()
-        img.save(buf, format="PNG")
+        img.save(buf, format="PNG", **self.png_kwargs)
         return buf.getvalue(), self.px[0], self.px[1]
 
     def activate(self, pid):
@@ -227,6 +229,53 @@ def test_readiness_probe_refuses_locked_or_unexpected_session() -> None:
     with pytest.raises(RemoteDisplayError, match="readiness probe rejected"):
         backend.click(100, 100)
     assert not any(c[0] == "mouse" for c in client.calls)
+
+
+def test_bound_actuation_refuses_same_window_content_change_before_input() -> None:
+    client = FakeClient()
+    backend = RemoteDisplayBackend(
+        client=client,
+        settle_s=0.0,
+        readiness_probe=lambda _png: True,
+    )
+    backend.acquire_actuation_frame()
+    # PID, window id, bounds, dimensions, focus, and readiness all remain
+    # valid. Only the remote pixels changed after resolution.
+    client.frame_color = (11, 22, 34)
+
+    with pytest.raises(RemoteDisplayError, match="frame content changed"):
+        backend.click(100, 100)
+
+    assert not any(call[0] == "mouse" for call in client.calls)
+
+
+def test_bound_actuation_accepts_same_pixels_with_different_png_encoding() -> None:
+    client = FakeClient()
+    client.png_kwargs = {"compress_level": 0}
+    backend = RemoteDisplayBackend(
+        client=client,
+        settle_s=0.0,
+        readiness_probe=lambda _png: True,
+    )
+    backend.acquire_actuation_frame()
+    # Container bytes differ, while decoded dimensions and RGB pixels do not.
+    client.png_kwargs = {"compress_level": 9}
+
+    backend.click(100, 100)
+
+    assert any(call[0] == "mouse" for call in client.calls)
+
+
+def test_observation_invalidates_bound_actuation_before_input() -> None:
+    client = FakeClient()
+    backend = RemoteDisplayBackend(client=client, settle_s=0.0)
+    backend.acquire_actuation_frame()
+    backend.screenshot()
+
+    with pytest.raises(RemoteDisplayError, match="invalidated"):
+        backend.click(100, 100)
+
+    assert not any(call[0] == "mouse" for call in client.calls)
 
 
 def test_coordinate_click_requires_prior_frame_lease() -> None:

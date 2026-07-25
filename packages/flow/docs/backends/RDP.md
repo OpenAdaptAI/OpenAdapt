@@ -79,6 +79,25 @@ Identity falls back to the OCR name+DOB-primary tier exactly as documented for
 pixel-only substrates (`openadapt_flow/backend.py`, `docs/LIMITS.md`). This
 mirrors how `WindowsBackend` omits `StructuralBackend`.
 
+### Two-phase consequential actuation
+
+Before an irreversible, effect-bearing, or governed identity action, the
+runtime asks the backend for a fresh actuation frame, re-resolves the target,
+and reruns identity on that exact frame. The backend then captures once more
+under its input lock and compares dimensions, readiness, and a digest of the
+decoded RGB dimensions and pixels before emitting the first input edge. A
+mismatch refuses the action; equivalent PNG encodings do not cause a false
+halt. An intervening diagnostic capture invalidates rather than silently
+disarms the lease. After a successful check, the lease is consumed once, so a
+multi-character type or double-click remains one gesture and is never retried
+after an uncertain delivery.
+
+The first contract intentionally binds the full framebuffer. Dynamic clocks,
+animations, or other volatile chrome can therefore cause a safe over-halt.
+Relaxing that behavior requires a qualification-bound mask or protected-region
+contract for the exact application; the runtime never learns a global ignore
+region from an ordinary run.
+
 ## The `rdp` extra
 
 The real transport uses [`aardwolf`](https://pypi.org/project/aardwolf/), a

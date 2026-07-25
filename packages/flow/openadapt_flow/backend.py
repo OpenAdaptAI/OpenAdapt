@@ -247,6 +247,28 @@ class TextValueBackend(Protocol):
 
 
 @runtime_checkable
+class RemoteActuationBackend(Protocol):
+    """Optional two-phase actuation seam for opaque remote surfaces.
+
+    A remote backend implements this when input crosses an RDP/Citrix/VDI
+    boundary whose guest-side focus and contents can change after ordinary
+    target resolution.  The method acquires the exact remote client/session,
+    validates readiness, and captures the frame that the runtime must
+    re-resolve immediately before a consequential action.
+
+    The backend owns a one-shot content lease for the returned frame.  Its next
+    input method captures once more under the backend input lock and refuses
+    before the first input edge if the window/session, dimensions, readiness,
+    or exact frame content changed.  The lease is consumed once so a
+    multi-character type or double-click gesture cannot invalidate itself.
+    """
+
+    def acquire_actuation_frame(self) -> bytes:
+        """Acquire focus/readiness and return the freshly leased PNG frame."""
+        ...
+
+
+@runtime_checkable
 class Backend(Protocol):
     @property
     def viewport(self) -> tuple[int, int]:
