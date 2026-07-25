@@ -85,6 +85,51 @@ REPOSITORY_ONLY_EVALUATION_EXACT_PATHS = frozenset(
     }
 )
 
+# Hatchling walks the source tree rather than trusting .gitignore. Generated
+# benchmark sessions must therefore be excluded by the build configuration and
+# refused again when inspecting the actual archive. Keep this semantic: a new
+# benchmark under the same output convention is protected automatically, while
+# tracked synthetic fixture source (for example benchmark/run_player/runs) is
+# unaffected.
+GENERATED_BENCHMARK_OUTPUT_SEGMENTS = frozenset(
+    {
+        "_bundle",
+        "_recording",
+        "_work",
+        "out",
+        "output",
+        "outputs",
+        "state",
+        "work",
+    }
+)
+GENERATED_BENCHMARK_OUTPUT_PREFIXES = (
+    "api-delta-probe-",
+    "bundle-live",
+    "recording-live",
+    "results-",
+)
+RAW_VIDEO_SUFFIXES = frozenset({".avi", ".mkv", ".mov", ".mp4", ".webm"})
+RAW_RESULT_BASENAMES = frozenset(
+    {
+        "per-run-results.json",
+        "per_run_results.json",
+        "raw-results.json",
+        "raw_results.json",
+        "rows.jsonl",
+    }
+)
+RECORDING_METADATA_BASENAMES = frozenset({"events.jsonl", "meta.json"})
+RECORDING_AUTHORITY_TOKENS = (
+    b"access_token",
+    b"api_key",
+    b"authorization",
+    b"csrf_token",
+    b"refresh_token",
+    b"session_token",
+    b"token_main",
+)
+
 # Current-tree guard. Public source retains mechanisms, interfaces, conservative
 # defaults, and bounded aggregate evidence. Raw/grown data, tuning sweeps,
 # target recipes, and per-target rows must be absent from the public checkout,
@@ -335,6 +380,47 @@ def _repository_only_evaluation_hits(members: set[str]) -> set[str]:
             token in member.lower() for token in REPOSITORY_ONLY_EVALUATION_PATH_TOKENS
         )
     }
+
+
+def _generated_or_raw_archive_hits(
+    members: set[str], payloads: dict[str, bytes]
+) -> set[str]:
+    """Return generated sessions, raw media/results, or retained authority.
+
+    Synthetic fixture source and reviewed aggregate results remain eligible for
+    publication. What cannot ship is a local run directory, raw video/per-run
+    result, or recording metadata that retains session authority.
+    """
+    hits: set[str] = set()
+    for member in members:
+        path = PurePosixPath(member)
+        lower_parts = tuple(part.lower() for part in path.parts)
+        basename = path.name.lower()
+        if path.suffix.lower() in RAW_VIDEO_SUFFIXES:
+            hits.add(member)
+            continue
+        if basename in RAW_RESULT_BASENAMES:
+            hits.add(member)
+            continue
+        if (
+            lower_parts
+            and lower_parts[0] == "benchmark"
+            and any(
+                part in GENERATED_BENCHMARK_OUTPUT_SEGMENTS
+                or any(
+                    part.startswith(prefix)
+                    for prefix in GENERATED_BENCHMARK_OUTPUT_PREFIXES
+                )
+                for part in lower_parts[1:]
+            )
+        ):
+            hits.add(member)
+            continue
+        if basename in RECORDING_METADATA_BASENAMES:
+            payload = payloads.get(member, b"").lower()
+            if any(token in payload for token in RECORDING_AUTHORITY_TOKENS):
+                hits.add(member)
+    return hits
 
 
 def _artifact_inventory_candidate(path: str) -> bool:
@@ -1073,6 +1159,13 @@ def validate_sdist_license_boundary(
             "recipes that are not part of the distributable engine: "
             f"{sorted(repository_only)}"
         )
+    generated_or_raw = _generated_or_raw_archive_hits(members, payloads)
+    if generated_or_raw:
+        raise ValueError(
+            "source distribution contains generated/raw benchmark output, "
+            "recording authority, or per-run evidence: "
+            f"{sorted(generated_or_raw)}"
+        )
     missing = REQUIRED_SDIST_PATHS - members
     if missing:
         raise ValueError(
@@ -1179,6 +1272,12 @@ def validate_wheel_license_boundary(
             "wheel contains repository-only evaluation data or recipes that "
             "are not part of the distributable engine: "
             f"{sorted(repository_only)}"
+        )
+    generated_or_raw = _generated_or_raw_archive_hits(members, payloads)
+    if generated_or_raw:
+        raise ValueError(
+            "wheel contains generated/raw benchmark output, recording authority, "
+            f"or per-run evidence: {sorted(generated_or_raw)}"
         )
     forbidden = {
         member

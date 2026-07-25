@@ -20,6 +20,8 @@ from scripts.check_release_consistency import (
     AGPL_CONTENT_SIGNATURES,
     FORBIDDEN_SDIST_PATHS,
     FORBIDDEN_SDIST_PREFIXES,
+    GENERATED_BENCHMARK_OUTPUT_PREFIXES,
+    GENERATED_BENCHMARK_OUTPUT_SEGMENTS,
     PRIVATE_CORPUS_CONTENT_SIGNATURES,
     PRIVATE_DISTRIBUTION_EXACT_PATHS,
     PRIVATE_DISTRIBUTION_PATH_SEGMENTS,
@@ -68,6 +70,20 @@ SOURCE_BOUNDARY_EXCLUDES = {
     "/tests/test_reliability.py",
 }
 EPHEMERAL_BUILD_EXCLUDES = {"/.hypothesis"}
+GENERATED_BENCHMARK_EXCLUDES = {
+    "/benchmark/**/api-delta-probe-*",
+    "/benchmark/**/bundle-live*",
+    "/benchmark/**/out",
+    "/benchmark/**/output",
+    "/benchmark/**/outputs",
+    "/benchmark/**/recording-live*",
+    "/benchmark/**/results-*",
+    "/benchmark/**/state",
+    "/benchmark/**/work",
+    "/benchmark/**/_bundle",
+    "/benchmark/**/_recording",
+    "/benchmark/**/_work",
+}
 
 
 def test_release_versions_are_synchronized() -> None:
@@ -128,6 +144,11 @@ def test_wheel_and_sdist_exclude_repository_only_evidence() -> None:
     assert SOURCE_BOUNDARY_EXCLUDES <= set(targets["sdist"]["exclude"])
     assert EPHEMERAL_BUILD_EXCLUDES <= set(targets["wheel"]["exclude"])
     assert EPHEMERAL_BUILD_EXCLUDES <= set(targets["sdist"]["exclude"])
+    assert GENERATED_BENCHMARK_EXCLUDES <= set(targets["wheel"]["exclude"])
+    assert GENERATED_BENCHMARK_EXCLUDES <= set(targets["sdist"]["exclude"])
+
+    assert {"out", "state", "work"} <= GENERATED_BENCHMARK_OUTPUT_SEGMENTS
+    assert {"recording-live", "results-"} <= set(GENERATED_BENCHMARK_OUTPUT_PREFIXES)
 
     # The archive guard is semantic, not an exact-file-only denylist: a future
     # corpus version or renamed reliability recipe must fail closed too.
@@ -824,6 +845,63 @@ def test_sdist_refuses_repository_only_evaluation_data(tmp_path: Path) -> None:
         _write_sdist(mixed, {*clean_members, forbidden})
         with pytest.raises(ValueError, match="repository-only evaluation"):
             validate_sdist_license_boundary(mixed)
+
+
+def test_archives_refuse_generated_runs_raw_media_and_recording_authority(
+    tmp_path: Path,
+) -> None:
+    """Generated sessions cannot hitchhike in either publication artifact."""
+    license_path = "openadapt_flow-1.0.dist-info/licenses/LICENSE"
+    metadata_path = "openadapt_flow-1.0.dist-info/METADATA"
+    wheel_base = {license_path, metadata_path}
+    sdist_base = {*REQUIRED_SDIST_PATHS, "PKG-INFO"}
+    cases = {
+        "benchmark/new_fixture/out/run/report.txt": b"raw run",
+        "benchmark/new_fixture/state/database.txt": b"state",
+        "assets/replay.webm": b"raw video",
+        "benchmark/new_fixture/raw_results.json": b"{}",
+        "docs/recording/events.jsonl": b'{"url":"/?token_main=secret"}\n',
+        "docs/recording/meta.json": b'{"access_token":"secret"}\n',
+    }
+    for index, (relative, payload) in enumerate(cases.items()):
+        wheel = tmp_path / f"generated-{index}.whl"
+        _write_wheel(wheel, {*wheel_base, relative}, payloads={relative: payload})
+        with pytest.raises(ValueError, match="generated/raw benchmark output"):
+            validate_wheel_license_boundary(wheel)
+
+        sdist = tmp_path / f"generated-{index}.tar.gz"
+        _write_sdist(
+            sdist,
+            {*sdist_base, relative},
+            payloads={relative: payload},
+        )
+        with pytest.raises(ValueError, match="generated/raw benchmark output"):
+            validate_sdist_license_boundary(sdist)
+
+
+def test_sdist_preserves_reviewed_synthetic_recording_fixture(tmp_path: Path) -> None:
+    """Recording-shaped synthetic source is allowed when it retains no authority."""
+    members = {
+        *REQUIRED_SDIST_PATHS,
+        "PKG-INFO",
+        "benchmark/new_fixture/fixture.py",
+        "docs/showcase/recording/events.jsonl",
+        "docs/showcase/recording/meta.json",
+    }
+    sdist = tmp_path / "synthetic-fixture.tar.gz"
+    _write_sdist(
+        sdist,
+        members,
+        payloads={
+            "docs/showcase/recording/events.jsonl": (
+                ROOT / "docs/showcase/recording/events.jsonl"
+            ).read_bytes(),
+            "docs/showcase/recording/meta.json": (
+                ROOT / "docs/showcase/recording/meta.json"
+            ).read_bytes(),
+        },
+    )
+    validate_sdist_license_boundary(sdist)
 
 
 def test_distribution_directory_refuses_extra_or_multiple_artifacts(
