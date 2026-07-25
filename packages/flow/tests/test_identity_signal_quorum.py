@@ -804,6 +804,24 @@ def test_qualified_api_write_requires_exact_request_effect_identity_binding() ->
     assert "declared target-bearing request pointer" in refusal
 
     step.api_binding.url_template = "/records"
+    step.api_binding.body_template = {"patient": {"id": "{patient_id}"}}
+    step.api_binding.identity[0].effect_field = "patient.id"
+    step.api_binding.identity[0].request_pointers = ["/body/patient/id"]
+    nested_effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"patient.id": ValueExpr(param="patient_id")},
+    )
+    refusal = replayer._api_identity_refusal(
+        step,
+        {"patient_id": "p1"},
+        workflow,
+        [nested_effect],
+        StepResult(step_id=step.id, intent=step.intent, ok=False),
+    )
+    assert refusal is None
+
+    step.api_binding.body_template = {"patient_id": "{patient_id}"}
+    step.api_binding.identity[0].effect_field = "patient_id"
     step.api_binding.identity[0].request_pointers = ["/body/patient_id"]
     wrong_effect = Effect(
         kind=EffectKind.RECORD_WRITTEN,
@@ -833,6 +851,7 @@ def test_api_identity_rejects_placeholder_outside_declared_target_pointer() -> N
         body_template={
             "patient_id": "VICTIM",
             "audit_note": "{patient_id}",
+            "audit": {"patient_id": "{patient_id}"},
         },
         identity=[
             ApiIdentityBinding(
@@ -881,6 +900,16 @@ def test_api_identity_rejects_placeholder_outside_declared_target_pointer() -> N
     )
     assert refusal is not None
     assert "declared target-bearing request pointer" in refusal
+
+    step.api_binding.identity[0].request_pointers = ["/body/audit/patient_id"]
+    refusal = _replayer(None)._api_identity_refusal(
+        step,
+        {"patient_id": "p1"},
+        workflow,
+        [effect],
+        StepResult(step_id=step.id, intent=step.intent, ok=False),
+    )
+    assert refusal is not None
 
     step.api_binding.query = {"trace": "{patient_id}"}
     step.api_binding.identity[0].request_pointers = ["/query/trace"]

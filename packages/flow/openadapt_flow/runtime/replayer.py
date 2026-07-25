@@ -2924,6 +2924,15 @@ class Replayer:
                 return None
         return value
 
+    @staticmethod
+    def _api_request_pointer_field_path(pointer: str) -> tuple[str, ...]:
+        """Return the fully decoded target-field path after the request root."""
+
+        return tuple(
+            token.replace("~1", "/").replace("~0", "~")
+            for token in pointer.lstrip("/").split("/")[1:]
+        )
+
     def _api_identity_refusal(
         self,
         step: Step,
@@ -2978,11 +2987,10 @@ class Replayer:
                 for pointer in identity.request_pointers
             ]
             exact_token = "{" + identity.param + "}"
-            effect_target_field = identity.effect_field.rsplit(".", 1)[-1]
+            effect_target_path = tuple(identity.effect_field.split("."))
             pointers_are_bound = all(
                 template is not None
-                and pointer.rsplit("/", 1)[-1].replace("~1", "/").replace("~0", "~")
-                == effect_target_field
+                and self._api_request_pointer_field_path(pointer) == effect_target_path
                 and (
                     isinstance(template, str)
                     and self._url_path_targets_param(template, identity.param)
