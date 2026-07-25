@@ -48,6 +48,12 @@ build = [
     # engine sidecar.  Keep it exact: Desktop and Flow can release
     # independently, while each installer remains reproducible and rollbackable.
     "openadapt-flow==1.23.0",
+    # cryptography 49 no longer publishes a macOS Intel wheel. Building it
+    # against a mutable runner OpenSSL can make PyInstaller pair the extension
+    # with a different libssl from the Python runtime. Keep Intel builds on the
+    # newest universal2 wheel and verify below that it has no external OpenSSL
+    # dependency.
+    "cryptography==48.0.0; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     # ONNX Runtime 1.27 dropped macOS Intel wheels. Flow's RapidOCR dependency
     # accepts this universal2 release, which retains Python 3.12 Intel support.
     "onnxruntime==1.20.1; sys_platform == 'darwin' and platform_machine == 'x86_64'",
