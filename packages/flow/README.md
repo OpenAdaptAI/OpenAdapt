@@ -339,17 +339,17 @@ below is hand-drawn):
 
 ```mermaid
 flowchart TD
-  n0("click recorded visual target<br/><small>visual template + landmarks</small>")
+  n0("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
   n1("type 'nurse.demo'")
-  n2("click recorded visual target<br/><small>visual template + landmarks</small>")
+  n2("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
   n3("type 'mockmed-demo-pass'")
-  n4("click 'Sign In'<br/><small>visual template + landmarks</small>")
-  n5("click 'Open'<br/><small>visual template + landmarks</small>")
-  n6("click 'New Encounter'<br/><small>visual template + landmarks</small>")
-  n7("click 'Triage'<br/><small>visual template + landmarks</small>")
-  n8("click recorded visual target<br/><small>visual template + landmarks</small>")
+  n4("click 'Sign In'<br/><small>visual template + 2 OCR landmarks</small>")
+  n5("click 'Open'<br/><small>visual template + 2 OCR landmarks</small>")
+  n6("click 'New Encounter'<br/><small>visual template + 2 OCR landmarks</small>")
+  n7("click 'Triage'<br/><small>visual template + 2 OCR landmarks</small>")
+  n8("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
   n9("type <note>")
-  n10("click 'Save Encounter'<br/><small>visual template + landmarks</small>")
+  n10("click 'Save Encounter'<br/><small>visual template + 2 OCR landmarks</small>")
   n11{{"Success"}}
   n0 --> n1
   n1 --> n2
@@ -366,15 +366,26 @@ flowchart TD
   classDef halt stroke:#b21f2d,stroke-width:2px;
 ```
 
-*Text summary (PyPI does not render Mermaid): the compiled MockMed triage
-bundle is eleven ordered steps, signing in, opening the patient, starting a new
-encounter, opening triage, typing the `<note>` parameter, and clicking Save
-Encounter, ending in a `Success` postcondition node (`n11`). A recorder may
-retain the demonstration's click point as diagnostic evidence, but the graph
-deliberately names the compiled target by the evidence used to re-find it:
-DOM/accessibility where available, otherwise visual template, OCR, and nearby
-landmarks. The `--format html` output renders the same graph with each rung,
-identity gate, effect contract, and halt point expanded.*
+How to read the target labels:
+
+- **`recorded visual target` is not coordinate replay.** It means the control
+  had no readable label, so the bundle retained its visual crop and nearby text
+  instead. The demonstration's point is only the relative offset inside the
+  target after that evidence re-finds it.
+- **`visual template + 2 OCR landmarks` names the retained evidence.** Replay
+  resolves it on a fresh frame; global movement is accepted only when the
+  landmarks do not contradict it, and ambiguous OCR refuses instead of picking
+  a match.
+- **DOM/accessibility is stronger when available.** Browser and native bundles
+  show that structural rung instead; RDP and Citrix intentionally use the
+  visual floor.
+- **The HTML view carries the full contract.** `--format html` expands every
+  resolution rung, identity gate, effect check, postcondition, and halt point.
+
+*Text summary (for renderers without Mermaid): the compiled MockMed triage
+bundle signs in, opens the patient, starts an encounter, enters the `<note>`
+parameter, and saves it. Each click is re-found from retained evidence rather
+than replayed at a literal screen coordinate.*
 
 ## Benchmark
 

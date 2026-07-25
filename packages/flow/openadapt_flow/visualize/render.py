@@ -119,7 +119,12 @@ def render_mermaid(spec: ProgramGraphSpec) -> str:
                         None,
                     )
                     if landmarks is not None:
-                        rung_label += " + landmarks"
+                        count = landmarks.detail.split(" ", 1)[0]
+                        rung_label += (
+                            f" + {count} OCR landmarks"
+                            if count.isdigit()
+                            else " + OCR landmarks"
+                        )
                 badges.append(rung_label)
             if node.identity and node.identity.armed is True:
                 badges.append("identity")

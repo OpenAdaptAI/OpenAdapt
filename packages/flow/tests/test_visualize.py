@@ -153,7 +153,7 @@ def test_coordinate_intent_is_rendered_as_evidence_resolved_target() -> None:
     assert spec.nodes[0].title == "click recorded visual target"
     mermaid = render_mermaid(spec)
     assert "(214, 195)" not in mermaid
-    assert "visual template + landmarks" in mermaid
+    assert "visual template + 1 OCR landmarks" in mermaid
 
 
 def test_identity_gate_projection() -> None:
