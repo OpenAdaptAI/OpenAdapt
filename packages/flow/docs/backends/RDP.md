@@ -84,11 +84,13 @@ mirrors how `WindowsBackend` omits `StructuralBackend`.
 Before an irreversible, effect-bearing, or governed identity action, the
 runtime asks the backend for a fresh actuation frame, re-resolves the target,
 and reruns identity on that exact frame. The backend then captures once more
-under its input lock and compares dimensions, readiness, and the exact frame
-digest before emitting the first input edge. A mismatch refuses the action;
-after a successful check the lease is consumed once, so a multi-character type
-or double-click remains one gesture and is never retried after an uncertain
-delivery.
+under its input lock and compares dimensions, readiness, and a digest of the
+decoded RGB dimensions and pixels before emitting the first input edge. A
+mismatch refuses the action; equivalent PNG encodings do not cause a false
+halt. An intervening diagnostic capture invalidates rather than silently
+disarms the lease. After a successful check, the lease is consumed once, so a
+multi-character type or double-click remains one gesture and is never retried
+after an uncertain delivery.
 
 The first contract intentionally binds the full framebuffer. Dynamic clocks,
 animations, or other volatile chrome can therefore cause a safe over-halt.

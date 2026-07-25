@@ -24,9 +24,11 @@ Consequential input uses a two-phase lease. OpenAdapt first acquires and proves
 the exact foreground Workspace window, captures a fresh readiness-checked
 frame, and re-runs target resolution and record identity on that frame. Under
 the backend input lock it captures once more and rejects any window, geometry,
-readiness, dimension, or exact-content change before the first input edge.
-The lease is consumed once per gesture, and a timeout after possible delivery
-is never blindly repeated.
+readiness, dimension, or decoded RGB-content change before the first input
+edge. Equivalent PNG encodings do not cause a false halt, while an intervening
+diagnostic capture invalidates rather than silently disarms the lease. The
+lease is consumed once per gesture, and a timeout after possible delivery is
+never blindly repeated.
 
 Exact full-window continuity is deliberately conservative: volatile remote
 chrome can over-halt. Any mask or protected-region relaxation is part of the
