@@ -946,7 +946,7 @@ class EngineDispatcher:
             cost = report.get("est_model_cost_usd")
 
         mapped = {
-            "ok": outcome == "VERIFIED",
+            "ok": outcome in {"VERIFIED", "success"},
             "outcome": outcome,
             "pre_action_refusal": False,
             "run_id": report.get("run_id") or run_id,

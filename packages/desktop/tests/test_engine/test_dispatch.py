@@ -20,16 +20,32 @@ def _precise_report(
     production_eligible: bool,
     execution_completed: bool,
 ) -> dict:
+    required = {"authorization": 1, "identity": 0, "postcondition": 0, "effect": 0}
+    passed = dict(required)
+    if outcome == "COMPLETED_UNVERIFIED":
+        required["effect"] = 1
+    compensation_actions = 1 if outcome == "ROLLED_BACK" else 0
+    evidence = ["authorization"]
+    if compensation_actions:
+        evidence.append("compensation")
     return {
         "success": outcome == "VERIFIED",
         "execution_outcome": outcome,
+        "execution_profile": "standard",
         "production_eligible": production_eligible,
         "execution_completed": execution_completed,
         "outcome_envelope": {
             "version": "openadapt.execution-outcome/v1",
             "outcome": outcome,
+            "profile": "standard",
             "production_eligible": production_eligible,
             "execution_completed": execution_completed,
+            "required_contracts": required,
+            "passed_contracts": passed,
+            "evidence_classes": evidence,
+            "model_calls": 0,
+            "external_network_calls": "none",
+            "compensation_actions": compensation_actions,
         },
     }
 
@@ -838,6 +854,17 @@ class TestLibraryCommands:
         assert db.list_runs(limit=1)[0]["status"] == outcome
         if outcome == "HALTED":
             assert result["halt"]["reason"]
+
+    def test_legacy_flow_success_remains_ok(self, deps, tmp_path: Path) -> None:
+        disp, _db, _events = deps
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.json").write_text(json.dumps({"success": True}))
+
+        result = disp._run_report(run_dir, "bnd1", "run-1", outcome="success")
+
+        assert result["outcome"] == "success"
+        assert result["ok"] is True
 
     def test_invocation_exception_reports_unknown_effect_state(self, deps, tmp_path: Path) -> None:
         disp, db, events = deps
