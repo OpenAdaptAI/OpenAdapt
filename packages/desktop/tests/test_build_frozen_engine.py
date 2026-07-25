@@ -75,6 +75,53 @@ def test_non_linux_system_runtime_boundary_is_a_noop(platform: str) -> None:
     assert build.configure_system_runtime_boundary(platform=platform) is False
 
 
+def test_macos_intel_crypto_boundary_requires_self_contained_pinned_wheel(
+    tmp_path: Path,
+) -> None:
+    extension = tmp_path / "cryptography/hazmat/bindings/_rust.abi3.so"
+    extension.parent.mkdir(parents=True)
+    extension.write_bytes(b"mach-o")
+    installed = SimpleNamespace(
+        version=build.MACOS_X86_CRYPTOGRAPHY_VERSION,
+        locate_file=lambda _member: extension,
+    )
+    inspected = SimpleNamespace(
+        returncode=0,
+        stdout=f"{extension}:\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0)\n",
+        stderr="",
+    )
+
+    assert build.verify_macos_intel_cryptography_boundary(
+        platform="darwin",
+        machine="x86_64",
+        distribution_lookup=lambda _name: installed,
+        run=lambda *_args, **_kwargs: inspected,
+    )
+
+
+def test_macos_intel_crypto_boundary_rejects_external_openssl(tmp_path: Path) -> None:
+    extension = tmp_path / "cryptography/hazmat/bindings/_rust.abi3.so"
+    extension.parent.mkdir(parents=True)
+    extension.write_bytes(b"mach-o")
+    installed = SimpleNamespace(
+        version=build.MACOS_X86_CRYPTOGRAPHY_VERSION,
+        locate_file=lambda _member: extension,
+    )
+    inspected = SimpleNamespace(
+        returncode=0,
+        stdout=f"{extension}:\n\t/usr/local/lib/libssl.3.dylib (compatibility version 3.0.0)\n",
+        stderr="",
+    )
+
+    with pytest.raises(RuntimeError, match="external libssl/libcrypto"):
+        build.verify_macos_intel_cryptography_boundary(
+            platform="darwin",
+            machine="x86_64",
+            distribution_lookup=lambda _name: installed,
+            run=lambda *_args, **_kwargs: inspected,
+        )
+
+
 def test_frozen_runtime_bundles_required_third_party_notices(tmp_path: Path) -> None:
     command = _build_command("", tmp_path)
 

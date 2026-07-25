@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform as platform_module
+import re
 import shutil
+import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
@@ -46,6 +49,8 @@ EXCLUDED_MODULES = (
 
 RAPIDOCR_NOTICE_DIR = ROOT / "third_party" / "rapidocr"
 LINUX_RUNNER_RUNTIME_EXCLUDE = r"libgcc_s\.so(\..*)?"
+MACOS_X86_CRYPTOGRAPHY_VERSION = "48.0.0"
+MACOS_OPENSSL_DYLIB = re.compile(r"(?:^|/)(?:libssl|libcrypto)(?:\.[0-9]+)*\.dylib$")
 
 
 def configure_system_runtime_boundary(
@@ -62,6 +67,51 @@ def configure_system_runtime_boundary(
 
     dylib_module._excludes.add(LINUX_RUNNER_RUNTIME_EXCLUDE)
     dylib_module.exclude_list = dylib_module.MatchList(dylib_module._excludes)
+    return True
+
+
+def verify_macos_intel_cryptography_boundary(
+    *,
+    platform: str = sys.platform,
+    machine: str | None = None,
+    distribution_lookup=distribution,
+    run=subprocess.run,
+) -> bool:
+    """Refuse a mutable or externally linked macOS Intel crypto extension."""
+
+    machine = machine or platform_module.machine()
+    if platform != "darwin" or machine != "x86_64":
+        return False
+
+    installed = distribution_lookup("cryptography")
+    if installed.version != MACOS_X86_CRYPTOGRAPHY_VERSION:
+        raise RuntimeError(
+            "macOS Intel frozen builds require the universal2 cryptography "
+            f"{MACOS_X86_CRYPTOGRAPHY_VERSION} wheel, found {installed.version}"
+        )
+    extension = Path(installed.locate_file("cryptography/hazmat/bindings/_rust.abi3.so"))
+    if not extension.is_file():
+        raise RuntimeError(f"cryptography extension is missing: {extension}")
+    result = run(
+        ["otool", "-L", str(extension)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"could not inspect cryptography linkage: {result.stderr[-1000:]}")
+    linked_openssl = [
+        line.strip().split(" ", 1)[0]
+        for line in result.stdout.splitlines()[1:]
+        if MACOS_OPENSSL_DYLIB.search(line.strip().split(" ", 1)[0])
+    ]
+    if linked_openssl:
+        raise RuntimeError(
+            "macOS Intel cryptography must carry its own OpenSSL implementation; "
+            "external libssl/libcrypto linkage can collide inside the frozen runtime: "
+            + ", ".join(linked_openssl)
+        )
     return True
 
 
@@ -176,6 +226,7 @@ def main() -> int:
     )
     try:
         configure_system_runtime_boundary()
+        verify_macos_intel_cryptography_boundary()
         command = build_command(
             distpath=args.distpath,
             workpath=args.workpath,
