@@ -47,6 +47,7 @@ from urllib.parse import urlsplit
 
 from openadapt_flow.backend import (
     Backend,
+    GuardedCoordinateActionBackend,
     RemoteActuationBackend,
     StructuralResolutionRefused,
 )
@@ -3571,6 +3572,15 @@ class Replayer:
             or self._step_has_identity_contract(step, workflow)
         )
 
+    def _requires_atomic_identity_click(self, step: Step, workflow: Workflow) -> bool:
+        """Whether a click may not cross an unleased coordinate boundary."""
+
+        return (
+            step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and self._step_is_consequential(step)
+            and self._step_has_identity_contract(step, workflow)
+        )
+
     def _revalidate_consequential_actuation(
         self,
         step: Step,
@@ -3749,6 +3759,9 @@ class Replayer:
             assert resolution is not None  # guaranteed by _resolve_step
             x, y = resolution.point
             native_act = getattr(self.backend, "act_structural", None)
+            requires_atomic_identity = self._requires_atomic_identity_click(
+                step, workflow
+            )
             if (
                 resolution.rung == "structural"
                 and resolution.structural_handle is not None
@@ -3756,14 +3769,58 @@ class Replayer:
                 and step.anchor.structural is not None
                 and callable(native_act)
             ):
-                result.delivery_receipt = native_act(
+                if (
+                    requires_atomic_identity
+                    and resolution.structural_handle.target_fingerprint is None
+                ):
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) is a consequential "
+                        "identity-gated click, but its structural target has no "
+                        "fresh actuation fingerprint — refusing raw coordinate "
+                        "delivery; run aborted"
+                    )
+                delivery_receipt = native_act(
                     step.anchor.structural,
                     resolution.structural_handle,
                     double=step.action is ActionKind.DOUBLE_CLICK,
                 )
-                result.actuation = "uia"
+                result.delivery_receipt = delivery_receipt
+                result.actuation = "uia" if delivery_receipt.native else "dom"
             else:
-                self.backend.click(x, y, double=step.action is ActionKind.DOUBLE_CLICK)
+                if requires_atomic_identity:
+                    if isinstance(self.backend, RemoteActuationBackend):
+                        self.backend.click(
+                            x,
+                            y,
+                            double=step.action is ActionKind.DOUBLE_CLICK,
+                        )
+                    elif isinstance(self.backend, GuardedCoordinateActionBackend):
+                        result.delivery_receipt = self.backend.act_guarded_coordinate(
+                            x,
+                            y,
+                            expected_frame_sha256=hashlib.sha256(
+                                before_png
+                            ).hexdigest(),
+                            double=step.action is ActionKind.DOUBLE_CLICK,
+                        )
+                        result.actuation = "guarded_coordinate"
+                    else:
+                        result.safety_halt = True
+                        result.failure_category = "safety_halt"
+                        return (
+                            f"Step '{step.id}' ({step.intent}) is a consequential "
+                            "identity-gated click, but this backend cannot bind "
+                            "identity verification to the same actuation operation "
+                            "— refusing raw coordinate delivery; run aborted"
+                        )
+                else:
+                    self.backend.click(
+                        x,
+                        y,
+                        double=step.action is ActionKind.DOUBLE_CLICK,
+                    )
             self._last_click_point = (x, y)
             self._last_click_region = (
                 resolution.structural_handle.region

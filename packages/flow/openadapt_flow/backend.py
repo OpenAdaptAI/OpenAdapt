@@ -244,6 +244,30 @@ class NativeStructuralActionBackend(Protocol):
 
 
 @runtime_checkable
+class GuardedCoordinateActionBackend(Protocol):
+    """Optional atomic local coordinate actuation.
+
+    A backend implementing this seam must bind the identity-verified target to
+    delivery and reject a changed frame/element/record before the first input
+    edge. A pixel backend can compare the expected frame under its input lock; a
+    DOM backend can use an opaque element token plus a mutation guard and retain
+    its native pointer-event semantics. This is the local counterpart to a
+    remote backend's one-shot actuation lease.
+    """
+
+    def act_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> "ActionDeliveryReceipt":
+        """Verify the exact frame and deliver one coordinate action atomically."""
+        ...
+
+
+@runtime_checkable
 class TextValueBackend(Protocol):
     """Optional exact readback for the editable control under a point.
 

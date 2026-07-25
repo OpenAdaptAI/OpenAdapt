@@ -748,6 +748,11 @@ def test_playwright_structural_locator_and_locate_roundtrip() -> None:
         px, py = handle.point
         assert box["x"] <= px <= box["x"] + box["width"]
         assert box["y"] <= py <= box["y"] + box["height"]
+        assert handle.target_fingerprint is not None
+        receipt = backend.act_structural(loc, handle)
+        assert receipt.operation == "dom_click"
+        assert receipt.target_fingerprint == handle.target_fingerprint
+        assert receipt.native is False
     finally:
         close()
 

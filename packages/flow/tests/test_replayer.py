@@ -5,6 +5,7 @@ Backend and vision are both faked — no Playwright, no openadapt_flow.vision.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 
@@ -12,6 +13,7 @@ import pytest
 from PIL import Image
 
 from openadapt_flow.ir import (
+    ActionDeliveryReceipt,
     ActionKind,
     Anchor,
     IdentityCheck,
@@ -176,6 +178,24 @@ class FakeBackend:
 
     def click(self, x, y, *, double=False):
         self.actions.append(("click", x, y, double))
+
+    def act_guarded_coordinate(
+        self,
+        x,
+        y,
+        *,
+        expected_frame_sha256,
+        double=False,
+    ):
+        if hashlib.sha256(self._frame).hexdigest() != expected_frame_sha256:
+            raise RuntimeError("guarded coordinate frame changed")
+        self.click(x, y, double=double)
+        return ActionDeliveryReceipt(
+            receipt_id="test-guarded-coordinate",
+            operation="guarded_coordinate_click",
+            native=False,
+            delivered_at="2026-07-25T00:00:00+00:00",
+        )
 
     def type_text(self, text):
         self.actions.append(("type", text))
@@ -1209,6 +1229,46 @@ def test_identity_verified_clicks_normally(bundle, run_dir):
     assert ("click", 110, 105, False) in backend.actions
     assert report.results[0].identity.status == "verified"
     assert report.results[0].identity.mode == "context"
+
+
+def test_consequential_identity_click_refuses_raw_local_coordinates(bundle, run_dir):
+    class RawCoordinateBackend:
+        def __init__(self):
+            self.frame = make_png()
+            self.actions = []
+
+        @property
+        def viewport(self):
+            return VIEWPORT
+
+        def screenshot(self):
+            return self.frame
+
+        def click(self, x, y, *, double=False):
+            self.actions.append(("click", x, y, double))
+
+        def type_text(self, text):
+            self.actions.append(("type", text))
+
+        def press(self, key):
+            self.actions.append(("press", key))
+
+        def scroll(self, dx, dy):
+            self.actions.append(("scroll", dx, dy))
+
+    vision = resolving_vision()
+    vision.ocr_lines = [OcrLine("Jane Sample Knee pain referral High")]
+    backend = RawCoordinateBackend()
+    step = context_click_step("Jane Sample Knee pain referral High")
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].safety_halt is True
+    assert "same actuation operation" in (report.results[0].error or "")
 
 
 def test_identity_param_mode_reanchors_on_run_value(bundle, run_dir):
