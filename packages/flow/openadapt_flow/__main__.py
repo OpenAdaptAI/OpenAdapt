@@ -395,6 +395,7 @@ _SAFE_BUNDLE_LOAD_GUIDANCE = (
 def _configured_replayer(
     backend,
     *,
+    workflow,
     allow_egress: bool,
     effect_verifier,
     api_actuator,
@@ -420,8 +421,11 @@ def _configured_replayer(
     if profile_name is not None:
         from openadapt_flow.execution_profiles import execution_profile_contract
 
-        if execution_profile_contract(profile_name).production:
-            checkpoint_key = crypto.resolve_key(None)
+        contract = execution_profile_contract(profile_name)
+        if contract.production and (
+            contract.require_encryption or bool(getattr(workflow, "encrypted", False))
+        ):
+            checkpoint_key = crypto.require_key(None)
 
     return build_replayer(
         backend,
@@ -461,6 +465,7 @@ def _build_and_run_replayer(
     """Build the shared Replayer configuration and execute one workflow."""
     return _configured_replayer(
         backend,
+        workflow=workflow,
         allow_egress=allow_egress,
         effect_verifier=effect_verifier,
         api_actuator=api_actuator,

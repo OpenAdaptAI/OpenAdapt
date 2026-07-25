@@ -1424,15 +1424,17 @@ def test_deployment_runtime_accepts_named_profile():
 
 
 @pytest.mark.parametrize(
-    ("profile", "expected_key"),
+    ("profile", "encrypted", "expected_key"),
     [
-        (ExecutionProfile.DEMO, None),
-        (ExecutionProfile.STANDARD, _KEY),
-        (ExecutionProfile.REGULATED, _KEY),
+        (ExecutionProfile.DEMO, False, None),
+        (ExecutionProfile.DEMO, True, None),
+        (ExecutionProfile.STANDARD, False, None),
+        (ExecutionProfile.STANDARD, True, _KEY),
+        (ExecutionProfile.REGULATED, True, _KEY),
     ],
 )
 def test_cli_replayer_wires_checkpoint_encryption_by_profile(
-    monkeypatch, profile, expected_key
+    monkeypatch, profile, encrypted, expected_key
 ):
     import openadapt_flow.__main__ as main
     import openadapt_flow.deployment as deployment
@@ -1447,6 +1449,7 @@ def test_cli_replayer_wires_checkpoint_encryption_by_profile(
     monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _KEY)
     main._configured_replayer(
         object(),
+        workflow=SimpleNamespace(encrypted=encrypted),
         allow_egress=False,
         effect_verifier=None,
         api_actuator=None,
@@ -1456,6 +1459,45 @@ def test_cli_replayer_wires_checkpoint_encryption_by_profile(
     )
 
     assert captured["checkpoint_key"] == expected_key
+
+
+@pytest.mark.parametrize(
+    ("profile", "encrypted"),
+    [
+        (ExecutionProfile.STANDARD, True),
+        (ExecutionProfile.REGULATED, False),
+    ],
+)
+def test_cli_replayer_refuses_missing_required_checkpoint_key_before_build(
+    monkeypatch, profile, encrypted
+):
+    import openadapt_flow.__main__ as main
+    import openadapt_flow.deployment as deployment
+    from openadapt_flow.crypto import MissingKeyError
+
+    build_calls = 0
+
+    def capture(_backend, **_kwargs):
+        nonlocal build_calls
+        build_calls += 1
+        return object()
+
+    monkeypatch.setattr(deployment, "build_replayer", capture)
+    monkeypatch.delenv("OPENADAPT_BUNDLE_KEY", raising=False)
+
+    with pytest.raises(MissingKeyError, match="no encryption passphrase configured"):
+        main._configured_replayer(
+            object(),
+            workflow=SimpleNamespace(encrypted=encrypted),
+            allow_egress=False,
+            effect_verifier=None,
+            api_actuator=None,
+            durable=True,
+            use_structural=True,
+            governed_authorization=SimpleNamespace(execution_profile=profile.value),
+        )
+
+    assert build_calls == 0
 
 
 def test_encrypted_demo_does_not_require_durable_checkpoint_key(tmp_path):

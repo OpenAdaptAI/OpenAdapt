@@ -242,12 +242,15 @@ def _deployment_executor(
     key: Optional[str],
 ):
     """Construct and close the qualified backend on the current owner thread."""
+    from openadapt_flow import crypto
     from openadapt_flow.backends.factory import _normalize_kind, build_backend
     from openadapt_flow.deployment import (
         build_api_actuator,
         build_effect_verifier,
         build_replayer,
     )
+
+    resolved_key = crypto.resolve_key(key)
 
     def bound_executor(backend: Any) -> BoundAttendedExecutor:
         def replayer_for_manifest(manifest: Any) -> Any:
@@ -268,10 +271,10 @@ def _deployment_executor(
                 pixel_verify_enabled=deployment.runtime.pixel_verify_enabled,
                 governed_authorization=manifest.governed_authorization,
                 runtime_config=deployment.runtime,
-                checkpoint_key=key,
+                checkpoint_key=resolved_key,
             )
 
-        return BoundAttendedExecutor(replayer_for_manifest, key=key)
+        return BoundAttendedExecutor(replayer_for_manifest, key=resolved_key)
 
     backend_cfg = deployment.backend
     if _normalize_kind(backend_cfg.kind) == "web":
