@@ -47,7 +47,11 @@ from openadapt_capture.db.models import ActionEvent, Recording, WindowEvent
 from openadapt_capture.video import VideoWriter
 from PIL import Image, ImageDraw
 
-from openadapt_flow.adapters.capture import _reject_out_of_window, convert_capture
+from openadapt_flow.adapters.capture import (
+    _flow_events,
+    _reject_out_of_window,
+    convert_capture,
+)
 
 # Physical (video) pixels; logical screen is half that (pixel_ratio 2.0, the
 # macOS Retina case where capture coords and frame pixels disagree).
@@ -371,6 +375,85 @@ def test_coordinates_scaled_to_frame_pixels(converted: Path) -> None:
     # Capture points are logical (Retina /2); frames are physical pixels.
     click = events_of(converted)[0]
     assert (click["x"], click["y"]) == BUTTON_CENTER_PHYSICAL
+
+
+def _captured_click_with_uia(**observation_overrides) -> SimpleNamespace:
+    observation = {
+        "schema_version": "openadapt.capture.structural-observation/v1",
+        "provider": "windows_uia",
+        "query_kind": "point",
+        "element": {
+            "automation_id": "SubmitAction",
+            "role": "Button",
+            "role_source": "pywinauto_friendly_class",
+            "control_type": "Button",
+            "name": "Submit",
+        },
+        "window": {"title": "Eligibility"},
+        "candidate_count": 2,
+        **observation_overrides,
+    }
+    return SimpleNamespace(
+        type="mouse.singleclick",
+        timestamp=T0 + 1,
+        button="left",
+        x=100.0,
+        y=120.0,
+        structural_observation=observation,
+    )
+
+
+def test_windows_uia_observation_maps_to_flow_structural_locator() -> None:
+    (event,) = _flow_events(
+        [_captured_click_with_uia()],
+        scale=1.0,
+        value_to_param={},
+    )
+    assert event["structural"] == {
+        "automation_id": "SubmitAction",
+        "role": "button",
+        "name": "Submit",
+        "window_name": "Eligibility",
+    }
+
+    # The exact locator is compiler-ready. Candidate ambiguity is intentionally
+    # not converted into a first-match choice: the Windows runtime enumerates
+    # candidates again and refuses when this locator is still non-unique.
+    from openadapt_flow.ir import StructuralLocator
+
+    locator = StructuralLocator.model_validate(event["structural"])
+    assert locator.automation_id == "SubmitAction"
+    assert locator.role == "button"
+
+
+def test_remote_window_capture_never_promotes_local_uia_canvas() -> None:
+    (event,) = _flow_events(
+        [_captured_click_with_uia()],
+        scale=1.0,
+        value_to_param={},
+        include_structural=False,
+    )
+    assert "structural" not in event
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"schema_version": "openadapt.capture.structural-observation/v999"},
+        {"provider": "future_provider"},
+        {"query_kind": "focused"},
+        {"element": {"control_type": "Unknown", "name": "Submit"}},
+    ],
+)
+def test_unknown_or_unresolvable_structural_observation_stays_optional(
+    overrides: dict,
+) -> None:
+    (event,) = _flow_events(
+        [_captured_click_with_uia(**overrides)],
+        scale=1.0,
+        value_to_param={},
+    )
+    assert "structural" not in event
 
 
 def test_meta_matches_recorder_contract(converted: Path) -> None:
