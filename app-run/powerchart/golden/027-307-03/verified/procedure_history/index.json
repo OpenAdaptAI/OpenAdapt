@@ -1,0 +1,129 @@
+{
+  "section": "procedure_history",
+  "shots": [
+    {
+      "file": "procedure_history_00.png",
+      "hash": "8249dcf160b5",
+      "mean": 223.83844426929275,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_01.png",
+      "hash": "c0e282821284",
+      "mean": 223.34141567332045,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_02.png",
+      "hash": "2bc264b00cbe",
+      "mean": 224.07472159000338,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_03.png",
+      "hash": "b7eab17fdaae",
+      "mean": 223.84525933642112,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_04.png",
+      "hash": "2ef1d5ee65bb",
+      "mean": 224.4873404815884,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_05.png",
+      "hash": "0a5c2966ec53",
+      "mean": 225.1265284874865,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_06.png",
+      "hash": "1aa2ab3168db",
+      "mean": 225.8108231194318,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_07.png",
+      "hash": "da7b8b00196e",
+      "mean": 226.88434549850334,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_08.png",
+      "hash": "0c39c7d65502",
+      "mean": 227.0255489049576,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_09.png",
+      "hash": "d50eb0e4a939",
+      "mean": 227.49301301608247,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_10.png",
+      "hash": "91e87585333c",
+      "mean": 227.3492378872279,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_11.png",
+      "hash": "44c781dad58c",
+      "mean": 227.36331657707362,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_12.png",
+      "hash": "6cf4caa3c4b5",
+      "mean": 227.39256562284135,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_13.png",
+      "hash": "ec91748b31ac",
+      "mean": 227.35124985609025,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_14.png",
+      "hash": "e16177688ef8",
+      "mean": 226.94523470571565,
+      "stop_marker": "important links"
+    },
+    {
+      "file": "procedure_history_15.png",
+      "hash": "04ac1411b2a6",
+      "mean": 227.45394534086682,
+      "stop_marker": "important links"
+    },
+    {
+      "file": "procedure_history_p2_00.png",
+      "hash": "5da9af7a2dc4",
+      "mean": 227.88515654058696,
+      "stop_marker": null,
+      "page": 2
+    },
+    {
+      "file": "procedure_history_p2_01.png",
+      "hash": "c465720bb573",
+      "mean": 226.93980759267788,
+      "stop_marker": null,
+      "page": 2
+    },
+    {
+      "file": "procedure_history_p3_00.png",
+      "hash": "95e46e8dbab9",
+      "mean": 227.45293802803803,
+      "stop_marker": null,
+      "page": 3
+    },
+    {
+      "file": "procedure_history_p3_01.png",
+      "hash": "c54d553246e3",
+      "mean": 227.3011392116403,
+      "stop_marker": null,
+      "page": 3
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "section": "procedure_history",
+  "shots": [
+    {
+      "file": "procedure_history_00.png",
+      "hash": "173686f9009c",
+      "mean": 222.9564023229246,
+      "stop_marker": null
+    },
+    {
+      "file": "procedure_history_01.png",
+      "hash": "6633caaedda4",
+      "mean": 224.33115784241662,
+      "stop_marker": "important links"
+    }
+  ]
+}

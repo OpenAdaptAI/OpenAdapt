@@ -1,0 +1,53 @@
+{
+  "mrn": "080-975-37",
+  "sections": {
+    "allergies": [
+      {
+        "file": "allergies_00.png",
+        "hash": "d5829e0d5198",
+        "mean": 225.00639878053101,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_01.png",
+        "hash": "7dba41d6fc18",
+        "mean": 225.7093818080377,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_02.png",
+        "hash": "7b4b2f068acd",
+        "mean": 225.86574560743193,
+        "stop_marker": "home medications"
+      }
+    ],
+    "problem_history": [
+      {
+        "file": "problem_history_00.png",
+        "hash": "d99a947bbe3d",
+        "mean": 224.7190522104536,
+        "stop_marker": null
+      },
+      {
+        "file": "problem_history_01.png",
+        "hash": "57aca35b5267",
+        "mean": 225.60892068802139,
+        "stop_marker": "important links"
+      }
+    ],
+    "procedure_history": [
+      {
+        "file": "procedure_history_00.png",
+        "hash": "173686f9009c",
+        "mean": 222.9564023229246,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_01.png",
+        "hash": "6633caaedda4",
+        "mean": 224.33115784241662,
+        "stop_marker": "important links"
+      }
+    ]
+  }
+}

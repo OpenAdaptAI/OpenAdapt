@@ -1,0 +1,23 @@
+{
+  "section": "allergies",
+  "shots": [
+    {
+      "file": "allergies_00.png",
+      "hash": "d5829e0d5198",
+      "mean": 225.00639878053101,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_01.png",
+      "hash": "7dba41d6fc18",
+      "mean": 225.7093818080377,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_02.png",
+      "hash": "7b4b2f068acd",
+      "mean": 225.86574560743193,
+      "stop_marker": "home medications"
+    }
+  ]
+}

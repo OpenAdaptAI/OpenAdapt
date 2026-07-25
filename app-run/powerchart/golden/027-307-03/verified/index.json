@@ -1,0 +1,312 @@
+{
+  "mrn": "027-307-03",
+  "sections": {
+    "allergies": [
+      {
+        "file": "allergies_00.png",
+        "hash": "1ec0d188ebbf",
+        "mean": 222.6998531567155,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_01.png",
+        "hash": "e1a3600763d8",
+        "mean": 223.34563073424962,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_02.png",
+        "hash": "007c17b162f8",
+        "mean": 224.96064743884943,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_03.png",
+        "hash": "ca8031d9c9b6",
+        "mean": 225.12875991870206,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_04.png",
+        "hash": "a4de45fb2068",
+        "mean": 226.24515876565295,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_05.png",
+        "hash": "e952d2c9ff7b",
+        "mean": 225.89312288563383,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_06.png",
+        "hash": "df0328668f96",
+        "mean": 225.94019044793566,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_07.png",
+        "hash": "660f86105f00",
+        "mean": 225.82620297472502,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_08.png",
+        "hash": "89e8dcd82f58",
+        "mean": 225.79175308631042,
+        "stop_marker": null
+      },
+      {
+        "file": "allergies_09.png",
+        "hash": "cc2ed91dbd01",
+        "mean": 225.54463443605093,
+        "stop_marker": "home medications"
+      },
+      {
+        "file": "allergies_10.png",
+        "hash": "6070ca09b482",
+        "mean": 225.01854243787528,
+        "stop_marker": "home medications"
+      },
+      {
+        "file": "allergies_p2_00.png",
+        "hash": "ac8e4f2c063e",
+        "mean": 227.3740924276909,
+        "stop_marker": null,
+        "page": 2
+      }
+    ],
+    "problem_history": [
+      {
+        "file": "problem_history_00.png",
+        "hash": "9afd58cb0f38",
+        "mean": 224.93395666545635,
+        "stop_marker": null
+      },
+      {
+        "file": "problem_history_01.png",
+        "hash": "0cd5cfe66499",
+        "mean": 225.4329263270692,
+        "stop_marker": null
+      },
+      {
+        "file": "problem_history_02.png",
+        "hash": "d96a01c57d26",
+        "mean": 227.04155128057528,
+        "stop_marker": null
+      },
+      {
+        "file": "problem_history_03.png",
+        "hash": "94f1a74228ba",
+        "mean": 227.48411103632725,
+        "stop_marker": null
+      },
+      {
+        "file": "problem_history_04.png",
+        "hash": "aac7ce372d6e",
+        "mean": 227.41802308976426,
+        "stop_marker": null
+      },
+      {
+        "file": "problem_history_05.png",
+        "hash": "493bbcf01435",
+        "mean": 227.4075249849448,
+        "stop_marker": null
+      },
+      {
+        "file": "problem_history_06.png",
+        "hash": "09b27e51123b",
+        "mean": 226.39425418223843,
+        "stop_marker": "important links"
+      },
+      {
+        "file": "problem_history_07.png",
+        "hash": "9b57ea670901",
+        "mean": 227.36695201385075,
+        "stop_marker": "important links"
+      },
+      {
+        "file": "problem_history_p2_00.png",
+        "hash": "76717fc2cce4",
+        "mean": 227.13790787341256,
+        "stop_marker": null,
+        "page": 2
+      },
+      {
+        "file": "problem_history_p2_01.png",
+        "hash": "c3a4dc7c4e3b",
+        "mean": 226.08935626959388,
+        "stop_marker": null,
+        "page": 2
+      },
+      {
+        "file": "problem_history_p3_00.png",
+        "hash": "18024e1800c8",
+        "mean": 227.36983696133478,
+        "stop_marker": null,
+        "page": 3
+      },
+      {
+        "file": "problem_history_p3_01.png",
+        "hash": "274207e312ce",
+        "mean": 227.3485399249898,
+        "stop_marker": null,
+        "page": 3
+      },
+      {
+        "file": "problem_history_p3_02.png",
+        "hash": "8feccccdd2c0",
+        "mean": 226.2999300930764,
+        "stop_marker": null,
+        "page": 3
+      },
+      {
+        "file": "problem_history_p4_00.png",
+        "hash": "5d8ee9f67443",
+        "mean": 227.42668418675498,
+        "stop_marker": null,
+        "page": 4
+      },
+      {
+        "file": "problem_history_p4_01.png",
+        "hash": "5a83d6629e3f",
+        "mean": 227.51019617111533,
+        "stop_marker": null,
+        "page": 4
+      },
+      {
+        "file": "problem_history_p4_02.png",
+        "hash": "edf4810e7c6b",
+        "mean": 226.46147536265255,
+        "stop_marker": null,
+        "page": 4
+      }
+    ],
+    "procedure_history": [
+      {
+        "file": "procedure_history_00.png",
+        "hash": "8249dcf160b5",
+        "mean": 223.83844426929275,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_01.png",
+        "hash": "c0e282821284",
+        "mean": 223.34141567332045,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_02.png",
+        "hash": "2bc264b00cbe",
+        "mean": 224.07472159000338,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_03.png",
+        "hash": "b7eab17fdaae",
+        "mean": 223.84525933642112,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_04.png",
+        "hash": "2ef1d5ee65bb",
+        "mean": 224.4873404815884,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_05.png",
+        "hash": "0a5c2966ec53",
+        "mean": 225.1265284874865,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_06.png",
+        "hash": "1aa2ab3168db",
+        "mean": 225.8108231194318,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_07.png",
+        "hash": "da7b8b00196e",
+        "mean": 226.88434549850334,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_08.png",
+        "hash": "0c39c7d65502",
+        "mean": 227.0255489049576,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_09.png",
+        "hash": "d50eb0e4a939",
+        "mean": 227.49301301608247,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_10.png",
+        "hash": "91e87585333c",
+        "mean": 227.3492378872279,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_11.png",
+        "hash": "44c781dad58c",
+        "mean": 227.36331657707362,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_12.png",
+        "hash": "6cf4caa3c4b5",
+        "mean": 227.39256562284135,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_13.png",
+        "hash": "ec91748b31ac",
+        "mean": 227.35124985609025,
+        "stop_marker": null
+      },
+      {
+        "file": "procedure_history_14.png",
+        "hash": "e16177688ef8",
+        "mean": 226.94523470571565,
+        "stop_marker": "important links"
+      },
+      {
+        "file": "procedure_history_15.png",
+        "hash": "04ac1411b2a6",
+        "mean": 227.45394534086682,
+        "stop_marker": "important links"
+      },
+      {
+        "file": "procedure_history_p2_00.png",
+        "hash": "5da9af7a2dc4",
+        "mean": 227.88515654058696,
+        "stop_marker": null,
+        "page": 2
+      },
+      {
+        "file": "procedure_history_p2_01.png",
+        "hash": "c465720bb573",
+        "mean": 226.93980759267788,
+        "stop_marker": null,
+        "page": 2
+      },
+      {
+        "file": "procedure_history_p3_00.png",
+        "hash": "95e46e8dbab9",
+        "mean": 227.45293802803803,
+        "stop_marker": null,
+        "page": 3
+      },
+      {
+        "file": "procedure_history_p3_01.png",
+        "hash": "c54d553246e3",
+        "mean": 227.3011392116403,
+        "stop_marker": null,
+        "page": 3
+      }
+    ]
+  }
+}

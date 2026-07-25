@@ -1,0 +1,78 @@
+{
+  "section": "allergies",
+  "shots": [
+    {
+      "file": "allergies_00.png",
+      "hash": "1ec0d188ebbf",
+      "mean": 222.6998531567155,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_01.png",
+      "hash": "e1a3600763d8",
+      "mean": 223.34563073424962,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_02.png",
+      "hash": "007c17b162f8",
+      "mean": 224.96064743884943,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_03.png",
+      "hash": "ca8031d9c9b6",
+      "mean": 225.12875991870206,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_04.png",
+      "hash": "a4de45fb2068",
+      "mean": 226.24515876565295,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_05.png",
+      "hash": "e952d2c9ff7b",
+      "mean": 225.89312288563383,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_06.png",
+      "hash": "df0328668f96",
+      "mean": 225.94019044793566,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_07.png",
+      "hash": "660f86105f00",
+      "mean": 225.82620297472502,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_08.png",
+      "hash": "89e8dcd82f58",
+      "mean": 225.79175308631042,
+      "stop_marker": null
+    },
+    {
+      "file": "allergies_09.png",
+      "hash": "cc2ed91dbd01",
+      "mean": 225.54463443605093,
+      "stop_marker": "home medications"
+    },
+    {
+      "file": "allergies_10.png",
+      "hash": "6070ca09b482",
+      "mean": 225.01854243787528,
+      "stop_marker": "home medications"
+    },
+    {
+      "file": "allergies_p2_00.png",
+      "hash": "ac8e4f2c063e",
+      "mean": 227.3740924276909,
+      "stop_marker": null,
+      "page": 2
+    }
+  ]
+}

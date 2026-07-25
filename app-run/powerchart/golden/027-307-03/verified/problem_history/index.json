@@ -1,0 +1,109 @@
+{
+  "section": "problem_history",
+  "shots": [
+    {
+      "file": "problem_history_00.png",
+      "hash": "9afd58cb0f38",
+      "mean": 224.93395666545635,
+      "stop_marker": null
+    },
+    {
+      "file": "problem_history_01.png",
+      "hash": "0cd5cfe66499",
+      "mean": 225.4329263270692,
+      "stop_marker": null
+    },
+    {
+      "file": "problem_history_02.png",
+      "hash": "d96a01c57d26",
+      "mean": 227.04155128057528,
+      "stop_marker": null
+    },
+    {
+      "file": "problem_history_03.png",
+      "hash": "94f1a74228ba",
+      "mean": 227.48411103632725,
+      "stop_marker": null
+    },
+    {
+      "file": "problem_history_04.png",
+      "hash": "aac7ce372d6e",
+      "mean": 227.41802308976426,
+      "stop_marker": null
+    },
+    {
+      "file": "problem_history_05.png",
+      "hash": "493bbcf01435",
+      "mean": 227.4075249849448,
+      "stop_marker": null
+    },
+    {
+      "file": "problem_history_06.png",
+      "hash": "09b27e51123b",
+      "mean": 226.39425418223843,
+      "stop_marker": "important links"
+    },
+    {
+      "file": "problem_history_07.png",
+      "hash": "9b57ea670901",
+      "mean": 227.36695201385075,
+      "stop_marker": "important links"
+    },
+    {
+      "file": "problem_history_p2_00.png",
+      "hash": "76717fc2cce4",
+      "mean": 227.13790787341256,
+      "stop_marker": null,
+      "page": 2
+    },
+    {
+      "file": "problem_history_p2_01.png",
+      "hash": "c3a4dc7c4e3b",
+      "mean": 226.08935626959388,
+      "stop_marker": null,
+      "page": 2
+    },
+    {
+      "file": "problem_history_p3_00.png",
+      "hash": "18024e1800c8",
+      "mean": 227.36983696133478,
+      "stop_marker": null,
+      "page": 3
+    },
+    {
+      "file": "problem_history_p3_01.png",
+      "hash": "274207e312ce",
+      "mean": 227.3485399249898,
+      "stop_marker": null,
+      "page": 3
+    },
+    {
+      "file": "problem_history_p3_02.png",
+      "hash": "8feccccdd2c0",
+      "mean": 226.2999300930764,
+      "stop_marker": null,
+      "page": 3
+    },
+    {
+      "file": "problem_history_p4_00.png",
+      "hash": "5d8ee9f67443",
+      "mean": 227.42668418675498,
+      "stop_marker": null,
+      "page": 4
+    },
+    {
+      "file": "problem_history_p4_01.png",
+      "hash": "5a83d6629e3f",
+      "mean": 227.51019617111533,
+      "stop_marker": null,
+      "page": 4
+    },
+    {
+      "file": "problem_history_p4_02.png",
+      "hash": "edf4810e7c6b",
+      "mean": 226.46147536265255,
+      "stop_marker": null,
+      "page": 4
+    }
+  ]
+}

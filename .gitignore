@@ -56,3 +56,21 @@ performance/
 *.pem
 .env.backup
 deploy/.env
+
+# Local OpenAdapt flow recordings / replays (generated)
+app-run/*
+!app-run/powerchart/
+!app-run/powerchart/**
+demo-run/
+my-run/
+.build/
+
+# PowerChart: track source + golden JSON; ignore runs, captures, packaging
+app-run/powerchart/out/
+app-run/powerchart/kept/
+app-run/powerchart/template/
+app-run/powerchart/**/__pycache__/
+app-run/powerchart/golden/**/*.png
+app-run/powerchart/PowerChartPilot/.build/
+app-run/powerchart/PowerChartPilot/dist/
+app-run/powerchart/PowerChartPilot/dist-release/

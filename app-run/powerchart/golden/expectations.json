@@ -1,0 +1,20 @@
+{
+  "080-975-37": {
+    "run": "golden/080-975-37",
+    "patient_contains": "ZZTEST",
+    "tables": {
+      "allergies": {"ui": 5, "min_rows": 5, "max_rows": 5},
+      "problem_history": {"ui": 4, "min_rows": 4, "max_rows": 4},
+      "procedure_history": {"ui": 4, "min_rows": 4, "max_rows": 4}
+    }
+  },
+  "027-307-03": {
+    "run": "golden/027-307-03",
+    "patient_contains": "ZZTEST",
+    "tables": {
+      "allergies": {"ui": 15, "min_rows": 14, "max_rows": 17},
+      "problem_history": {"ui": 25, "min_rows": 25, "max_rows": 25},
+      "procedure_history": {"ui": 24, "min_rows": 21, "max_rows": 24}
+    }
+  }
+}
