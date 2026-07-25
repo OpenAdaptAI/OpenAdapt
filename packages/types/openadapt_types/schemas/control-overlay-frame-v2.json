@@ -1,0 +1,455 @@
+{
+  "$defs": {
+    "ControlOverlayControlsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "pause": {
+          "default": false,
+          "title": "Pause",
+          "type": "boolean"
+        },
+        "resume": {
+          "default": false,
+          "title": "Resume",
+          "type": "boolean"
+        },
+        "stop": {
+          "default": false,
+          "title": "Stop",
+          "type": "boolean"
+        }
+      },
+      "title": "ControlOverlayControlsV1",
+      "type": "object"
+    },
+    "ControlOverlayMediaFrameBindingV2": {
+      "additionalProperties": false,
+      "description": "Binding to one exact decoded frame of one exact immutable media file.",
+      "properties": {
+        "frame_index": {
+          "minimum": 0,
+          "title": "Frame Index",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "media_frame",
+          "default": "media_frame",
+          "title": "Kind",
+          "type": "string"
+        },
+        "media_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Media Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "media_sha256",
+        "frame_index"
+      ],
+      "title": "ControlOverlayMediaFrameBindingV2",
+      "type": "object"
+    },
+    "ControlOverlayMode": {
+      "enum": [
+        "demonstration",
+        "replay",
+        "governed",
+        "managed"
+      ],
+      "title": "ControlOverlayMode",
+      "type": "string"
+    },
+    "ControlOverlayNormalizedRectV2": {
+      "additionalProperties": false,
+      "description": "Axis-aligned rectangle normalized to the source top-level viewport.",
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Height",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Width",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "ControlOverlayNormalizedRectV2",
+      "type": "object"
+    },
+    "ControlOverlayObservationBindingV2": {
+      "additionalProperties": false,
+      "description": "Opaque binding to one exact private runtime observation.\n\nThe digest must be HMAC-SHA256 over a canonical private observation ID,\ndomain-separated for this contract and keyed with a run/export-scoped\nsecret.  A raw screenshot, frame, or observation SHA-256 is not valid here:\nit can be linkable across evidence boundaries.",
+      "properties": {
+        "kind": {
+          "const": "observation_hmac_sha256",
+          "default": "observation_hmac_sha256",
+          "title": "Kind",
+          "type": "string"
+        },
+        "observation_hmac_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Observation Hmac Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "observation_hmac_sha256"
+      ],
+      "title": "ControlOverlayObservationBindingV2",
+      "type": "object"
+    },
+    "ControlOverlayPhase": {
+      "description": "Canonical cross-surface execution and terminal states.",
+      "enum": [
+        "idle",
+        "observing",
+        "recording",
+        "executing",
+        "pausing",
+        "paused",
+        "resuming",
+        "stopping",
+        "verifying",
+        "verified",
+        "completed_unverified",
+        "halted",
+        "failed",
+        "rolled_back"
+      ],
+      "title": "ControlOverlayPhase",
+      "type": "string"
+    },
+    "ControlOverlayProfile": {
+      "enum": [
+        "demo",
+        "standard",
+        "regulated"
+      ],
+      "title": "ControlOverlayProfile",
+      "type": "string"
+    },
+    "ControlOverlaySourceViewportV2": {
+      "additionalProperties": false,
+      "description": "Source viewport used when the runtime resolved the target.",
+      "properties": {
+        "device_pixel_ratio": {
+          "exclusiveMinimum": 0,
+          "maximum": 16,
+          "title": "Device Pixel Ratio",
+          "type": "number"
+        },
+        "height_css_px": {
+          "exclusiveMinimum": 0,
+          "title": "Height Css Px",
+          "type": "integer"
+        },
+        "width_css_px": {
+          "exclusiveMinimum": 0,
+          "title": "Width Css Px",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width_css_px",
+        "height_css_px",
+        "device_pixel_ratio"
+      ],
+      "title": "ControlOverlaySourceViewportV2",
+      "type": "object"
+    },
+    "ControlOverlayStepV1": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current"
+        },
+        "total": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total"
+        }
+      },
+      "title": "ControlOverlayStepV1",
+      "type": "object"
+    },
+    "ControlOverlayTargetActionKind": {
+      "description": "Closed, presentation-only kinds for actions with a visible target.",
+      "enum": [
+        "click",
+        "double_click",
+        "right_click",
+        "drag",
+        "type",
+        "select",
+        "toggle",
+        "invoke",
+        "expand_collapse",
+        "scroll",
+        "hover"
+      ],
+      "title": "ControlOverlayTargetActionKind",
+      "type": "string"
+    },
+    "ControlOverlayTargetTrackingV2": {
+      "additionalProperties": false,
+      "description": "Exact geometry for presentation, never target-resolution evidence.",
+      "properties": {
+        "action_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ControlOverlayTargetActionKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "binding": {
+          "discriminator": {
+            "mapping": {
+              "media_frame": "#/$defs/ControlOverlayMediaFrameBindingV2",
+              "observation_hmac_sha256": "#/$defs/ControlOverlayObservationBindingV2"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ControlOverlayObservationBindingV2"
+            },
+            {
+              "$ref": "#/$defs/ControlOverlayMediaFrameBindingV2"
+            }
+          ],
+          "title": "Binding"
+        },
+        "coordinate_space": {
+          "const": "top_level_viewport_normalized",
+          "default": "top_level_viewport_normalized",
+          "title": "Coordinate Space",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/ControlOverlayNormalizedRectV2"
+        },
+        "source_viewport": {
+          "$ref": "#/$defs/ControlOverlaySourceViewportV2"
+        },
+        "viewport_to_presentation": {
+          "$ref": "#/$defs/ControlOverlayViewportTransformV2"
+        }
+      },
+      "required": [
+        "rect",
+        "source_viewport",
+        "viewport_to_presentation",
+        "binding"
+      ],
+      "title": "ControlOverlayTargetTrackingV2",
+      "type": "object",
+      "x-openadapt-missing-binding-behavior": "omit_target",
+      "x-openadapt-render-only-on-exact-binding": true,
+      "x-openadapt-runtime-resolution-replay": false
+    },
+    "ControlOverlayViewportTransformV2": {
+      "additionalProperties": false,
+      "description": "Explicit source-viewport to presentation-surface transform.\n\nThe source and destination are both normalized.  This bounded transform\nrepresents full-viewport scaling and letterboxing without rotation,\nmirroring, or cropping.  If a producer cannot describe its transform this\nway, it must omit target tracking rather than approximate it.",
+      "properties": {
+        "destination_coordinate_space": {
+          "const": "presentation_surface_normalized",
+          "default": "presentation_surface_normalized",
+          "title": "Destination Coordinate Space",
+          "type": "string"
+        },
+        "kind": {
+          "const": "axis_aligned_normalized",
+          "default": "axis_aligned_normalized",
+          "title": "Kind",
+          "type": "string"
+        },
+        "offset_x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Offset X",
+          "type": "number"
+        },
+        "offset_y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Offset Y",
+          "type": "number"
+        },
+        "scale_x": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Scale X",
+          "type": "number"
+        },
+        "scale_y": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Scale Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "scale_x",
+        "scale_y",
+        "offset_x",
+        "offset_y"
+      ],
+      "title": "ControlOverlayViewportTransformV2",
+      "type": "object"
+    },
+    "ControlOverlayWorkflowLabel": {
+      "description": "Closed presentation labels; user-authored workflow names are excluded.",
+      "enum": [
+        "Workflow demonstration",
+        "Workflow replay",
+        "Governed workflow",
+        "Managed workflow"
+      ],
+      "title": "ControlOverlayWorkflowLabel",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Control state plus optional exactly bound target presentation geometry.",
+  "properties": {
+    "controls": {
+      "$ref": "#/$defs/ControlOverlayControlsV1"
+    },
+    "event_sequence": {
+      "minimum": 0,
+      "title": "Event Sequence",
+      "type": "integer"
+    },
+    "mode": {
+      "$ref": "#/$defs/ControlOverlayMode"
+    },
+    "observed_at_monotonic_ms": {
+      "minimum": 0,
+      "title": "Observed At Monotonic Ms",
+      "type": "number"
+    },
+    "observed_at_unix_ms": {
+      "minimum": 0,
+      "title": "Observed At Unix Ms",
+      "type": "integer"
+    },
+    "phase": {
+      "$ref": "#/$defs/ControlOverlayPhase"
+    },
+    "presentation": {
+      "const": true,
+      "default": true,
+      "title": "Presentation",
+      "type": "boolean"
+    },
+    "profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ControlOverlayProfile"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": "openadapt.control-overlay-frame/v2",
+      "default": "openadapt.control-overlay-frame/v2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "state_id": {
+      "maxLength": 280,
+      "minLength": 1,
+      "title": "State Id",
+      "type": "string"
+    },
+    "status": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Status",
+      "type": "string"
+    },
+    "step": {
+      "$ref": "#/$defs/ControlOverlayStepV1"
+    },
+    "target_tracking": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ControlOverlayTargetTrackingV2"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "visible": {
+      "title": "Visible",
+      "type": "boolean"
+    },
+    "workflow_label": {
+      "$ref": "#/$defs/ControlOverlayWorkflowLabel"
+    }
+  },
+  "required": [
+    "state_id",
+    "event_sequence",
+    "observed_at_unix_ms",
+    "observed_at_monotonic_ms",
+    "visible",
+    "phase",
+    "workflow_label",
+    "mode",
+    "step",
+    "controls",
+    "status"
+  ],
+  "title": "ControlOverlayFrameV2",
+  "type": "object"
+}

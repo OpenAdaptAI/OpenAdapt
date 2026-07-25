@@ -61,6 +61,24 @@ from openadapt_types.control_overlay import (
     control_overlay_state_id,
     is_terminal_control_overlay_phase,
 )
+from openadapt_types.control_overlay_tracking import (
+    CONTROL_OVERLAY_FRAME_V2_SCHEMA,
+    CONTROL_OVERLAY_TIMELINE_V2_SCHEMA,
+    ControlOverlayFrameV2,
+    ControlOverlayMediaFrameBindingV2,
+    ControlOverlayNormalizedRectV2,
+    ControlOverlayObservationBindingV2,
+    ControlOverlaySourceViewportV2,
+    ControlOverlayTargetActionKind,
+    ControlOverlayTargetBindingV2,
+    ControlOverlayTargetTrackingV2,
+    ControlOverlayTimelineBindingV2,
+    ControlOverlayTimelineEventV2,
+    ControlOverlayTimelineV2,
+    ControlOverlayViewportTransformV2,
+    build_control_overlay_timeline_v2,
+    control_overlay_state_id_v2,
+)
 from openadapt_types.episode import Episode, Step
 from openadapt_types.failure import FailureCategory, FailureRecord
 from openadapt_types.parsing import (
@@ -101,6 +119,23 @@ __all__ = [
     "build_control_overlay_timeline",
     "control_overlay_state_id",
     "is_terminal_control_overlay_phase",
+    # exact control-overlay target tracking
+    "CONTROL_OVERLAY_FRAME_V2_SCHEMA",
+    "CONTROL_OVERLAY_TIMELINE_V2_SCHEMA",
+    "ControlOverlayFrameV2",
+    "ControlOverlayMediaFrameBindingV2",
+    "ControlOverlayNormalizedRectV2",
+    "ControlOverlayObservationBindingV2",
+    "ControlOverlaySourceViewportV2",
+    "ControlOverlayTargetActionKind",
+    "ControlOverlayTargetBindingV2",
+    "ControlOverlayTargetTrackingV2",
+    "ControlOverlayTimelineBindingV2",
+    "ControlOverlayTimelineEventV2",
+    "ControlOverlayTimelineV2",
+    "ControlOverlayViewportTransformV2",
+    "build_control_overlay_timeline_v2",
+    "control_overlay_state_id_v2",
     # action
     "Action",
     "ActionResult",

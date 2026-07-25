@@ -5,13 +5,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from openadapt_types import ControlOverlayFrameV1, ControlOverlayTimelineV1
+from openadapt_types import (
+    ControlOverlayFrameV1,
+    ControlOverlayFrameV2,
+    ControlOverlayTimelineV1,
+    ControlOverlayTimelineV2,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "openadapt_types" / "schemas"
 SCHEMAS = {
     "control-overlay-frame-v1.json": ControlOverlayFrameV1,
     "control-overlay-timeline-v1.json": ControlOverlayTimelineV1,
+    "control-overlay-frame-v2.json": ControlOverlayFrameV2,
+    "control-overlay-timeline-v2.json": ControlOverlayTimelineV2,
 }
 
 
