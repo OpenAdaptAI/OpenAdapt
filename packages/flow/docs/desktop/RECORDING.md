@@ -63,20 +63,24 @@ pip install 'openadapt-flow[capture]'
 
 ### Structural UIA evidence
 
-Offline capture records mouse/keyboard/video **only** — there is no live
-accessibility tree at conversion time to read an element identity from. So every
-`anchor.structural` is `None` and replay resolves on the **visual ladder**
-(template → OCR → geometry). The bundle is fully valid and replays; it simply
-lacks the deterministic *structural* top rung that a DOM-armed web bundle
-(`dom_arm`) or a live UIA-armed desktop recording carries.
+On Windows, `openadapt-capture` observes the UI Automation element at action
+time and stores versioned structural evidence beside the native input event.
+`convert_capture` maps the element's AutomationId or ControlType+Name and
+top-level window into Flow's `StructuralLocator`. The compiled bundle therefore
+uses UIA as its deterministic first resolution rung while retaining templates,
+OCR, and geometry as fallback evidence.
 
-The deterministic structural rung is armed by the **live-over-`WindowsBackend`**
-path (`openadapt_flow.adapters.desktop_recorder.record_desktop_demo`), which
-queries `WindowsBackend.structural_locator_at` at each click — but that path
-uses a driver that can query the target under the click. Capture-converted
-recordings without that observer remain valid and use the visual ladder. A
-deployment that requires UIA identity records through the live observer or
-re-arms the fixed workflow against the qualified application before release.
+Older recordings and inaccessible controls remain valid and use the visual
+ladder. Flow never fabricates a structural locator from coordinates or nearby
+pixels. At replay the Windows backend enumerates current candidates and refuses
+an ambiguous match rather than selecting the first one.
+
+Window scoping does not itself disable UIA: a native Windows recording scoped
+to one application window still retains that application's structural
+evidence. For RDP and Citrix, Flow explicitly suppresses local UIA because it
+can describe only the remote-client window or canvas, not controls inside the
+remote session. Those remote recordings instead use the external black-box
+visual, relational, identity, and fresh-frame contracts.
 
 ### Secret handling
 

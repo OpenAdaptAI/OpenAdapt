@@ -131,7 +131,7 @@ service-mlx = [
 # while retaining headless-safe import and persisted pixel_ratio. The adapter
 # tests therefore run against the exact producer contract in headless CI (the
 # `test` job installs this extra).
-capture = ["openadapt-capture>=0.6.0"]
+capture = ["openadapt-capture>=1.1.0"]
 # Canonical action-vocabulary interop (openadapt_flow.interop.types). Boundary
 # only (emit / benchmark round-trip); never on the replay hot path. The shim
 # imports openadapt-types lazily, so the core stays importable without it.

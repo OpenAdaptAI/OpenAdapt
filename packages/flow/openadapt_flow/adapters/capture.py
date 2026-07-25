@@ -116,18 +116,18 @@ openadapt-capture is an **optional** dependency (the ``capture`` extra:
 ``pip install 'openadapt-flow[capture]'``); it is imported lazily so the flow
 core never pulls it onto the replay hot path.
 
-Structural-identity gap (desktop→web parity). This offline conversion produces
-a recording of the SAME shape as a web recording, and it compiles into a valid
-bundle, but it CANNOT carry the ``structural`` locator (UIA ``AutomationId`` or
-AT-SPI accessible ID / role+name) that a DOM-armed web bundle gets: capture records only
-mouse/keyboard/frame evidence, so there is no live accessibility tree at conversion time
-to read an element identity from. Every ``anchor.structural`` is therefore None
-and replay uses the VISUAL ladder (template/ocr/geometry). To get the
-deterministic structural top rung on desktop, record LIVE over ``WindowsBackend``
-via :func:`openadapt_flow.adapters.desktop_recorder.record_desktop_demo` (the
-recorder arms UIA locators per click). Re-arming an already-converted capture
-session against a live UIA tree is a separate follow-up documented in
-``desktop_recorder`` — it is not done here.
+Native structural evidence. Current openadapt-capture sessions can retain a
+versioned Windows UIA observation beside each native action. This adapter maps
+the observation's AutomationId or ControlType+Name, plus its top-level window,
+into Flow's backend-neutral ``structural`` locator. The compiler therefore
+keeps UIA as the deterministic top resolution rung while retaining the same
+visual fallback evidence. Older captures and applications without accessible
+controls continue through the visual ladder.
+
+Window-scoped RDP/Citrix captures deliberately do NOT promote local UIA
+observations. UIA describes the local remote-client canvas, not controls inside
+the remote session, so those surfaces remain external black-box workflows using
+pixels, OCR, relational anchors, identity regions, and fresh-frame verification.
 """
 
 from __future__ import annotations
@@ -202,6 +202,19 @@ _CHORD_MODIFIER_NAMES = _MODIFIER_KEY_NAMES - {
     "shift_l",
     "shift_r",
     "caps_lock",
+}
+
+_CAPTURE_STRUCTURAL_SCHEMA = "openadapt.capture.structural-observation/v1"
+_WINDOWS_CONTROL_TYPE_TO_ROLE = {
+    "Button": "button",
+    "Hyperlink": "link",
+    "MenuItem": "menuitem",
+    "TabItem": "tab",
+    "ListItem": "listitem",
+    "CheckBox": "checkbox",
+    "RadioButton": "radio",
+    "Edit": "textbox",
+    "SplitButton": "button",
 }
 
 
@@ -492,10 +505,93 @@ def _window_identity_int(value: Any) -> Optional[int]:
     return None
 
 
+def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
+    """Map a Capture Windows UIA observation to Flow's locator contract.
+
+    Unknown or malformed observation versions stay optional instead of being
+    guessed into a target. Capture's friendly-class ``role`` is intentionally
+    ignored: Flow's Windows resolver expects lowercase ARIA-style roles, which
+    are derived from the native UIA ``control_type`` through the same mapping
+    used by :class:`~openadapt_flow.backends.windows_backend.WindowsBackend`.
+    """
+
+    observation = getattr(action, "structural_observation", None)
+    if observation is None:
+        return None
+    if hasattr(observation, "model_dump"):
+        try:
+            observation = observation.model_dump(mode="json", exclude_none=True)
+        except Exception:
+            return None
+    if not isinstance(observation, dict):
+        return None
+    if (
+        observation.get("schema_version") != _CAPTURE_STRUCTURAL_SCHEMA
+        or observation.get("provider") != "windows_uia"
+        or observation.get("query_kind") != "point"
+    ):
+        return None
+
+    raw_element = observation.get("element")
+    if not isinstance(raw_element, dict):
+        return None
+
+    # Capture observes the exact element under the pointer. Common Windows
+    # controls expose a non-actionable Text child inside the actionable Button,
+    # Edit, or selection control. Use the nearest supported actionable node,
+    # matching WindowsBackend.structural_locator_at instead of compiling a
+    # child handle that the native actuator cannot safely invoke.
+    raw_ancestry = observation.get("ancestry")
+    candidates = [raw_element]
+    if isinstance(raw_ancestry, list):
+        candidates.extend(item for item in raw_ancestry if isinstance(item, dict))
+    selected: Optional[dict[str, Any]] = None
+    role: Optional[str] = None
+    for candidate in candidates:
+        control_type = candidate.get("control_type")
+        candidate_role = (
+            _WINDOWS_CONTROL_TYPE_TO_ROLE.get(control_type)
+            if isinstance(control_type, str)
+            else None
+        )
+        automation_id = candidate.get("automation_id")
+        name = candidate.get("name")
+        if candidate_role is not None and (
+            (isinstance(automation_id, str) and automation_id.strip())
+            or (isinstance(name, str) and name.strip())
+        ):
+            selected = candidate
+            role = candidate_role
+            break
+    if selected is None or role is None:
+        return None
+
+    automation_id = selected.get("automation_id")
+    name = selected.get("name")
+    window = observation.get("window")
+    window_name = window.get("title") if isinstance(window, dict) else None
+
+    locator = {
+        key: value.strip()
+        for key, value in {
+            "automation_id": automation_id,
+            "role": role,
+            "name": name,
+            "window_name": window_name,
+        }.items()
+        if isinstance(value, str) and value.strip()
+    }
+    if "automation_id" not in locator and not ("role" in locator and "name" in locator):
+        return None
+    return locator
+
+
 def _flow_events(
     actions: "list[Action]",
     scale: float,
     value_to_param: dict[str, str],
+    *,
+    include_structural: bool = True,
 ) -> list[dict[str, Any]]:
     """Convert capture ``Action``s into ordered flow event dicts.
 
@@ -541,14 +637,18 @@ def _flow_events(
                     f"(t={ts:.3f}); converting would silently drop a user action"
                 )
             kind = "click" if atype == "mouse.singleclick" else "double_click"
-            events.append(
-                {
-                    "kind": kind,
-                    "x": int(round((action.x or 0.0) * scale)),
-                    "y": int(round((action.y or 0.0) * scale)),
-                    "_ts": ts,
-                }
+            event = {
+                "kind": kind,
+                "x": int(round((action.x or 0.0) * scale)),
+                "y": int(round((action.y or 0.0) * scale)),
+                "_ts": ts,
+            }
+            structural = (
+                _capture_structural_locator(action) if include_structural else None
             )
+            if structural is not None:
+                event["structural"] = structural
+            events.append(event)
         elif atype == "mouse.scroll":
             flush_text()
             # pynput: notches, +dy = scroll up. Flow: pixels, +dy = view down.
@@ -643,6 +743,7 @@ def convert_capture(
     *,
     params: Optional[dict[str, str]] = None,
     settle_s: float = 1.0,
+    include_structural: bool = False,
 ) -> Path:
     """Convert an openadapt-capture session into a flow recording directory.
 
@@ -670,6 +771,13 @@ def convert_capture(
             lints against value leakage).
         settle_s: Seconds after each action at which the *after* frame is
             sampled (clamped to just before the next event).
+        include_structural: Whether versioned native accessibility observations
+            may be promoted into Flow structural locators. ``True`` is used by
+            native Windows recording and ``False`` by external black-box
+            RDP/Citrix recording, whose local UIA tree describes only the
+            remote-client canvas. Direct conversion defaults to ``False``
+            because a capture directory alone does not prove which substrate
+            was recorded.
 
     Returns:
         The recording directory path (compile-ready).
@@ -733,7 +841,12 @@ def convert_capture(
             timeline = _window_viewport_timeline(session, window_capture)
             _reject_out_of_window(actions, timeline)
             window_viewport = timeline[0][1]
-        events = _flow_events(actions, scale, value_to_param)
+        events = _flow_events(
+            actions,
+            scale,
+            value_to_param,
+            include_structural=include_structural,
+        )
         if not events:
             raise ValueError(
                 "capture session produced no convertible actions "

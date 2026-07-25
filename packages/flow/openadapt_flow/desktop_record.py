@@ -29,13 +29,11 @@ What is REAL vs deferred (see ``docs/desktop/RECORDING.md`` for the full map):
   backends. Recording is substrate-agnostic (pixel frames + coordinates), so a
   recording made here drives the ``windows`` (WAA) or ``rdp`` (pixel-only)
   backend at replay.
-* DEFERRED: offline capture carries NO structural (UIA ``AutomationId`` or
-  AT-SPI accessible ID) locator
-  — replay uses the visual ladder (template/ocr/geometry). The deterministic
-  structural top rung is armed only by the LIVE-over-``WindowsBackend`` path
-  (:func:`openadapt_flow.adapters.desktop_recorder.record_desktop_demo`), which
-  needs a scripted driver, not a human-in-the-wild demonstration. Re-arming a
-  converted capture against a live UIA tree is the tracked follow-up.
+* REAL: human Windows demonstrations retain action-time UIA evidence from
+  ``openadapt-capture`` and compile it into the same structural-locator
+  contract as scripted Windows recording. RDP/Citrix remain externally
+  black-box: the local remote-client UIA tree is deliberately not promoted
+  because it cannot identify controls inside the remote session.
 
 openadapt-capture is the optional ``capture`` extra (``pip install
 'openadapt-flow[capture]'``); it is imported lazily so the flow core never
@@ -223,7 +221,13 @@ def record_desktop_capture(
     if convert is None:
         from openadapt_flow.adapters.capture import convert_capture
 
-        convert = convert_capture
+        convert = functools.partial(
+            convert_capture,
+            # A native Windows window remains a native UIA surface. Only an
+            # explicitly remote target suppresses the local client-window UIA
+            # observation, which cannot see controls inside RDP/Citrix.
+            include_structural=backend_kind not in ("rdp", "citrix"),
+        )
 
     if announce:
         scope_line = ""
