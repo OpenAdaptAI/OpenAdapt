@@ -703,6 +703,27 @@ def init_project(
     return project
 
 
+def set_minimum_effect_tier(
+    workflow: "Workflow",
+    tier: VerificationTier,
+) -> QualificationProject:
+    """Set the project's minimum accepted effect-verification strength."""
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError(
+            "initialize qualification before setting minimum effect strength"
+        )
+    candidate = VerificationTier(tier)
+    if project.minimum_effect_tier == candidate:
+        return project
+    previous = project.revision_digest()
+    project.minimum_effect_tier = candidate
+    _touch(project, previous)
+    _invalidate_certification(workflow)
+    return project
+
+
 def set_identity_policy(
     workflow: "Workflow",
     policy: IdentityPolicy,
