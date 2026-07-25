@@ -64,9 +64,12 @@ do not replace qualification of a complete real workflow.
 
 ## Integrity and provenance
 
-Release jobs stage the exact post-signing, smoke-tested files, generate one
-sorted `SHA256SUMS` manifest, verify it, and create GitHub artifact attestations
-over that manifest. Consumers can verify downloaded assets with:
+Release jobs stage the exact post-signing, smoke-tested files and scan that
+assembled installer set with Syft to publish a machine-readable CycloneDX JSON
+software bill of materials (SBOM). The workflow refuses an empty or malformed
+SBOM, includes it in the sorted `SHA256SUMS` manifest, verifies the manifest,
+and creates GitHub artifact attestations over every named file. Consumers can
+verify downloaded assets with:
 
 ```bash
 sha256sum -c SHA256SUMS

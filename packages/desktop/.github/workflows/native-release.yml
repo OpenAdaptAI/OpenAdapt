@@ -497,6 +497,20 @@ jobs:
       - name: Reject missing, duplicate, or unexpected release files
         run: python scripts/native_release.py validate-set --directory release-assets
 
+      - name: Generate a machine-readable SBOM from the exact installer set
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: release-assets
+          format: cyclonedx-json
+          output-file: release-assets/OpenAdapt-Desktop-${{ github.ref_name }}.cyclonedx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Refuse an empty or malformed release SBOM
+        run: >-
+          python scripts/native_release.py validate-sbom
+          --file release-assets/OpenAdapt-Desktop-${{ github.ref_name }}.cyclonedx.json
+
       - name: Generate and verify final checksums
         run: |
           python scripts/native_release.py checksums \

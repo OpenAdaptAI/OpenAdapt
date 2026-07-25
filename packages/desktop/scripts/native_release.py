@@ -330,6 +330,35 @@ def validate_release_set(directory: Path) -> int:
     return len(actual_assets) + len(metadata_paths)
 
 
+def validate_sbom(path: Path) -> int:
+    """Validate the minimum contract for the published CycloneDX release SBOM."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("bomFormat") != "CycloneDX":
+        raise ValueError(f"SBOM is not CycloneDX JSON: {path}")
+    spec_version = data.get("specVersion")
+    if not isinstance(spec_version, str) or not re.fullmatch(r"1\.[4-9]", spec_version):
+        raise ValueError(f"unsupported CycloneDX specVersion in {path}: {spec_version!r}")
+    if data.get("version") != 1:
+        raise ValueError(f"SBOM document version must be 1 in {path}")
+    metadata = data.get("metadata")
+    tools = metadata.get("tools") if isinstance(metadata, dict) else None
+    if not isinstance(tools, (dict, list)) or not tools:
+        raise ValueError(f"SBOM does not identify its generator in {path}")
+    components = data.get("components")
+    if not isinstance(components, list) or not components:
+        raise ValueError(f"SBOM contains no detected components: {path}")
+    named = [
+        component
+        for component in components
+        if isinstance(component, dict)
+        and isinstance(component.get("name"), str)
+        and component["name"].strip()
+    ]
+    if len(named) != len(components):
+        raise ValueError(f"SBOM contains an unnamed or malformed component: {path}")
+    return len(components)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -365,6 +394,8 @@ def _parser() -> argparse.ArgumentParser:
 
     validate_set_parser = subparsers.add_parser("validate-set")
     validate_set_parser.add_argument("--directory", type=Path, required=True)
+    validate_sbom_parser = subparsers.add_parser("validate-sbom")
+    validate_sbom_parser.add_argument("--file", type=Path, required=True)
     return parser
 
 
@@ -413,6 +444,9 @@ def main() -> int:
         elif args.command == "validate-set":
             count = validate_release_set(args.directory)
             print(f"Validated {count} exact release files in {args.directory}")
+        elif args.command == "validate-sbom":
+            count = validate_sbom(args.file)
+            print(f"Validated {count} components in {args.file}")
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

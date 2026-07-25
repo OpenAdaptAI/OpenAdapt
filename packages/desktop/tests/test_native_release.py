@@ -14,6 +14,7 @@ from scripts.native_release import (
     stage_artifacts,
     superseded_notes,
     validate_release_set,
+    validate_sbom,
     validate_tag,
     verify_checksums,
     write_checksums,
@@ -52,6 +53,14 @@ def test_native_workflows_are_pinned_and_preserve_beta_boundary() -> None:
     assert 'tags:\n      - "desktop-v*"' in release
     assert "environment: native-release" in release
     assert "subject-checksums: release-assets/SHA256SUMS" in release
+    assert "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610" in release
+    assert "format: cyclonedx-json" in release
+    assert "upload-artifact: false" in release
+    assert "upload-release-assets: false" in release
+    assert "native_release.py validate-sbom" in release
+    assert release.index("anchore/sbom-action@") < release.index(
+        "native_release.py validate-sbom"
+    ) < release.index("- name: Generate and verify final checksums")
     assert "attestations: write" in release
     assert "id-token: write" in release
     assert "contents: write" in release
@@ -82,6 +91,81 @@ def test_windows_installer_lifecycle_has_an_overall_fail_closed_timeout() -> Non
     )[1].split("\n      - name:", 1)[0]
     assert "timeout-minutes: 15" in build_smoke
     assert "timeout-minutes: 15" in release_smoke
+
+
+def test_validate_sbom_requires_cyclonedx_generator_and_named_components(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "release.cyclonedx.json"
+    path.write_text(
+        json.dumps(
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.6",
+                "version": 1,
+                "metadata": {
+                    "tools": [{"vendor": "Anchore", "name": "Syft", "version": "1.44.0"}]
+                },
+                "components": [
+                    {
+                        "type": "library",
+                        "name": "openadapt-flow",
+                        "version": "1.22.0",
+                        "purl": "pkg:pypi/openadapt-flow@1.22.0",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert validate_sbom(path) == 1
+
+    empty = json.loads(path.read_text(encoding="utf-8"))
+    empty["components"] = []
+    path.write_text(json.dumps(empty), encoding="utf-8")
+    with pytest.raises(ValueError, match="no detected components"):
+        validate_sbom(path)
+
+
+def test_dependabot_covers_every_desktop_release_ecosystem() -> None:
+    config = (ROOT / ".github" / "dependabot.yml").read_text()
+
+    for ecosystem in ("github-actions", "pip", "npm", "cargo"):
+        assert f"package-ecosystem: {ecosystem}" in config
+    assert 'directory: "/src-tauri"' in config
+
+
+def test_security_workflows_cover_all_languages_and_pin_every_dependency() -> None:
+    workflow_dir = ROOT / ".github" / "workflows"
+    security_workflows = [
+        workflow_dir / "codeql.yml",
+        workflow_dir / "dependency-review.yml",
+        workflow_dir / "secret-scan.yml",
+    ]
+    text = "\n".join(path.read_text() for path in security_workflows)
+    uses = re.findall(r"^\s*(?:-\s+)?uses:\s+\S+@([^\s#]+)", text, flags=re.MULTILINE)
+
+    assert uses
+    assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in uses)
+    for language in ("python", "javascript-typescript", "rust"):
+        assert f'"{language}"' in (workflow_dir / "codeql.yml").read_text()
+    dependency_audit = (workflow_dir / "dependency-review.yml").read_text()
+    assert "uv export --quiet --locked --all-extras --no-emit-project" in dependency_audit
+    assert "pip-audit==2.10.1" in dependency_audit
+    assert "npm audit --audit-level=high --package-lock-only" in dependency_audit
+    assert "cargo install cargo-audit --version 0.22.1 --locked" in dependency_audit
+    assert "cargo audit --file src-tauri/Cargo.lock" in dependency_audit
+    assert "schedule:" in dependency_audit
+    secret_scan = (workflow_dir / "secret-scan.yml").read_text()
+    assert "fetch-depth: 0" in secret_scan
+    assert "GITLEAKS_VERSION: 8.30.1" in secret_scan
+    assert (
+        "GITLEAKS_SHA256: "
+        "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        in secret_scan
+    )
+    assert "sha256sum --check --strict" in secret_scan
 
 
 def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None:
