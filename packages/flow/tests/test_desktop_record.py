@@ -408,6 +408,46 @@ def test_orchestration_stamps_identifier_region_into_meta(tmp_path: Path) -> Non
     assert meta["id"] == "x"  # existing keys preserved (additive stamp)
 
 
+@pytest.mark.parametrize(
+    ("backend_kind", "expected"),
+    [(None, True), ("rdp", False), ("citrix", False)],
+)
+def test_orchestration_promotes_structure_only_for_native_surface(
+    tmp_path: Path,
+    monkeypatch,
+    backend_kind: str | None,
+    expected: bool,
+) -> None:
+    observed: dict[str, bool] = {}
+    log: list = []
+
+    def fake_convert(
+        cap_dir,
+        out_dir,
+        *,
+        params=None,
+        include_structural=None,
+    ):
+        observed["include_structural"] = include_structural
+        (Path(out_dir) / "meta.json").write_text(
+            json.dumps({"id": "x", "viewport": [800, 600], "params": {}})
+        )
+        return Path(out_dir)
+
+    monkeypatch.setattr(
+        "openadapt_flow.adapters.capture.convert_capture",
+        fake_convert,
+    )
+    record_desktop_capture(
+        tmp_path / f"rec-{backend_kind or 'native'}",
+        backend_kind=backend_kind,
+        recorder_factory=_make(log),
+        stop=lambda: True,
+        announce=False,
+    )
+    assert observed["include_structural"] is expected
+
+
 def test_orchestration_stamps_exact_citrix_replay_binding(tmp_path: Path) -> None:
     log: list = []
 

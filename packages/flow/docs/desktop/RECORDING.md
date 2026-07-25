@@ -75,10 +75,12 @@ ladder. Flow never fabricates a structural locator from coordinates or nearby
 pixels. At replay the Windows backend enumerates current candidates and refuses
 an ambiguous match rather than selecting the first one.
 
-For RDP and Citrix, UIA can describe only the local remote-client window or
-canvas; it cannot see controls inside the remote session. Window-scoped remote
-recordings therefore never promote those local UIA observations and instead use
-the external black-box visual, relational, identity, and fresh-frame contracts.
+Window scoping does not itself disable UIA: a native Windows recording scoped
+to one application window still retains that application's structural
+evidence. For RDP and Citrix, Flow explicitly suppresses local UIA because it
+can describe only the remote-client window or canvas, not controls inside the
+remote session. Those remote recordings instead use the external black-box
+visual, relational, identity, and fresh-frame contracts.
 
 ### Secret handling
 

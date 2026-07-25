@@ -403,6 +403,28 @@ def _captured_click_with_uia(**observation_overrides) -> SimpleNamespace:
     )
 
 
+def _persisted_uia_observation() -> dict:
+    return {
+        "schema_version": "openadapt.capture.structural-observation/v1",
+        "provider": "windows_uia",
+        "event_timestamp": T0 + 1.0,
+        "observed_at": T0 + 1.001,
+        "query_kind": "point",
+        "element": {
+            "control_type": "Text",
+            "name": "Submit",
+        },
+        "ancestry": [
+            {
+                "automation_id": "SubmitAction",
+                "control_type": "Button",
+                "name": "Submit",
+            }
+        ],
+        "window": {"title": "Eligibility"},
+    }
+
+
 def test_windows_uia_observation_maps_to_flow_structural_locator() -> None:
     (event,) = _flow_events(
         [_captured_click_with_uia()],
@@ -434,6 +456,37 @@ def test_remote_window_capture_never_promotes_local_uia_canvas() -> None:
         include_structural=False,
     )
     assert "structural" not in event
+
+
+@pytest.mark.timeout(300)
+def test_real_capture_uia_compiles_to_structural_anchor(tmp_path: Path) -> None:
+    rows = _click_rows(
+        T0 + 1.0,
+        BUTTON_CENTER_LOGICAL[0],
+        BUTTON_CENTER_LOGICAL[1],
+    )
+    rows[0]["structural_observation"] = _persisted_uia_observation()
+    capture_dir = make_capture(tmp_path, rows, screens=app_screens()[:2])
+    recording_dir = tmp_path / "recording"
+    convert_capture(
+        capture_dir,
+        recording_dir,
+        include_structural=True,
+    )
+
+    from openadapt_flow.compiler import compile_recording
+
+    workflow = compile_recording(
+        recording_dir,
+        tmp_path / "bundle",
+        name="capture-uia-bridge",
+    )
+    locator = workflow.steps[0].anchor.structural
+    assert locator is not None
+    assert locator.automation_id == "SubmitAction"
+    assert locator.role == "button"
+    assert locator.name == "Submit"
+    assert locator.window_name == "Eligibility"
 
 
 @pytest.mark.parametrize(

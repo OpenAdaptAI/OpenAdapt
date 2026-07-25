@@ -532,17 +532,42 @@ def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
     ):
         return None
 
-    element = observation.get("element")
-    if not isinstance(element, dict):
+    raw_element = observation.get("element")
+    if not isinstance(raw_element, dict):
         return None
-    automation_id = element.get("automation_id")
-    control_type = element.get("control_type")
-    name = element.get("name")
-    role = (
-        _WINDOWS_CONTROL_TYPE_TO_ROLE.get(control_type)
-        if isinstance(control_type, str)
-        else None
-    )
+
+    # Capture observes the exact element under the pointer. Common Windows
+    # controls expose a non-actionable Text child inside the actionable Button,
+    # Edit, or selection control. Use the nearest supported actionable node,
+    # matching WindowsBackend.structural_locator_at instead of compiling a
+    # child handle that the native actuator cannot safely invoke.
+    raw_ancestry = observation.get("ancestry")
+    candidates = [raw_element]
+    if isinstance(raw_ancestry, list):
+        candidates.extend(item for item in raw_ancestry if isinstance(item, dict))
+    selected: Optional[dict[str, Any]] = None
+    role: Optional[str] = None
+    for candidate in candidates:
+        control_type = candidate.get("control_type")
+        candidate_role = (
+            _WINDOWS_CONTROL_TYPE_TO_ROLE.get(control_type)
+            if isinstance(control_type, str)
+            else None
+        )
+        automation_id = candidate.get("automation_id")
+        name = candidate.get("name")
+        if candidate_role is not None and (
+            (isinstance(automation_id, str) and automation_id.strip())
+            or (isinstance(name, str) and name.strip())
+        ):
+            selected = candidate
+            role = candidate_role
+            break
+    if selected is None or role is None:
+        return None
+
+    automation_id = selected.get("automation_id")
+    name = selected.get("name")
     window = observation.get("window")
     window_name = window.get("title") if isinstance(window, dict) else None
 
@@ -718,6 +743,7 @@ def convert_capture(
     *,
     params: Optional[dict[str, str]] = None,
     settle_s: float = 1.0,
+    include_structural: bool = False,
 ) -> Path:
     """Convert an openadapt-capture session into a flow recording directory.
 
@@ -745,6 +771,13 @@ def convert_capture(
             lints against value leakage).
         settle_s: Seconds after each action at which the *after* frame is
             sampled (clamped to just before the next event).
+        include_structural: Whether versioned native accessibility observations
+            may be promoted into Flow structural locators. ``True`` is used by
+            native Windows recording and ``False`` by external black-box
+            RDP/Citrix recording, whose local UIA tree describes only the
+            remote-client canvas. Direct conversion defaults to ``False``
+            because a capture directory alone does not prove which substrate
+            was recorded.
 
     Returns:
         The recording directory path (compile-ready).
@@ -812,9 +845,7 @@ def convert_capture(
             actions,
             scale,
             value_to_param,
-            # UIA sees only the local remote-client canvas, not controls inside
-            # an RDP/Citrix session.
-            include_structural=window_capture is None,
+            include_structural=include_structural,
         )
         if not events:
             raise ValueError(
