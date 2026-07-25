@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { CMD, engineInvoke } from "../lib/engine";
 import type {
   QualificationEffectKind,
+  QualificationIdentityEnforcement,
+  QualificationIdentityMatch,
+  QualificationIdentityNormalizer,
+  QualificationIdentitySourceKind,
   QualificationNode,
   QualificationProject,
   QualificationResponse,
@@ -11,6 +15,42 @@ import type {
 import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
 
 const POLICY = "clinical-write";
+const IDENTITY_NORMALIZERS: {
+  value: QualificationIdentityNormalizer;
+  label: string;
+}[] = [
+  { value: "unicode_nfkc", label: "Unicode NFKC" },
+  { value: "casefold", label: "Case-insensitive" },
+  { value: "collapse_whitespace", label: "Collapse whitespace" },
+  { value: "strip_punctuation", label: "Ignore punctuation" },
+];
+const IDENTITY_REFUSALS = new Set([
+  "step_identity_unarmed",
+  "identity_policy_missing",
+  "identity_policy_unenforced",
+  "identity_signal_unavailable",
+]);
+const EFFECT_REFUSALS = new Set([
+  "effect_contract_missing",
+  "effect_policy_missing",
+  "effect_contract_changed",
+  "effect_tier_insufficient",
+  "high_risk_screen_only",
+]);
+
+interface IdentitySignalDraft {
+  key: string;
+  field: string;
+  source: QualificationIdentitySourceKind;
+  match: QualificationIdentityMatch;
+  normalizers: QualificationIdentityNormalizer[];
+}
+
+function defaultIdentityField(source: QualificationIdentitySourceKind): string {
+  if (source === "structured") return "structured_identity";
+  if (source === "identifier_region") return "identifier_region";
+  return "captured_context";
+}
 
 function identityLabel(node: QualificationNode): string {
   if (!node.identity?.applicable) return "not applicable";
@@ -86,6 +126,12 @@ export function Qualification({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [contractActionId, setContractActionId] = useState("");
+  const [identityEnforcement, setIdentityEnforcement] =
+    useState<QualificationIdentityEnforcement>("canonical_ladder");
+  const [identitySignals, setIdentitySignals] = useState<IdentitySignalDraft[]>([]);
+  const [identityQuorum, setIdentityQuorum] = useState(1);
+  const [identityDraftActionId, setIdentityDraftActionId] = useState("");
+  const [selectedEffectIndex, setSelectedEffectIndex] = useState("");
   const [effectKind, setEffectKind] =
     useState<QualificationEffectKind>("record_written");
   const [matchField, setMatchField] = useState("record_id");
@@ -97,12 +143,14 @@ export function Qualification({
   const [expectedCount, setExpectedCount] = useState(1);
   const [countNewOnly, setCountNewOnly] = useState(true);
   const [verificationTier, setVerificationTier] = useState(3);
+  const [bindingVerificationTier, setBindingVerificationTier] = useState(3);
   const [targetKind, setTargetKind] = useState<QualificationTargetKind>("web");
   const [application, setApplication] = useState("");
   const [applicationVersion, setApplicationVersion] = useState("");
   const [environmentLabel, setEnvironmentLabel] = useState("");
   const [capabilities, setCapabilities] = useState("");
   const [minimumTier, setMinimumTier] = useState(3);
+  const [projectMinimumTier, setProjectMinimumTier] = useState(3);
 
   async function load() {
     setBusy("loading");
@@ -162,8 +210,85 @@ export function Qualification({
   const selectedControls = selectedActionId
     ? project?.controls.actions[selectedActionId]
     : undefined;
+  const selectedEffect = selectedControls?.effects.find(
+    (effect) => String(effect.index) === selectedEffectIndex,
+  );
   const selectedMatchParam = matchParam || parameters[0]?.name || "";
   const selectedValueParam = valueParam || parameters[0]?.name || "";
+  const uncoveredConsequentialActions = useMemo(() => {
+    if (!project) return [];
+    return actions
+      .map((action) => {
+        const controls = project.controls.actions[action.id];
+        if (
+          controls?.classification?.classification !== "consequential" &&
+          controls?.classification?.classification !== "irreversible"
+        ) {
+          return null;
+        }
+        const refusals = project.report.refusals.filter(
+          (refusal) =>
+            refusal.step_id === controls.step_id &&
+            (IDENTITY_REFUSALS.has(refusal.code) ||
+              EFFECT_REFUSALS.has(refusal.code)),
+        );
+        return refusals.length ? { action, refusals } : null;
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          action: QualificationNode;
+          refusals: QualificationProject["report"]["refusals"];
+        } => item !== null,
+      );
+  }, [actions, project]);
+
+  useEffect(() => {
+    if (!selectedControls || identityDraftActionId === selectedActionId) return;
+    const policy = selectedControls.identity.policy;
+    setIdentityEnforcement(policy?.enforcement || "canonical_ladder");
+    setIdentitySignals(
+      (policy?.signals || []).map((signal, index) => ({
+        key: `${selectedActionId}-${signal.field}-${index}`,
+        field: signal.field,
+        source: signal.source,
+        match: signal.match,
+        normalizers: signal.normalizers,
+      })),
+    );
+    setIdentityQuorum(Math.max(1, policy?.quorum || 1));
+    const firstEffect =
+      selectedControls.effects.find((effect) => effect.verification_tier == null) ||
+      selectedControls.effects[0];
+    setSelectedEffectIndex(firstEffect ? String(firstEffect.index) : "");
+    setVerificationTier(
+      firstEffect?.verification_tier || project?.project?.minimum_effect_tier || 3,
+    );
+    setIdentityDraftActionId(selectedActionId);
+  }, [
+    identityDraftActionId,
+    project?.project?.minimum_effect_tier,
+    selectedActionId,
+    selectedControls,
+  ]);
+
+  useEffect(() => {
+    if (project?.project) {
+      setProjectMinimumTier(project.project.minimum_effect_tier);
+      setBindingVerificationTier(project.project.minimum_effect_tier);
+    }
+  }, [project?.project?.minimum_effect_tier]);
+
+  useEffect(() => {
+    if (
+      project?.project &&
+      selectedEffect &&
+      selectedEffect.verification_tier == null
+    ) {
+      setVerificationTier(project.project.minimum_effect_tier);
+    }
+  }, [project?.project?.minimum_effect_tier, selectedEffect]);
 
   async function initializeQualification() {
     setBusy("initialize");
@@ -223,16 +348,110 @@ export function Qualification({
     }
   }
 
-  async function armIdentity() {
+  function addIdentitySignal() {
+    const source = selectedControls?.identity.sources[0]?.kind;
+    if (!source) return;
+    const duplicateCount = identitySignals.filter(
+      (signal) => signal.source === source,
+    ).length;
+    setIdentitySignals((current) => [
+      ...current,
+      {
+        key: `${selectedActionId}-${source}-${Date.now()}`,
+        field: `${defaultIdentityField(source)}${
+          duplicateCount ? `_${duplicateCount + 1}` : ""
+        }`,
+        source,
+        match: "exact",
+        normalizers: [],
+      },
+    ]);
+  }
+
+  function updateIdentitySignal(
+    key: string,
+    update: Partial<Omit<IdentitySignalDraft, "key">>,
+  ) {
+    setIdentitySignals((current) =>
+      current.map((signal) =>
+        signal.key === key ? { ...signal, ...update } : signal,
+      ),
+    );
+  }
+
+  async function saveIdentity() {
     if (!selectedActionId) return;
     setBusy("identity");
     setError("");
     try {
       const response = await engineInvoke<QualificationResponse>(
-        CMD.ARM_QUALIFICATION_IDENTITY,
+        CMD.SET_QUALIFICATION_IDENTITY,
         {
           workflow_id: workflowId,
           step_id: selectedActionId,
+          enforcement: identityEnforcement,
+          signals:
+            identityEnforcement === "signal_quorum"
+              ? identitySignals.map((signal) => ({
+                  field: signal.field.trim(),
+                  source: signal.source,
+                  match: signal.match,
+                  normalizers:
+                    signal.match === "normalized" ? signal.normalizers : [],
+                }))
+              : [],
+          quorum: identityEnforcement === "signal_quorum" ? identityQuorum : 0,
+          policy: POLICY,
+        },
+      );
+      if (!response.ok) {
+        setError(response.error);
+        return;
+      }
+      setProject(response);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function setEffectVerification() {
+    if (!selectedActionId || !selectedEffect) return;
+    setBusy("effect-verification");
+    setError("");
+    try {
+      const response = await engineInvoke<QualificationResponse>(
+        CMD.SET_QUALIFICATION_EFFECT_VERIFICATION,
+        {
+          workflow_id: workflowId,
+          step_id: selectedActionId,
+          effect_index: selectedEffect.index,
+          verification_tier: verificationTier,
+          policy: POLICY,
+        },
+      );
+      if (!response.ok) {
+        setError(response.error);
+        return;
+      }
+      setProject(response);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function setMinimumEffectTier() {
+    setBusy("minimum-tier");
+    setError("");
+    try {
+      const response = await engineInvoke<QualificationResponse>(
+        CMD.SET_QUALIFICATION_MINIMUM_EFFECT_TIER,
+        {
+          workflow_id: workflowId,
+          minimum_effect_tier: projectMinimumTier,
           policy: POLICY,
         },
       );
@@ -273,7 +492,7 @@ export function Qualification({
           count_new_only:
             effectKind === "record_written" ? countNewOnly : false,
           effect_index: placeholder?.index,
-          verification_tier: verificationTier,
+          verification_tier: bindingVerificationTier,
           policy: POLICY,
         },
       );
@@ -282,6 +501,18 @@ export function Qualification({
         return;
       }
       setProject(response);
+      const effects = response.controls.actions[selectedActionId]?.effects || [];
+      const bound =
+        effects.find((effect) => effect.index === placeholder?.index) ||
+        effects[effects.length - 1];
+      if (bound) {
+        setSelectedEffectIndex(String(bound.index));
+        setVerificationTier(
+          bound.verification_tier ||
+            response.project?.minimum_effect_tier ||
+            verificationTier,
+        );
+      }
     } catch (reason) {
       setError(String(reason));
     } finally {
@@ -521,7 +752,87 @@ export function Qualification({
                 {busy === "certify" ? "Certifying…" : "Run certification"}
               </Button>
             </div>
+            {project.project && (
+              <div
+                className="row"
+                style={{
+                  marginTop: "var(--space-4)",
+                  paddingTop: "var(--space-4)",
+                  borderTop: "1px solid var(--border)",
+                }}
+              >
+                <div className="field" style={{ marginBottom: 0, minWidth: 280 }}>
+                  <label htmlFor="project-minimum-effect-tier">
+                    Workflow minimum verification tier
+                  </label>
+                  <select
+                    id="project-minimum-effect-tier"
+                    className="input"
+                    value={projectMinimumTier}
+                    onChange={(event) =>
+                      setProjectMinimumTier(Number(event.target.value))
+                    }
+                  >
+                    <option value={1}>Tier 1 · independent system</option>
+                    <option value={2}>Tier 2 · independent session</option>
+                    <option value={3}>
+                      Tier 3 · persisted-state reacquisition
+                    </option>
+                    <option value={4}>Tier 4 · immediate screen</option>
+                  </select>
+                </div>
+                <Button
+                  disabled={
+                    busy === "minimum-tier" ||
+                    projectMinimumTier === project.project.minimum_effect_tier
+                  }
+                  onClick={() => void setMinimumEffectTier()}
+                >
+                  {busy === "minimum-tier" ? "Saving…" : "Save minimum"}
+                </Button>
+                <span className="page-sub">
+                  Changing this advances the project revision and invalidates
+                  certification and case evidence from the prior revision.
+                </span>
+              </div>
+            )}
           </Card>
+
+          {uncoveredConsequentialActions.length > 0 && (
+            <Card>
+              <CardHead
+                eyebrow="Consequential coverage"
+                title="Actions still missing identity or effect coverage"
+                sub="Open the exact action below to complete its retained identity and independent effect-verification contract."
+              />
+              {uncoveredConsequentialActions.map(({ action, refusals }) => (
+                <div
+                  className="row"
+                  key={`uncovered-${action.id}`}
+                  style={{
+                    alignItems: "flex-start",
+                    marginBottom: "var(--space-3)",
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <strong>{actionTitle(action)}</strong>
+                    <div className="page-sub mono">{action.id}</div>
+                    {refusals.map((refusal) => (
+                      <div
+                        className="page-sub"
+                        key={`${action.id}-${refusal.code}`}
+                      >
+                        {refusal.code.replaceAll("_", " ")} · {refusal.message}
+                      </div>
+                    ))}
+                  </div>
+                  <Button onClick={() => setContractActionId(action.id)}>
+                    Edit contract
+                  </Button>
+                </div>
+              ))}
+            </Card>
+          )}
 
           <Card>
             <CardHead
@@ -703,8 +1014,8 @@ export function Qualification({
                 <div>
                   <h3>Identity before actuation</h3>
                   <p className="page-sub">
-                    OpenAdapt uses every retained source from strongest to weakest and
-                    halts when they conflict or cannot establish the record identity.
+                    Choose the shipped identity ladder or declare named signals with
+                    explicit comparison and quorum semantics.
                   </p>
                   <div
                     className="row"
@@ -716,6 +1027,21 @@ export function Qualification({
                     <Pill tone={selectedControls.identity.armed ? "ok" : "warn"}>
                       {selectedControls.identity.armed ? "armed" : "not armed"}
                     </Pill>
+                    {selectedControls.identity.policy && (
+                      <Pill
+                        tone={
+                          selectedControls.identity.policy.enforcement ===
+                          "canonical_ladder"
+                            ? "ok"
+                            : "warn"
+                        }
+                      >
+                        {selectedControls.identity.policy.enforcement.replaceAll(
+                          "_",
+                          " ",
+                        )}
+                      </Pill>
+                    )}
                     <span className="page-sub">
                       {selectedControls.identity.sources.length} retained source
                       {selectedControls.identity.sources.length === 1 ? "" : "s"}
@@ -738,17 +1064,254 @@ export function Qualification({
                       identifier region, or a captured row identity.
                     </Callout>
                   )}
+                  {selectedControls.identity.sources.length > 0 && (
+                    <>
+                      <div className="field" style={{ marginTop: "var(--space-4)" }}>
+                        <label htmlFor="identity-enforcement">Identity semantics</label>
+                        <select
+                          id="identity-enforcement"
+                          className="input"
+                          value={identityEnforcement}
+                          onChange={(event) => {
+                            const enforcement = event.target
+                              .value as QualificationIdentityEnforcement;
+                            setIdentityEnforcement(enforcement);
+                            if (
+                              enforcement === "signal_quorum" &&
+                              identitySignals.length === 0
+                            ) {
+                              addIdentitySignal();
+                            }
+                          }}
+                        >
+                          <option value="canonical_ladder">
+                            Canonical ladder · strongest retained evidence first
+                          </option>
+                          <option value="signal_quorum">
+                            Named signals · explicit quorum
+                          </option>
+                        </select>
+                      </div>
+
+                      {identityEnforcement === "signal_quorum" && (
+                        <>
+                          <Callout tone="warn" title="Quorum intent is fail-closed">
+                            Flow versions this policy but does not yet enforce named
+                            signal quorums at runtime. Certification will retain an
+                            identity_policy_unenforced refusal until that runtime
+                            support is present.
+                          </Callout>
+                          {identitySignals.map((signal, index) => {
+                            const retained = selectedControls.identity.sources.find(
+                              (source) => source.kind === signal.source,
+                            );
+                            return (
+                              <div
+                                key={signal.key}
+                                style={{
+                                  borderTop: "1px solid var(--border)",
+                                  marginTop: "var(--space-4)",
+                                  paddingTop: "var(--space-4)",
+                                }}
+                              >
+                                <div className="row">
+                                  <strong>Identity field {index + 1}</strong>
+                                  <span className="spacer" />
+                                  <Button
+                                    onClick={() => {
+                                      setIdentitySignals((current) =>
+                                        current.filter(
+                                          (candidate) =>
+                                            candidate.key !== signal.key,
+                                        ),
+                                      );
+                                      setIdentityQuorum((current) =>
+                                        Math.max(
+                                          1,
+                                          Math.min(
+                                            current,
+                                            identitySignals.length - 1,
+                                          ),
+                                        ),
+                                      );
+                                    }}
+                                  >
+                                    Remove
+                                  </Button>
+                                </div>
+                                <div className="grid grid-2">
+                                  <div className="field">
+                                    <label htmlFor={`identity-field-${signal.key}`}>
+                                      Field name
+                                    </label>
+                                    <input
+                                      id={`identity-field-${signal.key}`}
+                                      className="input"
+                                      value={signal.field}
+                                      onChange={(event) =>
+                                        updateIdentitySignal(signal.key, {
+                                          field: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <div className="field">
+                                    <label htmlFor={`identity-source-${signal.key}`}>
+                                      Retained source
+                                    </label>
+                                    <select
+                                      id={`identity-source-${signal.key}`}
+                                      className="input"
+                                      value={signal.source}
+                                      onChange={(event) =>
+                                        updateIdentitySignal(signal.key, {
+                                          source: event.target
+                                            .value as QualificationIdentitySourceKind,
+                                        })
+                                      }
+                                    >
+                                      {selectedControls.identity.sources.map(
+                                        (source) => (
+                                          <option
+                                            key={`${signal.key}-${source.kind}`}
+                                            value={source.kind}
+                                          >
+                                            {source.label}
+                                          </option>
+                                        ),
+                                      )}
+                                    </select>
+                                    {retained?.region && (
+                                      <span className="page-sub mono">
+                                        retained region {retained.region.join(", ")}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="field">
+                                    <label htmlFor={`identity-match-${signal.key}`}>
+                                      Comparison
+                                    </label>
+                                    <select
+                                      id={`identity-match-${signal.key}`}
+                                      className="input"
+                                      value={signal.match}
+                                      onChange={(event) => {
+                                        const match = event.target
+                                          .value as QualificationIdentityMatch;
+                                        updateIdentitySignal(signal.key, {
+                                          match,
+                                          normalizers:
+                                            match === "normalized" &&
+                                            signal.normalizers.length === 0
+                                              ? [
+                                                  "unicode_nfkc",
+                                                  "collapse_whitespace",
+                                                ]
+                                              : signal.normalizers,
+                                        });
+                                      }}
+                                    >
+                                      <option value="exact">Exact</option>
+                                      <option value="normalized">
+                                        Normalized with explicit transforms
+                                      </option>
+                                    </select>
+                                  </div>
+                                </div>
+                                {signal.match === "normalized" && (
+                                  <div className="field">
+                                    <label>Allowed normalizers</label>
+                                    {IDENTITY_NORMALIZERS.map((normalizer) => (
+                                      <label
+                                        className="check-row"
+                                        key={`${signal.key}-${normalizer.value}`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={signal.normalizers.includes(
+                                            normalizer.value,
+                                          )}
+                                          onChange={(event) => {
+                                            const normalizers = event.target.checked
+                                              ? [
+                                                  ...signal.normalizers,
+                                                  normalizer.value,
+                                                ]
+                                              : signal.normalizers.filter(
+                                                  (value) =>
+                                                    value !== normalizer.value,
+                                                );
+                                            updateIdentitySignal(signal.key, {
+                                              normalizers,
+                                            });
+                                          }}
+                                        />
+                                        <span>{normalizer.label}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <div className="row" style={{ marginTop: "var(--space-4)" }}>
+                            <Button onClick={addIdentitySignal}>
+                              Add identity field
+                            </Button>
+                            <div className="field" style={{ marginBottom: 0 }}>
+                              <label htmlFor="identity-quorum">
+                                Required matching signals
+                              </label>
+                              <select
+                                id="identity-quorum"
+                                className="input"
+                                value={Math.min(
+                                  identityQuorum,
+                                  Math.max(1, identitySignals.length),
+                                )}
+                                onChange={(event) =>
+                                  setIdentityQuorum(Number(event.target.value))
+                                }
+                              >
+                                {identitySignals.map((_, index) => (
+                                  <option
+                                    key={`identity-quorum-${index + 1}`}
+                                    value={index + 1}
+                                  >
+                                    {index + 1} of {identitySignals.length}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
                   <div style={{ marginTop: "var(--space-4)" }}>
                     <Button
                       variant="primary"
                       disabled={
                         busy === "identity" ||
-                        selectedControls.identity.armed ||
-                        !selectedControls.identity.can_arm
+                        !selectedControls.identity.can_arm ||
+                        (identityEnforcement === "signal_quorum" &&
+                          (identitySignals.length === 0 ||
+                            identitySignals.some(
+                              (signal) =>
+                                !signal.field.trim() ||
+                                (signal.match === "normalized" &&
+                                  signal.normalizers.length === 0),
+                            ) ||
+                            identityQuorum < 1 ||
+                            identityQuorum > identitySignals.length))
                       }
-                      onClick={() => void armIdentity()}
+                      onClick={() => void saveIdentity()}
                     >
-                      {busy === "identity" ? "Arming…" : "Arm identity check"}
+                      {busy === "identity"
+                        ? "Saving…"
+                        : selectedControls.identity.policy
+                          ? "Save identity policy"
+                          : "Arm identity check"}
                     </Button>
                   </div>
                 </div>
@@ -757,8 +1320,122 @@ export function Qualification({
                   <h3>Persisted business effect</h3>
                   <p className="page-sub">
                     Bind the record identity and intended result to workflow parameters.
-                    The runtime still needs a matching read-only verifier at deployment.
+                    Required evidence and the concrete deployment verifier are reviewed
+                    separately.
                   </p>
+                  {selectedControls.effects.length > 0 ? (
+                    <>
+                      <div className="field">
+                        <label htmlFor="declared-effect">Declared business effect</label>
+                        <select
+                          id="declared-effect"
+                          className="input"
+                          value={selectedEffectIndex}
+                          onChange={(event) => {
+                            const index = event.target.value;
+                            const effect = selectedControls.effects.find(
+                              (candidate) => String(candidate.index) === index,
+                            );
+                            setSelectedEffectIndex(index);
+                            setVerificationTier(
+                              effect?.verification_tier ||
+                                project.project?.minimum_effect_tier ||
+                                3,
+                            );
+                          }}
+                        >
+                          {selectedControls.effects.map((effect) => (
+                            <option
+                              key={`declared-effect-${effect.index}`}
+                              value={effect.index}
+                            >
+                              #{effect.index + 1} {effect.kind.replaceAll("_", " ")}
+                              {effect.needs_operator_confirmation
+                                ? " · binding required"
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedEffect && (
+                          <>
+                            <span className="page-sub mono">
+                              {selectedEffect.effect_contract_hash}
+                            </span>
+                            <span className="page-sub">
+                              Required verification tier:{" "}
+                              {selectedEffect.verification_tier
+                                ? `Tier ${selectedEffect.verification_tier}`
+                                : "not assigned"}
+                            </span>
+                            <span className="page-sub">
+                              Concrete verifier binding: not configured by this
+                              requirement. Qualification must still exercise a matching
+                              deployment verifier.
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <div className="field">
+                        <label htmlFor="declared-effect-tier">
+                          Minimum evidence required for this effect
+                        </label>
+                        <select
+                          id="declared-effect-tier"
+                          className="input"
+                          value={verificationTier}
+                          onChange={(event) =>
+                            setVerificationTier(Number(event.target.value))
+                          }
+                        >
+                          <option value={1}>Tier 1 · independent system</option>
+                          <option value={2}>Tier 2 · independent session</option>
+                          <option value={3}>
+                            Tier 3 · persisted-state reacquisition
+                          </option>
+                          <option value={4}>Tier 4 · immediate screen</option>
+                        </select>
+                        <span className="page-sub">
+                          The project requires Tier{" "}
+                          {project.project.minimum_effect_tier} or stronger.
+                          {project.project.minimum_effect_tier < 4
+                            ? " Immediate-screen evidence is below the current minimum."
+                            : " The current minimum permits immediate-screen evidence."}
+                        </span>
+                      </div>
+                      <Button
+                        disabled={
+                          busy === "effect-verification" ||
+                          !selectedEffect ||
+                          selectedEffect.verification_tier === verificationTier
+                        }
+                        onClick={() => void setEffectVerification()}
+                      >
+                        {busy === "effect-verification"
+                          ? "Saving…"
+                          : "Save required tier"}
+                      </Button>
+                    </>
+                  ) : (
+                    <Callout tone="warn" title="No declared effect">
+                      This action has no executable business-effect contract. Bind one
+                      below before it can be covered.
+                    </Callout>
+                  )}
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--border)",
+                      marginTop: "var(--space-4)",
+                      paddingTop: "var(--space-4)",
+                    }}
+                  >
+                    <strong>
+                      {selectedControls.effects.some(
+                        (effect) => effect.needs_operator_confirmation,
+                      )
+                        ? "Complete a retained effect"
+                        : "Add an effect contract"}
+                    </strong>
+                  </div>
                   {!parameters.length ? (
                     <Callout tone="warn" title="Workflow parameters required">
                       Add typed workflow parameters before binding a reusable effect.
@@ -783,13 +1460,15 @@ export function Qualification({
                         </select>
                       </div>
                       <div className="field">
-                        <label htmlFor="effect-tier">Verification strength</label>
+                        <label htmlFor="effect-tier">
+                          Minimum evidence required for this effect
+                        </label>
                         <select
                           id="effect-tier"
                           className="input"
-                          value={verificationTier}
+                          value={bindingVerificationTier}
                           onChange={(event) =>
-                            setVerificationTier(Number(event.target.value))
+                            setBindingVerificationTier(Number(event.target.value))
                           }
                         >
                           <option value={1}>Tier 1 · independent system</option>

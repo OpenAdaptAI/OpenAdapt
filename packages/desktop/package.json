@@ -7,16 +7,20 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test:ui": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^25.0.1",
     "typescript": "^5.5.4",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

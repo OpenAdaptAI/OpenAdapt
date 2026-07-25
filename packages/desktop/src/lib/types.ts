@@ -68,6 +68,19 @@ export type QualificationRisk =
   | "irreversible";
 export type QualificationExecutableRisk = "reversible" | "irreversible";
 export type QualificationEffectKind = "record_written" | "field_equals";
+export type QualificationIdentitySourceKind =
+  | "structured"
+  | "identifier_region"
+  | "captured_context";
+export type QualificationIdentityEnforcement =
+  | "canonical_ladder"
+  | "signal_quorum";
+export type QualificationIdentityMatch = "exact" | "normalized";
+export type QualificationIdentityNormalizer =
+  | "unicode_nfkc"
+  | "casefold"
+  | "collapse_whitespace"
+  | "strip_punctuation";
 export type QualificationTargetKind =
   | "web"
   | "windows"
@@ -93,10 +106,18 @@ export interface QualificationEffect {
 }
 
 export interface QualificationIdentitySource {
-  kind: "structured" | "identifier_region" | "captured_context";
+  kind: QualificationIdentitySourceKind;
   label: string;
   match: string;
   region?: [number, number, number, number];
+}
+
+export interface QualificationIdentitySignal {
+  field: string;
+  source: QualificationIdentitySourceKind;
+  match: QualificationIdentityMatch;
+  normalizers: QualificationIdentityNormalizer[];
+  region?: [number, number, number, number] | null;
 }
 
 export interface QualificationValueExpression {
@@ -134,7 +155,9 @@ export interface QualificationActionControls {
     sources: QualificationIdentitySource[];
     policy?: {
       step_id: string;
-      enforcement: "canonical_ladder" | "signal_quorum";
+      enforcement: QualificationIdentityEnforcement;
+      signals: QualificationIdentitySignal[];
+      quorum: number;
     } | null;
   };
   effects: QualificationEditableEffect[];

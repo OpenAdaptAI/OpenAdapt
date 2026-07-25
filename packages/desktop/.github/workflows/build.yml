@@ -15,6 +15,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  frontend:
+    name: Frontend behavior and build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Exercise qualification interaction and build
+        run: npm run test:ui && npm run build
+
   python-distribution:
     name: Python distribution
     runs-on: ubuntu-22.04

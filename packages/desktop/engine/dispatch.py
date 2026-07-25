@@ -210,7 +210,14 @@ class EngineDispatcher:
             "initialize_qualification": self.initialize_qualification,
             "set_qualification_risk": self.set_qualification_risk,
             "arm_qualification_identity": self.arm_qualification_identity,
+            "set_qualification_identity": self.set_qualification_identity,
             "bind_qualification_effect": self.bind_qualification_effect,
+            "set_qualification_effect_verification": (
+                self.set_qualification_effect_verification
+            ),
+            "set_qualification_minimum_effect_tier": (
+                self.set_qualification_minimum_effect_tier
+            ),
             "certify_qualification": self.certify_qualification,
             # cloud sync / push
             "push_workflow": self.push_workflow,
@@ -1159,6 +1166,44 @@ class EngineDispatcher:
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
 
+    def set_qualification_identity(self, **params: Any) -> dict:
+        """Persist exact or signal-quorum semantics for retained identity evidence."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_action_identity_policy,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_signals = params.get("signals") or []
+        try:
+            if not isinstance(raw_signals, list) or not all(
+                isinstance(signal, dict) for signal in raw_signals
+            ):
+                raise ValueError("signals must be a list of identity signal objects")
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_action_identity_policy(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                enforcement=str(params.get("enforcement") or ""),
+                signals=raw_signals,
+                quorum=int(params.get("quorum", 0)),
+                policy_source=policy,
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified"
+                    if result.get("certification_current")
+                    else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
     def bind_qualification_effect(self, **params: Any) -> dict:
         """Bind one parameterized Flow effect contract without raw JSON edits."""
 
@@ -1193,6 +1238,64 @@ class EngineDispatcher:
                 count_new_only=bool(params.get("count_new_only", False)),
                 effect_index=int(raw_index) if raw_index is not None else None,
                 verification_tier=int(params.get("verification_tier", 3)),
+                policy_source=policy,
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_effect_verification(self, **params: Any) -> dict:
+        """Set the required evidence tier for one selected declared effect."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_action_effect_verification,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_action_effect_verification(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                effect_index=int(params.get("effect_index", -1)),
+                verification_tier=int(params.get("verification_tier", 3)),
+                policy_source=policy,
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_minimum_effect_tier(self, **params: Any) -> dict:
+        """Version the project's minimum accepted effect strength."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_project_minimum_effect_tier,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_project_minimum_effect_tier(
+                bundle,
+                workflow_id=workflow_id,
+                minimum_effect_tier=int(params.get("minimum_effect_tier", 3)),
                 policy_source=policy,
             )
             self.services.db.update_bundle(

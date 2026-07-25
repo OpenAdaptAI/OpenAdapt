@@ -35,7 +35,12 @@ export const CMD = {
   INITIALIZE_QUALIFICATION: "initialize_qualification",
   SET_QUALIFICATION_RISK: "set_qualification_risk",
   ARM_QUALIFICATION_IDENTITY: "arm_qualification_identity",
+  SET_QUALIFICATION_IDENTITY: "set_qualification_identity",
   BIND_QUALIFICATION_EFFECT: "bind_qualification_effect",
+  SET_QUALIFICATION_EFFECT_VERIFICATION:
+    "set_qualification_effect_verification",
+  SET_QUALIFICATION_MINIMUM_EFFECT_TIER:
+    "set_qualification_minimum_effect_tier",
   CERTIFY_QUALIFICATION: "certify_qualification",
   // cloud sync / push
   PUSH_WORKFLOW: "push_workflow",

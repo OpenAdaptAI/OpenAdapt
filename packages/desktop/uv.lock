@@ -288,6 +288,15 @@ wheels = [
 ]
 
 [[package]]
+name = "comtypes"
+version = "1.4.16"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/2a/65274c13327f637ec13af8d39f2cf579d9ebe7a0e683696b5f05236d2805/comtypes-1.4.16.tar.gz", hash = "sha256:cd66d1add01265cface4df51ba1e31cd1657e04463c281c802e737e79e1ba93c", size = 260252, upload-time = "2026-03-02T23:11:42.413Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5f/7c/0eb685107290b6221c03c46d39214a4e42a124189691cb83ae3228257f46/comtypes-1.4.16-py3-none-any.whl", hash = "sha256:e18d85179ff12955524c5a8c3bc09cb3c0d890f1da4d7123d14244c7b78f84c8", size = 296230, upload-time = "2026-03-02T23:11:41.049Z" },
+]
+
+[[package]]
 name = "contourpy"
 version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1346,7 +1355,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-capture"
-version = "1.0.4"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
@@ -1362,15 +1371,16 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pympler" },
     { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin'" },
+    { name = "pywinauto", marker = "sys_platform == 'win32'" },
     { name = "sounddevice" },
     { name = "soundfile" },
     { name = "sqlalchemy" },
     { name = "tqdm" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/b7/d7002739f0eca1bcdaa748c4e47154b8c0c785387ae3f1f584d13f8062e1/openadapt_capture-1.0.4.tar.gz", hash = "sha256:990b93ed81f58c55ae0b5ee2dd09bcf1714740e7d995768d119ca742fb2ce9fc", size = 11976924, upload-time = "2026-07-24T01:17:58.008Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6f/65/11c5c49eeee83b10595c87269f83d1d1dbc6f4e2e04f51885441d064e295/openadapt_capture-1.1.1.tar.gz", hash = "sha256:7022d41b37f3a8fbf30f5e89df2373d3bfacc0e13ab8c9b6c1770f76126fbd6b", size = 11057321, upload-time = "2026-07-25T06:14:38.944Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/39/31677da3654aae8671c80abcca51ac805bf3331e62d95aa1c825a274dfb1/openadapt_capture-1.0.4-py3-none-any.whl", hash = "sha256:a5e93317e054f5faef6dd88ce9a50878770b16cffca97e21d59e6c171b4c6808", size = 185407, upload-time = "2026-07-24T01:17:56.207Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/66/f6ea4cb9a5e9515370e59574c7caf8f827807af877d251db17047010c871/openadapt_capture-1.1.1-py3-none-any.whl", hash = "sha256:76f6fdc9bd81dd3a72445fd8ebd918654a732765d5aae848d5f56dc62d1bf97d", size = 194802, upload-time = "2026-07-25T06:14:37.089Z" },
 ]
 
 [[package]]
@@ -1418,9 +1428,9 @@ requires-dist = [
     { name = "loguru" },
     { name = "onnxruntime", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin' and extra == 'build'", specifier = "==1.20.1" },
     { name = "onnxruntime", marker = "(platform_machine != 'x86_64' and extra == 'build') or (sys_platform != 'darwin' and extra == 'build')", specifier = "==1.27.0" },
-    { name = "openadapt-capture", specifier = ">=1.0.4" },
+    { name = "openadapt-capture", specifier = ">=1.1.0" },
     { name = "openadapt-desktop", extras = ["enterprise"], marker = "extra == 'full'" },
-    { name = "openadapt-flow", marker = "extra == 'build'", specifier = "==1.21.0" },
+    { name = "openadapt-flow", marker = "extra == 'build'", specifier = "==1.22.0" },
     { name = "openadapt-privacy", specifier = ">=1.0.0" },
     { name = "psutil" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -1437,7 +1447,7 @@ provides-extras = ["enterprise", "full", "build", "dev"]
 
 [[package]]
 name = "openadapt-flow"
-version = "1.21.0"
+version = "1.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -1451,9 +1461,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cf/c8/c44930f7a52263d629eb59211b7e5d4c3821c09453a2a8ad3fa325fec2fd/openadapt_flow-1.21.0.tar.gz", hash = "sha256:a02d406b1f954c2908fdc99c0ec12bed582e27c2c0d060992fe1b939dacb598b", size = 18888810, upload-time = "2026-07-25T03:02:24.723Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/1a/c1f8f2961e4bd1faf85692c127c4843f21a287f8217d7b383cc9d7f739da/openadapt_flow-1.22.0.tar.gz", hash = "sha256:81d9171a4a41f44a437091f7fa047a47360c9b3087725e65ec5c94e62f4c63c9", size = 18895321, upload-time = "2026-07-25T07:45:18.709Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/f0/78fb7fac0bb7a64d47c8f669818d998eadd9af00883a0609d83812ee2af3/openadapt_flow-1.21.0-py3-none-any.whl", hash = "sha256:fb05cd58b519f86547e7884c8447edb8d09c7bc3c409341616ac88a0dfa9ff9b", size = 1203209, upload-time = "2026-07-25T03:02:22.111Z" },
+    { url = "https://files.pythonhosted.org/packages/19/7c/2cf9ec82ae282b8811f2abb8bede8c959e44086ba2f993da39cdb7338cf4/openadapt_flow-1.22.0-py3-none-any.whl", hash = "sha256:24cd779249fe6b0f0ca34e0680d425e491c819222fcb432df6dfc5d3f1aec092", size = 1207904, upload-time = "2026-07-25T07:45:16.276Z" },
 ]
 
 [[package]]
@@ -2180,6 +2190,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/85/9f/01a1a99704853cb63f253eea009390c88e7131c67e66a0a02099a8c917cb/pywin32-ctypes-0.2.3.tar.gz", hash = "sha256:d162dc04946d704503b2edc4d55f3dba5c1d539ead017afa00142c38b9885755", size = 29471, upload-time = "2024-08-14T10:15:34.626Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/3d/8161f7711c017e01ac9f008dfddd9410dff3674334c233bde66e7ba65bbf/pywin32_ctypes-0.2.3-py3-none-any.whl", hash = "sha256:8a1513379d709975552d202d942d9837758905c8d01eb82b8bcc30918929e7b8", size = 30756, upload-time = "2024-08-14T10:15:33.187Z" },
+]
+
+[[package]]
+name = "pywinauto"
+version = "0.6.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "comtypes" },
+    { name = "pywin32" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2c/85/cc65e3b64e7473cc86c07f0b5c415d509402c03ef19dadc39c583835eb5f/pywinauto-0.6.9.tar.gz", hash = "sha256:94d710bfa796df245250f952ffa65d97233d9807bcd42e052b71b81af469b6de", size = 434734, upload-time = "2025-01-06T11:30:01.801Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/46/f2283648e0c237af451dc50ebc42121abfd198d12391fd9ad4df1c6b97d2/pywinauto-0.6.9-py2.py3-none-any.whl", hash = "sha256:5924b3072864a1d730c5546bbeb17cf4063ba518b618dbc5e43c18276c7c9356", size = 363041, upload-time = "2025-01-06T11:29:55.586Z" },
 ]
 
 [[package]]

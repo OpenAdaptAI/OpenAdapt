@@ -485,7 +485,7 @@ class FlowBridge:
 
     @staticmethod
     def classify_outcome(returncode: int, report: dict) -> FlowOutcome:
-        """Classify only explicit Flow 1.21.0 success or halt evidence.
+        """Classify only explicit Flow 1.22.0 success or halt evidence.
 
         Flow's connector defines success as exit 0 plus a true ``success``
         field, and a halt from ``terminal_outcome == "halt"`` or a structured

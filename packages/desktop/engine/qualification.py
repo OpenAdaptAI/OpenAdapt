@@ -25,6 +25,7 @@ QualificationRisk = Literal[
     "irreversible",
 ]
 QualificationEffectKind = Literal["record_written", "field_equals"]
+QualificationIdentityEnforcement = Literal["canonical_ladder", "signal_quorum"]
 QualificationTargetKind = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
 DEFAULT_QUALIFICATION_POLICY = "clinical-write"
 ENVIRONMENT_IDENTIFIER_DERIVATION = "sha256(trimmed UTF-8 operator identifier)"
@@ -45,7 +46,11 @@ def _flow_api() -> dict[str, Any]:
             ActionRiskClassification,
             EnvironmentBoundary,
             IdentityEnforcement,
+            IdentityEvidenceSource,
+            IdentityMatchMode,
+            IdentityNormalizer,
             IdentityPolicy,
+            IdentitySignalPolicy,
             VerificationTier,
             certify_project,
             evaluate_qualification,
@@ -54,6 +59,7 @@ def _flow_api() -> dict[str, Any]:
             set_action_classification,
             set_effect_policy,
             set_identity_policy,
+            set_minimum_effect_tier,
             workflow_contract_sha256,
         )
         from openadapt_flow.traversal import iter_workflow_steps
@@ -75,7 +81,11 @@ def _flow_api() -> dict[str, Any]:
         "ActionRiskClassification": ActionRiskClassification,
         "EnvironmentBoundary": EnvironmentBoundary,
         "IdentityEnforcement": IdentityEnforcement,
+        "IdentityEvidenceSource": IdentityEvidenceSource,
+        "IdentityMatchMode": IdentityMatchMode,
+        "IdentityNormalizer": IdentityNormalizer,
         "IdentityPolicy": IdentityPolicy,
+        "IdentitySignalPolicy": IdentitySignalPolicy,
         "VerificationTier": VerificationTier,
         "certify_project": certify_project,
         "evaluate_qualification": evaluate_qualification,
@@ -84,6 +94,7 @@ def _flow_api() -> dict[str, Any]:
         "set_action_classification": set_action_classification,
         "set_effect_policy": set_effect_policy,
         "set_identity_policy": set_identity_policy,
+        "set_minimum_effect_tier": set_minimum_effect_tier,
         "workflow_contract_sha256": workflow_contract_sha256,
     }
 
@@ -522,29 +533,157 @@ def arm_action_identity(
 ) -> dict:
     """Arm retained identity evidence and bind canonical-ladder enforcement."""
 
+    return set_action_identity_policy(
+        bundle_dir,
+        workflow_id=workflow_id,
+        step_id=step_id,
+        enforcement="canonical_ladder",
+        signals=[],
+        quorum=0,
+        policy_source=policy_source,
+    )
+
+
+def set_action_identity_policy(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    step_id: str,
+    enforcement: QualificationIdentityEnforcement,
+    signals: list[dict[str, Any]],
+    quorum: int,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+) -> dict:
+    """Arm retained evidence and persist Flow's canonical identity policy."""
+
+    if enforcement not in {"canonical_ladder", "signal_quorum"}:
+        raise QualificationError(
+            "enforcement must be canonical_ladder or signal_quorum"
+        )
     api = _flow_api()
     workflow = _load(bundle_dir)
     if workflow.qualification is None:
         raise QualificationError(
-            "Initialize the qualification boundary before arming identity."
+            "Initialize the qualification boundary before setting identity."
         )
     step = _resolve_action(workflow, step_id)
-    sources = _identity_sources(step)
-    if not sources:
+    retained_sources = _identity_sources(step)
+    if not retained_sources:
         raise QualificationError(
             "This action has no retained structured identity, identifier region, "
             "or captured row identity. Record or teach the action with identity "
             "evidence before arming it."
         )
-    step.identity_armed = True
-    step.identity_unarmed_reason = None
     try:
+        canonical_signals = []
+        retained_by_kind = {source["kind"]: source for source in retained_sources}
+        for signal in signals:
+            if not isinstance(signal, dict):
+                raise QualificationError("identity signals must be objects")
+            source_name = str(signal.get("source") or "")
+            retained = retained_by_kind.get(source_name)
+            if retained is None:
+                raise QualificationError(
+                    f"identity policy references unavailable evidence: {source_name}"
+                )
+            canonical_signals.append(
+                api["IdentitySignalPolicy"](
+                    field=str(signal.get("field") or ""),
+                    source=api["IdentityEvidenceSource"](source_name),
+                    match=api["IdentityMatchMode"](
+                        str(signal.get("match") or "exact")
+                    ),
+                    normalizers=[
+                        api["IdentityNormalizer"](str(item))
+                        for item in (signal.get("normalizers") or [])
+                    ],
+                    region=(
+                        tuple(retained["region"])
+                        if source_name == "identifier_region"
+                        else None
+                    ),
+                )
+            )
+        identity_policy = api["IdentityPolicy"](
+            step_id=step.id,
+            enforcement=api["IdentityEnforcement"](enforcement),
+            signals=canonical_signals,
+            quorum=quorum,
+        )
+        step.identity_armed = True
+        step.identity_unarmed_reason = None
         api["set_identity_policy"](
             workflow,
-            api["IdentityPolicy"](
-                step_id=step.id,
-                enforcement=api["IdentityEnforcement"].CANONICAL_LADDER,
-            ),
+            identity_policy,
+        )
+        _save(workflow, bundle_dir)
+    except (QualificationError, ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+    )
+
+
+def set_action_effect_verification(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    step_id: str,
+    effect_index: int,
+    verification_tier: int,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+) -> dict:
+    """Set the minimum evidence tier required for one declared Flow effect."""
+
+    api = _flow_api()
+    workflow = _load(bundle_dir)
+    if workflow.qualification is None:
+        raise QualificationError(
+            "Initialize the qualification boundary before setting effect verification."
+        )
+    step = _resolve_action(workflow, step_id)
+    if effect_index < 0 or effect_index >= len(step.effects):
+        raise QualificationError(
+            f"Effect index {effect_index} is outside this action's effect inventory"
+        )
+    try:
+        api["set_effect_policy"](
+            workflow,
+            step_id=step.id,
+            effect_index=effect_index,
+            tier=api["VerificationTier"](verification_tier),
+        )
+        _save(workflow, bundle_dir)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+    )
+
+
+def set_project_minimum_effect_tier(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    minimum_effect_tier: int,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+) -> dict:
+    """Version the project's canonical minimum effect-verification strength."""
+
+    api = _flow_api()
+    workflow = _load(bundle_dir)
+    if workflow.qualification is None:
+        raise QualificationError(
+            "Initialize the qualification boundary before setting minimum effect strength."
+        )
+    try:
+        api["set_minimum_effect_tier"](
+            workflow,
+            api["VerificationTier"](minimum_effect_tier),
         )
         _save(workflow, bundle_dir)
     except (ValueError, TypeError) as exc:

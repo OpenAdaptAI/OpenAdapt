@@ -30,7 +30,10 @@ from engine.qualification import (
     environment_digest_from_identifier,
     initialize_qualification,
     inspect_bundle,
+    set_action_effect_verification,
+    set_action_identity_policy,
     set_action_risk,
+    set_project_minimum_effect_tier,
 )
 
 
@@ -364,6 +367,132 @@ def test_identity_control_refuses_missing_evidence_without_mutation(
     assert (bundle / "workflow.json").read_bytes() == before
 
 
+def test_identity_editor_round_trips_exact_normalized_region_and_quorum(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(
+            id="save",
+            intent="Save encounter",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="save.png",
+                region=(0, 0, 20, 20),
+                click_point=(10, 10),
+                structured_identity="patient_id P-42",
+                identifier_crop="patient-id.png",
+                identifier_region=(4, 6, 120, 24),
+            ),
+            identity_armed=False,
+            identity_unarmed_reason="operator review required",
+        ),
+    )
+    _initialize(bundle)
+    set_action_risk(
+        bundle,
+        workflow_id="wf-1",
+        step_id="save",
+        risk="consequential",
+    )
+    before = Workflow.load(bundle)
+    assert before.qualification is not None
+    previous_revision = before.qualification.revision
+    previous_digest = before.qualification.revision_digest()
+
+    result = set_action_identity_policy(
+        bundle,
+        workflow_id="wf-1",
+        step_id="save",
+        enforcement="signal_quorum",
+        signals=[
+            {
+                "field": "patient_id",
+                "source": "structured",
+                "match": "exact",
+                "normalizers": [],
+            },
+            {
+                "field": "patient_banner",
+                "source": "identifier_region",
+                "match": "normalized",
+                "normalizers": ["unicode_nfkc", "collapse_whitespace"],
+            },
+        ],
+        quorum=2,
+    )
+
+    persisted = Workflow.load(bundle)
+    assert persisted.qualification is not None
+    policy = persisted.qualification.identity_policies["save"]
+    assert policy.enforcement.value == "signal_quorum"
+    assert policy.quorum == 2
+    assert [signal.field for signal in policy.signals] == [
+        "patient_id",
+        "patient_banner",
+    ]
+    assert policy.signals[0].match.value == "exact"
+    assert policy.signals[0].normalizers == []
+    assert policy.signals[1].match.value == "normalized"
+    assert [item.value for item in policy.signals[1].normalizers] == [
+        "unicode_nfkc",
+        "collapse_whitespace",
+    ]
+    assert policy.signals[1].region == (4, 6, 120, 24)
+    assert persisted.qualification.revision == previous_revision + 1
+    assert persisted.qualification.previous_revision_sha256 == previous_digest
+    assert result["controls"]["actions"]["save"]["identity"]["policy"]["quorum"] == 2
+    assert result["controls"]["actions"]["save"]["identity"]["policy"]["signals"][1]["region"] == [
+        4,
+        6,
+        120,
+        24,
+    ]
+    assert "identity_policy_unenforced" in {
+        refusal["code"] for refusal in result["report"]["refusals"]
+    }
+
+
+def test_identity_editor_refuses_unavailable_source_without_mutation(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(
+            id="save",
+            intent="Save",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="save.png",
+                region=(0, 0, 20, 20),
+                click_point=(10, 10),
+                structured_identity="patient_id P-42",
+            ),
+        ),
+    )
+    _initialize(bundle)
+    before = (bundle / "workflow.json").read_bytes()
+
+    with pytest.raises(QualificationError, match="unavailable evidence"):
+        set_action_identity_policy(
+            bundle,
+            workflow_id="wf-1",
+            step_id="save",
+            enforcement="signal_quorum",
+            signals=[
+                {
+                    "field": "patient_banner",
+                    "source": "identifier_region",
+                    "match": "exact",
+                    "normalizers": [],
+                }
+            ],
+            quorum=1,
+        )
+
+    assert (bundle / "workflow.json").read_bytes() == before
+
+
 def test_effect_control_writes_executable_contract_and_canonical_tier(
     tmp_path: Path,
 ) -> None:
@@ -440,6 +569,70 @@ def test_effect_control_refuses_unknown_parameter_without_mutation(
     assert (bundle / "workflow.json").read_bytes() == before
 
 
+def test_existing_effect_verification_and_project_minimum_round_trip_by_revision(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(
+            id="save",
+            intent="Save encounter",
+            action=ActionKind.CLICK,
+            effects=[
+                Effect(
+                    kind=EffectKind.FIELD_EQUALS,
+                    match={"patient_id": "P-42"},
+                    field="status",
+                    value="complete",
+                )
+            ],
+        ),
+    )
+    _initialize(bundle)
+    before = Workflow.load(bundle)
+    assert before.qualification is not None
+    effect_before = before.steps[0].effects[0].model_dump(mode="json")
+    previous_revision = before.qualification.revision
+    previous_digest = before.qualification.revision_digest()
+
+    verified = set_action_effect_verification(
+        bundle,
+        workflow_id="wf-1",
+        step_id="save",
+        effect_index=0,
+        verification_tier=2,
+    )
+    persisted = Workflow.load(bundle)
+    assert persisted.qualification is not None
+    assert persisted.steps[0].effects[0].model_dump(mode="json") == effect_before
+    assert int(persisted.qualification.effect_policies[0].tier) == 2
+    assert persisted.qualification.revision == previous_revision + 1
+    assert persisted.qualification.previous_revision_sha256 == previous_digest
+    assert verified["controls"]["actions"]["save"]["effects"][0]["verification_tier"] == 2
+
+    previous_revision = persisted.qualification.revision
+    previous_digest = persisted.qualification.revision_digest()
+    updated = set_project_minimum_effect_tier(
+        bundle,
+        workflow_id="wf-1",
+        minimum_effect_tier=2,
+    )
+    persisted = Workflow.load(bundle)
+    assert persisted.qualification is not None
+    assert int(persisted.qualification.minimum_effect_tier) == 2
+    assert persisted.qualification.revision == previous_revision + 1
+    assert persisted.qualification.previous_revision_sha256 == previous_digest
+    assert updated["project"]["minimum_effect_tier"] == 2
+    assert updated["report"]["minimum_effect_tier"] == 2
+
+    unchanged = set_project_minimum_effect_tier(
+        bundle,
+        workflow_id="wf-1",
+        minimum_effect_tier=2,
+    )
+    assert unchanged["project"]["revision"] == persisted.qualification.revision
+
+
 def test_certification_uses_canonical_refusals_instead_of_policy_only_success(
     tmp_path: Path,
 ) -> None:
@@ -490,4 +683,91 @@ def test_dispatcher_initialization_persists_bundle_status_and_contract(
 
     assert result["ok"] is True
     assert result["project"]["environment"]["target_kind"] == "rdp"
+    assert row["status"] == "qualification_pending"
+
+
+def test_dispatcher_round_trips_editable_identity_and_effect_contracts(
+    tmp_path: Path,
+) -> None:
+    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+    bundle = _bundle(
+        config.data_dir / "bundles" / "wf-1",
+        Step(
+            id="save",
+            intent="Save encounter",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="save.png",
+                region=(0, 0, 20, 20),
+                click_point=(10, 10),
+                structured_identity="patient_id P-42",
+            ),
+            effects=[
+                Effect(
+                    kind=EffectKind.RECORD_WRITTEN,
+                    match={"patient_id": "P-42"},
+                )
+            ],
+        ),
+    )
+    db = IndexDB(tmp_path / "index.db")
+    db.initialize()
+    db.insert_bundle("wf-1", str(bundle))
+    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
+    try:
+        initialized = dispatcher.dispatch(
+            "initialize_qualification",
+            {
+                "workflow_id": "wf-1",
+                "target_kind": "rdp",
+                "application": "Reference app",
+                "application_version": "1",
+                "environment_label": "test-rdp-session",
+                "minimum_effect_tier": 3,
+            },
+        )
+        identity = dispatcher.dispatch(
+            "set_qualification_identity",
+            {
+                "workflow_id": "wf-1",
+                "step_id": "save",
+                "enforcement": "signal_quorum",
+                "signals": [
+                    {
+                        "field": "patient_id",
+                        "source": "structured",
+                        "match": "normalized",
+                        "normalizers": ["unicode_nfkc", "casefold"],
+                    }
+                ],
+                "quorum": 1,
+            },
+        )
+        effect = dispatcher.dispatch(
+            "set_qualification_effect_verification",
+            {
+                "workflow_id": "wf-1",
+                "step_id": "save",
+                "effect_index": 0,
+                "verification_tier": 2,
+            },
+        )
+        minimum = dispatcher.dispatch(
+            "set_qualification_minimum_effect_tier",
+            {
+                "workflow_id": "wf-1",
+                "minimum_effect_tier": 2,
+            },
+        )
+        row = db.get_bundle("wf-1")
+    finally:
+        db.close()
+
+    assert initialized["ok"] is True
+    assert identity["controls"]["actions"]["save"]["identity"]["policy"]["signals"][0][
+        "normalizers"
+    ] == ["unicode_nfkc", "casefold"]
+    assert effect["controls"]["actions"]["save"]["effects"][0]["verification_tier"] == 2
+    assert minimum["project"]["minimum_effect_tier"] == 2
+    assert minimum["project"]["revision"] == initialized["project"]["revision"] + 3
     assert row["status"] == "qualification_pending"
