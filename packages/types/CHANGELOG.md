@@ -1,6 +1,41 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-07-25)
+
+### Documentation
+
+- Add lifecycle status banner ([#7](https://github.com/OpenAdaptAI/openadapt-types/pull/7),
+  [`c8b9109`](https://github.com/OpenAdaptAI/openadapt-types/commit/c8b91092901b1948bcc5671780fd31f13aee830f))
+
+Adds the standard lifecycle banner used across the org (matching the banner wave on
+  openadapt-capture, openadapt-grounding, etc.), derived from this repo's classification in the
+  repository lifecycle registry (OpenAdaptAI/.github repository-lifecycle.yml, reviewed 2026-07-15):
+  Experimental.
+
+Existing README content is unchanged below the banner.
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+- Refresh README to shared OpenAdapt house style
+  ([#8](https://github.com/OpenAdaptAI/openadapt-types/pull/8),
+  [`5d16b85`](https://github.com/OpenAdaptAI/openadapt-types/commit/5d16b85ab6c8db14c58a6e17252f5e81374a31ca))
+
+Refresh the README to the shared OpenAdapt house style: governed demonstration compiler positioning,
+  a consistent "The OpenAdapt stack" section cross-linking the sibling packages, docs.openadapt.ai
+  and the main OpenAdapt repo links, first-class substrate framing with honest maturity, and no em
+  dashes. Claims verified against the package code.
+
+Claude-Session: https://claude.ai/code/session_01NyCHrzA1psrKMFfroYbzaM
+
+Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
+
+### Features
+
+- Add shared control overlay contract
+  ([`ca1c85c`](https://github.com/OpenAdaptAI/openadapt-types/commit/ca1c85c34ac7a62c4b9e59e940b15c104cf68420))
+
+
 ## v0.3.1 (2026-07-16)
 
 ### Bug Fixes
