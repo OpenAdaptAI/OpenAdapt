@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.5.0 (2026-07-25)
+
+### Bug Fixes
+
+- Separate runtime geometry from renderer mapping
+  ([`9b88122`](https://github.com/OpenAdaptAI/openadapt-types/commit/9b88122c3b9da9229e2b563f3f8494f417efa691))
+
+### Documentation
+
+- Clarify browser target geometry scope
+  ([`4e2fa41`](https://github.com/OpenAdaptAI/openadapt-types/commit/4e2fa41fc80f36c4a04f10cf646a353376e49c74))
+
+### Features
+
+- Add exact overlay target tracking contract
+  ([`22b9cbb`](https://github.com/OpenAdaptAI/openadapt-types/commit/22b9cbb42540ac63f236fb72d295cdcd375ede29))
+
+
 ## v0.4.0 (2026-07-25)
 
 ### Documentation
