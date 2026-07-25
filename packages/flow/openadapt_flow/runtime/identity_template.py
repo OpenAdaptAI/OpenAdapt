@@ -745,6 +745,7 @@ def verify_signal_template(
     live: Optional[str],
     params: Optional[dict[str, str]] = None,
     param_examples: Optional[dict[str, str]] = None,
+    parameter_names: Optional[list[str]] = None,
 ) -> Optional[bool]:
     """Verify one strict full-source signal hash without exposing its value.
 
@@ -759,6 +760,8 @@ def verify_signal_template(
     if expected is None:
         return None
     names = tmpl.structured_params if source == "structured" else tmpl.context_params
+    if parameter_names is not None and set(parameter_names) != set(names):
+        return None
     live_form = live
     if names:
         values = {**(param_examples or {}), **(params or {})}

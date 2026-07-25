@@ -100,8 +100,10 @@ def parameterize_identity_text(
     """Replace exact run-specific values with stable non-value sentinels.
 
     This lets a retained hash bind the surrounding identity structure while
-    the named workflow parameter changes per run.  Replacement is exact
-    unless ``case_sensitive`` is false; no approximate matching is used.
+    the named workflow parameter changes per run. Replacement is exact,
+    boundary-aware, and limited to the explicitly supplied ``names`` when that
+    argument is present. A parameter value such as ``John`` therefore never
+    claims the ``John`` prefix in ``Johnson``.
     """
 
     result = text
@@ -113,7 +115,12 @@ def parameterize_identity_text(
         if len("".join(value.split())) < minimum_chars:
             continue
         flags = 0 if case_sensitive else re.IGNORECASE
-        pattern = re.compile(re.escape(value), flags)
+        left_boundary = r"(?<!\w)" if value[0].isalnum() or value[0] == "_" else ""
+        right_boundary = r"(?!\w)" if value[-1].isalnum() or value[-1] == "_" else ""
+        pattern = re.compile(
+            left_boundary + re.escape(value) + right_boundary,
+            flags,
+        )
         if not pattern.search(result):
             continue
         result = pattern.sub(f"__OPENADAPT_PARAM_{name}__", result)

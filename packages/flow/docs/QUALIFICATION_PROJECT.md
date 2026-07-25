@@ -60,8 +60,10 @@ openadapt-flow qualify set-identity bundle \
 # Or require two independent retained sources with explicit comparisons:
 openadapt-flow qualify set-identity bundle \
   --step save \
-  --signal patient_record=structured:exact \
-  --signal patient_banner=captured_context:normalized:unicode_nfkc,collapse_whitespace \
+  --signal record_id=structured:exact \
+  --signal secondary_identifier=captured_context:normalized:unicode_nfkc,collapse_whitespace \
+  --signal-region secondary_identifier=40,20,240,48 \
+  --signal-param record_id=patient_id \
   --quorum 2
 
 openadapt-flow qualify set-effect bundle \
@@ -104,14 +106,24 @@ and system-of-record records do not belong in the qualification project.
 
 Both `--canonical-ladder` and named signal quorums are runtime-enforced.
 Quorum signals must use independent retained sources; giving one source two
-field labels cannot create two votes. A definitive conflict halts even after
-the numeric quorum has been reached, while an unavailable signal can abstain
-only when the remaining independent signals still satisfy the quorum.
+labels cannot create two votes, and overlapping pixel regions are refused.
+Pixel signals use explicit qualified regions rather than arbitrary broad
+context bands. A definitive conflict halts even after the numeric quorum has
+been reached, while an unavailable signal can abstain only when the remaining
+independent signals still satisfy the quorum.
 Comparisons are either byte-exact or use only the explicitly listed
-normalizers. Reports retain signal name, source, evidence class, and verdict,
-not the observed identity value. Signal names are PHI-free logical keys
-beginning with an ASCII letter; patient or account values are rejected as
-labels.
+normalizers. Parameter substitution is explicit (`--signal-param`) and matches
+only complete values, so `John` cannot bind inside `Johnson`. Reports retain a
+closed semantic signal key, source, evidence class, and verdict, not the
+observed identity value; arbitrary patient/account labels cannot enter the
+bundle or report.
+
+When a qualified consequential action uses an `api_binding`, the binding must
+map the qualified semantic identity key to a workflow parameter, reference that
+parameter in the outgoing request template, and bind the same parameter in the
+declared effect selector. The runtime checks this request/effect identity proof
+before sending the request; API actuation cannot bypass the GUI identity
+contract.
 
 PHI-free bundles compiled with this runtime carry salted full-source hashes for
 the exact and supported explicit-normalization contracts. A bundle compiled

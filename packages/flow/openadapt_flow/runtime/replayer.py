@@ -885,8 +885,8 @@ class Replayer:
         """Record the bundle's identity-protection coverage on the report.
 
         Computed over the WHOLE workflow at run start (not just executed
-        steps): every anchored click / double-click / TYPE step is
-        identity-applicable; it is ARMED when the pre-click identity gate
+        steps): every anchored click / double-click / TYPE / KEY step is
+        identity-applicable; it is ARMED when the pre-actuation identity gate
         will actually run (``anchor.context_text`` present — the ground
         truth the gate itself keys on). Unarmed steps proceed with NO
         identity verification (docs/LIMITS.md), so each one is listed by
@@ -901,6 +901,7 @@ class Replayer:
                 ActionKind.CLICK,
                 ActionKind.DOUBLE_CLICK,
                 ActionKind.TYPE,
+                ActionKind.KEY,
             ):
                 continue
             report.identity_applicable_steps += 1
@@ -908,6 +909,7 @@ class Replayer:
                 step.anchor.context_text
                 or step.anchor.structured_identity
                 or step.anchor.identity_template
+                or step.anchor.identifier_crop
             ):
                 report.identity_armed_steps += 1
             else:
@@ -2668,7 +2670,7 @@ class Replayer:
                     matched_region,
                     before_png,
                     error,
-                ) = self._revalidate_remote_actuation(
+                ) = self._revalidate_consequential_actuation(
                     step,
                     resolution,
                     matched_region,
@@ -2862,6 +2864,124 @@ class Replayer:
 
     # -- API/tool actuation tier (top of the capability ladder) -----------------
 
+    @staticmethod
+    def _template_mentions_param(value: Any, param: str) -> bool:
+        """Whether an API request template contains the exact ``{param}`` token."""
+
+        needle = "{" + param + "}"
+        if isinstance(value, str):
+            return needle in value
+        if isinstance(value, dict):
+            return any(
+                Replayer._template_mentions_param(item, param)
+                for item in value.values()
+            )
+        if isinstance(value, (list, tuple)):
+            return any(Replayer._template_mentions_param(item, param) for item in value)
+        return False
+
+    def _api_identity_refusal(
+        self,
+        step: Step,
+        params: dict[str, str],
+        workflow: Workflow,
+        effects: list["Effect"],
+        result: StepResult,
+    ) -> Optional[str]:
+        """Validate an exact qualified identity binding before an API write."""
+
+        authorization_requires = (
+            self.governed_authorization is not None
+            and self.governed_authorization.requires_verified_identity(step.id)
+        )
+        project = workflow.qualification
+        policy = project.identity_policies.get(step.id) if project is not None else None
+        if not authorization_requires and policy is None:
+            return None
+
+        binding = step.api_binding
+        assert binding is not None
+        if not binding.identity:
+            return (
+                f"API identity verification HALTED step '{step.id}' "
+                f"({step.intent}): the qualified action has no exact "
+                "api_binding.identity contract — refusing to send the request"
+            )
+
+        allowed_keys: Optional[set[str]] = None
+        required = 1
+        if policy is not None and policy.enforcement.value == "signal_quorum":
+            allowed_keys = {signal.key.value for signal in policy.signals}
+            required = policy.quorum
+
+        request_templates = (
+            binding.url_template,
+            binding.body_template,
+            binding.query,
+            binding.headers,
+        )
+        evidence: list[IdentitySignalEvidence] = []
+        for identity in binding.identity:
+            if allowed_keys is not None and identity.key not in allowed_keys:
+                return (
+                    f"API identity verification HALTED step '{step.id}' "
+                    f"({step.intent}): semantic signal {identity.key!r} is not "
+                    "part of the qualified identity policy"
+                )
+            value = params.get(identity.param)
+            if value is None or value == "":
+                return (
+                    f"API identity verification HALTED step '{step.id}' "
+                    f"({step.intent}): required identity parameter "
+                    f"{identity.param!r} is missing"
+                )
+            if not any(
+                self._template_mentions_param(template, identity.param)
+                for template in request_templates
+            ):
+                return (
+                    f"API identity verification HALTED step '{step.id}' "
+                    f"({step.intent}): identity parameter {identity.param!r} is "
+                    "not bound into the outgoing request template"
+                )
+            effect_exprs = [
+                effect.match.get(identity.effect_field) for effect in effects
+            ]
+            if not any(
+                expr is not None and expr.param == identity.param
+                for expr in effect_exprs
+            ):
+                return (
+                    f"API identity verification HALTED step '{step.id}' "
+                    f"({step.intent}): effect selector {identity.effect_field!r} "
+                    f"is not bound to identity parameter {identity.param!r}"
+                )
+            evidence.append(
+                IdentitySignalEvidence(
+                    signal=identity.key,
+                    source="api_parameter",
+                    verdict="verified",
+                    evidence_class="api_request_effect_binding",
+                    match="exact",
+                )
+            )
+
+        if len(evidence) < required:
+            return (
+                f"API identity verification HALTED step '{step.id}' "
+                f"({step.intent}): {len(evidence)}/{required} exact qualified "
+                "identity bindings verified — refusing to send the request"
+            )
+        result.identity = IdentityCheck(
+            status="verified",
+            mode="signal_quorum",
+            coverage=1.0,
+            signal_evidence=evidence,
+            quorum_required=required,
+            quorum_verified=len(evidence),
+        )
+        return None
+
     def _try_api_tier(
         self,
         step: Step,
@@ -2918,6 +3038,19 @@ class Replayer:
                 "must be verifiable; refusing to actuate "
                 "(deployment/configuration error); run aborted"
             )
+            return True
+        identity_refusal = self._api_identity_refusal(
+            step,
+            params,
+            workflow,
+            effects,
+            result,
+        )
+        if identity_refusal is not None:
+            result.ok = False
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            result.error = identity_refusal
             return True
         if self.effect_verifier is None:
             result.effect_verified = False
@@ -3260,7 +3393,12 @@ class Replayer:
         """Run the target-identity contract on one exact observed frame."""
         if (
             step.action
-            not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.TYPE)
+            not in (
+                ActionKind.CLICK,
+                ActionKind.DOUBLE_CLICK,
+                ActionKind.TYPE,
+                ActionKind.KEY,
+            )
             or step.anchor is None
             or not (
                 step.anchor.context_text
@@ -3282,7 +3420,7 @@ class Replayer:
         signal_quorum = check.mode == "signal_quorum"
         if signal_quorum and check.status == "mismatch":
             conflicts = [
-                f"{item.name}/{item.source}"
+                f"{item.signal}/{item.source}"
                 for item in check.signal_evidence
                 if item.verdict == "conflict"
             ]
@@ -3340,14 +3478,46 @@ class Replayer:
             result.safety_halt = True
         return error
 
-    def _remote_step_is_consequential(self, step: Step) -> bool:
+    def _step_is_consequential(self, step: Step) -> bool:
         authorization = self.governed_authorization
         return is_consequential(step) or (
             authorization is not None
             and authorization.requires_verified_identity(step.id)
         )
 
-    def _revalidate_remote_actuation(
+    def _step_has_identity_contract(self, step: Step, workflow: Workflow) -> bool:
+        """Whether this step carries identity evidence or an explicit mandate."""
+        authorization = self.governed_authorization
+        if authorization is not None and authorization.requires_verified_identity(
+            step.id
+        ):
+            return True
+        qualification = workflow.qualification
+        if qualification is not None and step.id in qualification.identity_policies:
+            return True
+        anchor = step.anchor
+        return anchor is not None and bool(
+            anchor.context_text
+            or anchor.structured_identity
+            or anchor.identity_template
+            or anchor.identifier_crop
+        )
+
+    def _step_needs_consequential_revalidation(
+        self, step: Step, workflow: Workflow
+    ) -> bool:
+        """Whether delivery needs a second, immediately fresh observation.
+
+        Opaque remote surfaces always use the two-phase lease for a
+        consequential action. Browser/native surfaces use the same pre-delivery
+        refresh when identity is part of the action contract.
+        """
+        return self._step_is_consequential(step) and (
+            isinstance(self.backend, RemoteActuationBackend)
+            or self._step_has_identity_contract(step, workflow)
+        )
+
+    def _revalidate_consequential_actuation(
         self,
         step: Step,
         resolution: Optional[Resolution],
@@ -3363,20 +3533,22 @@ class Replayer:
         bytes,
         Optional[str],
     ]:
-        """Acquire, re-resolve, and identity-check a consequential remote step.
+        """Freshly re-resolve and identity-check a consequential GUI step.
 
-        ``RemoteActuationBackend`` arms a one-shot exact-frame lease.  Its input
-        method captures once more under the backend lock and refuses before the
-        first input edge if the frame changed after this method returned.
-        Reversible remote actions retain the ordinary replay path.
+        Browser/native backends provide a fresh screenshot immediately before
+        delivery. ``RemoteActuationBackend`` additionally arms a one-shot
+        exact-frame lease and refuses if pixels change before the first input
+        edge. Reversible actions retain the ordinary replay path.
         """
-        if not self._remote_step_is_consequential(step) or not isinstance(
-            self.backend, RemoteActuationBackend
-        ):
+        if not self._step_needs_consequential_revalidation(step, workflow):
             return resolution, matched_region, before_png, None
 
         try:
-            fresh_png = self.backend.acquire_actuation_frame()
+            fresh_png = (
+                self.backend.acquire_actuation_frame()
+                if isinstance(self.backend, RemoteActuationBackend)
+                else self.backend.screenshot()
+            )
         except Exception as exc:  # noqa: BLE001 - backend boundary must halt
             if self.governed_authorization is not None:
                 result.safety_halt = True
@@ -3385,7 +3557,7 @@ class Replayer:
                 resolution,
                 matched_region,
                 before_png,
-                "Remote actuation preflight HALTED before input for step "
+                "Actuation preflight HALTED before input for step "
                 f"'{step.id}' ({step.intent}): {detail}",
             )
 
@@ -3396,7 +3568,20 @@ class Replayer:
             if self.governed_authorization is not None:
                 result.safety_halt = True
             return fresh_resolution, fresh_region, fresh_png, error
-        if fresh_resolution is not None:
+        identity_required = (
+            self.governed_authorization is not None
+            and self.governed_authorization.requires_verified_identity(step.id)
+        ) or (
+            workflow.qualification is not None
+            and step.id in workflow.qualification.identity_policies
+        )
+        if fresh_resolution is None and identity_required:
+            error = (
+                f"Step '{step.id}' ({step.intent}) requires verified identity "
+                "but no exact target observation was available immediately "
+                "before actuation — refusing to act; run aborted"
+            )
+        elif fresh_resolution is not None:
             error = self._identity_gate_error(
                 step,
                 fresh_resolution,
@@ -3604,15 +3789,13 @@ class Replayer:
                 # is a second input gesture after that click, so reacquire and
                 # re-run target/identity before typing; the focusing click
                 # consumed the first one-shot remote lease.
-                if self._remote_step_is_consequential(step) and isinstance(
-                    self.backend, RemoteActuationBackend
-                ):
+                if self._step_needs_consequential_revalidation(step, workflow):
                     (
                         refreshed,
                         refreshed_region,
                         before_png,
                         remote_error,
-                    ) = self._revalidate_remote_actuation(
+                    ) = self._revalidate_consequential_actuation(
                         step,
                         resolution,
                         field_region,
@@ -4371,7 +4554,7 @@ class Replayer:
             }[source],
         )
         return IdentitySignalEvidence(
-            name=signal.field,
+            signal=signal.key.value,
             source=source,
             verdict=verdict,
             evidence_class=evidence_class,
@@ -4401,9 +4584,12 @@ class Replayer:
             expected_form, parameter_names = parameterize_identity_text(
                 recorded,
                 workflow.params,
+                names=signal.params,
                 minimum_chars=identity_mod.MIN_PARAM_CHARS,
                 case_sensitive=True,
             )
+            if set(parameter_names) != set(signal.params):
+                return "unverifiable"
             live_values = {**workflow.params, **params}
             live_form, used = parameterize_identity_text(
                 live,
@@ -4440,6 +4626,7 @@ class Replayer:
             live=live,
             params=params,
             param_examples=workflow.params,
+            parameter_names=signal.params,
         )
         if result is None:
             return "unverifiable"
@@ -4457,13 +4644,17 @@ class Replayer:
         step: Step,
         resolution: Resolution,
         before_png: bytes,
+        qualified_region: Region,
     ) -> list[str]:
-        """Read the qualified context source at native and, if needed, 2x scale."""
+        """Read one explicitly qualified context region at native and 2x scale."""
 
         assert step.anchor is not None
         anchor = step.anchor
-        band = identity_mod.band_region(
-            resolution.point, anchor.region[3], self.backend.viewport
+        band = (
+            resolution.point[0] + (qualified_region[0] - anchor.click_point[0]),
+            resolution.point[1] + (qualified_region[1] - anchor.click_point[1]),
+            qualified_region[2],
+            qualified_region[3],
         )
         exclude = (
             resolution.point[0] + (anchor.region[0] - anchor.click_point[0]),
@@ -4566,8 +4757,9 @@ class Replayer:
                     workflow=workflow,
                 )
             elif source == "captured_context":
+                assert signal.region is not None
                 attempts = self._captured_context_observations(
-                    step, resolution, before_png
+                    step, resolution, before_png, signal.region
                 )
                 verdicts = [
                     self._compare_qualified_signal_text(
@@ -4684,9 +4876,12 @@ class Replayer:
         recorded, parameter_names = parameterize_identity_text(
             recorded,
             workflow.params,
+            names=signal.params,
             minimum_chars=identity_mod.MIN_PARAM_CHARS,
             case_sensitive=True,
         )
+        if set(parameter_names) != set(signal.params):
+            return "unverifiable", signal.params
         live, used = parameterize_identity_text(
             live,
             {**workflow.params, **params},

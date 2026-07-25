@@ -50,7 +50,8 @@ from openadapt_flow.runtime.effects.effect import ReadbackNav, ReadbackSpec
 from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.verification import VerificationTier
-from tests.test_replayer import FakeBackend, FakeVision
+from openadapt_flow.vision.ocr import OcrLine
+from tests.test_replayer import FakeBackend, FakeVision, make_png
 
 _KEY = "profile-test-key"
 
@@ -71,6 +72,64 @@ class _TieredVerifier:
 
 
 class _ReadyVision(FakeVision):
+    def find_template(
+        self,
+        screen_png,
+        template_png,
+        *,
+        search_region=None,
+        prefer_near=None,
+        scales=(0.85, 1.0, 1.18),
+        threshold=0.82,
+    ):
+        if template_png:
+            return SimpleNamespace(
+                point=(5, 5),
+                region=(0, 0, 10, 10),
+                confidence=0.99,
+            )
+        return super().find_template(
+            screen_png,
+            template_png,
+            search_region=search_region,
+            prefer_near=prefer_near,
+            scales=scales,
+            threshold=threshold,
+        )
+
+    def find_text(
+        self,
+        screen_png,
+        text,
+        *,
+        region=None,
+        min_ratio=0.8,
+        raise_on_ambiguity=False,
+    ):
+        if text == "Submit target":
+            return SimpleNamespace(
+                point=(5, 5),
+                region=(0, 0, 10, 10),
+                confidence=0.99,
+            )
+        return super().find_text(
+            screen_png,
+            text,
+            region=region,
+            min_ratio=min_ratio,
+            raise_on_ambiguity=raise_on_ambiguity,
+        )
+
+    def ocr(self, screen_png, *, region=None):
+        del screen_png, region
+        return [
+            OcrLine(
+                text="Synthetic record",
+                region=(20, 0, 100, 10),
+                confidence=0.99,
+            )
+        ]
+
     def wait_settled_result(self, backend, **kwargs):
         return SimpleNamespace(png=backend.screenshot(), settled=True)
 
@@ -89,6 +148,7 @@ def _key_workflow(
     *,
     with_effect: bool,
     with_postcondition: bool = False,
+    with_identity: bool = True,
 ) -> Workflow:
     return Workflow(
         name=name,
@@ -98,6 +158,18 @@ def _key_workflow(
                 intent="submit",
                 action=ActionKind.KEY,
                 key="Enter",
+                anchor=(
+                    Anchor(
+                        template="templates/submit.png",
+                        region=(0, 0, 10, 10),
+                        click_point=(5, 5),
+                        ocr_text="Submit target",
+                        context_text="Synthetic record",
+                    )
+                    if with_identity
+                    else None
+                ),
+                identity_armed=True if with_identity else None,
                 effects=[_effect()] if with_effect else [],
                 expect=(
                     [
@@ -148,6 +220,12 @@ def _sealed(
 ) -> tuple[Workflow, Path]:
     bundle = tmp_path / ("encrypted" if encrypted else "plaintext")
     workflow.save(bundle, encrypt=encrypted, key=_KEY if encrypted else None)
+    if any(
+        step.anchor is not None and step.anchor.template == "templates/submit.png"
+        for step in workflow.steps
+    ):
+        (bundle / "templates" / "submit.png").write_bytes(make_png((10, 10)))
+        workflow.save(bundle, encrypt=encrypted, key=_KEY if encrypted else None)
     return Workflow.load(bundle, key=_KEY if encrypted else None), bundle
 
 
@@ -728,6 +806,7 @@ def test_demo_declared_write_requires_approval_and_stays_non_production(tmp_path
         "demo-write",
         with_effect=True,
         with_postcondition=True,
+        with_identity=False,
     )
     workflow, bundle = _sealed(tmp_path, workflow, encrypted=False)
     refused = _gate(

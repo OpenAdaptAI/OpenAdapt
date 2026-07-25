@@ -198,7 +198,7 @@ def _record_passing_campaign(workflow: Workflow, evidence_root: Path) -> None:
 def test_identity_normalization_is_explicit_and_quorum_is_bounded() -> None:
     with pytest.raises(ValueError, match="requires at least one"):
         IdentitySignalPolicy(
-            field="name",
+            key="subject_name",
             source="structured",
             match="normalized",
         )
@@ -207,7 +207,7 @@ def test_identity_normalization_is_explicit_and_quorum_is_bounded() -> None:
             step_id="save",
             signals=[
                 IdentitySignalPolicy(
-                    field="id",
+                    key="record_id",
                     source="structured",
                     match="exact",
                 )
@@ -374,7 +374,7 @@ def test_signal_quorum_is_executable_qualification_identity_coverage() -> None:
             enforcement="signal_quorum",
             signals=[
                 IdentitySignalPolicy(
-                    field="record_id",
+                    key="record_id",
                     source="structured",
                     match="exact",
                 )

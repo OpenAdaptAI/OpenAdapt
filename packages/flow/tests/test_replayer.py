@@ -960,9 +960,10 @@ def test_closed_loop_scroll_requires_armed_target_identity(
     """A generic crop at the wrong form row cannot make scroll readiness pass."""
     vision = FakeVision()
     target = Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99)
-    # The generic crop resolves both before and after the scroll, then again
-    # for the actual click. Identity is what distinguishes wrong-row from ready.
-    vision.template_results = [target, target, target]
+    # The generic crop resolves both before and after the scroll, then for the
+    # click's initial and immediately-pre-delivery observations. Identity is
+    # what distinguishes wrong-row from ready.
+    vision.template_results = [target, target, target, target]
     backend = FakeBackend()
     click = click_step()
     assert click.anchor is not None
@@ -973,6 +974,7 @@ def test_closed_loop_scroll_requires_armed_target_identity(
     checks = iter(
         [
             IdentityCheck(status="mismatch", expected="target", observed="wrong"),
+            IdentityCheck(status="verified", expected="target", observed="target"),
             IdentityCheck(status="verified", expected="target", observed="target"),
             IdentityCheck(status="verified", expected="target", observed="target"),
         ]
@@ -1139,7 +1141,8 @@ def context_click_step(context, **kwargs) -> Step:
 def resolving_vision() -> FakeVision:
     vision = FakeVision()
     vision.template_results = [
-        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99)
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
     ]
     return vision
 

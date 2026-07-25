@@ -397,6 +397,32 @@ class Postcondition(BaseModel):
     )
 
 
+IdentitySignalKeyValue = Literal[
+    "subject_name",
+    "record_id",
+    "secondary_identifier",
+    "application",
+    "session",
+    "workflow_state",
+]
+
+
+class ApiIdentityBinding(BaseModel):
+    """Exact API request/effect binding for one qualified identity signal.
+
+    ``param`` must be referenced by the outgoing request template and by
+    ``effect_field`` through ``ValueExpr(param=...)``. Runtime validates both
+    sides before any request is sent, so an API optimization cannot bypass the
+    qualified identity contract that guards the equivalent GUI action.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: IdentitySignalKeyValue
+    param: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+    effect_field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")
+
+
 class ApiBinding(BaseModel):
     """A declarative API/tool call that performs a step's write WITHOUT the GUI.
 
@@ -475,6 +501,21 @@ class ApiBinding(BaseModel):
             " confirmable, exactly as a GUI write with declared effects is)."
         ),
     )
+    identity: list[ApiIdentityBinding] = Field(
+        default_factory=list,
+        description=(
+            "Exact run-parameter bindings that prove qualified record identity "
+            "for API actuation. Each binding must occur in both the request "
+            "template and an effect selector before the request may be sent."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _unique_identity_bindings(self) -> "ApiBinding":
+        keys = [binding.key for binding in self.identity]
+        if len(keys) != len(set(keys)):
+            raise ValueError("API identity semantic keys must be unique")
+        return self
 
 
 # -- Workflow-program IR, Phase 1 (RFC docs/design/WORKFLOW_PROGRAM_IR.md §6) --
@@ -1654,13 +1695,19 @@ class ActionDeliveryReceipt(BaseModel):
 class IdentitySignalEvidence(BaseModel):
     """PHI-free audit evidence for one qualified identity signal."""
 
-    name: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
-    source: Literal["structured", "identifier_region", "captured_context"]
+    signal: IdentitySignalKeyValue
+    source: Literal[
+        "structured",
+        "identifier_region",
+        "captured_context",
+        "api_parameter",
+    ]
     verdict: Literal["verified", "conflict", "unverifiable"]
     evidence_class: Literal[
         "application_structured_text",
         "recorded_and_live_region",
         "captured_context_ocr",
+        "api_request_effect_binding",
     ]
     match: Literal["exact", "normalized"]
 
