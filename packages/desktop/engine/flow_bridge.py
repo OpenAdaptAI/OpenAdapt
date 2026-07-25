@@ -149,7 +149,7 @@ def _valid_precise_envelope(report: dict, envelope: dict, outcome: object) -> bo
     has_compensation = "compensation" in evidence
     if has_compensation != (compensation_actions > 0):
         return False
-    if outcome == "ROLLED_BACK" and compensation_actions == 0:
+    if (outcome == "ROLLED_BACK") != (compensation_actions > 0):
         return False
     return (
         isinstance(report.get("success"), bool)

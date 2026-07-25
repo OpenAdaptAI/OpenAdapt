@@ -867,7 +867,7 @@ class TestLibraryCommands:
         assert result["outcome"] == "success"
         assert result["ok"] is True
 
-    def test_verified_reconciliation_remains_verified(self) -> None:
+    def test_verified_outcome_rejects_completed_compensation(self) -> None:
         report = _precise_report(
             "VERIFIED",
             production_eligible=True,
@@ -876,7 +876,7 @@ class TestLibraryCommands:
         report["outcome_envelope"]["compensation_actions"] = 1
         report["outcome_envelope"]["evidence_classes"].append("compensation")
 
-        assert FlowBridge.classify_outcome(0, report) == "VERIFIED"
+        assert FlowBridge.classify_outcome(0, report) == "unknown"
 
     def test_invocation_exception_reports_unknown_effect_state(self, deps, tmp_path: Path) -> None:
         disp, db, events = deps
