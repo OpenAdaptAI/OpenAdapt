@@ -3592,11 +3592,17 @@ class Replayer:
             or self._step_has_identity_contract(step, workflow)
         )
 
-    def _requires_atomic_identity_click(self, step: Step, workflow: Workflow) -> bool:
-        """Whether a click may not cross an unleased coordinate boundary."""
+    def _requires_atomic_identity_pointer(self, step: Step, workflow: Workflow) -> bool:
+        """Whether a pointer edge may not cross an unleased identity boundary.
+
+        An anchored TYPE has a focusing click before keyboard delivery.  That
+        first input edge needs the same target/record lease as a consequential
+        CLICK; otherwise a visually identical replacement can receive its
+        handler before the later keyboard lease notices the change.
+        """
 
         return (
-            step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.TYPE)
             and self._step_is_consequential(step)
             and self._step_has_identity_contract(step, workflow)
         )
@@ -3658,6 +3664,21 @@ class Replayer:
             and not isinstance(self.backend, RemoteActuationBackend)
             and isinstance(self.backend, GuardedKeyboardActionBackend)
         )
+        guarded_type_pointer_backend = (
+            step.action is ActionKind.TYPE
+            and self._requires_atomic_identity_pointer(step, workflow)
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, GuardedCoordinateActionBackend)
+            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
+        if guarded_type_pointer_backend and not arm_keyboard:
+            cancel_stale_structural = getattr(
+                self.backend,
+                "cancel_pending_structural_guards",
+                None,
+            )
+            if callable(cancel_stale_structural):
+                cancel_stale_structural()
         try:
             fresh_png = (
                 self.backend.acquire_actuation_frame()
@@ -3666,7 +3687,7 @@ class Replayer:
                     cast(
                         GuardedKeyboardActionBackend, self.backend
                     ).guarded_keyboard_frame()
-                    if guarded_keyboard_backend
+                    if guarded_keyboard_backend or guarded_type_pointer_backend
                     else self.backend.screenshot()
                 )
             )
@@ -3704,15 +3725,23 @@ class Replayer:
             )
         elif fresh_resolution is not None:
             guarded_coordinate = (
-                self._requires_atomic_identity_click(step, workflow)
+                self._requires_atomic_identity_pointer(step, workflow)
+                and not (arm_keyboard and step.action is ActionKind.TYPE)
                 and fresh_resolution.rung != "structural"
                 and not isinstance(self.backend, RemoteActuationBackend)
                 and isinstance(self.backend, GuardedCoordinateActionBackend)
             )
             if guarded_coordinate:
-                cast(
-                    GuardedCoordinateActionBackend, self.backend
-                ).arm_guarded_coordinate(*fresh_resolution.point)
+                coordinate_backend = cast(GuardedCoordinateActionBackend, self.backend)
+                editable_arm = getattr(
+                    coordinate_backend,
+                    "arm_guarded_editable_coordinate",
+                    None,
+                )
+                if step.action is ActionKind.TYPE and callable(editable_arm):
+                    editable_arm(*fresh_resolution.point)
+                else:
+                    coordinate_backend.arm_guarded_coordinate(*fresh_resolution.point)
             guarded_keyboard = guarded_keyboard_backend
             if guarded_keyboard:
                 cast(GuardedKeyboardActionBackend, self.backend).arm_guarded_keyboard(
@@ -3842,7 +3871,7 @@ class Replayer:
             assert resolution is not None  # guaranteed by _resolve_step
             x, y = resolution.point
             native_act = getattr(self.backend, "act_structural", None)
-            requires_atomic_identity = self._requires_atomic_identity_click(
+            requires_atomic_identity = self._requires_atomic_identity_pointer(
                 step, workflow
             )
             if (
@@ -3957,6 +3986,9 @@ class Replayer:
                 # Anchored TYPE: click to focus the field first.
                 x, y = resolution.point
                 native_act = getattr(self.backend, "act_structural", None)
+                requires_atomic_identity = self._requires_atomic_identity_pointer(
+                    step, workflow
+                )
                 if (
                     resolution.rung == "structural"
                     and resolution.structural_handle is not None
@@ -3970,7 +4002,21 @@ class Replayer:
                     )
                     result.actuation = "uia"
                 else:
-                    self.backend.click(x, y)
+                    if (
+                        requires_atomic_identity
+                        and not isinstance(self.backend, RemoteActuationBackend)
+                        and isinstance(self.backend, GuardedCoordinateActionBackend)
+                    ):
+                        result.delivery_receipt = self.backend.act_guarded_coordinate(
+                            x,
+                            y,
+                            expected_frame_sha256=hashlib.sha256(
+                                before_png
+                            ).hexdigest(),
+                        )
+                        result.actuation = "guarded_coordinate"
+                    else:
+                        self.backend.click(x, y)
                 field_point = (x, y)
                 field_region = (
                     resolution.structural_handle.region

@@ -217,13 +217,22 @@ _BIND_COORDINATE_TARGET_JS = (
     r"""(args) => {
     const hit = document.elementFromPoint(args.x, args.y);
     if (!hit) return null;
-    const el = hit.closest(
+    const actionable =
         'button, a[href], input[type="button"], input[type="submit"],' +
         ' input[type="reset"], input[type="checkbox"], input[type="radio"],' +
         ' select,' +
         ' [role="button"], [role="link"], [role="menuitem"],' +
         ' [role="tab"], [role="option"], [role="checkbox"],' +
-        ' [role="radio"], [role="switch"]'
+        ' [role="radio"], [role="switch"]';
+    const editable =
+        ', input:not([type]), input[type="text"], input[type="search"],' +
+        ' input[type="email"], input[type="url"], input[type="tel"],' +
+        ' input[type="password"], input[type="number"], input[type="date"],' +
+        ' input[type="time"], input[type="datetime-local"],' +
+        ' input[type="month"], input[type="week"], textarea,' +
+        ' [contenteditable=""], [contenteditable="true"], [role="textbox"]';
+    const el = hit.closest(
+        actionable + (args.allowEditable ? editable : '')
     );
     // Canvas/maps, sliders/ranges, text-editing caret positions, and generic
     // onclick regions are coordinate-semantic. They cannot be upgraded into
@@ -340,7 +349,7 @@ class PlaywrightBackend:
         self._structural_store_key = f"__oaflow_structural_{uuid.uuid4().hex}"
         self._structural_tokens: dict[str, str] = {}
         self._guarded_coordinate: Optional[
-            tuple[tuple[int, int], str, str, tuple[float, float]]
+            tuple[tuple[int, int], str, str, tuple[float, float], bool]
         ] = None
         self._guarded_keyboard: Optional[tuple[str, str]] = None
 
@@ -633,6 +642,11 @@ class PlaywrightBackend:
         for token in tokens:
             self._cleanup_guard(token)
 
+    def cancel_pending_structural_guards(self) -> None:
+        """Discard handles that an immediate fresh re-resolution replaces."""
+
+        self._cancel_structural_guards()
+
     def _token_locator(self, token: str) -> Any:
         return self.page.locator(f"[{self._token_attribute(token)}]")
 
@@ -722,9 +736,13 @@ class PlaywrightBackend:
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
-    def arm_guarded_coordinate(self, x: int, y: int) -> None:
-        """Bind a visual point to its exact DOM target before identity readback."""
-
+    def _arm_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        allow_editable: bool,
+    ) -> None:
         self.cancel_guarded_coordinate()
         point = (int(x), int(y))
         token = uuid.uuid4().hex
@@ -738,6 +756,7 @@ class PlaywrightBackend:
                     "x": point[0],
                     "y": point[1],
                     "requireRowIdentity": True,
+                    "allowEditable": allow_editable,
                 },
             )
             if not isinstance(observed, dict):
@@ -759,10 +778,21 @@ class PlaywrightBackend:
                 fingerprint,
                 token,
                 (float(offset[0]), float(offset[1])),
+                allow_editable,
             )
         except Exception:
             self._cleanup_guard(token)
             raise
+
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        """Bind an actionable visual point before identity readback."""
+
+        self._arm_guarded_coordinate(x, y, allow_editable=False)
+
+    def arm_guarded_editable_coordinate(self, x: int, y: int) -> None:
+        """Bind an editable field for an identity-gated focusing click."""
+
+        self._arm_guarded_coordinate(x, y, allow_editable=True)
 
     def cancel_guarded_coordinate(self) -> None:
         """Cancel and clean the current one-shot visual DOM binding."""
@@ -795,13 +825,16 @@ class PlaywrightBackend:
             raise StructuralResolutionRefused(
                 "visual DOM actuation has no pre-identity target binding"
             )
-        armed_point, fingerprint, token, offset = pending
+        armed_point, fingerprint, token, offset, editable = pending
         try:
             if armed_point != point:
                 raise StructuralResolutionRefused(
                     "visual DOM actuation point changed after target binding"
                 )
-            if hashlib.sha256(self.screenshot()).hexdigest() != expected_frame_sha256:
+            current_frame = (
+                self.guarded_keyboard_frame() if editable else self.screenshot()
+            )
+            if hashlib.sha256(current_frame).hexdigest() != expected_frame_sha256:
                 raise StructuralResolutionRefused(
                     "visual frame changed after identity verification"
                 )
@@ -844,7 +877,7 @@ class PlaywrightBackend:
         # click handle. Remove those now-unused observers before adding the
         # keyboard token so the guards cannot invalidate one another merely by
         # cleaning their private DOM attributes.
-        self._cancel_structural_guards()
+        self.cancel_pending_structural_guards()
         self.cancel_guarded_keyboard()
         token = uuid.uuid4().hex
         try:
