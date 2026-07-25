@@ -19,6 +19,27 @@
         "minWidth": 880,
         "minHeight": 600,
         "visible": false
+      },
+      {
+        "label": "control-overlay",
+        "title": "OpenAdapt control",
+        "url": "index.html?surface=control-overlay",
+        "width": 440,
+        "height": 104,
+        "minWidth": 360,
+        "minHeight": 92,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "focus": false,
+        "focusable": false,
+        "contentProtected": true,
+        "visible": false
       }
     ],
     "security": {

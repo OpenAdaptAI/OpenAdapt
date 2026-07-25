@@ -50,6 +50,11 @@ export interface EngineStatus {
   paused: boolean;
   duration_secs?: number | null;
   capture_id?: string | null;
+  controls?: {
+    pause: boolean;
+    resume: boolean;
+    stop: boolean;
+  };
 }
 
 export interface Workflow {
@@ -409,6 +414,12 @@ export interface ReplayProgress {
     | "unknown"
     | "error";
   backend: TargetBackend | "configured";
+  /** Precise runtime contract outcome. Legacy state alone never proves VERIFIED. */
+  outcome?: ExecutionOutcome;
+  mode?: "replay" | "governed" | "managed";
+  profile?: "demo" | "standard" | "regulated" | null;
+  current_step?: number | null;
+  total_steps?: number | null;
 }
 
 export interface SyncState {

@@ -18,7 +18,30 @@ mod tray;
 use std::sync::Arc;
 
 use sidecar::{SidecarHandle, SidecarInner};
-use tauri::Manager;
+use tauri::{Manager, PhysicalPosition, Position};
+
+fn place_control_overlay(app: &tauri::AppHandle) {
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    let Some(overlay) = app.get_webview_window("control-overlay") else {
+        return;
+    };
+    let monitor = main
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| app.primary_monitor().ok().flatten());
+    let (Some(monitor), Ok(overlay_size)) = (monitor, overlay.outer_size()) else {
+        return;
+    };
+    let monitor_position = monitor.position();
+    let monitor_size = monitor.size();
+    let margin = (24.0 * monitor.scale_factor()).round() as i32;
+    let x = monitor_position.x + monitor_size.width as i32 - overlay_size.width as i32 - margin;
+    let y = monitor_position.y + margin;
+    let _ = overlay.set_position(Position::Physical(PhysicalPosition::new(x, y)));
+}
 
 fn main() {
     let engine = Arc::new(SidecarInner::default());
@@ -73,6 +96,10 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
             }
+            // Anchor to the monitor containing the Desktop window. The user can
+            // drag the overlay to any other monitor, and subsequent show/hide
+            // transitions never reposition or focus it.
+            place_control_overlay(app.handle());
 
             // Spawn the frozen Python engine sidecar. Guarded: if the binary is
             // absent (frontend-only dev) the app still runs; the UI shows an
@@ -91,6 +118,9 @@ fn main() {
             commands::engine_invoke,
             commands::sidecar_status,
             commands::open_external,
+            commands::set_control_overlay_visible,
+            commands::set_control_overlay_interactive,
+            commands::set_control_overlay_presentation,
             ffmpeg::ffmpeg_status,
             ffmpeg::retry_ffmpeg_provisioning,
             // typed convenience commands (forward to the sidecar)

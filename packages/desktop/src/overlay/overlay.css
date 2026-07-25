@@ -1,0 +1,212 @@
+html:has(.control-overlay),
+body:has(.control-overlay),
+#root:has(.control-overlay) {
+  background: transparent;
+  overflow: hidden;
+}
+
+.control-overlay {
+  align-items: stretch;
+  background: var(--slate-0);
+  background: color-mix(in srgb, var(--slate-0) 94%, transparent);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--run-lift);
+  box-shadow: var(--shadow-pop);
+  color: var(--fog-1);
+  display: grid;
+  font-size: var(--fs-caption);
+  grid-template-columns: minmax(0, 1fr) auto;
+  height: 100vh;
+  min-width: 0;
+  position: relative;
+  user-select: none;
+}
+
+.control-overlay.phase-recording {
+  border-top-color: var(--crit-lift);
+}
+.control-overlay.phase-pausing,
+.control-overlay.phase-resuming,
+.control-overlay.phase-stopping {
+  border-top-color: var(--warn-lift);
+}
+.control-overlay.phase-halted,
+.control-overlay.phase-completed_unverified,
+.control-overlay.phase-rolled_back,
+.control-overlay.phase-failed {
+  border-top-color: var(--warn-lift);
+}
+.control-overlay.phase-verified {
+  border-top-color: var(--success-lift);
+}
+
+.control-overlay.presentation {
+  background: var(--slate-0);
+  background: color-mix(in srgb, var(--slate-0) 88%, transparent);
+  border-width: 2px;
+}
+
+.overlay-main {
+  align-items: center;
+  cursor: default;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+}
+
+.overlay-mark {
+  border-right: 1px solid var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  line-height: 1.05;
+  padding-right: var(--space-3);
+}
+
+.overlay-open {
+  color: var(--fog-2);
+  font-weight: var(--fw-regular);
+}
+
+.demo-badge {
+  color: var(--warn-lift);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  margin-top: var(--space-1);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.overlay-copy {
+  min-width: 0;
+}
+
+.overlay-meta {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.overlay-meta strong {
+  color: var(--fog-0);
+  font-size: var(--fs-sm);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay-meta span {
+  color: var(--fog-3);
+  font-family: var(--font-mono);
+}
+
+.overlay-status {
+  align-items: center;
+  color: var(--fog-2);
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  white-space: nowrap;
+}
+
+.overlay-pulse {
+  background: var(--run-lift);
+  border-radius: var(--radius-pill);
+  height: 7px;
+  width: 7px;
+}
+
+.phase-recording .overlay-pulse {
+  background: var(--crit-lift);
+  animation: overlay-pulse 1.2s ease-in-out infinite;
+}
+.phase-pausing .overlay-pulse,
+.phase-resuming .overlay-pulse,
+.phase-stopping .overlay-pulse {
+  background: var(--warn-lift);
+  animation: overlay-pulse 0.8s ease-in-out infinite;
+}
+.phase-halted .overlay-pulse,
+.phase-completed_unverified .overlay-pulse,
+.phase-rolled_back .overlay-pulse,
+.phase-failed .overlay-pulse {
+  background: var(--warn-lift);
+}
+.phase-verified .overlay-pulse {
+  background: var(--success-lift);
+}
+
+@keyframes overlay-pulse {
+  50% { opacity: 0.35; }
+}
+
+.overlay-controls {
+  align-items: center;
+  border-left: 1px solid var(--line);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+}
+
+.overlay-button,
+.overlay-dismiss {
+  background: var(--slate-2);
+  border: 1px solid var(--line-strong);
+  color: var(--fog-1);
+  cursor: pointer;
+  font: inherit;
+}
+
+.overlay-button {
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) var(--space-3);
+}
+
+.overlay-button.stop:not(:disabled) {
+  border-color: var(--crit-lift);
+  color: var(--crit-lift);
+}
+
+.overlay-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.overlay-button:focus-visible,
+.overlay-dismiss:focus-visible {
+  outline: 2px solid var(--accent-lift);
+  outline-offset: 2px;
+}
+
+.overlay-dismiss {
+  align-items: center;
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  font-size: var(--fs-md);
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.sr-only {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phase-recording .overlay-pulse { animation: none; }
+}

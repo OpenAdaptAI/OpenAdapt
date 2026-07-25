@@ -28,6 +28,7 @@ export function RecordReview({
     paused: false,
     duration_secs: 0,
     capture_id: null,
+    controls: { pause: false, resume: false, stop: false },
   });
   const [lastCapture, setLastCapture] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "compiling">("idle");
@@ -185,7 +186,21 @@ export function RecordReview({
             <>
               <Button
                 variant="ghost"
-                disabled={busy}
+                disabled={
+                  busy ||
+                  (status.paused
+                    ? !status.controls?.resume
+                    : !status.controls?.pause)
+                }
+                title={
+                  status.paused
+                    ? status.controls?.resume
+                      ? undefined
+                      : "Resume is not available for this recorder"
+                    : status.controls?.pause
+                      ? undefined
+                      : "Pause is not available for this recorder; stop finalizes the recording safely"
+                }
                 onClick={() =>
                   engineInvoke(
                     status.paused ? CMD.RESUME_RECORDING : CMD.PAUSE_RECORDING,
@@ -195,7 +210,11 @@ export function RecordReview({
               >
                 {status.paused ? "Resume" : "Pause"}
               </Button>
-              <Button variant="danger" disabled={busy} onClick={stop}>
+              <Button
+                variant="danger"
+                disabled={busy || status.controls?.stop === false}
+                onClick={stop}
+              >
                 Stop
               </Button>
             </>
