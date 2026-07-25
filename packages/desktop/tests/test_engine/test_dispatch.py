@@ -12,6 +12,7 @@ from engine.config import EngineConfig
 from engine.controller import RecordingState
 from engine.db import IndexDB
 from engine.dispatch import EngineDispatcher, EngineServices
+from engine.flow_bridge import FlowBridge
 
 
 def _precise_report(
@@ -865,6 +866,17 @@ class TestLibraryCommands:
 
         assert result["outcome"] == "success"
         assert result["ok"] is True
+
+    def test_verified_reconciliation_remains_verified(self) -> None:
+        report = _precise_report(
+            "VERIFIED",
+            production_eligible=True,
+            execution_completed=True,
+        )
+        report["outcome_envelope"]["compensation_actions"] = 1
+        report["outcome_envelope"]["evidence_classes"].append("compensation")
+
+        assert FlowBridge.classify_outcome(0, report) == "VERIFIED"
 
     def test_invocation_exception_reports_unknown_effect_state(self, deps, tmp_path: Path) -> None:
         disp, db, events = deps
