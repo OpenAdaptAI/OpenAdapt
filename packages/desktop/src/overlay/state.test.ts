@@ -1,0 +1,177 @@
+import { expect, it } from "vitest";
+import type { ReplayProgress } from "../lib/types";
+import {
+  EMPTY_OVERLAY_STATE,
+  reduceControlOverlay,
+} from "./state";
+import {
+  buildControlOverlayFrame,
+  CONTROL_OVERLAY_FRAME_VERSION,
+} from "./contract";
+
+it("projects only advertised recording controls", () => {
+  const state = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "recording-status",
+    status: {
+      recording: true,
+      paused: false,
+      capture_id: "capture-local",
+      controls: { pause: false, resume: false, stop: true },
+    },
+  });
+
+  expect(state.phase).toBe("recording");
+  expect(state.controls).toEqual({ pause: false, resume: false, stop: true });
+  expect(JSON.stringify(state)).not.toContain("capture-local");
+});
+
+it("acknowledges cooperative stop before the recorder finalizes", () => {
+  const recording = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "recording-started",
+  });
+  const stopping = reduceControlOverlay(recording, {
+    kind: "control-requested",
+    action: "stop",
+  });
+
+  expect(stopping).toMatchObject({
+    visible: true,
+    phase: "stopping",
+    controls: { pause: false, resume: false, stop: false },
+  });
+});
+
+it("preserves precise terminal outcomes and bounded step progress", () => {
+  const running: ReplayProgress = {
+    workflow_id: "workflow-1",
+    state: "running",
+    backend: "citrix",
+    mode: "governed",
+    total_steps: 7,
+  };
+  const active = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "replay-progress",
+    progress: running,
+  });
+  const halted = reduceControlOverlay(active, {
+    kind: "replay-progress",
+    progress: {
+      ...running,
+      state: "halted",
+      outcome: "HALTED",
+      profile: "regulated",
+      current_step: 3,
+    },
+  });
+
+  expect(active).toMatchObject({
+    phase: "executing",
+    mode: "governed",
+    totalSteps: 7,
+    currentStep: null,
+  });
+  expect(halted).toMatchObject({
+    phase: "halted",
+    profile: "regulated",
+    currentStep: 3,
+    totalSteps: 7,
+  });
+});
+
+it("keeps workflow identifiers and names out of shared overlay state", () => {
+  const running = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "replay-progress",
+    progress: {
+      workflow_id: "workflow-1",
+      state: "running",
+      backend: "web",
+    },
+  });
+  const projected = reduceControlOverlay(running, {
+    kind: "workflow-metadata",
+    ordinal: 3,
+    totalSteps: 5,
+  });
+  expect(projected.localWorkflowLabel).toBe("Local workflow 3");
+  expect(JSON.stringify(projected)).not.toContain("workflow-1");
+});
+
+it("requires the precise outcome contract before displaying verified", () => {
+  const legacyDone = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "replay-progress",
+    progress: {
+      workflow_id: "workflow-1",
+      state: "done",
+      backend: "web",
+    },
+  });
+  const verified = reduceControlOverlay(legacyDone, {
+    kind: "replay-progress",
+    progress: {
+      workflow_id: "workflow-1",
+      state: "done",
+      outcome: "VERIFIED",
+      backend: "web",
+    },
+  });
+  const unverified = reduceControlOverlay(verified, {
+    kind: "replay-progress",
+    progress: {
+      workflow_id: "workflow-1",
+      state: "completed_unverified",
+      outcome: "COMPLETED_UNVERIFIED",
+      backend: "web",
+    },
+  });
+  const rolledBack = reduceControlOverlay(unverified, {
+    kind: "replay-progress",
+    progress: {
+      workflow_id: "workflow-1",
+      state: "rolled_back",
+      outcome: "ROLLED_BACK",
+      backend: "web",
+    },
+  });
+
+  expect(legacyDone.phase).toBe("completed_unverified");
+  expect(verified.phase).toBe("verified");
+  expect(unverified.phase).toBe("completed_unverified");
+  expect(rolledBack.phase).toBe("rolled_back");
+});
+
+it("exports a deterministic presentation frame without the local workflow label", () => {
+  const local = {
+    ...EMPTY_OVERLAY_STATE,
+    visible: true,
+    phase: "executing" as const,
+    localWorkflowLabel: "Patient Jane Doe",
+    mode: "governed" as const,
+    profile: "regulated" as const,
+    currentStep: 2,
+    totalSteps: 5,
+  };
+  const frame = buildControlOverlayFrame(local, true, {
+    event_sequence: 4,
+    observed_at_unix_ms: 1785000000123,
+    observed_at_monotonic_ms: 1234.5,
+  });
+
+  expect(frame).toEqual({
+    schema_version: CONTROL_OVERLAY_FRAME_VERSION,
+    state_id:
+      "visible:executing:governed:regulated:2:5:no-pause:no-resume:no-stop",
+    event_sequence: 4,
+    observed_at_unix_ms: 1785000000123,
+    observed_at_monotonic_ms: 1234.5,
+    visible: true,
+    phase: "executing",
+    workflow_label: "Governed workflow",
+    mode: "governed",
+    profile: "regulated",
+    step: { current: 2, total: 5 },
+    controls: { pause: false, resume: false, stop: false },
+    status: "Executing with verification gates",
+    presentation: true,
+  });
+  expect(JSON.stringify(frame)).not.toContain("Jane Doe");
+});

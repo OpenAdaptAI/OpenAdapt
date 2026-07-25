@@ -129,8 +129,15 @@ class TestRecordingCommands:
     def test_get_status_shape(self, deps) -> None:
         disp, _db, _e = deps
         s = disp.dispatch("get_status", {})
-        assert set(s) >= {"recording", "paused", "duration_secs", "capture_id"}
+        assert set(s) >= {
+            "recording",
+            "paused",
+            "duration_secs",
+            "capture_id",
+            "controls",
+        }
         assert s["recording"] is False
+        assert s["controls"] == {"pause": False, "resume": False, "stop": False}
 
     def test_mac_start_requests_input_monitoring_only_when_needed(self, deps, monkeypatch) -> None:
         disp, _db, _events = deps
@@ -861,6 +868,8 @@ class TestLibraryCommands:
         )
         states = [data["state"] for event, data in events if event == "replay_progress"]
         assert states == ["running", progress_state]
+        terminal = [data for event, data in events if event == "replay_progress"][-1]
+        assert terminal["outcome"] == outcome
         assert db.list_runs(limit=1)[0]["status"] == outcome
         if outcome == "HALTED":
             assert result["halt"]["reason"]

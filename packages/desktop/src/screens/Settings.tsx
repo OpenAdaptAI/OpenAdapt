@@ -18,6 +18,10 @@ import {
   SegControl,
 } from "../ui/primitives";
 import { OsWarning } from "../ui/OsWarning";
+import {
+  overlayPresentationEnabled,
+  saveOverlayPresentation,
+} from "../overlay/preferences";
 
 interface Cfg {
   host: string;
@@ -39,6 +43,10 @@ export function Settings({
   });
   const [updateMsg, setUpdateMsg] = useState<string | null>(null);
   const [policy, setPolicy] = useState<EffectivePolicy | null>(null);
+  const [includeOverlay, setIncludeOverlay] = useState(
+    overlayPresentationEnabled,
+  );
+  const [overlayError, setOverlayError] = useState<string | null>(null);
 
   useEffect(() => {
     engineTry<Cfg>(CMD.GET_CONFIG, {}, cfg).then(setCfg);
@@ -74,6 +82,18 @@ export function Settings({
       }
     } catch (e) {
       setUpdateMsg(`Update check unavailable: ${String(e)}`);
+    }
+  }
+
+  async function setOverlayPresentation(next: boolean) {
+    setOverlayError(null);
+    try {
+      await saveOverlayPresentation(next);
+      setIncludeOverlay(next);
+    } catch {
+      setOverlayError(
+        "This system could not apply the requested screen-capture policy. The previous setting was kept.",
+      );
     }
   }
 
@@ -128,6 +148,35 @@ export function Settings({
       </Card>
 
       <GroundingModelCard policy={policy} host={cfg.host} />
+
+      <Card>
+        <CardHead
+          eyebrow="On-screen controls"
+          title="Control overlay"
+          sub="A compact always-on-top status and control surface appears while OpenAdapt records or executes. It never displays screenshots, typed values, or identity evidence."
+        />
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={includeOverlay}
+            onChange={(event) =>
+              void setOverlayPresentation(event.target.checked)
+            }
+          />
+          <span>
+            Include the OpenAdapt overlay in presentation recordings
+            <span className="hint" style={{ display: "block" }}>
+              Off asks the operating system to exclude the overlay from capture.
+              Turn this on deliberately when exporting a product demonstration.
+            </span>
+          </span>
+        </label>
+        {overlayError && (
+          <Callout tone="warn" title="Overlay capture policy unchanged">
+            {overlayError}
+          </Callout>
+        )}
+      </Card>
 
       <Card>
         <CardHead eyebrow="Connection" title="Hosted organization" />

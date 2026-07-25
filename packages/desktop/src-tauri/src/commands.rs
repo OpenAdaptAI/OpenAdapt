@@ -13,7 +13,7 @@
 // so the engine (W1) and tray (W3) agents can align on the same wire.
 
 use serde_json::{json, Value};
-use tauri::State;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::sidecar::SidecarHandle;
 
@@ -35,6 +35,81 @@ pub async fn engine_invoke(
 #[tauri::command]
 pub fn sidecar_status(state: State<'_, SidecarHandle>) -> bool {
     state.0.is_running()
+}
+
+/// Show or hide the compact control overlay without focusing it.
+///
+/// The overlay is created once at startup as an always-on-top window with
+/// `focus: false`. State changes only call show/hide; they never activate the
+/// window or move keyboard focus away from the application being automated.
+#[tauri::command]
+pub fn set_control_overlay_visible(app: AppHandle, visible: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("control-overlay")
+        .ok_or_else(|| "control overlay window is unavailable".to_string())?;
+    if visible {
+        window.show()
+    } else {
+        window.hide()
+    }
+    .map_err(|error| format!("could not update control overlay visibility: {error}"))
+}
+
+/// Apply the overlay's OS-level pointer/focus policy.
+///
+/// Active observation and actuation states must be click-through and
+/// non-focusable. The window is hidden before entering that mode, so a partial
+/// platform failure cannot leave a visible input-intercepting overlay. The
+/// frontend shows it again only after this command acknowledges the policy.
+#[tauri::command]
+pub fn set_control_overlay_interactive(app: AppHandle, interactive: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("control-overlay")
+        .ok_or_else(|| "control overlay window is unavailable".to_string())?;
+
+    if !interactive {
+        window
+            .hide()
+            .map_err(|error| format!("could not hide control overlay safely: {error}"))?;
+        window
+            .set_ignore_cursor_events(true)
+            .map_err(|error| format!("could not make control overlay click-through: {error}"))?;
+        window
+            .set_focusable(false)
+            .map_err(|error| format!("could not make control overlay non-focusable: {error}"))?;
+    } else {
+        window
+            .set_focusable(true)
+            .map_err(|error| format!("could not enable control overlay focus: {error}"))?;
+        window
+            .set_ignore_cursor_events(false)
+            .map_err(|error| format!("could not enable control overlay input: {error}"))?;
+    }
+    Ok(())
+}
+
+/// Deliberately include or exclude the overlay from OS-level screen capture.
+///
+/// Normal operation is content-protected. Presentation mode is an explicit
+/// operator choice used when exporting a product demonstration. Platform
+/// implementations that cannot enforce capture exclusion return an error so
+/// the UI never promises privacy it cannot provide. This command deliberately
+/// does not alter pointer or focus behavior.
+#[tauri::command]
+pub fn set_control_overlay_presentation(
+    app: AppHandle,
+    include_in_recordings: bool,
+) -> Result<(), String> {
+    let window = app
+        .get_webview_window("control-overlay")
+        .ok_or_else(|| "control overlay window is unavailable".to_string())?;
+    window
+        .set_content_protected(!include_in_recordings)
+        .map_err(|error| {
+            format!("this platform could not change overlay capture policy: {error}")
+        })?;
+    app.emit("overlay://presentation", include_in_recordings)
+        .map_err(|error| format!("could not notify the control overlay: {error}"))
 }
 
 /// Open a URL in the user's default system browser.

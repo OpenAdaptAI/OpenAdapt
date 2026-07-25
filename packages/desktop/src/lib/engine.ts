@@ -127,6 +127,36 @@ export async function sidecarRunning(): Promise<boolean> {
   }
 }
 
+/** Show/hide the always-on-top control overlay without requesting focus. */
+export async function setControlOverlayVisible(visible: boolean): Promise<void> {
+  if (!inTauri()) return;
+  await invoke("set_control_overlay_visible", { visible });
+}
+
+/**
+ * Apply OS-level click-through and focus behavior for the overlay.
+ * False is required throughout observation and actuation.
+ */
+export async function setControlOverlayInteractive(
+  interactive: boolean,
+): Promise<void> {
+  if (!inTauri()) return;
+  await invoke("set_control_overlay_interactive", { interactive });
+}
+
+/**
+ * Choose whether the overlay is deliberately visible in OS-level recordings.
+ * The installed app defaults to capture exclusion; demo export is opt-in.
+ */
+export async function setControlOverlayPresentation(
+  includeInRecordings: boolean,
+): Promise<void> {
+  if (!inTauri()) return;
+  await invoke("set_control_overlay_presentation", {
+    includeInRecordings,
+  });
+}
+
 const FFMPEG_BROWSER_FALLBACK: FfmpegRuntimeStatus = {
   phase: "ready",
   source: "managed",

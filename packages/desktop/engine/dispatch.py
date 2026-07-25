@@ -512,6 +512,7 @@ class EngineDispatcher:
                     time.monotonic() - self._flow_recording.started_monotonic,
                 ),
                 "capture_id": self._flow_recording.capture_id,
+                "controls": {"pause": False, "resume": False, "stop": True},
             }
         recording = controller.is_recording
         paused = controller.state == RecordingState.PAUSED
@@ -531,6 +532,14 @@ class EngineDispatcher:
             "paused": paused,
             "duration_secs": duration,
             "capture_id": controller.current_capture_id,
+            # The canonical Capture/Flow record sessions currently support a
+            # clean finalizing stop, not a lossless pause/resume. Keep this
+            # capability explicit so every UI can avoid a placebo control.
+            "controls": {
+                "pause": False,
+                "resume": False,
+                "stop": recording,
+            },
         }
 
     # ------------------------------------------------------- library
@@ -703,6 +712,8 @@ class EngineDispatcher:
                         "workflow_id": workflow_id,
                         "state": "running",
                         "backend": backend,
+                        "mode": "governed" if run else "replay",
+                        "total_steps": self._workflow_step_count(workflow_id),
                     },
                 )
                 try:
@@ -792,7 +803,18 @@ class EngineDispatcher:
             {
                 "workflow_id": workflow_id,
                 "state": progress_state,
+                # Preserve the precise contract outcome. A legacy ``done``
+                # progress state alone is not sufficient to claim VERIFIED.
+                "outcome": outcome,
                 "backend": backend,
+                "mode": "governed" if run else "replay",
+                "profile": (
+                    report.get("outcome_details", {}).get("profile")
+                    if isinstance(report.get("outcome_details"), dict)
+                    else None
+                ),
+                "current_step": len(report.get("steps") or []) or None,
+                "total_steps": report.get("total_steps"),
             },
         )
         return report
