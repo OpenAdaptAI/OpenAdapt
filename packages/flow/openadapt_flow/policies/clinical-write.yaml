@@ -16,7 +16,8 @@ description: >-
 # No click may act without a verified target identity.
 prohibit_unarmed_clicks: true
 
-# Every effect-expecting step must assert something (no vacuous passes).
+# Every effect-expecting step must carry outcome evidence (TYPE has an
+# intrinsic fail-closed input read-back and is not a vacuous pass).
 prohibit_vacuous_postconditions: true
 
 # Belt-and-braces over prohibit_unarmed_clicks: the wrong-entity surface

@@ -1,0 +1,390 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openadapt.ai/schemas/public-demo-evidence-v1.json",
+  "title": "OpenAdapt immutable public-demo evidence pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pack",
+    "provenance",
+    "task",
+    "evaluation",
+    "artifacts",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "openadapt.public-demo-evidence/v1"
+    },
+    "pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "generated_at", "immutable"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "version": {
+          "const": 1
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "immutable": {
+          "const": true
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "repository",
+        "source_commit",
+        "source_tree_clean",
+        "exporter",
+        "openadapt_flow_version",
+        "license",
+        "data_classification",
+        "application",
+        "runtime"
+      ],
+      "properties": {
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "source_tree_clean": {
+          "type": "boolean"
+        },
+        "data_classification": {
+          "const": "synthetic_sample"
+        },
+        "application": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "name",
+            "version",
+            "source_path",
+            "source_sha256",
+            "license",
+            "synthetic_data_only"
+          ],
+          "properties": {
+            "source_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "synthetic_data_only": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow_name",
+        "target_kind",
+        "parameter_names",
+        "program_graph_ref"
+      ],
+      "properties": {
+        "workflow_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_kind": {
+          "enum": ["web", "windows", "macos", "linux", "rdp", "citrix"]
+        },
+        "parameter_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "program_graph_ref": {
+          "$ref": "#/$defs/fileRef"
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "environment_digest",
+        "trials_per_case",
+        "case_count",
+        "run_count",
+        "required_case_kinds",
+        "outcome_counts",
+        "model_calls",
+        "external_network_calls",
+        "screenshots_may_leave_box",
+        "wrong_target_actions",
+        "silent_incorrect_successes",
+        "over_halts",
+        "total_duration_ms",
+        "oracle",
+        "required_contracts",
+        "passed_contracts",
+        "minimum_effect_tier",
+        "qualification_passed",
+        "caveats"
+      ],
+      "properties": {
+        "environment_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "trials_per_case": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "model_calls": {
+          "const": 0
+        },
+        "external_network_calls": {
+          "const": 0
+        },
+        "screenshots_may_leave_box": {
+          "const": false
+        },
+        "wrong_target_actions": {
+          "const": 0
+        },
+        "silent_incorrect_successes": {
+          "const": 0
+        },
+        "qualification_passed": {
+          "const": true
+        },
+        "minimum_effect_tier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_recording",
+        "compiled",
+        "qualification",
+        "cases",
+        "crop_bindings"
+      ],
+      "properties": {
+        "source_recording": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["meta", "events", "media", "frame_count"]
+        },
+        "compiled": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "workflow",
+            "workflow_source",
+            "content_digest",
+            "workflow_contract_sha256",
+            "program_graph",
+            "program_graph_html"
+          ]
+        },
+        "qualification": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "project",
+            "report",
+            "passed",
+            "minimum_effect_tier"
+          ]
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 6,
+          "items": {
+            "$ref": "#/$defs/case"
+          }
+        },
+        "crop_bindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/cropBinding"
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/fileRef"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "fileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "role", "media_type"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "cropBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_id",
+        "crop_path",
+        "crop_sha256",
+        "source_frame_path",
+        "source_frame_sha256",
+        "region"
+      ],
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "crop_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "crop_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source_frame_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_frame_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "region": {
+          "type": "array",
+          "prefixItems": [
+            {"type": "integer", "minimum": 0},
+            {"type": "integer", "minimum": 0},
+            {"type": "integer", "minimum": 1},
+            {"type": "integer", "minimum": 1}
+          ],
+          "items": false
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "kind",
+        "expected_outcome",
+        "reports",
+        "outcome_envelopes",
+        "outcomes",
+        "oracles",
+        "events",
+        "media",
+        "poster"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "representative",
+            "ambiguity",
+            "wrong_identity",
+            "stale_identity",
+            "weak_effect",
+            "missing_effect"
+          ]
+        },
+        "expected_outcome": {
+          "enum": ["VERIFIED", "HALTED"]
+        },
+        "reports": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/fileRef"
+          }
+        },
+        "outcome_envelopes": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/fileRef"
+          }
+        },
+        "outcomes": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object"
+          }
+        },
+        "oracles": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/fileRef"
+          }
+        },
+        "events": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/fileRef"
+          }
+        },
+        "media": {
+          "$ref": "#/$defs/fileRef"
+        },
+        "poster": {
+          "oneOf": [
+            {"$ref": "#/$defs/fileRef"},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  }
+}

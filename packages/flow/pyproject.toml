@@ -183,6 +183,7 @@ packages = ["openadapt_flow"]
 # list in lockstep with the sdist target and the archive validator below.
 exclude = [
     "/.hypothesis",
+    "/public-demo",
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
     "/docs/validation/adversary_corpus_manifest.json",
@@ -223,6 +224,7 @@ exclude = [
 # fake-patient synthetic fixtures, and bounded aggregate evidence remain.
 exclude = [
     "/.hypothesis",
+    "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
     "/benchmark/openimis_claims",
     "/benchmark/reliability",

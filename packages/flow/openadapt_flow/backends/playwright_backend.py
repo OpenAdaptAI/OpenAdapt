@@ -435,13 +435,24 @@ class PlaywrightBackend:
             such as the demo driver may use locators; replay never does).
     """
 
-    def __init__(self, page: "Page") -> None:
+    def __init__(
+        self,
+        page: "Page",
+        *,
+        system_of_record_reader: Optional[Callable[[], list[dict[str, Any]]]] = None,
+    ) -> None:
         """Wrap an existing Playwright page.
 
         Args:
             page: A page created with viewport 1280x800, deviceScaleFactor=1.
+            system_of_record_reader: Optional read-only observer called before
+                and after recorded actions. Its returned records are persisted
+                by :class:`~openadapt_flow.recorder.Recorder` as source-of-record
+                evidence so the compiler can mine effect contracts. Replay
+                never consults this callback.
         """
         self.page = page
+        self._system_of_record_reader = system_of_record_reader
         # Opaque per-backend key keeps the WeakMap private from ordinary page
         # code. Python retains only token material keyed by the public
         # SHA-256 fingerprint; target/row text stays page-local and ephemeral.
@@ -603,6 +614,20 @@ class PlaywrightBackend:
             if self._bind_context_identity("workflow_state", observed)
             else None
         )
+
+    @property
+    def system_of_record(self) -> Optional[list[dict[str, Any]]]:
+        """Read the optional recorder-time system-of-record observation.
+
+        This is deliberately opt-in and read-only. A normal browser backend
+        returns ``None`` exactly as before; a qualified recorder can provide a
+        customer-controlled observer so effect bindings are derived from
+        retained evidence instead of invented by the compiler.
+        """
+
+        if self._system_of_record_reader is None:
+            return None
+        return self._system_of_record_reader()
 
     # -- structured-text identity (openadapt_flow.backend.IdentityBackend) --
 
@@ -1041,15 +1066,19 @@ class PlaywrightBackend:
             raise StructuralResolutionRefused(
                 "visual DOM actuation has no pre-identity target binding"
             )
-        armed_point, fingerprint, token, offset, editable = pending
+        armed_point, fingerprint, token, offset, _editable = pending
         try:
             if armed_point != point:
                 raise StructuralResolutionRefused(
                     "visual DOM actuation point changed after target binding"
                 )
-            current_frame = (
-                self.guarded_keyboard_frame() if editable else self.screenshot()
-            )
+            # Playwright's default screenshot hides a live text caret by
+            # temporarily mutating the focused editable element. If that field
+            # shares the guarded record row with this button, the mutation
+            # correctly trips the row observer and creates a false refusal.
+            # Capture with the native caret unchanged for every guarded
+            # coordinate; the replayer uses the same frame mode at preflight.
+            current_frame = self.guarded_keyboard_frame()
             if hashlib.sha256(current_frame).hexdigest() != expected_frame_sha256:
                 raise StructuralResolutionRefused(
                     "visual frame changed after identity verification"
@@ -1129,13 +1158,33 @@ class PlaywrightBackend:
             self._cleanup_guard(pending[1])
 
     def guarded_keyboard_frame(self) -> bytes:
-        """Capture without Playwright's temporary caret-hiding DOM mutation."""
+        """Capture a caret-stable frame without mutating the focused field.
 
-        return self.page.screenshot(
-            type="png",
-            full_page=False,
-            caret="initial",
-        )
+        ``caret="initial"`` prevents Playwright from toggling inline styles on
+        the editable element inside a guarded record row. A temporary
+        screenshot stylesheet hides the blinking caret from the pixels, so
+        consecutive exact-frame hashes remain stable; the stylesheet is
+        injected outside the guarded row.
+        """
+
+        def capture() -> bytes:
+            return self.page.screenshot(
+                type="png",
+                full_page=False,
+                caret="initial",
+                style="* { caret-color: transparent !important; }",
+            )
+
+        previous = capture()
+        for _attempt in range(3):
+            current = capture()
+            if current == previous:
+                return current
+            previous = current
+        # A continuously changing surface remains different from the earlier
+        # preflight hash and is refused by the caller. Never coerce instability
+        # into a matching frame.
+        return previous
 
     def _act_guarded_keyboard(
         self,
@@ -1250,6 +1299,7 @@ class PlaywrightBackend:
         headless: bool = True,
         *,
         record_video_dir: Optional[str] = None,
+        system_of_record_reader: Optional[Callable[[], list[dict[str, Any]]]] = None,
     ) -> tuple["PlaywrightBackend", Callable[[], None]]:
         """Start Playwright + chromium, open ``url``, and return a backend.
 
@@ -1263,6 +1313,8 @@ class PlaywrightBackend:
                 the page is created directly on the browser as before. The
                 finished video is only flushed to disk after ``close()`` (which
                 closes the context); read its path from ``backend.page.video``.
+            system_of_record_reader: Optional read-only recorder observer; see
+                :attr:`system_of_record`. It is never called by replay itself.
 
         Returns:
             ``(backend, close)`` where ``close()`` shuts down the browser and
@@ -1295,7 +1347,10 @@ class PlaywrightBackend:
         else:
             page = browser.new_page(viewport=viewport, device_scale_factor=1)
         page.goto(url)
-        backend = cls(page)
+        backend = cls(
+            page,
+            system_of_record_reader=system_of_record_reader,
+        )
 
         def close() -> None:
             try:

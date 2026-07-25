@@ -3879,6 +3879,22 @@ class Replayer:
             result.failure_category = "safety_halt"
             return resolution, matched_region, before_png, capability_error
 
+        # The ordinary resolution pass may have armed a one-shot structural
+        # handle. Consequential revalidation deliberately replaces that
+        # observation with a fresh resolve immediately before delivery. Drop
+        # the stale handle first: on browser backends, binding a second token
+        # mutates the target node, which correctly invalidates the first
+        # MutationObserver; if the old observer remains live, its cleanup
+        # mutation can in turn invalidate the new guard and falsely refuse an
+        # unchanged target.
+        cancel_stale_structural = getattr(
+            self.backend,
+            "cancel_pending_structural_guards",
+            None,
+        )
+        if callable(cancel_stale_structural):
+            cancel_stale_structural()
+
         guarded_keyboard_backend = (
             arm_keyboard
             and self._requires_atomic_identity_keyboard(step, workflow)
@@ -3898,15 +3914,13 @@ class Replayer:
             and isinstance(self.backend, GuardedCoordinateActionBackend)
             and isinstance(self.backend, GuardedKeyboardActionBackend)
         )
-        if guarded_type_pointer_backend and not arm_keyboard:
-            cancel_stale_structural = getattr(
-                self.backend,
-                "cancel_pending_structural_guards",
-                None,
-            )
-            if callable(cancel_stale_structural):
-                cancel_stale_structural()
-
+        guarded_click_pointer_backend = (
+            step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and self._requires_atomic_identity_pointer(step, workflow)
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, GuardedCoordinateActionBackend)
+            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
         prepared_pointer: Optional[Point] = None
         pointer_edge_pending = step.action in (
             ActionKind.CLICK,
@@ -3944,7 +3958,11 @@ class Replayer:
                     cast(
                         GuardedKeyboardActionBackend, self.backend
                     ).guarded_keyboard_frame()
-                    if guarded_keyboard_backend or guarded_type_pointer_backend
+                    if (
+                        guarded_keyboard_backend
+                        or guarded_type_pointer_backend
+                        or guarded_click_pointer_backend
+                    )
                     else self.backend.screenshot()
                 )
             )
@@ -4025,6 +4043,19 @@ class Replayer:
                     FocusedElementActuationLeaseBackend,
                     self.backend,
                 ).arm_focused_element_lease(*fresh_resolution.point)
+            if guarded_coordinate or guarded_keyboard:
+                # Guard arming adds a private one-shot DOM token. Although it
+                # has no visual styling, Chromium may repaint text during the
+                # resulting style recalculation. Bind identity and the exact
+                # delivery hash to a frame captured AFTER that instrumentation
+                # so our own guard cannot create a false frame-change refusal.
+                fresh_png = (
+                    cast(
+                        GuardedKeyboardActionBackend, self.backend
+                    ).guarded_keyboard_frame()
+                    if isinstance(self.backend, GuardedKeyboardActionBackend)
+                    else self.backend.screenshot()
+                )
             try:
                 error = self._identity_gate_error(
                     step,
@@ -4043,6 +4074,17 @@ class Replayer:
                 if focused_element_backend:
                     self._cancel_guarded_keyboard()
                 raise
+            if error is None and (guarded_coordinate or guarded_keyboard):
+                # The identity observation itself can flush a pending browser
+                # repaint. This final bound frame is the exact byte contract
+                # consumed at delivery; no input edge has occurred.
+                fresh_png = (
+                    cast(
+                        GuardedKeyboardActionBackend, self.backend
+                    ).guarded_keyboard_frame()
+                    if isinstance(self.backend, GuardedKeyboardActionBackend)
+                    else self.backend.screenshot()
+                )
             if error is not None and guarded_coordinate:
                 self._cancel_guarded_coordinate()
             if error is not None and guarded_keyboard:
