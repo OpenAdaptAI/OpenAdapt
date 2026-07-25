@@ -267,6 +267,12 @@ def build_manifest(workflow: "Workflow", bundle_dir: Path | str) -> BundleManife
         certification_status=(prior_prov.certification_status if prior_prov else None),
         certified_at=prior_prov.certified_at if prior_prov else None,
         expires_at=prior_prov.expires_at if prior_prov else None,
+        certification_invalidated_at=(
+            prior_prov.certification_invalidated_at if prior_prov else None
+        ),
+        certification_invalidation_reason=(
+            prior_prov.certification_invalidation_reason if prior_prov else None
+        ),
     )
     return BundleManifest(
         content_digest=digest,

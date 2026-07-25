@@ -515,6 +515,24 @@ key rotation remain operator responsibilities, and full-disk encryption is
 still required. Treat every source bundle as PHI. Details:
 [docs/phi_at_rest.md](docs/phi_at_rest.md).
 
+Seal a production candidate without modifying the compiled source bundle:
+
+```bash
+export OPENADAPT_BUNDLE_KEY='<inject from your secret manager>'
+openadapt-flow seal ./bundle-v2 --out ./bundle-prod
+openadapt-flow certify ./bundle-prod --policy clinical-write
+```
+
+The command copies the complete bundle, encrypts the workflow and retained
+template evidence, verifies the sealed digest, and atomically publishes the new
+directory. It refuses symlinks and existing destinations. Other bundle files
+are copied unchanged; keep sensitive artifacts inside the workflow/templates
+boundary or protect them with the deployment's encrypted volume. Sealing
+changes the artifact contract, so it expires any prior certification instead
+of carrying a stale decision forward. Always certify the sealed destination.
+For a bundle with a qualification project, run its representative and fault
+cases against the sealed destination before running `qualify certify`.
+
 ### Hosted (cloud connectivity)
 
 Hosted commands connect the locally executed compiler/runtime to the launched

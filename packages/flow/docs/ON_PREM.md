@@ -111,11 +111,19 @@ FileVault — openadapt-flow never holds the disk key):
 are held in the OS keychain / a root-only file and injected as environment
 variables (`OPENADAPT_FLOW_IDENTITY_SALT`, `OPENADAPT_FLOW_VLM_TOKEN`).
 
-**Encryption - honest status.** Operator full-disk encryption remains the
-deployment baseline. In addition, `Workflow.save(encrypt=True)` and
-`OPENADAPT_BUNDLE_KEY` opt into AES-256-GCM containers for `workflow.json`,
-template crops, and durable checkpoints; keyed loads decrypt them in memory and
-fail on a missing/wrong key or tampering. This is shipped but off by default.
+**Encryption.** Operator full-disk encryption remains the deployment baseline.
+For an application-sealed production candidate, inject
+`OPENADAPT_BUNDLE_KEY` from the customer-controlled secret manager and run
+`openadapt-flow seal ./bundle-v2 --out ./bundle-prod`, then certify that exact
+destination with
+`openadapt-flow certify ./bundle-prod --policy clinical-write`. The command
+preserves the source, refuses an existing destination, encrypts `workflow.json`
+and template crops with AES-256-GCM, and verifies the resulting integrity
+digest. Sealing changes the artifact contract and explicitly expires prior
+certification; a versioned qualification campaign must therefore run its cases
+and `qualify certify` against the sealed destination. Durable checkpoints use
+the same environment key; keyed loads decrypt in memory and fail on a
+missing/wrong key or tampering.
 The engine does not provide KMS integration, envelope-key rotation, backup-key
 escrow, or hardware-backed key custody; those remain operator responsibilities.
 
