@@ -544,7 +544,7 @@ def main(argv: list[str] | None = None) -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="openadapt-desktop",
-        description="Experimental OpenAdapt Desktop capture/review CLI",
+        description="OpenAdapt Desktop Beta local authoring and governed execution CLI",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
