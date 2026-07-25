@@ -1,16 +1,14 @@
-"""Fail-closed admission gate for regulated execution (``openadapt-flow run``).
+"""Fail-closed admission gate for governed execution (``openadapt-flow run``).
 
 ``replay`` is the permissive DEMO path: it will drive a bundle against an app
 with every safety control (certification, identity arming, effect verification,
-encryption) left OPTIONAL, because a demo's job is to *show the mechanism*, not
-to be safe. The external safety review scored that default posture 4/10 for
-exactly this reason: nothing forces the controls on.
+encryption) left OPTIONAL. Its report is explicitly non-production.
 
-``run`` is the REGULATED path, and this module is its admission gate. It is a
-PURE function of a loaded bundle plus its deployment wiring: it executes nothing
-and mutates nothing. It answers one question -- *may this bundle be executed
-unattended in this deployment?* -- and it FAILS CLOSED, refusing (with a
-structured reason naming the failing gate) unless ALL of the following hold:
+``run`` applies Demo, Standard, or Regulated requirements to this one admission
+gate. It is a PURE function of a loaded bundle plus its deployment wiring: it
+executes nothing and mutates nothing. It answers one question -- *may this
+bundle be executed under the selected profile in this deployment?* -- and
+FAILS CLOSED with a structured reason naming every failed requirement.
 
 1. **Certification** -- the bundle passes a required safety policy (default
    ``clinical-write``, or ``--policy``). An uncertified bundle is refused.
@@ -21,11 +19,9 @@ structured reason naming the failing gate) unless ALL of the following hold:
    effect contract (and none is an unconfirmed / fabricated binding). A write
    that would be verified by the SCREEN only -- because it declares no
    system-of-record effect -- refuses the run.
-4. **Approval fallback** -- every declared write effect must be independently
-   verifiable in THIS deployment (a verifier configured for its substrate).
-   Where independent verification is impossible (no verifier wired), the write
-   is admitted ONLY under EXPLICIT operator approval; absent approval, the run
-   halts.
+4. **Effect execution** -- Standard and Regulated require an independent
+   verifier in THIS deployment. Demo and the legacy compatibility lane may use
+   exact, bundle-bound approval, but that result remains unverified.
 5. **Interstitial admission** -- every bundle/runtime interstitial declaration
    is schema-valid, every explicit asset is sealed in the bundle manifest, and
    the exact declaration digest is recorded for authorization binding.
@@ -52,12 +48,13 @@ is refused, not repaired.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 from openadapt_flow import crypto
 from openadapt_flow.deployment import DeploymentConfig
+from openadapt_flow.execution_profiles import ExecutionProfileContract
 from openadapt_flow.ir import Interstitial, Step, Workflow
 from openadapt_flow.policy import (
     has_screen_postcondition,
@@ -81,6 +78,7 @@ DEFAULT_POLICY: str = "clinical-write"
 
 # Gate identifiers (stable strings a caller / test can assert on).
 GATE_CERTIFICATION = "certification"
+GATE_PROFILE = "execution_profile"
 GATE_IDENTITY = "identity_coverage"
 GATE_EFFECT = "effect_coverage"
 GATE_APPROVAL = "approval_fallback"
@@ -90,6 +88,7 @@ GATE_MANIFEST = "manifest_integrity"
 
 #: The gates, in the order the report renders them.
 GATE_ORDER = (
+    GATE_PROFILE,
     GATE_CERTIFICATION,
     GATE_IDENTITY,
     GATE_EFFECT,
@@ -100,6 +99,7 @@ GATE_ORDER = (
 )
 
 _GATE_TITLES = {
+    GATE_PROFILE: "Execution profile",
     GATE_CERTIFICATION: "Certification passed",
     GATE_IDENTITY: "Identity coverage",
     GATE_EFFECT: "Effect coverage",
@@ -188,6 +188,7 @@ class RunGateReport(BaseModel):
 
     workflow_name: str
     policy_name: str
+    execution_profile: Optional[Literal["demo", "standard", "regulated"]] = None
     gates: list[GateResult] = Field(default_factory=list)
     bundle_content_digest: Optional[str] = Field(default=None, pattern="^[a-f0-9]{64}$")
     required_identity_step_ids: list[str] = Field(default_factory=list)
@@ -216,7 +217,13 @@ class RunGateReport(BaseModel):
     def render(self) -> str:
         head = (
             f"{'ADMIT' if self.passed else 'REFUSE'}: "
-            f"workflow {self.workflow_name!r} vs policy {self.policy_name!r}"
+            f"workflow {self.workflow_name!r}"
+            + (
+                f" under {self.execution_profile!r} profile"
+                if self.execution_profile
+                else ""
+            )
+            + f" vs policy {self.policy_name!r}"
         )
         lines = [head]
         lines.extend(g.render() for g in self.gates)
@@ -249,6 +256,8 @@ def evaluate_run_gate(
     require_encryption: bool = True,
     pinned_content_digest: Optional[str] = None,
     pinned_compiler_version: Optional[str] = None,
+    profile_contract: Optional[ExecutionProfileContract] = None,
+    effective_durable: Optional[bool] = None,
 ) -> RunGateReport:
     """Admit or refuse ``workflow`` for a regulated run in this deployment.
 
@@ -281,39 +290,109 @@ def evaluate_run_gate(
             refuses the run.
     """
     bundle = Path(bundle_dir)
-    policy_name = policy_source or deployment.policy.policy or DEFAULT_POLICY
+    policy_name = (
+        policy_source
+        or deployment.policy.policy
+        or (profile_contract.default_policy if profile_contract is not None else None)
+        or DEFAULT_POLICY
+    )
     steps = list(iter_workflow_steps(workflow))
 
     approval_gate = _gate_approval(
-        steps, effect_verifier, api_actuator, approval_available
+        steps,
+        effect_verifier,
+        api_actuator,
+        approval_available,
+        require_independent=(
+            profile_contract.require_independent_effects
+            if profile_contract is not None
+            else False
+        ),
+        require_approval=(
+            profile_contract.require_approval_for_unverified_effects
+            if profile_contract is not None
+            else True
+        ),
+        allow_approval=(
+            profile_contract.allow_unverified_write_approval
+            if profile_contract is not None
+            else True
+        ),
     )
     interstitial_gate = _gate_interstitials(workflow, interstitials)
-    gates = [
-        _gate_certification(workflow, policy_name),
-        _gate_identity(steps),
-        _gate_effect(steps),
-        approval_gate,
-        interstitial_gate,
-        _gate_encryption(workflow, bundle, require_encryption, strict_templates),
-        _gate_manifest(
-            workflow, bundle, pinned_content_digest, pinned_compiler_version
-        ),
-    ]
+    gates = []
+    if profile_contract is not None:
+        gates.append(_gate_profile(profile_contract, effective_durable))
+    gates.extend(
+        [
+            (
+                _gate_certification(workflow, policy_name)
+                if profile_contract is None or profile_contract.require_certification
+                else _not_required(
+                    GATE_CERTIFICATION, "not required by the Demo profile"
+                )
+            ),
+            (
+                _gate_identity(steps)
+                if profile_contract is None
+                or profile_contract.require_identity_coverage
+                else _not_required(GATE_IDENTITY, "not required by the Demo profile")
+            ),
+            (
+                _gate_effect(steps)
+                if profile_contract is None or profile_contract.require_effect_contracts
+                else _not_required(
+                    GATE_EFFECT,
+                    "not required by the Demo profile; screen evidence cannot "
+                    "produce a production VERIFIED outcome",
+                )
+            ),
+            approval_gate,
+            interstitial_gate,
+            _gate_encryption(
+                workflow,
+                bundle,
+                (
+                    profile_contract.require_encryption
+                    if profile_contract is not None
+                    else require_encryption
+                ),
+                (
+                    profile_contract.strict_templates or strict_templates
+                    if profile_contract is not None
+                    else strict_templates
+                ),
+            ),
+            _gate_manifest(
+                workflow, bundle, pinned_content_digest, pinned_compiler_version
+            ),
+        ]
+    )
+    required_identity = (
+        [step.id for step in steps if must_be_identity_armed(step)]
+        if profile_contract is None or profile_contract.require_identity_coverage
+        else []
+    )
     return RunGateReport(
         workflow_name=workflow.name,
         policy_name=policy_name,
+        execution_profile=(
+            profile_contract.profile.value if profile_contract is not None else None
+        ),
         gates=gates,
         bundle_content_digest=(
             workflow.manifest.content_digest if workflow.manifest is not None else None
         ),
-        required_identity_step_ids=[
-            step.id for step in steps if must_be_identity_armed(step)
-        ],
+        required_identity_step_ids=required_identity,
         effect_verifier_configured=effect_verifier is not None,
         api_actuator_configured=api_actuator is not None,
         unverified_write_approval_granted=(
             effect_verifier is None
             and approval_available
+            and (
+                profile_contract is None
+                or profile_contract.allow_unverified_write_approval
+            )
             and approval_gate.passed
             and any(
                 is_consequential(step) and has_system_effect(step) for step in steps
@@ -342,6 +421,32 @@ def _result(
         warning=warning,
         detail=detail,
         offenders=offenders or [],
+    )
+
+
+def _not_required(gate: str, detail: str) -> GateResult:
+    return _result(gate, True, detail)
+
+
+def _gate_profile(
+    contract: ExecutionProfileContract,
+    effective_durable: Optional[bool],
+) -> GateResult:
+    """Verify the effective runtime satisfies the selected named posture."""
+
+    if contract.require_durable and effective_durable is not True:
+        return _result(
+            GATE_PROFILE,
+            False,
+            f"{contract.profile.value} requires durable execution, but the "
+            "effective runtime is not durable",
+        )
+    durability = "required and enabled" if contract.require_durable else "optional"
+    production = "production" if contract.production else "non-production"
+    return _result(
+        GATE_PROFILE,
+        True,
+        f"{contract.profile.value} ({production}); durability {durability}",
     )
 
 
@@ -441,6 +546,10 @@ def _gate_approval(
     effect_verifier: object | None,
     api_actuator: object | None,
     approval_available: bool,
+    *,
+    require_independent: bool = False,
+    require_approval: bool = True,
+    allow_approval: bool = True,
 ) -> GateResult:
     """Gate 4: writes with no configured verifier need explicit approval.
 
@@ -478,7 +587,23 @@ def _gate_approval(
             "check",
             [step.id for step in direct_api_writes],
         )
-    if approval_available:
+    if require_independent:
+        return _result(
+            GATE_APPROVAL,
+            False,
+            f"{len(writes)} consequential write(s) lack the independent verifier "
+            "required by this execution profile; an approval cannot convert "
+            "unverified completion into VERIFIED",
+            [step.id for step in writes],
+        )
+    if approval_available and not allow_approval:
+        return _result(
+            GATE_APPROVAL,
+            False,
+            "this execution profile does not permit unverified-write approval",
+            [step.id for step in writes],
+        )
+    if approval_available and allow_approval:
         vacuous = [step for step in writes if not has_screen_postcondition(step)]
         if vacuous:
             return _result(
@@ -493,6 +618,14 @@ def _gate_approval(
             True,
             f"NO verifier configured, but {len(writes)} unverifiable write(s) "
             "were EXPLICITLY approved by the operator (approval fallback)",
+            [s.id for s in writes],
+        )
+    if not require_approval:
+        return _result(
+            GATE_APPROVAL,
+            True,
+            f"{len(writes)} consequential write(s) have no verifier; Demo may "
+            "execute, but the result cannot be production VERIFIED",
             [s.id for s in writes],
         )
     return _result(
@@ -633,6 +766,7 @@ def build_runtime_authorization(
             interstitials=interstitials,
         ),
         admitted_policy_name=report.policy_name,
+        execution_profile=report.execution_profile,
         required_identity_step_ids=tuple(report.required_identity_step_ids),
         unverified_write_approvals=tuple(approvals),
         approval_source=approval_source,

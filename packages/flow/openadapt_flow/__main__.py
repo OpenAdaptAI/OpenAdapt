@@ -279,6 +279,13 @@ def _deployment_runtime(args: argparse.Namespace, params: dict[str, str] | None 
         raise SystemExit(str(e))
 
     durable = bool(cfg.runtime.durable or getattr(args, "durable", False))
+    selected_profile = getattr(args, "_execution_profile", None)
+    if selected_profile is not None:
+        from openadapt_flow.execution_profiles import execution_profile_contract
+
+        durable = bool(
+            durable or execution_profile_contract(selected_profile).require_durable
+        )
     allow_egress = bool(
         cfg.runtime.allow_model_grounding
         or getattr(args, "allow_model_grounding", False)
@@ -474,7 +481,9 @@ def _finish_replay(
     from openadapt_flow.report import render_run_report
 
     report_md = render_run_report(run_dir)
-    outcome = "success" if report.success else "FAILED"
+    outcome = getattr(report, "execution_outcome", None) or (
+        "success" if report.success else "FAILED"
+    )
     print(f"Replay {outcome}: {report_md}")
     if report.screenshots_may_leave_box:
         print(
@@ -483,6 +492,8 @@ def _finish_replay(
         )
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
+    if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
+        return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
 
 
@@ -981,21 +992,21 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    """Execute a bundle under a deployment config -- FAIL-CLOSED.
+    """Execute a bundle under a named deployment profile -- FAIL-CLOSED.
 
-    Unlike ``replay`` (the permissive demo path, where certification / identity
-    arming / effect verification / encryption are all OPTIONAL), ``run`` REFUSES
-    to execute unless every fail-closed admission gate holds
-    (:mod:`openadapt_flow.run_gate`): the bundle is certified, every
-    entity-sensitive / consequential action is identity-armed, every write has a
-    verifiable (or explicitly approved) effect contract, the bundle is encrypted
-    at rest, and its integrity manifest re-verifies. On any refusal it prints the
-    coverage report naming the failing gate and exits nonzero WITHOUT executing.
+    ``run`` selects Demo, Standard, or Regulated over the same admission gate,
+    authorization, and replayer. An omitted profile retains the pre-profile
+    compatibility contract. On any refusal it prints the coverage report naming
+    the failing gate and exits nonzero WITHOUT executing.
     ``--dry-run`` / ``--explain`` print the coverage report and stop before
     execution. Once admitted, it delegates to the shared executor (the same
     backend / effect / actuation / durable runtime as ``replay``), with
     ``--drift`` (a MockMed-only teaching aid) forced off.
     """
+    from openadapt_flow.execution_profiles import (
+        execution_profile_contract,
+        resolve_execution_profile,
+    )
     from openadapt_flow.ir import Workflow
     from openadapt_flow.run_gate import (
         build_runtime_authorization,
@@ -1018,9 +1029,36 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 2
 
     gate_params = _replay_params(args.param, getattr(args, "params_file", None))
-    cfg, effect_verifier, api_actuator, _durable, _egress = _deployment_runtime(
-        args, params=gate_params
+    cfg, effect_verifier, api_actuator, configured_durable, _egress = (
+        _deployment_runtime(args, params=gate_params)
     )
+    profile_name = getattr(args, "profile", None) or cfg.runtime.profile
+    selected_profile = None
+    profile = None
+    if profile_name is not None:
+        try:
+            selected_profile = resolve_execution_profile(profile_name)
+        except ValueError as exc:
+            print(f"run REFUSED: {exc}. Nothing was executed.")
+            return 2
+        profile = execution_profile_contract(selected_profile)
+        args._execution_profile = selected_profile.value
+    effective_durable = bool(
+        configured_durable or (profile is not None and profile.require_durable)
+    )
+    if (
+        profile is not None
+        and profile.require_encryption
+        and bool(getattr(args, "allow_unencrypted", False))
+    ):
+        assert selected_profile is not None
+        print(
+            f"run REFUSED: the {selected_profile.value} profile requires "
+            "encrypted bundles; --allow-unencrypted cannot weaken a named "
+            "profile. Select Standard or Demo for a reviewed plaintext "
+            "deployment. Nothing was executed."
+        )
+        return 2
     backend_cfg = _resolve_backend_config(args, cfg, workflow)
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
@@ -1038,6 +1076,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         require_encryption=not bool(getattr(args, "allow_unencrypted", False)),
         pinned_content_digest=getattr(args, "pin_digest", None),
         pinned_compiler_version=getattr(args, "pin_version", None),
+        profile_contract=profile,
+        effective_durable=effective_durable if profile is not None else None,
     )
     print(report.render())
 
@@ -2733,6 +2773,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--profile",
+        choices=["demo", "standard", "regulated"],
+        default=None,
+        help=(
+            "Named execution posture (or runtime.profile from --config). Demo "
+            "is explicitly non-production; Standard "
+            "requires certification, durability, identity, and independently "
+            "verified consequential effects; Regulated additionally requires "
+            "encrypted bundles and strictly sealed evidence assets. Omit only "
+            "for compatibility with a pre-profile deployment."
+        ),
+    )
     p.add_argument(
         "--url",
         default=None,

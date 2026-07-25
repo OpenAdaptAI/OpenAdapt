@@ -316,6 +316,11 @@ class GroundingModelConfig(BaseModel):
 class RuntimeSection(BaseModel):
     """Runtime posture: durability and model-egress opt-in."""
 
+    #: Named posture for ``openadapt-flow run``. A direct ``--profile`` wins.
+    #: Omission preserves the pre-profile low-level flag contract for existing
+    #: deployments; new production deployments should select a profile.
+    #: ``replay`` remains the explicitly non-production Demo path.
+    profile: Optional[Literal["demo", "standard", "regulated"]] = None
     #: Tier-3 durable runtime: checkpoint each verified step, durably pause on
     #: halt, resumable via ``resume``. Off by default.
     durable: bool = False

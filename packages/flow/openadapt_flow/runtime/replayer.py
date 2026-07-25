@@ -611,6 +611,11 @@ class Replayer:
         report = RunReport(
             workflow_name=workflow.name,
             started_at=datetime.now(timezone.utc).isoformat(),
+            execution_profile=(
+                self.governed_authorization.execution_profile
+                if self.governed_authorization is not None
+                else "demo"
+            ),
             execution_target_kind=execution_target_kind,
             execution_origin=execution_origin,
             execution_entry_url=execution_entry_url,
@@ -627,6 +632,20 @@ class Replayer:
             screenshots_may_leave_box=self._screenshots_may_leave_box,
         )
         if self.governed_authorization is not None:
+            profile_refusal = self._profile_runtime_refusal(workflow)
+            if profile_refusal is not None:
+                report.results.append(
+                    StepResult(
+                        step_id="<profile>",
+                        intent="validate execution profile runtime",
+                        ok=False,
+                        error=f"{profile_refusal} — refusing to run; run aborted",
+                    )
+                )
+                report.success = False
+                self._stamp_execution_outcome(report, workflow)
+                report.save(run_dir)
+                return report
             refusal, assets = self.governed_authorization.validate_execution_snapshot(
                 workflow,
                 bundle_dir=bundle_dir,
@@ -676,6 +695,7 @@ class Replayer:
                     )
                 )
                 report.success = False
+                self._stamp_execution_outcome(report, workflow)
                 report.save(run_dir)
                 return report
         self._record_identity_coverage(workflow, report)
@@ -709,6 +729,7 @@ class Replayer:
             )
             report.success = False
             report.total_ms = (time.monotonic() - t_run) * 1000.0
+            self._stamp_execution_outcome(report, workflow)
             report.save(run_dir)
             return report
 
@@ -806,8 +827,36 @@ class Replayer:
                 workflow, bundle_dir, Path(save_healed_to), new_crops
             )
 
+        self._stamp_execution_outcome(report, workflow)
         report.save(run_dir)
         return report
+
+    @staticmethod
+    def _stamp_execution_outcome(report: RunReport, workflow: Workflow) -> None:
+        """Apply the named profile's evidence contract before persistence."""
+
+        if report.execution_profile is None:
+            return
+        from openadapt_flow.execution_profiles import stamp_execution_outcome
+
+        stamp_execution_outcome(
+            report,
+            workflow,
+            report.execution_profile,
+        )
+
+    def _profile_runtime_refusal(self, workflow: Workflow) -> Optional[str]:
+        """Recheck load-bearing profile invariants at the actuation boundary."""
+
+        authorization = self.governed_authorization
+        if authorization is None or authorization.execution_profile is None:
+            return None
+        profile = authorization.execution_profile
+        if profile in {"standard", "regulated"} and not self.durable:
+            return f"{profile} execution requires the durable runtime"
+        if profile == "regulated" and not workflow.encrypted:
+            return "regulated execution requires an encrypted bundle"
+        return None
 
     @staticmethod
     def _record_identity_coverage(workflow: Workflow, report: RunReport) -> None:

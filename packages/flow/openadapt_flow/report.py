@@ -231,13 +231,28 @@ def render_run_report(run_dir: Path | str) -> Path:
     _warn_if_plaintext_phi(report)
 
     ok_count = sum(1 for r in report.results if r.ok)
-    icon = "✅" if report.success else "❌"
-    outcome = "success" if report.success else "FAILED"
+    outcome = report.execution_outcome or ("success" if report.success else "FAILED")
+    icon = (
+        "✅"
+        if outcome in {"VERIFIED", "success"}
+        else "⚠️"
+        if outcome == "COMPLETED_UNVERIFIED"
+        else "❌"
+    )
 
     lines: list[str] = []
     lines.append(f"# {icon} {_md_phi(report.workflow_name)} — {outcome}")
     lines.append("")
     lines.append(f"- **Started:** {report.started_at}")
+    if report.execution_profile:
+        production = (
+            "production-eligible"
+            if report.production_eligible
+            else "not production-eligible"
+        )
+        lines.append(
+            f"- **Execution profile:** `{report.execution_profile}` ({production})"
+        )
     lines.append(f"- **Steps:** {ok_count}/{len(report.results)} ok")
     lines.append(f"- **Heals:** {report.heal_count}")
     # Egress transparency (PHI audit REM-3): make it unmistakable whether a

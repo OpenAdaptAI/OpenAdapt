@@ -13,6 +13,7 @@ import json
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -118,6 +119,7 @@ class GovernedRunAuthorization(BaseModel):
     bundle_content_digest: str = Field(pattern="^[a-f0-9]{64}$")
     runtime_inputs_digest: str = Field(pattern="^[a-f0-9]{64}$")
     admitted_policy_name: str
+    execution_profile: Literal["demo", "standard", "regulated"] | None = None
     required_identity_step_ids: tuple[str, ...] = Field(default_factory=tuple)
     unverified_write_approvals: tuple[UnverifiedWriteApproval, ...] = Field(
         default_factory=tuple

@@ -1822,6 +1822,35 @@ class HaltObservation(BaseModel):
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
+    execution_profile: Optional[Literal["demo", "standard", "regulated"]] = Field(
+        default=None,
+        description=(
+            "Named runtime posture applied to this run. Raw replay is Demo; "
+            "governed run authorization carries Standard or Regulated."
+        ),
+    )
+    execution_outcome: Optional[
+        Literal[
+            "VERIFIED",
+            "COMPLETED_UNVERIFIED",
+            "HALTED",
+            "FAILED",
+            "ROLLED_BACK",
+        ]
+    ] = Field(
+        default=None,
+        description=(
+            "Evidence-qualified outcome. Standard and Regulated never map a "
+            "screen-only consequential completion to VERIFIED."
+        ),
+    )
+    production_eligible: bool = Field(
+        default=False,
+        description=(
+            "True only for a VERIFIED result under Standard or Regulated. "
+            "Demo results remain explicitly non-production."
+        ),
+    )
     execution_target_kind: Optional[ExecutionTargetKind] = Field(
         default=None,
         description=(

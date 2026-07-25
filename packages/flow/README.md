@@ -127,6 +127,12 @@ plus target flags to `replay`, or drive a real deployment with
 `openadapt-flow run bundle --config deploy.yaml`, which reads the backend,
 effects, actuation, durable, and policy sections from one config. Recorded
 parameter values are the defaults, and `--param` overrides them at replay.
+Select `--profile regulated` for encrypted, fail-closed production execution,
+`--profile standard` for a certified, durable deployment that does not require
+bundle encryption, or `--profile demo` for an explicitly non-production run.
+Demo completions are `COMPLETED_UNVERIFIED`; Standard and Regulated return
+`VERIFIED` only when every consequential effect is independently confirmed.
+See [execution profiles](docs/EXECUTION_PROFILES.md).
 
 **Secrets never get recorded.** An `input[type=password]` field (or any field
 named with `--secret <name>`) is a secret parameter: its value is never written
