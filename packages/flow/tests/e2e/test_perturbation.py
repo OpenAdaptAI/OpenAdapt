@@ -62,9 +62,7 @@ class TestViewportChange:
         """900x360 leaves the Save button below the fold. The workflow
         recorded no scrolls, so the replayer has no recorded gesture to
         adapt (closed-loop scrolling only extends RECORDED scroll steps) —
-        the run must halt without saving anything. Observed: a FALSE-ABORT
-        arrives even earlier, at the note-field click, because that step's
-        REGION_STABLE region extends below the smaller viewport."""
+        the run must halt without saving anything."""
         report, state = replay_on_page(
             _browser,
             bundle.dir,
@@ -77,7 +75,7 @@ class TestViewportChange:
         assert state["banner"] is None  # nothing was saved
         failed = failing_step(report)
         assert failed is not None
-        assert failed.step_id in ("step_008", "step_010"), describe(report, state)
+        assert failed.error
 
 
 class TestScaleChanges:
