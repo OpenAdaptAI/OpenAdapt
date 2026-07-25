@@ -1,6 +1,6 @@
 # ✅ mockmed-triage — VERIFIED
 
-- **Started:** 2026-07-25T17:43:34.005272+00:00
+- **Started:** 2026-07-25T17:47:07.366387+00:00
 - **Execution profile:** `standard` (production-eligible)
 - **Required contracts passed:** authorization 1/1, identity 5/5, postcondition 8/8, effect 2/2
 - **Evidence classes:** `authorization`, `effect_tier_1`, `identity`, `postcondition`
@@ -9,7 +9,7 @@
 - **Steps:** 6/6 ok
 - **Heals:** 0
 - **Screenshot egress:** none observed (zero screenshots left the box)
-- **Governed authorization:** `a1cf343fb8074f2fbe597b8211a2894d` (public-demo-qualified-campaign)
+- **Governed authorization:** `34062e0a6b38482e806f71f252b40c23` (public-demo-qualified-campaign)
 - **Admitted policy:** clinical-write; runtime inputs bound to `342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1`
 
 ## Parameters
@@ -30,12 +30,12 @@
 
 | # | Step | Intent | Rung | Confidence | Verified | ms | Healed | OK |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `step_000` | click 'Open' | structural | 1.00 | id ✓ | 781 |  | ✅ |
-| 2 | `step_001` | click 'New Encounter' | structural | 1.00 | id ✓ | 1016 |  | ✅ |
-| 3 | `step_002` | click 'Triage' | structural | 1.00 | id ✓ | 388 |  | ✅ |
-| 4 | `step_003` | click at (480, 268) | structural | 1.00 | id ✓ | 396 |  | ✅ |
-| 5 | `step_004` | type <note> | &mdash; | &mdash; | input ✓ | 479 |  | ✅ |
-| 6 | `step_005` | click 'Save Encounter' | structural | 1.00 | id ✓, effect ✓ | 907 |  | ✅ |
+| 1 | `step_000` | click 'Open' | structural | 1.00 | id ✓ | 743 |  | ✅ |
+| 2 | `step_001` | click 'New Encounter' | structural | 1.00 | id ✓ | 1094 |  | ✅ |
+| 3 | `step_002` | click 'Triage' | structural | 1.00 | id ✓ | 416 |  | ✅ |
+| 4 | `step_003` | click at (480, 268) | structural | 1.00 | id ✓ | 398 |  | ✅ |
+| 5 | `step_004` | type <note> | &mdash; | &mdash; | input ✓ | 480 |  | ✅ |
+| 6 | `step_005` | click 'Save Encounter' | structural | 1.00 | id ✓, effect ✓ | 813 |  | ✅ |
 
 ## Per-step evidence
 
@@ -104,7 +104,7 @@ Every step below shows the frame **before** and **after** the action next to the
 
 | Metric | Value |
 | --- | --- |
-| Total time | 3972 ms |
+| Total time | 3948 ms |
 | Steps ok | 6/6 |
 | Heals | 0 |
 | model_calls | 0 |

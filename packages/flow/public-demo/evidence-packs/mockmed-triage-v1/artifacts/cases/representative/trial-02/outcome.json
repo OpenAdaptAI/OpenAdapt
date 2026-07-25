@@ -1,6 +1,6 @@
 {
   "case_id": "representative",
-  "duration_ms": 4038.5632920078933,
+  "duration_ms": 3835.078375181183,
   "execution_completed": true,
   "execution_profile": "standard",
   "expected_outcome": "VERIFIED",
@@ -12,7 +12,7 @@
   "observed_outcome": "VERIFIED",
   "oracle_passed": true,
   "production_eligible": true,
-  "report_sha256": "d150b03193c1b7844749cfdd74633f9bcf17bcb9e97e5b00475563722013a2c1",
+  "report_sha256": "cd2fb589653040363ddde5ca0b162811c3be97ec03e7bcd0b555967fdee5218b",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,
   "silent_incorrect_success": false,

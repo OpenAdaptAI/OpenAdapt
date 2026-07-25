@@ -24,7 +24,7 @@
     "quorum_required": null,
     "quorum_verified": null
   },
-  "governed_authorization_id": "1f4c8b409b5b424da094da6a72d77655",
+  "governed_authorization_id": "79d32158c138404c8ac93592e81d16aa",
   "governed_approval_source": "public-demo-qualified-campaign",
   "postconditions_ok": true,
   "skipped": false,
@@ -36,7 +36,7 @@
       186
     ],
     "confidence": 1.0,
-    "elapsed_ms": 9.595583193004131,
+    "elapsed_ms": 6.626625079661608,
     "structural_handle": {
       "point": [
         776,
@@ -49,7 +49,7 @@
         90,
         36
       ],
-      "target_fingerprint": "3230590fd652cf5de1587aba41107a0e99de842a0e05ba01088d33137f850a81",
+      "target_fingerprint": "7ab0050cec6e7a2f2814b019ca51d41d2c8d247e516cc9e8d5672f02aabf7fc4",
       "candidate_count": 1,
       "supported_operations": [
         "dom_click",
@@ -59,5 +59,5 @@
   },
   "drift_oracle_calls": 0,
   "heal": null,
-  "created_at": "2026-07-25T17:43:25.878850+00:00"
+  "created_at": "2026-07-25T17:46:58.874569+00:00"
 }

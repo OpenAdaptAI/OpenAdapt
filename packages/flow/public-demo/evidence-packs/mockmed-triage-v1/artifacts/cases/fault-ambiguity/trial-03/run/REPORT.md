@@ -1,6 +1,6 @@
 # ❌ mockmed-triage — HALTED
 
-- **Started:** 2026-07-25T17:43:40.965437+00:00
+- **Started:** 2026-07-25T17:47:14.265669+00:00
 - **Execution profile:** `standard` (not production-eligible)
 - **Required contracts passed:** authorization 1/1, identity 0/1, postcondition 0/2
 - **Evidence classes:** `authorization`
@@ -9,7 +9,7 @@
 - **Steps:** 0/1 ok
 - **Heals:** 0
 - **Screenshot egress:** none observed (zero screenshots left the box)
-- **Governed authorization:** `26ab2da3bb384a2baec0c2819dc7376e` (public-demo-qualified-campaign)
+- **Governed authorization:** `24b64ce9b9934e4d803c56d5fbe35861` (public-demo-qualified-campaign)
 - **Admitted policy:** clinical-write; runtime inputs bound to `342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1`
 
 ## Parameters
@@ -30,7 +30,7 @@ _No executed step carried a system-of-record effect contract — every local ste
 
 | # | Step | Intent | Rung | Confidence | Verified | ms | Healed | OK |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `step_000` | click 'Open' | &mdash; | &mdash; | &mdash; | 143 |  | ❌ |
+| 1 | `step_000` | click 'Open' | &mdash; | &mdash; | &mdash; | 139 |  | ❌ |
 
 ## Per-step evidence
 
@@ -60,7 +60,7 @@ Every step below shows the frame **before** and **after** the action next to the
 
 | Metric | Value |
 | --- | --- |
-| Total time | 147 ms |
+| Total time | 142 ms |
 | Steps ok | 0/1 |
 | Heals | 0 |
 | model_calls | 0 |

@@ -1,6 +1,6 @@
 {
   "workflow_name": "mockmed-triage",
-  "started_at": "2026-07-25T17:43:29.379801+00:00",
+  "started_at": "2026-07-25T17:47:02.953249+00:00",
   "execution_profile": "standard",
   "execution_outcome": "VERIFIED",
   "production_eligible": true,
@@ -34,14 +34,14 @@
     "compensation_actions": 0
   },
   "execution_target_kind": "web",
-  "execution_origin": "http://127.0.0.1:57712/",
-  "execution_entry_url": "http://127.0.0.1:57712/?fault=ok&idempotency=demo#tasks",
-  "bundle_content_digest": "4691b56bac8942ab010b25f47dc5434a0bd4be36a687d16fa8a08e6d9f082b40",
+  "execution_origin": "http://127.0.0.1:59433/",
+  "execution_entry_url": "http://127.0.0.1:59433/?fault=ok&idempotency=demo#tasks",
+  "bundle_content_digest": "b8bb8a1c9c9da482f6276403314b976b94f9bdec55726c425a1351df6aade6df",
   "source_recording_sha256": null,
   "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
-  "governed_authorization_id": "a047c6199b694e65ab5b6041e587790d",
+  "governed_authorization_id": "dec03146167243e9bcee33b19140575b",
   "governed_approval_source": "public-demo-qualified-campaign",
-  "governed_authorization_created_at": "2026-07-25T17:43:29.379055+00:00",
+  "governed_authorization_created_at": "2026-07-25T17:47:02.952453+00:00",
   "governed_policy_name": "clinical-write",
   "governed_minimum_effect_tier": 1,
   "governed_runtime_inputs_digest": "342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1",
@@ -71,7 +71,7 @@
           186
         ],
         "confidence": 1.0,
-        "elapsed_ms": 7.794374832883477,
+        "elapsed_ms": 5.551500013098121,
         "structural_handle": {
           "point": [
             776,
@@ -84,7 +84,7 @@
             90,
             36
           ],
-          "target_fingerprint": "5300314d0b04e28ffb4f5fe77f1223e17f1c7acbfd66848d9627e748faceabf3",
+          "target_fingerprint": "7f929a1853177b67789711dad69f17601e29172aa82dea73784d18f7a7920cfb",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -117,11 +117,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-297734ec95aa42e3a877b765de34dade",
+        "receipt_id": "playwright-9160f844b2624ba389b4023210a4ed75",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "5300314d0b04e28ffb4f5fe77f1223e17f1c7acbfd66848d9627e748faceabf3",
-        "delivered_at": "2026-07-25T17:43:29.626010+00:00",
+        "target_fingerprint": "7f929a1853177b67789711dad69f17601e29172aa82dea73784d18f7a7920cfb",
+        "delivered_at": "2026-07-25T17:47:03.199823+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -130,7 +130,7 @@
       "error": null,
       "before_png": "steps/step_000_before.png",
       "after_png": "steps/step_000_after.png",
-      "elapsed_ms": 718.2162918616086
+      "elapsed_ms": 705.3060000762343
     },
     {
       "step_id": "step_001",
@@ -145,7 +145,7 @@
           159
         ],
         "confidence": 1.0,
-        "elapsed_ms": 5.323334131389856,
+        "elapsed_ms": 5.694374907761812,
         "structural_handle": {
           "point": [
             114,
@@ -158,7 +158,7 @@
             180,
             40
           ],
-          "target_fingerprint": "c77f39e61513e4699a915f94c355b790e9fbf62fe95b0a5ceeded13d91e5f45e",
+          "target_fingerprint": "9afccbc5387184540e363d9aa9f26120f0cb0dfbcf5e706701234a6e4951c03f",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -191,11 +191,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-aafb8b1b12fb4ff6be3cd24f8d04e86c",
+        "receipt_id": "playwright-94143ad44a0d4b94ba284b17b4eeea0b",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "c77f39e61513e4699a915f94c355b790e9fbf62fe95b0a5ceeded13d91e5f45e",
-        "delivered_at": "2026-07-25T17:43:30.313880+00:00",
+        "target_fingerprint": "9afccbc5387184540e363d9aa9f26120f0cb0dfbcf5e706701234a6e4951c03f",
+        "delivered_at": "2026-07-25T17:47:03.856062+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -204,7 +204,7 @@
       "error": null,
       "before_png": "steps/step_001_before.png",
       "after_png": "steps/step_001_after.png",
-      "elapsed_ms": 1151.8463750835508
+      "elapsed_ms": 784.5203329343349
     },
     {
       "step_id": "step_002",
@@ -219,7 +219,7 @@
           214
         ],
         "confidence": 1.0,
-        "elapsed_ms": 5.347375059500337,
+        "elapsed_ms": 6.6890420857816935,
         "structural_handle": {
           "point": [
             85,
@@ -232,7 +232,7 @@
             120,
             38
           ],
-          "target_fingerprint": "c01932247521461cc5fe9170e0dc5a89824dbf17f546df411bf28a4b7ef00295",
+          "target_fingerprint": "8949102e46f3546f3c6759f4fce6c0e3093eb5ba9425c38ed23cbc5fa408d1b6",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -265,11 +265,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-7fd6de4dd11347a1af0b3e3f019e0043",
+        "receipt_id": "playwright-914d0f169656419dbde17c6d0971696b",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "c01932247521461cc5fe9170e0dc5a89824dbf17f546df411bf28a4b7ef00295",
-        "delivered_at": "2026-07-25T17:43:31.455175+00:00",
+        "target_fingerprint": "8949102e46f3546f3c6759f4fce6c0e3093eb5ba9425c38ed23cbc5fa408d1b6",
+        "delivered_at": "2026-07-25T17:47:04.655712+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -278,7 +278,7 @@
       "error": null,
       "before_png": "steps/step_002_before.png",
       "after_png": "steps/step_002_after.png",
-      "elapsed_ms": 378.96229210309684
+      "elapsed_ms": 383.4120000246912
     },
     {
       "step_id": "step_003",
@@ -293,7 +293,7 @@
           269
         ],
         "confidence": 1.0,
-        "elapsed_ms": 6.882417015731335,
+        "elapsed_ms": 6.027125054970384,
         "structural_handle": {
           "point": [
             480,
@@ -306,7 +306,7 @@
             912,
             17
           ],
-          "target_fingerprint": "03d60a4b6551f2dccf28e0fbd3d5f6f285104768f5361fb158816eca6be890f9",
+          "target_fingerprint": "1be120614ad06c77ba73ea3355130ffab7899e27ea10d3b7ae538852bd427160",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -339,11 +339,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-374752b2bf0341e1824851fc752b7b3b",
+        "receipt_id": "playwright-4219af213872400399d2752e9f549b15",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "03d60a4b6551f2dccf28e0fbd3d5f6f285104768f5361fb158816eca6be890f9",
-        "delivered_at": "2026-07-25T17:43:31.831950+00:00",
+        "target_fingerprint": "1be120614ad06c77ba73ea3355130ffab7899e27ea10d3b7ae538852bd427160",
+        "delivered_at": "2026-07-25T17:47:05.036330+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -352,7 +352,7 @@
       "error": null,
       "before_png": "steps/step_003_before.png",
       "after_png": "steps/step_003_after.png",
-      "elapsed_ms": 374.8166661243886
+      "elapsed_ms": 371.7954170424491
     },
     {
       "step_id": "step_004",
@@ -381,7 +381,7 @@
       "error": null,
       "before_png": "steps/step_004_before.png",
       "after_png": "steps/step_004_after.png",
-      "elapsed_ms": 463.56287505477667
+      "elapsed_ms": 465.4932499397546
     },
     {
       "step_id": "step_005",
@@ -396,7 +396,7 @@
           457
         ],
         "confidence": 1.0,
-        "elapsed_ms": 5.831332877278328,
+        "elapsed_ms": 4.902708111330867,
         "structural_handle": {
           "point": [
             134,
@@ -409,7 +409,7 @@
             220,
             40
           ],
-          "target_fingerprint": "a62c3d321a515731770024c802b51d0f8d2bf70b2e7b1a5706344de890d57bb2",
+          "target_fingerprint": "a8664e356414837716091063245fc5842928c8783f53b844f68e2e485478ff23",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -467,11 +467,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-3d47ccc20a6941ce824f2114570c827c",
+        "receipt_id": "playwright-32587ad95be746db95f0426cd00337ec",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "a62c3d321a515731770024c802b51d0f8d2bf70b2e7b1a5706344de890d57bb2",
-        "delivered_at": "2026-07-25T17:43:32.689199+00:00",
+        "target_fingerprint": "a8664e356414837716091063245fc5842928c8783f53b844f68e2e485478ff23",
+        "delivered_at": "2026-07-25T17:47:05.888334+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -480,7 +480,7 @@
       "error": null,
       "before_png": "steps/step_005_before.png",
       "after_png": "steps/step_005_after.png",
-      "elapsed_ms": 947.6832498330623
+      "elapsed_ms": 1118.8563748728484
     }
   ],
   "success": true,
@@ -494,7 +494,7 @@
   "model_calls": 0,
   "external_network_calls": "observed",
   "est_model_cost_usd": 0.0,
-  "total_ms": 4038.5632920078933,
+  "total_ms": 3835.078375181183,
   "identity_applicable_steps": 5,
   "identity_armed_steps": 5,
   "identity_unarmed": [],

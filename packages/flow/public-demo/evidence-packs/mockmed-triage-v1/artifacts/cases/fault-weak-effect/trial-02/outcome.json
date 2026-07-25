@@ -1,6 +1,6 @@
 {
   "case_id": "fault-weak-effect",
-  "duration_ms": 9843.56570802629,
+  "duration_ms": 8790.657749865204,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -34,7 +34,7 @@
   "observed_outcome": "HALTED",
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "c5bfa5396ccd36dcae1ce8b6ca7f136898dba17c8f892c75ca9844fdf4ea3dc1",
+  "report_sha256": "a62ded23484e7eb555b1f3041503bdb78ed6ff4cdab009a16cb796b21f1bcda3",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,
   "silent_incorrect_success": false,

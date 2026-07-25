@@ -1,6 +1,6 @@
 {
   "case_id": "fault-missing-effect",
-  "duration_ms": 8686.090624891222,
+  "duration_ms": 8774.491708027199,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -34,7 +34,7 @@
   "observed_outcome": "HALTED",
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "27197db52de8fdc88e49723a01d0bd969205c18d9720426039ca735cfb2708d8",
+  "report_sha256": "6afd1bdbebe933411661dfbab4dd87d18e88f6e014ec9137dd2c16f0db786e53",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,
   "silent_incorrect_success": false,

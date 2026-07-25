@@ -48,9 +48,9 @@
       "results": [
         {
           "attestation_key_id": "public-demo-headless-runner",
-          "attestation_signature": "KS6kVxTh5emmv+pIli4I9swaLpnR/SynWQyLRQvGn1nwiEx4r7xYUjWNCCpaoHS3QRhZy46JMkk4DnAOQ0kPCQ==",
+          "attestation_signature": "uUOmnr5pj1EwomCLOUi0WZ/TLTQQXTRZEV1P8jtIU3G8UTez1MCOlN48TEsmBe7yZAeg+Vo7cBVGAsPsvDm2Aw==",
           "case_id": "fault-ambiguity",
-          "completed_at": "2026-07-25T17:43:42.014101+00:00",
+          "completed_at": "2026-07-25T17:47:15.124958+00:00",
           "detail_code": "fault-ambiguity.three-trial-contract",
           "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
           "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
@@ -58,17 +58,17 @@
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-ambiguity/trial-01/run/report.json",
-              "sha256": "2512b8d9e4c14df1fd38f86eab18057c4ba56806acb6807c870c3657a355c091"
+              "sha256": "74986c72b6d04c81ec3ec781a9d6f203553d5657c114a9649734da5489161b67"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-ambiguity/trial-02/run/report.json",
-              "sha256": "bc2f0995db8e768462cdc1f0c1c43a1b956d4f3280dcc10643646ed6246bca59"
+              "sha256": "58866879d1f61049927609ec341871ef90396aca07996c04504d153d92b675c4"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-ambiguity/trial-03/run/report.json",
-              "sha256": "a83a8a3146316ea44e25a2c256e2ede1a9f85eca9b5cd3c1178f06abaee47fd6"
+              "sha256": "2a3cc12faaee8987c9e3c20b7575935e09ddff7e9426b4121336160b57422ea4"
             },
             {
               "kind": "effect",
@@ -87,8 +87,8 @@
             }
           ],
           "observed_outcome": "halted",
-          "project_contract_sha256": "fb8295dc1d60c271b91bd4f138a2be3d6822da58cb77518397ddcf161a851dcc",
-          "project_id": "18fcaf17-457a-4d7a-961d-138bb33cbe89",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
           "project_revision": 12,
           "runner_capabilities": [
             "headless_chromium",
@@ -98,7 +98,7 @@
           "runner_id": "openadapt-flow/public-demo-headless",
           "runtime_version": "1.22.0",
           "status": "passed",
-          "workflow_contract_sha256": "86afe7906fcab7ee7f08136dbea31678f02d6b73e0c229ad5b45a3e6b0e9adeb"
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
         }
       ]
     },
@@ -112,9 +112,9 @@
       "results": [
         {
           "attestation_key_id": "public-demo-headless-runner",
-          "attestation_signature": "jDZAJmBsNwAM+gNm/jKPMkJXQ6e9l4jlvS/wILpfxYYCQZ/o4ROsGVfnXb6F8M82/IaoZjxJV82ZE+XQLw6oDg==",
+          "attestation_signature": "I6QAlPrY221zJSiTdVkOPOaTQLo1VV4NhEeq6OetnTzX+Jqns700/I6LE0qONP2OZgz6UuboViDSyVgGq9UuCQ==",
           "case_id": "fault-wrong-identity",
-          "completed_at": "2026-07-25T17:43:45.507438+00:00",
+          "completed_at": "2026-07-25T17:47:19.037898+00:00",
           "detail_code": "fault-wrong-identity.three-trial-contract",
           "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
           "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
@@ -122,17 +122,17 @@
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-wrong-identity/trial-01/run/report.json",
-              "sha256": "8c5103cbeec4168c3e95466800bfd9d30bfe57dda75f131373147afd0ea503a4"
+              "sha256": "ed06ffa2c5bacce6f323ce0c64fc8af3d1b5c4039c50bff45b2626c465ceb387"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-wrong-identity/trial-02/run/report.json",
-              "sha256": "a3e610be7bcb283d0f5aa888bbd92558875027d7f212335a0555b7b60b6a9e6b"
+              "sha256": "7689976a15d82fba1c2392121b740d8863c4ff7a9302e756605f1aa4dd016993"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-wrong-identity/trial-03/run/report.json",
-              "sha256": "f639cbbc03cc1c5215130fa3807cbb30131c14788a86acb3437ad709c74d4980"
+              "sha256": "2d5f01bd01327a391083494abffbd6473358c58a82f1dff0ff8dda5fedfc5ff2"
             },
             {
               "kind": "effect",
@@ -151,8 +151,8 @@
             }
           ],
           "observed_outcome": "halted",
-          "project_contract_sha256": "fb8295dc1d60c271b91bd4f138a2be3d6822da58cb77518397ddcf161a851dcc",
-          "project_id": "18fcaf17-457a-4d7a-961d-138bb33cbe89",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
           "project_revision": 12,
           "runner_capabilities": [
             "headless_chromium",
@@ -162,7 +162,7 @@
           "runner_id": "openadapt-flow/public-demo-headless",
           "runtime_version": "1.22.0",
           "status": "passed",
-          "workflow_contract_sha256": "86afe7906fcab7ee7f08136dbea31678f02d6b73e0c229ad5b45a3e6b0e9adeb"
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
         }
       ]
     },
@@ -176,9 +176,9 @@
       "results": [
         {
           "attestation_key_id": "public-demo-headless-runner",
-          "attestation_signature": "SMnAvkJyCRAj5oNOAZTvJ6XBD4yVFYF3YtGhIBFOcgNLpCYdquf0zpxPp2Nkw+WNlurMvxe+3afP9AXdWbNYCQ==",
+          "attestation_signature": "ertXCxc9VbirZiOyf2O6edXZUYz2yGnf5bxB16DCQtkJPH055n8GaxTkJKCdnzOwWtYYsMKLiAMwOGn3PyG+Aw==",
           "case_id": "fault-stale-identity",
-          "completed_at": "2026-07-25T17:43:49.229703+00:00",
+          "completed_at": "2026-07-25T17:47:23.543249+00:00",
           "detail_code": "fault-stale-identity.three-trial-contract",
           "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
           "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
@@ -186,17 +186,17 @@
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-stale-identity/trial-01/run/report.json",
-              "sha256": "a65d66628e341b02921aec69235a5b2e99a364aa9e2576d095c6db1f97826a6e"
+              "sha256": "48a3419a3b9ae758aeddebc180905c67e0b867775a438466677f3005fafaeb29"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-stale-identity/trial-02/run/report.json",
-              "sha256": "2cc3e7319b25f8d4f7953feba4f9db93987d56284486de7e26f9e6ccae3c2551"
+              "sha256": "4d97a3f308a1f911ea1f61ce46f086d96aeed89e93d2c4477f48cbbab6a6f0dc"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-stale-identity/trial-03/run/report.json",
-              "sha256": "9feb9f714d6e47bb8c7f95f45d3f695bd54355f3ed16a5c389047d45bc592d4e"
+              "sha256": "537ba9ee1244a5d915efa4976ffdf595a1eb8e2e09dffb42f25417e68dd8fd53"
             },
             {
               "kind": "effect",
@@ -215,8 +215,8 @@
             }
           ],
           "observed_outcome": "halted",
-          "project_contract_sha256": "fb8295dc1d60c271b91bd4f138a2be3d6822da58cb77518397ddcf161a851dcc",
-          "project_id": "18fcaf17-457a-4d7a-961d-138bb33cbe89",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
           "project_revision": 12,
           "runner_capabilities": [
             "headless_chromium",
@@ -226,7 +226,7 @@
           "runner_id": "openadapt-flow/public-demo-headless",
           "runtime_version": "1.22.0",
           "status": "passed",
-          "workflow_contract_sha256": "86afe7906fcab7ee7f08136dbea31678f02d6b73e0c229ad5b45a3e6b0e9adeb"
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
         }
       ]
     },
@@ -240,9 +240,9 @@
       "results": [
         {
           "attestation_key_id": "public-demo-headless-runner",
-          "attestation_signature": "3Tk2DpFNGSaXok1maJiOHDXQvvjsUu5fryoE6UtaxRLKCgNONNaJTlcCc1j7OiTfkYoFF4Wjujd75eVbYcdWCw==",
+          "attestation_signature": "+cxapJEWNvtP0ZZF//MrmEk0MFWw3EGnFkfXgDrZbMDTmearuMGn2JLDmYdV/Wx7MmrN1TcYSPVFWjkPYT7RBw==",
           "case_id": "fault-weak-effect",
-          "completed_at": "2026-07-25T17:44:21.157952+00:00",
+          "completed_at": "2026-07-25T17:47:54.956121+00:00",
           "detail_code": "fault-weak-effect.three-trial-contract",
           "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
           "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
@@ -250,17 +250,17 @@
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-weak-effect/trial-01/run/report.json",
-              "sha256": "aab49325a8f40c7a352317ea54b200ebf764e2eb7780ca983b42e2bc48a30bfc"
+              "sha256": "81c547d418928f12689060ca9894f2527cfdc5e868535598ffbadd5bbebed1c0"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-weak-effect/trial-02/run/report.json",
-              "sha256": "c5bfa5396ccd36dcae1ce8b6ca7f136898dba17c8f892c75ca9844fdf4ea3dc1"
+              "sha256": "a62ded23484e7eb555b1f3041503bdb78ed6ff4cdab009a16cb796b21f1bcda3"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-weak-effect/trial-03/run/report.json",
-              "sha256": "8fd76596296ac4a2daa21b08f4aad9ee6eada6733a6ea6e497be522f0563cf0e"
+              "sha256": "367862f0153857358692edd1dc5c7bc1ccdc7588b93156ef658905634d1c937b"
             },
             {
               "kind": "effect",
@@ -279,8 +279,8 @@
             }
           ],
           "observed_outcome": "halted",
-          "project_contract_sha256": "fb8295dc1d60c271b91bd4f138a2be3d6822da58cb77518397ddcf161a851dcc",
-          "project_id": "18fcaf17-457a-4d7a-961d-138bb33cbe89",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
           "project_revision": 12,
           "runner_capabilities": [
             "headless_chromium",
@@ -290,7 +290,7 @@
           "runner_id": "openadapt-flow/public-demo-headless",
           "runtime_version": "1.22.0",
           "status": "passed",
-          "workflow_contract_sha256": "86afe7906fcab7ee7f08136dbea31678f02d6b73e0c229ad5b45a3e6b0e9adeb"
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
         }
       ]
     },
@@ -304,9 +304,9 @@
       "results": [
         {
           "attestation_key_id": "public-demo-headless-runner",
-          "attestation_signature": "eaoLUWP0h7UX5RDs5y61vTNQWStWyko0gdPV27oIqp+LHbo+djy0ilT1Yv6oD8VOkm8WTijgeYj4x5N4MiUVCw==",
+          "attestation_signature": "u0ezOXM8QT39GwkaRmWJvGG2D2FSW/rJEWBKt/oi7ecDdkAoAe7YS+faqoG/KTaO1qn2dIJxpscucK1LuMKVDw==",
           "case_id": "fault-missing-effect",
-          "completed_at": "2026-07-25T17:44:51.280076+00:00",
+          "completed_at": "2026-07-25T17:48:25.038175+00:00",
           "detail_code": "fault-missing-effect.three-trial-contract",
           "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
           "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
@@ -314,17 +314,17 @@
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-missing-effect/trial-01/run/report.json",
-              "sha256": "584f0e271ee803b35693a72a530fa0eff25212569854fed7c8d42ec45990deec"
+              "sha256": "6ee3f3a9d4885fc985459db9bf61428ffef3093cb0530c1c744e922b3dd8e0f7"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-missing-effect/trial-02/run/report.json",
-              "sha256": "27197db52de8fdc88e49723a01d0bd969205c18d9720426039ca735cfb2708d8"
+              "sha256": "6afd1bdbebe933411661dfbab4dd87d18e88f6e014ec9137dd2c16f0db786e53"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/fault-missing-effect/trial-03/run/report.json",
-              "sha256": "c7eedbd07904ae16ef8eeb44746e28f4d91be09372e705df1877d843d0eafaa9"
+              "sha256": "8db86671e4a201a7f5e23b8ab18227273c786c01e167370c5ce93a7bbc161a40"
             },
             {
               "kind": "effect",
@@ -343,8 +343,8 @@
             }
           ],
           "observed_outcome": "halted",
-          "project_contract_sha256": "fb8295dc1d60c271b91bd4f138a2be3d6822da58cb77518397ddcf161a851dcc",
-          "project_id": "18fcaf17-457a-4d7a-961d-138bb33cbe89",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
           "project_revision": 12,
           "runner_capabilities": [
             "headless_chromium",
@@ -354,7 +354,7 @@
           "runner_id": "openadapt-flow/public-demo-headless",
           "runtime_version": "1.22.0",
           "status": "passed",
-          "workflow_contract_sha256": "86afe7906fcab7ee7f08136dbea31678f02d6b73e0c229ad5b45a3e6b0e9adeb"
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
         }
       ]
     },
@@ -368,9 +368,9 @@
       "results": [
         {
           "attestation_key_id": "public-demo-headless-runner",
-          "attestation_signature": "nyMb7w+r73SZwpQTL6BP/Us2XWPWjuFMVGodBjuLvmF575vxUKuRF2KfJOq3GkyGM+Z8ZuXHTplUnwhegK+kDg==",
+          "attestation_signature": "MqR0qSXD5tFzV4v65S1PrXqPB3ZEV4+C9BA/oiye1jJk6yqPlW9uwwVbbxVSTtg7m0b1J6oxVnYCXfYFxiFWDg==",
           "case_id": "representative",
-          "completed_at": "2026-07-25T17:43:38.205375+00:00",
+          "completed_at": "2026-07-25T17:47:11.543347+00:00",
           "detail_code": "representative.three-trial-contract",
           "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
           "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
@@ -378,17 +378,17 @@
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/representative/trial-01/run/report.json",
-              "sha256": "38fa886cf84dcbc00e6431766c8be79ffbcef6353f64a50b00dc8f4ce182230f"
+              "sha256": "79bd5810918bb6e71951dd7ce159736f31844b94333e249e5b001de5a5162672"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/representative/trial-02/run/report.json",
-              "sha256": "d150b03193c1b7844749cfdd74633f9bcf17bcb9e97e5b00475563722013a2c1"
+              "sha256": "cd2fb589653040363ddde5ca0b162811c3be97ec03e7bcd0b555967fdee5218b"
             },
             {
               "kind": "run_report",
               "relative_path": "artifacts/cases/representative/trial-03/run/report.json",
-              "sha256": "7406fd12dd56823fb16fb8cad8b71039f07fdde30d6bca43ab9c7b038cac2924"
+              "sha256": "f7f3c4cd74903f3e5d48767dd4f24dfe5eaf1d3289f42e073e56399fcb4bf31b"
             },
             {
               "kind": "effect",
@@ -407,8 +407,8 @@
             }
           ],
           "observed_outcome": "verified",
-          "project_contract_sha256": "fb8295dc1d60c271b91bd4f138a2be3d6822da58cb77518397ddcf161a851dcc",
-          "project_id": "18fcaf17-457a-4d7a-961d-138bb33cbe89",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
           "project_revision": 12,
           "runner_capabilities": [
             "headless_chromium",
@@ -418,12 +418,12 @@
           "runner_id": "openadapt-flow/public-demo-headless",
           "runtime_version": "1.22.0",
           "status": "passed",
-          "workflow_contract_sha256": "86afe7906fcab7ee7f08136dbea31678f02d6b73e0c229ad5b45a3e6b0e9adeb"
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
         }
       ]
     }
   ],
-  "created_at": "2026-07-25T17:43:24.688211+00:00",
+  "created_at": "2026-07-25T17:46:57.746347+00:00",
   "effect_policies": [
     {
       "effect_contract_hash": "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b",
@@ -460,23 +460,23 @@
     }
   },
   "last_certification": {
-    "certified_at": "2026-07-25T17:44:51.314580+00:00",
+    "certified_at": "2026-07-25T17:48:25.066701+00:00",
     "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
     "passed": true,
     "policy_name": "clinical-write",
-    "project_contract_sha256": "fb8295dc1d60c271b91bd4f138a2be3d6822da58cb77518397ddcf161a851dcc",
+    "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
     "project_revision": 12,
-    "report_sha256": "248d11f63c3563a9bf375d4a5c0f37a06a45240cdf676e12f54cb1421123e7c8",
-    "workflow_contract_sha256": "86afe7906fcab7ee7f08136dbea31678f02d6b73e0c229ad5b45a3e6b0e9adeb"
+    "report_sha256": "d17eadf90cedc84c71fa64a8a236f85c8ef6b9087350cd97d60aca4f81d220db",
+    "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
   },
   "minimum_effect_tier": 1,
-  "previous_revision_sha256": "277b695b93aaf1e08f56840db0a2998c04280a76878570d5666645f2baa5c3a1",
-  "project_id": "18fcaf17-457a-4d7a-961d-138bb33cbe89",
+  "previous_revision_sha256": "daef0cc2110ecad3d241c1d099b617778236d81b2722fc5ea0100f4964e193e6",
+  "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
   "requalification_conditions": [],
   "revision": 12,
   "schema_version": "openadapt.qualification-project/v1",
   "trusted_runner_keys": {
-    "public-demo-headless-runner": "2I6TpFOlISgOeoRXgAMCHwTZnPRB7dfK1asjbqT2TP8="
+    "public-demo-headless-runner": "mrUFxhq05PCi7y0ovSawDo+I5I60abxxM0oRSHtgC6k="
   },
-  "updated_at": "2026-07-25T17:44:51.303881+00:00"
+  "updated_at": "2026-07-25T17:48:25.057173+00:00"
 }

@@ -1,6 +1,6 @@
 {
   "case_id": "fault-wrong-identity",
-  "duration_ms": 152.4219170678407,
+  "duration_ms": 168.9318330027163,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -39,7 +39,7 @@
   "observed_outcome": "HALTED",
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "8c5103cbeec4168c3e95466800bfd9d30bfe57dda75f131373147afd0ea503a4",
+  "report_sha256": "ed06ffa2c5bacce6f323ce0c64fc8af3d1b5c4039c50bff45b2626c465ceb387",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,
   "silent_incorrect_success": false,

@@ -1,6 +1,6 @@
 {
   "workflow_name": "mockmed-triage",
-  "started_at": "2026-07-25T17:44:21.549858+00:00",
+  "started_at": "2026-07-25T17:47:55.271932+00:00",
   "execution_profile": "standard",
   "execution_outcome": "HALTED",
   "production_eligible": false,
@@ -33,14 +33,14 @@
     "compensation_actions": 0
   },
   "execution_target_kind": "web",
-  "execution_origin": "http://127.0.0.1:57712/",
-  "execution_entry_url": "http://127.0.0.1:57712/?fault=optimistic&idempotency=demo#tasks",
-  "bundle_content_digest": "4691b56bac8942ab010b25f47dc5434a0bd4be36a687d16fa8a08e6d9f082b40",
+  "execution_origin": "http://127.0.0.1:59433/",
+  "execution_entry_url": "http://127.0.0.1:59433/?fault=optimistic&idempotency=demo#tasks",
+  "bundle_content_digest": "b8bb8a1c9c9da482f6276403314b976b94f9bdec55726c425a1351df6aade6df",
   "source_recording_sha256": null,
   "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
-  "governed_authorization_id": "682687def1fd4b63b9c9d3392b549c7f",
+  "governed_authorization_id": "33261cb73c814f688f6e988d40f4abd2",
   "governed_approval_source": "public-demo-qualified-campaign",
-  "governed_authorization_created_at": "2026-07-25T17:44:21.549074+00:00",
+  "governed_authorization_created_at": "2026-07-25T17:47:55.271186+00:00",
   "governed_policy_name": "clinical-write",
   "governed_minimum_effect_tier": 1,
   "governed_runtime_inputs_digest": "342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1",
@@ -70,7 +70,7 @@
           186
         ],
         "confidence": 1.0,
-        "elapsed_ms": 7.124583004042506,
+        "elapsed_ms": 7.557125063613057,
         "structural_handle": {
           "point": [
             776,
@@ -83,7 +83,7 @@
             90,
             36
           ],
-          "target_fingerprint": "6e17b7ed0ebe541f48a217c1992c470fbc724f3545ac94bacf8daa62809137aa",
+          "target_fingerprint": "131f6f5a4dd321ef738c54e3dc49e6059289f3cbc73cf82f6aedf15e5e28f329",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -116,11 +116,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-63331e1db68244f7bac06550bcd148e7",
+        "receipt_id": "playwright-3b0b199ad1824553890708f269f02f1d",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "6e17b7ed0ebe541f48a217c1992c470fbc724f3545ac94bacf8daa62809137aa",
-        "delivered_at": "2026-07-25T17:44:21.845206+00:00",
+        "target_fingerprint": "131f6f5a4dd321ef738c54e3dc49e6059289f3cbc73cf82f6aedf15e5e28f329",
+        "delivered_at": "2026-07-25T17:47:55.532439+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -129,7 +129,7 @@
       "error": null,
       "before_png": "steps/step_000_before.png",
       "after_png": "steps/step_000_after.png",
-      "elapsed_ms": 931.5889999270439
+      "elapsed_ms": 802.2994580678642
     },
     {
       "step_id": "step_001",
@@ -144,7 +144,7 @@
           159
         ],
         "confidence": 1.0,
-        "elapsed_ms": 11.997750028967857,
+        "elapsed_ms": 5.483499960973859,
         "structural_handle": {
           "point": [
             114,
@@ -157,7 +157,7 @@
             180,
             40
           ],
-          "target_fingerprint": "e68c94a403de172b93d28873fcd68d011ad55d411a837c145bdbfa537f3887cd",
+          "target_fingerprint": "2b4737884b8273f0a028a2d724f21df6ac32054dba6330d0d0bfc315c9e17621",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -190,11 +190,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-49b8af3cc03a42aeb2f34d15cb87e1e2",
+        "receipt_id": "playwright-42dabb034ee2426bad4a9b8b82f794c8",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "e68c94a403de172b93d28873fcd68d011ad55d411a837c145bdbfa537f3887cd",
-        "delivered_at": "2026-07-25T17:44:22.700096+00:00",
+        "target_fingerprint": "2b4737884b8273f0a028a2d724f21df6ac32054dba6330d0d0bfc315c9e17621",
+        "delivered_at": "2026-07-25T17:47:56.318170+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -203,7 +203,7 @@
       "error": null,
       "before_png": "steps/step_001_before.png",
       "after_png": "steps/step_001_after.png",
-      "elapsed_ms": 884.8631249275059
+      "elapsed_ms": 798.9967919420451
     },
     {
       "step_id": "step_002",
@@ -218,7 +218,7 @@
           214
         ],
         "confidence": 1.0,
-        "elapsed_ms": 7.675834000110626,
+        "elapsed_ms": 6.94924988783896,
         "structural_handle": {
           "point": [
             85,
@@ -231,7 +231,7 @@
             120,
             38
           ],
-          "target_fingerprint": "c208b0dfb8a16572c31179d6b2f50453eae071d3a3f1cce262a0257ee068127b",
+          "target_fingerprint": "73887df1d8af8addc4336d9ce4ad9485b896800e2548cb1dff9e4870c194a004",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -264,11 +264,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-41658a20d0544503b7f622ee5beaed80",
+        "receipt_id": "playwright-d2f4ba4ad68548a6a721d57cacc72e0a",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "c208b0dfb8a16572c31179d6b2f50453eae071d3a3f1cce262a0257ee068127b",
-        "delivered_at": "2026-07-25T17:44:23.582203+00:00",
+        "target_fingerprint": "73887df1d8af8addc4336d9ce4ad9485b896800e2548cb1dff9e4870c194a004",
+        "delivered_at": "2026-07-25T17:47:57.092671+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -277,7 +277,7 @@
       "error": null,
       "before_png": "steps/step_002_before.png",
       "after_png": "steps/step_002_after.png",
-      "elapsed_ms": 389.16550017893314
+      "elapsed_ms": 388.4624589700252
     },
     {
       "step_id": "step_003",
@@ -292,7 +292,7 @@
           269
         ],
         "confidence": 1.0,
-        "elapsed_ms": 6.211375119164586,
+        "elapsed_ms": 9.268875000998378,
         "structural_handle": {
           "point": [
             480,
@@ -305,7 +305,7 @@
             912,
             17
           ],
-          "target_fingerprint": "b34d2269a66b8501ddab019e582e93441b2e1da61b1ca7a9e0261f31c4f921bf",
+          "target_fingerprint": "0ee5461cef192a5c377ded588dec91adbc6d63b96d6af83acb09ba42c0f2d679",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -338,11 +338,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-f2cfe10f95b147ada7bc8e2982dde7ca",
+        "receipt_id": "playwright-ee37744ed0a24f1aa410feda40fa259a",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "b34d2269a66b8501ddab019e582e93441b2e1da61b1ca7a9e0261f31c4f921bf",
-        "delivered_at": "2026-07-25T17:44:23.982868+00:00",
+        "target_fingerprint": "0ee5461cef192a5c377ded588dec91adbc6d63b96d6af83acb09ba42c0f2d679",
+        "delivered_at": "2026-07-25T17:47:57.467828+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -351,7 +351,7 @@
       "error": null,
       "before_png": "steps/step_003_before.png",
       "after_png": "steps/step_003_after.png",
-      "elapsed_ms": 433.0800829920918
+      "elapsed_ms": 386.7854999843985
     },
     {
       "step_id": "step_004",
@@ -380,7 +380,7 @@
       "error": null,
       "before_png": "steps/step_004_before.png",
       "after_png": "steps/step_004_after.png",
-      "elapsed_ms": 530.8779999613762
+      "elapsed_ms": 487.2019998729229
     },
     {
       "step_id": "step_005",
@@ -395,7 +395,7 @@
           457
         ],
         "confidence": 1.0,
-        "elapsed_ms": 21.928624948486686,
+        "elapsed_ms": 4.991291090846062,
         "structural_handle": {
           "point": [
             134,
@@ -408,7 +408,7 @@
             220,
             40
           ],
-          "target_fingerprint": "dffac4f082684eaa777ddd2edbab479062c42bf319a176aefd0ec18db7aec0bf",
+          "target_fingerprint": "810ef1598da6eb70256219eae7e6465a787869642dd94c6df05061328a1580c1",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -455,11 +455,11 @@
       "actuation": "dom",
       "delivery_receipt": {
         "status": "delivered",
-        "receipt_id": "playwright-7662199ce1624b38abc30d83c74327ad",
+        "receipt_id": "playwright-973dd14505de41b989a13d7dd16376b5",
         "operation": "dom_click",
         "native": false,
-        "target_fingerprint": "dffac4f082684eaa777ddd2edbab479062c42bf319a176aefd0ec18db7aec0bf",
-        "delivered_at": "2026-07-25T17:44:25.007717+00:00",
+        "target_fingerprint": "810ef1598da6eb70256219eae7e6465a787869642dd94c6df05061328a1580c1",
+        "delivered_at": "2026-07-25T17:47:58.402460+00:00",
         "outcome_verified": false
       },
       "postcondition_drift_rescues": [],
@@ -468,7 +468,7 @@
       "error": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
       "before_png": "steps/step_005_before.png",
       "after_png": "steps/step_005_after.png",
-      "elapsed_ms": 6120.480708079413
+      "elapsed_ms": 6114.39587501809
     }
   ],
   "success": false,
@@ -504,7 +504,7 @@
   "model_calls": 0,
   "external_network_calls": "observed",
   "est_model_cost_usd": 0.0,
-  "total_ms": 9298.821541946381,
+  "total_ms": 8992.109542014077,
   "identity_applicable_steps": 5,
   "identity_armed_steps": 5,
   "identity_unarmed": [],

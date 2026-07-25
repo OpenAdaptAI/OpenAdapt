@@ -1,6 +1,6 @@
 {
   "case_id": "fault-stale-identity",
-  "duration_ms": 212.03337493352592,
+  "duration_ms": 217.77166705578566,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -37,7 +37,7 @@
   "observed_outcome": "HALTED",
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "9feb9f714d6e47bb8c7f95f45d3f695bd54355f3ed16a5c389047d45bc592d4e",
+  "report_sha256": "537ba9ee1244a5d915efa4976ffdf595a1eb8e2e09dffb42f25417e68dd8fd53",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,
   "silent_incorrect_success": false,

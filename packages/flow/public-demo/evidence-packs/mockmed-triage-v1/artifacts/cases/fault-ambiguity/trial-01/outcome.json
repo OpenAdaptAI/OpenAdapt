@@ -1,6 +1,6 @@
 {
   "case_id": "fault-ambiguity",
-  "duration_ms": 144.74537479691207,
+  "duration_ms": 157.5716668739915,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -38,7 +38,7 @@
   "observed_outcome": "HALTED",
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "2512b8d9e4c14df1fd38f86eab18057c4ba56806acb6807c870c3657a355c091",
+  "report_sha256": "74986c72b6d04c81ec3ec781a9d6f203553d5657c114a9649734da5489161b67",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,
   "silent_incorrect_success": false,

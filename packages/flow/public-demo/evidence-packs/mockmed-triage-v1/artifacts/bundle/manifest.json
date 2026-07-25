@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "content_digest": "15249dfe5b37387cb7bae007fe33b9a039315364e74027d7be1e233629681efa",
+  "content_digest": "9fa2d01fa442f94ae248e4d95fd8053dd89808530835c9c4256ad7d32511bb4c",
   "file_hashes": {
     "templates/step_000.png": "46a75b5d63ceaad4bee942ccf2a6ca3d2b4f6327509df7eff2cc7ddb2c9fd389",
     "templates/step_000_expect.png": "337e403fec476cc955bcf5f1d96902119d9c2fadc03e201c0c2fbc2475d03646",
@@ -11,17 +11,17 @@
     "templates/step_003.png": "2cb01de3e45c7c6cd6526f1b6f9c1a4f86bee1a5e4f8e3f6fbf7150470cf5f2c",
     "templates/step_003_expect.png": "68cd40d6bd0abdf81beb40dd4202bac784a4b55492f803cdd5fb1e7ab8f76941",
     "templates/step_005.png": "5d8163520ba8355f44ffe0cd06a26be6bfe5d6660bcff1395dc82d4da3aa0ac1",
-    "templates/step_005_expect.png": "edfe747742665a647eb36f21a903785e240295beed9f48418b1bbc9c609a0198"
+    "templates/step_005_expect.png": "0919dca8fe883ad52eae6359f9da3494cb57c68e006ea4ba314d61e15787ea47"
   },
   "provenance": {
     "compiler_version": "1.22.0",
     "source_recording_sha256": null,
     "compiler_config_sha256": "479f143ba6970af144553f82f66990463129ee6606852260478c9c2a79b7f91d",
-    "created_at": "2026-07-25T17:43:24.678688+00:00",
+    "created_at": "2026-07-25T17:46:57.737378+00:00",
     "policy_name": "clinical-write",
     "certified": true,
     "certification_status": "certified",
-    "certified_at": "2026-07-25T17:44:51.314598+00:00",
+    "certified_at": "2026-07-25T17:48:25.066715+00:00",
     "expires_at": null
   },
   "encrypted": false

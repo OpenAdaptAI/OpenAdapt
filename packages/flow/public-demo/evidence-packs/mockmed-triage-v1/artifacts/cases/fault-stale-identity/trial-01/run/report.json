@@ -1,6 +1,6 @@
 {
   "workflow_name": "mockmed-triage",
-  "started_at": "2026-07-25T17:43:45.847541+00:00",
+  "started_at": "2026-07-25T17:47:19.451111+00:00",
   "execution_profile": "standard",
   "execution_outcome": "HALTED",
   "production_eligible": false,
@@ -31,14 +31,14 @@
     "compensation_actions": 0
   },
   "execution_target_kind": "web",
-  "execution_origin": "http://127.0.0.1:57712/",
-  "execution_entry_url": "http://127.0.0.1:57712/?fault=ok&idempotency=demo#tasks",
-  "bundle_content_digest": "4691b56bac8942ab010b25f47dc5434a0bd4be36a687d16fa8a08e6d9f082b40",
+  "execution_origin": "http://127.0.0.1:59433/",
+  "execution_entry_url": "http://127.0.0.1:59433/?fault=ok&idempotency=demo#tasks",
+  "bundle_content_digest": "b8bb8a1c9c9da482f6276403314b976b94f9bdec55726c425a1351df6aade6df",
   "source_recording_sha256": null,
   "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
-  "governed_authorization_id": "930872fc0a1342f6903bad42ee0fdc0b",
+  "governed_authorization_id": "3237dff13e9240e99f8724ee417b7adf",
   "governed_approval_source": "public-demo-qualified-campaign",
-  "governed_authorization_created_at": "2026-07-25T17:43:45.846848+00:00",
+  "governed_authorization_created_at": "2026-07-25T17:47:19.450056+00:00",
   "governed_policy_name": "clinical-write",
   "governed_minimum_effect_tier": 1,
   "governed_runtime_inputs_digest": "342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1",
@@ -68,7 +68,7 @@
           186
         ],
         "confidence": 1.0,
-        "elapsed_ms": 10.840208968147635,
+        "elapsed_ms": 7.272666785866022,
         "structural_handle": {
           "point": [
             781,
@@ -81,7 +81,7 @@
             90,
             36
           ],
-          "target_fingerprint": "2a49dbc719c4806ce4715cc1ca774521b825fe76164c9e9456817aac1c7923a8",
+          "target_fingerprint": "c3260034f53e439e1fb90f4a7d79ac8a68394d52c97247e15f6e296ccde62411",
           "candidate_count": 1,
           "supported_operations": [
             "dom_click",
@@ -119,7 +119,7 @@
       "error": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Changed IdentityKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
       "before_png": "steps/step_000_before.png",
       "after_png": "steps/step_000_after.png",
-      "elapsed_ms": 218.73425017111003
+      "elapsed_ms": 222.70316700451076
     }
   ],
   "success": false,
@@ -156,7 +156,7 @@
   "model_calls": 0,
   "external_network_calls": "observed",
   "est_model_cost_usd": 0.0,
-  "total_ms": 224.13141699507833,
+  "total_ms": 226.89024987630546,
   "identity_applicable_steps": 5,
   "identity_armed_steps": 5,
   "identity_unarmed": [],
