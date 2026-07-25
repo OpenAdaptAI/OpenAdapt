@@ -891,7 +891,7 @@ class EngineDispatcher:
         outcome: str | None = None,
         error: str | None = None,
     ) -> dict:
-        from engine.flow_bridge import FlowBridge
+        from engine.flow_bridge import PRECISE_FLOW_OUTCOMES, FlowBridge
 
         report = FlowBridge.read_report(run_dir)
         inferred_returncode = 0 if report.get("success") is True else 1
@@ -952,6 +952,24 @@ class EngineDispatcher:
         if cost is None:
             cost = report.get("est_model_cost_usd")
 
+        outcome_details = None
+        envelope = report.get("outcome_envelope")
+        if outcome in PRECISE_FLOW_OUTCOMES:
+            # FlowBridge validated this exact envelope before classifying the
+            # outcome. Project its bounded evidence contract into the cockpit.
+            if isinstance(envelope, dict):
+                outcome_details = {
+                    "profile": envelope.get("profile"),
+                    "production_eligible": envelope.get("production_eligible"),
+                    "execution_completed": envelope.get("execution_completed"),
+                    "required_contracts": envelope.get("required_contracts"),
+                    "passed_contracts": envelope.get("passed_contracts"),
+                    "evidence_classes": envelope.get("evidence_classes"),
+                    "model_calls": envelope.get("model_calls"),
+                    "external_network_calls": envelope.get("external_network_calls"),
+                    "compensation_actions": envelope.get("compensation_actions"),
+                }
+
         mapped = {
             "ok": outcome in {"VERIFIED", "success"},
             "outcome": outcome,
@@ -963,6 +981,7 @@ class EngineDispatcher:
             "steps": steps,
             "halt": halt_block,
             "metrics": {"duration_s": duration_s, "cost_usd": cost},
+            "outcome_details": outcome_details,
         }
         if error:
             mapped["error"] = error

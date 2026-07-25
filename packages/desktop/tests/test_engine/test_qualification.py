@@ -16,6 +16,7 @@ from openadapt_flow.ir import (  # noqa: E402
     StructuralLocator,
     Workflow,
 )
+from openadapt_flow.qualification import IdentitySignalPolicy  # noqa: E402
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind  # noqa: E402
 from openadapt_flow.traversal import iter_workflow_steps  # noqa: E402
 
@@ -407,13 +408,14 @@ def test_identity_editor_round_trips_exact_normalized_region_and_quorum(
         enforcement="signal_quorum",
         signals=[
             {
-                "field": "patient_id",
+                "key": "record_id",
                 "source": "structured",
                 "match": "exact",
                 "normalizers": [],
+                "extract_pattern": r"patient_id (?P<value>[A-Z0-9-]+)",
             },
             {
-                "field": "patient_banner",
+                "key": "secondary_identifier",
                 "source": "identifier_region",
                 "match": "normalized",
                 "normalizers": ["unicode_nfkc", "collapse_whitespace"],
@@ -427,10 +429,13 @@ def test_identity_editor_round_trips_exact_normalized_region_and_quorum(
     policy = persisted.qualification.identity_policies["save"]
     assert policy.enforcement.value == "signal_quorum"
     assert policy.quorum == 2
-    assert [signal.field for signal in policy.signals] == [
-        "patient_id",
-        "patient_banner",
+    signal_keys = [
+        getattr(signal, "key", getattr(signal, "field", None))
+        for signal in policy.signals
     ]
+    assert [
+        value.value if hasattr(value, "value") else value for value in signal_keys
+    ] == ["record_id", "secondary_identifier"]
     assert policy.signals[0].match.value == "exact"
     assert policy.signals[0].normalizers == []
     assert policy.signals[1].match.value == "normalized"
@@ -448,9 +453,67 @@ def test_identity_editor_round_trips_exact_normalized_region_and_quorum(
         120,
         24,
     ]
-    assert "identity_policy_unenforced" in {
+    refusal_codes = {
         refusal["code"] for refusal in result["report"]["refusals"]
     }
+    if "key" in IdentitySignalPolicy.model_fields:
+        assert "identity_policy_unenforced" not in refusal_codes
+    else:
+        assert "identity_policy_unenforced" in refusal_codes
+
+
+@pytest.mark.skipif(
+    "key" not in IdentitySignalPolicy.model_fields,
+    reason="requires the Flow 1.23 semantic identity contract",
+)
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("application", "reference.application"),
+        ("session", "a" * 64),
+        ("workflow_state", "record.review"),
+    ],
+)
+def test_identity_editor_authors_live_context_expected_values(
+    tmp_path: Path,
+    source: str,
+    expected: str,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(
+            id="save",
+            intent="Save",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="save.png",
+                region=(0, 0, 20, 20),
+                click_point=(10, 10),
+            ),
+        ),
+    )
+    _initialize(bundle)
+
+    result = set_action_identity_policy(
+        bundle,
+        workflow_id="wf-1",
+        step_id="save",
+        enforcement="signal_quorum",
+        signals=[
+            {
+                "key": source,
+                "source": source,
+                "match": "exact",
+                "normalizers": [],
+                "expected_value": expected,
+            }
+        ],
+        quorum=1,
+    )
+
+    signal = result["controls"]["actions"]["save"]["identity"]["policy"]["signals"][0]
+    assert signal["key"] == source
+    assert signal["expected_value"] == expected
 
 
 def test_identity_editor_refuses_unavailable_source_without_mutation(
@@ -481,7 +544,7 @@ def test_identity_editor_refuses_unavailable_source_without_mutation(
             enforcement="signal_quorum",
             signals=[
                 {
-                    "field": "patient_banner",
+                    "key": "record_id",
                     "source": "identifier_region",
                     "match": "exact",
                     "normalizers": [],
@@ -734,10 +797,11 @@ def test_dispatcher_round_trips_editable_identity_and_effect_contracts(
                 "enforcement": "signal_quorum",
                 "signals": [
                     {
-                        "field": "patient_id",
+                        "key": "record_id",
                         "source": "structured",
                         "match": "normalized",
                         "normalizers": ["unicode_nfkc", "casefold"],
+                        "extract_pattern": r"patient_id (?P<value>[A-Z0-9-]+)",
                     }
                 ],
                 "quorum": 1,

@@ -31,6 +31,7 @@ def _precise_report(
         evidence.append("compensation")
     return {
         "success": outcome == "VERIFIED",
+        "model_calls": 0,
         "execution_outcome": outcome,
         "execution_profile": "standard",
         "production_eligible": production_eligible,
@@ -850,6 +851,14 @@ class TestLibraryCommands:
 
         assert result["outcome"] == outcome
         assert result["ok"] is (outcome == "VERIFIED")
+        details = result["outcome_details"]
+        assert details["profile"] == "standard"
+        assert details["production_eligible"] is production_eligible
+        assert details["model_calls"] == 0
+        assert details["external_network_calls"] == "none"
+        assert details["compensation_actions"] == (
+            1 if outcome == "ROLLED_BACK" else 0
+        )
         states = [data["state"] for event, data in events if event == "replay_progress"]
         assert states == ["running", progress_state]
         assert db.list_runs(limit=1)[0]["status"] == outcome

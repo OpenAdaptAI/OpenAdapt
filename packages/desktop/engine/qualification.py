@@ -39,6 +39,7 @@ def _flow_api() -> dict[str, Any]:
     """Load the pinned canonical Flow API only when qualification is used."""
 
     try:
+        import openadapt_flow.qualification as flow_qualification
         from openadapt_flow.ir import Workflow
         from openadapt_flow.policy import evaluate_policy, lint_workflow, load_policy
         from openadapt_flow.qualification import (
@@ -82,6 +83,7 @@ def _flow_api() -> dict[str, Any]:
         "EnvironmentBoundary": EnvironmentBoundary,
         "IdentityEnforcement": IdentityEnforcement,
         "IdentityEvidenceSource": IdentityEvidenceSource,
+        "IdentitySignalKey": getattr(flow_qualification, "IdentitySignalKey", None),
         "IdentityMatchMode": IdentityMatchMode,
         "IdentityNormalizer": IdentityNormalizer,
         "IdentityPolicy": IdentityPolicy,
@@ -229,7 +231,50 @@ def _identity_sources(step) -> list[dict[str, Any]]:
                 "match": "Canonical Flow identity ladder",
             }
         )
+    available_sources = {
+        member.value for member in _flow_api()["IdentityEvidenceSource"]
+    }
+    if "application" in available_sources:
+        sources.append(
+            {
+                "kind": "application",
+                "label": "Live application identity",
+                "match": "Observed immediately before actuation",
+            }
+        )
+    if "session" in available_sources:
+        sources.append(
+            {
+                "kind": "session",
+                "label": "Live session continuity",
+                "match": "Observed immediately before actuation",
+            }
+        )
+    if "workflow_state" in available_sources:
+        sources.append(
+            {
+                "kind": "workflow_state",
+                "label": "Live workflow state",
+                "match": "Observed immediately before actuation",
+            }
+        )
     return sources
+
+
+def _identity_policy_view(identity_policy) -> dict[str, Any] | None:
+    if identity_policy is None:
+        return None
+    payload = identity_policy.model_dump(mode="json")
+    for signal in payload.get("signals", []):
+        # Flow 1.23 closes this field to a semantic key. The compatibility
+        # projection keeps an older qualified project inspectable while the
+        # Desktop release moves atomically to the new runtime.
+        if "key" not in signal and "field" in signal:
+            signal["key"] = signal.pop("field")
+        signal.setdefault("extract_pattern", None)
+        signal.setdefault("expected_value", None)
+        signal.setdefault("params", [])
+    return payload
 
 
 def _expr_view(expr) -> dict[str, Any] | None:
@@ -310,9 +355,7 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
                 "can_arm": bool(sources),
                 "armed": bool(step.identity_armed),
                 "sources": sources,
-                "policy": (
-                    identity_policy.model_dump(mode="json") if identity_policy else None
-                ),
+                "policy": _identity_policy_view(identity_policy),
             },
             "effects": [
                 _effect_view(
@@ -567,43 +610,80 @@ def set_action_identity_policy(
             "Initialize the qualification boundary before setting identity."
         )
     step = _resolve_action(workflow, step_id)
-    retained_sources = _identity_sources(step)
-    if not retained_sources:
+    available_sources = _identity_sources(step)
+    if not available_sources:
         raise QualificationError(
-            "This action has no retained structured identity, identifier region, "
-            "or captured row identity. Record or teach the action with identity "
+            "This action has no retained structured identity or live context "
+            "observation available. Record or teach the target with identity "
             "evidence before arming it."
         )
     try:
         canonical_signals = []
-        retained_by_kind = {source["kind"]: source for source in retained_sources}
+        available_by_kind = {source["kind"]: source for source in available_sources}
+        model_fields = api["IdentitySignalPolicy"].model_fields
         for signal in signals:
             if not isinstance(signal, dict):
                 raise QualificationError("identity signals must be objects")
             source_name = str(signal.get("source") or "")
-            retained = retained_by_kind.get(source_name)
-            if retained is None:
+            available = available_by_kind.get(source_name)
+            if available is None:
                 raise QualificationError(
                     f"identity policy references unavailable evidence: {source_name}"
                 )
-            canonical_signals.append(
-                api["IdentitySignalPolicy"](
-                    field=str(signal.get("field") or ""),
-                    source=api["IdentityEvidenceSource"](source_name),
-                    match=api["IdentityMatchMode"](
-                        str(signal.get("match") or "exact")
-                    ),
-                    normalizers=[
-                        api["IdentityNormalizer"](str(item))
-                        for item in (signal.get("normalizers") or [])
-                    ],
-                    region=(
-                        tuple(retained["region"])
-                        if source_name == "identifier_region"
-                        else None
-                    ),
+            explicit_region = signal.get("region")
+            region = None
+            if source_name == "identifier_region":
+                region = tuple(available["region"])
+                if explicit_region is not None and tuple(explicit_region) != region:
+                    raise QualificationError(
+                        "identifier_region must use the retained qualified region"
+                    )
+            elif source_name == "captured_context" and explicit_region is not None:
+                region = tuple(explicit_region)
+            kwargs: dict[str, Any] = {
+                "source": api["IdentityEvidenceSource"](source_name),
+                "match": api["IdentityMatchMode"](
+                    str(signal.get("match") or "exact")
+                ),
+                "normalizers": [
+                    api["IdentityNormalizer"](str(item))
+                    for item in (signal.get("normalizers") or [])
+                ],
+                "region": region,
+            }
+            if "key" in model_fields:
+                identity_signal_key = api["IdentitySignalKey"]
+                if identity_signal_key is None:
+                    raise QualificationError(
+                        "The bundled Flow runtime cannot author semantic identity keys."
+                    )
+                kwargs.update(
+                    {
+                        "key": identity_signal_key(
+                            str(signal.get("key") or signal.get("field") or "")
+                        ),
+                        "extract_pattern": (
+                            str(signal["extract_pattern"]).strip()
+                            if signal.get("extract_pattern")
+                            else None
+                        ),
+                        "expected_value": (
+                            str(signal["expected_value"]).strip()
+                            if signal.get("expected_value")
+                            else None
+                        ),
+                        "params": [
+                            str(item).strip()
+                            for item in (signal.get("params") or [])
+                            if str(item).strip()
+                        ],
+                    }
                 )
-            )
+            else:
+                kwargs["field"] = str(
+                    signal.get("key") or signal.get("field") or ""
+                )
+            canonical_signals.append(api["IdentitySignalPolicy"](**kwargs))
         identity_policy = api["IdentityPolicy"](
             step_id=step.id,
             enforcement=api["IdentityEnforcement"](enforcement),

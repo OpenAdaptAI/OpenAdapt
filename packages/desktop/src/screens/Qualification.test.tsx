@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CMD, engineInvoke } from "../lib/engine";
 import type { QualificationProject } from "../lib/types";
 import { Qualification } from "./Qualification";
@@ -124,6 +124,7 @@ function projectWithTiers(tiers: Record<string, number>): QualificationProject {
 
 describe("Qualification effect requirements", () => {
   beforeEach(() => mockedEngineInvoke.mockReset());
+  afterEach(cleanup);
 
   it("saves the selected action's tier without carrying the prior action's value", async () => {
     mockedEngineInvoke
@@ -150,6 +151,56 @@ describe("Qualification effect requirements", () => {
           step_id: "submit",
           effect_index: 0,
           verification_tier: 1,
+        }),
+      ),
+    );
+  });
+
+  it("saves a dedicated application identity expectation through the cockpit", async () => {
+    const project = projectWithTiers({ review: 3, submit: 2 });
+    project.controls.actions.review.identity.sources.push({
+      kind: "application",
+      label: "Live application identity",
+      match: "Observed immediately before actuation",
+    });
+    project.controls.actions.review.identity.policy = {
+      step_id: "review",
+      enforcement: "signal_quorum",
+      signals: [
+        {
+          key: "application",
+          source: "application",
+          match: "exact",
+          normalizers: [],
+          expected_value: "https://app.example",
+          params: [],
+        },
+      ],
+      quorum: 1,
+    };
+    mockedEngineInvoke.mockResolvedValue(project);
+
+    render(<Qualification workflowId="wf-1" onBack={() => {}} />);
+
+    const expectedInput = (await screen.findByDisplayValue(
+      "https://app.example",
+    )) as HTMLInputElement;
+    expect(expectedInput.value).toBe("https://app.example");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save identity policy" }),
+    );
+
+    await waitFor(() =>
+      expect(mockedEngineInvoke).toHaveBeenCalledWith(
+        CMD.SET_QUALIFICATION_IDENTITY,
+        expect.objectContaining({
+          signals: [
+            expect.objectContaining({
+              key: "application",
+              source: "application",
+              expected_value: "https://app.example",
+            }),
+          ],
         }),
       ),
     );

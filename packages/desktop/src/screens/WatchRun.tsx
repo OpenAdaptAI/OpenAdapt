@@ -16,6 +16,7 @@ import {
   CardHead,
   Callout,
   Field,
+  Pill,
 } from "../ui/primitives";
 import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
 import { ReplayMonitor } from "../ui/ReplayMonitor";
@@ -62,6 +63,13 @@ function issueForReport(report: RunReport): RunIssue | null {
   }
   return null;
 }
+
+const CONTRACT_LABELS = {
+  authorization: "Authorization",
+  identity: "Identity",
+  postcondition: "Postcondition",
+  effect: "Business effect",
+} as const;
 
 export function WatchRun({
   workflowId,
@@ -283,6 +291,80 @@ export function WatchRun({
               Teach the fix
             </Button>
           </div>
+        </Card>
+      )}
+
+      {report?.outcome_details && (
+        <Card>
+          <CardHead
+            eyebrow="Execution contract"
+            title="Outcome evidence"
+            sub="The runtime reports what the profile required, what passed, and which external capabilities were used."
+          />
+          <div className="row">
+            <Pill tone={report.outcome === "VERIFIED" ? "ok" : "warn"}>
+              {report.outcome.replaceAll("_", " ").toLowerCase()}
+            </Pill>
+            {report.outcome_details.profile && (
+              <Pill tone="neutral">{report.outcome_details.profile}</Pill>
+            )}
+            <Pill
+              tone={
+                report.outcome_details.production_eligible ? "ok" : "neutral"
+              }
+            >
+              {report.outcome_details.production_eligible
+                ? "production eligible"
+                : "not production eligible"}
+            </Pill>
+            <Pill tone={report.outcome_details.execution_completed ? "ok" : "warn"}>
+              {report.outcome_details.execution_completed
+                ? "execution completed"
+                : "execution stopped"}
+            </Pill>
+          </div>
+          <div className="metrics" style={{ marginTop: "var(--space-4)" }}>
+            {(
+              Object.keys(CONTRACT_LABELS) as Array<
+                keyof typeof CONTRACT_LABELS
+              >
+            ).map((contract) => (
+              <div className="metric" key={contract}>
+                <span className="label">{CONTRACT_LABELS[contract]}</span>
+                <span className="metric-value tnum">
+                  {report.outcome_details?.passed_contracts[contract]}/
+                  {report.outcome_details?.required_contracts[contract]}
+                </span>
+              </div>
+            ))}
+            <div className="metric">
+              <span className="label">Model calls</span>
+              <span className="metric-value tnum">
+                {report.outcome_details.model_calls}
+              </span>
+            </div>
+            <div className="metric">
+              <span className="label">External network</span>
+              <span className="metric-value">
+                {report.outcome_details.external_network_calls}
+              </span>
+            </div>
+            <div className="metric">
+              <span className="label">Compensating actions</span>
+              <span className="metric-value tnum">
+                {report.outcome_details.compensation_actions}
+              </span>
+            </div>
+          </div>
+          {report.outcome_details.evidence_classes.length > 0 && (
+            <div className="row" style={{ marginTop: "var(--space-4)" }}>
+              {report.outcome_details.evidence_classes.map((evidence) => (
+                <Pill key={evidence} tone="neutral">
+                  {evidence.replaceAll("_", " ")}
+                </Pill>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 

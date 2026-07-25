@@ -72,7 +72,17 @@ export type QualificationEffectKind = "record_written" | "field_equals";
 export type QualificationIdentitySourceKind =
   | "structured"
   | "identifier_region"
-  | "captured_context";
+  | "captured_context"
+  | "application"
+  | "session"
+  | "workflow_state";
+export type QualificationIdentitySignalKey =
+  | "subject_name"
+  | "record_id"
+  | "secondary_identifier"
+  | "application"
+  | "session"
+  | "workflow_state";
 export type QualificationIdentityEnforcement =
   | "canonical_ladder"
   | "signal_quorum";
@@ -114,11 +124,14 @@ export interface QualificationIdentitySource {
 }
 
 export interface QualificationIdentitySignal {
-  field: string;
+  key: QualificationIdentitySignalKey;
   source: QualificationIdentitySourceKind;
   match: QualificationIdentityMatch;
   normalizers: QualificationIdentityNormalizer[];
   region?: [number, number, number, number] | null;
+  extract_pattern?: string | null;
+  expected_value?: string | null;
+  params: string[];
 }
 
 export interface QualificationValueExpression {
@@ -336,6 +349,24 @@ export interface RunReport {
     resolver_rung?: string;
   } | null;
   metrics?: { duration_s?: number; cost_usd?: number } | null;
+  outcome_details?: {
+    profile: "demo" | "standard" | "regulated" | null;
+    production_eligible: boolean;
+    execution_completed: boolean;
+    required_contracts: ExecutionContractCounts;
+    passed_contracts: ExecutionContractCounts;
+    evidence_classes: string[];
+    model_calls: number;
+    external_network_calls: "none" | "observed" | "unknown";
+    compensation_actions: number;
+  } | null;
+}
+
+export interface ExecutionContractCounts {
+  authorization: number;
+  identity: number;
+  postcondition: number;
+  effect: number;
 }
 
 export interface ExecutionRefusal {

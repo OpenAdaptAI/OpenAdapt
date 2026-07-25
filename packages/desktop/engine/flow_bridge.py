@@ -158,6 +158,7 @@ def _valid_precise_envelope(report: dict, envelope: dict, outcome: object) -> bo
         and isinstance(report.get("production_eligible"), bool)
         and report.get("execution_completed") == completed
         and isinstance(report.get("execution_completed"), bool)
+        and report.get("model_calls") == model_calls
     )
 
 
