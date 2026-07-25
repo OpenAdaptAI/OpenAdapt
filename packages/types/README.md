@@ -59,6 +59,7 @@ Documentation for the whole stack lives at
 | `Episode` / `Step` | Complete task trajectory (observation → action → result) |
 | `FailureRecord` | Classified failure for dataset pipelines |
 | `ControlOverlayFrameV1` / `ControlOverlayTimelineV1` | PHI-safe execution overlay state bound to exact evidence media |
+| `ControlOverlayFrameV2` / `ControlOverlayTimelineV2` | Exact, privacy-safe target geometry for sibling overlays and media composition |
 
 ## Quick start
 
@@ -144,19 +145,43 @@ print(json.dumps(schema, indent=2))
 The same API exports the versioned cross-surface overlay contracts:
 
 ```python
-from openadapt_types import ControlOverlayFrameV1, ControlOverlayTimelineV1
+from openadapt_types import (
+    ControlOverlayFrameV1,
+    ControlOverlayFrameV2,
+    ControlOverlayTimelineV1,
+    ControlOverlayTimelineV2,
+)
 
 frame_schema = ControlOverlayFrameV1.model_json_schema()
 timeline_schema = ControlOverlayTimelineV1.model_json_schema()
+tracking_frame_schema = ControlOverlayFrameV2.model_json_schema()
+tracking_timeline_schema = ControlOverlayTimelineV2.model_json_schema()
 ```
 
-The same schemas ship as `openadapt_types/schemas/control-overlay-frame-v1.json`
-and `control-overlay-timeline-v1.json` for TypeScript, Rust, and other consumers.
+The same schemas ship under `openadapt_types/schemas/` for TypeScript, Rust,
+and other consumers. Version 1 remains the control-state contract. Version 2
+adds an optional normalized top-level viewport rectangle, the exact source
+viewport and DPR, and an exact observation or decoded-media-frame binding
+without changing V1.
 
 Overlay schemas reject unknown fields and contain only closed presentation
-labels and canonical statuses. Screenshots, action targets, typed values,
-identities, URLs, logs, report bodies, and user-authored workflow names remain
-outside this public presentation contract.
+labels and canonical statuses. Screenshot payloads, action-target selectors,
+accessible names, text and values, typed input, identities, URLs, logs, report
+bodies, and user-authored workflow names remain outside this public contract.
+V2 may carry only normalized target geometry from a browser top-level CSS
+viewport. Native and RDP device-pixel geometry is not part of this V2 schema.
+
+Target geometry never carries locators, accessible names, values, URLs, or
+screenshots. A private live observation uses a run/export-scoped HMAC reference
+instead of a linkable raw frame hash. Published media uses the exact media
+SHA-256 and decoded frame index. A renderer draws tracking only when that
+binding matches; it omits the rectangle rather than replaying selectors,
+interpolating movement, or inferring a missing target from adjacent events.
+The runtime does not guess a future viewer transform. Desktop, Cloud, and media
+renderers map the normalized rectangle through their actual content box.
+If multiple runtime states land in one decoded media frame, the producer must
+coalesce them deterministically; it must not invent extra media frames or
+approximate their timing.
 
 ## Design principles
 
