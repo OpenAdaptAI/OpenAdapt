@@ -21,7 +21,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -457,6 +457,9 @@ class RunSummary(BaseModel):
     id: str
     started_at: Optional[str] = None
     success: Optional[bool] = None
+    execution_outcome: Optional[
+        Literal["VERIFIED", "COMPLETED_UNVERIFIED", "HALTED", "FAILED"]
+    ] = None
     terminal_outcome: Optional[str] = None
     halted: bool = False
     paused: bool = False
@@ -543,6 +546,7 @@ def run_summary(root: Path, path: Path) -> RunSummary:
         id=_rel_id(root, path),
         started_at=_safe_timestamp(report.started_at),
         success=report.success,
+        execution_outcome=report.execution_outcome,
         terminal_outcome=(
             report.terminal_outcome
             if report.terminal_outcome
@@ -577,6 +581,7 @@ def latest_runs_by_digest(root: Path) -> dict[str, dict[str, Any]]:
                 "run_id": run.id,
                 "started_at": run.started_at,
                 "success": run.success,
+                "execution_outcome": run.execution_outcome,
                 "halted": run.halted,
                 "paused": run.paused,
             }

@@ -154,6 +154,13 @@ def status_from_report(returncode: int, report: dict[str, Any]) -> str:
     failed  : anything else (a hard failure, a crash, a gate refusal, or a
               missing report).
     """
+    outcome = report.get("execution_outcome")
+    if outcome is not None:
+        if outcome == "HALTED":
+            return "halt"
+        if outcome == "VERIFIED" and returncode == 0 and report.get("success") is True:
+            return "success"
+        return "failed"
     if report and (
         report.get("terminal_outcome") == "halt"
         or ("halt" in report and report["halt"] is not None)
@@ -182,8 +189,14 @@ def metrics_from_report(report: dict[str, Any]) -> dict[str, Any]:
         "steps_ok": sum(1 for r in results if r.get("ok")),
         "halts": 1
         if (
-            report.get("terminal_outcome") == "halt"
-            or ("halt" in report and report["halt"] is not None)
+            report.get("execution_outcome") == "HALTED"
+            or (
+                report.get("execution_outcome") is None
+                and (
+                    report.get("terminal_outcome") == "halt"
+                    or ("halt" in report and report["halt"] is not None)
+                )
+            )
         )
         else 0,
         "heals": numeric(report.get("heal_count"), 0),
@@ -193,6 +206,9 @@ def metrics_from_report(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def halt_object(report: dict[str, Any]) -> Optional[dict[str, Any]]:
+    outcome = report.get("execution_outcome")
+    if outcome is not None and outcome != "HALTED":
+        return None
     if "halt" in report and report["halt"] is not None:
         return report["halt"]
     if report.get("terminal_outcome") == "halt":

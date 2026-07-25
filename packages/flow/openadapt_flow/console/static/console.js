@@ -90,12 +90,21 @@ function statusChip(summary) {
   return '<span class="chip">uncertified</span>';
 }
 
+function runPresentation(run) {
+  if (run.execution_outcome === "VERIFIED") return { cssClass: "ok", label: "verified" };
+  if (run.execution_outcome === "COMPLETED_UNVERIFIED") {
+    return { cssClass: "warn", label: "completed unverified" };
+  }
+  if (run.execution_outcome === "HALTED") return { cssClass: "err", label: "halted" };
+  if (run.execution_outcome === "FAILED") return { cssClass: "err", label: "failed" };
+  if (run.success) return { cssClass: "ok", label: "success" };
+  if (run.paused) return { cssClass: "warn", label: "paused" };
+  return { cssClass: "err", label: run.halted ? "halted" : "failed" };
+}
+
 function runChip(run) {
   if (!run) return '<span class="muted">never run</span>';
-  const cssClass = run.success ? "ok" : (run.paused ? "warn" : "err");
-  const label = run.success
-    ? "success"
-    : (run.paused ? "paused" : (run.halted ? "halted" : "failed"));
+  const { cssClass, label } = runPresentation(run);
   return `<a href="#/runs/${enc(run.run_id)}"><span class="chip ${cssClass}">${label}</span></a> <span class="muted">${fmtTime(run.started_at)}</span>`;
 }
 
@@ -251,15 +260,10 @@ async function viewDiff(firstId, secondId) {
 async function viewRuns() {
   const runs = await api("/api/runs");
   const rows = runs.map((run) => {
+    const presentation = runPresentation(run);
     const status = run.load_error
       ? '<span class="chip err">unreadable</span>'
-      : run.success
-        ? '<span class="chip ok">success</span>'
-        : run.paused
-          ? '<span class="chip warn">paused</span>'
-          : run.halted
-            ? '<span class="chip err">halted</span>'
-            : '<span class="chip err">failed</span>';
+      : `<span class="chip ${presentation.cssClass}">${presentation.label}</span>`;
     return `<tr class="rowlink" data-route="#/runs/${enc(run.id)}">
       <td class="mono">${esc(run.id)}</td><td>Protected workflow</td>
       <td>${fmtTime(run.started_at)}</td><td>${status}${run.approved ? ' <span class="chip info">approved</span>' : ""}</td>
@@ -439,10 +443,11 @@ async function viewRunDetail(id) {
       <td>${safeNumber((Number(item.elapsed_ms) / 1000).toFixed(2), "0")}s</td></tr>`;
   }).join("");
 
+  const presentation = runPresentation(summary);
   return `<h2>Run ${esc(summary.id)}</h2>
     <div class="cards">
       <div class="card"><div class="lbl">Outcome</div><div class="big">${
-        summary.success ? "success" : summary.paused ? "paused" : summary.halted ? "halted" : "failed"}</div>
+        presentation.label}</div>
         <div class="lbl">${fmtTime(summary.started_at)}</div></div>
       <div class="card"><div class="lbl">Identity armed</div>
         <div class="big">${summary.identity_applicable_steps != null ? `${safeNumber(summary.identity_armed_steps, "0")}/${safeNumber(summary.identity_applicable_steps, "0")}` : "n/a"}</div>

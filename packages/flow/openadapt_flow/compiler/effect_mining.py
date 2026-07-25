@@ -54,6 +54,7 @@ from typing import Any, Optional
 
 from openadapt_flow.ir import ActionKind, PostconditionKind, Region, Step
 from openadapt_flow.runtime.effects.effect import (
+    MIN_RENAV_ACTIONS,
     Effect,
     EffectKind,
     ReadbackNav,
@@ -61,12 +62,6 @@ from openadapt_flow.runtime.effects.effect import (
     ValueExpr,
     stable_id,
 )
-
-# A different-path re-navigation must be genuinely independent of the write
-# flow: at least this many deterministic navigation actions (e.g. close/clear
-# the form + re-open the record, or search + open the result) before the saved
-# value is re-viewed. One action is not a "different path"; it is a re-read.
-MIN_RENAV_ACTIONS = 2
 
 
 def _ve(value: str) -> ValueExpr:

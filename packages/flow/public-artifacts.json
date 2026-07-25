@@ -596,7 +596,7 @@
     },
     {
       "path": "docs/deployment.example.yaml",
-      "sha256": "debf0fb5d37003dc417ef10dea6364545e7e9724bb8ebac48ff597cac868729c"
+      "sha256": "ef9d0ac8a4f787dc10f720d3549e0d3716f2f3cefc507254604a5bd40d0e084d"
     },
     {
       "path": "docs/showcase-encounter-loop/body/manifest.json",
@@ -1772,7 +1772,7 @@
     },
     {
       "path": "openadapt_flow/console/static/console.js",
-      "sha256": "28bbc4b5fa0a830d14d65951904e92814ce92cad1272c1d9b7e62caee8e90eb9"
+      "sha256": "40f5b62e64c9677a63ad51498ac8c86b849b57dbf45327478e26ab1a5e8bcba0"
     },
     {
       "path": "openadapt_flow/console/static/index.html",

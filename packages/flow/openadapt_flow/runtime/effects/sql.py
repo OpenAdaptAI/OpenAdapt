@@ -50,6 +50,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
 )
+from openadapt_flow.verification import VerificationTier
 
 # Keywords that could make a SELECT-leading statement mutate. Matched on word
 # boundaries anywhere in the statement (defense in depth beyond the
@@ -151,6 +152,7 @@ class SqlRecordVerifier:
     """
 
     substrate = "sql"
+    verification_tier = VerificationTier.INDEPENDENT_SYSTEM
 
     def __init__(
         self,

@@ -36,6 +36,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
 )
+from openadapt_flow.verification import VerificationTier
 
 
 def sha256_file(path: Path, *, chunk: int = 1 << 16) -> str:
@@ -58,6 +59,7 @@ class DocumentHashVerifier:
     """
 
     substrate = "fs"
+    verification_tier = VerificationTier.INDEPENDENT_SYSTEM
 
     def __init__(
         self,

@@ -1377,6 +1377,45 @@ def test_report_break_success_run_emits_nothing(tmp_path, monkeypatch):
     assert result["emitted"] is False
 
 
+def test_report_break_keeps_completed_unverified_local_before_resolution(
+    tmp_path, monkeypatch
+):
+    run_dir = tmp_path / "runs" / "completed-unverified"
+    RunReport(
+        workflow_name="demo",
+        started_at="2026-01-01T00:00:00Z",
+        execution_profile="demo",
+        execution_outcome="COMPLETED_UNVERIFIED",
+        execution_completed=True,
+        success=True,
+    ).save(run_dir)
+    monkeypatch.setattr(
+        hosted,
+        "resolve_host",
+        lambda *a, **k: pytest.fail("must not resolve a host for local-only outcome"),
+    )
+    monkeypatch.setattr(
+        hosted,
+        "resolve_token",
+        lambda *a, **k: pytest.fail("must not resolve a token for local-only outcome"),
+    )
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *a, **k: pytest.fail("must not POST a local-only outcome"),
+    )
+
+    result = hosted.report_break(
+        run_dir,
+        workflow_id=_WORKFLOW_UUID,
+        host="https://h.test",
+        token="tok",
+    )
+
+    assert result["emitted"] is False
+    assert "COMPLETED_UNVERIFIED stays local" in result["reason"]
+
+
 def test_report_break_missing_report(tmp_path):
     with pytest.raises(hosted.HostedError, match="report.json"):
         hosted.report_break(
@@ -1559,6 +1598,28 @@ def test_report_run_success(tmp_path, monkeypatch):
     assert "effect_contract_hashes" not in posted
 
 
+def test_report_run_verified_success(tmp_path, monkeypatch):
+    run_dir = tmp_path / "runs" / "verified"
+    _successful_run(
+        run_dir,
+        execution_profile="standard",
+        execution_outcome="VERIFIED",
+        production_eligible=True,
+    )
+    recorder: dict = {}
+    monkeypatch.setattr(httpx, "post", _capture_post(recorder, 202, _run_response()))
+
+    result = hosted.report_run(
+        run_dir,
+        workflow_id=_WORKFLOW_UUID,
+        host="https://h.test",
+        token="tok",
+    )
+
+    assert result["emitted"] is True
+    assert recorder["kw"]["json"]["status"] == "success"
+
+
 def test_report_run_binds_by_digest_without_workflow_id(tmp_path, monkeypatch):
     run_dir = tmp_path / "runs" / "r1"
     _successful_run(run_dir)
@@ -1658,7 +1719,34 @@ def test_report_run_refuses_non_success(tmp_path, monkeypatch):
         run_dir, workflow_id=_WORKFLOW_UUID, host="https://h.test", token="tok"
     )
     assert result["emitted"] is False
-    assert "report-break" in result["reason"]
+    assert "not VERIFIED" in result["reason"]
+
+
+def test_report_run_keeps_completed_unverified_local(tmp_path, monkeypatch):
+    run_dir = tmp_path / "runs" / "unverified"
+    _successful_run(
+        run_dir,
+        execution_profile="demo",
+        execution_outcome="COMPLETED_UNVERIFIED",
+        production_eligible=False,
+    )
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *a, **k: pytest.fail(
+            "COMPLETED_UNVERIFIED must never use the Cloud success rail"
+        ),
+    )
+
+    result = hosted.report_run(
+        run_dir,
+        workflow_id=_WORKFLOW_UUID,
+        host="https://h.test",
+        token="tok",
+    )
+
+    assert result["emitted"] is False
+    assert "not VERIFIED" in result["reason"]
 
 
 def test_report_run_missing_binding_raises(tmp_path):
@@ -2477,6 +2565,21 @@ def test_maybe_report_run_fires_on_opt_in_success_only(tmp_path, monkeypatch, ca
         (halted_dir / "report.json").read_text(encoding="utf-8")
     )
     _maybe_report_run(halted_dir, halted, args)
+    assert len(calls) == 1
+
+    # Demo completion is locally complete but not VERIFIED; it must not enter
+    # the legacy Cloud success rail.
+    demo_dir = tmp_path / "runs" / "r3"
+    _successful_run(
+        demo_dir,
+        execution_profile="demo",
+        execution_outcome="COMPLETED_UNVERIFIED",
+        production_eligible=False,
+    )
+    demo = RunReport.model_validate_json(
+        (demo_dir / "report.json").read_text(encoding="utf-8")
+    )
+    _maybe_report_run(demo_dir, demo, args)
     assert len(calls) == 1
 
 

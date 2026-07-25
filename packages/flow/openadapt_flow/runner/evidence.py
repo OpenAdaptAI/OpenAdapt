@@ -153,6 +153,12 @@ def _halt_event(
 
 
 def summary_status(report: "RunReport") -> str:
+    if report.execution_outcome is not None:
+        if report.execution_outcome == "VERIFIED":
+            return "confirmed"
+        if report.execution_outcome == "HALTED":
+            return "halted-needs-attention"
+        return "failed"
     if report.success:
         return "confirmed"
     if report.halt is not None:

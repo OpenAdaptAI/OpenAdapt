@@ -26,6 +26,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from openadapt_flow.ir import EffectVerificationEvidence
+
 #: The synthetic ``graph_id`` of the top-level ``Workflow.program`` graph (every
 #: OTHER graph is a named entry in ``Workflow.subflows`` -- including a loop
 #: body, whose id is ``LoopSpec.body``). Resume resolves a frame's graph by this
@@ -189,6 +191,10 @@ class ProgramCheckpoint(BaseModel):
     #: still hold before continuing. Consistent with the run manifest already
     #: persisting the run's params; a run directory is sensitive at rest.
     new_effects: list[dict] = Field(default_factory=list)
+    #: Structured verification evidence for ``new_effect_keys``. Persisted so
+    #: an idempotently skipped action on resume retains the original proof
+    #: rather than being downgraded to an unverified completion.
+    new_effect_evidence: list[EffectVerificationEvidence] = Field(default_factory=list)
     #: Already-performed effects admitted under explicit approval rather than
     #: independently confirmed. Kept separate so resume never promotes them to
     #: CONFIRMED while still preventing duplicate re-execution.

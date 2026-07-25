@@ -1465,6 +1465,9 @@ class BoundAttendedExecutor:
                 else []
             ),
             new_effects=resolved_effects,
+            new_effect_evidence=(
+                list(result.effect_evidence) if result.effect_verified is True else []
+            ),
             governed_authorization_id=(
                 manifest.governed_authorization.authorization_id
                 if manifest.governed_authorization is not None

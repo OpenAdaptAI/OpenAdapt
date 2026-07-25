@@ -316,9 +316,17 @@ class GroundingModelConfig(BaseModel):
 class RuntimeSection(BaseModel):
     """Runtime posture: durability and model-egress opt-in."""
 
+    #: Named posture for ``openadapt-flow run``. A direct ``--profile`` wins.
+    #: Omission preserves the pre-profile low-level flag contract for existing
+    #: deployments; new production deployments should select a profile.
+    #: ``replay`` remains the explicitly non-production Demo path.
+    profile: Optional[Literal["demo", "standard", "regulated"]] = None
     #: Tier-3 durable runtime: checkpoint each verified step, durably pause on
     #: halt, resumable via ``resume``. Off by default.
     durable: bool = False
+    #: Require a fresh settled frame before every action. Standard and
+    #: Regulated profiles force this on; unprofiled and Demo runs may opt in.
+    require_settled: bool = False
     #: EGRESS OPT-IN (PHI audit REM-3): permit wiring an off-box model
     #: grounder / identity-VLM / state-verifier. Off by default => fully local,
     #: zero outbound calls.
@@ -682,6 +690,16 @@ def build_replayer(
     grounder = build_grounder(fallback=fallback)
     if grounder is not None:
         print(f"Grounding rung active: {type(grounder).__name__}")
+    require_settled = (
+        bool(runtime_config.require_settled) if runtime_config is not None else False
+    )
+    profile_name = getattr(governed_authorization, "execution_profile", None)
+    if profile_name is not None:
+        from openadapt_flow.execution_profiles import execution_profile_contract
+
+        require_settled = (
+            require_settled or execution_profile_contract(profile_name).require_settled
+        )
     return Replayer(
         backend,
         grounder=grounder,
@@ -694,6 +712,7 @@ def build_replayer(
         use_structural=use_structural,
         pixel_verify_enabled=pixel_verify_enabled,
         governed_authorization=governed_authorization,
+        require_settled=require_settled,
     )
 
 

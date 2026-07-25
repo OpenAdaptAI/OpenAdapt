@@ -454,9 +454,11 @@ def create_runtime_validation_attestation(
         report = RunReport.model_validate_json(report_bytes)
     except (OSError, ValueError) as exc:
         raise RuntimeValidationError(f"Cannot read a valid run report: {exc}") from exc
-    if not report.success or report.halt is not None:
+    classified_success = report.execution_outcome in (None, "VERIFIED")
+    if not report.success or not classified_success or report.halt is not None:
         raise RuntimeValidationError(
-            "Runtime validation requires a successful, non-halted replay"
+            "Runtime validation requires a VERIFIED, non-halted replay "
+            "(legacy unclassified success remains compatible)"
         )
     if report.workflow_name != workflow.name:
         raise RuntimeValidationError(

@@ -18,7 +18,7 @@ import json
 import re
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
-from enum import Enum, IntEnum
+from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Literal, Optional
 from uuid import uuid4
@@ -30,6 +30,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.ir import Step, Workflow
@@ -44,22 +46,6 @@ _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-class VerificationTier(IntEnum):
-    """Strength of the evidence used to verify a declared business effect.
-
-    Lower numbers are stronger.  ``satisfies(actual, minimum)`` is therefore
-    ``actual <= minimum``.
-    """
-
-    INDEPENDENT_SYSTEM = 1
-    INDEPENDENT_SESSION = 2
-    PERSISTED_STATE_REACQUISITION = 3
-    IMMEDIATE_SCREEN = 4
-
-    def satisfies(self, minimum: "VerificationTier") -> bool:
-        return int(self) <= int(minimum)
 
 
 class IdentityEvidenceSource(str, Enum):

@@ -52,6 +52,7 @@ from openadapt_flow.bundle_validation import compute_parameter_schema_digest
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    EffectVerificationEvidence,
     ExecutionTargetKind,
     HaltObservation,
     IdentityCheck,
@@ -102,6 +103,7 @@ from openadapt_flow.runtime.effects import (
     reconcile_or_escalate,
 )
 from openadapt_flow.runtime.resolver import is_below_ocr, pad_region, resolve
+from openadapt_flow.verification import verifier_effect_tier
 from openadapt_flow.vision.ocr import OcrResolutionRefused
 
 # REGION_STABLE template check: how far the expected content may shift from
@@ -182,17 +184,24 @@ class _GraphStepContext:
     gesture, exactly as at the end of a linear workflow).
     """
 
-    __slots__ = ("prev_action", "next_anchored", "following")
+    __slots__ = (
+        "prev_action",
+        "next_anchored",
+        "following",
+        "has_exception_handler",
+    )
 
     def __init__(
         self,
         prev_action: Optional[ActionKind] = None,
         next_anchored: Optional[Step] = None,
         following: Optional[Step] = None,
+        has_exception_handler: bool = False,
     ) -> None:
         self.prev_action = prev_action
         self.next_anchored = next_anchored
         self.following = following
+        self.has_exception_handler = has_exception_handler
 
 
 class _ProgramHalt(Exception):
@@ -611,6 +620,11 @@ class Replayer:
         report = RunReport(
             workflow_name=workflow.name,
             started_at=datetime.now(timezone.utc).isoformat(),
+            execution_profile=(
+                self.governed_authorization.execution_profile
+                if self.governed_authorization is not None
+                else "demo"
+            ),
             execution_target_kind=execution_target_kind,
             execution_origin=execution_origin,
             execution_entry_url=execution_entry_url,
@@ -627,6 +641,21 @@ class Replayer:
             screenshots_may_leave_box=self._screenshots_may_leave_box,
         )
         if self.governed_authorization is not None:
+            profile_refusal = self._profile_runtime_refusal(workflow)
+            if profile_refusal is not None:
+                report.results.append(
+                    StepResult(
+                        step_id="<profile>",
+                        intent="validate execution profile runtime",
+                        ok=False,
+                        failure_category="governed_refusal",
+                        error=f"{profile_refusal} — refusing to run; run aborted",
+                    )
+                )
+                report.success = False
+                self._stamp_execution_outcome(report, workflow)
+                report.save(run_dir)
+                return report
             refusal, assets = self.governed_authorization.validate_execution_snapshot(
                 workflow,
                 bundle_dir=bundle_dir,
@@ -652,6 +681,9 @@ class Replayer:
             report.governed_policy_name = (
                 self.governed_authorization.admitted_policy_name
             )
+            report.governed_minimum_effect_tier = (
+                self.governed_authorization.minimum_effect_tier
+            )
             report.governed_runtime_inputs_digest = (
                 self.governed_authorization.runtime_inputs_digest
             )
@@ -672,10 +704,12 @@ class Replayer:
                         step_id="<authorization>",
                         intent="validate governed run authorization",
                         ok=False,
+                        failure_category="governed_refusal",
                         error=f"{refusal} — refusing to run; run aborted",
                     )
                 )
                 report.success = False
+                self._stamp_execution_outcome(report, workflow)
                 report.save(run_dir)
                 return report
         self._record_identity_coverage(workflow, report)
@@ -699,6 +733,7 @@ class Replayer:
                     step_id="<params>",
                     intent="validate required workflow parameters",
                     ok=False,
+                    failure_category="governed_refusal",
                     error=(
                         "Required workflow parameter(s) not supplied and no "
                         "recorded example is available: "
@@ -709,6 +744,7 @@ class Replayer:
             )
             report.success = False
             report.total_ms = (time.monotonic() - t_run) * 1000.0
+            self._stamp_execution_outcome(report, workflow)
             report.save(run_dir)
             return report
 
@@ -806,8 +842,38 @@ class Replayer:
                 workflow, bundle_dir, Path(save_healed_to), new_crops
             )
 
+        self._stamp_execution_outcome(report, workflow)
         report.save(run_dir)
         return report
+
+    @staticmethod
+    def _stamp_execution_outcome(report: RunReport, workflow: Workflow) -> None:
+        """Apply the named profile's evidence contract before persistence."""
+
+        if report.execution_profile is None:
+            return
+        from openadapt_flow.execution_profiles import stamp_execution_outcome
+
+        stamp_execution_outcome(
+            report,
+            workflow,
+            report.execution_profile,
+        )
+
+    def _profile_runtime_refusal(self, workflow: Workflow) -> Optional[str]:
+        """Recheck load-bearing profile invariants at the actuation boundary."""
+
+        authorization = self.governed_authorization
+        if authorization is None or authorization.execution_profile is None:
+            return None
+        profile = authorization.execution_profile
+        if profile in {"standard", "regulated"} and not self.durable:
+            return f"{profile} execution requires the durable runtime"
+        if profile in {"standard", "regulated"} and not self.require_settled:
+            return f"{profile} execution requires settled-state detection"
+        if profile == "regulated" and not workflow.encrypted:
+            return "regulated execution requires an encrypted bundle"
+        return None
 
     @staticmethod
     def _record_identity_coverage(workflow: Workflow, report: RunReport) -> None:
@@ -1012,6 +1078,7 @@ class Replayer:
             # a resume (the store already holds the pre-pause checkpoints).
             self._program_seq = len(store.program_checkpoints())
             self._completed_effect_keys = list(store.completed_effect_keys())
+            self._completed_effect_evidence = list(store.completed_effect_evidence())
             self._completed_unverified_effect_keys = list(
                 store.completed_unverified_effect_keys()
             )
@@ -1019,6 +1086,7 @@ class Replayer:
         else:
             self._program_seq = 0
             self._completed_effect_keys = []
+            self._completed_effect_evidence = []
             self._completed_unverified_effect_keys = []
             self._bundle_version = ""
         try:
@@ -1527,6 +1595,9 @@ class Replayer:
             effect_verified=True if confirmed else None,
             effect_approved_unverified=not confirmed,
             effect_contract_hashes=keys,
+            effect_evidence=(
+                self._evidence_for_completed_effects(keys) if confirmed else []
+            ),
             effect_results=(
                 ["[resume] previously CONFIRMED effect was not re-executed"]
                 if confirmed
@@ -1539,6 +1610,20 @@ class Replayer:
         report.results.append(result)
         self._account_result(report, result)
         return True
+
+    def _evidence_for_completed_effects(
+        self, effect_keys: list[str]
+    ) -> list[EffectVerificationEvidence]:
+        """Return one retained proof per idempotently skipped effect."""
+
+        remaining = list(self._completed_effect_evidence)
+        selected: list[EffectVerificationEvidence] = []
+        for effect_key in effect_keys:
+            for index, evidence in enumerate(remaining):
+                if evidence.effect_contract_hash == effect_key:
+                    selected.append(remaining.pop(index))
+                    break
+        return selected
 
     def _record_program_checkpoint(
         self,
@@ -1580,6 +1665,8 @@ class Replayer:
         # Extend the live ledger so a later state in the SAME leg (and the next
         # checkpoint's union) sees these as already-confirmed.
         self._completed_effect_keys.extend(new_keys)
+        if new_keys:
+            self._completed_effect_evidence.extend(result.effect_evidence)
         self._completed_unverified_effect_keys.extend(new_unverified_keys)
         expected = (
             [
@@ -1600,6 +1687,7 @@ class Replayer:
             bound_params=dict(params),
             new_effect_keys=new_keys,
             new_effects=resolved_effects if new_keys else [],
+            new_effect_evidence=(list(result.effect_evidence) if new_keys else []),
             new_unverified_effect_keys=new_unverified_keys,
             new_unverified_effects=(resolved_effects if new_unverified_keys else []),
             governed_authorization_id=(
@@ -2309,6 +2397,7 @@ class Replayer:
             prev_action=self._prev_action,
             next_anchored=next_anchored,
             following=following,
+            has_exception_handler=state.on_exception is not None,
         )
 
     @staticmethod
@@ -2380,9 +2469,14 @@ class Replayer:
         # yet performed (the no-double-write contract). See
         # openadapt_flow.runtime.actuators.
         if self.api_actuator is not None and step.api_binding is not None:
-            if self._try_api_tier(step, params, result):
-                if self.governed_authorization is not None and not result.ok:
+            if self._try_api_tier(step, params, result, workflow=workflow):
+                if not result.ok and result.failure_category is None:
                     result.safety_halt = True
+                    result.failure_category = (
+                        "governed_refusal"
+                        if self.governed_authorization is not None
+                        else "safety_halt"
+                    )
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
 
@@ -2437,6 +2531,13 @@ class Replayer:
                 result.error = gate_error
                 if self._governed_asset_mutation is not None:
                     result.safety_halt = True
+                if gate_error is not None and result.failure_category is None:
+                    result.safety_halt = True
+                    result.failure_category = (
+                        "governed_refusal"
+                        if self.governed_authorization is not None
+                        else "safety_halt"
+                    )
                 result.after_png = self._save_step_png(
                     run_dir, step.id, "after", last_frame
                 )
@@ -2526,14 +2627,31 @@ class Replayer:
                             "no EffectVerifier configured for a step that declares "
                             "effects (fail-safe HALT)"
                         )
-                        if self.governed_authorization is not None:
-                            result.safety_halt = True
+                    if error is not None and self.governed_authorization is not None:
+                        result.safety_halt = True
+                        result.failure_category = "governed_refusal"
                 else:
                     # Bind the effect contracts to this run's params BEFORE the
                     # pre-state snapshot (P0-3): match/value/idempotency_key must
                     # describe the record THIS run writes, not the demo's.
                     resolved_effects = self._resolve_effects(step.effects, params)
-                    effect_pre_state = active_verifier.capture_pre_state()
+                    error = self._profile_effect_tier_refusal(
+                        workflow,
+                        resolved_effects,
+                        active_verifier,
+                    )
+                    if error is None:
+                        effect_pre_state = active_verifier.capture_pre_state()
+                        error = self._profile_effect_tier_refusal(
+                            workflow,
+                            resolved_effects,
+                            active_verifier,
+                        )
+                    if error is not None:
+                        result.effect_verified = False
+                        result.safety_halt = True
+                        result.failure_category = "governed_refusal"
+                        result.effect_results.append(error)
 
             if self._governed_asset_mutation is not None:
                 error = self._governed_asset_mutation
@@ -2561,6 +2679,19 @@ class Replayer:
                         run_dir, step.id, "before", before_png
                     )
                     last_frame = before_png
+
+            if error is None:
+                if resolved_effects is not None and active_verifier is not None:
+                    error = self._profile_effect_tier_refusal(
+                        workflow,
+                        resolved_effects,
+                        active_verifier,
+                    )
+                    if error is not None:
+                        result.effect_verified = False
+                        result.safety_halt = True
+                        result.failure_category = "governed_refusal"
+                        result.effect_results.append(error)
 
             if error is None:
                 # Structural postconditions compare against the final observed
@@ -2685,6 +2816,7 @@ class Replayer:
             # halt immediately; never retry into weaker evidence or actuation.
             result.ok = False
             result.safety_halt = True
+            result.failure_category = "safety_halt"
             result.error = (
                 f"OCR safety refusal for step '{step.id}' "
                 f"({step.intent}): {exc} — no action was admitted"
@@ -2695,14 +2827,30 @@ class Replayer:
             # never as an incidental backend crash and never retry via pixels.
             result.ok = False
             result.safety_halt = True
+            result.failure_category = "safety_halt"
             result.error = (
                 f"Structural safety refusal for step '{step.id}' "
                 f"({step.intent}): {exc} — no action was admitted"
             )
         except Exception as exc:  # defensive: report, don't crash the run
             result.ok = False
+            result.failure_category = "runtime_failure"
             result.error = f"Step '{step.id}' raised {type(exc).__name__}: {exc}"
 
+        if not result.ok and result.failure_category is None:
+            if graph_ctx is not None and graph_ctx.has_exception_handler:
+                # An authored program exception edge may handle an ordinary
+                # action failure (for example, an expected target absence).
+                # Typed ambiguity/identity/effect refusals set ``safety_halt``
+                # earlier and can never be caught by this branch.
+                result.failure_category = "runtime_failure"
+            else:
+                result.safety_halt = True
+                result.failure_category = (
+                    "governed_refusal"
+                    if self.governed_authorization is not None
+                    else "safety_halt"
+                )
         result.after_png = self._save_step_png(run_dir, step.id, "after", last_frame)
         result.elapsed_ms = (time.monotonic() - t0) * 1000.0
         return result
@@ -2714,6 +2862,8 @@ class Replayer:
         step: Step,
         params: dict[str, str],
         result: StepResult,
+        *,
+        workflow: Workflow,
     ) -> bool:
         """Perform ``step.api_binding``'s write via the API and confirm it.
 
@@ -2784,11 +2934,35 @@ class Replayer:
         # or an API write for patient "Susan" would be confirmed against the
         # demonstration's patient "Phil".
         effects = self._resolve_effects(effects, params)
+        refusal = self._profile_effect_tier_refusal(
+            workflow,
+            effects,
+            self.effect_verifier,
+        )
+        if refusal is not None:
+            result.effect_verified = False
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            result.effect_results.append(refusal)
+            result.error = refusal
+            return True
 
         # Snapshot the system of record BEFORE the write so the verifier counts
         # only what THIS actuation wrote (delta / at-most-once / collateral
         # loss), then actuate exactly once.
         before = self.effect_verifier.capture_pre_state()
+        refusal = self._profile_effect_tier_refusal(
+            workflow,
+            effects,
+            self.effect_verifier,
+        )
+        if refusal is not None:
+            result.effect_verified = False
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            result.effect_results.append(refusal)
+            result.error = refusal
+            return True
         outcome = self.api_actuator.actuate(binding, params)
 
         from openadapt_flow.runtime.actuators import ActuationStatus
@@ -2840,6 +3014,41 @@ class Replayer:
         """
         namespace = {**params, "__run_id__": self._run_id}
         return [effect.resolve(namespace) for effect in effects]
+
+    def _profile_effect_tier_refusal(
+        self,
+        workflow: Workflow,
+        effects: list["Effect"],
+        verifier: object,
+    ) -> Optional[str]:
+        """Recheck effect strength immediately before governed actuation."""
+
+        authorization = self.governed_authorization
+        if authorization is None or authorization.execution_profile is None:
+            return None
+        from openadapt_flow.execution_profiles import required_effect_tier
+        from openadapt_flow.verification import VerificationTier
+
+        minimum = (
+            VerificationTier(authorization.minimum_effect_tier)
+            if authorization.minimum_effect_tier is not None
+            else required_effect_tier(workflow, authorization.execution_profile)
+        )
+        if minimum is None:
+            return None
+        weak = []
+        for effect in effects:
+            actual = verifier_effect_tier(verifier, effect)
+            if actual is None or not actual.satisfies(minimum):
+                weak.append("untyped" if actual is None else actual.name.lower())
+        if not weak:
+            return None
+        observed = ", ".join(sorted(set(weak)))
+        return (
+            "Effect verifier strength changed after admission: "
+            f"{observed} evidence cannot satisfy the required "
+            f"{minimum.name.lower()} tier — refusing to actuate; run aborted"
+        )
 
     def _all_default_readback(self, effects: list["Effect"]) -> bool:
         """Whether EVERY declared effect is an auto-derived DIFFERENT-PATH
@@ -2931,7 +3140,17 @@ class Replayer:
                     "write can run — run aborted"
                 )
             verdict = verifier.verify(effect, before)
+            tier = verifier_effect_tier(verifier, effect)
             if verdict.confirmed:
+                result.effect_evidence.append(
+                    EffectVerificationEvidence(
+                        effect_contract_hash=effect.contract_hash(),
+                        substrate=verdict.substrate,
+                        verification_tier=(int(tier) if tier is not None else None),
+                        initial_verdict=verdict.verdict.value,
+                        final_verdict=verdict.verdict.value,
+                    )
+                )
                 result.effect_results.append(
                     f"[{verdict.substrate}] {effect.kind.value}: CONFIRMED"
                     + (f" — {verdict.reason}" if verdict.reason else "")
@@ -2953,6 +3172,18 @@ class Replayer:
                     compensator=self.effect_compensator,
                 )
                 if comp.proceed:
+                    final_verdict = comp.final_verdict or verdict
+                    result.effect_evidence.append(
+                        EffectVerificationEvidence(
+                            effect_contract_hash=effect.contract_hash(),
+                            substrate=final_verdict.substrate,
+                            verification_tier=(int(tier) if tier is not None else None),
+                            initial_verdict=verdict.verdict.value,
+                            final_verdict=final_verdict.verdict.value,
+                            reconciliation_completed=True,
+                            reconciliation_actions=comp.actions_taken,
+                        )
+                    )
                     result.effect_results.append(
                         f"[{verdict.substrate}] {effect.kind.value}: "
                         f"{verdict.verdict.value.upper()} → RECONCILED "
@@ -2960,6 +3191,17 @@ class Replayer:
                     )
                     continue
                 result.effect_verified = False
+                final_verdict = comp.final_verdict or verdict
+                result.effect_evidence.append(
+                    EffectVerificationEvidence(
+                        effect_contract_hash=effect.contract_hash(),
+                        substrate=final_verdict.substrate,
+                        verification_tier=(int(tier) if tier is not None else None),
+                        initial_verdict=verdict.verdict.value,
+                        final_verdict=final_verdict.verdict.value,
+                        reconciliation_actions=comp.actions_taken,
+                    )
+                )
                 result.effect_results.append(
                     f"[{verdict.substrate}] {effect.kind.value}: "
                     f"{verdict.verdict.value.upper()} → "
@@ -2975,6 +3217,15 @@ class Replayer:
                 )
 
             result.effect_verified = False
+            result.effect_evidence.append(
+                EffectVerificationEvidence(
+                    effect_contract_hash=effect.contract_hash(),
+                    substrate=verdict.substrate,
+                    verification_tier=(int(tier) if tier is not None else None),
+                    initial_verdict=verdict.verdict.value,
+                    final_verdict=verdict.verdict.value,
+                )
+            )
             result.effect_results.append(
                 f"[{verdict.substrate}] {effect.kind.value}: "
                 f"{verdict.verdict.value.upper()} — {verdict.reason}"
@@ -3889,6 +4140,17 @@ class Replayer:
 
         Model-free: predicates are evaluated by :meth:`_predicate_holds`.
         """
+        if workflow is not None:
+            profile_refusal = self._profile_runtime_refusal(workflow)
+            if profile_refusal is not None:
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                return (
+                    False,
+                    f"{profile_refusal} at the actuation boundary — refusing "
+                    "to act; run aborted",
+                    before_png,
+                )
         # (1) Readiness: never act on a frame that never settled.
         before_png, readiness_error = self._wait_starting_state_settled(before_png)
         if readiness_error is not None:

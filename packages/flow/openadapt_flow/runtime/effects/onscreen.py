@@ -50,6 +50,7 @@ import difflib
 from typing import Any, Optional
 
 from openadapt_flow.runtime.effects.effect import (
+    MIN_RENAV_ACTIONS,
     Effect,
     EffectKind,
     EffectState,
@@ -58,6 +59,7 @@ from openadapt_flow.runtime.effects.effect import (
     Region,
     Verdict,
 )
+from openadapt_flow.verification import VerificationTier
 
 # Fuzzy-match floor for accepting an OCR read-back as the expected value.
 # Deliberately strict (mirrors resolver.OCR_MIN_RATIO): a near-miss on a
@@ -79,17 +81,39 @@ READABLE_CONF = 0.3
 DIFFERENT_PATH_IS_DEFAULT_ORACLE = True
 
 
+def _valid_renavigation_step(nav: ReadbackNav) -> bool:
+    """Whether one persisted-reacquisition action is fully performable."""
+
+    action = (nav.action or "").strip().lower()
+    if action == "click":
+        return nav.point is not None
+    if action == "type":
+        return nav.text is not None
+    if action == "key":
+        return bool(nav.key)
+    return False
+
+
+def _is_persisted_reacquisition(spec: Any) -> bool:
+    """Conservatively recognize the compiler's different-path invariant."""
+
+    if spec is None or not spec.different_path or spec.region is None:
+        return False
+    _, _, width, height = spec.region
+    return (
+        width > 0
+        and height > 0
+        and len(spec.renavigation) >= MIN_RENAV_ACTIONS
+        and all(_valid_renavigation_step(nav) for nav in spec.renavigation)
+    )
+
+
 def is_default_readback_effect(effect: Any) -> bool:
     """Whether ``effect`` is an on-screen read-back that may be auto-verified as
     the out-of-the-box default (a DIFFERENT-PATH read-back, gated by
     :data:`DIFFERENT_PATH_IS_DEFAULT_ORACLE`)."""
     spec = getattr(effect, "readback", None)
-    return bool(
-        DIFFERENT_PATH_IS_DEFAULT_ORACLE
-        and spec is not None
-        and spec.different_path
-        and spec.renavigation
-    )
+    return bool(DIFFERENT_PATH_IS_DEFAULT_ORACLE and _is_persisted_reacquisition(spec))
 
 
 def _normalize(text: str) -> str:
@@ -118,6 +142,16 @@ class OnScreenReadbackVerifier:
     """
 
     substrate = "onscreen"
+    verification_tier = VerificationTier.IMMEDIATE_SCREEN
+
+    @staticmethod
+    def verification_tier_for(effect: Effect) -> VerificationTier:
+        """Distinguish persisted reacquisition from immediate screen evidence."""
+
+        spec = effect.readback
+        if _is_persisted_reacquisition(spec):
+            return VerificationTier.PERSISTED_STATE_REACQUISITION
+        return VerificationTier.IMMEDIATE_SCREEN
 
     def __init__(
         self,

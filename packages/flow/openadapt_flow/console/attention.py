@@ -178,10 +178,14 @@ def attention_item(root: Path, path: Path) -> Optional[AttentionItem]:
     encrypted_pause = (
         data._contained_file(path, path / "pending_escalation.json.enc") is not None
     )
+    outcome_needs_review = (
+        report is not None and report.execution_outcome == "COMPLETED_UNVERIFIED"
+    )
 
     if (
         report is not None
         and report.success
+        and not outcome_needs_review
         and pending is None
         and not encrypted_pause
     ):
@@ -193,6 +197,7 @@ def attention_item(root: Path, path: Path) -> Optional[AttentionItem]:
         and not encrypted_pause
         and report is not None
         and report.halt is None
+        and not outcome_needs_review
     ):
         return None
 
@@ -207,8 +212,13 @@ def attention_item(root: Path, path: Path) -> Optional[AttentionItem]:
         pending.get("category") if pending is not None else None,
         *protected_texts,
     )
+    if outcome_needs_review:
+        category = "operator_review"
     headline, next_action = _COPY.get(category, _COPY["operator_review"])
     status = "encrypted" if encrypted_pause and pending is None else "halted"
+    if outcome_needs_review and report is not None:
+        assert report.execution_outcome is not None
+        status = report.execution_outcome.lower()
     if pending is not None:
         raw_status = pending.get("status")
         status = raw_status if raw_status in {"pending", "approved"} else "pending"

@@ -47,6 +47,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
 )
+from openadapt_flow.verification import VerificationTier
 
 #: OpenEMR's FHIR field paths for the canonical patient-note-as-Observation
 #: write. Callers override for DocumentReference / Encounter / etc.
@@ -99,6 +100,7 @@ class FhirEffectVerifier:
     """
 
     substrate = "fhir"
+    verification_tier = VerificationTier.INDEPENDENT_SYSTEM
 
     def __init__(
         self,

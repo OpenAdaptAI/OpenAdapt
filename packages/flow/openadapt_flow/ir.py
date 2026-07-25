@@ -1709,6 +1709,18 @@ class InterstitialActionResult(BaseModel):
     error: Optional[str] = None
 
 
+class EffectVerificationEvidence(BaseModel):
+    """Structured evidence behind one effect-verification decision."""
+
+    effect_contract_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    substrate: str = Field(min_length=1)
+    verification_tier: Optional[int] = Field(default=None, ge=1, le=4)
+    initial_verdict: Literal["confirmed", "refuted", "indeterminate"]
+    final_verdict: Literal["confirmed", "refuted", "indeterminate"]
+    reconciliation_completed: bool = False
+    reconciliation_actions: int = Field(default=0, ge=0)
+
+
 class StepResult(BaseModel):
     step_id: str
     intent: str
@@ -1750,6 +1762,13 @@ class StepResult(BaseModel):
     # into a successful terminal outcome.
     safety_halt: bool = False
     effect_results: list[str] = Field(default_factory=list)
+    effect_evidence: list[EffectVerificationEvidence] = Field(default_factory=list)
+    #: Machine-readable terminal category. ``report.halt`` remains useful
+    #: learning evidence but is not itself proof that a failure was a governed
+    #: safety halt.
+    failure_category: Optional[
+        Literal["governed_refusal", "safety_halt", "runtime_failure"]
+    ] = None
     # One stable, NON-secret-bearing SHA-256 digest per verified effect, taken
     # AFTER the effect's ValueExpr contract was bound to THIS run's params
     # (P0-3). Records THAT a parameterized run verified against its own resolved
@@ -1822,6 +1841,41 @@ class HaltObservation(BaseModel):
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
+    execution_profile: Optional[Literal["demo", "standard", "regulated"]] = Field(
+        default=None,
+        description=(
+            "Named runtime posture applied to this run. Raw replay is Demo; "
+            "governed run authorization carries Standard or Regulated."
+        ),
+    )
+    execution_outcome: Optional[
+        Literal[
+            "VERIFIED",
+            "COMPLETED_UNVERIFIED",
+            "HALTED",
+            "FAILED",
+        ]
+    ] = Field(
+        default=None,
+        description=(
+            "Evidence-qualified outcome. Standard and Regulated never map a "
+            "screen-only consequential completion to VERIFIED."
+        ),
+    )
+    production_eligible: bool = Field(
+        default=False,
+        description=(
+            "True only for a VERIFIED result under Standard or Regulated. "
+            "Demo results remain explicitly non-production."
+        ),
+    )
+    execution_completed: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether execution reached a completed terminal state, independent "
+            "of whether the evidence contract permitted reporting success."
+        ),
+    )
     execution_target_kind: Optional[ExecutionTargetKind] = Field(
         default=None,
         description=(
@@ -1858,6 +1912,7 @@ class RunReport(BaseModel):
     governed_approval_source: Optional[str] = None
     governed_authorization_created_at: Optional[str] = None
     governed_policy_name: Optional[str] = None
+    governed_minimum_effect_tier: Optional[int] = Field(default=None, ge=1, le=4)
     governed_runtime_inputs_digest: Optional[str] = Field(
         default=None, pattern="^[a-f0-9]{64}$"
     )
