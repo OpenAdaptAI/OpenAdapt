@@ -214,8 +214,11 @@ function renderPatient(id) {
     encHtml = '<p id="no-encounters">No encounters yet.</p>';
   }
 
+  var patientIdentity = p.name + ' — MRN ' +
+    p.id.toUpperCase() + ' — DOB ' + p.dob;
   app.innerHTML =
-    '<section id="patient-record" role="listitem">' +
+    '<section id="patient-record" role="listitem" aria-label="' +
+    esc(patientIdentity) + '">' +
     '<div id="patient-banner">' + esc(p.name) + ' — MRN ' +
     esc(p.id.toUpperCase()) + ' — DOB ' + esc(p.dob) + '</div>' +
     bannerHtml +
@@ -358,7 +361,8 @@ function renderEncounter() {
     ? consultBtn + triageBtn   // swapped order under "typelabel" drift
     : triageBtn + consultBtn;
   app.innerHTML =
-    '<section id="encounter-record" role="listitem">' +
+    '<section id="encounter-record" role="listitem" aria-label="' +
+    esc(patientIdentity) + '">' +
     '<div id="patient-banner">' + esc(patientIdentity) + '</div>' +
     '<h1>New Encounter</h1>' +
     '<label id="type-label">Encounter Type</label>' +

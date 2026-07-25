@@ -4043,19 +4043,6 @@ class Replayer:
                     FocusedElementActuationLeaseBackend,
                     self.backend,
                 ).arm_focused_element_lease(*fresh_resolution.point)
-            if guarded_coordinate or guarded_keyboard:
-                # Guard arming adds a private one-shot DOM token. Although it
-                # has no visual styling, Chromium may repaint text during the
-                # resulting style recalculation. Bind identity and the exact
-                # delivery hash to a frame captured AFTER that instrumentation
-                # so our own guard cannot create a false frame-change refusal.
-                fresh_png = (
-                    cast(
-                        GuardedKeyboardActionBackend, self.backend
-                    ).guarded_keyboard_frame()
-                    if isinstance(self.backend, GuardedKeyboardActionBackend)
-                    else self.backend.screenshot()
-                )
             try:
                 error = self._identity_gate_error(
                     step,
@@ -4074,17 +4061,6 @@ class Replayer:
                 if focused_element_backend:
                     self._cancel_guarded_keyboard()
                 raise
-            if error is None and (guarded_coordinate or guarded_keyboard):
-                # The identity observation itself can flush a pending browser
-                # repaint. This final bound frame is the exact byte contract
-                # consumed at delivery; no input edge has occurred.
-                fresh_png = (
-                    cast(
-                        GuardedKeyboardActionBackend, self.backend
-                    ).guarded_keyboard_frame()
-                    if isinstance(self.backend, GuardedKeyboardActionBackend)
-                    else self.backend.screenshot()
-                )
             if error is not None and guarded_coordinate:
                 self._cancel_guarded_coordinate()
             if error is not None and guarded_keyboard:

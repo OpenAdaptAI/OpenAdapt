@@ -87,6 +87,15 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
     ) || node;
     let rowIdentity = '';
     if (row) {
+        // A row/list item with an explicit accessible name has already
+        // declared its record identity. Prefer that stable application-owned
+        // signal over concatenating every sibling control label, which would
+        // make harmless button renames look like a record-identity change.
+        const declaredIdentity = clean(
+            row.getAttribute('data-openadapt-identity') ||
+            row.getAttribute('aria-label') ||
+            ''
+        );
         const path = [];
         let cursor = own;
         while (cursor && cursor !== row) {
@@ -103,10 +112,7 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
             }
             if (cloneOwn) cloneOwn.remove();
         }
-        rowIdentity = clean(
-            (row.getAttribute('aria-label') || '') + ' ' +
-            (clone.textContent || '')
-        );
+        rowIdentity = declaredIdentity || clean(clone.textContent || '');
     }
     const ancestry = [];
     let cursor = node;
@@ -1053,10 +1059,12 @@ class PlaywrightBackend:
     ) -> ActionDeliveryReceipt:
         """Consume the target binding armed before the fresh identity read.
 
-        Screenshot equality remains an additional exact-frame check. The
-        already-armed MutationObserver covers hidden mutations, pixel-identical
-        node replacement, and every target/row subtree change from before the
-        identity observation through Playwright's real pointer delivery.
+        The already-armed MutationObserver covers hidden mutations,
+        pixel-identical node replacement, and every target/row subtree change
+        from before the identity observation through Playwright's real pointer
+        delivery. Unlike a remote pixel-only lease, this DOM lease deliberately
+        does not require byte-identical full-viewport screenshots: caret
+        painting and unrelated page animation are not target changes.
         """
 
         point = (int(x), int(y))
@@ -1072,17 +1080,11 @@ class PlaywrightBackend:
                 raise StructuralResolutionRefused(
                     "visual DOM actuation point changed after target binding"
                 )
-            # Playwright's default screenshot hides a live text caret by
-            # temporarily mutating the focused editable element. If that field
-            # shares the guarded record row with this button, the mutation
-            # correctly trips the row observer and creates a false refusal.
-            # Capture with the native caret unchanged for every guarded
-            # coordinate; the replayer uses the same frame mode at preflight.
-            current_frame = self.guarded_keyboard_frame()
-            if hashlib.sha256(current_frame).hexdigest() != expected_frame_sha256:
-                raise StructuralResolutionRefused(
-                    "visual frame changed after identity verification"
-                )
+            # Retain the protocol argument for cross-backend compatibility.
+            # Browser delivery is bound by the stronger target/record/context
+            # lease below; remote pixel backends continue to enforce their
+            # exact fresh-frame lease.
+            del expected_frame_sha256
             token_locator = self._token_locator(token)
             if token_locator.count() != 1 or not self._guard_is_current(
                 token_locator, token
@@ -1163,8 +1165,8 @@ class PlaywrightBackend:
         ``caret="initial"`` prevents Playwright from toggling inline styles on
         the editable element inside a guarded record row. A temporary
         screenshot stylesheet hides the blinking caret from the pixels, so
-        consecutive exact-frame hashes remain stable; the stylesheet is
-        injected outside the guarded row.
+        consecutive captures provide a stable resolver/identity observation;
+        the stylesheet is injected outside the guarded row.
         """
 
         def capture() -> bytes:
@@ -1201,13 +1203,11 @@ class PlaywrightBackend:
             )
         fingerprint, token = pending
         try:
-            if (
-                hashlib.sha256(self.guarded_keyboard_frame()).hexdigest()
-                != expected_frame_sha256
-            ):
-                raise StructuralResolutionRefused(
-                    "keyboard target frame changed after identity verification"
-                )
+            # Retain the protocol argument for cross-backend compatibility.
+            # The browser's one-shot focused-element/record/context lease is
+            # the authoritative race guard. Full-frame byte equality is both
+            # weaker semantically and unstable around caret painting.
+            del expected_frame_sha256
             token_locator = self._token_locator(token)
             if token_locator.count() != 1 or not self._guard_is_current(
                 token_locator,

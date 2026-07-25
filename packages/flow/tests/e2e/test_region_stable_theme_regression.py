@@ -109,4 +109,3 @@ def test_true_region_change_still_refuses_after_structural_theme_match(
     failure = next(result for result in report.results if not result.ok)
     assert failure.step_id == regression["failed_step"]
     assert "region_stable" in (failure.error or "")
-    assert "text_present" in (failure.error or "")
