@@ -41,10 +41,10 @@ no scaling then happens here (see :class:`AardwolfTransport`, which is 1:1).
 Identity note: RDP is a **pure-pixel substrate** — there is no structured
 (DOM / a11y) text to read, so this backend deliberately does NOT implement the
 optional ``IdentityBackend.structured_text_at`` (nor the ``StructuralBackend``
-url/title/page-count observations). Claiming a capability it cannot honor would
-be a lie; identity instead falls back to the OCR name+DOB-primary tier exactly
-as documented for pixel-only substrates (openadapt_flow/backend.py,
-docs/LIMITS.md). This mirrors how WindowsBackend omits StructuralBackend.
+url/title/page-count observations). Record identity therefore uses qualified
+pixel/OCR regions. The separate ``ExecutionContextIdentityBackend`` contract
+is available only from explicit PHI-free visual markers or a live
+transport/session digest observer; captured text is never returned.
 """
 
 from __future__ import annotations
@@ -53,6 +53,7 @@ import hashlib
 import io
 import threading
 import time
+import unicodedata
 from typing import Callable, Optional, Protocol, Union, runtime_checkable
 
 from PIL import Image
@@ -64,6 +65,7 @@ Framebuffer = tuple[Union["Image.Image", bytes], int, int]
 _LEASE_NONE = 0
 _LEASE_ARMED = 1
 _LEASE_INVALIDATED = 2
+_SESSION_DIGEST_HEX_LENGTH = 64
 
 
 @runtime_checkable
@@ -193,6 +195,56 @@ def normalize_chord(key: str) -> list[str]:
     return parts
 
 
+def _clean_marker(marker: Optional[str], *, name: str) -> Optional[str]:
+    if marker is None:
+        return None
+    cleaned = unicodedata.normalize("NFKC", marker).strip()
+    if not cleaned:
+        raise ValueError(f"{name} must be non-empty when configured")
+    if len(cleaned.encode("utf-8")) > 128 or not all(
+        character.isprintable() for character in cleaned
+    ):
+        raise ValueError(
+            f"{name} must be one printable PHI-free token of at most 128 bytes"
+        )
+    return cleaned
+
+
+def _marker_probe(
+    marker: Optional[str],
+    probe: Optional[Callable[[bytes], bool]],
+) -> Optional[Callable[[bytes], bool]]:
+    if marker is None:
+        if probe is not None:
+            raise ValueError("a marker probe requires its PHI-free marker")
+        return None
+    if probe is not None:
+        return probe
+
+    def _ocr_probe(png: bytes) -> bool:
+        from openadapt_flow import vision
+
+        return vision.find_text(png, marker, min_ratio=1.0) is not None
+
+    return _ocr_probe
+
+
+def _session_marker_digest(marker: str) -> str:
+    payload = b"openadapt.remote-session-marker.v1\x00" + marker.encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _valid_session_digest(value: object) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if len(candidate) != _SESSION_DIGEST_HEX_LENGTH:
+        return None
+    if any(ch not in "0123456789abcdef" for ch in candidate):
+        return None
+    return candidate
+
+
 class FreeRDPBackend:
     """`Backend` implementation over an :class:`RDPTransport`.
 
@@ -210,6 +262,17 @@ class FreeRDPBackend:
             return False for lock/login/disconnect or unexpected-app screens.
             Generic RDP has no portable structured lock-state signal, so a
             consequential deployment should supply this fail-closed hook.
+        application_marker: Optional PHI-free application marker verified on a
+            fresh framebuffer. Only this configured marker, never OCR text, is
+            returned.
+        workflow_state_marker: Optional PHI-free workflow-state marker under
+            the same fresh-frame contract.
+        session_marker: Optional PHI-free, session-unique visual marker. A
+            verified marker is exposed only as a namespaced SHA-256 digest.
+        session_identity_observer: Optional callback returning a live 64-hex
+            transport/session digest. When omitted, a transport method named
+            ``session_identity`` is used if present. Raw session identifiers
+            are rejected. Mutually exclusive with ``session_marker``.
     """
 
     def __init__(
@@ -220,6 +283,13 @@ class FreeRDPBackend:
         connect: bool = True,
         max_frame_age_s: float = 10.0,
         readiness_probe: Optional[Callable[[bytes], bool]] = None,
+        application_marker: Optional[str] = None,
+        application_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        workflow_state_marker: Optional[str] = None,
+        workflow_state_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        session_marker: Optional[str] = None,
+        session_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        session_identity_observer: Optional[Callable[[], Optional[str]]] = None,
     ) -> None:
         self._transport = transport
         self._viewport = viewport
@@ -227,8 +297,36 @@ class FreeRDPBackend:
         if self._max_frame_age_s <= 0:
             raise ValueError("max_frame_age_s must be positive")
         self._readiness_probe = readiness_probe
+        self._application_marker = _clean_marker(
+            application_marker, name="application_marker"
+        )
+        self._application_marker_probe = _marker_probe(
+            self._application_marker,
+            application_marker_probe,
+        )
+        self._workflow_state_marker = _clean_marker(
+            workflow_state_marker, name="workflow_state_marker"
+        )
+        self._workflow_state_marker_probe = _marker_probe(
+            self._workflow_state_marker,
+            workflow_state_marker_probe,
+        )
+        self._session_marker = _clean_marker(session_marker, name="session_marker")
+        self._session_marker_probe = _marker_probe(
+            self._session_marker,
+            session_marker_probe,
+        )
+        transport_observer = getattr(transport, "session_identity", None)
+        if session_identity_observer is None and callable(transport_observer):
+            session_identity_observer = transport_observer
+        if self._session_marker is not None and session_identity_observer is not None:
+            raise ValueError(
+                "configure either session_marker or session_identity_observer, not both"
+            )
+        self._session_identity_observer = session_identity_observer
         self._last_frame_monotonic: Optional[float] = None
         self._last_frame_digest: Optional[bytes] = None
+        self._last_session_identity: Optional[str] = None
         self._actuation_lease_state = _LEASE_NONE
         # Keep capture/geometry validation and a complete input gesture in one
         # critical section. A concurrent screenshot may otherwise replace the
@@ -268,6 +366,7 @@ class FreeRDPBackend:
             png = self._png_bytes(img)
             self._last_frame_monotonic = time.monotonic()
             self._last_frame_digest = self._canonical_frame_digest(img)
+            self._last_session_identity = self._session_identity_from_frame(png)
             if self._actuation_lease_state == _LEASE_ARMED:
                 self._actuation_lease_state = _LEASE_INVALIDATED
             return png
@@ -288,8 +387,56 @@ class FreeRDPBackend:
                     "RDP readiness probe rejected the fresh actuation frame "
                     "(locked, disconnected, or unexpected session)"
                 )
+            if (
+                self._session_identity_configured
+                and self._last_session_identity is None
+            ):
+                self._actuation_lease_state = _LEASE_INVALIDATED
+                raise RuntimeError(
+                    "configured RDP session identity is unavailable on the "
+                    "fresh actuation frame"
+                )
             self._actuation_lease_state = _LEASE_ARMED
             return png
+
+    # -- Optional ExecutionContextIdentityBackend --------------------------
+
+    def application_identity(self) -> Optional[str]:
+        """Return a PHI-free application marker verified on a fresh frame."""
+
+        return self._verified_marker_identity(
+            self._application_marker,
+            self._application_marker_probe,
+        )
+
+    def workflow_state_identity(self) -> Optional[str]:
+        """Return a PHI-free workflow-state marker verified on a fresh frame."""
+
+        return self._verified_marker_identity(
+            self._workflow_state_marker,
+            self._workflow_state_marker_probe,
+        )
+
+    def session_identity(self) -> Optional[str]:
+        """Return only a live, verified 64-hex remote-session digest."""
+
+        if not self._session_identity_configured:
+            return None
+        with self._input_lock:
+            png = self._fresh_identity_frame()
+            if png is None:
+                return None
+            observed = self._session_identity_from_frame(png)
+            if observed is None:
+                self._invalidate_actuation_lease()
+                return None
+            if (
+                self._actuation_lease_state == _LEASE_ARMED
+                and observed != self._last_session_identity
+            ):
+                self._invalidate_actuation_lease()
+                return None
+            return observed
 
     def wait_first_frame(self, *, retries: int = 20, settle_s: float = 0.25) -> bytes:
         """Poll :meth:`screenshot` until a non-blank frame, returning its PNG.
@@ -476,8 +623,10 @@ class FreeRDPBackend:
                 "RDP actuation lease was invalidated by another observation; "
                 "refusing input and requiring a fresh lease"
             )
-        if self._readiness_probe is not None or (
-            self._actuation_lease_state == _LEASE_ARMED
+        if (
+            self._readiness_probe is not None
+            or self._actuation_lease_state == _LEASE_ARMED
+            or self._session_identity_configured
         ):
             # Evaluate readiness on the current framebuffer, not merely the
             # resolver's leased image: a lock/disconnect or content change can
@@ -492,6 +641,16 @@ class FreeRDPBackend:
                     "RDP readiness probe rejected the current frame "
                     "(locked, disconnected, or unexpected session); refusing input"
                 )
+            current_session_identity = self._session_identity_from_frame(current_png)
+            if self._session_identity_configured and (
+                current_session_identity is None
+                or current_session_identity != self._last_session_identity
+            ):
+                self._invalidate_actuation_lease()
+                raise RuntimeError(
+                    "RDP session identity changed or became unverifiable after "
+                    "capture; refusing input"
+                )
             if self._actuation_lease_state == _LEASE_ARMED:
                 digest = self._canonical_frame_digest(current_img)
                 if self._last_frame_digest is None or digest != self._last_frame_digest:
@@ -505,6 +664,77 @@ class FreeRDPBackend:
         # framebuffer/readiness work can block on the network; recheck at the
         # last common point before an input edge.
         self._assert_frame_fresh()
+
+    @property
+    def _session_identity_configured(self) -> bool:
+        return (
+            self._session_marker is not None
+            or self._session_identity_observer is not None
+        )
+
+    def _invalidate_actuation_lease(self) -> None:
+        if self._actuation_lease_state == _LEASE_ARMED:
+            self._actuation_lease_state = _LEASE_INVALIDATED
+
+    def _fresh_identity_frame(self) -> Optional[bytes]:
+        """Passively capture a fresh framebuffer without replacing a valid lease."""
+
+        if self._actuation_lease_state == _LEASE_INVALIDATED:
+            return None
+        try:
+            frame, w, h = self._transport.framebuffer()
+            current = (int(w), int(h))
+            image = self._to_image(frame, current[0], current[1])
+            png = self._png_bytes(image)
+            if self._readiness_probe is not None and not self._readiness_probe(png):
+                self._invalidate_actuation_lease()
+                return None
+            if self._actuation_lease_state == _LEASE_ARMED and (
+                self._viewport != current
+                or self._last_frame_digest is None
+                or self._canonical_frame_digest(image) != self._last_frame_digest
+            ):
+                self._invalidate_actuation_lease()
+                return None
+            return png
+        except Exception:  # noqa: BLE001 - observer failure is unverifiable
+            self._invalidate_actuation_lease()
+            return None
+
+    def _verified_marker_identity(
+        self,
+        marker: Optional[str],
+        probe: Optional[Callable[[bytes], bool]],
+    ) -> Optional[str]:
+        if marker is None or probe is None:
+            return None
+        with self._input_lock:
+            png = self._fresh_identity_frame()
+            if png is None:
+                return None
+            try:
+                verified = bool(probe(png))
+            except Exception:  # noqa: BLE001 - observer failure is unverifiable
+                verified = False
+            if not verified:
+                self._invalidate_actuation_lease()
+                return None
+            return marker
+
+    def _session_identity_from_frame(self, png: bytes) -> Optional[str]:
+        if self._session_identity_observer is not None:
+            try:
+                return _valid_session_digest(self._session_identity_observer())
+            except Exception:  # noqa: BLE001 - observer failure is unverifiable
+                return None
+        if self._session_marker is None or self._session_marker_probe is None:
+            return None
+        try:
+            if not self._session_marker_probe(png):
+                return None
+        except Exception:  # noqa: BLE001 - observer failure is unverifiable
+            return None
+        return _session_marker_digest(self._session_marker)
 
     def _assert_frame_fresh(self) -> None:
         if self._last_frame_monotonic is None:

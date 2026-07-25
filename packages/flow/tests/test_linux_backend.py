@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 
 import pytest
@@ -7,11 +8,15 @@ from PIL import Image
 
 from openadapt_flow.backend import (
     Backend,
+    ExecutionContextIdentityBackend,
+    GuardedCoordinateActionBackend,
+    GuardedKeyboardActionBackend,
     IdentityBackend,
     NativeStructuralActionBackend,
     StructuralActionBackend,
     StructuralResolutionRefused,
 )
+from openadapt_flow.backends import linux_backend as linux_backend_module
 from openadapt_flow.backends.factory import build_backend
 from openadapt_flow.backends.linux_backend import (
     LinuxBackend,
@@ -75,6 +80,7 @@ class FakeLinuxClient:
         self.truncated = truncated
         self.calls: list[tuple] = []
         self.text_at_point: LinuxElement | None = TARGET_ELEMENT
+        self.focused: LinuxElement | None = TEXT_ELEMENT
         self.text_value = "Account 100512"
         self.native_succeeds = True
         self.replace_succeeds = True
@@ -114,6 +120,10 @@ class FakeLinuxClient:
     def element_at_point(self, window, x, y):
         self.calls.append(("element-at", window.native_id, x, y))
         return self.text_at_point
+
+    def focused_element(self, window):
+        self.calls.append(("focused-element", window.native_id))
+        return self.focused
 
     def find_candidates(self, window, locator):
         self.calls.append(("find", window.native_id, locator))
@@ -165,6 +175,59 @@ def test_linux_backend_implements_existing_runtime_capabilities() -> None:
     assert isinstance(target, IdentityBackend)
     assert isinstance(target, StructuralActionBackend)
     assert isinstance(target, NativeStructuralActionBackend)
+    assert isinstance(target, GuardedCoordinateActionBackend)
+    assert isinstance(target, GuardedKeyboardActionBackend)
+
+
+def test_guarded_keyboard_refuses_focus_change_before_delivery() -> None:
+    client = FakeLinuxClient(candidates=[TEXT_ELEMENT])
+    target = backend(client, allow_physical_input=True)
+    frame = target.guarded_keyboard_frame()
+    target.arm_guarded_keyboard(300, 200)
+    client.focused = TARGET_ELEMENT
+
+    with pytest.raises(LinuxBackendError, match="focused element changed"):
+        target.type_text_guarded(
+            "must not land",
+            expected_frame_sha256=hashlib.sha256(frame).hexdigest(),
+        )
+
+    assert not any(call[0] == "replace" for call in client.calls)
+
+
+def test_execution_context_identity_is_live_and_title_free(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_facts = {"value": ("12345678-1234-1234-1234-123456789abc", 42, 501)}
+    monkeypatch.setattr(
+        linux_backend_module,
+        "_linux_session_facts",
+        lambda: session_facts["value"],
+    )
+    title = "Patient Alice Example MRN 100512"
+    window = LinuxWindow("0.1", "Accuro EMR", title, 9001, (100, 200, 640, 480))
+    client = FakeLinuxClient(windows=[window])
+    target = LinuxBackend(client, app="Accuro EMR", window_title=title)
+
+    assert isinstance(target, ExecutionContextIdentityBackend)
+    assert target.application_identity() == "accuro-emr"
+    session = target.session_identity()
+    assert session is not None and len(session) == 64 and session == session.casefold()
+    assert title not in target.application_identity()
+    assert target.workflow_state_identity() is None
+
+    client.windows = [
+        LinuxWindow("0.2", "Unrelated App", title, 9002, (100, 200, 640, 480))
+    ]
+    assert target.application_identity() is None
+    assert target.session_identity() == session
+
+    session_facts["value"] = (
+        "12345678-1234-1234-1234-123456789abc",
+        43,
+        501,
+    )
+    assert target.session_identity() != session
 
 
 def test_import_and_injected_client_are_headless_safe() -> None:

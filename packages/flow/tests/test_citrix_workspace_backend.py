@@ -2,8 +2,9 @@
 
 These run without Docker / a browser / pyobjc: they assert the preset owner
 resolution, that the backend conforms to the base ``Backend`` protocol while
-deliberately NOT implementing the structural / identity capabilities (the ICA
-pixel floor), and that the factory builds it for ``backend.kind: citrix``.
+deliberately NOT implementing structured target/record identity capabilities
+(the ICA pixel floor), while permitting explicitly verified PHI-free execution
+context markers, and that the factory builds it for ``backend.kind: citrix``.
 
 The END-TO-END proof that the backend actually records->compiles->replays and
 safe-halts over a real no-DOM surface is the fixture qualification in
@@ -19,6 +20,7 @@ import pytest
 
 from openadapt_flow.backend import (
     Backend,
+    ExecutionContextIdentityBackend,
     IdentityBackend,
     StructuralActionBackend,
     StructuralBackend,
@@ -70,8 +72,8 @@ def test_owner_and_title_overrides():
     assert be._title_substr == "Claims App - ICA"
 
 
-def test_pixel_only_protocol_surface():
-    """Base Backend yes; structural/identity/system-of-record NO (ICA floor)."""
+def test_pixel_targeting_plus_context_identity_protocol_surface():
+    """No UIA/record identity; explicit context markers remain available."""
     be = CitrixWorkspaceBackend(_NoopWindowClient())
     # Python 3.10/3.11's runtime Protocol check uses hasattr() for data
     # members, which evaluates the side-effecting viewport property and takes a
@@ -88,6 +90,7 @@ def test_pixel_only_protocol_surface():
     }
     for member in members:
         assert inspect.getattr_static(be, member) is not None
+    assert isinstance(be, ExecutionContextIdentityBackend)
     assert not isinstance(be, StructuralBackend)
     assert not isinstance(be, IdentityBackend)
     assert not isinstance(be, StructuralActionBackend)
@@ -95,8 +98,33 @@ def test_pixel_only_protocol_surface():
 
 
 def test_readiness_text_builds_probe():
-    be = CitrixWorkspaceBackend(_NoopWindowClient(), readiness_text="Patient")
+    be = CitrixWorkspaceBackend(
+        _NoopWindowClient(), readiness_text="Published app ready"
+    )
     assert be._readiness_probe is not None
+    assert be._application_marker == "Published app ready"
+    assert be._application_marker_probe is not None
+
+
+def test_explicit_application_marker_overrides_readiness_identity():
+    be = CitrixWorkspaceBackend(
+        _NoopWindowClient(),
+        readiness_text="Published app ready",
+        application_marker="Accuro",
+        application_marker_probe=lambda _png: True,
+    )
+    assert be._application_marker == "Accuro"
+
+
+def test_window_title_is_never_used_as_application_or_session_identity():
+    sensitive_title = "Jane Doe - Account 004271"
+    be = CitrixWorkspaceBackend(
+        _NoopWindowClient(),
+        window_title=sensitive_title,
+        readiness_text=None,
+    )
+    assert be._application_marker is None
+    assert be._session_marker is None
 
 
 def test_factory_builds_citrix_backend_with_default_owner():

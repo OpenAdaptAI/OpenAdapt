@@ -1372,19 +1372,19 @@ def _build_break_payload(
     resumed success without exposing or hashing report contents.
     """
     halt = report.halt
-    status = (
-        "halt"
-        if report.execution_outcome == "HALTED"
-        or (report.execution_outcome is None and halt is not None)
-        else "failed"
-    )
+    explicit_outcome = report.execution_outcome
+    status = _coarse_status_for_outcome(explicit_outcome, legacy_halt=halt is not None)
     resolver_rung = _last_failed_rung(report)
     if resolver_rung is not None and resolver_rung not in _RUN_SUMMARY_RUNGS:
         raise HostedError("report contains an unknown resolution rung")
 
     payload: dict[str, Any] = {
         "kind": "break_summary",
-        "schema": BREAK_SUMMARY_SCHEMA,
+        "schema": (
+            BREAK_SUMMARY_SCHEMA
+            if explicit_outcome is not None
+            else LEGACY_BREAK_SUMMARY_SCHEMA
+        ),
         "workflow_id": _optional_uuid(workflow_id, field="workflow_id"),
         "bundle_content_digest": _hex64(
             report.bundle_content_digest,
@@ -1406,6 +1406,8 @@ def _build_break_payload(
         },
         "phi_minimal": True,
     }
+    if explicit_outcome is not None:
+        payload["outcome"] = _outcome_envelope_payload(report)
     if resolver_rung is not None:
         payload["resolver_rung"] = resolver_rung
     return payload
@@ -1475,15 +1477,6 @@ def report_break(
     except (OSError, ValueError) as exc:
         raise HostedError("report.json is unreadable or invalid") from exc
 
-    if report.execution_outcome == "COMPLETED_UNVERIFIED":
-        return {
-            "emitted": False,
-            "reason": (
-                "run completed without sufficient verification; "
-                "COMPLETED_UNVERIFIED stays local until the precise outcome "
-                "rail is available"
-            ),
-        }
     if report.execution_outcome == "VERIFIED" or (
         report.execution_outcome is None and report.halt is None and report.success
     ):
@@ -1565,9 +1558,12 @@ def _post_report(url: str, token: str, payload: dict[str, Any]) -> httpx.Respons
 # boundary, opposite outcome)
 # ---------------------------------------------------------------------------
 
-#: Wire-schema tag for the success payload; version it if the shape changes.
-RUN_SUMMARY_SCHEMA = "run-summary/v2"
-BREAK_SUMMARY_SCHEMA = "break-summary/v2"
+#: Wire-schema tags. Cloud retains v2 for already-released clients; current
+#: reports carry the exact versioned execution-outcome envelope in v3.
+RUN_SUMMARY_SCHEMA = "run-summary/v3"
+BREAK_SUMMARY_SCHEMA = "break-summary/v3"
+LEGACY_RUN_SUMMARY_SCHEMA = "run-summary/v2"
+LEGACY_BREAK_SUMMARY_SCHEMA = "break-summary/v2"
 
 #: CLOSED substrate enum (red-team PHI-1): the payload's ``backend`` field may
 #: only carry one of these fixed tokens, never a free-text hint. In particular
@@ -1595,6 +1591,37 @@ _MAX_RUN_SUMMARY_BYTES = 16 * 1024
 #: Sidecar file persisting this run's client-generated report UUID, so
 #: re-reporting the SAME run is idempotent while DISTINCT runs never collide.
 _RUN_REPORT_ID_FILE = ".report_run_id"
+
+
+def _outcome_envelope_payload(report: Any) -> dict[str, Any]:
+    """Return the report's exact PHI-free outcome envelope or refuse."""
+
+    envelope = report.outcome_envelope
+    if envelope is None:
+        raise HostedError(
+            "explicit execution outcome is missing its versioned evidence envelope"
+        )
+    if envelope.outcome != report.execution_outcome:
+        raise HostedError("execution outcome does not match its evidence envelope")
+    return envelope.model_dump(mode="json")
+
+
+def _coarse_status_for_outcome(
+    outcome: Optional[str],
+    *,
+    legacy_halt: bool = False,
+) -> str:
+    """Map precise evidence results onto the retained Cloud lifecycle enum."""
+
+    if outcome == "VERIFIED":
+        return "success"
+    if outcome in {"COMPLETED_UNVERIFIED", "HALTED", "ROLLED_BACK"}:
+        return "halt"
+    if outcome == "FAILED":
+        return "failed"
+    if outcome is None:
+        return "halt" if legacy_halt else "failed"
+    raise HostedError("report contains an unknown execution outcome")
 
 
 def _client_run_id(run_path: Path) -> str:
@@ -1990,9 +2017,14 @@ def _build_run_summary_payload(
         ),
         6,
     )
+    explicit_outcome = report.execution_outcome
     payload: dict[str, Any] = {
         "kind": "run_summary",
-        "schema": RUN_SUMMARY_SCHEMA,
+        "schema": (
+            RUN_SUMMARY_SCHEMA
+            if explicit_outcome is not None
+            else LEGACY_RUN_SUMMARY_SCHEMA
+        ),
         "status": "success",
         "flow_version": flow_version,
         "started_at": _run_summary_timestamp(report.started_at),
@@ -2017,6 +2049,8 @@ def _build_run_summary_payload(
             field="bundle_content_digest",
         ),
     }
+    if explicit_outcome is not None:
+        payload["outcome"] = _outcome_envelope_payload(report)
     if backend is not None:
         payload["backend"] = backend
     if normalized_workflow_id:

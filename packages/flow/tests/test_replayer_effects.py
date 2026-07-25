@@ -226,12 +226,13 @@ def test_effect_refuted_halts_despite_green_screen(tmp_path):
 # -- REFUTED duplicate on an irreversible effect -> reconcile -> proceed ----
 
 
-def test_effect_duplicate_irreversible_reconciles_and_proceeds(tmp_path):
+def test_effect_duplicate_irreversible_reconciles_as_rolled_back(tmp_path):
     url, db, stop = _fault_server()
     try:
         # Two non-idempotent submissions -> two rows (a double-delivered
         # click). The effect refutes (2 != 1); the compensator deletes the
-        # extra and re-verification confirms exactly one -> the run proceeds.
+        # extra and re-verification confirms exactly one. The runtime keeps the
+        # compensated execution distinct from ordinary verified success.
         backend = WritingBackend(url, posts=2)
         vision = _vision_that_confirms_saved()
         workflow = _save_workflow(
@@ -256,7 +257,11 @@ def test_effect_duplicate_irreversible_reconciles_and_proceeds(tmp_path):
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
 
-        assert report.success is True
+        assert report.execution_outcome == "ROLLED_BACK"
+        assert report.success is False
+        assert report.production_eligible is False
+        assert report.outcome_envelope is not None
+        assert report.outcome_envelope.compensation_actions == 1
         r = report.results[0]
         assert r.effect_verified is True
         assert any("RECONCILED" in line for line in r.effect_results)

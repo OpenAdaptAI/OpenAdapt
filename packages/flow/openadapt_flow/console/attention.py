@@ -179,7 +179,9 @@ def attention_item(root: Path, path: Path) -> Optional[AttentionItem]:
         data._contained_file(path, path / "pending_escalation.json.enc") is not None
     )
     outcome_needs_review = (
-        report is not None and report.execution_outcome == "COMPLETED_UNVERIFIED"
+        report is not None
+        and report.execution_outcome is not None
+        and report.execution_outcome != "VERIFIED"
     )
 
     if (

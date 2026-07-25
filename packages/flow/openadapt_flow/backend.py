@@ -276,6 +276,26 @@ class GuardedCoordinateActionBackend(Protocol):
 
 
 @runtime_checkable
+class FocusedElementActuationLeaseBackend(Protocol):
+    """Optional focused-control binding layered onto a remote frame lease.
+
+    Native backends that already use :class:`RemoteActuationBackend` for an
+    exact frame/window lease can additionally bind the freshly resolved target
+    point to one accessibility-focused element before final identity readback.
+    Delivery must refuse if that opaque element changes while the pixels remain
+    indistinguishable.
+    """
+
+    def arm_focused_element_lease(self, x: int, y: int) -> None:
+        """Bind the current focused element to the resolved target point."""
+        ...
+
+    def cancel_focused_element_lease(self) -> None:
+        """Cancel an unconsumed focused-element binding."""
+        ...
+
+
+@runtime_checkable
 class GuardedKeyboardActionBackend(Protocol):
     """Optional browser-local focus/record lease for consequential keyboard I/O.
 
@@ -355,6 +375,22 @@ class RemoteActuationBackend(Protocol):
 
     def acquire_actuation_frame(self) -> bytes:
         """Acquire focus/readiness and return the freshly leased PNG frame."""
+        ...
+
+
+@runtime_checkable
+class PreparedPointerActuationBackend(Protocol):
+    """Optional pointer pre-positioning for opaque remote-display clients.
+
+    Moving a remote cursor can legitimately repaint hover, caret, or remote
+    cursor pixels.  A backend implementing this seam positions the pointer
+    *before* the runtime acquires its final consequential actuation frame.  The
+    runtime then re-resolves the target and identity on that post-hover frame;
+    delivery must use the same prepared point without another pointer move.
+    """
+
+    def prepare_pointer_actuation(self, x: int, y: int) -> None:
+        """Position the pointer without pressing a button or claiming success."""
         ...
 
 

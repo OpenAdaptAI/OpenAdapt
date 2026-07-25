@@ -22,7 +22,14 @@ import pytest
 
 from openadapt_flow import hosted, privacy
 from openadapt_flow.__main__ import build_parser, main
-from openadapt_flow.ir import HaltObservation, Resolution, RunReport, StepResult
+from openadapt_flow.ir import (
+    ExecutionOutcomeEnvelope,
+    HaltObservation,
+    OutcomeContractCounts,
+    Resolution,
+    RunReport,
+    StepResult,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -1254,6 +1261,29 @@ def _halted_run(run_dir: Path) -> Path:
     return run_dir / "report.json"
 
 
+def _outcome_envelope(
+    outcome: str,
+    *,
+    profile: str,
+    completed: bool,
+    production_eligible: bool = False,
+    model_calls: int = 0,
+) -> ExecutionOutcomeEnvelope:
+    authorization = 1 if outcome == "VERIFIED" else 0
+    counts = OutcomeContractCounts(authorization=authorization)
+    return ExecutionOutcomeEnvelope(
+        outcome=outcome,
+        profile=profile,
+        execution_completed=completed,
+        production_eligible=production_eligible,
+        required_contracts=counts,
+        passed_contracts=counts,
+        evidence_classes=["authorization"] if authorization else [],
+        model_calls=model_calls,
+        external_network_calls="unknown",
+    )
+
+
 def test_report_break_success(tmp_path, monkeypatch):
     run_dir = tmp_path / "runs" / "r1"
     _halted_run(run_dir)
@@ -1272,7 +1302,7 @@ def test_report_break_success(tmp_path, monkeypatch):
     assert result["teach_url"] == (f"https://h.test/dashboard/runs/{_RUN_UUID}/teach")
     posted = recorder["kw"]["json"]
     assert posted["kind"] == "break_summary"
-    assert posted["schema"] == hosted.BREAK_SUMMARY_SCHEMA
+    assert posted["schema"] == hosted.LEGACY_BREAK_SUMMARY_SCHEMA
     assert posted["workflow_id"] == _WORKFLOW_UUID
     assert posted["bundle_content_digest"] == "ab" * 32
     assert "deployment_kind" not in posted
@@ -1377,9 +1407,7 @@ def test_report_break_success_run_emits_nothing(tmp_path, monkeypatch):
     assert result["emitted"] is False
 
 
-def test_report_break_keeps_completed_unverified_local_before_resolution(
-    tmp_path, monkeypatch
-):
+def test_report_break_routes_completed_unverified_to_attention(tmp_path, monkeypatch):
     run_dir = tmp_path / "runs" / "completed-unverified"
     RunReport(
         workflow_name="demo",
@@ -1387,23 +1415,16 @@ def test_report_break_keeps_completed_unverified_local_before_resolution(
         execution_profile="demo",
         execution_outcome="COMPLETED_UNVERIFIED",
         execution_completed=True,
+        outcome_envelope=_outcome_envelope(
+            "COMPLETED_UNVERIFIED",
+            profile="demo",
+            completed=True,
+        ),
+        bundle_content_digest="ab" * 32,
         success=True,
     ).save(run_dir)
-    monkeypatch.setattr(
-        hosted,
-        "resolve_host",
-        lambda *a, **k: pytest.fail("must not resolve a host for local-only outcome"),
-    )
-    monkeypatch.setattr(
-        hosted,
-        "resolve_token",
-        lambda *a, **k: pytest.fail("must not resolve a token for local-only outcome"),
-    )
-    monkeypatch.setattr(
-        httpx,
-        "post",
-        lambda *a, **k: pytest.fail("must not POST a local-only outcome"),
-    )
+    recorder: dict = {}
+    monkeypatch.setattr(httpx, "post", _capture_post(recorder, 202, _break_response()))
 
     result = hosted.report_break(
         run_dir,
@@ -1412,8 +1433,10 @@ def test_report_break_keeps_completed_unverified_local_before_resolution(
         token="tok",
     )
 
-    assert result["emitted"] is False
-    assert "COMPLETED_UNVERIFIED stays local" in result["reason"]
+    assert result["emitted"] is True
+    assert recorder["kw"]["json"]["status"] == "halt"
+    assert recorder["kw"]["json"]["schema"] == hosted.BREAK_SUMMARY_SCHEMA
+    assert recorder["kw"]["json"]["outcome"]["outcome"] == "COMPLETED_UNVERIFIED"
 
 
 def test_report_break_missing_report(tmp_path):
@@ -1557,7 +1580,7 @@ def test_report_run_success(tmp_path, monkeypatch):
     assert recorder["url"] == "https://h.test/api/runs/ingest-report"
     posted = recorder["kw"]["json"]
     assert posted["kind"] == "run_summary"
-    assert posted["schema"] == hosted.RUN_SUMMARY_SCHEMA
+    assert posted["schema"] == hosted.LEGACY_RUN_SUMMARY_SCHEMA
     assert posted["status"] == "success"
     assert posted["workflow_id"] == _WORKFLOW_UUID
     assert posted["bundle_content_digest"] == "ab" * 32
@@ -1605,6 +1628,14 @@ def test_report_run_verified_success(tmp_path, monkeypatch):
         execution_profile="standard",
         execution_outcome="VERIFIED",
         production_eligible=True,
+        execution_completed=True,
+        outcome_envelope=_outcome_envelope(
+            "VERIFIED",
+            profile="standard",
+            completed=True,
+            production_eligible=True,
+            model_calls=2,
+        ),
     )
     recorder: dict = {}
     monkeypatch.setattr(httpx, "post", _capture_post(recorder, 202, _run_response()))
@@ -1618,6 +1649,8 @@ def test_report_run_verified_success(tmp_path, monkeypatch):
 
     assert result["emitted"] is True
     assert recorder["kw"]["json"]["status"] == "success"
+    assert recorder["kw"]["json"]["schema"] == hosted.RUN_SUMMARY_SCHEMA
+    assert recorder["kw"]["json"]["outcome"]["outcome"] == "VERIFIED"
 
 
 def test_report_run_binds_by_digest_without_workflow_id(tmp_path, monkeypatch):
@@ -1945,8 +1978,8 @@ def test_break_and_resumed_success_share_attempt_id(tmp_path, monkeypatch):
     hosted.report_run(
         run_dir, workflow_id=_WORKFLOW_UUID, host="https://h.test", token="tok"
     )
-    assert payloads[0]["schema"] == hosted.BREAK_SUMMARY_SCHEMA
-    assert payloads[1]["schema"] == hosted.RUN_SUMMARY_SCHEMA
+    assert payloads[0]["schema"] == hosted.LEGACY_BREAK_SUMMARY_SCHEMA
+    assert payloads[1]["schema"] == hosted.LEGACY_RUN_SUMMARY_SCHEMA
     assert payloads[0]["client_run_id"] == payloads[1]["client_run_id"]
     assert payloads[0]["bundle_content_digest"] == payloads[1]["bundle_content_digest"]
 

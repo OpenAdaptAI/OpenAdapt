@@ -559,10 +559,11 @@ jobs:
             runs/**/*.png
           if-no-files-found: warn
 
-  # --- Windows: native ABI + pure-Python mock backend tests ----------------
+  # --- Windows: native ABI + read-only context + mock backend tests ---------
   # Runs on PRs because 64-bit ctypes ABI mistakes cannot be validated on the
-  # Linux required matrix. The ABI test binds/inspects prototypes only; every
-  # behavior test uses fakes. Nothing opens a window or calls SendInput.
+  # Linux required matrix. The context probe reads the live logon-session
+  # identity through the typed loopback endpoint; every actuation behavior test
+  # uses fakes. Nothing opens a window or calls SendInput.
   windows-mock:
     runs-on: windows-latest
     steps:
@@ -577,11 +578,16 @@ jobs:
       - name: Install
         run: pip install -e .[dev]
 
-      # The WindowsBackend + RDP backend suites mock the WAA/RDP servers with
-      # stdlib HTTP + fakes (no live VM, no Playwright browser), and the win32
-      # window-client behavior suite mocks the entire Win32 API. Its one native
-      # test only constructs NativeWin32Api and verifies every ctypes prototype
-      # and structure size; it never enumerates a window or calls SendInput.
+      - name: Windows live execution-context probe (read-only)
+        run: |
+          pytest -q tests/test_windows_context_identity_native.py
+
+      # The remaining WindowsBackend + RDP backend suites mock the WAA/RDP
+      # servers with stdlib HTTP + fakes (no live VM, no Playwright browser),
+      # and the win32 window-client behavior suite mocks the entire Win32 API.
+      # Its one native test only constructs NativeWin32Api and verifies every
+      # ctypes prototype and structure size; it never enumerates a window or
+      # calls SendInput.
       - name: Windows ABI and mock backend tests (non-injecting)
         run: |
           pytest -q tests/test_windows_backend.py tests/test_rdp_backend.py tests/test_win32_window_client.py tests/test_remote_display_backend.py

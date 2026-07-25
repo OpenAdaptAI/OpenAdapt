@@ -38,13 +38,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
+import sys
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from openadapt_flow.backend import StructuralResolutionRefused
 from openadapt_flow.backends.remote_display import (
     _CHAR_KEYCODES,
+    _LEASE_ARMED,
+    _LEASE_NONE,
     _MAC_KEYCODES,
     _NAMED_KEY_ALIASES,
     MacWindowClient,
@@ -87,7 +93,26 @@ class MacOSClient(WindowClient, Protocol):
 
     def exact_window_focused_main(self, window: WindowInfo) -> bool: ...
 
+    def focused_element_token(self, window: WindowInfo) -> Any: ...
+
+    def focused_element_token_at_point(
+        self,
+        window: WindowInfo,
+        x: float,
+        y: float,
+    ) -> Any: ...
+
+    def focused_element_matches(self, window: WindowInfo, expected: Any) -> bool: ...
+
     def replace_selected_text(self, window: WindowInfo, text: str) -> bool: ...
+
+    def replace_selected_text_guarded(
+        self,
+        window: WindowInfo,
+        text: str,
+        *,
+        expected_focused_element: Any,
+    ) -> bool: ...
 
 
 # Maximum AX nodes enumerated for one structural resolution. A window whose
@@ -132,6 +157,45 @@ _MAC_ACTION_MAP = {
     "AXIncrement": "increment",
     "AXDecrement": "decrement",
 }
+
+_CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+
+
+def _application_identifier(name: str) -> Optional[str]:
+    """Return a bounded PHI-free identifier derived only from an app owner.
+
+    Window titles are deliberately excluded: native applications commonly put
+    patient, account, or document names in their title bar.  The configured
+    owner is exact-validated against the live window before this helper runs.
+    """
+
+    ascii_name = (
+        unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    )
+    identifier = re.sub(r"[^A-Za-z0-9._:/-]+", "-", ascii_name).strip("-._:/")
+    identifier = identifier.casefold()[:128]
+    return identifier if _CONTEXT_ID_RE.fullmatch(identifier) else None
+
+
+def _mac_audit_session_id() -> Optional[int]:
+    """Return the current macOS audit/login session id, if the OS exposes it."""
+
+    if sys.platform != "darwin":
+        return None
+    try:
+        import ctypes  # noqa: PLC0415
+        import ctypes.util  # noqa: PLC0415
+
+        library = ctypes.util.find_library("bsm") or "/usr/lib/libbsm.dylib"
+        audit_session_self = ctypes.CDLL(library).audit_session_self
+        audit_session_self.argtypes = []
+        audit_session_self.restype = ctypes.c_uint32
+        session_id = int(audit_session_self())
+        if session_id in {0, 0xFFFFFFFF}:
+            return None
+        return session_id
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
 
 
 @dataclass(frozen=True)
@@ -515,6 +579,10 @@ class MacOSBackend(RemoteDisplayBackend):
         self._foreground_retries = max(1, int(foreground_retries))
         self._foreground_settle_s = max(0.0, float(foreground_settle_s))
         self._captured_window: Optional[WindowInfo] = None
+        # Opaque AX object captured with the one-shot actuation frame. It is
+        # process-local, never serialized/logged, and prevents an unchanged-
+        # pixel focus switch from redirecting consequential TYPE/KEY input.
+        self._actuation_focused_element: Any = None
         super().__init__(
             native_client,
             owner_substr=app.strip(),
@@ -548,6 +616,15 @@ class MacOSBackend(RemoteDisplayBackend):
         self._window = candidates[0]
         return candidates[0]
 
+    def _window_focus_matches(self, window: WindowInfo) -> bool:
+        """Use authoritative CG+AX focus; NSWorkspace may lag after AXRaise."""
+
+        return (
+            self._mac_client.frontmost_window_id() == window.window_id
+            and self._mac_client.focused_application_pid() == window.pid
+            and self._mac_client.exact_window_focused_main(window)
+        )
+
     def screenshot(self) -> bytes:
         if self._require_capture_trust and not self._mac_client.capture_trusted():
             raise MacOSBackendError(
@@ -556,9 +633,74 @@ class MacOSBackend(RemoteDisplayBackend):
                 "Security > Screen & System Audio Recording, enable the app "
                 "that launches openadapt-flow, then restart it."
             )
+        if self._actuation_lease_state == _LEASE_ARMED:
+            self._actuation_focused_element = None
         frame = super().screenshot()
         self._captured_window = self._resolve_window()
         return frame
+
+    def arm_focused_element_lease(self, x: int, y: int) -> None:
+        """Bind the exact AX focus to the freshly resolved target point."""
+        self.cancel_focused_element_lease()
+        if self._actuation_lease_state != _LEASE_ARMED:
+            raise MacOSBackendError(
+                "native focused-element binding requires an armed actuation frame"
+            )
+        window = self._ensure_captured()
+        screen_x, screen_y = self._pixel_to_screen(window, int(x), int(y))
+        observe_focus = getattr(
+            self._mac_client,
+            "focused_element_token_at_point",
+            None,
+        )
+        token = (
+            observe_focus(window, screen_x, screen_y)
+            if callable(observe_focus)
+            else None
+        )
+        if token is None:
+            raise MacOSBackendError(
+                "native focused AX element does not match the freshly resolved "
+                "keyboard target"
+            )
+        self._actuation_focused_element = token
+
+    def cancel_focused_element_lease(self) -> None:
+        self._actuation_focused_element = None
+
+    # -- live execution-context identity -----------------------------------
+
+    def application_identity(self) -> Optional[str]:
+        """Return the exact live application owner, never the window title.
+
+        ``find_windows`` is an exact owner/title query in the shipped client,
+        but the equality check is intentionally repeated here so an injected or
+        future client cannot turn a broad selector into a verified identity.
+        Observation failure is ``None`` (unverifiable), never the configured
+        expected value echoed back to the runtime.
+        """
+
+        try:
+            window = self._resolve_window(refresh=True)
+        except Exception:
+            return None
+        if window.owner.casefold() != self._owner_substr.casefold():
+            return None
+        return _application_identifier(window.owner)
+
+    def session_identity(self) -> Optional[str]:
+        """Hash only live macOS audit/login-session continuity facts."""
+
+        session_id = _mac_audit_session_id()
+        if session_id is None:
+            return None
+        material = f"macos-session-v1\0{os.getuid()}\0{session_id}"
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+    def workflow_state_identity(self) -> Optional[str]:
+        """Workflow state requires an explicitly qualified AX marker."""
+
+        return None
 
     def _assert_bound_physical_target(
         self,
@@ -588,66 +730,115 @@ class MacOSBackend(RemoteDisplayBackend):
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click only through one foregrounded, frame-compatible window binding."""
-        if self._captured_window is None or self._viewport is None:
-            self._ensure_input_ready()
-            self.screenshot()
-        assert self._captured_window is not None
-        assert self._viewport is not None
-        frame_window = self._captured_window
-        bound = self._bind_physical_target()
-        if (
-            bound.window_id != frame_window.window_id
-            or bound.pid != frame_window.pid
-            or bound.title != frame_window.title
-            or bound.bounds[2:] != frame_window.bounds[2:]
-        ):
-            raise MacOSBackendError(
-                "native window was resized, reopened, or retitled after its "
-                "frame was captured; refusing to map stale pixel coordinates "
-                f"from id={frame_window.window_id} bounds={frame_window.bounds!r} "
-                f"to id={bound.window_id} bounds={bound.bounds!r}"
+        with self._input_lock:
+            if self._captured_window is None or self._viewport is None:
+                self.screenshot()
+            assert self._captured_window is not None
+            assert self._viewport is not None
+            frame_window = self._captured_window
+            current_window = self._resolve_window(refresh=True)
+            if (
+                self._actuation_lease_state == _LEASE_NONE
+                and current_window.window_id == frame_window.window_id
+                and current_window.pid == frame_window.pid
+                and current_window.title == frame_window.title
+                and current_window.bounds[2:] == frame_window.bounds[2:]
+                and current_window.bounds[:2] != frame_window.bounds[:2]
+            ):
+                # A reversible direct caller may move an otherwise identical
+                # window between capture and click; local captured coordinates
+                # remain valid after refreshing the screen-point origin. Never
+                # do this for an armed consequential lease: post-identity
+                # geometry changes must halt and re-resolve.
+                self.screenshot()
+                assert self._captured_window is not None
+                frame_window = self._captured_window
+                current_window = frame_window
+            if (
+                current_window.window_id != frame_window.window_id
+                or current_window.pid != frame_window.pid
+                or current_window.title != frame_window.title
+                or current_window.bounds[2:] != frame_window.bounds[2:]
+            ):
+                raise MacOSBackendError(
+                    "native window was resized, reopened, or retitled after its "
+                    "frame was captured; refusing to map stale pixel coordinates "
+                    f"from id={frame_window.window_id} "
+                    f"bounds={frame_window.bounds!r} to "
+                    f"id={current_window.window_id} "
+                    f"bounds={current_window.bounds!r}"
+                )
+            point_px = (int(x), int(y))
+            # Keep a consequential exact-frame lease armed while moving the
+            # pointer. Hover/focus changes are checked again at the first
+            # pointer-down edge, where the one-shot lease is consumed.
+            self._ensure_input_ready(
+                point=point_px,
+                consume_actuation_lease=False,
             )
-        width, height = self._viewport
-        if not (0 <= x < width and 0 <= y < height):
-            raise MacOSBackendError(
-                f"click ({x}, {y}) is outside captured viewport {self._viewport}"
-            )
-        scale = self._scale or 1.0
-        sx = bound.bounds[0] + x / scale
-        sy = bound.bounds[1] + y / scale
+            bound = self._resolve_window(refresh=True)
+            self._assert_bound_physical_target(bound)
+            if (
+                bound.window_id != frame_window.window_id
+                or bound.pid != frame_window.pid
+                or bound.title != frame_window.title
+                or bound.bounds[2:] != frame_window.bounds[2:]
+            ):
+                raise MacOSBackendError(
+                    "native window was resized, reopened, or retitled after its "
+                    "frame was captured; refusing to map stale pixel coordinates "
+                    f"from id={frame_window.window_id} "
+                    f"bounds={frame_window.bounds!r} to id={bound.window_id} "
+                    f"bounds={bound.bounds!r}"
+                )
+            width, height = self._viewport
+            if not (0 <= x < width and 0 <= y < height):
+                raise MacOSBackendError(
+                    f"click ({x}, {y}) is outside captured viewport {self._viewport}"
+                )
+            scale = self._scale or 1.0
+            sx = bound.bounds[0] + x / scale
+            sy = bound.bounds[1] + y / scale
 
-        point = (sx, sy)
-        self._assert_bound_physical_target(bound, point=point)
-        self._mac_client.mouse_move(sx, sy)
-        time.sleep(self._settle_s)
-        self._assert_bound_physical_target(bound, point=point)
-        counts = 2 if double else 1
-        for index in range(counts):
+            point = (sx, sy)
             self._assert_bound_physical_target(bound, point=point)
-            self._mac_client.mouse(
-                sx,
-                sy,
-                button="left",
-                down=True,
-                click_count=index + 1,
-            )
-            try:
-                time.sleep(self._settle_s)
+            self._mac_client.mouse_move(sx, sy)
+            time.sleep(self._settle_s)
+            self._assert_bound_physical_target(bound, point=point)
+            self._ensure_input_ready(point=point_px)
+            rebound = self._resolve_window(refresh=True)
+            if rebound != bound:
+                raise MacOSBackendError(
+                    "native window binding changed while positioning the pointer; "
+                    "refusing input"
+                )
+            self._assert_bound_physical_target(bound, point=point)
+            counts = 2 if double else 1
+            for index in range(counts):
                 self._assert_bound_physical_target(bound, point=point)
-            finally:
-                # Always release a button that this backend pressed. If focus
-                # changed after mouse-down, the assertion still propagates and
-                # no further click is attempted, but leaving a global button
-                # latched would corrupt the operator's next physical action.
                 self._mac_client.mouse(
                     sx,
                     sy,
                     button="left",
-                    down=False,
+                    down=True,
                     click_count=index + 1,
                 )
-            time.sleep(self._settle_s)
-            self._assert_bound_physical_target(bound, point=point)
+                try:
+                    time.sleep(self._settle_s)
+                    self._assert_bound_physical_target(bound, point=point)
+                finally:
+                    # Always release a button that this backend pressed. If
+                    # focus changed after mouse-down, the assertion still
+                    # propagates and no further click is attempted.
+                    self._mac_client.mouse(
+                        sx,
+                        sy,
+                        button="left",
+                        down=False,
+                        click_count=index + 1,
+                    )
+                time.sleep(self._settle_s)
+                self._assert_bound_physical_target(bound, point=point)
 
     def ensure_foreground(
         self, *, retries: Optional[int] = None, settle_s: Optional[float] = None
@@ -691,19 +882,31 @@ class MacOSBackend(RemoteDisplayBackend):
                 "then restart it. Refusing to emit input."
             )
 
-    def _ensure_input_ready(self, *, point: Optional[tuple[int, int]] = None) -> None:
-        """Gate physical/global input on both active app and exact window."""
-        if point is not None:
-            # The base remote-display hook receives captured-pixel coordinates,
-            # while native macOS must bind and convert the exact screen point in
-            # its click override. Never reinterpret those pixels as global
-            # coordinates if a caller bypasses the native point-bound path.
-            raise MacOSBackendError(
-                "native macOS coordinate input must use the point-bound click "
-                "path; refusing an unconverted base-backend point"
-            )
+    def _ensure_input_ready(
+        self,
+        *,
+        point: Optional[tuple[int, int]] = None,
+        consume_actuation_lease: bool = True,
+    ) -> None:
+        """Gate native input on the exact frame lease plus exact AX/CG window."""
         self._ensure_input_trusted()
         self.ensure_foreground()
+        bound = self._resolve_window(refresh=True)
+        self._assert_bound_physical_target(bound)
+        # MacOSBackend intentionally reuses the remote-display capture/lease
+        # machinery. Bypass this override explicitly so a fresh frame acquired
+        # by the runtime is compared and consumed immediately before the native
+        # input edge. ``point`` remains in captured-pixel coordinates, exactly
+        # as the base validator expects; screen-point conversion stays in
+        # ``click``.
+        try:
+            RemoteDisplayBackend._ensure_input_ready(
+                self,
+                point=point,
+                consume_actuation_lease=consume_actuation_lease,
+            )
+        except RemoteDisplayError as exc:
+            raise MacOSBackendError(str(exc)) from exc
         bound = self._resolve_window(refresh=True)
         self._assert_bound_physical_target(bound)
 
@@ -717,6 +920,10 @@ class MacOSBackend(RemoteDisplayBackend):
     def type_text(self, text: str) -> None:
         if not text:
             return
+        guarded_delivery = self._actuation_lease_state == _LEASE_ARMED
+        expected_focused_element = (
+            self._actuation_focused_element if guarded_delivery else None
+        )
         # AX text replacement is addressed to one exact focused element, not
         # routed through the global keyboard event stream. NSWorkspace can lag
         # behind the WindowServer/AX state under remote control, so bound AX
@@ -734,7 +941,36 @@ class MacOSBackend(RemoteDisplayBackend):
                 and self._mac_client.frontmost_window_id() == target.window_id
             )
             if exact_ax_focus and exact_cg_topmost:
-                if self._mac_client.replace_selected_text(target, text):
+                self._ensure_input_ready()
+                rebound = self._resolve_window(refresh=True)
+                if rebound != target:
+                    raise MacOSBackendError(
+                        "native text window changed after focus and frame "
+                        "verification; refusing AX text delivery"
+                    )
+                if guarded_delivery:
+                    guarded_replace = getattr(
+                        self._mac_client,
+                        "replace_selected_text_guarded",
+                        None,
+                    )
+                    if expected_focused_element is None or not callable(
+                        guarded_replace
+                    ):
+                        raise MacOSBackendError(
+                            "native text focus could not be bound to the final "
+                            "identity-verified actuation frame; refusing AX text "
+                            "delivery"
+                        )
+                    delivered = guarded_replace(
+                        target,
+                        text,
+                        expected_focused_element=expected_focused_element,
+                    )
+                else:
+                    delivered = self._mac_client.replace_selected_text(target, text)
+                self._actuation_focused_element = None
+                if delivered:
                     return
                 # Never retry or fall back after an AX delivery attempt. An AX
                 # error is not proof that the target remained unchanged, so a
@@ -758,6 +994,10 @@ class MacOSBackend(RemoteDisplayBackend):
         if len(final) == 1 and not modifiers:
             self.type_text(final)
             return
+        guarded_delivery = self._actuation_lease_state == _LEASE_ARMED
+        expected_focused_element = (
+            self._actuation_focused_element if guarded_delivery else None
+        )
         bound = self._bind_physical_target()
         code = _MAC_KEYCODES.get(final.lower())
         shift = False
@@ -769,6 +1009,23 @@ class MacOSBackend(RemoteDisplayBackend):
             raise MacOSBackendError(f"no native Mac key mapping for {final!r}")
         flags = list(modifiers) + (["shift"] if shift else [])
         self._assert_bound_physical_target(bound)
+        if guarded_delivery:
+            focus_matches = getattr(
+                self._mac_client,
+                "focused_element_matches",
+                None,
+            )
+            if (
+                expected_focused_element is None
+                or not callable(focus_matches)
+                or not focus_matches(bound, expected_focused_element)
+            ):
+                self._actuation_focused_element = None
+                raise MacOSBackendError(
+                    "native key focus changed after final identity verification; "
+                    "refusing global key delivery"
+                )
+        self._actuation_focused_element = None
         try:
             self._mac_client.key(code, down=True, flags=flags)
             self._assert_bound_physical_target(bound)

@@ -13,6 +13,7 @@ stack over the FreeRDPBackend against a stateful fake desktop, proving the
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -22,7 +23,12 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from openadapt_flow.backend import Backend, IdentityBackend, StructuralBackend
+from openadapt_flow.backend import (
+    Backend,
+    ExecutionContextIdentityBackend,
+    IdentityBackend,
+    StructuralBackend,
+)
 from openadapt_flow.backends.rdp_backend import (
     FreeRDPBackend,
     RDPTransport,
@@ -271,6 +277,7 @@ def backend(transport: FakeRDPTransport) -> FreeRDPBackend:
 
 def test_implements_backend_protocol(backend: FreeRDPBackend) -> None:
     assert isinstance(backend, Backend)
+    assert isinstance(backend, ExecutionContextIdentityBackend)
 
 
 def test_connect_on_construction(transport: FakeRDPTransport) -> None:
@@ -294,6 +301,116 @@ def test_pixel_only_has_no_structured_or_structural_capabilities(
     assert not isinstance(backend, StructuralBackend)
     for attr in ("structured_text_at", "url", "page_title", "page_count"):
         assert not hasattr(backend, attr)
+
+
+def test_live_context_markers_preserve_unchanged_actuation_lease() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(
+        transport,
+        application_marker="Accuro",
+        application_marker_probe=lambda _png: True,
+        workflow_state_marker="Eligibility ready",
+        workflow_state_marker_probe=lambda _png: True,
+        session_marker="clinic-rdp-session-4",
+        session_marker_probe=lambda _png: True,
+    )
+    backend.acquire_actuation_frame()
+
+    application = backend.application_identity()
+    workflow_state = backend.workflow_state_identity()
+    session = backend.session_identity()
+
+    assert application == "Accuro"
+    assert workflow_state == "Eligibility ready"
+    assert (
+        session
+        == hashlib.sha256(
+            b"openadapt.remote-session-marker.v1\x00clinic-rdp-session-4"
+        ).hexdigest()
+    )
+    assert NOTE_VALUE not in repr((application, workflow_state, session))
+
+    backend.click(*BUTTON_CENTER)
+    assert transport.pointer_events
+
+
+def test_absent_rdp_application_marker_invalidates_actuation_lease() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(
+        transport,
+        application_marker="Accuro",
+        application_marker_probe=lambda _png: False,
+    )
+    backend.acquire_actuation_frame()
+
+    assert backend.application_identity() is None
+    with pytest.raises(RuntimeError, match="invalidated"):
+        backend.click(*BUTTON_CENTER)
+    assert transport.pointer_events == []
+
+
+def test_rdp_context_observation_refuses_mutated_frame_before_input() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(
+        transport,
+        workflow_state_marker="Ready to submit",
+        workflow_state_marker_probe=lambda _png: True,
+    )
+    backend.acquire_actuation_frame()
+    changed = transport.screens[0].copy()
+    changed.putpixel((0, 0), (244, 245, 245))
+    transport.screens[0] = changed
+
+    assert backend.workflow_state_identity() is None
+    with pytest.raises(RuntimeError, match="invalidated"):
+        backend.click(*BUTTON_CENTER)
+    assert transport.pointer_events == []
+
+
+def test_rdp_live_session_digest_change_invalidates_before_input() -> None:
+    transport = FakeRDPTransport(app_screens())
+    live = {"digest": "a" * 64}
+    backend = FreeRDPBackend(
+        transport,
+        session_identity_observer=lambda: live["digest"],
+    )
+    backend.acquire_actuation_frame()
+    assert backend.session_identity() == "a" * 64
+
+    live["digest"] = "b" * 64
+    assert backend.session_identity() is None
+    with pytest.raises(RuntimeError, match="invalidated"):
+        backend.click(*BUTTON_CENTER)
+    assert transport.pointer_events == []
+
+
+def test_rdp_raw_session_identity_is_never_exposed() -> None:
+    sensitive = "DOMAIN/jane.doe patient account 004271"
+    live = {"value": sensitive}
+    backend = FreeRDPBackend(
+        FakeRDPTransport(app_screens()),
+        session_identity_observer=lambda: live["value"],
+    )
+
+    observed = backend.session_identity()
+
+    assert observed is None
+    assert sensitive not in repr(observed)
+    live["value"] = "A" * 64
+    assert backend.session_identity() is None
+
+
+def test_rdp_context_marker_must_be_bounded_single_line_token() -> None:
+    with pytest.raises(ValueError, match="printable PHI-free token"):
+        FreeRDPBackend(
+            FakeRDPTransport(app_screens()),
+            application_marker="Accuro\nPatient Jane Doe",
+        )
+    with pytest.raises(ValueError, match="at most 128 bytes"):
+        FreeRDPBackend(
+            FakeRDPTransport(app_screens()),
+            session_marker="x" * 129,
+        )
 
 
 # -- screenshot / viewport -----------------------------------------------------

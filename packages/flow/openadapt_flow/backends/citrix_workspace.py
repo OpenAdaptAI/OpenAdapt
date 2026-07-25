@@ -25,9 +25,10 @@ by owner/title and the *same* capture+inject code runs. This module is the thin,
   constraints. It conforms to the base :class:`~openadapt_flow.backend.Backend`
   protocol UNCHANGED, so the resolver ladder + effect verification run over it
   exactly as over any other backend, and -- like ``RemoteDisplayBackend`` -- it
-  deliberately implements ONLY the base protocol (NOT ``StructuralBackend`` /
-  ``IdentityBackend`` / ``StructuralActionBackend``), so the structural rung is
-  unavailable by construction: the Citrix pixel floor.
+  does not implement ``StructuralBackend`` / ``IdentityBackend`` /
+  ``StructuralActionBackend``, so the structural rung is unavailable by
+  construction: the Citrix pixel floor. Explicit PHI-free visual markers may
+  supply the separate live execution-context identity contract.
 
 Validation status (see ``benchmark/citrix_workspace/README.md``):
 * DONE: window-scoped pixel capture + OS input injection inherit the
@@ -115,7 +116,16 @@ class CitrixWorkspaceBackend(RemoteDisplayBackend):
         window_title: Optional exact window title to disambiguate when multiple
             Citrix session windows are open. Zero/multiple matches fail closed.
         readiness_text: Coarse in-session OCR marker; when set, a frame missing
-            it is refused as a lock/login/disconnect screen.
+            it is refused as a lock/login/disconnect screen. Unless
+            ``application_marker`` is set separately, this explicit marker also
+            becomes the live application identity marker.
+        application_marker: Optional PHI-free application marker. Defaults to
+            the explicit ``readiness_text``; no window title is used as an
+            application identity.
+        workflow_state_marker: Optional PHI-free in-application state marker.
+        session_marker: Optional PHI-free, session-unique visual marker. The
+            backend exposes only its verified digest, never the marker or other
+            captured text.
         **kwargs: Passed through to ``RemoteDisplayBackend`` (``require_input_trust``,
             ``activate_before_input``, ``settle_s``, ``max_frame_age_s``,
             ``readiness_probe`` ...).
@@ -129,6 +139,13 @@ class CitrixWorkspaceBackend(RemoteDisplayBackend):
         window_title: Optional[str] = None,
         readiness_text: Optional[str] = DEFAULT_CITRIX_READINESS_TEXT,
         readiness_probe: Optional[Callable[[bytes], bool]] = None,
+        application_marker: Optional[str] = None,
+        application_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        workflow_state_marker: Optional[str] = None,
+        workflow_state_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        session_marker: Optional[str] = None,
+        session_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        session_identity_observer: Optional[Callable[[], Optional[str]]] = None,
         **kwargs: object,
     ) -> None:
         if client is None and sys.platform.startswith("linux"):
@@ -140,11 +157,20 @@ class CitrixWorkspaceBackend(RemoteDisplayBackend):
         owner = owner_substr or default_citrix_owner()
         if readiness_probe is None and readiness_text:
             readiness_probe = _ocr_marker_probe(readiness_text)
+        if application_marker is None and readiness_text:
+            application_marker = readiness_text
         super().__init__(
             client,
             owner_substr=owner,
             title_substr=window_title,
             readiness_probe=readiness_probe,
+            application_marker=application_marker,
+            application_marker_probe=application_marker_probe,
+            workflow_state_marker=workflow_state_marker,
+            workflow_state_marker_probe=workflow_state_marker_probe,
+            session_marker=session_marker,
+            session_marker_probe=session_marker_probe,
+            session_identity_observer=session_identity_observer,
             **kwargs,  # type: ignore[arg-type]
         )
         self._citrix_owner = owner

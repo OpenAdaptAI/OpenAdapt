@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Literal, Optional
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from pydantic import (
@@ -49,6 +50,41 @@ QUALIFICATION_SCHEMA: Final[Literal["openadapt.qualification-project/v1"]] = (
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _PARAM_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+
+
+def _valid_application_identity(value: str) -> bool:
+    """Accept a native app id or the exact bounded HTTP(S) origin observer emits."""
+
+    if "://" not in value:
+        return _CONTEXT_ID_RE.fullmatch(value) is not None
+    try:
+        parts = urlsplit(value)
+        scheme = parts.scheme.lower()
+        hostname = parts.hostname
+        port = parts.port
+    except (AttributeError, TypeError, ValueError):
+        return False
+    if (
+        scheme not in {"http", "https"}
+        or not hostname
+        or parts.username is not None
+        or parts.password is not None
+        or parts.path
+        or parts.query
+        or parts.fragment
+    ):
+        return False
+    rendered_host = (
+        f"[{hostname.lower().rstrip('.')}]"
+        if ":" in hostname
+        else hostname.lower().rstrip(".")
+    )
+    origin = f"{scheme}://{rendered_host}"
+    if port is not None and not (
+        (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+    ):
+        origin += f":{port}"
+    return value == origin and len(value) <= 320
 
 
 def _now() -> str:
@@ -117,7 +153,7 @@ class IdentitySignalPolicy(BaseModel):
     )
     expected_value: Optional[str] = Field(
         default=None,
-        max_length=128,
+        max_length=320,
         description=(
             "Qualified PHI-free identifier expected from a dedicated "
             "application/session/workflow-state runtime observer."
@@ -165,10 +201,21 @@ class IdentitySignalPolicy(BaseModel):
                         "session expected_value must be a 64-character "
                         "lowercase hexadecimal identity digest"
                     )
-            elif not _CONTEXT_ID_RE.fullmatch(self.expected_value):
+            elif (
+                self.key is IdentitySignalKey.APPLICATION
+                and not _valid_application_identity(self.expected_value)
+            ):
                 raise ValueError(
-                    "application/workflow_state expected_value must be a "
-                    "bounded PHI-free identifier"
+                    "application expected_value must be a bounded PHI-free "
+                    "identifier or canonical HTTP(S) origin"
+                )
+            elif (
+                self.key is IdentitySignalKey.WORKFLOW_STATE
+                and not _CONTEXT_ID_RE.fullmatch(self.expected_value)
+            ):
+                raise ValueError(
+                    "workflow_state expected_value must be a bounded PHI-free "
+                    "identifier"
                 )
         if required_source is None and self.source in set(dedicated_sources.values()):
             raise ValueError(

@@ -1130,8 +1130,8 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     if args.require_approval and pending.status != "approved":
         print(
             f"Pending escalation at {run_dir} is {pending.status!r}, not "
-            "'approved'. Re-run without --require-approval to resume anyway, "
-            f"or approve it first:\n    openadapt-flow approve {run_dir}"
+            "'approved'. Approval is required before resume:\n"
+            f"    openadapt flow approve {run_dir}"
         )
         return 3
 
@@ -1258,6 +1258,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     execution_outcome = getattr(report, "execution_outcome", None)
     outcome = execution_outcome or ("success" if report.success else "FAILED")
     print(f"Resume {outcome}: {report_md}")
+    _maybe_report_break(run_dir, report)
     _maybe_report_run(
         run_dir,
         report,
@@ -1497,6 +1498,7 @@ def _parse_qualification_signal(
     signal_regions: dict[str, tuple[int, int, int, int]] | None = None,
     signal_params: dict[str, list[str]] | None = None,
     signal_extracts: dict[str, str] | None = None,
+    signal_expecteds: dict[str, str] | None = None,
 ):
     from openadapt_flow.qualification import (
         IdentityEvidenceSource,
@@ -1534,6 +1536,7 @@ def _parse_qualification_signal(
             ),
             params=(signal_params or {}).get(key, []),
             extract_pattern=(signal_extracts or {}).get(key),
+            expected_value=(signal_expecteds or {}).get(key),
         )
     except ValueError as exc:
         raise SystemExit(f"invalid --signal {raw!r}: {exc}") from exc
@@ -1687,16 +1690,27 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
                 if key in signal_extracts:
                     raise SystemExit(f"--signal-extract repeats signal key {key!r}")
                 signal_extracts[key] = pattern
+            signal_expecteds: dict[str, str] = {}
+            for raw_expected in args.signal_expected:
+                key, separator, expected = raw_expected.partition("=")
+                if not separator or not key or not expected:
+                    raise SystemExit("--signal-expected expects KEY=VALUE")
+                if key in signal_expecteds:
+                    raise SystemExit(f"--signal-expected repeats signal key {key!r}")
+                signal_expecteds[key] = expected
             signal_keys = {raw.split("=", 1)[0] for raw in args.signal if "=" in raw}
             unknown_options = sorted(
                 (
-                    set(signal_regions) | set(signal_params) | set(signal_extracts)
+                    set(signal_regions)
+                    | set(signal_params)
+                    | set(signal_extracts)
+                    | set(signal_expecteds)
                 ).difference(signal_keys)
             )
             if unknown_options:
                 raise SystemExit(
-                    "--signal-region/--signal-param/--signal-extract references "
-                    "unknown signal "
+                    "--signal-region/--signal-param/--signal-extract/"
+                    "--signal-expected references unknown signal "
                     "key(s): " + ", ".join(unknown_options)
                 )
             signals = [
@@ -1706,6 +1720,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
                     signal_regions=signal_regions,
                     signal_params=signal_params,
                     signal_extracts=signal_extracts,
+                    signal_expecteds=signal_expecteds,
                 )
                 for raw in args.signal
             ]
@@ -2209,7 +2224,16 @@ def _maybe_report_break(run_dir: Path, report) -> None:
     import os
 
     workflow_id = os.environ.get("OPENADAPT_FLOW_HOSTED_WORKFLOW_ID")
-    if not workflow_id or getattr(report, "halt", None) is None:
+    attention_outcomes = {
+        "COMPLETED_UNVERIFIED",
+        "HALTED",
+        "FAILED",
+        "ROLLED_BACK",
+    }
+    if not workflow_id or (
+        getattr(report, "halt", None) is None
+        and getattr(report, "execution_outcome", None) not in attention_outcomes
+    ):
         return
     try:
         from openadapt_flow.hosted import report_break
@@ -2233,7 +2257,7 @@ def _maybe_report_run(
     *,
     backend_kind: Optional[str] = None,
 ) -> None:
-    """Opt-in post-run hook: emit a PHI-free SUCCESS summary (the L0 rail).
+    """Opt-in post-run hook: emit a PHI-free VERIFIED summary (the L0 rail).
 
     NEVER auto-uploads: it fires only when the operator explicitly opted in —
     ``run --report`` on this invocation, or ``OPENADAPT_FLOW_REPORT_RUN=1``
@@ -3239,6 +3263,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Extract one named (?P<value>...) field from a structured or "
             "captured-context signal"
+        ),
+    )
+    q.add_argument(
+        "--signal-expected",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "Bind a qualified PHI-free expected value to an "
+            "application/session/workflow-state signal"
         ),
     )
     q.add_argument("--quorum", type=int)

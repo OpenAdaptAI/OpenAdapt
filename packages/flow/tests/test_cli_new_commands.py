@@ -226,7 +226,10 @@ def test_resume_require_approval_refuses_pending(tmp_path: Path, capsys) -> None
     run = _paused_run(tmp_path)
     rc = main(["resume", str(run), "--require-approval"])
     assert rc == 3
-    assert "not 'approved'" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "not 'approved'" in output
+    assert "openadapt flow approve" in output
+    assert "without --require-approval" not in output
 
 
 def test_resume_without_url_exits(tmp_path: Path) -> None:

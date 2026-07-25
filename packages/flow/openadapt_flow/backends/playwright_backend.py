@@ -9,9 +9,11 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Optional
+from urllib.parse import urlsplit
 
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
@@ -56,6 +58,23 @@ _NAMED_KEYS = {
 }
 
 _TOKEN_ATTRIBUTE_PREFIX = "data-openadapt-actuation-"
+
+# Explicit application-owned DOM contracts for live context identity. These
+# markers belong in ``<head>`` so the backend never derives a workflow or
+# session identity from arbitrary body text that may contain customer data:
+#
+#   <meta name="openadapt-session-identity" content="<64 lowercase hex>">
+#   <meta name="openadapt-workflow-state" content="eligibility.review">
+#
+# The session marker is an opaque digest. The workflow marker is a bounded,
+# lowercase machine token that the application author promises is PHI-free
+# (state names such as ``eligibility.review``, never record values).
+_SESSION_IDENTITY_META = "openadapt-session-identity"
+_WORKFLOW_STATE_IDENTITY_META = "openadapt-workflow-state"
+_SESSION_IDENTITY_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_WORKFLOW_STATE_IDENTITY_PATTERN = re.compile(
+    r"^[a-z0-9](?:[a-z0-9._:-]{0,126}[a-z0-9])?$"
+)
 
 # The descriptor stays inside the page-local guard store. It binds the exact
 # actionable node, its ancestry, and the enclosing record row while excluding
@@ -157,10 +176,14 @@ _INSTALL_GUARD_BODY_JS = r"""
         el: el,
         descriptor: observed.descriptor,
         observer: null,
+        contextObserver: null,
+        context: {},
+        invalidate: null,
         focusListener: null,
     };
     const invalidate = () => {
         if (entry.observer) entry.observer.disconnect();
+        if (entry.contextObserver) entry.contextObserver.disconnect();
         if (entry.focusListener) {
             el.removeEventListener('blur', entry.focusListener, true);
         }
@@ -172,6 +195,7 @@ _INSTALL_GUARD_BODY_JS = r"""
         }
         tokenMap.delete(args.token);
     };
+    entry.invalidate = invalidate;
     // Any mutation in the target's record boundary after arming invalidates
     // the lease. Descriptor equality is deliberately irrelevant: hidden
     // attributes and pixel-identical node replacement can still change the
@@ -271,9 +295,50 @@ _STRUCTURED_TEXT_AT_JS = (
 }"""
 )
 
+_CONTEXT_CURRENT_JS = r"""(entry) => {
+    const metaName = {
+        session: 'openadapt-session-identity',
+        workflow_state: 'openadapt-workflow-state',
+    };
+    for (const [kind, expected] of Object.entries(entry.context || {})) {
+        if (kind === 'application') {
+            let url;
+            try {
+                url = new URL(window.location.href);
+            } catch (_) {
+                return false;
+            }
+            let hostname = url.hostname.toLowerCase().replace(/\.+$/, '');
+            if (!hostname) return false;
+            const rendered = hostname.includes(':')
+                ? '[' + hostname + ']'
+                : hostname;
+            const defaultPort =
+                (url.protocol === 'http:' && url.port === '80') ||
+                (url.protocol === 'https:' && url.port === '443');
+            const observed = url.protocol.slice(0, -1) + '://' + rendered +
+                (url.port && !defaultPort ? ':' + url.port : '');
+            if (observed !== expected) return false;
+            continue;
+        }
+        const name = metaName[kind];
+        if (!name) return false;
+        const markers = document.querySelectorAll(
+            'head > meta[name="' + name + '"]'
+        );
+        if (markers.length !== 1 ||
+                markers[0].getAttribute('content') !== expected) {
+            return false;
+        }
+    }
+    return true;
+}"""
+
 _GUARD_CURRENT_JS = (
     "(el, args) => { const describe = "
     + _DESCRIBE_TARGET_JS
+    + "; const contextCurrent = "
+    + _CONTEXT_CURRENT_JS
     + r""";
     const tokenMap = window[args.storeKey];
     const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
@@ -281,8 +346,41 @@ _GUARD_CURRENT_JS = (
         entry && entry.el === el &&
         el.getAttribute(args.tokenAttribute) === args.token &&
         (!args.requireFocused || document.activeElement === el) &&
+        contextCurrent(entry) &&
         entry.descriptor === describe(el).descriptor
     );
+}"""
+)
+
+_BIND_CONTEXT_IDENTITY_JS = (
+    r"""(args) => {
+    const tokenMap = window[args.storeKey];
+    if (!(tokenMap instanceof Map)) return true;
+    const current = """
+    + _CONTEXT_CURRENT_JS
+    + r""";
+    let valid = true;
+    for (const entry of tokenMap.values()) {
+        entry.context = entry.context || {};
+        entry.context[args.kind] = args.value;
+        if (!current(entry)) {
+            valid = false;
+            if (entry.invalidate) entry.invalidate();
+            continue;
+        }
+        if (!entry.contextObserver && document.head) {
+            entry.contextObserver = new MutationObserver(() => {
+                if (!current(entry) && entry.invalidate) entry.invalidate();
+            });
+            entry.contextObserver.observe(document.head, {
+                attributes: true,
+                childList: true,
+                subtree: true,
+                attributeFilter: ['content', 'name'],
+            });
+        }
+    }
+    return valid;
 }"""
 )
 
@@ -290,6 +388,7 @@ _CLEAN_GUARD_JS = r"""(args) => {
     const tokenMap = window[args.storeKey];
     const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
     if (entry && entry.observer) entry.observer.disconnect();
+    if (entry && entry.contextObserver) entry.contextObserver.disconnect();
     if (entry && entry.focusListener && entry.el) {
         entry.el.removeEventListener('blur', entry.focusListener, true);
     }
@@ -387,6 +486,123 @@ class PlaywrightBackend:
             return len(self.page.context.pages)
         except Exception:
             return None
+
+    # -- live execution-context identity -------------------------------
+
+    def _bind_context_identity(self, kind: str, value: str) -> bool:
+        """Bind one observed context value to every pending one-shot guard."""
+
+        pending = bool(
+            self._structural_tokens
+            or self._guarded_coordinate is not None
+            or self._guarded_keyboard is not None
+        )
+        if not pending:
+            return True
+        try:
+            return bool(
+                self.page.evaluate(
+                    _BIND_CONTEXT_IDENTITY_JS,
+                    {
+                        "storeKey": self._structural_store_key,
+                        "kind": kind,
+                        "value": value,
+                    },
+                )
+            )
+        except Exception:
+            return False
+
+    def application_identity(self) -> Optional[str]:
+        """Return the live browser origin as a bounded application identity.
+
+        Only the current page's HTTP(S) origin is observed. User information,
+        path, query, and fragment are never included, so record identifiers and
+        other sensitive navigation state cannot enter identity evidence.
+        Default ports are omitted and non-web or malformed URLs return
+        ``None``.
+        """
+
+        try:
+            current_url = self.page.url
+            parts = urlsplit(current_url)
+            scheme = parts.scheme.lower()
+            hostname = parts.hostname
+            port = parts.port
+        except (AttributeError, TypeError, ValueError):
+            return None
+        except Exception:
+            return None
+
+        if scheme not in {"http", "https"} or not hostname:
+            return None
+        hostname = hostname.lower().rstrip(".")
+        if not hostname or len(hostname) > 253:
+            return None
+        rendered_host = f"[{hostname}]" if ":" in hostname else hostname
+        origin = f"{scheme}://{rendered_host}"
+        if port is not None and not (
+            (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+        ):
+            origin += f":{port}"
+        if len(origin) > 320:
+            return None
+        return origin if self._bind_context_identity("application", origin) else None
+
+    def _context_meta_content(self, name: str) -> Optional[str]:
+        """Read one unambiguous live ``<head>`` context marker."""
+
+        try:
+            locator = self.page.locator(f'head > meta[name="{name}"]')
+            if locator.count() != 1:
+                return None
+            content = locator.get_attribute("content")
+        except Exception:
+            return None
+        return content if isinstance(content, str) else None
+
+    def session_identity(self) -> Optional[str]:
+        """Return the live opaque session digest declared by the page.
+
+        The contract is exactly one direct ``<head>`` meta named
+        ``openadapt-session-identity`` with a 64-character lowercase
+        hexadecimal ``content`` value. Missing, duplicate, malformed, or
+        unreadable markers return ``None``.
+        """
+
+        value = self._context_meta_content(_SESSION_IDENTITY_META)
+        observed = (
+            value
+            if value is not None and _SESSION_IDENTITY_PATTERN.fullmatch(value)
+            else None
+        )
+        if observed is None:
+            return None
+        return observed if self._bind_context_identity("session", observed) else None
+
+    def workflow_state_identity(self) -> Optional[str]:
+        """Return the live, application-declared PHI-free workflow-state token.
+
+        The contract is exactly one direct ``<head>`` meta named
+        ``openadapt-workflow-state``. Its ``content`` must be a 1-128 character
+        lowercase machine token containing only letters, digits, ``.``, ``_``,
+        ``:``, and ``-``. Missing, duplicate, malformed, or unreadable markers
+        return ``None``.
+        """
+
+        value = self._context_meta_content(_WORKFLOW_STATE_IDENTITY_META)
+        observed = (
+            value
+            if value is not None and _WORKFLOW_STATE_IDENTITY_PATTERN.fullmatch(value)
+            else None
+        )
+        if observed is None:
+            return None
+        return (
+            observed
+            if self._bind_context_identity("workflow_state", observed)
+            else None
+        )
 
     # -- structured-text identity (openadapt_flow.backend.IdentityBackend) --
 

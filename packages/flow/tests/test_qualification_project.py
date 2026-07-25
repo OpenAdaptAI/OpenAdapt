@@ -739,6 +739,85 @@ def test_cli_identity_extract_pattern_round_trips_exactly(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize(
+    ("signal", "expected"),
+    [
+        ("application=application:exact", "accuro"),
+        ("session=session:exact", "a" * 64),
+        ("workflow_state=workflow_state:exact", "patient-chart"),
+    ],
+)
+def test_cli_identity_expected_value_round_trips(
+    tmp_path: Path, signal: str, expected: str
+) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    init_project(workflow, environment=_environment())
+    workflow.save(bundle)
+    key = signal.split("=", 1)[0]
+
+    assert (
+        main(
+            [
+                "qualify",
+                "set-identity",
+                str(bundle),
+                "--step",
+                "save",
+                "--signal",
+                signal,
+                "--signal-expected",
+                f"{key}={expected}",
+                "--quorum",
+                "1",
+            ]
+        )
+        == 0
+    )
+
+    loaded = Workflow.load(bundle)
+    policy = loaded.qualification.identity_policies["save"]
+    assert policy.signals[0].expected_value == expected
+
+
+def test_cli_identity_expected_value_rejects_invalid_bindings(tmp_path: Path) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    init_project(workflow, environment=_environment())
+    workflow.save(bundle)
+
+    for expected_args, message in (
+        (["--signal-expected", "unknown=accuro"], "unknown signal"),
+        (
+            [
+                "--signal-expected",
+                "application=accuro",
+                "--signal-expected",
+                "application=accuro",
+            ],
+            "repeats signal key",
+        ),
+        (["--signal-expected", "application"], "expects KEY=VALUE"),
+    ):
+        with pytest.raises(SystemExit, match=message):
+            main(
+                [
+                    "qualify",
+                    "set-identity",
+                    str(bundle),
+                    "--step",
+                    "save",
+                    "--signal",
+                    "application=application:exact",
+                    *expected_args,
+                    "--quorum",
+                    "1",
+                ]
+            )
+
+
+@pytest.mark.parametrize(
     ("signal", "extract_args", "message"),
     [
         (

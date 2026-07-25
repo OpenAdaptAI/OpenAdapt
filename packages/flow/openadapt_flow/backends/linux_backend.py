@@ -29,9 +29,13 @@ import hmac
 import io
 import json
 import os
+import re
 import secrets
+import sys
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from PIL import Image, ImageGrab
@@ -107,6 +111,10 @@ class LinuxClient(Protocol):
         self, window: LinuxWindow, x: int, y: int
     ) -> Optional[LinuxElement]: ...
 
+    def focused_element(self, window: LinuxWindow) -> Optional[LinuxElement]:
+        """Return the unique live focused element inside ``window``."""
+        ...
+
     def find_candidates(
         self, window: LinuxWindow, locator: StructuralLocator
     ) -> LinuxCandidateSet: ...
@@ -160,6 +168,44 @@ _ACTION_ALIASES = {
     "toggle": frozenset({"check", "toggle", "uncheck"}),
     "select": frozenset({"select"}),
 }
+
+_CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+
+
+def _application_identifier(name: str) -> Optional[str]:
+    """Return a bounded app id without including a sensitive window title."""
+
+    ascii_name = (
+        unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    )
+    identifier = re.sub(r"[^A-Za-z0-9._:/-]+", "-", ascii_name).strip("-._:/")
+    identifier = identifier.casefold()[:128]
+    return identifier if _CONTEXT_ID_RE.fullmatch(identifier) else None
+
+
+def _linux_session_facts() -> Optional[tuple[str, int, int]]:
+    """Return kernel boot/audit-session facts, never environment assertions."""
+
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        boot_id = (
+            Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
+        )
+        session_text = Path("/proc/self/sessionid").read_text(encoding="ascii").strip()
+        if not re.fullmatch(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+            boot_id,
+        ):
+            return None
+        session_id = int(session_text)
+        # UINT32_MAX is the kernel's "audit session not assigned" sentinel.
+        if session_id < 0 or session_id == 0xFFFFFFFF:
+            return None
+        return boot_id.casefold(), session_id, os.getuid()
+    except (OSError, UnicodeError, ValueError):
+        return None
 
 
 def _clean_text(value: object) -> Optional[str]:
@@ -229,6 +275,15 @@ class LinuxBackend:
         self._viewport: Optional[tuple[int, int]] = None
         self._focused_element: Optional[LinuxElement] = None
         self._focused_fingerprint: Optional[str] = None
+        self._guarded_coordinate: Optional[
+            tuple[
+                tuple[int, int],
+                LinuxWindow,
+                Optional[str],
+                Optional[str],
+            ]
+        ] = None
+        self._guarded_keyboard: Optional[tuple[LinuxWindow, str, Optional[str]]] = None
         self._assert_session_supported()
 
     def _assert_session_supported(self) -> None:
@@ -332,6 +387,34 @@ class LinuxBackend:
         self._captured_window = current
         self._viewport = (width, height)
         return png
+
+    # -- live execution-context identity -----------------------------------
+
+    def application_identity(self) -> Optional[str]:
+        """Return a live exact AT-SPI application id, never a window title."""
+
+        try:
+            window = self._resolve_window()
+        except Exception:
+            return None
+        if window.app_name.casefold() != self._app.casefold():
+            return None
+        return _application_identifier(window.app_name)
+
+    def session_identity(self) -> Optional[str]:
+        """Hash only live kernel boot/audit-session continuity facts."""
+
+        facts = _linux_session_facts()
+        if facts is None:
+            return None
+        boot_id, session_id, uid = facts
+        material = f"linux-session-v1\0{boot_id}\0{session_id}\0{uid}"
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+    def workflow_state_identity(self) -> Optional[str]:
+        """Workflow state requires an explicitly qualified AT-SPI marker."""
+
+        return None
 
     def _global_point(
         self, x: int, y: int, *, require_active: bool = True
@@ -559,6 +642,183 @@ class LinuxBackend:
             "physical_double_click" if double else "physical_click",
             native=False,
             target_fingerprint=expected,
+        )
+
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        """Bind one visual point, exact window, and optional AT-SPI element."""
+
+        self.cancel_guarded_coordinate()
+        point = (int(x), int(y))
+        window, global_x, global_y = self._global_point(*point)
+        element = self._client.element_at_point(window, global_x, global_y)
+        fingerprint = _fingerprint(element) if element is not None else None
+        self._guarded_coordinate = (
+            point,
+            window,
+            fingerprint,
+            self.session_identity(),
+        )
+
+    def cancel_guarded_coordinate(self) -> None:
+        self._guarded_coordinate = None
+
+    def _assert_guarded_frame(
+        self,
+        window: LinuxWindow,
+        expected_frame_sha256: str,
+        expected_session: Optional[str],
+    ) -> None:
+        current = self._require_same_window(window, require_active=True)
+        png, width, height = self._client.capture_window(current)
+        if (width, height) != current.bounds[2:]:
+            raise LinuxBackendError(
+                "Linux target window dimensions changed before guarded input"
+            )
+        if not hmac.compare_digest(
+            hashlib.sha256(png).hexdigest(), expected_frame_sha256
+        ):
+            raise LinuxBackendError(
+                "Linux target frame changed after identity verification"
+            )
+        if expected_session is not None and not hmac.compare_digest(
+            self.session_identity() or "", expected_session
+        ):
+            raise LinuxBackendError(
+                "Linux desktop session changed after identity verification"
+            )
+
+    def act_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        pending = self._guarded_coordinate
+        self._guarded_coordinate = None
+        if pending is None:
+            raise LinuxBackendError(
+                "Linux coordinate actuation has no pre-identity binding"
+            )
+        point, window, expected_element, expected_session = pending
+        if point != (int(x), int(y)):
+            raise LinuxBackendError(
+                "Linux coordinate target changed after identity verification"
+            )
+        if not self._allow_physical_input:
+            raise LinuxBackendError(
+                "guarded Linux coordinate input requires the explicitly "
+                "qualified physical-input fallback"
+            )
+        self._assert_guarded_frame(
+            window,
+            expected_frame_sha256,
+            expected_session,
+        )
+        _, global_x, global_y = self._global_point(*point)
+        if expected_element is not None:
+            current_element = self._client.element_at_point(window, global_x, global_y)
+            if current_element is None or not hmac.compare_digest(
+                expected_element, _fingerprint(current_element)
+            ):
+                raise LinuxBackendError(
+                    "Linux accessibility target changed before coordinate delivery"
+                )
+        if not self._client.physical_click(global_x, global_y, double=double):
+            raise LinuxBackendError("Linux guarded coordinate click was rejected")
+        self._clear_focused_element()
+        return _receipt(
+            "guarded_coordinate_double_click" if double else "guarded_coordinate_click",
+            native=False,
+            target_fingerprint=expected_element,
+        )
+
+    def guarded_keyboard_frame(self) -> bytes:
+        return self.screenshot()
+
+    def arm_guarded_keyboard(self, x: int, y: int) -> None:
+        """Bind the unique live focused AT-SPI element at the resolved point."""
+
+        self.cancel_guarded_keyboard()
+        window, global_x, global_y = self._global_point(int(x), int(y))
+        focused = self._client.focused_element(window)
+        if focused is None:
+            raise LinuxBackendError(
+                "Linux keyboard action has no unique focused AT-SPI element"
+            )
+        left, top, width, height = focused.bounds
+        if not (left <= global_x < left + width and top <= global_y < top + height):
+            raise LinuxBackendError(
+                "Linux focused element does not contain the resolved target point"
+            )
+        self._guarded_keyboard = (
+            window,
+            _fingerprint(focused),
+            self.session_identity(),
+        )
+
+    def cancel_guarded_keyboard(self) -> None:
+        self._guarded_keyboard = None
+
+    def _consume_guarded_keyboard(
+        self, expected_frame_sha256: str
+    ) -> tuple[LinuxElement, str]:
+        pending = self._guarded_keyboard
+        self._guarded_keyboard = None
+        if pending is None:
+            raise LinuxBackendError(
+                "Linux keyboard actuation has no pre-identity focused binding"
+            )
+        window, fingerprint, expected_session = pending
+        self._assert_guarded_frame(
+            window,
+            expected_frame_sha256,
+            expected_session,
+        )
+        focused = self._client.focused_element(window)
+        if focused is None or not hmac.compare_digest(
+            fingerprint, _fingerprint(focused)
+        ):
+            raise LinuxBackendError(
+                "Linux focused element changed after identity verification"
+            )
+        return focused, fingerprint
+
+    def type_text_guarded(
+        self,
+        text: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        focused, fingerprint = self._consume_guarded_keyboard(expected_frame_sha256)
+        if text and not self._client.replace_text(focused, text):
+            raise LinuxBackendError("Linux guarded text delivery was rejected")
+        return _receipt(
+            "guarded_atspi_type",
+            native=True,
+            target_fingerprint=fingerprint,
+        )
+
+    def press_guarded(
+        self,
+        key: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        _, fingerprint = self._consume_guarded_keyboard(expected_frame_sha256)
+        if not self._allow_physical_input:
+            raise LinuxBackendError(
+                "guarded Linux KEY delivery requires the explicitly qualified "
+                "physical-input fallback"
+            )
+        if not self._client.physical_press(key):
+            raise LinuxBackendError(f"Linux guarded key delivery was rejected: {key!r}")
+        self._clear_focused_element()
+        return _receipt(
+            "guarded_atspi_key",
+            native=False,
+            target_fingerprint=fingerprint,
         )
 
     def _physical_element_click(
@@ -1012,6 +1272,21 @@ class AtspiLinuxClient:
             matches[0][1],
         )
         return actionable
+
+    def focused_element(self, window: LinuxWindow) -> Optional[LinuxElement]:
+        nodes, truncated = self._walk(window)
+        if truncated:
+            raise LinuxBackendError("AT-SPI tree exceeded the bounded traversal limit")
+        found: list[LinuxElement] = []
+        for node, path in nodes:
+            if not self._state_contains(node, "FOCUSED"):
+                continue
+            candidate = self._element(node, path, window)
+            if candidate is not None:
+                found.append(candidate)
+        if len(found) != 1:
+            return None
+        return found[0]
 
     def find_candidates(
         self, window: LinuxWindow, locator: StructuralLocator

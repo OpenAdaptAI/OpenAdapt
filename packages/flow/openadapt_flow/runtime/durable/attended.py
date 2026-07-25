@@ -1323,6 +1323,7 @@ class BoundAttendedExecutor:
             effect_verified=result.effect_verified,
             effect_approved_unverified=result.effect_approved_unverified,
             effect_contract_hashes=list(result.effect_contract_hashes),
+            effect_evidence=list(result.effect_evidence),
             governed_authorization_id=(
                 manifest.governed_authorization.authorization_id
                 if manifest.governed_authorization is not None
@@ -1468,6 +1469,19 @@ class BoundAttendedExecutor:
             new_effect_evidence=(
                 list(result.effect_evidence) if result.effect_verified is True else []
             ),
+            new_unverified_effect_keys=(
+                list(result.effect_contract_hashes)
+                if result.effect_approved_unverified
+                else []
+            ),
+            step_id=state.step.id,
+            # ``result.identity`` here proves the next continuation target, not
+            # the already human-actuated source. Do not mislabel it as source
+            # identity evidence.
+            identity=None,
+            postconditions_ok=result.postconditions_ok,
+            skipped=skipped,
+            actuation="human_attended_skip" if skipped else "human_attended",
             governed_authorization_id=(
                 manifest.governed_authorization.authorization_id
                 if manifest.governed_authorization is not None

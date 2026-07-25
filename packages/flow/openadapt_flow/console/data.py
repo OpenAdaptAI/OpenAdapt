@@ -458,7 +458,13 @@ class RunSummary(BaseModel):
     started_at: Optional[str] = None
     success: Optional[bool] = None
     execution_outcome: Optional[
-        Literal["VERIFIED", "COMPLETED_UNVERIFIED", "HALTED", "FAILED"]
+        Literal[
+            "VERIFIED",
+            "COMPLETED_UNVERIFIED",
+            "HALTED",
+            "FAILED",
+            "ROLLED_BACK",
+        ]
     ] = None
     terminal_outcome: Optional[str] = None
     halted: bool = False

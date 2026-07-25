@@ -1965,6 +1965,106 @@ class HaltObservation(BaseModel):
     completed_intents: list[str] = Field(default_factory=list)
 
 
+class OutcomeContractCounts(BaseModel):
+    """PHI-free counts of the contracts required and passed by one run."""
+
+    authorization: int = Field(default=0, ge=0)
+    identity: int = Field(default=0, ge=0)
+    postcondition: int = Field(default=0, ge=0)
+    effect: int = Field(default=0, ge=0)
+
+
+OutcomeEvidenceClass = Literal[
+    "authorization",
+    "identity",
+    "postcondition",
+    "effect_tier_1",
+    "effect_tier_2",
+    "effect_tier_3",
+    "effect_tier_4",
+    "model",
+    "compensation",
+]
+
+
+class ExecutionOutcomeEnvelope(BaseModel):
+    """Versioned, PHI-free execution result shared with control planes.
+
+    The coarse ``success``/``halt``/``failed`` lifecycle remains available for
+    old consumers.  This envelope states what the evidence actually proves.
+    """
+
+    version: Literal["openadapt.execution-outcome/v1"] = (
+        "openadapt.execution-outcome/v1"
+    )
+    outcome: Literal[
+        "VERIFIED",
+        "COMPLETED_UNVERIFIED",
+        "HALTED",
+        "FAILED",
+        "ROLLED_BACK",
+    ]
+    profile: Optional[Literal["demo", "standard", "regulated"]] = None
+    production_eligible: bool = False
+    execution_completed: bool = False
+    required_contracts: OutcomeContractCounts = Field(
+        default_factory=OutcomeContractCounts
+    )
+    passed_contracts: OutcomeContractCounts = Field(
+        default_factory=OutcomeContractCounts
+    )
+    evidence_classes: list[OutcomeEvidenceClass] = Field(default_factory=list)
+    model_calls: int = Field(default=0, ge=0)
+    external_network_calls: Literal["none", "observed", "unknown"] = "unknown"
+    compensation_actions: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _validate_evidence_contract(self) -> "ExecutionOutcomeEnvelope":
+        required = self.required_contracts.model_dump()
+        passed = self.passed_contracts.model_dump()
+        if any(passed[key] > required[key] for key in required):
+            raise ValueError("passed contract counts cannot exceed required counts")
+        if (
+            self.outcome in {"VERIFIED", "COMPLETED_UNVERIFIED"}
+            and not self.execution_completed
+        ):
+            raise ValueError(
+                f"{self.outcome} requires evidence that execution completed"
+            )
+        if len(self.evidence_classes) != len(set(self.evidence_classes)):
+            raise ValueError("evidence classes must be unique")
+        if self.outcome == "VERIFIED":
+            if passed != required:
+                raise ValueError("VERIFIED requires every declared contract to pass")
+            if self.profile not in {"standard", "regulated"}:
+                raise ValueError("VERIFIED requires a Standard or Regulated profile")
+            if not self.production_eligible:
+                raise ValueError("VERIFIED must be production eligible")
+            if required["authorization"] < 1 or passed["authorization"] < 1:
+                raise ValueError(
+                    "VERIFIED requires a passed governed authorization contract"
+                )
+        elif self.production_eligible:
+            raise ValueError(
+                "only VERIFIED Standard or Regulated runs are production eligible"
+            )
+        has_compensation = "compensation" in self.evidence_classes
+        if has_compensation != (self.compensation_actions > 0):
+            raise ValueError(
+                "compensation evidence and completed action count are inconsistent"
+            )
+        if self.outcome == "ROLLED_BACK":
+            if self.compensation_actions < 1:
+                raise ValueError(
+                    "ROLLED_BACK requires evidence of a completed compensating action"
+                )
+        elif self.compensation_actions:
+            raise ValueError(
+                "completed compensating actions require the ROLLED_BACK outcome"
+            )
+        return self
+
+
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
@@ -1981,6 +2081,7 @@ class RunReport(BaseModel):
             "COMPLETED_UNVERIFIED",
             "HALTED",
             "FAILED",
+            "ROLLED_BACK",
         ]
     ] = Field(
         default=None,
@@ -2001,6 +2102,13 @@ class RunReport(BaseModel):
         description=(
             "Whether execution reached a completed terminal state, independent "
             "of whether the evidence contract permitted reporting success."
+        ),
+    )
+    outcome_envelope: Optional[ExecutionOutcomeEnvelope] = Field(
+        default=None,
+        description=(
+            "Versioned PHI-free outcome, contract coverage, evidence classes, "
+            "model calls, and external-network-call observability."
         ),
     )
     execution_target_kind: Optional[ExecutionTargetKind] = Field(
@@ -2067,6 +2175,7 @@ class RunReport(BaseModel):
     rung_counts: dict[str, int] = Field(default_factory=dict)
     heal_count: int = 0
     model_calls: int = 0
+    external_network_calls: Literal["none", "observed", "unknown"] = "unknown"
     est_model_cost_usd: float = 0.0
     total_ms: float = 0.0
     # Identity-protection coverage of the WHOLE workflow (computed at run
@@ -2083,6 +2192,55 @@ class RunReport(BaseModel):
     # Wiring an egress component requires the operator's explicit opt-in
     # (Replayer(allow_model_grounding=True) / CLI --allow-model-grounding).
     screenshots_may_leave_box: bool = False
+
+    @model_validator(mode="after")
+    def _validate_outcome_envelope_binding(self) -> "RunReport":
+        """Keep the transported envelope bound to this exact report.
+
+        The envelope is the PHI-free projection accepted by hosted consumers.
+        When it is present, its top-level fields must not be independently
+        mutable from the local report that produced it.
+        """
+
+        envelope = self.outcome_envelope
+        if envelope is None:
+            return self
+        if self.execution_outcome != envelope.outcome:
+            raise ValueError("execution outcome does not match its evidence envelope")
+        if self.execution_profile != envelope.profile:
+            raise ValueError("execution profile does not match its evidence envelope")
+        if self.production_eligible != envelope.production_eligible:
+            raise ValueError(
+                "production eligibility does not match its evidence envelope"
+            )
+        if self.execution_completed is None or (
+            self.execution_completed != envelope.execution_completed
+        ):
+            raise ValueError(
+                "execution completion does not match its evidence envelope"
+            )
+        if self.model_calls != envelope.model_calls:
+            raise ValueError("model-call count does not match its evidence envelope")
+        if "external_network_calls" not in self.model_fields_set:
+            # Reports produced before this top-level binding existed carried
+            # the observation only inside the envelope. Preserve read
+            # compatibility while normalizing them on the next save.
+            self.external_network_calls = envelope.external_network_calls
+        elif self.external_network_calls != envelope.external_network_calls:
+            raise ValueError(
+                "external-network observation does not match its evidence envelope"
+            )
+        if envelope.outcome == "VERIFIED" and not self.success:
+            raise ValueError("VERIFIED evidence cannot accompany a non-success report")
+        if envelope.profile in {"standard", "regulated"} and self.success != (
+            envelope.outcome == "VERIFIED"
+        ):
+            raise ValueError(
+                "production report success must mean the exact VERIFIED outcome"
+            )
+        if envelope.outcome == "ROLLED_BACK" and self.success:
+            raise ValueError("ROLLED_BACK is a non-success outcome")
+        return self
 
     def save(self, run_dir: Path | str) -> Path:
         run = Path(run_dir)

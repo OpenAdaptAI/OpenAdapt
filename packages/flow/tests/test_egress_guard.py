@@ -118,4 +118,4 @@ def test_egress_optin_flagged_in_report(bundle, run_dir):
     report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
     assert report.screenshots_may_leave_box is True
     md = render_run_report(run_dir).read_text()
-    assert "Data egress" in md and "left the box" in md
+    assert "Screenshot egress" in md and "left the box" in md

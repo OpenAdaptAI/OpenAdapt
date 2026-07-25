@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 from openadapt_flow.ir import Step, StepResult, Workflow
 from openadapt_flow.runtime.authorization import GovernedRunAuthorization
@@ -239,6 +239,9 @@ class DurableRun:
         save_healed_to: Optional[Path | str] = None,
         key: Optional[str] = None,
         governed_authorization: Optional[GovernedRunAuthorization] = None,
+        screenshots_may_leave_box: bool = False,
+        model_calls: int = 0,
+        external_network_calls: Literal["none", "observed", "unknown"] = "unknown",
     ) -> None:
         # ``key`` (None by default) opts the durable artifacts into AES-256-GCM
         # encryption-at-rest; unset => plaintext, exactly as before.
@@ -255,7 +258,30 @@ class DurableRun:
                 params=dict(params),
                 worklists=worklists,
                 governed_authorization=governed_authorization,
+                screenshots_may_leave_box=screenshots_may_leave_box,
+                model_calls=model_calls,
+                external_network_calls=external_network_calls,
                 save_healed_to=(str(save_healed_to) if save_healed_to else None),
+            )
+        )
+
+    def update_audit_evidence(
+        self,
+        *,
+        model_calls: int,
+        external_network_calls: Literal["none", "observed", "unknown"],
+    ) -> None:
+        """Persist cumulative evidence shared by every leg of one run."""
+
+        manifest = self.store.read_manifest()
+        if manifest is None:
+            raise RuntimeError("durable run manifest disappeared during execution")
+        self.store.write_manifest(
+            manifest.model_copy(
+                update={
+                    "model_calls": model_calls,
+                    "external_network_calls": external_network_calls,
+                }
             )
         )
 
@@ -289,6 +315,7 @@ class DurableRun:
                     effect_approved_unverified=result.effect_approved_unverified,
                     effect_contract_hashes=list(result.effect_contract_hashes),
                     effect_evidence=list(result.effect_evidence),
+                    identity=result.identity,
                     governed_authorization_id=(
                         self.governed_authorization.authorization_id
                         if self.governed_authorization is not None
@@ -302,6 +329,9 @@ class DurableRun:
                     postconditions_ok=result.postconditions_ok,
                     skipped=result.skipped,
                     actuation=result.actuation,
+                    resolution=result.resolution,
+                    drift_oracle_calls=result.drift_oracle_calls,
+                    heal=result.heal,
                 )
             )
             return
@@ -452,10 +482,16 @@ def resumed_step_results(
                 effect_evidence=(
                     list(checkpoint.effect_evidence) if checkpoint is not None else []
                 ),
+                identity=checkpoint.identity if checkpoint is not None else None,
                 postconditions_ok=(
                     checkpoint.postconditions_ok if checkpoint is not None else None
                 ),
                 actuation=checkpoint.actuation if checkpoint is not None else None,
+                resolution=checkpoint.resolution if checkpoint is not None else None,
+                drift_oracle_calls=(
+                    checkpoint.drift_oracle_calls if checkpoint is not None else 0
+                ),
+                heal=checkpoint.heal if checkpoint is not None else None,
                 error=None,
             )
         )

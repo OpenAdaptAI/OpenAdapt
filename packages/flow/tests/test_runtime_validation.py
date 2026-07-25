@@ -277,6 +277,16 @@ def test_attestation_refuses_completed_unverified_as_runtime_evidence(tmp_path):
     report.execution_completed = True
     report.production_eligible = False
     report.success = True
+    assert report.outcome_envelope is not None
+    report.outcome_envelope = type(report.outcome_envelope).model_validate(
+        {
+            **report.outcome_envelope.model_dump(),
+            "outcome": "COMPLETED_UNVERIFIED",
+            "profile": "demo",
+            "production_eligible": False,
+            "execution_completed": True,
+        }
+    )
     report.save(run_dir)
 
     with pytest.raises(RuntimeValidationError, match="requires a VERIFIED"):

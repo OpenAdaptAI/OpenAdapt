@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from io import BytesIO
 
 import pytest
@@ -178,6 +179,93 @@ def test_playwright_refuses_mutation_after_fresh_identity(
         browser.close()
 
     assert clicked == []
+
+
+@pytest.mark.parametrize("operation", ["pointer", "keyboard"])
+@pytest.mark.parametrize(
+    ("source", "marker", "observed", "replacement"),
+    [
+        (
+            "session",
+            "openadapt-session-identity",
+            "a" * 64,
+            "b" * 64,
+        ),
+        (
+            "workflow_state",
+            "openadapt-workflow-state",
+            "eligibility.review",
+            "eligibility.submit",
+        ),
+    ],
+)
+def test_playwright_refuses_invisible_context_change_before_delivery(
+    operation: str,
+    source: str,
+    marker: str,
+    observed: str,
+    replacement: str,
+) -> None:
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": 800, "height": 400},
+            device_scale_factor=1,
+        )
+        page.set_content(
+            f"""<!doctype html><html><head>
+            <meta name="{marker}" content="{observed}">
+            </head><body>
+            <table><tbody><tr><td>MRN-1</td><td>Jane Sample</td><td>
+              <button id="button"
+                onclick="window.actions.push('pointer')">Submit</button>
+              <input id="input" aria-label="Patient value"
+                onkeydown="if(event.key === 'Enter')
+                  window.actions.push('keyboard')">
+            </td></tr></tbody></table>
+            <script>window.actions = [];</script>
+            </body></html>"""
+        )
+        backend = PlaywrightBackend(page)
+        if operation == "pointer":
+            locator = StructuralLocator(
+                selector="#button",
+                role="button",
+                name="Submit",
+            )
+            handle = backend.locate_structural(locator)
+            assert handle is not None
+            assert getattr(backend, f"{source}_identity")() == observed
+            page.locator(f'meta[name="{marker}"]').evaluate(
+                "(element, value) => element.setAttribute('content', value)",
+                replacement,
+            )
+            with pytest.raises(StructuralResolutionRefused):
+                backend.act_structural(locator, handle)
+        else:
+            target = page.locator("#input")
+            target.focus()
+            box = target.bounding_box()
+            assert box is not None
+            backend.arm_guarded_keyboard(
+                int(round(box["x"] + box["width"] / 2)),
+                int(round(box["y"] + box["height"] / 2)),
+            )
+            assert getattr(backend, f"{source}_identity")() == observed
+            expected = hashlib.sha256(backend.guarded_keyboard_frame()).hexdigest()
+            page.locator(f'meta[name="{marker}"]').evaluate(
+                "(element, value) => element.setAttribute('content', value)",
+                replacement,
+            )
+            with pytest.raises(StructuralResolutionRefused):
+                backend.press_guarded("Enter", expected_frame_sha256=expected)
+        actions = page.evaluate("window.actions")
+        browser.close()
+
+    assert actions == []
 
 
 @pytest.mark.parametrize("mutation", ["clone_handler", "hidden_attribute"])

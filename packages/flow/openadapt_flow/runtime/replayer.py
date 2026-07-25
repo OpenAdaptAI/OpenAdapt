@@ -47,8 +47,10 @@ from urllib.parse import urlsplit
 
 from openadapt_flow.backend import (
     Backend,
+    FocusedElementActuationLeaseBackend,
     GuardedCoordinateActionBackend,
     GuardedKeyboardActionBackend,
+    PreparedPointerActuationBackend,
     RemoteActuationBackend,
     StructuralResolutionRefused,
 )
@@ -524,6 +526,11 @@ class Replayer:
         execution_target_kind: Optional[ExecutionTargetKind] = None,
         execution_origin: Optional[str] = None,
         execution_entry_url: Optional[str] = None,
+        prior_screenshots_may_leave_box: bool = False,
+        prior_model_calls: int = 0,
+        prior_external_network_calls: Literal[
+            "none", "observed", "unknown"
+        ] = "unknown",
     ) -> RunReport:
         """Execute the workflow and write a run directory.
 
@@ -579,6 +586,13 @@ class Replayer:
             execution_entry_url: Browser URL requested before replay. Hosted
                 validation binds this to the runner's entry URL so workflows
                 that start below `/` retain their required path.
+            prior_screenshots_may_leave_box: Durable-resume audit carry. True
+                when an earlier leg of the same logical run was configured with
+                an egress-capable screenshot consumer.
+            prior_model_calls: Cumulative model calls made by earlier legs of
+                the same logical run.
+            prior_external_network_calls: Sticky network observation from
+                earlier legs of the same logical run.
 
         Returns:
             The RunReport (also saved as ``run_dir/report.json``). A linear run
@@ -648,7 +662,11 @@ class Replayer:
             ),
             parameter_schema_sha256=(compute_parameter_schema_digest(workflow)),
             params=params,
-            screenshots_may_leave_box=self._screenshots_may_leave_box,
+            model_calls=prior_model_calls,
+            external_network_calls=prior_external_network_calls,
+            screenshots_may_leave_box=(
+                self._screenshots_may_leave_box or prior_screenshots_may_leave_box
+            ),
         )
         if self.governed_authorization is not None:
             profile_refusal = self._profile_runtime_refusal(workflow)
@@ -772,14 +790,24 @@ class Replayer:
                 save_healed_to=save_healed_to,
                 key=self.checkpoint_key,
                 governed_authorization=self.governed_authorization,
+                screenshots_may_leave_box=(
+                    self._screenshots_may_leave_box or prior_screenshots_may_leave_box
+                ),
+                model_calls=prior_model_calls,
+                external_network_calls=prior_external_network_calls,
             )
         if resume_from:
             from openadapt_flow.runtime.durable import resumed_step_results
 
-            report.results.extend(
-                resumed_step_results(
-                    run_dir, workflow, resume_from, key=self.checkpoint_key
-                )
+            resumed_results = resumed_step_results(
+                run_dir, workflow, resume_from, key=self.checkpoint_key
+            )
+            report.results.extend(resumed_results)
+            for result in resumed_results:
+                self._account_result(report, result, account_model_calls=False)
+            report.model_calls = max(
+                report.model_calls,
+                sum(self._result_model_calls(result) for result in resumed_results),
             )
             if durable_run is not None:
                 durable_run.store.clear_pending()
@@ -817,7 +845,9 @@ class Replayer:
                     new_crops=new_crops,
                 )
                 report.results.append(result)
+                self._account_result(report, result)
                 if durable_run is not None:
+                    self._sync_durable_audit(durable_run, report)
                     # Tier-3: verified step -> checkpoint; halt -> pending
                     # escalation (resumable from the last checkpoint).
                     durable_run.record(
@@ -832,7 +862,6 @@ class Replayer:
                             else None
                         ),
                     )
-                self._account_result(report, result)
                 if not result.ok:
                     break
 
@@ -1013,7 +1042,12 @@ class Replayer:
         return out
 
     @staticmethod
-    def _account_result(report: RunReport, result: StepResult) -> None:
+    def _account_result(
+        report: RunReport,
+        result: StepResult,
+        *,
+        account_model_calls: bool = True,
+    ) -> None:
         """Fold one StepResult's rung / model-call / heal counts into the
         report. Shared by the linear loop and the program interpreter so both
         account a step identically (a rescued or grounded run is never counted
@@ -1021,8 +1055,6 @@ class Replayer:
         if result.ok and result.resolution is not None:
             rung = result.resolution.rung
             report.rung_counts[rung] = report.rung_counts.get(rung, 0) + 1
-            if rung == "grounder":
-                report.model_calls += 1
         elif result.ok and result.actuation == "api":
             # API-tier actuation has no visual resolution rung; count it under
             # "api" so the report shows the deterministic top of the ladder in
@@ -1030,9 +1062,37 @@ class Replayer:
             report.rung_counts["api"] = report.rung_counts.get("api", 0) + 1
         # Drift-oracle state-verifier calls are model calls too (honest
         # accounting).
-        report.model_calls += result.drift_oracle_calls
+        if account_model_calls:
+            report.model_calls += Replayer._result_model_calls(result)
         if result.heal is not None:
             report.heal_count += 1
+
+    @staticmethod
+    def _result_model_calls(result: StepResult) -> int:
+        return int(
+            result.drift_oracle_calls
+            + (
+                1
+                if (
+                    result.ok
+                    and result.resolution is not None
+                    and result.resolution.rung == "grounder"
+                )
+                else 0
+            )
+        )
+
+    @staticmethod
+    def _sync_durable_audit(durable_run: Any, report: RunReport) -> None:
+        """Persist whole-run counters before a leg can durably pause."""
+
+        from openadapt_flow.execution_profiles import _external_network_call_state
+
+        report.external_network_calls = _external_network_call_state(report)
+        durable_run.update_audit_evidence(
+            model_calls=report.model_calls,
+            external_network_calls=report.external_network_calls,
+        )
 
     # -- Workflow-program IR, Phase 2: the state-machine interpreter -----------
     #
@@ -1095,6 +1155,17 @@ class Replayer:
                 store.completed_unverified_effect_keys()
             )
             self._bundle_version = _bundle_version(bundle_dir)
+            if resume_checkpoint is not None:
+                resumed_results = self._resumed_program_results(
+                    store.program_checkpoints(), workflow
+                )
+                report.results.extend(resumed_results)
+                for result in resumed_results:
+                    self._account_result(report, result, account_model_calls=False)
+                report.model_calls = max(
+                    report.model_calls,
+                    sum(self._result_model_calls(result) for result in resumed_results),
+                )
         else:
             self._program_seq = 0
             self._completed_effect_keys = []
@@ -1396,6 +1467,8 @@ class Replayer:
         )
         report.results.append(result)
         self._account_result(report, result)
+        if self._program_durable is not None:
+            self._sync_durable_audit(self._program_durable, report)
         # Track the previously EXECUTED action for the next TYPE step's
         # click-to-focus heuristic. A SKIPPED step (guard on_unmet="skip") did
         # not act, so it leaves the previous action / click point untouched.
@@ -1583,10 +1656,16 @@ class Replayer:
         ):
             return False
         step = state.step
-        if step is None or not step.effects:
+        effects = (
+            step.effects
+            or (step.api_binding.effects if step.api_binding is not None else [])
+            if step is not None
+            else []
+        )
+        if step is None or not effects:
             return False
         try:
-            resolved = self._resolve_effects(step.effects, params)
+            resolved = self._resolve_effects(effects, params)
             keys = [e.contract_hash() for e in resolved]
         except Exception:
             return False
@@ -1622,6 +1701,51 @@ class Replayer:
         report.results.append(result)
         self._account_result(report, result)
         return True
+
+    @staticmethod
+    def _resumed_program_results(
+        checkpoints: list[ProgramCheckpoint],
+        workflow: Workflow,
+    ) -> list[StepResult]:
+        """Reconstruct the verified pre-resume leg without re-actuating it."""
+
+        steps = {
+            step.id: step
+            for graph in [
+                workflow.program,
+                *workflow.subflows.values(),
+            ]
+            if graph is not None
+            for state in graph.states.values()
+            if state.step is not None
+            for step in [state.step]
+        }
+        results: list[StepResult] = []
+        for checkpoint in checkpoints:
+            step_id = checkpoint.step_id or checkpoint.verified_state_id
+            step = steps.get(step_id)
+            verified_keys = list(checkpoint.new_effect_keys)
+            unverified_keys = list(checkpoint.new_unverified_effect_keys)
+            results.append(
+                StepResult(
+                    step_id=step_id,
+                    intent=checkpoint.intent
+                    or (step.intent if step is not None else ""),
+                    ok=True,
+                    skipped=checkpoint.skipped,
+                    effect_verified=True if verified_keys else None,
+                    effect_approved_unverified=bool(unverified_keys),
+                    effect_contract_hashes=verified_keys or unverified_keys,
+                    effect_evidence=list(checkpoint.new_effect_evidence),
+                    identity=checkpoint.identity,
+                    postconditions_ok=checkpoint.postconditions_ok,
+                    actuation=checkpoint.actuation,
+                    resolution=checkpoint.resolution,
+                    drift_oracle_calls=checkpoint.drift_oracle_calls,
+                    heal=checkpoint.heal,
+                )
+            )
+        return results
 
     def _evidence_for_completed_effects(
         self, effect_keys: list[str]
@@ -1666,12 +1790,18 @@ class Replayer:
             if result.effect_approved_unverified
             else []
         )
+        declared_effects = (
+            step.effects
+            or (step.api_binding.effects if step.api_binding is not None else [])
+            if step is not None
+            else []
+        )
         resolved_effects = (
             [
                 e.model_dump(mode="json")
-                for e in self._resolve_effects(step.effects, params)
+                for e in self._resolve_effects(declared_effects, params)
             ]
-            if step is not None and step.effects
+            if declared_effects
             else []
         )
         # Extend the live ledger so a later state in the SAME leg (and the next
@@ -1702,6 +1832,14 @@ class Replayer:
             new_effect_evidence=(list(result.effect_evidence) if new_keys else []),
             new_unverified_effect_keys=new_unverified_keys,
             new_unverified_effects=(resolved_effects if new_unverified_keys else []),
+            step_id=step.id if step is not None else state.id,
+            identity=result.identity,
+            postconditions_ok=result.postconditions_ok,
+            skipped=result.skipped,
+            actuation=result.actuation,
+            resolution=result.resolution,
+            drift_oracle_calls=result.drift_oracle_calls,
+            heal=result.heal,
             governed_authorization_id=(
                 self.governed_authorization.authorization_id
                 if self.governed_authorization is not None
@@ -3466,6 +3604,12 @@ class Replayer:
         result: StepResult,
     ) -> Optional[str]:
         """Run the target-identity contract on one exact observed frame."""
+        qualification = workflow.qualification
+        qualified_policy = (
+            qualification.identity_policies.get(step.id)
+            if qualification is not None
+            else None
+        )
         if (
             step.action
             not in (
@@ -3475,11 +3619,14 @@ class Replayer:
                 ActionKind.KEY,
             )
             or step.anchor is None
-            or not (
-                step.anchor.context_text
-                or step.anchor.structured_identity
-                or step.anchor.identity_template
-                or step.anchor.identifier_crop
+            or (
+                qualified_policy is None
+                and not (
+                    step.anchor.context_text
+                    or step.anchor.structured_identity
+                    or step.anchor.identity_template
+                    or step.anchor.identifier_crop
+                )
             )
         ):
             return None
@@ -3629,6 +3776,69 @@ class Replayer:
 
         if isinstance(self.backend, GuardedKeyboardActionBackend):
             self.backend.cancel_guarded_keyboard()
+        if isinstance(self.backend, FocusedElementActuationLeaseBackend):
+            self.backend.cancel_focused_element_lease()
+
+    def _local_atomic_capability_error(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        workflow: Workflow,
+        *,
+        arm_keyboard: bool,
+    ) -> Optional[str]:
+        """Refuse before input when a local identity lease cannot be enforced.
+
+        Consequential TYPE has two input edges: its optional focusing click and
+        the subsequent keyboard delivery.  The first revalidation must prove
+        both local seams are available before it focuses anything.  The second
+        revalidation (``arm_keyboard=True``) only needs the keyboard seam.
+        Structural focusing actions already carry a native target fingerprint;
+        visual/coordinate focusing actions require the coordinate guard.
+        """
+
+        if isinstance(self.backend, RemoteActuationBackend):
+            return None
+
+        requires_keyboard = self._requires_atomic_identity_keyboard(step, workflow)
+        if requires_keyboard and not isinstance(
+            self.backend, GuardedKeyboardActionBackend
+        ):
+            return (
+                f"Step '{step.id}' ({step.intent}) is a consequential "
+                "identity-gated keyboard action, but this backend cannot bind "
+                "the verified focus and execution context to the same input "
+                "operation — refusing unguarded keyboard delivery; run aborted"
+            )
+
+        requires_pointer = self._requires_atomic_identity_pointer(step, workflow)
+        pointer_edge_pending = step.action in (
+            ActionKind.CLICK,
+            ActionKind.DOUBLE_CLICK,
+        ) or (step.action is ActionKind.TYPE and not arm_keyboard)
+        structural_pointer = bool(
+            resolution is not None
+            and resolution.rung == "structural"
+            and resolution.structural_handle is not None
+            and resolution.structural_handle.target_fingerprint is not None
+            and step.anchor is not None
+            and step.anchor.structural is not None
+            and callable(getattr(self.backend, "act_structural", None))
+        )
+        if (
+            requires_pointer
+            and pointer_edge_pending
+            and resolution is not None
+            and not structural_pointer
+            and not isinstance(self.backend, GuardedCoordinateActionBackend)
+        ):
+            return (
+                f"Step '{step.id}' ({step.intent}) is a consequential "
+                "identity-gated pointer action, but this backend cannot bind "
+                "target and context verification to the same actuation operation "
+                "— refusing raw coordinate delivery; run aborted"
+            )
+        return None
 
     def _revalidate_consequential_actuation(
         self,
@@ -3658,11 +3868,28 @@ class Replayer:
         if not self._step_needs_consequential_revalidation(step, workflow):
             return resolution, matched_region, before_png, None
 
+        capability_error = self._local_atomic_capability_error(
+            step,
+            resolution,
+            workflow,
+            arm_keyboard=arm_keyboard,
+        )
+        if capability_error is not None:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return resolution, matched_region, before_png, capability_error
+
         guarded_keyboard_backend = (
             arm_keyboard
             and self._requires_atomic_identity_keyboard(step, workflow)
             and not isinstance(self.backend, RemoteActuationBackend)
             and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
+        focused_element_backend = (
+            arm_keyboard
+            and self._step_is_consequential(step)
+            and isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, FocusedElementActuationLeaseBackend)
         )
         guarded_type_pointer_backend = (
             step.action is ActionKind.TYPE
@@ -3679,6 +3906,36 @@ class Replayer:
             )
             if callable(cancel_stale_structural):
                 cancel_stale_structural()
+
+        prepared_pointer: Optional[Point] = None
+        pointer_edge_pending = step.action in (
+            ActionKind.CLICK,
+            ActionKind.DOUBLE_CLICK,
+        ) or (
+            step.action is ActionKind.TYPE
+            and resolution is not None
+            and not arm_keyboard
+        )
+        if (
+            pointer_edge_pending
+            and resolution is not None
+            and isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, PreparedPointerActuationBackend)
+        ):
+            prepared_pointer = resolution.point
+            try:
+                self.backend.prepare_pointer_actuation(*prepared_pointer)
+            except Exception as exc:  # noqa: BLE001 - backend boundary must halt
+                if self.governed_authorization is not None:
+                    result.safety_halt = True
+                detail = _scrub_phi(str(exc)) or type(exc).__name__
+                return (
+                    resolution,
+                    matched_region,
+                    before_png,
+                    "Pointer preflight HALTED before final target resolution for "
+                    f"step '{step.id}' ({step.intent}): {detail}",
+                )
         try:
             fresh_png = (
                 self.backend.acquire_actuation_frame()
@@ -3710,6 +3967,22 @@ class Replayer:
             if self.governed_authorization is not None:
                 result.safety_halt = True
             return fresh_resolution, fresh_region, fresh_png, error
+        if (
+            prepared_pointer is not None
+            and fresh_resolution is not None
+            and fresh_resolution.point != prepared_pointer
+        ):
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return (
+                fresh_resolution,
+                fresh_region,
+                fresh_png,
+                f"Step '{step.id}' ({step.intent}) resolved to "
+                f"{fresh_resolution.point!r} after remote pointer hover, not "
+                f"the prepared point {prepared_pointer!r}; refusing a click "
+                "whose target moved before actuation",
+            )
         identity_required = (
             self.governed_authorization is not None
             and self.governed_authorization.requires_verified_identity(step.id)
@@ -3747,6 +4020,11 @@ class Replayer:
                 cast(GuardedKeyboardActionBackend, self.backend).arm_guarded_keyboard(
                     *fresh_resolution.point
                 )
+            if focused_element_backend:
+                cast(
+                    FocusedElementActuationLeaseBackend,
+                    self.backend,
+                ).arm_focused_element_lease(*fresh_resolution.point)
             try:
                 error = self._identity_gate_error(
                     step,
@@ -3762,10 +4040,14 @@ class Replayer:
                     self._cancel_guarded_coordinate()
                 if guarded_keyboard:
                     self._cancel_guarded_keyboard()
+                if focused_element_backend:
+                    self._cancel_guarded_keyboard()
                 raise
             if error is not None and guarded_coordinate:
                 self._cancel_guarded_coordinate()
             if error is not None and guarded_keyboard:
+                self._cancel_guarded_keyboard()
+            if error is not None and focused_element_backend:
                 self._cancel_guarded_keyboard()
         return fresh_resolution, fresh_region, fresh_png, error
 
@@ -3974,6 +4256,23 @@ class Replayer:
                     f"Step '{step.id}' ({step.intent}) is a TYPE step with "
                     "neither text nor param"
                 )
+            requires_atomic_keyboard = self._requires_atomic_identity_keyboard(
+                step, workflow
+            )
+            if (
+                requires_atomic_keyboard
+                and not isinstance(self.backend, RemoteActuationBackend)
+                and not isinstance(self.backend, GuardedKeyboardActionBackend)
+            ):
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return (
+                    f"Step '{step.id}' ({step.intent}) is a consequential "
+                    "identity-gated keyboard action, but this backend cannot "
+                    "bind the verified focus and execution context to the same "
+                    "input operation — refusing unguarded keyboard delivery; "
+                    "run aborted"
+                )
             # The field point: this step's own focusing click (anchored
             # TYPE), or the immediately preceding step's click point (the
             # recorder's click-to-focus-then-type pattern). When focus was
@@ -4015,6 +4314,18 @@ class Replayer:
                             ).hexdigest(),
                         )
                         result.actuation = "guarded_coordinate"
+                    elif requires_atomic_identity and not isinstance(
+                        self.backend, RemoteActuationBackend
+                    ):
+                        result.safety_halt = True
+                        result.failure_category = "safety_halt"
+                        return (
+                            f"Step '{step.id}' ({step.intent}) is a consequential "
+                            "identity-gated focusing click, but this backend "
+                            "cannot bind target and context verification to the "
+                            "same coordinate operation — refusing raw coordinate "
+                            "delivery; run aborted"
+                        )
                     else:
                         self.backend.click(x, y)
                 field_point = (x, y)
@@ -4062,7 +4373,7 @@ class Replayer:
             if baseline_field_value is None:
                 baseline_field_value = self._text_value_at(None)
             guarded_type = (
-                self._requires_atomic_identity_keyboard(step, workflow)
+                requires_atomic_keyboard
                 and not isinstance(self.backend, RemoteActuationBackend)
                 and isinstance(self.backend, GuardedKeyboardActionBackend)
             )
@@ -4074,6 +4385,16 @@ class Replayer:
                     expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
                 )
                 result.actuation = "guarded_keyboard"
+            elif requires_atomic_keyboard and not isinstance(
+                self.backend, RemoteActuationBackend
+            ):
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return (
+                    f"Step '{step.id}' ({step.intent}) lost its guarded keyboard "
+                    "capability before delivery — refusing unguarded text input; "
+                    "run aborted"
+                )
             else:
                 self.backend.type_text(text)
             if not text:
@@ -4093,8 +4414,11 @@ class Replayer:
         if step.action is ActionKind.KEY:
             if not step.key:
                 return f"Step '{step.id}' ({step.intent}) is a KEY step with no key"
+            requires_atomic_keyboard = self._requires_atomic_identity_keyboard(
+                step, workflow
+            )
             guarded_key = (
-                self._requires_atomic_identity_keyboard(step, workflow)
+                requires_atomic_keyboard
                 and not isinstance(self.backend, RemoteActuationBackend)
                 and isinstance(self.backend, GuardedKeyboardActionBackend)
             )
@@ -4106,6 +4430,16 @@ class Replayer:
                     expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
                 )
                 result.actuation = "guarded_keyboard"
+            elif requires_atomic_keyboard and not isinstance(
+                self.backend, RemoteActuationBackend
+            ):
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return (
+                    f"Step '{step.id}' ({step.intent}) lost its guarded keyboard "
+                    "capability before delivery — refusing unguarded key input; "
+                    "run aborted"
+                )
             else:
                 self.backend.press(step.key)
             return None

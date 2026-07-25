@@ -8,6 +8,7 @@ import pytest
 
 from openadapt_flow.identity_signals import parameterize_identity_text
 from openadapt_flow.ir import (
+    ActionDeliveryReceipt,
     ActionKind,
     Anchor,
     ApiBinding,
@@ -65,12 +66,38 @@ class _RuntimeBackend(_Backend):
     def __init__(self, structured: str | None) -> None:
         super().__init__(structured)
         self.actions: list[tuple[object, ...]] = []
+        self.guarded_point: tuple[int, int] | None = None
 
     def screenshot(self) -> bytes:
         return b"frame"
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         self.actions.append(("click", x, y, double))
+
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        self.guarded_point = (x, y)
+
+    def cancel_guarded_coordinate(self) -> None:
+        self.guarded_point = None
+
+    def act_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        del expected_frame_sha256
+        assert self.guarded_point == (x, y)
+        self.guarded_point = None
+        self.click(x, y, double=double)
+        return ActionDeliveryReceipt(
+            receipt_id="identity-quorum-test",
+            operation="guarded_coordinate_click",
+            native=False,
+            delivered_at="2026-07-25T00:00:00+00:00",
+        )
 
     def press(self, key: str) -> None:
         self.actions.append(("press", key))
@@ -1084,6 +1111,45 @@ def test_semantic_signal_label_cannot_relabel_unrelated_structured_text() -> Non
 
 
 @pytest.mark.parametrize(
+    "expected",
+    [
+        "https://app.example.test",
+        "https://app.example.test:8443",
+        "https://[2001:db8::1]",
+        f"https://{'a' * 63}.{'b' * 63}.{'c' * 63}.test",
+    ],
+)
+def test_application_signal_accepts_exact_browser_origin(expected: str) -> None:
+    signal = IdentitySignalPolicy(
+        key="application",
+        source="application",
+        expected_value=expected,
+    )
+
+    assert signal.expected_value == expected
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        "https://app.example.test/patient/1",
+        "https://user@app.example.test",
+        "HTTPS://app.example.test",
+        "https://[2001:db8::1]:invalid",
+    ],
+)
+def test_application_signal_rejects_noncanonical_or_sensitive_origin(
+    expected: str,
+) -> None:
+    with pytest.raises(ValueError, match="canonical HTTP"):
+        IdentitySignalPolicy(
+            key="application",
+            source="application",
+            expected_value=expected,
+        )
+
+
+@pytest.mark.parametrize(
     ("key", "expected"),
     [
         ("application", "reference.application"),
@@ -1125,6 +1191,64 @@ def test_dedicated_context_signal_uses_matching_observer_not_patient_row(
     assert check.status == "verified"
     assert check.signal_evidence[0].source == key
     assert check.signal_evidence[0].evidence_class == f"{key}_identity"
+
+
+@pytest.mark.parametrize(
+    ("live_application", "should_act"),
+    [
+        ("reference.application", True),
+        ("wrong.application", False),
+        (None, False),
+    ],
+)
+def test_dedicated_only_identity_policy_is_enforced_before_runtime_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    live_application: str | None,
+    should_act: bool,
+) -> None:
+    step = _step()
+    assert step.anchor is not None
+    step.anchor.structured_identity = None
+    step.anchor.context_text = None
+    step.anchor.identity_template = None
+    step.anchor.identifier_crop = None
+    step.anchor.identifier_region = None
+    policy = IdentityPolicy(
+        step_id=step.id,
+        signals=[
+            IdentitySignalPolicy(
+                key="application",
+                source="application",
+                match="exact",
+                expected_value="reference.application",
+            )
+        ],
+        quorum=1,
+    )
+    workflow = _workflow(step, policy)
+    backend = _RuntimeBackend(None)
+    backend.application = live_application
+    replayer = Replayer(backend, vision=_Vision())
+    monkeypatch.setattr(
+        replayer,
+        "_resolve_step",
+        lambda *_args, **_kwargs: (_resolution(), None, None),
+    )
+
+    report = replayer.run(
+        workflow,
+        bundle_dir=tmp_path / "bundle",
+        run_dir=tmp_path / f"run-{live_application}",
+    )
+
+    assert bool(backend.actions) is should_act
+    if should_act:
+        assert report.results[0].identity is not None
+        assert report.results[0].identity.status == "verified"
+    else:
+        assert report.success is False
+        assert report.results[0].safety_halt is True
 
 
 def test_overlapping_pixel_identity_signals_cannot_form_quorum() -> None:

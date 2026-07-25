@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from openadapt_flow.verification import VerificationTier
 
@@ -37,6 +37,7 @@ class ExecutionOutcome(str, Enum):
     COMPLETED_UNVERIFIED = "COMPLETED_UNVERIFIED"
     HALTED = "HALTED"
     FAILED = "FAILED"
+    ROLLED_BACK = "ROLLED_BACK"
 
 
 @dataclass(frozen=True)
@@ -173,6 +174,8 @@ def classify_execution_outcome(
         if report.execution_completed is not None
         else report.success
     )
+    if _completed_compensation_actions(report) > 0:
+        return ExecutionOutcome.ROLLED_BACK
     if not execution_completed:
         refusal_step_ids = {"<authorization>", "<params>", "<profile>"}
         governed_halt = (
@@ -188,6 +191,8 @@ def classify_execution_outcome(
 
     if resolved is ExecutionProfile.DEMO:
         return ExecutionOutcome.COMPLETED_UNVERIFIED
+    if not (report.governed_authorization_id and report.governed_runtime_inputs_digest):
+        return ExecutionOutcome.COMPLETED_UNVERIFIED
 
     # Import lazily: run_gate imports this module for the profile contract.
     from openadapt_flow.run_gate import is_consequential
@@ -196,6 +201,7 @@ def classify_execution_outcome(
     consequential = {
         step.id for step in iter_workflow_steps(workflow) if is_consequential(step)
     }
+    steps_by_id = {step.id: step for step in iter_workflow_steps(workflow)}
     if workflow.program is None:
         expected_results = Counter(step.id for step in workflow.steps)
         observed_results = Counter(
@@ -205,12 +211,37 @@ def classify_execution_outcome(
         )
         if observed_results != expected_results:
             return ExecutionOutcome.COMPLETED_UNVERIFIED
+    required_identity_ids = set(report.required_identity_step_ids)
+    if any(
+        result.identity is None or result.identity.status != "verified"
+        for result in report.results
+        if (
+            not result.skipped
+            and not result.exception_handled
+            and result.step_id in required_identity_ids
+        )
+    ):
+        return ExecutionOutcome.COMPLETED_UNVERIFIED
     minimum = required_effect_tier(workflow, resolved)
     assert minimum is not None
     for result in report.results:
-        if result.skipped or result.step_id not in consequential:
+        if result.skipped or result.exception_handled:
+            continue
+        step = steps_by_id.get(result.step_id)
+        if step is None:
+            continue
+        if not result.ok:
+            return ExecutionOutcome.COMPLETED_UNVERIFIED
+        if step.expect and result.postconditions_ok is not True:
+            return ExecutionOutcome.COMPLETED_UNVERIFIED
+        if result.step_id not in consequential:
             continue
         if result.effect_approved_unverified or result.effect_verified is not True:
+            return ExecutionOutcome.COMPLETED_UNVERIFIED
+        effects = step.effects or (
+            step.api_binding.effects if step.api_binding is not None else []
+        )
+        if len(result.effect_contract_hashes) != len(effects):
             return ExecutionOutcome.COMPLETED_UNVERIFIED
         evidence_hashes = Counter(
             item.effect_contract_hash
@@ -234,6 +265,7 @@ def stamp_execution_outcome(
     """Write the profile and precise outcome into ``report``."""
 
     resolved = resolve_execution_profile(profile)
+    report.external_network_calls = _external_network_call_state(report)
     if report.execution_completed is None:
         report.execution_completed = report.success
     outcome = classify_execution_outcome(report, workflow, resolved)
@@ -245,4 +277,201 @@ def stamp_execution_outcome(
     )
     if execution_profile_contract(resolved).production:
         report.success = outcome is ExecutionOutcome.VERIFIED
+    elif outcome is ExecutionOutcome.ROLLED_BACK:
+        report.success = False
+    report.outcome_envelope = build_outcome_envelope(report, workflow)
     return outcome
+
+
+def _completed_compensation_actions(report: RunReport) -> int:
+    """Count only compensations that completed and were re-verified."""
+
+    return sum(
+        evidence.reconciliation_actions
+        for result in report.results
+        for evidence in result.effect_evidence
+        if (
+            evidence.reconciliation_completed
+            and evidence.reconciliation_actions > 0
+            and evidence.final_verdict == "confirmed"
+        )
+    )
+
+
+def build_outcome_envelope(report: RunReport, workflow: Workflow):
+    """Build the versioned PHI-free evidence summary for ``report``.
+
+    Counts are derived from typed workflow/report fields only.  Free-text
+    intents, parameters, identifiers, effect hashes, and observed values never
+    enter the envelope.
+    """
+
+    from openadapt_flow.ir import (
+        ExecutionOutcomeEnvelope,
+        OutcomeContractCounts,
+        OutcomeEvidenceClass,
+    )
+    from openadapt_flow.traversal import iter_workflow_steps
+
+    if report.execution_outcome is None:
+        raise ValueError("execution outcome must be classified before enveloping")
+
+    steps_by_id = {step.id: step for step in iter_workflow_steps(workflow)}
+    production = report.execution_profile in {"standard", "regulated"}
+
+    required_authorization = 1 if production else 0
+    passed_authorization = int(
+        bool(
+            required_authorization
+            and report.governed_authorization_id
+            and report.governed_runtime_inputs_digest
+        )
+    )
+
+    required_identity_ids = set(report.required_identity_step_ids)
+    identity_results = [
+        result
+        for result in report.results
+        if (
+            not result.skipped
+            and not result.exception_handled
+            and result.step_id in required_identity_ids
+        )
+    ]
+    required_identity = len(identity_results)
+    passed_identity = sum(
+        result.identity is not None and result.identity.status == "verified"
+        for result in identity_results
+    )
+
+    required_postconditions = 0
+    passed_postconditions = 0
+    required_effects = 0
+    passed_effects = 0
+    evidence_classes: set[OutcomeEvidenceClass] = set()
+    effect_class_by_tier: dict[int, OutcomeEvidenceClass] = {
+        1: "effect_tier_1",
+        2: "effect_tier_2",
+        3: "effect_tier_3",
+        4: "effect_tier_4",
+    }
+    minimum_effect_tier = (
+        required_effect_tier(workflow, report.execution_profile)
+        if report.execution_profile is not None
+        else None
+    )
+    compensation_actions = _completed_compensation_actions(report)
+    for result in report.results:
+        if result.skipped or result.exception_handled:
+            continue
+        step = steps_by_id.get(result.step_id)
+        if step is not None:
+            postcondition_count = len(step.expect)
+            required_postconditions += postcondition_count
+            if result.postconditions_ok is True:
+                passed_postconditions += postcondition_count
+            effects = step.effects or (
+                step.api_binding.effects if step.api_binding is not None else []
+            )
+            required_effects += len(effects)
+        if result.effect_verified is True:
+            sufficient_evidence = Counter(
+                evidence.effect_contract_hash
+                for evidence in result.effect_evidence
+                if evidence.final_verdict == "confirmed"
+                and (
+                    minimum_effect_tier is None
+                    or (
+                        evidence.verification_tier is not None
+                        and VerificationTier(evidence.verification_tier).satisfies(
+                            minimum_effect_tier
+                        )
+                    )
+                )
+            )
+            passed_effects += sum(
+                (sufficient_evidence & Counter(result.effect_contract_hashes)).values()
+            )
+        if result.identity is not None and result.identity.status == "verified":
+            evidence_classes.add("identity")
+        if result.postconditions_ok is True and step is not None and step.expect:
+            evidence_classes.add("postcondition")
+        for evidence in result.effect_evidence:
+            if (
+                evidence.final_verdict == "confirmed"
+                and evidence.verification_tier is not None
+            ):
+                evidence_class = effect_class_by_tier.get(evidence.verification_tier)
+                if evidence_class is not None:
+                    evidence_classes.add(evidence_class)
+            if (
+                evidence.reconciliation_completed
+                and evidence.reconciliation_actions > 0
+                and evidence.final_verdict == "confirmed"
+            ):
+                evidence_classes.add("compensation")
+
+    required = OutcomeContractCounts(
+        authorization=required_authorization,
+        identity=required_identity,
+        postcondition=required_postconditions,
+        effect=required_effects,
+    )
+    passed = OutcomeContractCounts(
+        authorization=passed_authorization,
+        identity=min(passed_identity, required_identity),
+        postcondition=min(passed_postconditions, required_postconditions),
+        effect=min(passed_effects, required_effects),
+    )
+    if passed.authorization:
+        evidence_classes.add("authorization")
+    if report.model_calls:
+        evidence_classes.add("model")
+
+    return ExecutionOutcomeEnvelope(
+        outcome=report.execution_outcome,
+        profile=report.execution_profile,
+        production_eligible=report.production_eligible,
+        execution_completed=bool(report.execution_completed),
+        required_contracts=required,
+        passed_contracts=passed,
+        evidence_classes=sorted(evidence_classes),
+        model_calls=report.model_calls,
+        external_network_calls=report.external_network_calls,
+        compensation_actions=compensation_actions,
+    )
+
+
+def _external_network_call_state(
+    report: RunReport,
+) -> Literal["none", "observed", "unknown"]:
+    """Report observed egress without turning absence of instrumentation into 0."""
+
+    if report.external_network_calls == "observed" or report.model_calls > 0:
+        return "observed"
+    if report.execution_origin or report.execution_entry_url:
+        return "observed"
+    if report.execution_target_kind in {"web", "rdp", "citrix"}:
+        return "observed"
+
+    local_substrates = {
+        "onscreen",
+        "file",
+        "document_hash",
+        "snapshot",
+        "test",
+        "fake",
+    }
+    for result in report.results:
+        if result.actuation == "api":
+            return "observed"
+        for evidence in result.effect_evidence:
+            substrate = evidence.substrate.strip().lower()
+            if substrate in {"rest", "fhir", "sftp", "http", "https"}:
+                return "observed"
+            if substrate not in local_substrates:
+                return "unknown"
+    # A native target says where input was delivered, not whether this process
+    # or one of its integrations opened a socket. Until an explicit network
+    # observer proves the negative, absence of an observed call remains unknown.
+    return report.external_network_calls

@@ -25,13 +25,13 @@ Faithful pixel-only property (the whole point):
   the remote display, nothing else.
 * input is injected at the **host OS level** (``CGEvent`` mouse / keyboard /
   wheel) into that window, mapped from screenshot-pixel space to screen points.
-* the backend deliberately implements **only** the base
-  :class:`openadapt_flow.backend.Backend` protocol — NOT ``StructuralBackend``,
+* the backend deliberately does NOT implement ``StructuralBackend``,
   ``IdentityBackend`` or ``StructuralActionBackend``. So the resolver's
-  ``structural`` (UIA) rung is **unavailable** and resolution runs on the visual
-  floor (template / OCR / geometry / grounder); identity falls back to the OCR
-  name+DOB tier — exactly the Citrix constraint (``backend.py`` protocol notes,
-  ``docs/desktop/LIMITS.md``).
+  ``structural`` (UIA) rung is **unavailable** and record identity still uses
+  qualified pixel/OCR regions. It may implement the separate
+  ``ExecutionContextIdentityBackend`` contract when explicitly configured with
+  PHI-free on-screen application/workflow/session markers or a live session
+  digest observer. Those observers never expose captured text.
 
 Permission reality (macOS, and the honest failure mode): window capture needs
 **Screen Recording** permission and input injection needs **Accessibility**
@@ -59,8 +59,9 @@ import struct
 import sys
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass
-from typing import Callable, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from PIL import Image
 
@@ -68,6 +69,7 @@ _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _LEASE_NONE = 0
 _LEASE_ARMED = 1
 _LEASE_INVALIDATED = 2
+_SESSION_DIGEST_HEX_LENGTH = 64
 
 
 class RemoteDisplayError(RuntimeError):
@@ -244,8 +246,66 @@ def _canonical_rgb_digest(png: bytes) -> bytes:
         rgb = image.convert("RGB")
         digest = hashlib.sha256()
         digest.update(struct.pack(">II", *rgb.size))
-        digest.update(rgb.tobytes())
-        return digest.digest()
+    digest.update(rgb.tobytes())
+    return digest.digest()
+
+
+def _clean_marker(marker: Optional[str], *, name: str) -> Optional[str]:
+    """Normalize an explicitly PHI-free marker without observing screen text."""
+
+    if marker is None:
+        return None
+    cleaned = unicodedata.normalize("NFKC", marker).strip()
+    if not cleaned:
+        raise ValueError(f"{name} must be non-empty when configured")
+    if len(cleaned.encode("utf-8")) > 128 or not all(
+        character.isprintable() for character in cleaned
+    ):
+        raise ValueError(
+            f"{name} must be one printable PHI-free token of at most 128 bytes"
+        )
+    return cleaned
+
+
+def _marker_probe(
+    marker: Optional[str],
+    probe: Optional[Callable[[bytes], bool]],
+) -> Optional[Callable[[bytes], bool]]:
+    """Return a boolean frame probe; callbacks never return observed text."""
+
+    if marker is None:
+        if probe is not None:
+            raise ValueError("a marker probe requires its PHI-free marker")
+        return None
+    if probe is not None:
+        return probe
+
+    def _ocr_probe(png: bytes) -> bool:
+        from openadapt_flow import vision
+
+        return vision.find_text(png, marker, min_ratio=1.0) is not None
+
+    return _ocr_probe
+
+
+def _session_marker_digest(marker: str) -> str:
+    """Opaque digest for a verified, PHI-free, session-unique visual marker."""
+
+    payload = b"openadapt.remote-session-marker.v1\x00" + marker.encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _valid_session_digest(value: object) -> Optional[str]:
+    """Accept only a transport-supplied SHA-256-shaped digest."""
+
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if len(candidate) != _SESSION_DIGEST_HEX_LENGTH:
+        return None
+    if any(ch not in "0123456789abcdef" for ch in candidate):
+        return None
+    return candidate
 
 
 def _split_chord(key: str) -> tuple[list[str], str]:
@@ -392,6 +452,12 @@ class RemoteDisplayBackend:
         activate_before_input: When True (default) raise the target app frontmost
             before each input burst so keystrokes route to it.
         settle_s: Seconds to pause after activating / between click edges.
+        pointer_settle_stable_frames: Consecutive exact post-pointer frames
+            required before the runtime may acquire its final consequential
+            actuation frame. Remote clients can acknowledge pointer/hover paint
+            asynchronously, so a fixed delay is not a sufficient boundary.
+        pointer_settle_timeout_s: Maximum time to wait for those exact frames.
+            A surface that keeps repainting halts before target re-resolution.
         max_frame_age_s: Maximum age of the captured frame whose pixel geometry
             an input may use. Older coordinates are refused and must be
             re-captured/re-resolved.
@@ -399,6 +465,24 @@ class RemoteDisplayBackend:
             before every input. Return False on a lock/login/disconnect or
             unexpected application screen to fail closed. Generic client-window
             capture cannot identify a remote session lock state portably.
+        application_marker: Optional PHI-free label whose presence in a fresh
+            bounded client-window frame proves the current application. The
+            verified marker itself is returned; arbitrary OCR text is never
+            returned.
+        application_marker_probe: Optional custom predicate for
+            ``application_marker``. When omitted, the marker is found with the
+            existing OCR text resolver.
+        workflow_state_marker: Optional PHI-free state label, verified and
+            returned under the same contract as ``application_marker``.
+        workflow_state_marker_probe: Optional custom predicate for
+            ``workflow_state_marker``.
+        session_marker: Optional PHI-free, session-unique on-screen marker. Its
+            verified value is returned only as a namespaced SHA-256 digest.
+        session_marker_probe: Optional custom predicate for ``session_marker``.
+        session_identity_observer: Optional passive callback returning a live
+            64-hex transport/session digest. Raw usernames, titles, patient
+            text, and other identifiers are rejected. It is mutually exclusive
+            with ``session_marker``.
     """
 
     def __init__(
@@ -410,8 +494,17 @@ class RemoteDisplayBackend:
         require_input_trust: bool = True,
         activate_before_input: bool = True,
         settle_s: float = 0.03,
+        pointer_settle_stable_frames: int = 4,
+        pointer_settle_timeout_s: float = 2.0,
         max_frame_age_s: float = 10.0,
         readiness_probe: Optional[Callable[[bytes], bool]] = None,
+        application_marker: Optional[str] = None,
+        application_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        workflow_state_marker: Optional[str] = None,
+        workflow_state_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        session_marker: Optional[str] = None,
+        session_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        session_identity_observer: Optional[Callable[[], Optional[str]]] = None,
     ) -> None:
         self._client = client if client is not None else _default_window_client()
         self._owner_substr = owner_substr
@@ -419,10 +512,40 @@ class RemoteDisplayBackend:
         self._require_input_trust = require_input_trust
         self._activate_before_input = activate_before_input
         self._settle_s = settle_s
+        self._pointer_settle_stable_frames = int(pointer_settle_stable_frames)
+        self._pointer_settle_timeout_s = float(pointer_settle_timeout_s)
+        if self._pointer_settle_stable_frames < 2:
+            raise ValueError("pointer_settle_stable_frames must be at least 2")
+        if self._pointer_settle_timeout_s <= 0:
+            raise ValueError("pointer_settle_timeout_s must be positive")
         self._max_frame_age_s = float(max_frame_age_s)
         if self._max_frame_age_s <= 0:
             raise ValueError("max_frame_age_s must be positive")
         self._readiness_probe = readiness_probe
+        self._application_marker = _clean_marker(
+            application_marker, name="application_marker"
+        )
+        self._application_marker_probe = _marker_probe(
+            self._application_marker,
+            application_marker_probe,
+        )
+        self._workflow_state_marker = _clean_marker(
+            workflow_state_marker, name="workflow_state_marker"
+        )
+        self._workflow_state_marker_probe = _marker_probe(
+            self._workflow_state_marker,
+            workflow_state_marker_probe,
+        )
+        self._session_marker = _clean_marker(session_marker, name="session_marker")
+        self._session_marker_probe = _marker_probe(
+            self._session_marker,
+            session_marker_probe,
+        )
+        if self._session_marker is not None and session_identity_observer is not None:
+            raise ValueError(
+                "configure either session_marker or session_identity_observer, not both"
+            )
+        self._session_identity_observer = session_identity_observer
         self._window: Optional[WindowInfo] = None
         self._viewport: Optional[tuple[int, int]] = None
         self._scale: float = 1.0
@@ -431,7 +554,9 @@ class RemoteDisplayBackend:
         self._frame_window: Optional[WindowInfo] = None
         self._last_frame_monotonic: Optional[float] = None
         self._last_frame_digest: Optional[bytes] = None
+        self._last_session_identity: Optional[str] = None
         self._actuation_lease_state = _LEASE_NONE
+        self._prepared_pointer_point: Optional[tuple[int, int]] = None
         # Serialize capture/geometry validation with the entire input gesture;
         # otherwise another thread can replace the frame lease between mouse
         # down and up or between a key's down/up edges.
@@ -481,15 +606,19 @@ class RemoteDisplayBackend:
                 win = self._resolve_window(refresh=True)
                 # on_screen alone is insufficient: a window occluded by another
                 # app is still "on screen", yet clicks would hit the occluder.
-                if (
-                    win.on_screen
-                    and self._client.frontmost_pid() == win.pid
-                    and self._client.key_window_id(win.pid) == win.window_id
-                ):
+                if win.on_screen and self._window_focus_matches(win):
                     return
         raise RemoteDisplayError(
             "configured client window did not come to the foreground "
             "(frontmost check failed)"
+        )
+
+    def _window_focus_matches(self, window: WindowInfo) -> bool:
+        """Whether global input is presently routed to this exact window."""
+
+        return (
+            self._client.frontmost_pid() == window.pid
+            and self._client.key_window_id(window.pid) == window.window_id
         )
 
     # -- Backend protocol ----------------------------------------------------
@@ -552,6 +681,7 @@ class RemoteDisplayBackend:
             self._frame_window = win
             self._last_frame_monotonic = time.monotonic()
             self._last_frame_digest = _canonical_rgb_digest(png)
+            self._last_session_identity = self._session_identity_from_frame(png)
             # An ordinary observation is not permission to perform a
             # consequential remote action.  Only acquire_actuation_frame arms
             # the one-shot content lease after focus/readiness are established.
@@ -579,11 +709,7 @@ class RemoteDisplayBackend:
             self._client.activate(win.pid)
             time.sleep(self._settle_s)
             win = self._resolve_window(refresh=True)
-            if (
-                not win.on_screen
-                or self._client.frontmost_pid() != win.pid
-                or self._client.key_window_id(win.pid) != win.window_id
-            ):
+            if not win.on_screen or not self._window_focus_matches(win):
                 raise RemoteDisplayError(
                     "the exact remote-display window is not visible, "
                     "app-frontmost, and keyboard-frontmost; refusing to acquire "
@@ -598,8 +724,7 @@ class RemoteDisplayBackend:
                 or current.pid != lease.pid
                 or current.bounds != lease.bounds
                 or not current.on_screen
-                or self._client.frontmost_pid() != current.pid
-                or self._client.key_window_id(current.pid) != current.window_id
+                or not self._window_focus_matches(current)
             ):
                 raise RemoteDisplayError(
                     "remote-display window identity, focus, or geometry changed "
@@ -611,18 +736,109 @@ class RemoteDisplayBackend:
                     "remote-display readiness probe rejected the fresh actuation "
                     "frame (locked, disconnected, or unexpected session)"
                 )
+            if (
+                self._session_identity_configured
+                and self._last_session_identity is None
+            ):
+                self._actuation_lease_state = _LEASE_INVALIDATED
+                raise RemoteDisplayError(
+                    "configured remote session identity is unavailable on the "
+                    "fresh actuation frame"
+                )
             self._actuation_lease_state = _LEASE_ARMED
             return png
 
-    def click(self, x: int, y: int, *, double: bool = False) -> None:
-        """Click (or double-click) at captured-pixel coordinates (x, y)."""
+    # -- Optional ExecutionContextIdentityBackend --------------------------
+
+    def application_identity(self) -> Optional[str]:
+        """Return a PHI-free application marker verified on a fresh frame."""
+
+        return self._verified_marker_identity(
+            self._application_marker,
+            self._application_marker_probe,
+        )
+
+    def workflow_state_identity(self) -> Optional[str]:
+        """Return a PHI-free workflow-state marker verified on a fresh frame."""
+
+        return self._verified_marker_identity(
+            self._workflow_state_marker,
+            self._workflow_state_marker_probe,
+        )
+
+    def session_identity(self) -> Optional[str]:
+        """Return only a live, verified 64-hex remote-session digest."""
+
+        if not self._session_identity_configured:
+            return None
         with self._input_lock:
-            self._ensure_input_ready(point=(int(x), int(y)))
-            sx, sy = self._to_screen(int(x), int(y))
+            png = self._fresh_identity_frame()
+            if png is None:
+                return None
+            observed = self._session_identity_from_frame(png)
+            if self._session_identity_configured and observed is None:
+                self._invalidate_actuation_lease()
+                return None
+            if (
+                self._actuation_lease_state == _LEASE_ARMED
+                and observed != self._last_session_identity
+            ):
+                self._invalidate_actuation_lease()
+                return None
+            return observed
+
+    def prepare_pointer_actuation(self, x: int, y: int) -> None:
+        """Position the pointer before the runtime's final resolve/identity pass.
+
+        Remote cursor and hover paint are expected consequences of positioning,
+        so they must occur before ``acquire_actuation_frame`` establishes the
+        exact-content lease.  This method emits no button edge.  The subsequent
+        armed click must use this exact point without moving again.
+        """
+
+        with self._input_lock:
+            point = (int(x), int(y))
+            # If a prior final lease exists (a bounded re-prepare), validate and
+            # consume it before intentionally moving the pointer.  With an
+            # ordinary observation this still validates focus, geometry, trust,
+            # frame age, bounds, and occlusion.
+            self._ensure_input_ready(point=point)
+            sx, sy = self._to_screen(*point)
             self._assert_click_target(sx, sy)
             self._assert_frame_fresh()
             self._client.mouse_move(sx, sy)
             time.sleep(self._settle_s)
+            self._wait_for_pointer_settle()
+            self._prepared_pointer_point = point
+
+    def click(self, x: int, y: int, *, double: bool = False) -> None:
+        """Click (or double-click) at captured-pixel coordinates (x, y)."""
+        with self._input_lock:
+            point = (int(x), int(y))
+            if self._actuation_lease_state == _LEASE_ARMED:
+                if self._prepared_pointer_point != point:
+                    self._actuation_lease_state = _LEASE_INVALIDATED
+                    self._prepared_pointer_point = None
+                    raise RemoteDisplayError(
+                        "consequential remote click was not pre-positioned at "
+                        "the freshly resolved target; refusing pointer delivery"
+                    )
+                # Exact post-hover frame/context validation happens immediately
+                # before the first button edge.  No cursor move occurs after
+                # this check.
+                self._ensure_input_ready(point=point)
+            else:
+                # Reversible/direct callers retain the ordinary path.  They do
+                # not carry a consequential content lease, but still validate
+                # trust, focus, geometry, bounds, occlusion, and freshness.
+                self._ensure_input_ready(point=point)
+                sx, sy = self._to_screen(*point)
+                self._assert_click_target(sx, sy)
+                self._client.mouse_move(sx, sy)
+                time.sleep(self._settle_s)
+                self._ensure_input_ready(point=point)
+            sx, sy = self._to_screen(int(x), int(y))
+            self._prepared_pointer_point = None
             counts = 2 if double else 1
             for i in range(counts):
                 # Activation/focus and the move/settle call above can block.
@@ -680,7 +896,43 @@ class RemoteDisplayBackend:
 
     # -- internals -----------------------------------------------------------
 
-    def _ensure_input_ready(self, *, point: Optional[tuple[int, int]] = None) -> None:
+    def _wait_for_pointer_settle(self) -> None:
+        """Require exact consecutive frames after remote pointer positioning.
+
+        RDP/Citrix/noVNC clients can return from a host pointer move before its
+        hover/cursor update reaches the remote framebuffer.  Sampling one frame
+        after a fixed sleep can therefore arm a lease on the old pixels and
+        invalidate it moments later.  This gate waits for consecutive,
+        byte-decoded RGB-identical frames; it never masks cursor regions or
+        weakens the exact post-resolution digest used at the delivery edge.
+        """
+
+        deadline = time.monotonic() + self._pointer_settle_timeout_s
+        previous_digest: Optional[bytes] = None
+        stable_frames = 0
+        poll_s = max(0.01, self._settle_s)
+        while time.monotonic() < deadline:
+            self.screenshot()
+            digest = self._last_frame_digest
+            if digest is not None and digest == previous_digest:
+                stable_frames += 1
+            else:
+                previous_digest = digest
+                stable_frames = 1
+            if stable_frames >= self._pointer_settle_stable_frames:
+                return
+            time.sleep(poll_s)
+        raise RemoteDisplayError(
+            "remote-display pixels did not settle after pointer positioning; "
+            "refusing to acquire a consequential actuation frame"
+        )
+
+    def _ensure_input_ready(
+        self,
+        *,
+        point: Optional[tuple[int, int]] = None,
+        consume_actuation_lease: bool = True,
+    ) -> None:
         """Fail LOUD if input can't actually be delivered; else focus the app.
 
         A silently-dropped synthetic event (Accessibility not granted) would let
@@ -708,11 +960,7 @@ class RemoteDisplayBackend:
             self._client.activate(win.pid)
             time.sleep(self._settle_s)
         current = self._resolve_window(refresh=True)
-        if (
-            not current.on_screen
-            or self._client.frontmost_pid() != current.pid
-            or self._client.key_window_id(current.pid) != current.window_id
-        ):
+        if not current.on_screen or not self._window_focus_matches(current):
             raise RemoteDisplayError(
                 "the exact remote-display window is not visible, app-frontmost, "
                 "and keyboard-frontmost after activation; refusing input"
@@ -749,8 +997,10 @@ class RemoteDisplayBackend:
                 "remote-display actuation lease was invalidated by another "
                 "observation; refusing input and requiring a fresh lease"
             )
-        if self._readiness_probe is not None or (
-            self._actuation_lease_state == _LEASE_ARMED
+        if (
+            self._readiness_probe is not None
+            or self._actuation_lease_state == _LEASE_ARMED
+            or self._session_identity_configured
         ):
             # Check current pixels without replacing the resolver's coordinate
             # lease. This detects a lock/disconnect or content change after the
@@ -768,6 +1018,16 @@ class RemoteDisplayBackend:
                     "remote-display readiness probe rejected the current frame "
                     "(locked, disconnected, or unexpected session); refusing input"
                 )
+            current_session_identity = self._session_identity_from_frame(png)
+            if self._session_identity_configured and (
+                current_session_identity is None
+                or current_session_identity != self._last_session_identity
+            ):
+                self._invalidate_actuation_lease()
+                raise RemoteDisplayError(
+                    "remote session identity changed or became unverifiable "
+                    "after capture; refusing input"
+                )
             if self._actuation_lease_state == _LEASE_ARMED:
                 # Consume once before the first input edge.  A double click or
                 # multi-character type is one gesture and must not invalidate
@@ -780,15 +1040,15 @@ class RemoteDisplayBackend:
                         "identity resolution; refusing input and requiring a "
                         "fresh actuation lease"
                     )
-                self._actuation_lease_state = _LEASE_NONE
+                if consume_actuation_lease:
+                    self._actuation_lease_state = _LEASE_NONE
         # Activation, window resolution, capture and readiness/OCR may all
         # block. Re-resolve the exact window/key identity and age again at the
         # last common point before input.
         post = self._resolve_window(refresh=True)
         if (
             not post.on_screen
-            or self._client.frontmost_pid() != post.pid
-            or self._client.key_window_id(post.pid) != post.window_id
+            or not self._window_focus_matches(post)
             or post.window_id != lease.window_id
             or post.pid != lease.pid
             or post.bounds != lease.bounds
@@ -798,6 +1058,94 @@ class RemoteDisplayBackend:
                 "changed during readiness validation; refusing input"
             )
         self._assert_frame_fresh()
+
+    @property
+    def _session_identity_configured(self) -> bool:
+        return (
+            self._session_marker is not None
+            or self._session_identity_observer is not None
+        )
+
+    def _invalidate_actuation_lease(self) -> None:
+        if self._actuation_lease_state == _LEASE_ARMED:
+            self._actuation_lease_state = _LEASE_INVALIDATED
+
+    def _fresh_identity_frame(self) -> Optional[bytes]:
+        """Passively capture one bounded frame without replacing a valid lease.
+
+        Context-identity checks run after the runtime has acquired the exact
+        pre-actuation frame. A normal ``screenshot()`` would invalidate that
+        lease even when the pixels are unchanged. This observer instead
+        captures the same exact window under the shared lock, preserves an
+        armed lease only when window identity, geometry, dimensions, readiness,
+        and canonical pixels still match, and otherwise invalidates it.
+        """
+
+        if self._actuation_lease_state == _LEASE_INVALIDATED:
+            return None
+        try:
+            current = self._resolve_window(refresh=True)
+            png, px_w, px_h = self._client.capture(current.window_id)
+            size = _png_size(png)
+            if size != (int(px_w), int(px_h)):
+                self._invalidate_actuation_lease()
+                return None
+            if self._readiness_probe is not None and not self._readiness_probe(png):
+                self._invalidate_actuation_lease()
+                return None
+            if self._actuation_lease_state == _LEASE_ARMED:
+                lease = self._frame_window
+                if (
+                    lease is None
+                    or current.window_id != lease.window_id
+                    or current.pid != lease.pid
+                    or current.bounds != lease.bounds
+                    or not current.on_screen
+                    or self._viewport != size
+                    or self._last_frame_digest is None
+                    or _canonical_rgb_digest(png) != self._last_frame_digest
+                ):
+                    self._invalidate_actuation_lease()
+                    return None
+            return png
+        except Exception:  # noqa: BLE001 - observer failure is unverifiable
+            self._invalidate_actuation_lease()
+            return None
+
+    def _verified_marker_identity(
+        self,
+        marker: Optional[str],
+        probe: Optional[Callable[[bytes], bool]],
+    ) -> Optional[str]:
+        if marker is None or probe is None:
+            return None
+        with self._input_lock:
+            png = self._fresh_identity_frame()
+            if png is None:
+                return None
+            try:
+                verified = bool(probe(png))
+            except Exception:  # noqa: BLE001 - observer failure is unverifiable
+                verified = False
+            if not verified:
+                self._invalidate_actuation_lease()
+                return None
+            return marker
+
+    def _session_identity_from_frame(self, png: bytes) -> Optional[str]:
+        if self._session_identity_observer is not None:
+            try:
+                return _valid_session_digest(self._session_identity_observer())
+            except Exception:  # noqa: BLE001 - observer failure is unverifiable
+                return None
+        if self._session_marker is None or self._session_marker_probe is None:
+            return None
+        try:
+            if not self._session_marker_probe(png):
+                return None
+        except Exception:  # noqa: BLE001 - observer failure is unverifiable
+            return None
+        return _session_marker_digest(self._session_marker)
 
     def _assert_frame_fresh(self) -> None:
         if self._last_frame_monotonic is None:
@@ -1094,6 +1442,202 @@ class MacWindowClient:
                 and bool(is_main)
             )
         except Exception:  # noqa: BLE001 - caller verifies exact topmost id
+            return False
+
+    @staticmethod
+    def _focused_element_for_window(window: WindowInfo) -> Any:
+        """Return the exact window's focused AX element, or ``None``.
+
+        The returned value is an opaque, process-local AX object.  It is never
+        serialized or logged: the native backend retains it only across the
+        final identity check so delivery can prove that focus did not move to
+        another control whose pixels happen to be indistinguishable.
+        """
+        try:
+            from ApplicationServices import (
+                AXUIElementCopyAttributeValue,
+                AXUIElementCreateApplication,
+                kAXFocusedUIElementAttribute,
+                kAXFocusedWindowAttribute,
+                kAXMainAttribute,
+                kAXTitleAttribute,
+                kAXTopLevelUIElementAttribute,
+                kAXWindowsAttribute,
+            )
+
+            app = AXUIElementCreateApplication(int(window.pid))
+            windows_error, ax_windows = AXUIElementCopyAttributeValue(
+                app, kAXWindowsAttribute, None
+            )
+            if windows_error != 0 or ax_windows is None:
+                return None
+            matching_windows = []
+            for candidate in ax_windows:
+                title_error, title = AXUIElementCopyAttributeValue(
+                    candidate, kAXTitleAttribute, None
+                )
+                if title_error == 0 and str(title or "") == window.title:
+                    matching_windows.append(candidate)
+            if len(matching_windows) != 1:
+                return None
+            target = matching_windows[0]
+
+            focused_window_error, focused_window = AXUIElementCopyAttributeValue(
+                app, kAXFocusedWindowAttribute, None
+            )
+            main_error, is_main = AXUIElementCopyAttributeValue(
+                target, kAXMainAttribute, None
+            )
+            if (
+                focused_window_error != 0
+                or focused_window != target
+                or main_error != 0
+                or not bool(is_main)
+            ):
+                return None
+
+            focused_error, focused = AXUIElementCopyAttributeValue(
+                app, kAXFocusedUIElementAttribute, None
+            )
+            if focused_error != 0 or focused is None:
+                return None
+            top_error, top_level = AXUIElementCopyAttributeValue(
+                focused, kAXTopLevelUIElementAttribute, None
+            )
+            if top_error != 0 or top_level is None or top_level != target:
+                return None
+            top_title_error, top_title = AXUIElementCopyAttributeValue(
+                top_level, kAXTitleAttribute, None
+            )
+            if top_title_error != 0 or str(top_title or "") != window.title:
+                return None
+            return focused
+        except Exception:  # noqa: BLE001 - unknown AX focus fails closed
+            return None
+
+    def focused_element_token(self, window: WindowInfo) -> Any:
+        """Opaque token for the exact live AX focus, never customer content."""
+        return self._focused_element_for_window(window)
+
+    def focused_element_token_at_point(
+        self,
+        window: WindowInfo,
+        x: float,
+        y: float,
+    ) -> Any:
+        """Return focus only when the hit-tested control is that same control."""
+        focused = self._focused_element_for_window(window)
+        if focused is None:
+            return None
+        try:
+            from ApplicationServices import (
+                AXUIElementCopyAttributeValue,
+                AXUIElementCopyElementAtPosition,
+                AXUIElementCreateApplication,
+                kAXParentAttribute,
+                kAXTitleAttribute,
+                kAXTopLevelUIElementAttribute,
+            )
+
+            app = AXUIElementCreateApplication(int(window.pid))
+            hit_error, hit = AXUIElementCopyElementAtPosition(
+                app,
+                float(x),
+                float(y),
+                None,
+            )
+            if hit_error != 0 or hit is None:
+                return None
+            top_error, top_level = AXUIElementCopyAttributeValue(
+                hit,
+                kAXTopLevelUIElementAttribute,
+                None,
+            )
+            if top_error != 0 or top_level is None:
+                return None
+            title_error, title = AXUIElementCopyAttributeValue(
+                top_level,
+                kAXTitleAttribute,
+                None,
+            )
+            if title_error != 0 or str(title or "") != window.title:
+                return None
+
+            # A hit test may return an internal text child while AX focus is on
+            # its editable parent (or vice versa). Admit only that direct
+            # ancestry relationship; never accept merely sharing the same
+            # top-level window, which would confuse sibling fields.
+            def _lineage(element: Any) -> list[Any]:
+                lineage = [element]
+                current = element
+                for _ in range(6):
+                    parent_error, parent = AXUIElementCopyAttributeValue(
+                        current,
+                        kAXParentAttribute,
+                        None,
+                    )
+                    if parent_error != 0 or parent is None or parent == top_level:
+                        break
+                    lineage.append(parent)
+                    current = parent
+                return lineage
+
+            hit_lineage = _lineage(hit)
+            focused_lineage = _lineage(focused)
+            if not any(
+                hit_node == focused_node
+                for hit_node in hit_lineage
+                for focused_node in focused_lineage
+            ):
+                return None
+            return focused
+        except Exception:  # noqa: BLE001 - unknown hit/focus relation refuses
+            return None
+
+    def focused_element_matches(self, window: WindowInfo, expected: Any) -> bool:
+        """Whether the exact same AX object remains focused in ``window``."""
+        if expected is None:
+            return False
+        current = self._focused_element_for_window(window)
+        return current is not None and current == expected
+
+    def replace_selected_text_guarded(
+        self,
+        window: WindowInfo,
+        text: str,
+        *,
+        expected_focused_element: Any,
+    ) -> bool:
+        """Write only to the AX element retained from final revalidation.
+
+        The current focused object must equal the opaque retained object.  The
+        setter is then addressed to that object itself, so a subsequent focus
+        switch cannot redirect the write to a different control.
+        """
+        try:
+            from ApplicationServices import (
+                AXUIElementIsAttributeSettable,
+                AXUIElementSetAttributeValue,
+                kAXSelectedTextAttribute,
+            )
+
+            focused = self._focused_element_for_window(window)
+            if (
+                focused is None
+                or expected_focused_element is None
+                or focused != expected_focused_element
+            ):
+                return False
+            settable_error, settable = AXUIElementIsAttributeSettable(
+                focused, kAXSelectedTextAttribute, None
+            )
+            if settable_error != 0 or not settable:
+                return False
+            return (
+                AXUIElementSetAttributeValue(focused, kAXSelectedTextAttribute, text)
+                == 0
+            )
+        except Exception:  # noqa: BLE001 - unsupported AX is a safe refusal
             return False
 
     def replace_selected_text(self, window: WindowInfo, text: str) -> bool:

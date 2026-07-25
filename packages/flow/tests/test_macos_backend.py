@@ -7,9 +7,11 @@ from PIL import Image
 
 from openadapt_flow.backend import (
     Backend,
+    ExecutionContextIdentityBackend,
     IdentityBackend,
     StructuralActionBackend,
 )
+from openadapt_flow.backends import macos_backend as macos_backend_module
 from openadapt_flow.backends.factory import build_backend
 from openadapt_flow.backends.macos_backend import MacOSBackend, MacOSBackendError
 from openadapt_flow.backends.remote_display import WindowInfo
@@ -41,6 +43,9 @@ class FakeMacClient:
         self._ax_focused_pid: int | None = 9001
         self._exact_ax_focus = True
         self._point_window_id = frontmost_window_id
+        self._focused_element_token: object = object()
+        self._focus_matches_point = True
+        self.capture_color = (20, 30, 40)
         self.calls: list[tuple] = []
 
     def capture_trusted(self) -> bool:
@@ -68,7 +73,7 @@ class FakeMacClient:
         return matches[0] if matches else None
 
     def capture(self, window_id):
-        image = Image.new("RGB", (800, 600), (20, 30, 40))
+        image = Image.new("RGB", (800, 600), self.capture_color)
         output = io.BytesIO()
         image.save(output, format="PNG")
         self.calls.append(("capture", window_id))
@@ -78,6 +83,11 @@ class FakeMacClient:
         return self._active_pid
 
     def frontmost_window_id(self):
+        return self._frontmost_window_id
+
+    def key_window_id(self, pid):
+        if pid != self._active_pid:
+            return None
         return self._frontmost_window_id
 
     def focused_application_pid(self):
@@ -104,6 +114,18 @@ class FakeMacClient:
         self.calls.append(("focus-proof", window.window_id))
         return self._exact_ax_focus
 
+    def focused_element_token(self, window):
+        self.calls.append(("focused-element", window.window_id))
+        return self._focused_element_token
+
+    def focused_element_token_at_point(self, window, x, y):
+        self.calls.append(("focused-element-at-point", window.window_id, x, y))
+        return self._focused_element_token if self._focus_matches_point else None
+
+    def focused_element_matches(self, window, expected):
+        self.calls.append(("focused-element-matches", window.window_id))
+        return expected is self._focused_element_token
+
     def mouse(self, x, y, *, button, down, click_count):
         self.calls.append(("mouse", x, y, button, down, click_count))
 
@@ -114,6 +136,19 @@ class FakeMacClient:
         raise AssertionError("native backend must not use guest-scancode text")
 
     def replace_selected_text(self, window, text):
+        self.calls.append(("replace", window.window_id, text))
+        return self._replace_succeeds
+
+    def replace_selected_text_guarded(
+        self,
+        window,
+        text,
+        *,
+        expected_focused_element,
+    ):
+        self.calls.append(("guarded-replace-attempt", window.window_id))
+        if expected_focused_element is not self._focused_element_token:
+            return False
         self.calls.append(("replace", window.window_id, text))
         return self._replace_succeeds
 
@@ -146,6 +181,35 @@ def test_native_backend_exposes_ax_structured_identity_capability() -> None:
     assert isinstance(target, StructuralActionBackend)
 
 
+def test_execution_context_identity_is_live_and_title_free(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    audit_session = {"value": 7171}
+    monkeypatch.setattr(
+        macos_backend_module,
+        "_mac_audit_session_id",
+        lambda: audit_session["value"],
+    )
+    title = "Patient Alice Example MRN 100512"
+    window = WindowInfo(41, "Accuro EMR", title, 9001, (10, 20, 400, 300))
+    client = FakeMacClient(windows=[window])
+    target = MacOSBackend(client, app="Accuro EMR", window_title=title)
+
+    assert isinstance(target, ExecutionContextIdentityBackend)
+    assert target.application_identity() == "accuro-emr"
+    session = target.session_identity()
+    assert session is not None and len(session) == 64 and session == session.casefold()
+    assert title not in target.application_identity()
+    assert target.workflow_state_identity() is None
+
+    client.windows = [WindowInfo(42, "Unrelated App", title, 9002, (10, 20, 400, 300))]
+    assert target.application_identity() is None
+    assert target.session_identity() == session
+
+    audit_session["value"] = 7272
+    assert target.session_identity() != session
+
+
 def test_target_window_capture_and_exact_focused_text_delivery() -> None:
     client = FakeMacClient()
     target = backend(client)
@@ -153,6 +217,70 @@ def test_target_window_capture_and_exact_focused_text_delivery() -> None:
     target.type_text("Résumé — 東京")
     assert ("capture", 41) in client.calls
     assert ("replace", 41, "Résumé — 東京") in client.calls
+
+
+def test_consequential_text_refuses_changed_frame_before_ax_delivery() -> None:
+    client = FakeMacClient()
+    target = backend(client)
+    target.acquire_actuation_frame()
+    target.arm_focused_element_lease(100, 100)
+    client.capture_color = (50, 60, 70)
+
+    with pytest.raises(MacOSBackendError, match="frame content changed"):
+        target.type_text("must not land")
+
+    assert not any(call[0] == "replace" for call in client.calls)
+
+
+def test_consequential_text_uses_same_focused_ax_element_as_actuation_frame() -> None:
+    client = FakeMacClient()
+    target = backend(client)
+    target.acquire_actuation_frame()
+    target.arm_focused_element_lease(100, 100)
+
+    target.type_text("bound delivery")
+
+    assert ("guarded-replace-attempt", 41) in client.calls
+    assert ("replace", 41, "bound delivery") in client.calls
+
+
+def test_consequential_text_refuses_focus_outside_resolved_target() -> None:
+    client = FakeMacClient()
+    client._focus_matches_point = False
+    target = backend(client)
+    target.acquire_actuation_frame()
+
+    with pytest.raises(MacOSBackendError, match="does not match"):
+        target.arm_focused_element_lease(100, 100)
+
+    assert not any(call[0] == "replace" for call in client.calls)
+
+
+def test_consequential_text_refuses_unchanged_frame_focus_switch() -> None:
+    client = FakeMacClient()
+    target = backend(client)
+    target.acquire_actuation_frame()
+    target.arm_focused_element_lease(100, 100)
+    client._focused_element_token = object()
+
+    with pytest.raises(MacOSBackendError, match="not writable"):
+        target.type_text("must not land")
+
+    assert ("guarded-replace-attempt", 41) in client.calls
+    assert not any(call[0] == "replace" for call in client.calls)
+
+
+def test_consequential_key_refuses_unchanged_frame_focus_switch() -> None:
+    client = FakeMacClient()
+    target = backend(client)
+    target.acquire_actuation_frame()
+    target.arm_focused_element_lease(100, 100)
+    client._focused_element_token = object()
+
+    with pytest.raises(MacOSBackendError, match="focus changed"):
+        target.press("Enter")
+
+    assert not any(call[0] == "key" for call in client.calls)
 
 
 def test_control_or_meta_and_meta_use_native_command() -> None:
@@ -209,14 +337,12 @@ def test_capture_and_input_permissions_fail_loud() -> None:
     assert not input_client.calls
 
 
-def test_base_pixel_point_gate_refuses_unconverted_native_coordinates() -> None:
+def test_base_pixel_point_gate_accepts_captured_coordinates_without_input() -> None:
     client = FakeMacClient()
     target = backend(client)
-
-    with pytest.raises(MacOSBackendError, match="point-bound click"):
-        target._ensure_input_ready(point=(10, 10))
-
-    assert not client.calls
+    target.screenshot()
+    target._ensure_input_ready(point=(10, 10))
+    assert not any(call[0] in {"mouse", "key", "replace"} for call in client.calls)
 
 
 def test_input_refuses_when_exact_window_is_not_topmost() -> None:

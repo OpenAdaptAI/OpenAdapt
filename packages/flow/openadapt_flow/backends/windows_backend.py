@@ -36,6 +36,7 @@ base64-encoded to PowerShell ``Set-Clipboard`` and is pasted with Ctrl+V.
 from __future__ import annotations
 
 import base64
+import re
 import struct
 import warnings
 from dataclasses import dataclass
@@ -69,6 +70,8 @@ SCREENSHOT_RETRY_DELAY_S = 2.0
 SCROLL_PIXELS_PER_NOTCH = 100
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+_SESSION_ID_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 @dataclass(frozen=True)
@@ -226,6 +229,12 @@ class WindowsBackend:
         self._auth_token = auth_token or None
         self._pin_fingerprint = pin_fingerprint or None
         self._allow_legacy_exec = bool(allow_legacy_exec)
+        self._guarded_coordinate: Optional[
+            tuple[tuple[int, int], dict[str, Optional[str]]]
+        ] = None
+        self._guarded_keyboard: Optional[
+            tuple[tuple[int, int], dict[str, Optional[str]]]
+        ] = None
 
         scheme = urlparse(self.server_url).scheme.lower()
         host = urlparse(self.server_url).hostname or ""
@@ -402,6 +411,15 @@ class WindowsBackend:
                 raise StructuralResolutionRefused(
                     f"UIA actuation refused ({code}): {message or 'target changed'}"
                 )
+            if (
+                path == "/input/guarded"
+                and response.status_code == 409
+                and code in {"stale_context", "stale_focus", "stale_frame"}
+            ):
+                raise StructuralResolutionRefused(
+                    "guarded Windows input refused "
+                    f"({code}): {message or 'identity binding changed'}"
+                )
             raise RuntimeError(
                 f"typed win-agent action {path} HTTP {response.status_code}: "
                 f"{response.text[:200]}"
@@ -434,6 +452,74 @@ class WindowsBackend:
             or receipt.outcome_verified is not False
         ):
             raise RuntimeError("typed input returned a mismatched delivery receipt")
+
+    # -- live execution-context identity -----------------------------------
+
+    def _execution_context(self) -> Optional[dict]:
+        """Read one bounded live context snapshot from the typed agent."""
+
+        typed = self._post_typed_read("/context/identity", {})
+        return typed.payload if typed.available else None
+
+    def _guard_context(self) -> dict[str, Optional[str]]:
+        """Capture the PHI-free execution context bound to guarded input."""
+
+        payload = self._execution_context()
+        if payload is None:
+            raise StructuralResolutionRefused(
+                "Windows execution context is unavailable for guarded input"
+            )
+        application = payload.get("application")
+        session = payload.get("session")
+        workflow_state = payload.get("workflow_state")
+        if application is not None and (
+            not isinstance(application, str)
+            or not _CONTEXT_ID_RE.fullmatch(application)
+        ):
+            raise StructuralResolutionRefused(
+                "Windows application context is invalid for guarded input"
+            )
+        if session is not None and (
+            not isinstance(session, str) or not _SESSION_ID_RE.fullmatch(session)
+        ):
+            raise StructuralResolutionRefused(
+                "Windows session context is invalid for guarded input"
+            )
+        if workflow_state is not None and (
+            not isinstance(workflow_state, str)
+            or not _CONTEXT_ID_RE.fullmatch(workflow_state)
+        ):
+            raise StructuralResolutionRefused(
+                "Windows workflow-state context is invalid for guarded input"
+            )
+        return {
+            "application": application,
+            "session": session,
+            "workflow_state": workflow_state,
+        }
+
+    def application_identity(self) -> Optional[str]:
+        """Return the live foreground process id, never its window title."""
+
+        payload = self._execution_context()
+        value = payload.get("application") if payload is not None else None
+        if not isinstance(value, str) or not _CONTEXT_ID_RE.fullmatch(value):
+            return None
+        return value
+
+    def session_identity(self) -> Optional[str]:
+        """Return the agent's live Windows logon-session digest."""
+
+        payload = self._execution_context()
+        value = payload.get("session") if payload is not None else None
+        if not isinstance(value, str) or not _SESSION_ID_RE.fullmatch(value):
+            return None
+        return value
+
+    def workflow_state_identity(self) -> Optional[str]:
+        """Workflow state requires an explicitly qualified UIA marker."""
+
+        return None
 
     # -- structured-text identity (openadapt_flow.backend.IdentityBackend) --
 
@@ -883,6 +969,148 @@ class WindowsBackend:
                 "typed UIA action returned a mismatched delivery receipt"
             )
         return parsed
+
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        """Bind a coordinate and live execution context before identity readback."""
+
+        self.cancel_guarded_coordinate()
+        point = (int(x), int(y))
+        width, height = self.viewport
+        if not (0 <= point[0] < width and 0 <= point[1] < height):
+            raise StructuralResolutionRefused(
+                "Windows guarded coordinate is outside the captured viewport"
+            )
+        self._guarded_coordinate = (point, self._guard_context())
+
+    def cancel_guarded_coordinate(self) -> None:
+        self._guarded_coordinate = None
+
+    def guarded_keyboard_frame(self) -> bytes:
+        return self.screenshot()
+
+    def arm_guarded_keyboard(self, x: int, y: int) -> None:
+        """Bind the resolved focused element and live context before identity."""
+
+        self.cancel_guarded_keyboard()
+        point = (int(x), int(y))
+        width, height = self.viewport
+        if not (0 <= point[0] < width and 0 <= point[1] < height):
+            raise StructuralResolutionRefused(
+                "Windows guarded keyboard point is outside the captured viewport"
+            )
+        self._guarded_keyboard = (point, self._guard_context())
+
+    def cancel_guarded_keyboard(self) -> None:
+        self._guarded_keyboard = None
+
+    @staticmethod
+    def _guarded_receipt(
+        payload: dict,
+        operation: str,
+    ) -> ActionDeliveryReceipt:
+        try:
+            receipt = ActionDeliveryReceipt.model_validate(payload)
+        except Exception as exc:
+            raise RuntimeError(
+                "guarded Windows input returned an invalid delivery receipt"
+            ) from exc
+        if (
+            receipt.operation != operation
+            or receipt.native
+            or receipt.target_fingerprint is not None
+            or receipt.outcome_verified is not False
+        ):
+            raise RuntimeError(
+                "guarded Windows input returned a mismatched delivery receipt"
+            )
+        return receipt
+
+    def act_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        pending = self._guarded_coordinate
+        self._guarded_coordinate = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "Windows coordinate actuation has no pre-identity binding"
+            )
+        point, context = pending
+        if point != (int(x), int(y)):
+            raise StructuralResolutionRefused(
+                "Windows coordinate target changed after identity verification"
+            )
+        operation = "physical_double_click" if double else "physical_click"
+        response = self._post_typed_action(
+            "/input/guarded",
+            {
+                "expected_frame_sha256": expected_frame_sha256,
+                "expected_context": context,
+                "input": {
+                    "action": "click",
+                    "x": point[0],
+                    "y": point[1],
+                    "double": bool(double),
+                },
+            },
+        )
+        return self._guarded_receipt(response, operation)
+
+    def type_text_guarded(
+        self,
+        text: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        pending = self._guarded_keyboard
+        self._guarded_keyboard = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "Windows text actuation has no pre-identity focused binding"
+            )
+        point, context = pending
+        response = self._post_typed_action(
+            "/input/guarded",
+            {
+                "expected_frame_sha256": expected_frame_sha256,
+                "expected_context": context,
+                "focus_point": {"x": point[0], "y": point[1]},
+                "input": {
+                    "action": "type_text",
+                    "text": text,
+                    "interval_s": self._type_interval_s,
+                },
+            },
+        )
+        return self._guarded_receipt(response, "physical_type_text")
+
+    def press_guarded(
+        self,
+        key: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        pending = self._guarded_keyboard
+        self._guarded_keyboard = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "Windows key actuation has no pre-identity focused binding"
+            )
+        point, context = pending
+        response = self._post_typed_action(
+            "/input/guarded",
+            {
+                "expected_frame_sha256": expected_frame_sha256,
+                "expected_context": context,
+                "focus_point": {"x": point[0], "y": point[1]},
+                "input": {"action": "press", "keys": normalize_chord(key)},
+            },
+        )
+        return self._guarded_receipt(response, "physical_press")
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click (or double-click) through the bounded typed input contract."""

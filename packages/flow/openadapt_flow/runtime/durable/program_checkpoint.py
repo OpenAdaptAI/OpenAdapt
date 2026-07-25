@@ -26,7 +26,12 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openadapt_flow.ir import EffectVerificationEvidence
+from openadapt_flow.ir import (
+    EffectVerificationEvidence,
+    HealEvent,
+    IdentityCheck,
+    Resolution,
+)
 
 #: The synthetic ``graph_id`` of the top-level ``Workflow.program`` graph (every
 #: OTHER graph is a named entry in ``Workflow.subflows`` -- including a loop
@@ -200,6 +205,18 @@ class ProgramCheckpoint(BaseModel):
     #: CONFIRMED while still preventing duplicate re-execution.
     new_unverified_effect_keys: list[str] = Field(default_factory=list)
     new_unverified_effects: list[dict] = Field(default_factory=list)
+    #: Exact action evidence needed to reconstruct the already-verified leg in
+    #: the final resumed report. Additive defaults make old checkpoints load;
+    #: missing legacy identity/postcondition evidence then fails production
+    #: outcome classification closed instead of being invented.
+    step_id: str = ""
+    identity: Optional[IdentityCheck] = None
+    postconditions_ok: Optional[bool] = None
+    skipped: bool = False
+    actuation: Optional[str] = None
+    resolution: Optional[Resolution] = None
+    drift_oracle_calls: int = Field(default=0, ge=0)
+    heal: Optional[HealEvent] = None
     governed_authorization_id: Optional[str] = None
     governed_approval_source: Optional[str] = None
     #: On-screen text expected at the resume point (this state's TEXT_PRESENT
