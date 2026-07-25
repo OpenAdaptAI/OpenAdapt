@@ -48,6 +48,7 @@ from openadapt_flow.qualification import (
     set_action_classification,
     set_effect_policy,
     set_identity_policy,
+    set_minimum_effect_tier,
     set_trusted_runner_key,
     sign_case_result,
     workflow_contract_sha256,
@@ -567,6 +568,58 @@ def test_requalification_condition_advances_version_and_invalidates_certificatio
     assert project.revision == revision + 1
     assert project.previous_revision_sha256 == previous_digest
     assert project.requalification_conditions[0].kind == ("application_version_changed")
+
+
+def test_minimum_effect_tier_versions_round_trips_and_invalidates_certification(
+    tmp_path: Path,
+) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "save.png").write_bytes(b"fixture")
+    workflow.save(bundle)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+    report = certify_project(
+        workflow,
+        policy=load_policy("clinical-write"),
+        evidence_root=evidence_root,
+    )
+    assert report.passed
+    assert workflow.manifest is not None
+    assert workflow.manifest.provenance.certified
+    project = workflow.qualification
+    assert project is not None
+    previous_revision = project.revision
+    previous_digest = project.revision_digest()
+
+    set_minimum_effect_tier(
+        workflow,
+        VerificationTier.INDEPENDENT_SESSION,
+    )
+
+    assert project.minimum_effect_tier is VerificationTier.INDEPENDENT_SESSION
+    assert project.revision == previous_revision + 1
+    assert project.previous_revision_sha256 == previous_digest
+    assert project.last_certification is None
+    assert not workflow.manifest.provenance.certified
+
+    set_minimum_effect_tier(
+        workflow,
+        VerificationTier.INDEPENDENT_SESSION,
+    )
+    assert project.revision == previous_revision + 1
+
+    from openadapt_flow.qualification import save_qualified_workflow
+
+    save_qualified_workflow(workflow, bundle)
+    loaded = Workflow.load(bundle)
+    assert loaded.qualification is not None
+    assert loaded.qualification.minimum_effect_tier == (
+        VerificationTier.INDEPENDENT_SESSION
+    )
+    assert loaded.qualification.revision == previous_revision + 1
 
 
 def test_full_campaign_certifies_through_existing_policy_and_round_trips(
