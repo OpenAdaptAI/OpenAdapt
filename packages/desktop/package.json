@@ -1,6 +1,6 @@
 {
   "name": "openadapt-desktop",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Beta installed companion for OpenAdapt authoring, teaching, and local pairing",
   "private": true,
   "type": "module",
