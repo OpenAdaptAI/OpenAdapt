@@ -196,6 +196,15 @@ def classify_execution_outcome(
     consequential = {
         step.id for step in iter_workflow_steps(workflow) if is_consequential(step)
     }
+    if workflow.program is None:
+        expected_results = Counter(step.id for step in workflow.steps)
+        observed_results = Counter(
+            result.step_id
+            for result in report.results
+            if result.step_id in expected_results
+        )
+        if observed_results != expected_results:
+            return ExecutionOutcome.COMPLETED_UNVERIFIED
     minimum = required_effect_tier(workflow, resolved)
     assert minimum is not None
     for result in report.results:

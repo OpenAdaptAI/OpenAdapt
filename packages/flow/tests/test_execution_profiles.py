@@ -416,6 +416,26 @@ def test_production_profiles_never_verify_screen_only_consequential_result():
     )
 
 
+def test_missing_linear_step_result_never_verifies():
+    workflow = _workflow()
+    incomplete = RunReport(
+        workflow_name=workflow.name,
+        started_at="2026-07-25T00:00:00Z",
+        success=True,
+        execution_completed=True,
+        results=[],
+    )
+
+    assert (
+        classify_execution_outcome(
+            incomplete,
+            workflow,
+            ExecutionProfile.STANDARD,
+        )
+        is ExecutionOutcome.COMPLETED_UNVERIFIED
+    )
+
+
 def test_halt_and_infrastructure_failure_remain_distinct():
     workflow = Workflow(name="read-only", steps=[])
     halted = RunReport(

@@ -12,6 +12,10 @@ from openadapt_flow import hosted, privacy
 from openadapt_flow.bundle_validation import build_runtime_parameter_schema
 from openadapt_flow.compiler import compile_recording
 from openadapt_flow.ir import ParamKind, ParamSpec, RunReport, Workflow
+from openadapt_flow.runtime.authorization import (
+    GovernedRunAuthorization,
+    runtime_inputs_digest,
+)
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.runtime_validation import (
     LEGACY_SCHEMA,
@@ -67,7 +71,21 @@ def _approved_artifacts(
     approve_derivative(bundle_derivative, source=bundle, reviewer="alice")
 
     run_dir = tmp_path / "run"
-    report = Replayer(object(), vision=object()).run(
+    assert workflow.manifest is not None
+    authorization = GovernedRunAuthorization(
+        bundle_content_digest=workflow.manifest.content_digest,
+        runtime_inputs_digest=runtime_inputs_digest(workflow, None, None),
+        admitted_policy_name="permissive",
+        execution_profile="standard",
+        minimum_effect_tier=3,
+    )
+    report = Replayer(
+        object(),
+        vision=object(),
+        governed_authorization=authorization,
+        durable=True,
+        require_settled=True,
+    ).run(
         workflow,
         bundle_dir=bundle,
         run_dir=run_dir,
@@ -76,6 +94,7 @@ def _approved_artifacts(
         execution_entry_url=_TARGET_URL if target_kind == "web" else None,
     )
     assert report.success is True
+    assert report.execution_outcome == "VERIFIED"
     return recording_derivative, bundle_derivative, run_dir
 
 
@@ -235,6 +254,32 @@ def test_attestation_refuses_report_without_resolved_target_kind(tmp_path):
     report.execution_target_kind = None
     report.save(run_dir)
     with pytest.raises(RuntimeValidationError, match="no valid resolved"):
+        create_runtime_validation_attestation(
+            recording_derivative=recording,
+            bundle_derivative=bundle,
+            run_dir=run_dir,
+            policy_source="permissive",
+            risk_class="low",
+            environment="web-lab",
+            target_url=_TARGET_URL,
+            host=hosted.DEFAULT_HOST,
+            token="oai_ingest_test",
+            challenge=_challenge(),
+        )
+
+
+def test_attestation_refuses_completed_unverified_as_runtime_evidence(tmp_path):
+    recording, bundle, run_dir = _approved_artifacts(tmp_path)
+    report_path = run_dir / "report.json"
+    report = RunReport.model_validate_json(report_path.read_text())
+    report.execution_profile = "demo"
+    report.execution_outcome = "COMPLETED_UNVERIFIED"
+    report.execution_completed = True
+    report.production_eligible = False
+    report.success = True
+    report.save(run_dir)
+
+    with pytest.raises(RuntimeValidationError, match="requires a VERIFIED"):
         create_runtime_validation_attestation(
             recording_derivative=recording,
             bundle_derivative=bundle,
