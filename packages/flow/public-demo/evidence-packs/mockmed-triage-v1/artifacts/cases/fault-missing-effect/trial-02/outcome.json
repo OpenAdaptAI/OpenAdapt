@@ -1,0 +1,43 @@
+{
+  "case_id": "fault-missing-effect",
+  "duration_ms": 8686.090624891222,
+  "execution_completed": false,
+  "execution_profile": "standard",
+  "expected_outcome": "HALTED",
+  "external_network_calls": 0,
+  "failed_step_id": "step_005",
+  "halt": {
+    "completed_intents": [
+      "click 'Open'",
+      "click 'New Encounter'",
+      "click 'Triage'",
+      "click at (480, 268)",
+      "type <note>"
+    ],
+    "intent": "click 'Save Encounter'",
+    "observed_texts": [
+      "MockMed",
+      "Clinical demo — all data is fake",
+      "JaneSample—MRNP1—DOB1980-01-01",
+      "Encountersaved-",
+      "Syntheticfollow-upin twoweeks",
+      "NewEncounter",
+      "Encounters",
+      "·Triage—Synthetic follow-up in two weeks"
+    ],
+    "outcome": "halt",
+    "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+    "state_id": "step_005"
+  },
+  "matched_expectation": true,
+  "model_calls": 0,
+  "observed_outcome": "HALTED",
+  "oracle_passed": true,
+  "production_eligible": false,
+  "report_sha256": "27197db52de8fdc88e49723a01d0bd969205c18d9720426039ca735cfb2708d8",
+  "schema_version": "openadapt.public-demo-outcome/v1",
+  "screenshots_may_leave_box": false,
+  "silent_incorrect_success": false,
+  "trial": 2,
+  "wrong_target_action": false
+}
