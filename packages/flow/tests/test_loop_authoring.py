@@ -543,10 +543,12 @@ def test_poisoned_record_identity_mismatch_halts_no_wrong_click(dirs):
     looped = author_data_driven_loop(body, records)
 
     backend = FakeBackend()
-    # iteration 1: band matches (verified); iteration 2: band names another
-    # entity (mismatch -> HALT).
+    # Consequential identity-gated actions are checked once during ordinary
+    # replay and again against the freshly armed actuation target. Both reads
+    # for iteration 1 match; iteration 2 then names another entity and HALTs.
     vision = _ScriptedIdentityVision(
         bands=[
+            "Jane Sample Knee pain referral High",
             "Jane Sample Knee pain referral High",
             "Taylor Duplicate Knee pain referral High",
         ]
