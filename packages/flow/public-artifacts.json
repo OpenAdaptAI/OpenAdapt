@@ -1796,7 +1796,7 @@
     },
     {
       "path": "openadapt_flow/mockmed/static/app.js",
-      "sha256": "5df1747e670c3f113f6dd728e129e82aeb9973ec91761123c4610823cb183243"
+      "sha256": "1b78af82811c64e3d25ba257c0b6f805e66354b5e9854c17a230ab142e5a3c72"
     },
     {
       "path": "openadapt_flow/mockmed/static/index.html",
@@ -1816,7 +1816,7 @@
     },
     {
       "path": "openadapt_flow/policies/clinical-write.yaml",
-      "sha256": "91c7c4ffcb02445292d605709323069c0c5b89677d42ab4d801cdc22479e383c"
+      "sha256": "e6c782bd22b12a29c5ce9a6dada66aa3c37d965340cc0ed38d49e15c92353b4a"
     },
     {
       "path": "openadapt_flow/policies/permissive.yaml",
@@ -1833,6 +1833,10 @@
     {
       "path": "schemas/program-graph-v1.json",
       "sha256": "bc54c5df18ef47d2c54f7eb822847d12ce7613d545ac7f3b3f77872e3cf9e742"
+    },
+    {
+      "path": "schemas/public-demo-evidence-v1.json",
+      "sha256": "fe0b4b20a4338d8c4ea39a5d2e7b788dafa56e73639a084dd263f86f2a9f3baa"
     },
     {
       "path": "schemas/runtime-validation-attestation-v1.json",

@@ -95,6 +95,18 @@ TRIALS_PER_CASE = 3
 NOTE = "Synthetic follow-up in two weeks"
 WORKFLOW_NAME = "mockmed-triage"
 RUNNER_KEY_ID = "public-demo-headless-runner"
+NON_PUBLIC_RUN_AUTHORITY = frozenset(
+    {
+        ".attended_action.lease",
+        ".attended_capability.key",
+        ".attended_program_receipts",
+        "approval.json",
+        "approval.json.enc",
+        "attended_capability.json",
+        "attended_capability_history.json",
+        "attended_decisions.json",
+    }
+)
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = REPO_ROOT / "schemas" / "public-demo-evidence-v1.json"
 
@@ -571,6 +583,29 @@ def _outcome_envelope(
     }
 
 
+def _strip_run_authority(run_dir: Path) -> None:
+    """Remove live resume/approval authority from a public evidence derivative."""
+    for name in NON_PUBLIC_RUN_AUTHORITY:
+        path = run_dir / name
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+
+
+def _reject_run_authority(relative: str) -> None:
+    parts = PurePosixPath(relative).parts
+    secret_like = any(
+        part.lower().endswith(".key")
+        or any(marker in part.lower() for marker in ("credential", "secret", "token"))
+        for part in parts
+    )
+    if NON_PUBLIC_RUN_AUTHORITY.intersection(parts) or secret_like:
+        raise EvidencePackError(
+            f"public evidence must not contain live run authority: {relative}"
+        )
+
+
 def _run_case_trial(
     *,
     base_url: str,
@@ -649,6 +684,7 @@ def _run_case_trial(
 
     report_path = run_dir / "report.json"
     render_run_report(run_dir)
+    _strip_run_authority(run_dir)
     oracle = _oracle_snapshot(
         base_url,
         oracle_kind=str(case["oracle"]),
@@ -862,6 +898,8 @@ def _assemble_manifest(
         ),
         key=lambda path: path.relative_to(root).as_posix(),
     )
+    for path in payload_files:
+        _reject_run_authority(path.relative_to(root).as_posix())
     files = [_file_ref(root, path) for path in payload_files]
     outcomes = Counter(
         envelope["observed_outcome"] for case in cases for envelope in case["outcomes"]
@@ -1249,6 +1287,8 @@ def validate_pack(pack_dir: Path | str) -> dict[str, Any]:
         for path in root.rglob("*")
         if path.is_file() and path.name not in {"manifest.json", "manifest.sha256"}
     }
+    for path in actual_payloads:
+        _reject_run_authority(path)
     if actual_payloads != set(inventory):
         missing = sorted(actual_payloads.symmetric_difference(inventory))
         raise EvidencePackError(f"file inventory is not exhaustive: {missing}")
