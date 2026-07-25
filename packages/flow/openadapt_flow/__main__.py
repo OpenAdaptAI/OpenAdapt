@@ -31,6 +31,8 @@ imported lazily inside each handler so ``--help`` always works):
   view of a bundle (steps, targets, resolution ladder, identity/effect gates,
   verification, halt points) as self-contained HTML, Mermaid, or the shared JSON
   graph spec that the cloud and desktop surfaces render.
+- ``seal`` — copy a bundle to a new path and atomically seal its workflow and
+  template evidence with ``OPENADAPT_BUNDLE_KEY``.
 - ``lint`` — report a bundle's coverage gaps (advice; exit code by severity).
 - ``certify`` — enforce a safety policy on a bundle (refuse it if it fails).
 - ``qualify`` — create and edit the versioned qualification project, import
@@ -1474,6 +1476,19 @@ def _cmd_certify(args: argparse.Namespace) -> int:
     # A failing certification exits nonzero so CI / deploy gates refuse the
     # bundle — the whole point of making "runnable" distinct from "certified".
     return 0 if report.passed else 2
+
+
+def _cmd_seal(args: argparse.Namespace) -> int:
+    from openadapt_flow.bundle_sealing import BundleSealingError, seal_bundle
+
+    try:
+        sealed = seal_bundle(Path(args.source), Path(args.out))
+    except BundleSealingError as exc:
+        print(f"seal REFUSED: {exc}")
+        return 2
+    print(f"Sealed bundle: {sealed.path}")
+    print(f"Content digest: sha256:{sealed.content_digest}")
+    return 0
 
 
 def _qualification_workflow(args: argparse.Namespace):
@@ -3164,6 +3179,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write to this file instead of stdout (parent dirs are created)",
     )
     p.set_defaults(func=_cmd_visualize)
+
+    p = sub.add_parser(
+        "seal",
+        help=(
+            "Copy a bundle to a new path, encrypt its workflow and template "
+            "evidence with OPENADAPT_BUNDLE_KEY, verify integrity, and publish "
+            "it atomically"
+        ),
+    )
+    p.add_argument("source", help="Existing workflow bundle directory")
+    p.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        help="New destination directory (must not already exist)",
+    )
+    p.set_defaults(func=_cmd_seal)
 
     p = sub.add_parser(
         "certify",
