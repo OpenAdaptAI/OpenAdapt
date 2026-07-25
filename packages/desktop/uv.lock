@@ -1444,7 +1444,7 @@ requires-dist = [
     { name = "onnxruntime", marker = "(platform_machine != 'x86_64' and extra == 'build') or (sys_platform != 'darwin' and extra == 'build')", specifier = "==1.27.0" },
     { name = "openadapt-capture", specifier = ">=1.1.0" },
     { name = "openadapt-desktop", extras = ["enterprise"], marker = "extra == 'full'" },
-    { name = "openadapt-flow", marker = "extra == 'build'", specifier = "==1.22.0" },
+    { name = "openadapt-flow", marker = "extra == 'build'", specifier = "==1.23.0" },
     { name = "openadapt-privacy", specifier = ">=1.0.0" },
     { name = "psutil" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -1460,7 +1460,7 @@ requires-dist = [
 
 [[package]]
 name = "openadapt-flow"
-version = "1.22.0"
+version = "1.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -1474,9 +1474,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/08/1a/c1f8f2961e4bd1faf85692c127c4843f21a287f8217d7b383cc9d7f739da/openadapt_flow-1.22.0.tar.gz", hash = "sha256:81d9171a4a41f44a437091f7fa047a47360c9b3087725e65ec5c94e62f4c63c9", size = 18895321 }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/e5/8957790965a0fc5cde4e8f8dc8664c3db682d1b09881abf05f013fd3f495/openadapt_flow-1.23.0.tar.gz", hash = "sha256:b16e181ac1f8b84f825b418ca9c6608cd408bde9ccd94d0a7e62db515d2145be", size = 18978377 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/7c/2cf9ec82ae282b8811f2abb8bede8c959e44086ba2f993da39cdb7338cf4/openadapt_flow-1.22.0-py3-none-any.whl", hash = "sha256:24cd779249fe6b0f0ca34e0680d425e491c819222fcb432df6dfc5d3f1aec092", size = 1207904 },
+    { url = "https://files.pythonhosted.org/packages/54/f7/632b13c60ba805cfd22614dc4c73285c06c2b7d698c124d9c45104623c18/openadapt_flow-1.23.0-py3-none-any.whl", hash = "sha256:b5d10dfc294479866d6dddd4c1a6afc9164414f0634703173b7e440dc0133bec", size = 1261802 },
 ]
 
 [[package]]
