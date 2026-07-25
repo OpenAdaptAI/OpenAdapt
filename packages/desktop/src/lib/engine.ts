@@ -31,6 +31,9 @@ export const CMD = {
   RUN_WORKFLOW: "run_workflow",
   GET_RUN_REPORT: "get_run_report",
   TEACH_FIX: "teach_fix",
+  GET_QUALIFICATION: "get_qualification",
+  SET_QUALIFICATION_RISK: "set_qualification_risk",
+  CERTIFY_QUALIFICATION: "certify_qualification",
   // cloud sync / push
   PUSH_WORKFLOW: "push_workflow",
   GET_SYNC_STATE: "get_sync_state",

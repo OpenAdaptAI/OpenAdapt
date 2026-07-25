@@ -205,6 +205,10 @@ class EngineDispatcher:
             "run_workflow": self.run_workflow,
             "get_run_report": self.get_run_report,
             "teach_fix": self.teach_fix,
+            # qualification cockpit (canonical Flow graph/policy/manifests)
+            "get_qualification": self.get_qualification,
+            "set_qualification_risk": self.set_qualification_risk,
+            "certify_qualification": self.certify_qualification,
             # cloud sync / push
             "push_workflow": self.push_workflow,
             "get_sync_state": self.get_sync_state,
@@ -1004,6 +1008,110 @@ class EngineDispatcher:
         if not bundle or not bundle.get("bundle_path"):
             return None
         return Path(bundle["bundle_path"])
+
+    def _qualification_bundle_dir(self, bundle_id: str | None) -> Path:
+        """Resolve one writable local bundle without following a staged symlink."""
+
+        bundle = self._bundle_dir(bundle_id)
+        if bundle is None:
+            raise ValueError(f"Unknown workflow {bundle_id}")
+        root = (self.config.data_dir / "bundles").resolve()
+        resolved = bundle.resolve()
+        if not resolved.is_relative_to(root):
+            raise ValueError("Workflow bundle is outside the local Desktop bundle store")
+        # A symlinked bundle (or parent below the bundle-store root) can alias a
+        # different workflow while still resolving inside ``root``.  Reject the
+        # unresolved path itself before returning the canonical directory.
+        cursor = bundle.absolute()
+        while cursor.resolve() != root:
+            if cursor == cursor.parent or not cursor.resolve().is_relative_to(root):
+                raise ValueError(
+                    "Workflow bundle is outside the local Desktop bundle store"
+                )
+            if cursor.is_symlink():
+                raise ValueError(
+                    "Workflow bundle contains a symbolic link and cannot be edited safely"
+                )
+            cursor = cursor.parent
+        if not resolved.is_dir():
+            raise ValueError("Workflow bundle is unavailable")
+        if any(path.is_symlink() for path in resolved.rglob("*")):
+            raise ValueError("Workflow bundle contains a symbolic link and cannot be edited safely")
+        return resolved
+
+    def get_qualification(self, **params: Any) -> dict:
+        """Inspect Flow's canonical graph, coverage, and certification contract."""
+
+        from engine.qualification import DEFAULT_QUALIFICATION_POLICY, inspect_bundle
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            return inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+            )
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_risk(self, **params: Any) -> dict:
+        """Correct one action risk, reseal it, and invalidate prior certification."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_action_risk,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_action_risk(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                risk=str(params.get("risk") or ""),
+                policy_source=policy,
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified"
+                    if result.get("certification_current")
+                    else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def certify_qualification(self, **params: Any) -> dict:
+        """Persist a pass/fail policy attempt into the resealed local bundle."""
+
+        from engine.qualification import DEFAULT_QUALIFICATION_POLICY, certify_bundle
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = certify_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified"
+                    if result.get("certification_current")
+                    else "qualification_failed"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
 
     # ------------------------------------------------------- sync / push
 

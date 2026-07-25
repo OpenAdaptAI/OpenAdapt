@@ -13,10 +13,12 @@ import {
 } from "../ui/primitives";
 
 export function WorkflowLibrary({
+  onQualify,
   onWatch,
   onTeach,
   onRecord,
 }: {
+  onQualify: (id: string) => void;
   onWatch: (id: string) => void;
   onTeach: (id: string) => void;
   onRecord: () => void;
@@ -114,6 +116,9 @@ export function WorkflowLibrary({
                   </td>
                   <td className="num">
                     <div className="row" style={{ justifyContent: "flex-end" }}>
+                      <Button size="sm" onClick={() => onQualify(w.id)}>
+                        Qualify
+                      </Button>
                       <Button size="sm" onClick={() => onWatch(w.id)}>
                         Watch run
                       </Button>

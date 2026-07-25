@@ -61,6 +61,102 @@ export interface Workflow {
   synced?: boolean;
 }
 
+export type QualificationRisk = "reversible" | "irreversible";
+
+export interface QualificationIdentity {
+  applicable: boolean;
+  armed?: boolean | null;
+  reason?: string | null;
+  phi_free: boolean;
+  has_structured: boolean;
+  has_identifier_crop: boolean;
+}
+
+export interface QualificationEffect {
+  kind: string;
+  summary: string;
+  risk: QualificationRisk;
+  needs_operator_confirmation: boolean;
+}
+
+export interface QualificationNode {
+  id: string;
+  index: number;
+  kind: string;
+  title: string;
+  action?: string | null;
+  risk?: QualificationRisk | null;
+  identity?: QualificationIdentity | null;
+  effects: QualificationEffect[];
+  postconditions: string[];
+  halts: string[];
+  badges: string[];
+}
+
+export interface QualificationViolation {
+  rule: string;
+  step_id?: string | null;
+  reason: string;
+}
+
+export interface QualificationFinding {
+  severity: "info" | "warn" | "error";
+  code: string;
+  step_id?: string | null;
+  message: string;
+}
+
+export interface QualificationProject {
+  ok: true;
+  workflow_id: string;
+  policy: string;
+  certification_current: boolean;
+  graph: {
+    bundle: {
+      name: string;
+      action_count: number;
+      irreversible_count: number;
+      identity_armed_count: number;
+      identity_unarmed_count: number;
+      effect_count: number;
+      encrypted: boolean;
+      provenance: {
+        content_digest?: string | null;
+      };
+    };
+    nodes: QualificationNode[];
+    edges: { source: string; target: string; kind: string; label: string }[];
+  };
+  lint: {
+    findings: QualificationFinding[];
+    consequential_steps: number;
+    effect_covered_consequential_steps: number;
+  };
+  certification: {
+    policy_name: string;
+    workflow_name: string;
+    passed: boolean;
+    n_steps: number;
+    violations: QualificationViolation[];
+  };
+  provenance: {
+    policy_name?: string | null;
+    certified: boolean;
+    certification_status?: string | null;
+    certified_at?: string | null;
+  };
+}
+
+export interface QualificationRefusal {
+  ok: false;
+  workflow_id: string;
+  error: string;
+}
+
+export type QualificationResponse =
+  | QualificationProject
+  | QualificationRefusal;
+
 export interface RunStep {
   index: number;
   action: string;

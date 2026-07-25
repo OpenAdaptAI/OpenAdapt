@@ -25,10 +25,12 @@ import { WatchRun } from "./screens/WatchRun";
 import { Teach } from "./screens/Teach";
 import { Runner } from "./screens/Runner";
 import { Settings } from "./screens/Settings";
+import { Qualification } from "./screens/Qualification";
 
 type Route =
   | { name: "library" }
   | { name: "record" }
+  | { name: "qualify"; id: string }
   | { name: "watch"; id: string; target?: ExecutionTarget }
   | { name: "teach"; id: string }
   | { name: "runner" }
@@ -233,9 +235,16 @@ export default function App() {
         <main>
         {route.name === "library" && (
           <WorkflowLibrary
+            onQualify={(id) => setRoute({ name: "qualify", id })}
             onWatch={(id) => setRoute({ name: "watch", id })}
             onTeach={(id) => setRoute({ name: "teach", id })}
             onRecord={() => setRoute({ name: "record" })}
+          />
+        )}
+        {route.name === "qualify" && (
+          <Qualification
+            workflowId={route.id}
+            onBack={() => setRoute({ name: "library" })}
           />
         )}
         {route.name === "record" && (
