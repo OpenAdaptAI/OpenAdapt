@@ -28,6 +28,7 @@ from pydantic import (
     ConfigDict,
     Field,
     PrivateAttr,
+    field_validator,
     model_serializer,
     model_validator,
 )
@@ -421,6 +422,35 @@ class ApiIdentityBinding(BaseModel):
     key: IdentitySignalKeyValue
     param: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
     effect_field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")
+    request_pointers: list[str] = Field(
+        min_length=1,
+        max_length=8,
+        description=(
+            "Explicit target-bearing JSON pointers in the request template. "
+            "Supported roots are /url/<effect-field>, /body/..., and /query/...; "
+            "the terminal pointer segment must name the bound effect field, and "
+            "headers are never accepted as target identity."
+        ),
+    )
+
+    @field_validator("request_pointers")
+    @classmethod
+    def _validate_request_pointers(cls, pointers: list[str]) -> list[str]:
+        if len(pointers) != len(set(pointers)):
+            raise ValueError("API identity request pointers must be unique")
+        for pointer in pointers:
+            if (
+                (pointer.startswith("/body/") and len(pointer) > len("/body/"))
+                or (pointer.startswith("/query/") and len(pointer) > len("/query/"))
+                or (pointer.startswith("/url/") and len(pointer) > len("/url/"))
+            ):
+                continue
+            raise ValueError(
+                "API identity request pointers must target /url/<effect-field>, "
+                "/body/..., or /query/...; headers and whole request objects "
+                "are not valid"
+            )
+        return pointers
 
 
 class ApiBinding(BaseModel):
@@ -1700,6 +1730,9 @@ class IdentitySignalEvidence(BaseModel):
         "structured",
         "identifier_region",
         "captured_context",
+        "application",
+        "session",
+        "workflow_state",
         "api_parameter",
     ]
     verdict: Literal["verified", "conflict", "unverifiable"]
@@ -1707,6 +1740,9 @@ class IdentitySignalEvidence(BaseModel):
         "application_structured_text",
         "recorded_and_live_region",
         "captured_context_ocr",
+        "application_identity",
+        "session_identity",
+        "workflow_state_identity",
         "api_request_effect_binding",
     ]
     match: Literal["exact", "normalized"]

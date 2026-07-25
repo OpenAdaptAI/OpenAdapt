@@ -44,9 +44,21 @@ class _Backend:
 
     def __init__(self, structured: str | None) -> None:
         self.structured = structured
+        self.application: str | None = None
+        self.session: str | None = None
+        self.workflow_state: str | None = None
 
     def structured_text_at(self, _x: int, _y: int) -> str | None:
         return self.structured
+
+    def application_identity(self) -> str | None:
+        return self.application
+
+    def session_identity(self) -> str | None:
+        return self.session
+
+    def workflow_state_identity(self) -> str | None:
+        return self.workflow_state
 
 
 class _RuntimeBackend(_Backend):
@@ -137,11 +149,13 @@ def test_multi_signal_success_uses_independent_live_sources(monkeypatch) -> None
             IdentitySignalPolicy(
                 key="record_id",
                 source="structured",
+                extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
                 match="exact",
             ),
             IdentitySignalPolicy(
                 key="secondary_identifier",
                 source="captured_context",
+                extract_pattern=r"(?P<value>[0-9]{4}-[0-9]{2}-[0-9]{2})",
                 region=(0, 0, 100, 15),
                 match="normalized",
                 normalizers=["unicode_nfkc", "collapse_whitespace"],
@@ -185,12 +199,14 @@ def test_conflicting_identifier_halts_even_when_name_reaches_quorum(
             IdentitySignalPolicy(
                 key="subject_name",
                 source="structured",
+                extract_pattern=r"^(?P<value>.+?) account ",
                 match="normalized",
                 normalizers=["collapse_whitespace"],
             ),
             IdentitySignalPolicy(
                 key="record_id",
                 source="captured_context",
+                extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
                 region=(0, 0, 100, 15),
                 match="exact",
             ),
@@ -231,13 +247,15 @@ def test_unreadable_signal_is_tolerated_when_other_quorum_votes_match(
         step_id=step.id,
         signals=[
             IdentitySignalPolicy(
-                key="application",
+                key="subject_name",
                 source="structured",
+                extract_pattern=r"^(?P<value>.+?) account ",
                 match="exact",
             ),
             IdentitySignalPolicy(
                 key="secondary_identifier",
                 source="captured_context",
+                extract_pattern=r"(?P<value>[0-9]{4}-[0-9]{2}-[0-9]{2})",
                 region=(0, 0, 100, 15),
                 match="exact",
             ),
@@ -322,13 +340,15 @@ def test_insufficient_quorum_halts_before_actuation(monkeypatch) -> None:
         step_id=step.id,
         signals=[
             IdentitySignalPolicy(
-                key="application",
+                key="subject_name",
                 source="structured",
+                extract_pattern=r"^(?P<value>.+?) account ",
                 match="exact",
             ),
             IdentitySignalPolicy(
                 key="secondary_identifier",
                 source="captured_context",
+                extract_pattern=r"(?P<value>[0-9]{4}-[0-9]{2}-[0-9]{2})",
                 region=(0, 0, 100, 15),
                 match="exact",
             ),
@@ -384,11 +404,13 @@ def test_duplicate_source_policy_is_refused_by_qualification() -> None:
             IdentitySignalPolicy(
                 key="subject_name",
                 source="structured",
+                extract_pattern=r"^(?P<value>.+?) account ",
                 match="exact",
             ),
             IdentitySignalPolicy(
                 key="record_id",
                 source="structured",
+                extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
                 match="exact",
             ),
         ],
@@ -428,6 +450,7 @@ def test_captured_context_requires_explicit_region() -> None:
         IdentitySignalPolicy(
             key="record_id",
             source="captured_context",
+            extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
             match="exact",
         )
 
@@ -438,11 +461,13 @@ def test_exact_and_explicit_normalized_comparisons_differ() -> None:
     exact = IdentitySignalPolicy(
         key="record_id",
         source="structured",
+        extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
         match="exact",
     )
     normalized = IdentitySignalPolicy(
         key="record_id",
         source="structured",
+        extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
         match="normalized",
         normalizers=["unicode_nfkc", "casefold", "collapse_whitespace"],
     )
@@ -476,12 +501,14 @@ def test_parameterized_exact_match_does_not_silently_casefold() -> None:
     exact = IdentitySignalPolicy(
         key="record_id",
         source="structured",
+        extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
         match="exact",
         params=["account"],
     )
     normalized = IdentitySignalPolicy(
         key="record_id",
         source="structured",
+        extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
         match="normalized",
         normalizers=["casefold"],
         params=["account"],
@@ -609,6 +636,7 @@ def test_signal_report_and_halt_message_do_not_contain_identity_values(
             IdentitySignalPolicy(
                 key="record_id",
                 source="structured",
+                extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
                 match="exact",
             )
         ],
@@ -669,6 +697,7 @@ def test_consequential_enter_with_wrong_identity_halts_before_press(
             IdentitySignalPolicy(
                 key="record_id",
                 source="structured",
+                extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
                 match="exact",
             )
         ],
@@ -711,6 +740,7 @@ def test_qualified_api_write_requires_exact_request_effect_identity_binding() ->
             IdentitySignalPolicy(
                 key="record_id",
                 source="structured",
+                extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
                 match="exact",
             )
         ],
@@ -736,6 +766,7 @@ def test_qualified_api_write_requires_exact_request_effect_identity_binding() ->
             key="record_id",
             param="patient_id",
             effect_field="patient_id",
+            request_pointers=["/body/patient_id"],
         )
     ]
     refusal = replayer._api_identity_refusal(
@@ -750,6 +781,30 @@ def test_qualified_api_write_requires_exact_request_effect_identity_binding() ->
     assert result.identity.status == "verified"
     assert result.identity.signal_evidence[0].source == "api_parameter"
 
+    step.api_binding.url_template = "/records/{patient_id}"
+    step.api_binding.identity[0].request_pointers = ["/url/patient_id"]
+    refusal = replayer._api_identity_refusal(
+        step,
+        {"patient_id": "p1"},
+        workflow,
+        [effect],
+        StepResult(step_id=step.id, intent=step.intent, ok=False),
+    )
+    assert refusal is None
+
+    step.api_binding.url_template = "/records?trace={patient_id}"
+    refusal = replayer._api_identity_refusal(
+        step,
+        {"patient_id": "p1"},
+        workflow,
+        [effect],
+        StepResult(step_id=step.id, intent=step.intent, ok=False),
+    )
+    assert refusal is not None
+    assert "declared target-bearing request pointer" in refusal
+
+    step.api_binding.url_template = "/records"
+    step.api_binding.identity[0].request_pointers = ["/body/patient_id"]
     wrong_effect = Effect(
         kind=EffectKind.RECORD_WRITTEN,
         match={"patient_id": ValueExpr(param="other_patient")},
@@ -763,6 +818,81 @@ def test_qualified_api_write_requires_exact_request_effect_identity_binding() ->
     )
     assert refusal is not None
     assert "not bound to identity parameter" in refusal
+
+
+def test_api_identity_rejects_placeholder_outside_declared_target_pointer() -> None:
+    step = _step()
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"patient_id": ValueExpr(param="patient_id")},
+    )
+    step.effects = [effect]
+    step.api_binding = ApiBinding(
+        url_template="/records",
+        headers={"X-Trace": "{patient_id}"},
+        body_template={
+            "patient_id": "VICTIM",
+            "audit_note": "{patient_id}",
+        },
+        identity=[
+            ApiIdentityBinding(
+                key="record_id",
+                param="patient_id",
+                effect_field="patient_id",
+                request_pointers=["/body/patient_id"],
+            )
+        ],
+    )
+    workflow = _workflow(
+        step,
+        IdentityPolicy(
+            step_id=step.id,
+            signals=[
+                IdentitySignalPolicy(
+                    key="record_id",
+                    source="structured",
+                    extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
+                    match="exact",
+                )
+            ],
+            quorum=1,
+        ),
+    )
+    workflow.params["patient_id"] = "p1"
+
+    refusal = _replayer(None)._api_identity_refusal(
+        step,
+        {"patient_id": "p1"},
+        workflow,
+        [effect],
+        StepResult(step_id=step.id, intent=step.intent, ok=False),
+    )
+
+    assert refusal is not None
+    assert "declared target-bearing request pointer" in refusal
+
+    step.api_binding.identity[0].request_pointers = ["/body/audit_note"]
+    refusal = _replayer(None)._api_identity_refusal(
+        step,
+        {"patient_id": "p1"},
+        workflow,
+        [effect],
+        StepResult(step_id=step.id, intent=step.intent, ok=False),
+    )
+    assert refusal is not None
+    assert "declared target-bearing request pointer" in refusal
+
+    step.api_binding.query = {"trace": "{patient_id}"}
+    step.api_binding.identity[0].request_pointers = ["/query/trace"]
+    refusal = _replayer(None)._api_identity_refusal(
+        step,
+        {"patient_id": "p1"},
+        workflow,
+        [effect],
+        StepResult(step_id=step.id, intent=step.intent, ok=False),
+    )
+    assert refusal is not None
+    assert "declared target-bearing request pointer" in refusal
 
 
 def test_local_consequential_action_rechecks_identity_after_effect_prestate(
@@ -782,6 +912,7 @@ def test_local_consequential_action_rechecks_identity_after_effect_prestate(
             IdentitySignalPolicy(
                 key="record_id",
                 source="structured",
+                extract_pattern=r"account (?P<value>[A-Z]{2}-[0-9]{3})",
                 match="exact",
             )
         ],
@@ -829,6 +960,7 @@ def test_parameter_binding_is_explicit_and_never_matches_inside_larger_value() -
     signal = IdentitySignalPolicy(
         key="subject_name",
         source="structured",
+        extract_pattern=r"^(?P<value>.+?) account ",
         match="exact",
         params=["patient_name"],
     )
@@ -863,6 +995,109 @@ def test_parameter_binding_is_explicit_and_never_matches_inside_larger_value() -
     )
 
 
+@pytest.mark.parametrize(
+    ("retained", "example", "live_value"),
+    [
+        ("Patient X(555)Y record", "(555)", "(777)"),
+        ("Patient X--AB--Y record", "--AB--", "--CD--"),
+    ],
+)
+def test_punctuation_wrapped_parameter_never_matches_inside_larger_value(
+    retained: str,
+    example: str,
+    live_value: str,
+) -> None:
+    parameterized, used = parameterize_identity_text(
+        retained,
+        {"identity_fragment": example},
+        names=["identity_fragment"],
+        case_sensitive=True,
+    )
+    assert parameterized == retained
+    assert used == []
+
+    template = build_identity_template(
+        None,
+        structured_identity=retained,
+        param_examples={"identity_fragment": example},
+        salt_hex="ef" * 16,
+    )
+    assert template is not None
+    assert (
+        verify_signal_template(
+            template,
+            source="structured",
+            match="exact",
+            normalizers=[],
+            live=retained.replace(example, live_value),
+            params={"identity_fragment": live_value},
+            param_examples={"identity_fragment": example},
+            parameter_names=["identity_fragment"],
+        )
+        is None
+    )
+
+
+def test_semantic_signal_label_cannot_relabel_unrelated_structured_text() -> None:
+    with pytest.raises(ValueError, match="requires dedicated 'session'"):
+        IdentitySignalPolicy(
+            key="session",
+            source="structured",
+            match="exact",
+            extract_pattern=r"(?P<value>.+)",
+        )
+    with pytest.raises(ValueError, match="explicit expected_value"):
+        IdentitySignalPolicy(
+            key="session",
+            source="session",
+            match="exact",
+        )
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        ("application", "reference.application"),
+        ("session", "a" * 64),
+        ("workflow_state", "save.dialog.ready"),
+    ],
+)
+def test_dedicated_context_signal_uses_matching_observer_not_patient_row(
+    key: str,
+    expected: str,
+) -> None:
+    step = _step()
+    policy = IdentityPolicy(
+        step_id=step.id,
+        signals=[
+            IdentitySignalPolicy(
+                key=key,
+                source=key,
+                match="exact",
+                expected_value=expected,
+            )
+        ],
+        quorum=1,
+    )
+    workflow = _workflow(step, policy)
+    backend = _Backend(f"patient row says {key} is WRONG")
+    setattr(backend, key, expected)
+    replayer = Replayer(backend, vision=_Vision())
+
+    check = replayer._verify_identity(
+        step,
+        _resolution(),
+        b"fresh-frame",
+        {},
+        workflow,
+        Path("."),
+    )
+
+    assert check.status == "verified"
+    assert check.signal_evidence[0].source == key
+    assert check.signal_evidence[0].evidence_class == f"{key}_identity"
+
+
 def test_overlapping_pixel_identity_signals_cannot_form_quorum() -> None:
     step = _step()
     workflow = Workflow(name="overlap", steps=[step])
@@ -887,6 +1122,7 @@ def test_overlapping_pixel_identity_signals_cannot_form_quorum() -> None:
             IdentitySignalPolicy(
                 key="secondary_identifier",
                 source="captured_context",
+                extract_pattern=r"(?P<value>[0-9]{4}-[0-9]{2}-[0-9]{2})",
                 region=(160, 25, 100, 25),
             ),
         ],

@@ -48,6 +48,7 @@ QUALIFICATION_SCHEMA: Final[Literal["openadapt.qualification-project/v1"]] = (
 )
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _PARAM_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+_CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 
 
 def _now() -> str:
@@ -58,6 +59,9 @@ class IdentityEvidenceSource(str, Enum):
     STRUCTURED = "structured"
     IDENTIFIER_REGION = "identifier_region"
     CAPTURED_CONTEXT = "captured_context"
+    APPLICATION = "application"
+    SESSION = "session"
+    WORKFLOW_STATE = "workflow_state"
 
 
 class IdentityMatchMode(str, Enum):
@@ -102,6 +106,23 @@ class IdentitySignalPolicy(BaseModel):
     match: IdentityMatchMode = IdentityMatchMode.EXACT
     normalizers: list[IdentityNormalizer] = Field(default_factory=list)
     region: Optional[tuple[int, int, int, int]] = None
+    extract_pattern: Optional[str] = Field(
+        default=None,
+        max_length=256,
+        description=(
+            "Optional explicit regular expression with one named 'value' group. "
+            "For structured/context text, only that field participates in the "
+            "identity vote; the semantic key alone never extracts a value."
+        ),
+    )
+    expected_value: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "Qualified PHI-free identifier expected from a dedicated "
+            "application/session/workflow-state runtime observer."
+        ),
+    )
     params: list[str] = Field(
         default_factory=list,
         description=(
@@ -121,6 +142,73 @@ class IdentitySignalPolicy(BaseModel):
 
     @model_validator(mode="after")
     def _normalization_is_explicit(self) -> "IdentitySignalPolicy":
+        dedicated_sources = {
+            IdentitySignalKey.APPLICATION: IdentityEvidenceSource.APPLICATION,
+            IdentitySignalKey.SESSION: IdentityEvidenceSource.SESSION,
+            IdentitySignalKey.WORKFLOW_STATE: IdentityEvidenceSource.WORKFLOW_STATE,
+        }
+        required_source = dedicated_sources.get(self.key)
+        if required_source is not None and self.source is not required_source:
+            raise ValueError(
+                f"semantic signal {self.key.value!r} requires dedicated "
+                f"{required_source.value!r} runtime observation"
+            )
+        if required_source is not None:
+            if self.expected_value is None:
+                raise ValueError(
+                    f"dedicated {required_source.value!r} observation requires "
+                    "an explicit expected_value"
+                )
+            if self.key is IdentitySignalKey.SESSION:
+                if not re.fullmatch(r"[a-f0-9]{64}", self.expected_value):
+                    raise ValueError(
+                        "session expected_value must be a 64-character "
+                        "lowercase hexadecimal identity digest"
+                    )
+            elif not _CONTEXT_ID_RE.fullmatch(self.expected_value):
+                raise ValueError(
+                    "application/workflow_state expected_value must be a "
+                    "bounded PHI-free identifier"
+                )
+        if required_source is None and self.source in set(dedicated_sources.values()):
+            raise ValueError(
+                f"record identity signal {self.key.value!r} cannot use dedicated "
+                f"{self.source.value!r} runtime observation"
+            )
+        if required_source is None and self.expected_value is not None:
+            raise ValueError(
+                "expected_value applies only to dedicated "
+                "application/session/workflow-state observations"
+            )
+        if (
+            self.source
+            in {
+                IdentityEvidenceSource.STRUCTURED,
+                IdentityEvidenceSource.CAPTURED_CONTEXT,
+            }
+            and self.extract_pattern is None
+        ):
+            raise ValueError(
+                "structured/context identity signals require extract_pattern; "
+                "a semantic key alone cannot turn unrelated text into evidence"
+            )
+        if self.extract_pattern is not None:
+            if self.source not in {
+                IdentityEvidenceSource.STRUCTURED,
+                IdentityEvidenceSource.CAPTURED_CONTEXT,
+            }:
+                raise ValueError(
+                    "extract_pattern applies only to structured/context text"
+                )
+            try:
+                compiled = re.compile(self.extract_pattern)
+            except re.error as exc:
+                raise ValueError(f"invalid identity extract_pattern: {exc}") from exc
+            if compiled.groupindex != {"value": 1} or compiled.groups != 1:
+                raise ValueError(
+                    "identity extract_pattern must contain exactly one named "
+                    "'value' capture group"
+                )
         if self.match is IdentityMatchMode.EXACT and self.normalizers:
             raise ValueError("exact identity matching cannot apply normalizers")
         if self.match is IdentityMatchMode.NORMALIZED and not self.normalizers:
@@ -128,6 +216,13 @@ class IdentitySignalPolicy(BaseModel):
                 "normalized identity matching requires at least one explicit normalizer"
             )
         canonical_normalizers(self.normalizers)
+        if self.source in set(dedicated_sources.values()) and (
+            self.params or self.region is not None
+        ):
+            raise ValueError(
+                "dedicated application/session/workflow-state observations do "
+                "not accept params or pixel regions"
+            )
         if self.source in {
             IdentityEvidenceSource.IDENTIFIER_REGION,
             IdentityEvidenceSource.CAPTURED_CONTEXT,
@@ -669,6 +764,15 @@ def available_identity_sources(step: "Step") -> set[IdentityEvidenceSource]:
         out.add(IdentityEvidenceSource.IDENTIFIER_REGION)
     if anchor.context_text or (template is not None and template.tokens):
         out.add(IdentityEvidenceSource.CAPTURED_CONTEXT)
+    # These sources are supplied live by the selected runner rather than by
+    # target-row evidence. Capability negotiation/refusal happens at runtime.
+    out.update(
+        {
+            IdentityEvidenceSource.APPLICATION,
+            IdentityEvidenceSource.SESSION,
+            IdentityEvidenceSource.WORKFLOW_STATE,
+        }
+    )
     return out
 
 
@@ -750,6 +854,12 @@ def identity_signal_runtime_available(
             and signal_hash_key(signal.source, signal.match, signal.normalizers)
             in template.signal_hashes
         )
+    if signal.source in {
+        IdentityEvidenceSource.APPLICATION,
+        IdentityEvidenceSource.SESSION,
+        IdentityEvidenceSource.WORKFLOW_STATE,
+    }:
+        return True
     return False
 
 
@@ -887,6 +997,18 @@ def set_identity_policy(
                 if signal.source is IdentityEvidenceSource.CAPTURED_CONTEXT
                 else None
             )
+            if recorded is not None and signal.extract_pattern is not None:
+                extracted = re.search(
+                    signal.extract_pattern,
+                    recorded,
+                    flags=re.IGNORECASE,
+                )
+                if extracted is None:
+                    raise QualificationError(
+                        f"identity signal {signal.key.value!r} extract_pattern "
+                        "does not match the retained source"
+                    )
+                recorded = extracted.group("value")
             if recorded is not None and signal.params:
                 _parameterized, used = parameterize_identity_text(
                     recorded,

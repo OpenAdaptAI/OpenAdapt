@@ -115,8 +115,14 @@ def parameterize_identity_text(
         if len("".join(value.split())) < minimum_chars:
             continue
         flags = 0 if case_sensitive else re.IGNORECASE
-        left_boundary = r"(?<!\w)" if value[0].isalnum() or value[0] == "_" else ""
-        right_boundary = r"(?!\w)" if value[-1].isalnum() or value[-1] == "_" else ""
+        # A whole parameter value may begin/end in punctuation (``(555)``,
+        # ``--AB--``) while still being embedded in a larger word-shaped
+        # identifier (``X(555)Y``). Guard the OUTSIDE edges whenever the value
+        # contains any word character; looking only at value[0]/value[-1]
+        # would silently parameterize those embedded substrings.
+        has_word = any(char.isalnum() or char == "_" for char in value)
+        left_boundary = r"(?<!\w)" if has_word else ""
+        right_boundary = r"(?!\w)" if has_word else ""
         pattern = re.compile(
             left_boundary + re.escape(value) + right_boundary,
             flags,

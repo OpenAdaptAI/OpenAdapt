@@ -37,11 +37,13 @@ import hashlib
 import json
 import math
 import os
+import re
 import time
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, cast
+from urllib.parse import urlsplit
 
 from openadapt_flow.backend import (
     Backend,
@@ -56,6 +58,7 @@ from openadapt_flow.identity_signals import (
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    ApiBinding,
     EffectVerificationEvidence,
     ExecutionTargetKind,
     HaltObservation,
@@ -2880,6 +2883,46 @@ class Replayer:
             return any(Replayer._template_mentions_param(item, param) for item in value)
         return False
 
+    @staticmethod
+    def _url_path_targets_param(url_template: str, param: str) -> bool:
+        """Require the identity placeholder as one whole URL path segment."""
+
+        token = "{" + param + "}"
+        return token in [
+            segment for segment in urlsplit(url_template).path.split("/") if segment
+        ]
+
+    @staticmethod
+    def _api_request_pointer_value(binding: ApiBinding, pointer: str) -> Any:
+        """Resolve one admitted target-bearing pointer without consulting headers."""
+
+        if pointer.startswith("/url/"):
+            return binding.url_template
+        root_name, *tokens = pointer.lstrip("/").split("/")
+        if root_name == "body":
+            value: Any = binding.body_template
+        elif root_name == "query":
+            value = binding.query
+        else:
+            return None
+        for token in tokens:
+            decoded = token.replace("~1", "/").replace("~0", "~")
+            if isinstance(value, dict):
+                if decoded not in value:
+                    return None
+                value = value[decoded]
+            elif isinstance(value, list):
+                try:
+                    index = int(decoded)
+                except ValueError:
+                    return None
+                if index < 0 or index >= len(value):
+                    return None
+                value = value[index]
+            else:
+                return None
+        return value
+
     def _api_identity_refusal(
         self,
         step: Step,
@@ -2914,12 +2957,6 @@ class Replayer:
             allowed_keys = {signal.key.value for signal in policy.signals}
             required = policy.quorum
 
-        request_templates = (
-            binding.url_template,
-            binding.body_template,
-            binding.query,
-            binding.headers,
-        )
         evidence: list[IdentitySignalEvidence] = []
         for identity in binding.identity:
             if allowed_keys is not None and identity.key not in allowed_keys:
@@ -2935,14 +2972,31 @@ class Replayer:
                     f"({step.intent}): required identity parameter "
                     f"{identity.param!r} is missing"
                 )
-            if not any(
-                self._template_mentions_param(template, identity.param)
-                for template in request_templates
-            ):
+            pointed_templates = [
+                self._api_request_pointer_value(binding, pointer)
+                for pointer in identity.request_pointers
+            ]
+            exact_token = "{" + identity.param + "}"
+            effect_target_field = identity.effect_field.rsplit(".", 1)[-1]
+            pointers_are_bound = all(
+                template is not None
+                and pointer.rsplit("/", 1)[-1].replace("~1", "/").replace("~0", "~")
+                == effect_target_field
+                and (
+                    isinstance(template, str)
+                    and self._url_path_targets_param(template, identity.param)
+                    if pointer.startswith("/url/")
+                    else isinstance(template, str) and template == exact_token
+                )
+                for pointer, template in zip(
+                    identity.request_pointers, pointed_templates, strict=True
+                )
+            )
+            if not pointers_are_bound:
                 return (
                     f"API identity verification HALTED step '{step.id}' "
                     f"({step.intent}): identity parameter {identity.param!r} is "
-                    "not bound into the outgoing request template"
+                    "not bound at every declared target-bearing request pointer"
                 )
             effect_exprs = [
                 effect.match.get(identity.effect_field) for effect in effects
@@ -4546,11 +4600,17 @@ class Replayer:
                 "application_structured_text",
                 "recorded_and_live_region",
                 "captured_context_ocr",
+                "application_identity",
+                "session_identity",
+                "workflow_state_identity",
             ],
             {
                 "structured": "application_structured_text",
                 "identifier_region": "recorded_and_live_region",
                 "captured_context": "captured_context_ocr",
+                "application": "application_identity",
+                "session": "session_identity",
+                "workflow_state": "workflow_state_identity",
             }[source],
         )
         return IdentitySignalEvidence(
@@ -4580,6 +4640,19 @@ class Replayer:
             if source == "structured"
             else anchor.context_text
         )
+        extract_pattern = getattr(signal, "extract_pattern", None)
+        if extract_pattern is not None:
+            # Field labels are presentation text and may change case under an
+            # explicitly normalized policy. Preserve the captured value's
+            # original characters so the configured match mode, not the
+            # extractor, decides whether values compare equal.
+            compiled = re.compile(extract_pattern, re.IGNORECASE)
+            recorded_match = compiled.search(recorded or "")
+            live_match = compiled.search(live)
+            if recorded_match is None or live_match is None:
+                return "unverifiable"
+            recorded = recorded_match.group("value")
+            live = live_match.group("value")
         if recorded is not None:
             expected_form, parameter_names = parameterize_identity_text(
                 recorded,
@@ -4638,6 +4711,36 @@ class Replayer:
         ):
             return "unverifiable"
         return "verified" if result else "conflict"
+
+    def _verify_dedicated_identity_signal(
+        self,
+        *,
+        source: str,
+        signal: Any,
+        workflow: Workflow,
+    ) -> Literal["verified", "conflict", "unverifiable"]:
+        """Compare a non-record identity against its dedicated live observer."""
+
+        qualification = workflow.qualification
+        if qualification is None:
+            return "unverifiable"
+        expected = signal.expected_value
+        if not isinstance(expected, str):
+            return "unverifiable"
+        getter = getattr(self.backend, f"{source}_identity", None)
+        live: Optional[str] = None
+        if callable(getter):
+            try:
+                observed = getter()
+                live = observed if isinstance(observed, str) else None
+            except Exception:
+                live = None
+        if not live:
+            return "unverifiable"
+        if signal.match.value == "normalized":
+            expected = normalize_signal_text(expected, signal.normalizers)
+            live = normalize_signal_text(live, signal.normalizers)
+        return "verified" if expected == live else "conflict"
 
     def _captured_context_observations(
         self,
@@ -4754,6 +4857,12 @@ class Replayer:
                     anchor=anchor,
                     live=live,
                     params=params,
+                    workflow=workflow,
+                )
+            elif source in {"application", "session", "workflow_state"}:
+                verdict = self._verify_dedicated_identity_signal(
+                    source=source,
+                    signal=signal,
                     workflow=workflow,
                 )
             elif source == "captured_context":

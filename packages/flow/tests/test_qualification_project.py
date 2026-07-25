@@ -200,6 +200,7 @@ def test_identity_normalization_is_explicit_and_quorum_is_bounded() -> None:
         IdentitySignalPolicy(
             key="subject_name",
             source="structured",
+            extract_pattern=r"^(?P<value>.+?) account ",
             match="normalized",
         )
     with pytest.raises(ValueError, match="cannot exceed"):
@@ -209,6 +210,7 @@ def test_identity_normalization_is_explicit_and_quorum_is_bounded() -> None:
                 IdentitySignalPolicy(
                     key="record_id",
                     source="structured",
+                    extract_pattern=r"record (?P<value>identity)",
                     match="exact",
                 )
             ],
@@ -376,6 +378,7 @@ def test_signal_quorum_is_executable_qualification_identity_coverage() -> None:
                 IdentitySignalPolicy(
                     key="record_id",
                     source="structured",
+                    extract_pattern=r"record (?P<value>identity)",
                     match="exact",
                 )
             ],

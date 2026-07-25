@@ -144,6 +144,23 @@ class IdentityBackend(Protocol):
 
 
 @runtime_checkable
+class ExecutionContextIdentityBackend(Protocol):
+    """Optional live identities that cannot be inferred from record-row text."""
+
+    def application_identity(self) -> Optional[str]:
+        """Return the current application/window identity."""
+        ...
+
+    def session_identity(self) -> Optional[str]:
+        """Return the current runner/remote-session identity digest."""
+        ...
+
+    def workflow_state_identity(self) -> Optional[str]:
+        """Return the current application workflow-state identity."""
+        ...
+
+
+@runtime_checkable
 class StructuralActionBackend(Protocol):
     """Optional STRUCTURAL action capability a backend MAY expose.
 
