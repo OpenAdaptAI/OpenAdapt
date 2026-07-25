@@ -35,6 +35,7 @@ from .base import (
     ObservedMouseMove,
     ObservedMouseScroll,
     ThreadedInputObserver,
+    _InputObserverStartupCancelledError,
     add_exception_note,
 )
 
@@ -531,7 +532,7 @@ class LinuxXInputObserver(ThreadedInputObserver):
             return
         self._waiting_baseline_marker = False
         self._accepting_events = False
-        raise InputObserverError(
+        raise _InputObserverStartupCancelledError(
             "X RECORD setup was cancelled before the input boundary was ready"
         )
 

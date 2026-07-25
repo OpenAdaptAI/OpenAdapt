@@ -13,6 +13,10 @@ class InputObserverError(RuntimeError):
     """Base error for fail-loud input observation."""
 
 
+class _InputObserverStartupCancelledError(InputObserverError):
+    """Internal marker for setup failures caused by the parent's startup abort."""
+
+
 class InputObserverUnavailableError(InputObserverError):
     """The current platform/session cannot provide complete input observation."""
 
@@ -448,7 +452,7 @@ class ThreadedInputObserver(InputObserver):
                 f"{type(self).__name__} did not become ready within "
                 f"{self.startup_timeout:.1f}s"
             )
-            self._abort_start(primary)
+            self._abort_start(primary, prefer_observer_failure=True)
         try:
             self.check_health()
         except BaseException as exc:
@@ -458,7 +462,12 @@ class ThreadedInputObserver(InputObserver):
         except BaseException as exc:
             self._abort_start(exc)
 
-    def _abort_start(self, primary: BaseException) -> None:
+    def _abort_start(
+        self,
+        primary: BaseException,
+        *,
+        prefer_observer_failure: bool = False,
+    ) -> None:
         """Make a failed ``start`` transactional before surfacing its cause."""
         self._startup_failure = primary
         self._abort_delivery_start()
@@ -475,6 +484,31 @@ class ThreadedInputObserver(InputObserver):
                 f"observer wake during failed startup also failed: {cleanup_exc}"
             )
         thread.join(self.shutdown_timeout)
+        if prefer_observer_failure:
+            # A setup failure can race with the readiness deadline.  Teardown
+            # must still complete transactionally, but once the observer
+            # thread has reported its concrete cause it is more useful and
+            # accurate than the parent thread's generic timeout.  A clean
+            # cancellation (the genuinely-never-ready case) retains the
+            # timeout above.
+            with self._failure_lock:
+                observer_failure = self._failure
+            if (
+                observer_failure is not None
+                and not isinstance(
+                    observer_failure,
+                    _InputObserverStartupCancelledError,
+                )
+            ):
+                if isinstance(observer_failure, InputObserverError):
+                    primary = observer_failure
+                else:
+                    wrapped = InputObserverError(
+                        f"{type(self).__name__} failed: {observer_failure}"
+                    )
+                    wrapped.__cause__ = observer_failure
+                    primary = wrapped
+                self._startup_failure = primary
         if thread.is_alive():
             add_exception_note(
                 primary,

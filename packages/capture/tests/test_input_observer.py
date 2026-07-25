@@ -69,6 +69,15 @@ class _StubbornNeverReadyObserver(_CooperativeNeverReadyObserver):
         self.release_setup.wait()
 
 
+class _FailureAfterReadinessTimeoutObserver(_CooperativeNeverReadyObserver):
+    """Report a concrete setup failure only after start begins its abort."""
+
+    def _setup(self) -> None:
+        self.resource_open = True
+        self._stop_requested.wait()
+        raise RuntimeError("setup failed while readiness timed out")
+
+
 class _ReadyObserver(ThreadedInputObserver):
     def __init__(self, callback=lambda _event: None) -> None:
         super().__init__(
@@ -206,6 +215,21 @@ def test_failed_startup_joins_and_tears_down_before_raising() -> None:
     observer = _CooperativeNeverReadyObserver()
 
     with pytest.raises(InputObserverError, match="did not become ready"):
+        observer.start()
+
+    assert observer._thread is None
+    assert observer._delivery_thread is None
+    assert observer.torn_down.is_set()
+    assert not observer.resource_open
+
+
+def test_readiness_timeout_surfaces_setup_failure_observed_during_abort() -> None:
+    observer = _FailureAfterReadinessTimeoutObserver()
+
+    with pytest.raises(
+        InputObserverError,
+        match="setup failed while readiness timed out",
+    ):
         observer.start()
 
     assert observer._thread is None
