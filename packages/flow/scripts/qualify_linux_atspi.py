@@ -42,6 +42,7 @@ ENTRY_NAME = "Effect value"
 BUTTON_NAME = "Write effect"
 TRIALS_PER_CONDITION = 3
 POLL_SECONDS = 0.05
+REGISTRY_PROBE_ATTEMPTS = 2
 
 _T = TypeVar("_T")
 
@@ -267,6 +268,59 @@ def _cleanup(process: subprocess.Popen[str]) -> dict[str, Any]:
     }
 
 
+def _prime_atspi_registry(
+    client: AtspiLinuxClient,
+    root: Path,
+    run_id: str,
+) -> dict[str, Any]:
+    """Prove a fresh session can register one fixture before counted trials.
+
+    A newly spawned ``dbus-run-session`` can accept the first GTK process
+    before its AT-SPI registry and bridge have completed their handshake. That
+    process may remain healthy but never become discoverable. A bounded second
+    probe distinguishes that session-initialization race from a persistent
+    accessibility failure. Neither probe performs an action or counts toward
+    the fixed qualification matrix.
+    """
+    attempts: list[dict[str, Any]] = []
+    for attempt in range(1, REGISTRY_PROBE_ATTEMPTS + 1):
+        process, title, effect_path, _ = _launch(
+            root / "registry-readiness",
+            condition="clean",
+            trial=attempt,
+            run_id=f"readiness-{run_id}",
+        )
+        result: dict[str, Any] = {
+            "attempt": attempt,
+            "title": title,
+            "ready": False,
+        }
+        try:
+            _wait_exact_window(client, title)
+            result["ready"] = True
+        except Exception as error:  # noqa: BLE001 - retained readiness evidence
+            result["error"] = f"{type(error).__name__}: {error}"
+        finally:
+            result["effect_oracle"] = absent_file_oracle(effect_path)
+            result["cleanup"] = _cleanup(process)
+        attempts.append(result)
+        if (
+            result["ready"]
+            and result["effect_oracle"]["status"] == "confirmed"
+            and result["cleanup"]["verified_absent"]
+        ):
+            return {
+                "ready": True,
+                "attempt_count": attempt,
+                "attempts": attempts,
+            }
+    return {
+        "ready": False,
+        "attempt_count": len(attempts),
+        "attempts": attempts,
+    }
+
+
 def _clean_trial(
     client: AtspiLinuxClient,
     root: Path,
@@ -474,6 +528,21 @@ def qualify() -> tuple[int, dict[str, Any]]:
     with tempfile.TemporaryDirectory(prefix="openadapt-linux-atspi-") as temp:
         root = Path(temp)
         client = AtspiLinuxClient()
+        startup_probe = _prime_atspi_registry(client, root, run_id)
+        if not startup_probe["ready"]:
+            base.update(
+                {
+                    "status": "blocked",
+                    "reason": (
+                        "fresh AT-SPI session did not register the bounded "
+                        "readiness fixture"
+                    ),
+                    "run_id": run_id,
+                    "startup_probe": startup_probe,
+                    "results": {},
+                }
+            )
+            return 2, base
         clean = [
             _clean_trial(client, root, run_id, trial)
             for trial in range(1, TRIALS_PER_CONDITION + 1)
@@ -491,12 +560,16 @@ def qualify() -> tuple[int, dict[str, Any]]:
     cleanup_ok = all(
         result.get("cleanup", {}).get("verified_absent")
         for result in [*clean, *ambiguity, *stale]
+    ) and all(
+        attempt.get("cleanup", {}).get("verified_absent")
+        for attempt in startup_probe["attempts"]
     )
     accepted = bool(metrics["accepted"] and cleanup_ok)
     base.update(
         {
             "status": "passed" if accepted else "failed",
             "run_id": run_id,
+            "startup_probe": startup_probe,
             "metrics": metrics,
             "cleanup_verified": cleanup_ok,
             "results": {

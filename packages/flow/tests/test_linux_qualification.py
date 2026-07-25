@@ -105,3 +105,42 @@ def test_acceptance_rejects_receipt_that_claims_outcome_or_is_not_native() -> No
     metrics = qualification.evaluate(clean, refusals, refusals)
     assert metrics["accepted"] is False
     assert metrics["native_delivery_only_receipts"] == 4
+
+
+def test_registry_probe_is_bounded_and_does_not_count_as_a_trial(
+    monkeypatch, tmp_path: Path
+) -> None:
+    launched: list[int] = []
+    discoveries = iter([RuntimeError("not registered"), None])
+
+    def launch(_root: Path, *, condition: str, trial: int, run_id: str):
+        launched.append(trial)
+        return (
+            object(),
+            f"{condition} {trial} {run_id}",
+            tmp_path / f"{trial}.effect",
+            tmp_path / f"{trial}.control",
+        )
+
+    def wait(_client, _title: str) -> None:
+        outcome = next(discoveries)
+        if outcome is not None:
+            raise outcome
+
+    monkeypatch.setattr(qualification, "_launch", launch)
+    monkeypatch.setattr(qualification, "_wait_exact_window", wait)
+    monkeypatch.setattr(
+        qualification,
+        "_cleanup",
+        lambda _process: {"verified_absent": True},
+    )
+
+    report = qualification._prime_atspi_registry(object(), tmp_path, "run")
+
+    assert report["ready"] is True
+    assert report["attempt_count"] == 2
+    assert report["attempts"][0]["ready"] is False
+    assert report["attempts"][0]["effect_oracle"]["status"] == "confirmed"
+    assert report["attempts"][1]["ready"] is True
+    assert launched == [1, 2]
+    assert qualification.TRIALS_PER_CONDITION == 3
