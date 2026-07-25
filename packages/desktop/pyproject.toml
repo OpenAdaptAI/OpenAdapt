@@ -47,7 +47,7 @@ build = [
     # The native installer freezes this exact canonical runtime into the
     # engine sidecar.  Keep it exact: Desktop and Flow can release
     # independently, while each installer remains reproducible and rollbackable.
-    "openadapt-flow==1.20.1",
+    "openadapt-flow==1.21.0",
     # ONNX Runtime 1.27 dropped macOS Intel wheels. Flow's RapidOCR dependency
     # accepts this universal2 release, which retains Python 3.12 Intel support.
     "onnxruntime==1.20.1; sys_platform == 'darwin' and platform_machine == 'x86_64'",

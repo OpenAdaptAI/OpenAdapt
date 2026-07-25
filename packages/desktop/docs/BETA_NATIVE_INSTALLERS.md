@@ -10,7 +10,7 @@ only the fixed `openadapt://connect` action and forwards it to the sidecar's
 strict, transactional pairing flow.
 
 The canonical compiler and governed runtime remain in `openadapt-flow`. Each
-native installer freezes the exact `openadapt-flow==1.20.1` runtime and its
+native installer freezes the exact `openadapt-flow==1.21.0` runtime and its
 `playwright==1.61.0` browser automation dependency into the Desktop sidecar.
 Compile, replay, run, and teach therefore work without a separate Python,
 `openadapt-flow`, or `playwright` installation on `PATH`. The first browser

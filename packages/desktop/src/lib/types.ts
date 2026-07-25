@@ -61,8 +61,20 @@ export interface Workflow {
   synced?: boolean;
 }
 
-export type QualificationRisk = "reversible" | "irreversible";
+export type QualificationRisk =
+  | "read_only"
+  | "state_changing"
+  | "consequential"
+  | "irreversible";
+export type QualificationExecutableRisk = "reversible" | "irreversible";
 export type QualificationEffectKind = "record_written" | "field_equals";
+export type QualificationTargetKind =
+  | "web"
+  | "windows"
+  | "macos"
+  | "linux"
+  | "rdp"
+  | "citrix";
 
 export interface QualificationIdentity {
   applicable: boolean;
@@ -76,7 +88,7 @@ export interface QualificationIdentity {
 export interface QualificationEffect {
   kind: string;
   summary: string;
-  risk: QualificationRisk;
+  risk: QualificationExecutableRisk;
   needs_operator_confirmation: boolean;
 }
 
@@ -102,15 +114,28 @@ export interface QualificationEditableEffect {
   idempotency_key?: QualificationValueExpression | null;
   key_field: string;
   count_new_only: boolean;
-  risk: QualificationRisk;
+  risk: QualificationExecutableRisk;
   needs_operator_confirmation: boolean;
+  verification_tier?: number | null;
+  effect_contract_hash: string;
 }
 
 export interface QualificationActionControls {
+  step_id: string;
+  classification?: {
+    step_id: string;
+    classification: QualificationRisk | "unknown";
+    explanation: string;
+    operator_confirmed: boolean;
+  } | null;
   identity: {
     can_arm: boolean;
     armed: boolean;
     sources: QualificationIdentitySource[];
+    policy?: {
+      step_id: string;
+      enforcement: "canonical_ladder" | "signal_quorum";
+    } | null;
   };
   effects: QualificationEditableEffect[];
 }
@@ -121,7 +146,16 @@ export interface QualificationNode {
   kind: string;
   title: string;
   action?: string | null;
-  risk?: QualificationRisk | null;
+  resolution?: {
+    top_rung?: string | null;
+    rungs: {
+      name: string;
+      label: string;
+      present: boolean;
+      detail: string;
+    }[];
+  } | null;
+  risk?: QualificationExecutableRisk | null;
   identity?: QualificationIdentity | null;
   effects: QualificationEffect[];
   postconditions: string[];
@@ -146,6 +180,57 @@ export interface QualificationProject {
   ok: true;
   workflow_id: string;
   policy: string;
+  qualification_schema: "openadapt.qualification-project/v1";
+  migration_required: boolean;
+  project: {
+    schema_version: "openadapt.qualification-project/v1";
+    project_id: string;
+    revision: number;
+    environment: {
+      target_kind: QualificationTargetKind;
+      application: string;
+      application_version: string;
+      environment_digest: string;
+      runtime_version: string;
+      required_capabilities: string[];
+    };
+    minimum_effect_tier: number;
+    cases: {
+      id: string;
+      kind: string;
+      description: string;
+      expected_outcome: string;
+      required: boolean;
+      results: unknown[];
+    }[];
+    last_certification?: {
+      passed: boolean;
+      project_revision: number;
+      report_sha256: string;
+      certified_at: string;
+    } | null;
+  } | null;
+  report: {
+    schema_version: "openadapt.qualification-report/v1";
+    passed: boolean;
+    action_count: number;
+    state_changing_action_count: number;
+    consequential_action_count: number;
+    identity_covered_action_count: number;
+    effect_required_action_count: number;
+    effect_covered_action_count: number;
+    minimum_effect_tier?: number | null;
+    case_count: number;
+    passed_case_count: number;
+    refusals: {
+      code: string;
+      path: string;
+      message: string;
+      step_id?: string | null;
+      case_id?: string | null;
+      details: Record<string, string | number | boolean>;
+    }[];
+  };
   certification_current: boolean;
   graph: {
     bundle: {

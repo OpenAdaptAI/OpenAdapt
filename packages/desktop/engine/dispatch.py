@@ -207,6 +207,7 @@ class EngineDispatcher:
             "teach_fix": self.teach_fix,
             # qualification cockpit (canonical Flow graph/policy/manifests)
             "get_qualification": self.get_qualification,
+            "initialize_qualification": self.initialize_qualification,
             "set_qualification_risk": self.set_qualification_risk,
             "arm_qualification_identity": self.arm_qualification_identity,
             "bind_qualification_effect": self.bind_qualification_effect,
@@ -1056,6 +1057,46 @@ class EngineDispatcher:
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
 
+    def initialize_qualification(self, **params: Any) -> dict:
+        """Create Flow's versioned project for one explicit environment boundary."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            initialize_qualification,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_capabilities = params.get("required_capabilities") or []
+        try:
+            if not isinstance(raw_capabilities, list):
+                raise ValueError("required_capabilities must be a list")
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = initialize_qualification(
+                bundle,
+                workflow_id=workflow_id,
+                target_kind=str(params.get("target_kind") or ""),
+                application=str(params.get("application") or ""),
+                application_version=str(params.get("application_version") or ""),
+                environment_label=(
+                    str(params["environment_label"])
+                    if params.get("environment_label") is not None
+                    else None
+                ),
+                environment_digest=(
+                    str(params["environment_digest"])
+                    if params.get("environment_digest") is not None
+                    else None
+                ),
+                required_capabilities=[str(item) for item in raw_capabilities],
+                minimum_effect_tier=int(params.get("minimum_effect_tier", 3)),
+                policy_source=policy,
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
     def set_qualification_risk(self, **params: Any) -> dict:
         """Correct one action risk, reseal it, and invalidate prior certification."""
 
@@ -1073,6 +1114,11 @@ class EngineDispatcher:
                 workflow_id=workflow_id,
                 step_id=str(params.get("step_id") or ""),
                 risk=str(params.get("risk") or ""),
+                explanation=(
+                    str(params["explanation"])
+                    if params.get("explanation") is not None
+                    else None
+                ),
                 policy_source=policy,
             )
             self.services.db.update_bundle(
@@ -1146,6 +1192,7 @@ class EngineDispatcher:
                 expected_count=int(params.get("expected_count", 1)),
                 count_new_only=bool(params.get("count_new_only", False)),
                 effect_index=int(raw_index) if raw_index is not None else None,
+                verification_tier=int(params.get("verification_tier", 3)),
                 policy_source=policy,
             )
             self.services.db.update_bundle(

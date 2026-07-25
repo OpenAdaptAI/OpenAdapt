@@ -6,6 +6,7 @@ import type {
   QualificationProject,
   QualificationResponse,
   QualificationRisk,
+  QualificationTargetKind,
 } from "../lib/types";
 import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
 
@@ -17,6 +18,50 @@ function identityLabel(node: QualificationNode): string {
   return node.identity.reason || "not armed";
 }
 
+function actionTitle(node: QualificationNode): string {
+  if (/^(click|double click) at \(\d+,\s*\d+\)$/i.test(node.title.trim())) {
+    return node.action === "double_click"
+      ? "Double-click recorded target"
+      : "Click recorded target";
+  }
+  return node.title;
+}
+
+function TargetEvidence({ node }: { node: QualificationNode }) {
+  const rungs = node.resolution?.rungs.filter((rung) => rung.present) || [];
+  if (!rungs.length) {
+    return node.kind === "action" ? (
+      <span className="page-sub">No durable target evidence</span>
+    ) : (
+      <span className="page-sub">Not applicable</span>
+    );
+  }
+  return (
+    <div>
+      <div className="row">
+        {rungs.map((rung) => (
+          <Pill
+            key={`${node.id}-resolution-${rung.name}`}
+            tone={rung.name === node.resolution?.top_rung ? "ok" : "neutral"}
+          >
+            {rung.label}
+          </Pill>
+        ))}
+      </div>
+      {rungs
+        .filter((rung) => rung.detail)
+        .map((rung) => (
+          <div
+            className="page-sub"
+            key={`${node.id}-resolution-detail-${rung.name}`}
+          >
+            {rung.label}: <span className="mono">{rung.detail}</span>
+          </div>
+        ))}
+    </div>
+  );
+}
+
 function certificationState(project: QualificationProject): {
   label: string;
   tone: "ok" | "warn" | "crit";
@@ -24,7 +69,7 @@ function certificationState(project: QualificationProject): {
   if (project.certification_current) {
     return { label: "certified", tone: "ok" };
   }
-  if (project.certification.passed) {
+  if (project.report.passed) {
     return { label: "ready to certify", tone: "warn" };
   }
   return { label: "needs review", tone: "crit" };
@@ -51,6 +96,13 @@ export function Qualification({
   const [keyField, setKeyField] = useState("key");
   const [expectedCount, setExpectedCount] = useState(1);
   const [countNewOnly, setCountNewOnly] = useState(true);
+  const [verificationTier, setVerificationTier] = useState(3);
+  const [targetKind, setTargetKind] = useState<QualificationTargetKind>("web");
+  const [application, setApplication] = useState("");
+  const [applicationVersion, setApplicationVersion] = useState("");
+  const [environmentLabel, setEnvironmentLabel] = useState("");
+  const [capabilities, setCapabilities] = useState("");
+  const [minimumTier, setMinimumTier] = useState(3);
 
   async function load() {
     setBusy("loading");
@@ -63,6 +115,9 @@ export function Qualification({
       if (!response.ok) {
         setError(response.error);
         return;
+      }
+      if (response.migration_required && !application) {
+        setApplication(response.graph.bundle.name);
       }
       setProject(response);
     } catch (reason) {
@@ -110,6 +165,38 @@ export function Qualification({
   const selectedMatchParam = matchParam || parameters[0]?.name || "";
   const selectedValueParam = valueParam || parameters[0]?.name || "";
 
+  async function initializeQualification() {
+    setBusy("initialize");
+    setError("");
+    try {
+      const response = await engineInvoke<QualificationResponse>(
+        CMD.INITIALIZE_QUALIFICATION,
+        {
+          workflow_id: workflowId,
+          target_kind: targetKind,
+          application,
+          application_version: applicationVersion,
+          environment_label: environmentLabel,
+          required_capabilities: capabilities
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+          minimum_effect_tier: minimumTier,
+          policy: POLICY,
+        },
+      );
+      if (!response.ok) {
+        setError(response.error);
+        return;
+      }
+      setProject(response);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function setRisk(stepId: string, risk: QualificationRisk) {
     setBusy(stepId);
     setError("");
@@ -120,6 +207,7 @@ export function Qualification({
           workflow_id: workflowId,
           step_id: stepId,
           risk,
+          explanation: `Operator reviewed this action as ${risk.replaceAll("_", " ")}`,
           policy: POLICY,
         },
       );
@@ -185,6 +273,7 @@ export function Qualification({
           count_new_only:
             effectKind === "record_written" ? countNewOnly : false,
           effect_index: placeholder?.index,
+          verification_tier: verificationTier,
           policy: POLICY,
         },
       );
@@ -248,9 +337,132 @@ export function Qualification({
         </Card>
       ) : (
         <>
+          {project.migration_required && (
+            <Card>
+              <CardHead
+                eyebrow="Environment boundary"
+                title="Start the qualification project"
+                sub="Bind this compiled workflow to the application and operator-defined environment contract it will be qualified in. Desktop hashes the trimmed identifier locally; it does not claim to measure the machine automatically."
+              />
+              <div className="grid grid-2">
+                <div className="field">
+                  <label htmlFor="qualification-target">Execution surface</label>
+                  <select
+                    id="qualification-target"
+                    className="input"
+                    value={targetKind}
+                    onChange={(event) => {
+                      const target = event.target.value as QualificationTargetKind;
+                      setTargetKind(target);
+                    }}
+                  >
+                    <option value="web">Browser</option>
+                    <option value="windows">Windows</option>
+                    <option value="macos">macOS</option>
+                    <option value="linux">Linux</option>
+                    <option value="rdp">RDP</option>
+                    <option value="citrix">Citrix</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="qualification-app">Application</label>
+                  <input
+                    id="qualification-app"
+                    className="input"
+                    value={application}
+                    onChange={(event) => setApplication(event.target.value)}
+                    placeholder="Accuro"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="qualification-app-version">
+                    Application version
+                  </label>
+                  <input
+                    id="qualification-app-version"
+                    className="input"
+                    value={applicationVersion}
+                    onChange={(event) => setApplicationVersion(event.target.value)}
+                    placeholder="2026.1"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="qualification-environment">
+                    Operator-defined environment identifier
+                  </label>
+                  <input
+                    id="qualification-environment"
+                    className="input"
+                    value={environmentLabel}
+                    onChange={(event) => setEnvironmentLabel(event.target.value)}
+                    placeholder="clinic-test-citrix-vda"
+                  />
+                  <span className="page-sub">
+                    SHA-256 of the trimmed UTF-8 identifier. Configure the
+                    qualification runner with this same identifier, or initialize
+                    through the API with a measured environment digest.
+                  </span>
+                </div>
+                <div className="field">
+                  <label htmlFor="qualification-capabilities">
+                    Required runner capabilities
+                  </label>
+                  <input
+                    id="qualification-capabilities"
+                    className="input"
+                    value={capabilities}
+                    onChange={(event) => setCapabilities(event.target.value)}
+                    placeholder="Use names advertised by the selected runner"
+                  />
+                  <span className="page-sub">
+                    Optional, comma-separated, and operator-reviewed. Desktop does
+                    not invent capability names; signed case evidence must advertise
+                    every value entered here.
+                  </span>
+                </div>
+                <div className="field">
+                  <label htmlFor="qualification-minimum-tier">
+                    Minimum verification strength
+                  </label>
+                  <select
+                    id="qualification-minimum-tier"
+                    className="input"
+                    value={minimumTier}
+                    onChange={(event) => setMinimumTier(Number(event.target.value))}
+                  >
+                    <option value={1}>Tier 1 · independent system</option>
+                    <option value={2}>Tier 2 · independent session</option>
+                    <option value={3}>Tier 3 · persisted-state reacquisition</option>
+                    <option value={4}>Tier 4 · immediate screen</option>
+                  </select>
+                </div>
+              </div>
+              <Callout tone="info" title="Existing bundles migrate safely">
+                Starting the project keeps the compiled graph, parameters, identity
+                evidence, effects, and encryption mode. Any older policy-only
+                certification is invalidated because it does not contain this
+                versioned environment and evidence contract.
+              </Callout>
+              <Button
+                variant="primary"
+                disabled={
+                  busy === "initialize" ||
+                  !application.trim() ||
+                  !applicationVersion.trim() ||
+                  !environmentLabel.trim()
+                }
+                onClick={() => void initializeQualification()}
+              >
+                {busy === "initialize"
+                  ? "Starting qualification…"
+                  : "Start qualification project"}
+              </Button>
+            </Card>
+          )}
+
           <Card>
             <CardHead
-              eyebrow={project.policy}
+              eyebrow={project.qualification_schema}
               title="Qualification contract"
               sub={
                 digest
@@ -260,37 +472,50 @@ export function Qualification({
             />
             <div className="metrics">
               <div className="metric">
-                <span className="label">Actions</span>
-                <span className="metric-value">{project.graph.bundle.action_count}</span>
-              </div>
-              <div className="metric">
-                <span className="label">Irreversible</span>
+                <span className="label">Actions reviewed</span>
                 <span className="metric-value">
-                  {project.graph.bundle.irreversible_count}
+                  {project.project
+                    ? Object.keys(project.controls.actions).filter(
+                        (id) =>
+                          project.controls.actions[id].classification
+                            ?.operator_confirmed,
+                      ).length
+                    : 0}
+                  /{project.report.action_count}
                 </span>
               </div>
               <div className="metric">
-                <span className="label">Identity gates</span>
+                <span className="label">Consequential</span>
                 <span className="metric-value">
-                  {project.graph.bundle.identity_armed_count}
+                  {project.report.consequential_action_count}
                 </span>
               </div>
               <div className="metric">
-                <span className="label">Effect contracts</span>
-                <span className="metric-value">{project.graph.bundle.effect_count}</span>
+                <span className="label">Identity coverage</span>
+                <span className="metric-value">
+                  {project.report.identity_covered_action_count}/
+                  {project.report.consequential_action_count}
+                </span>
+              </div>
+              <div className="metric">
+                <span className="label">Effect coverage</span>
+                <span className="metric-value">
+                  {project.report.effect_covered_action_count}/
+                  {project.report.effect_required_action_count}
+                </span>
               </div>
             </div>
             <div className="row" style={{ marginTop: "var(--space-4)" }}>
               {state && <Pill tone={state.tone}>{state.label}</Pill>}
               <span className="page-sub">
-                {project.graph.bundle.encrypted
-                  ? "sealed and encrypted at rest"
-                  : "integrity sealed"}
+                {project.project
+                  ? `${project.project.environment.application} ${project.project.environment.application_version} · ${project.project.environment.target_kind}`
+                  : "environment boundary not initialized"}
               </span>
               <span className="spacer" />
               <Button
                 variant="primary"
-                disabled={busy === "certify"}
+                disabled={busy === "certify" || project.migration_required}
                 onClick={certify}
               >
                 {busy === "certify" ? "Certifying…" : "Run certification"}
@@ -310,6 +535,7 @@ export function Qualification({
                   <th className="num">#</th>
                   <th>Node</th>
                   <th>Type</th>
+                  <th>Target evidence</th>
                   <th>Next</th>
                 </tr>
               </thead>
@@ -318,7 +544,7 @@ export function Qualification({
                   <tr key={`graph-${node.id}`}>
                     <td className="num">{node.index + 1}</td>
                     <td>
-                      <strong>{node.title}</strong>
+                      <strong>{actionTitle(node)}</strong>
                       <div className="page-sub mono">{node.id}</div>
                       {node.badges.length > 0 && (
                         <div className="row" style={{ marginTop: "var(--space-1)" }}>
@@ -334,6 +560,9 @@ export function Qualification({
                       <Pill tone={node.kind === "terminal" ? "ok" : "neutral"}>
                         {node.kind}
                       </Pill>
+                    </td>
+                    <td>
+                      <TargetEvidence node={node} />
                     </td>
                     <td>
                       {(edgesBySource.get(node.id) || []).map((edge, index) => (
@@ -371,16 +600,23 @@ export function Qualification({
                 {actions.map((node) => (
                   <tr key={node.id}>
                     <td>
-                      <strong>{node.title}</strong>
+                      <strong>{actionTitle(node)}</strong>
                       <div className="page-sub mono">
                         {node.action} · {node.id}
                       </div>
+                      <TargetEvidence node={node} />
                     </td>
                     <td>
                       <select
                         className="input"
-                        aria-label={`Risk for ${node.title}`}
-                        value={node.risk || "reversible"}
+                        aria-label={`Risk for ${actionTitle(node)}`}
+                        value={
+                          project.controls.actions[node.id]?.classification
+                            ?.classification === "unknown"
+                            ? ""
+                            : project.controls.actions[node.id]?.classification
+                                ?.classification || ""
+                        }
                         disabled={busy === node.id}
                         onChange={(event) =>
                           void setRisk(
@@ -389,7 +625,12 @@ export function Qualification({
                           )
                         }
                       >
-                        <option value="reversible">Reversible</option>
+                        <option value="" disabled>
+                          Review required
+                        </option>
+                        <option value="read_only">Read-only</option>
+                        <option value="state_changing">State-changing</option>
+                        <option value="consequential">Consequential</option>
                         <option value="irreversible">Irreversible</option>
                       </select>
                     </td>
@@ -445,14 +686,19 @@ export function Qualification({
               >
                 {actions.map((action) => (
                   <option key={`contract-${action.id}`} value={action.id}>
-                    {action.risk === "irreversible" ? "Consequential: " : ""}
-                    {action.title}
+                    {project.controls.actions[action.id]?.classification
+                      ?.classification === "consequential" ||
+                    project.controls.actions[action.id]?.classification
+                      ?.classification === "irreversible"
+                      ? "Consequential: "
+                      : ""}
+                    {actionTitle(action)}
                   </option>
                 ))}
               </select>
             </div>
 
-            {selectedAction && selectedControls && (
+            {selectedAction && selectedControls && project.project && (
               <div className="grid grid-2">
                 <div>
                   <h3>Identity before actuation</h3>
@@ -535,6 +781,30 @@ export function Qualification({
                           <option value="record_written">Record written exactly once</option>
                           <option value="field_equals">Persisted field equals value</option>
                         </select>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="effect-tier">Verification strength</label>
+                        <select
+                          id="effect-tier"
+                          className="input"
+                          value={verificationTier}
+                          onChange={(event) =>
+                            setVerificationTier(Number(event.target.value))
+                          }
+                        >
+                          <option value={1}>Tier 1 · independent system</option>
+                          <option value={2}>Tier 2 · independent session</option>
+                          <option value={3}>
+                            Tier 3 · persisted-state reacquisition
+                          </option>
+                          <option value={4}>Tier 4 · immediate screen</option>
+                        </select>
+                        <span className="page-sub">
+                          The project requires Tier{" "}
+                          {project.project?.minimum_effect_tier ?? minimumTier} or
+                          stronger. Consequential writes cannot qualify from the
+                          current screen alone.
+                        </span>
                       </div>
                       <div className="grid grid-2">
                         <div className="field">
@@ -676,7 +946,74 @@ export function Qualification({
             )}
           </Card>
 
-          {(project.certification.violations.length > 0 ||
+          {project.project && (
+            <Card>
+              <CardHead
+                eyebrow={`Revision ${project.project.revision}`}
+                title="Qualification cases"
+                sub="Representative runs must finish VERIFIED. Ambiguity, wrong or stale identity, and weak or missing effects must halt with signed evidence from the declared runner."
+              />
+              <div className="metrics">
+                <div className="metric">
+                  <span className="label">Required cases</span>
+                  <span className="metric-value">{project.report.case_count}</span>
+                </div>
+                <div className="metric">
+                  <span className="label">Passed this revision</span>
+                  <span className="metric-value">
+                    {project.report.passed_case_count}
+                  </span>
+                </div>
+                <div className="metric">
+                  <span className="label">Environment</span>
+                  <span className="metric-value mono">
+                    {project.project.environment.environment_digest.slice(0, 10)}…
+                  </span>
+                </div>
+                <div className="metric">
+                  <span className="label">Runtime</span>
+                  <span className="metric-value">
+                    {project.project.environment.runtime_version}
+                  </span>
+                </div>
+              </div>
+              <div className="page-sub mono" style={{ marginTop: "var(--space-3)" }}>
+                environment contract SHA-256{" "}
+                {project.project.environment.environment_digest}
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Case</th>
+                    <th>Expected</th>
+                    <th>Current evidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {project.project.cases
+                    .filter((item) => item.required)
+                    .map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <strong>{item.kind.replaceAll("_", " ")}</strong>
+                          <div className="page-sub mono">{item.id}</div>
+                        </td>
+                        <td>{item.expected_outcome.toUpperCase()}</td>
+                        <td>
+                          <Pill tone={item.results.length ? "ok" : "warn"}>
+                            {item.results.length
+                              ? `${item.results.length} imported`
+                              : "run required"}
+                          </Pill>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+
+          {(project.report.refusals.length > 0 ||
             project.lint.findings.length > 0) && (
             <Card>
               <CardHead
@@ -684,22 +1021,27 @@ export function Qualification({
                 title="What must be resolved"
                 sub="Every item names the exact action and contract that prevented certification."
               />
-              {project.certification.violations.map((violation, index) => (
+              {project.report.refusals.map((refusal, index) => (
                 <Callout
-                  key={`${violation.rule}-${violation.step_id || index}`}
+                  key={`${refusal.code}-${refusal.step_id || refusal.case_id || index}`}
                   tone="warn"
-                  title={violation.step_id || violation.rule}
+                  title={
+                    refusal.step_id ||
+                    refusal.case_id ||
+                    refusal.code.replaceAll("_", " ")
+                  }
                 >
-                  {violation.reason}
+                  {refusal.message}
+                  <div className="page-sub mono">{refusal.path}</div>
                 </Callout>
               ))}
               {project.lint.findings
                 .filter(
                   (finding) =>
-                    !project.certification.violations.some(
-                      (violation) =>
-                        violation.step_id === finding.step_id &&
-                        violation.reason.includes(finding.message),
+                    !project.report.refusals.some(
+                      (refusal) =>
+                        refusal.step_id === finding.step_id &&
+                        refusal.message.includes(finding.message),
                     ),
                 )
                 .map((finding, index) => (

@@ -1,66 +1,109 @@
-"""Desktop adapter for OpenAdapt Flow's qualification mechanisms.
+"""Desktop adapter for Flow's versioned qualification-project contract.
 
-The canonical workflow schema, traversal, graph projection, linter, policy
-evaluator, manifest sealing, and encryption remain owned by ``openadapt-flow``.
-This module gives the installed Desktop cockpit a small, writable API over
-those mechanisms so an operator does not have to edit ``workflow.json``.
+``openadapt-flow`` owns the executable workflow, qualification models,
+evaluation, certification, sealing, and encryption.  Desktop projects those
+canonical objects into a UI-friendly response and supplies writable operations
+so operators never need to edit ``workflow.json`` or an internal manifest.
+
+Older bundles remain inspectable.  They expose an explicit initialization path
+that creates ``workflow.qualification`` and invalidates any legacy policy-only
+certification; Desktop never translates an old certification into evidence it
+did not produce.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import hashlib
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
 
-QualificationRisk = Literal["reversible", "irreversible"]
+QualificationRisk = Literal[
+    "read_only",
+    "state_changing",
+    "consequential",
+    "irreversible",
+]
 QualificationEffectKind = Literal["record_written", "field_equals"]
+QualificationTargetKind = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
 DEFAULT_QUALIFICATION_POLICY = "clinical-write"
+ENVIRONMENT_IDENTIFIER_DERIVATION = "sha256(trimmed UTF-8 operator identifier)"
 
 
 class QualificationError(RuntimeError):
     """A qualification request was refused without changing the bundle."""
 
 
-def _flow_api():
-    """Load the pinned Flow API only when the qualification surface is used."""
+def _flow_api() -> dict[str, Any]:
+    """Load the pinned canonical Flow API only when qualification is used."""
 
     try:
         from openadapt_flow.ir import Workflow
         from openadapt_flow.policy import evaluate_policy, lint_workflow, load_policy
+        from openadapt_flow.qualification import (
+            ActionRiskClass,
+            ActionRiskClassification,
+            EnvironmentBoundary,
+            IdentityEnforcement,
+            IdentityPolicy,
+            VerificationTier,
+            certify_project,
+            evaluate_qualification,
+            init_project,
+            save_qualified_workflow,
+            set_action_classification,
+            set_effect_policy,
+            set_identity_policy,
+            workflow_contract_sha256,
+        )
         from openadapt_flow.traversal import iter_workflow_steps
         from openadapt_flow.visualize import build_program_graph
-    except ImportError as exc:  # pragma: no cover - installed app always bundles Flow
+    except (ImportError, AttributeError) as exc:  # pragma: no cover - release gate
         raise QualificationError(
-            "The bundled OpenAdapt Flow runtime is unavailable. Reinstall OpenAdapt "
-            "Desktop before qualifying this workflow."
+            "This Desktop build requires an OpenAdapt Flow runtime with the "
+            "versioned qualification-project contract. Update OpenAdapt Desktop "
+            "before qualifying this workflow."
         ) from exc
-    return (
-        Workflow,
-        evaluate_policy,
-        lint_workflow,
-        load_policy,
-        iter_workflow_steps,
-        build_program_graph,
-    )
+    return {
+        "Workflow": Workflow,
+        "evaluate_policy": evaluate_policy,
+        "lint_workflow": lint_workflow,
+        "load_policy": load_policy,
+        "iter_workflow_steps": iter_workflow_steps,
+        "build_program_graph": build_program_graph,
+        "ActionRiskClass": ActionRiskClass,
+        "ActionRiskClassification": ActionRiskClassification,
+        "EnvironmentBoundary": EnvironmentBoundary,
+        "IdentityEnforcement": IdentityEnforcement,
+        "IdentityPolicy": IdentityPolicy,
+        "VerificationTier": VerificationTier,
+        "certify_project": certify_project,
+        "evaluate_qualification": evaluate_qualification,
+        "init_project": init_project,
+        "save_qualified_workflow": save_qualified_workflow,
+        "set_action_classification": set_action_classification,
+        "set_effect_policy": set_effect_policy,
+        "set_identity_policy": set_identity_policy,
+        "workflow_contract_sha256": workflow_contract_sha256,
+    }
 
 
 def _load(bundle_dir: Path):
-    Workflow, *_rest = _flow_api()
+    api = _flow_api()
     try:
-        return Workflow.load(bundle_dir)
+        return api["Workflow"].load(bundle_dir)
     except Exception as exc:
         if "duplicate_step_id" in str(exc):
             raise QualificationError(
-                "Action identity is ambiguous because a step id is defined more than once; "
-                "no qualification change was written."
+                "Action identity is ambiguous because a step id is defined more than "
+                "once; no qualification change was written."
             ) from exc
         raise QualificationError(f"Cannot open the sealed workflow bundle: {exc}") from exc
 
 
 def _policy(source: str):
-    _Workflow, _evaluate, _lint, load_policy, _iter, _graph = _flow_api()
     try:
-        return load_policy(source)
+        return _flow_api()["load_policy"](source)
     except (FileNotFoundError, ValueError) as exc:
         raise QualificationError(str(exc)) from exc
 
@@ -69,11 +112,7 @@ def _effect_api():
     """Load Flow's canonical effect models without duplicating their schema."""
 
     try:
-        from openadapt_flow.runtime.effects.effect import (
-            Effect,
-            EffectKind,
-            ValueExpr,
-        )
+        from openadapt_flow.runtime.effects.effect import Effect, EffectKind, ValueExpr
     except ImportError as exc:  # pragma: no cover - installed app bundles Flow
         raise QualificationError(
             "The bundled OpenAdapt Flow effect runtime is unavailable. "
@@ -82,43 +121,31 @@ def _effect_api():
     return Effect, EffectKind, ValueExpr
 
 
-def _reset_certification(workflow) -> None:
-    """Invalidate certification whenever an operator changes workflow intent."""
-
-    manifest = workflow.manifest
-    if manifest is None:
-        return
-    provenance = manifest.provenance
-    provenance.policy_name = None
-    provenance.certified = False
-    provenance.certification_status = None
-    provenance.certified_at = None
-    provenance.expires_at = None
-
-
-def _certification_is_current(provenance, *, policy_name: str, policy_passed: bool) -> bool:
-    """Return whether the sealed certification matches the live policy result."""
-
-    if (
-        provenance is None
-        or not provenance.certified
-        or provenance.certification_status != "certified"
-        or provenance.policy_name != policy_name
-        or not policy_passed
-    ):
-        return False
-    if not provenance.expires_at:
-        return True
+def _runtime_version() -> str:
     try:
-        expiry_text = provenance.expires_at
-        if expiry_text.endswith("Z"):
-            expiry_text = f"{expiry_text[:-1]}+00:00"
-        expiry = datetime.fromisoformat(expiry_text)
-        if expiry.tzinfo is None:
-            return False
-        return expiry.astimezone(timezone.utc) > datetime.now(timezone.utc)
-    except (TypeError, ValueError):
-        return False
+        return version("openadapt-flow")
+    except PackageNotFoundError:  # editable/source development
+        try:
+            from openadapt_flow import __version__
+
+            return str(__version__)
+        except (ImportError, AttributeError):
+            return "source"
+
+
+def environment_digest_from_identifier(identifier: str) -> str:
+    """Derive a reproducible contract digest from an operator-defined identifier.
+
+    This is not an automatic machine measurement.  A runner can reproduce the
+    digest only when it is configured with the same trimmed UTF-8 identifier.
+    Environments with a measured identity should pass ``environment_digest``
+    directly instead.
+    """
+
+    normalized = identifier.strip()
+    if not normalized:
+        raise QualificationError("environment identifier cannot be blank")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _actions_for_graph_ref(workflow, action_ref: str) -> list:
@@ -140,18 +167,26 @@ def _actions_for_graph_ref(workflow, action_ref: str) -> list:
             body = workflow.subflows.get(state.loop.body)
             if body is None or state.loop.body in ancestors:
                 continue
-            visit(
-                body,
-                f"{node_id}::",
-                ancestors | {state.loop.body},
-            )
+            visit(body, f"{node_id}::", ancestors | {state.loop.body})
 
     visit(workflow.program, "", frozenset())
     return matches
 
 
+def _resolve_action(workflow, action_ref: str):
+    if not action_ref:
+        raise QualificationError("step_id is required")
+    matches = _actions_for_graph_ref(workflow, action_ref)
+    if len(matches) != 1:
+        detail = "not found" if not matches else f"ambiguous ({len(matches)} matches)"
+        raise QualificationError(
+            f"Action {action_ref!r} is {detail}; no qualification change was written."
+        )
+    return matches[0]
+
+
 def _identity_sources(step) -> list[dict[str, Any]]:
-    """Project only identity evidence the canonical Flow runtime can consume."""
+    """Project only identity evidence the canonical Flow runtime consumes."""
 
     anchor = step.anchor
     if anchor is None:
@@ -163,7 +198,7 @@ def _identity_sources(step) -> list[dict[str, Any]]:
             {
                 "kind": "structured",
                 "label": "Application identity fields",
-                "match": "Exact after case and whitespace normalization",
+                "match": "Canonical Flow identity ladder",
             }
         )
     if anchor.identifier_crop and anchor.identifier_region:
@@ -171,7 +206,7 @@ def _identity_sources(step) -> list[dict[str, Any]]:
             {
                 "kind": "identifier_region",
                 "label": "Captured identifier region",
-                "match": "Conservative pixel comparison before actuation",
+                "match": "Canonical Flow identity ladder",
                 "region": list(anchor.identifier_region),
             }
         )
@@ -180,7 +215,7 @@ def _identity_sources(step) -> list[dict[str, Any]]:
             {
                 "kind": "captured_context",
                 "label": "Captured row identity",
-                "match": "Conservative OCR identity matching",
+                "match": "Canonical Flow identity ladder",
             }
         )
     return sources
@@ -194,7 +229,7 @@ def _expr_view(expr) -> dict[str, Any] | None:
     return {"source": "literal", "value": expr.literal}
 
 
-def _effect_view(index: int, effect) -> dict[str, Any]:
+def _effect_view(index: int, effect, verification_policy) -> dict[str, Any]:
     return {
         "index": index,
         "kind": effect.kind.value,
@@ -207,16 +242,20 @@ def _effect_view(index: int, effect) -> dict[str, Any]:
         "count_new_only": effect.count_new_only,
         "risk": effect.risk,
         "needs_operator_confirmation": effect.needs_operator_confirmation,
+        "verification_tier": (
+            int(verification_policy.tier) if verification_policy is not None else None
+        ),
+        "effect_contract_hash": effect.contract_hash(),
     }
 
 
 def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
-    """Return editable controls projected from the live Flow workflow."""
+    """Project writable controls from the executable workflow and canonical project."""
 
     parameter_names = sorted(
         set(workflow.params) | set(workflow.param_specs) | set(workflow.secret_params)
     )
-    parameters: list[dict[str, Any]] = []
+    parameters = []
     for name in parameter_names:
         spec = workflow.param_specs.get(name)
         parameters.append(
@@ -227,6 +266,15 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    project = workflow.qualification
+    effect_policies = (
+        {
+            (item.step_id, item.effect_index): item
+            for item in project.effect_policies
+        }
+        if project is not None
+        else {}
+    )
     actions: dict[str, dict[str, Any]] = {}
     for node in graph["nodes"]:
         if node["kind"] != "action":
@@ -236,27 +284,69 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
             continue
         step = matches[0]
         sources = _identity_sources(step)
+        classification = (
+            project.action_classifications.get(step.id) if project is not None else None
+        )
+        identity_policy = (
+            project.identity_policies.get(step.id) if project is not None else None
+        )
         actions[node["id"]] = {
+            "step_id": step.id,
+            "classification": (
+                classification.model_dump(mode="json") if classification else None
+            ),
             "identity": {
                 "can_arm": bool(sources),
                 "armed": bool(step.identity_armed),
                 "sources": sources,
+                "policy": (
+                    identity_policy.model_dump(mode="json") if identity_policy else None
+                ),
             },
-            "effects": [_effect_view(index, effect) for index, effect in enumerate(step.effects)],
+            "effects": [
+                _effect_view(
+                    index,
+                    effect,
+                    effect_policies.get((step.id, index)),
+                )
+                for index, effect in enumerate(step.effects)
+            ],
         }
     return {"parameters": parameters, "actions": actions}
 
 
 def _save(workflow, bundle_dir: Path) -> None:
-    """Reseal the exact bundle, preserving its existing at-rest mode."""
+    """Reseal the bundle through Flow's canonical qualified-artifact saver."""
 
     try:
-        workflow.save(bundle_dir, encrypt=bool(workflow.encrypted))
-        # A successful round trip proves that the new digest and asset seal are
-        # internally consistent before the UI reports the change as complete.
+        _flow_api()["save_qualified_workflow"](workflow, bundle_dir)
         type(workflow).load(bundle_dir)
     except Exception as exc:
         raise QualificationError(f"Could not reseal the qualified bundle: {exc}") from exc
+
+
+def _certification_is_current(workflow, report, *, policy_name: str) -> bool:
+    project = workflow.qualification
+    if project is None or project.last_certification is None or not report.passed:
+        return False
+    certification = project.last_certification
+    provenance = workflow.manifest.provenance if workflow.manifest else None
+    api = _flow_api()
+    return bool(
+        certification.passed
+        and certification.project_revision == project.revision
+        and certification.project_contract_sha256 == project.contract_sha256()
+        and certification.workflow_contract_sha256
+        == api["workflow_contract_sha256"](workflow)
+        and certification.environment_contract_sha256
+        == project.environment.contract_sha256()
+        and certification.policy_name == policy_name
+        and certification.report_sha256 == report.report_sha256()
+        and provenance is not None
+        and provenance.certified
+        and provenance.certification_status == "certified"
+        and provenance.policy_name == policy_name
+    )
 
 
 def inspect_bundle(
@@ -265,36 +355,43 @@ def inspect_bundle(
     workflow_id: str,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
 ) -> dict:
-    """Return the canonical graph and structured qualification findings."""
+    """Return graph, canonical project/report, controls, and exact refusals."""
 
-    (
-        _Workflow,
-        evaluate_policy,
-        lint_workflow,
-        _load_policy,
-        _iter_workflow_steps,
-        build_program_graph,
-    ) = _flow_api()
+    api = _flow_api()
     workflow = _load(bundle_dir)
     policy = _policy(policy_source)
-    graph = build_program_graph(workflow)
-    graph_payload = graph.model_dump(mode="json")
-    lint = lint_workflow(workflow)
-    certification = evaluate_policy(workflow, policy)
+    graph_payload = api["build_program_graph"](workflow).model_dump(mode="json")
+    lint = api["lint_workflow"](workflow)
+    runtime_policy = api["evaluate_policy"](workflow, policy)
+    report = api["evaluate_qualification"](
+        workflow,
+        policy=policy,
+        evidence_root=bundle_dir / "qualification-evidence",
+    )
     provenance = workflow.manifest.provenance if workflow.manifest else None
+    project = workflow.qualification
     return {
         "ok": True,
         "workflow_id": workflow_id,
         "policy": policy.name,
-        "certification_current": _certification_is_current(
-            provenance,
-            policy_name=policy.name,
-            policy_passed=certification.passed,
+        "qualification_schema": (
+            project.schema_version if project is not None else "openadapt.qualification-project/v1"
         ),
+        "project": project.model_dump(mode="json") if project is not None else None,
+        "migration_required": project is None,
+        "certification_current": _certification_is_current(
+            workflow,
+            report,
+            policy_name=policy.name,
+        ),
+        "report": report.model_dump(mode="json"),
         "graph": graph_payload,
         "controls": _qualification_controls(workflow, graph_payload),
         "lint": lint.model_dump(mode="json"),
-        "certification": certification.model_dump(mode="json"),
+        "runtime_policy": runtime_policy.model_dump(mode="json"),
+        # Compatibility alias for the existing frontend while the canonical
+        # report is now the certification source of truth.
+        "certification": runtime_policy.model_dump(mode="json"),
         "provenance": (
             provenance.model_dump(mode="json")
             if provenance is not None
@@ -307,39 +404,108 @@ def inspect_bundle(
     }
 
 
+def initialize_qualification(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    target_kind: QualificationTargetKind,
+    application: str,
+    application_version: str,
+    environment_label: str | None = None,
+    environment_digest: str | None = None,
+    required_capabilities: list[str] | None = None,
+    minimum_effect_tier: int = 3,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+) -> dict:
+    """Attach the canonical v1 project to an existing compiled workflow."""
+
+    if target_kind not in {"web", "windows", "macos", "linux", "rdp", "citrix"}:
+        raise QualificationError("target_kind is not a supported execution surface")
+    application = application.strip()
+    application_version = application_version.strip()
+    if not application or not application_version:
+        raise QualificationError("application and application_version are required")
+    if environment_digest is None:
+        if environment_label is None:
+            raise QualificationError(
+                "environment_label or an exact environment_digest is required"
+            )
+        environment_digest = environment_digest_from_identifier(environment_label)
+    elif len(environment_digest) != 64:
+        raise QualificationError("environment_digest must be a SHA-256 hex digest")
+
+    api = _flow_api()
+    workflow = _load(bundle_dir)
+    if workflow.qualification is not None:
+        raise QualificationError(
+            "This workflow already has a qualification project; reopen it to continue."
+        )
+    try:
+        environment = api["EnvironmentBoundary"](
+            target_kind=target_kind,
+            application=application,
+            application_version=application_version,
+            environment_digest=environment_digest,
+            runtime_version=_runtime_version(),
+            required_capabilities=required_capabilities or [],
+        )
+        api["init_project"](
+            workflow,
+            environment=environment,
+            minimum_effect_tier=api["VerificationTier"](minimum_effect_tier),
+        )
+        _save(workflow, bundle_dir)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+    )
+
+
 def set_action_risk(
     bundle_dir: Path,
     *,
     workflow_id: str,
     step_id: str,
     risk: QualificationRisk,
+    explanation: str | None = None,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
 ) -> dict:
-    """Correct one action's risk and invalidate any prior certification."""
+    """Set canonical business risk while preserving executable risk invariants."""
 
-    if risk not in ("reversible", "irreversible"):
-        raise QualificationError("risk must be reversible or irreversible")
-    if not step_id:
-        raise QualificationError("step_id is required")
-
-    _Workflow, _evaluate, _lint, _load_policy, _iter_workflow_steps, _graph = _flow_api()
-    workflow = _load(bundle_dir)
-    matches = _actions_for_graph_ref(workflow, step_id)
-    if len(matches) != 1:
-        detail = "not found" if not matches else f"ambiguous ({len(matches)} matches)"
+    if risk not in {"read_only", "state_changing", "consequential", "irreversible"}:
         raise QualificationError(
-            f"Action {step_id!r} is {detail}; no qualification change was written."
+            "risk must be read_only, state_changing, consequential, or irreversible"
         )
-    step = matches[0]
-    if step.risk != risk or any(effect.risk != risk for effect in step.effects):
-        step.risk = risk
-        # Flow's effect runtime consults Effect.risk when deciding whether a
-        # refuted write enters governed reconciliation. Keep the action and
-        # every bound effect on the same operator-reviewed classification.
+    api = _flow_api()
+    workflow = _load(bundle_dir)
+    if workflow.qualification is None:
+        raise QualificationError(
+            "Initialize the qualification boundary before reviewing action risk."
+        )
+    step = _resolve_action(workflow, step_id)
+    if risk == "irreversible":
+        step.risk = "irreversible"
         for effect in step.effects:
-            effect.risk = risk
-        _reset_certification(workflow)
+            effect.risk = "irreversible"
+    try:
+        api["set_action_classification"](
+            workflow,
+            api["ActionRiskClassification"](
+                step_id=step.id,
+                classification=api["ActionRiskClass"](risk),
+                explanation=(
+                    (explanation or "").strip()
+                    or f"Operator reviewed this action as {risk.replace('_', ' ')}"
+                ),
+                operator_confirmed=True,
+            ),
+        )
         _save(workflow, bundle_dir)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
@@ -354,19 +520,15 @@ def arm_action_identity(
     step_id: str,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
 ) -> dict:
-    """Arm Flow's existing identity ladder from evidence retained at compile time."""
+    """Arm retained identity evidence and bind canonical-ladder enforcement."""
 
-    if not step_id:
-        raise QualificationError("step_id is required")
-    _Workflow, _evaluate, _lint, _load_policy, _iter, _graph = _flow_api()
+    api = _flow_api()
     workflow = _load(bundle_dir)
-    matches = _actions_for_graph_ref(workflow, step_id)
-    if len(matches) != 1:
-        detail = "not found" if not matches else f"ambiguous ({len(matches)} matches)"
+    if workflow.qualification is None:
         raise QualificationError(
-            f"Action {step_id!r} is {detail}; no qualification change was written."
+            "Initialize the qualification boundary before arming identity."
         )
-    step = matches[0]
+    step = _resolve_action(workflow, step_id)
     sources = _identity_sources(step)
     if not sources:
         raise QualificationError(
@@ -374,11 +536,19 @@ def arm_action_identity(
             "or captured row identity. Record or teach the action with identity "
             "evidence before arming it."
         )
-    if step.identity_armed is not True:
-        step.identity_armed = True
-        step.identity_unarmed_reason = None
-        _reset_certification(workflow)
+    step.identity_armed = True
+    step.identity_unarmed_reason = None
+    try:
+        api["set_identity_policy"](
+            workflow,
+            api["IdentityPolicy"](
+                step_id=step.id,
+                enforcement=api["IdentityEnforcement"].CANONICAL_LADDER,
+            ),
+        )
         _save(workflow, bundle_dir)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
@@ -401,12 +571,11 @@ def bind_action_effect(
     expected_count: int = 1,
     count_new_only: bool = False,
     effect_index: int | None = None,
+    verification_tier: int = 3,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
 ) -> dict:
-    """Bind one canonical Flow ``Effect`` using workflow parameter references."""
+    """Bind an executable Flow effect and its canonical evidence-strength policy."""
 
-    if not step_id:
-        raise QualificationError("step_id is required")
     if kind not in ("record_written", "field_equals"):
         raise QualificationError("kind must be record_written or field_equals")
     if not match_field.strip():
@@ -416,19 +585,22 @@ def bind_action_effect(
     if not key_field.strip():
         raise QualificationError("key_field is required")
 
-    _Workflow, _evaluate, _lint, _load_policy, _iter, _graph = _flow_api()
+    api = _flow_api()
     Effect, EffectKind, ValueExpr = _effect_api()
     workflow = _load(bundle_dir)
-    matches = _actions_for_graph_ref(workflow, step_id)
-    if len(matches) != 1:
-        detail = "not found" if not matches else f"ambiguous ({len(matches)} matches)"
+    project = workflow.qualification
+    if project is None:
         raise QualificationError(
-            f"Action {step_id!r} is {detail}; no qualification change was written."
+            "Initialize the qualification boundary before binding an effect."
         )
-    step = matches[0]
+    step = _resolve_action(workflow, step_id)
     secrets = set(workflow.secret_params)
     parameters = set(workflow.params) | set(workflow.param_specs) | secrets
-    requested = {name for name in (match_param, value_param, idempotency_param) if name is not None}
+    requested = {
+        name
+        for name in (match_param, value_param, idempotency_param)
+        if name is not None
+    }
     unknown = sorted(requested - parameters)
     if unknown:
         raise QualificationError(
@@ -453,7 +625,9 @@ def bind_action_effect(
         field=field.strip() if field else None,
         value=ValueExpr(param=value_param) if value_param else None,
         expected_count=expected_count,
-        idempotency_key=(ValueExpr(param=idempotency_param) if idempotency_param else None),
+        idempotency_key=(
+            ValueExpr(param=idempotency_param) if idempotency_param else None
+        ),
         key_field=key_field.strip(),
         count_new_only=count_new_only,
         risk=step.risk,
@@ -469,29 +643,43 @@ def bind_action_effect(
         if len(placeholders) == 1:
             effect_index = placeholders[0]
     if effect_index is None:
-        if effect not in step.effects:
-            step.effects.append(effect)
+        if effect in step.effects:
+            effect_index = step.effects.index(effect)
         else:
-            return inspect_bundle(
-                bundle_dir,
-                workflow_id=workflow_id,
-                policy_source=policy_source,
-            )
+            step.effects.append(effect)
+            effect_index = len(step.effects) - 1
     else:
         if effect_index < 0 or effect_index >= len(step.effects):
             raise QualificationError(
                 f"Effect index {effect_index} is outside this action's effect inventory"
             )
-        if step.effects[effect_index] == effect:
-            return inspect_bundle(
-                bundle_dir,
-                workflow_id=workflow_id,
-                policy_source=policy_source,
-            )
         step.effects[effect_index] = effect
 
-    _reset_certification(workflow)
-    _save(workflow, bundle_dir)
+    try:
+        classification = project.action_classifications.get(step.id)
+        if classification is None or classification.classification.value in {
+            "unknown",
+            "read_only",
+        }:
+            inferred_risk = "irreversible" if step.risk == "irreversible" else "state_changing"
+            api["set_action_classification"](
+                workflow,
+                api["ActionRiskClassification"](
+                    step_id=step.id,
+                    classification=api["ActionRiskClass"](inferred_risk),
+                    explanation="Operator bound a persisted business-effect contract",
+                    operator_confirmed=True,
+                ),
+            )
+        api["set_effect_policy"](
+            workflow,
+            step_id=step.id,
+            effect_index=effect_index,
+            tier=api["VerificationTier"](verification_tier),
+        )
+        _save(workflow, bundle_dir)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
@@ -505,18 +693,24 @@ def certify_bundle(
     workflow_id: str,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
 ) -> dict:
-    """Evaluate, persist, and reseal one exact policy-certification attempt."""
+    """Run Flow's canonical certification and persist the versioned report."""
 
-    _Workflow, evaluate_policy, _lint, _load_policy, _iter, _graph = _flow_api()
+    api = _flow_api()
     workflow = _load(bundle_dir)
+    if workflow.qualification is None:
+        raise QualificationError(
+            "Initialize the qualification boundary before running certification."
+        )
     policy = _policy(policy_source)
-    report = evaluate_policy(workflow, policy)
-    workflow.stamp_certification(
-        policy_name=report.policy_name,
-        passed=report.passed,
-        status="certified" if report.passed else "failed",
-    )
-    _save(workflow, bundle_dir)
+    try:
+        report = api["certify_project"](
+            workflow,
+            policy=policy,
+            evidence_root=bundle_dir / "qualification-evidence",
+        )
+        _save(workflow, bundle_dir)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
     result = inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,

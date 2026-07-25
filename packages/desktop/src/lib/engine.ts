@@ -32,6 +32,7 @@ export const CMD = {
   GET_RUN_REPORT: "get_run_report",
   TEACH_FIX: "teach_fix",
   GET_QUALIFICATION: "get_qualification",
+  INITIALIZE_QUALIFICATION: "initialize_qualification",
   SET_QUALIFICATION_RISK: "set_qualification_risk",
   ARM_QUALIFICATION_IDENTITY: "arm_qualification_identity",
   BIND_QUALIFICATION_EFFECT: "bind_qualification_effect",

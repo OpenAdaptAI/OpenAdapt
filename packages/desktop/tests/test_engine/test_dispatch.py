@@ -1176,6 +1176,7 @@ class TestMisc:
             "get_run_report",
             "teach_fix",
             "get_qualification",
+            "initialize_qualification",
             "set_qualification_risk",
             "arm_qualification_identity",
             "bind_qualification_effect",

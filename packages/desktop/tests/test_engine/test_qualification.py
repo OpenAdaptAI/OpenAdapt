@@ -1,23 +1,22 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
 
-pytest.importorskip("openadapt_flow")
+pytest.importorskip("openadapt_flow.qualification")
 
 from openadapt_flow.ir import (  # noqa: E402
     ActionKind,
     Anchor,
+    Landmark,
     ParamSpec,
     Step,
+    StructuralLocator,
     Workflow,
-    lift_to_program,
 )
-from openadapt_flow.runtime.effects.effect import (  # noqa: E402
-    Effect,
-    EffectKind,
-)
+from openadapt_flow.runtime.effects.effect import Effect, EffectKind  # noqa: E402
 from openadapt_flow.traversal import iter_workflow_steps  # noqa: E402
 
 from engine.config import EngineConfig
@@ -28,282 +27,367 @@ from engine.qualification import (
     arm_action_identity,
     bind_action_effect,
     certify_bundle,
+    environment_digest_from_identifier,
+    initialize_qualification,
     inspect_bundle,
     set_action_risk,
 )
 
 
-def _bundle(path: Path, *steps: Step) -> Path:
-    workflow = Workflow(name="qualification-test", steps=list(steps))
+def _bundle(path: Path, *steps: Step, params: dict[str, str] | None = None) -> Path:
+    workflow = Workflow(
+        name="qualification-test",
+        params=params or {},
+        param_specs={
+            name: ParamSpec(name=name) for name in (params or {})
+        },
+        steps=list(steps),
+    )
     workflow.save(path)
     return path
 
 
-def test_ambiguous_step_id_refuses_without_changing_bundle(tmp_path: Path) -> None:
+def _initialize(bundle: Path, *, target_kind: str = "web") -> dict:
+    return initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind=target_kind,
+        application="Reference app",
+        application_version="1.0",
+        environment_label="reference-test-environment",
+        required_capabilities=["structural_observation", "actuation"],
+        minimum_effect_tier=3,
+    )
+
+
+def test_existing_bundle_initializes_canonical_project_and_invalidates_legacy_certification(
+    tmp_path: Path,
+) -> None:
     bundle = _bundle(
         tmp_path / "bundle",
-        Step(id="duplicate", intent="Wait once", action=ActionKind.WAIT),
-        Step(id="duplicate", intent="Wait twice", action=ActionKind.WAIT),
+        Step(id="settle", intent="Wait for settled state", action=ActionKind.WAIT),
     )
+    workflow = Workflow.load(bundle)
+    workflow.stamp_certification("clinical-write", True)
+    workflow.save(bundle)
+
+    before = inspect_bundle(bundle, workflow_id="wf-1")
+    result = _initialize(bundle, target_kind="citrix")
+    persisted = Workflow.load(bundle)
+
+    assert before["migration_required"] is True
+    assert before["report"]["refusals"][0]["code"] == "project_missing"
+    assert result["qualification_schema"] == "openadapt.qualification-project/v1"
+    assert result["report"]["schema_version"] == "openadapt.qualification-report/v1"
+    assert result["migration_required"] is False
+    assert result["project"]["environment"]["target_kind"] == "citrix"
+    assert result["project"]["environment"]["environment_digest"] == hashlib.sha256(
+        b"reference-test-environment"
+    ).hexdigest()
+    assert persisted.qualification is not None
+    assert persisted.manifest.provenance.certified is False
+    assert persisted.manifest.provenance.policy_name is None
+
+
+def test_environment_identifier_digest_is_reproducible_but_explicitly_operator_defined(
+    tmp_path: Path,
+) -> None:
+    digest = environment_digest_from_identifier("  clinic-test-citrix-vda  ")
+    assert digest == hashlib.sha256(b"clinic-test-citrix-vda").hexdigest()
+    assert digest == environment_digest_from_identifier("clinic-test-citrix-vda")
+    assert digest != environment_digest_from_identifier("clinic-prod-citrix-vda")
+
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    exact_measured_digest = "a" * 64
+    result = initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind="citrix",
+        application="Reference app",
+        application_version="1",
+        environment_digest=exact_measured_digest,
+        required_capabilities=[],
+    )
+    assert result["project"]["environment"]["environment_digest"] == exact_measured_digest
+
+
+def test_inspection_exposes_durable_target_evidence_without_flattening_to_coordinates(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(
+            id="submit",
+            intent="click at (815, 369)",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="submit.png",
+                region=(800, 350, 30, 38),
+                click_point=(815, 369),
+                structural=StructuralLocator(
+                    automation_id="submit-claim",
+                    role="button",
+                    name="Submit",
+                ),
+                ocr_text="Submit",
+                landmarks=[
+                    Landmark(
+                        relation="above",
+                        ocr_text="Eligibility",
+                        distance_px=120,
+                    )
+                ],
+            ),
+        ),
+    )
+
+    node = inspect_bundle(bundle, workflow_id="wf-1")["graph"]["nodes"][0]
+    assert node["resolution"]["top_rung"] == "structural"
+    evidence = {
+        rung["name"]: (rung["present"], rung["detail"])
+        for rung in node["resolution"]["rungs"]
+    }
+    assert evidence["structural"] == (True, "submit-claim")
+    assert evidence["template"] == (True, "submit.png")
+    assert evidence["ocr"] == (True, "Submit")
+    assert evidence["landmarks"] == (True, "1 landmark(s)")
+    assert "click_point" not in node["resolution"]
+
+
+def test_encrypted_bundle_inspect_mutate_and_reseal_stays_ciphertext_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = "desktop-qualification-test-key"
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="save", intent="Save", action=ActionKind.CLICK),
+    )
+    workflow = Workflow.load(bundle)
+    workflow.save(bundle, encrypt=True, key=key)
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", key)
+
+    assert not (bundle / "workflow.json").exists()
+    assert (bundle / "workflow.json.enc").is_file()
+    before = (bundle / "workflow.json.enc").read_bytes()
+
+    assert inspect_bundle(bundle, workflow_id="wf-encrypted")["migration_required"] is True
+    _initialize(bundle)
+    set_action_risk(
+        bundle,
+        workflow_id="wf-encrypted",
+        step_id="save",
+        risk="consequential",
+    )
+
+    assert not (bundle / "workflow.json").exists()
+    assert (bundle / "workflow.json.enc").read_bytes() != before
+    assert not list((bundle / "templates").glob("*.png"))
+    persisted = Workflow.load(bundle, key=key)
+    assert persisted.encrypted is True
+    assert persisted.manifest.encrypted is True
+    assert persisted.qualification.action_classifications[
+        "save"
+    ].classification.value == "consequential"
+
+
+def test_encrypted_bundle_without_configured_key_refuses_without_disk_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = "desktop-qualification-test-key"
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="save", intent="Save", action=ActionKind.CLICK),
+    )
+    workflow = Workflow.load(bundle)
+    workflow.save(bundle, encrypt=True, key=key)
+    monkeypatch.delenv("OPENADAPT_BUNDLE_KEY", raising=False)
     before = {
-        path.relative_to(bundle): path.read_bytes() for path in bundle.rglob("*") if path.is_file()
+        path.relative_to(bundle): path.read_bytes()
+        for path in bundle.rglob("*")
+        if path.is_file()
     }
 
-    with pytest.raises(QualificationError, match="ambiguous"):
+    with pytest.raises(QualificationError, match="Cannot open the sealed workflow"):
+        inspect_bundle(bundle, workflow_id="wf-encrypted")
+    with pytest.raises(QualificationError, match="Cannot open the sealed workflow"):
         set_action_risk(
             bundle,
-            workflow_id="wf-1",
-            step_id="duplicate",
-            risk="irreversible",
+            workflow_id="wf-encrypted",
+            step_id="save",
+            risk="consequential",
         )
 
     after = {
-        path.relative_to(bundle): path.read_bytes() for path in bundle.rglob("*") if path.is_file()
+        path.relative_to(bundle): path.read_bytes()
+        for path in bundle.rglob("*")
+        if path.is_file()
     }
     assert after == before
+    assert not (bundle / "workflow.json").exists()
 
 
-def test_risk_change_invalidates_certification_and_reseals(tmp_path: Path) -> None:
-    step = Step(id="review", intent="Review state", action=ActionKind.WAIT)
-    linear = Workflow(name="qualification-program-test", steps=[step])
-    workflow = linear.model_copy(
-        update={
-            "steps": [],
-            "program": lift_to_program(linear),
-        },
-    )
-    bundle = tmp_path / "bundle"
-    workflow.save(bundle)
-    workflow = Workflow.load(bundle)
-    workflow.stamp_certification("permissive", True)
-    workflow.save(bundle)
-    previous_digest = Workflow.load(bundle).manifest.content_digest
-    project = inspect_bundle(bundle, workflow_id="wf-1")
-    action_ref = next(node["id"] for node in project["graph"]["nodes"] if node["kind"] == "action")
-
-    result = set_action_risk(
-        bundle,
-        workflow_id="wf-1",
-        step_id=action_ref,
-        risk="irreversible",
-    )
-
-    persisted = Workflow.load(bundle)
-    assert [step.risk for step in iter_workflow_steps(persisted)] == ["irreversible"]
-    assert persisted.manifest.content_digest != previous_digest
-    assert persisted.manifest.provenance.certified is False
-    assert persisted.manifest.provenance.policy_name is None
-    assert persisted.manifest.provenance.certification_status is None
-    assert result["graph"]["bundle"]["provenance"]["content_digest"] == (
-        persisted.manifest.content_digest
-    )
-
-
-def test_risk_change_keeps_bound_effects_on_the_reviewed_classification(
+def test_canonical_risk_review_reseals_and_preserves_executable_irreversibility(
     tmp_path: Path,
 ) -> None:
     step = Step(
         id="save",
         intent="Save encounter",
         action=ActionKind.CLICK,
-        risk="reversible",
         effects=[
             Effect(
                 kind=EffectKind.RECORD_WRITTEN,
                 match={"patient_id": "P-42"},
-                risk="reversible",
             )
         ],
     )
     bundle = _bundle(tmp_path / "bundle", step)
+    _initialize(bundle)
+    previous_digest = Workflow.load(bundle).manifest.content_digest
 
-    set_action_risk(
+    result = set_action_risk(
         bundle,
-        workflow_id="wf-risk",
+        workflow_id="wf-1",
         step_id="save",
         risk="irreversible",
+        explanation="Final source-of-record submission",
     )
-
-    persisted = next(iter_workflow_steps(Workflow.load(bundle)))
-    assert persisted.risk == "irreversible"
-    assert [effect.risk for effect in persisted.effects] == ["irreversible"]
-
-
-def test_successful_certification_persists_exact_provenance(tmp_path: Path) -> None:
-    bundle = _bundle(
-        tmp_path / "bundle",
-        Step(id="settle", intent="Wait for settled state", action=ActionKind.WAIT),
-    )
-
-    result = certify_bundle(
-        bundle,
-        workflow_id="wf-1",
-        policy_source="clinical-write",
-    )
-
     persisted = Workflow.load(bundle)
-    provenance = persisted.manifest.provenance
-    assert result["certification_attempt"]["passed"] is True
-    assert provenance.certified is True
-    assert provenance.policy_name == "clinical-write"
-    assert provenance.certification_status == "certified"
-    assert provenance.certified_at
-    assert result["graph"]["bundle"]["provenance"]["content_digest"] == (
-        persisted.manifest.content_digest
+    action = next(iter_workflow_steps(persisted))
+    classification = persisted.qualification.action_classifications["save"]
+
+    assert action.risk == "irreversible"
+    assert [effect.risk for effect in action.effects] == ["irreversible"]
+    assert classification.classification.value == "irreversible"
+    assert classification.operator_confirmed is True
+    assert persisted.manifest.content_digest != previous_digest
+    assert result["controls"]["actions"]["save"]["classification"]["classification"] == (
+        "irreversible"
     )
 
-
-def test_sealed_certification_must_match_live_policy(tmp_path: Path) -> None:
-    bundle = _bundle(
-        tmp_path / "bundle",
-        Step(id="settle", intent="Wait for settled state", action=ActionKind.WAIT),
-    )
-    workflow = Workflow.load(bundle)
-    workflow.stamp_certification("permissive", True)
-    workflow.save(bundle)
-
-    result = inspect_bundle(
-        bundle,
-        workflow_id="wf-1",
-        policy_source="clinical-write",
-    )
-
-    assert result["certification"]["passed"] is True
-    assert result["provenance"]["certified"] is True
-    assert result["certification_current"] is False
-
-
-def test_symlinked_bundle_alias_is_not_writable(tmp_path: Path) -> None:
-    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
-    bundle_root = config.data_dir / "bundles"
-    target = _bundle(
-        bundle_root / "target",
-        Step(id="settle", intent="Wait for settled state", action=ActionKind.WAIT),
-    )
-    alias = bundle_root / "alias"
-    alias.symlink_to(target, target_is_directory=True)
-    db = IndexDB(tmp_path / "index.db")
-    db.initialize()
-    db.insert_bundle("wf-1", str(alias))
-    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
-    try:
-        result = dispatcher.get_qualification(
+    before = (bundle / "workflow.json").read_bytes()
+    with pytest.raises(QualificationError, match="cannot be down-classified"):
+        set_action_risk(
+            bundle,
             workflow_id="wf-1",
-            policy="clinical-write",
+            step_id="save",
+            risk="read_only",
         )
-    finally:
-        db.close()
-
-    assert result["ok"] is False
-    assert "symbolic link" in result["error"]
+    assert (bundle / "workflow.json").read_bytes() == before
 
 
-def test_identity_arming_uses_retained_flow_evidence_and_invalidates_certification(
+def test_risk_review_requires_project_without_mutating_legacy_bundle(
     tmp_path: Path,
 ) -> None:
-    step = Step(
-        id="save",
-        intent="Save encounter",
-        action=ActionKind.CLICK,
-        anchor=Anchor(
-            template="save.png",
-            region=(0, 0, 20, 20),
-            click_point=(10, 10),
-            structured_identity="patient_id P-42",
-        ),
-        identity_armed=False,
-        identity_unarmed_reason="operator review required",
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="save", intent="Save", action=ActionKind.CLICK),
     )
-    bundle = _bundle(tmp_path / "bundle", step)
-    workflow = Workflow.load(bundle)
-    workflow.stamp_certification("permissive", True)
-    workflow.save(bundle)
-    old_digest = Workflow.load(bundle).manifest.content_digest
+    before = (bundle / "workflow.json").read_bytes()
+
+    with pytest.raises(QualificationError, match="Initialize the qualification"):
+        set_action_risk(
+            bundle,
+            workflow_id="wf-1",
+            step_id="save",
+            risk="consequential",
+        )
+
+    assert (bundle / "workflow.json").read_bytes() == before
+
+
+def test_identity_control_arms_runtime_and_canonical_policy_together(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(
+            id="save",
+            intent="Save encounter",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="save.png",
+                region=(0, 0, 20, 20),
+                click_point=(10, 10),
+                structured_identity="patient_id P-42",
+            ),
+            identity_armed=False,
+            identity_unarmed_reason="operator review required",
+        ),
+    )
+    _initialize(bundle)
+    set_action_risk(
+        bundle,
+        workflow_id="wf-1",
+        step_id="save",
+        risk="consequential",
+    )
 
     result = arm_action_identity(
         bundle,
-        workflow_id="wf-identity",
+        workflow_id="wf-1",
         step_id="save",
     )
-
     persisted = Workflow.load(bundle)
-    armed = next(iter_workflow_steps(persisted))
-    assert armed.identity_armed is True
-    assert armed.identity_unarmed_reason is None
-    assert persisted.manifest.content_digest != old_digest
-    assert persisted.manifest.provenance.certified is False
-    controls = result["controls"]["actions"]["save"]["identity"]
-    assert controls["armed"] is True
-    assert [source["kind"] for source in controls["sources"]] == ["structured"]
+    action = next(iter_workflow_steps(persisted))
+    policy = persisted.qualification.identity_policies["save"]
+
+    assert action.identity_armed is True
+    assert action.identity_unarmed_reason is None
+    assert policy.enforcement.value == "canonical_ladder"
+    assert result["controls"]["actions"]["save"]["identity"]["policy"][
+        "enforcement"
+    ] == "canonical_ladder"
 
 
-def test_identity_arming_refuses_when_no_runtime_identity_source_exists(
+def test_identity_control_refuses_missing_evidence_without_mutation(
     tmp_path: Path,
 ) -> None:
-    step = Step(
-        id="save",
-        intent="Save encounter",
-        action=ActionKind.CLICK,
-        anchor=Anchor(
-            template="save.png",
-            region=(0, 0, 20, 20),
-            click_point=(10, 10),
-        ),
-        identity_armed=False,
-        identity_unarmed_reason="no retained identity evidence",
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="save", intent="Save", action=ActionKind.CLICK),
     )
-    bundle = _bundle(tmp_path / "bundle", step)
+    _initialize(bundle)
     before = (bundle / "workflow.json").read_bytes()
 
     with pytest.raises(QualificationError, match="no retained structured identity"):
         arm_action_identity(
             bundle,
-            workflow_id="wf-identity",
+            workflow_id="wf-1",
             step_id="save",
         )
 
     assert (bundle / "workflow.json").read_bytes() == before
 
 
-def test_effect_binding_replaces_placeholder_with_parameterized_flow_contract(
+def test_effect_control_writes_executable_contract_and_canonical_tier(
     tmp_path: Path,
 ) -> None:
-    step = Step(
-        id="save",
-        intent="Save encounter",
-        action=ActionKind.CLICK,
-        risk="irreversible",
-        effects=[
-            Effect(
-                kind=EffectKind.RECORD_WRITTEN,
-                match={"__unbound__": "__operator_required__"},
-                risk="irreversible",
-                needs_operator_confirmation=True,
-            )
-        ],
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(
+            id="save",
+            intent="Save encounter",
+            action=ActionKind.CLICK,
+            effects=[
+                Effect(
+                    kind=EffectKind.RECORD_WRITTEN,
+                    match={"__unbound__": "__operator_required__"},
+                    needs_operator_confirmation=True,
+                )
+            ],
+        ),
+        params={"patient_id": "P-42", "request_id": "req-1"},
     )
-    workflow = Workflow(
-        name="qualification-test",
-        params={
-            "patient_id": "P-42",
-            "request_id": "req-1",
-        },
-        param_specs={
-            "patient_id": ParamSpec(name="patient_id"),
-            "request_id": ParamSpec(name="request_id"),
-        },
-        steps=[step],
-    )
-    bundle = tmp_path / "bundle"
-    workflow.save(bundle)
-    loaded = Workflow.load(bundle)
-    loaded.stamp_certification("permissive", True)
-    loaded.save(bundle)
-    old_digest = Workflow.load(bundle).manifest.content_digest
+    _initialize(bundle)
 
     result = bind_action_effect(
         bundle,
-        workflow_id="wf-effect",
+        workflow_id="wf-1",
         step_id="save",
         kind="record_written",
         match_field="patient_id",
@@ -311,49 +395,42 @@ def test_effect_binding_replaces_placeholder_with_parameterized_flow_contract(
         idempotency_param="request_id",
         key_field="request_id",
         count_new_only=True,
+        verification_tier=2,
     )
-
     persisted = Workflow.load(bundle)
-    bound = next(iter_workflow_steps(persisted)).effects
-    assert len(bound) == 1
-    assert bound[0].kind is EffectKind.RECORD_WRITTEN
-    assert bound[0].match["patient_id"].param == "patient_id"
-    assert bound[0].idempotency_key is not None
-    assert bound[0].idempotency_key.param == "request_id"
-    assert bound[0].count_new_only is True
-    assert bound[0].needs_operator_confirmation is False
-    assert persisted.manifest.content_digest != old_digest
-    assert persisted.manifest.provenance.certified is False
-    controls = result["controls"]["actions"]["save"]["effects"]
-    assert controls[0]["match"]["patient_id"] == {
-        "source": "parameter",
-        "value": "patient_id",
-    }
+    action = next(iter_workflow_steps(persisted))
+    binding = persisted.qualification.effect_policies[0]
+
+    assert action.effects[0].match["patient_id"].param == "patient_id"
+    assert action.effects[0].idempotency_key.param == "request_id"
+    assert action.effects[0].needs_operator_confirmation is False
+    assert binding.step_id == "save"
+    assert binding.effect_index == 0
+    assert int(binding.tier) == 2
+    assert binding.effect_contract_hash == action.effects[0].contract_hash()
+    assert result["controls"]["actions"]["save"]["effects"][0][
+        "verification_tier"
+    ] == 2
+    assert persisted.qualification.action_classifications[
+        "save"
+    ].classification.value == "state_changing"
 
 
-def test_effect_binding_refuses_unknown_parameter_without_changing_bundle(
+def test_effect_control_refuses_unknown_parameter_without_mutation(
     tmp_path: Path,
 ) -> None:
-    workflow = Workflow(
-        name="qualification-test",
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="save", intent="Save", action=ActionKind.CLICK),
         params={"patient_id": "P-42"},
-        steps=[
-            Step(
-                id="save",
-                intent="Save encounter",
-                action=ActionKind.CLICK,
-                risk="irreversible",
-            )
-        ],
     )
-    bundle = tmp_path / "bundle"
-    workflow.save(bundle)
+    _initialize(bundle)
     before = (bundle / "workflow.json").read_bytes()
 
     with pytest.raises(QualificationError, match="unknown workflow parameter"):
         bind_action_effect(
             bundle,
-            workflow_id="wf-effect",
+            workflow_id="wf-1",
             step_id="save",
             kind="record_written",
             match_field="patient_id",
@@ -361,3 +438,56 @@ def test_effect_binding_refuses_unknown_parameter_without_changing_bundle(
         )
 
     assert (bundle / "workflow.json").read_bytes() == before
+
+
+def test_certification_uses_canonical_refusals_instead_of_policy_only_success(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="settle", intent="Wait for settled state", action=ActionKind.WAIT),
+    )
+    _initialize(bundle)
+
+    result = certify_bundle(bundle, workflow_id="wf-1")
+    persisted = Workflow.load(bundle)
+
+    assert result["certification_attempt"]["passed"] is False
+    assert result["certification_current"] is False
+    assert {
+        refusal["code"] for refusal in result["certification_attempt"]["refusals"]
+    } >= {"representative_case_missing", "case_not_passed"}
+    assert persisted.qualification.last_certification is not None
+    assert persisted.qualification.last_certification.passed is False
+    assert persisted.manifest.provenance.certified is False
+
+
+def test_dispatcher_initialization_persists_bundle_status_and_contract(
+    tmp_path: Path,
+) -> None:
+    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+    bundle = _bundle(
+        config.data_dir / "bundles" / "wf-1",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    db = IndexDB(tmp_path / "index.db")
+    db.initialize()
+    db.insert_bundle("wf-1", str(bundle))
+    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
+    try:
+        result = dispatcher.initialize_qualification(
+            workflow_id="wf-1",
+            target_kind="rdp",
+            application="Legacy app",
+            application_version="5",
+            environment_label="test-rdp-session",
+            required_capabilities=["pixel_observation", "session_continuity"],
+            minimum_effect_tier=3,
+        )
+        row = db.get_bundle("wf-1")
+    finally:
+        db.close()
+
+    assert result["ok"] is True
+    assert result["project"]["environment"]["target_kind"] == "rdp"
+    assert row["status"] == "qualification_pending"

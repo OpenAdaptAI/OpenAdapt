@@ -77,12 +77,12 @@ def test_embedded_flow_version_stays_offline(monkeypatch, capsys) -> None:
     monkeypatch.setitem(sys.modules, "engine.managed_vision", managed)
     monkeypatch.setattr(engine_main, "_configure_frozen_browser_cache", lambda: None)
     monkeypatch.setattr(engine_main, "_normalize_flow_auto_scrub_capability", lambda: None)
-    monkeypatch.setattr(engine_main, "_embedded_flow_version", lambda: "1.20.1")
+    monkeypatch.setattr(engine_main, "_embedded_flow_version", lambda: "1.21.0")
     monkeypatch.setattr(sys, "argv", ["engine", "__openadapt_flow__", "--version"])
 
     engine_main._run_embedded_flow()
 
-    assert capsys.readouterr().out == "openadapt-flow 1.20.1\n"
+    assert capsys.readouterr().out == "openadapt-flow 1.21.0\n"
 
 
 def test_embedded_flow_command_provisions_vision_before_import(
