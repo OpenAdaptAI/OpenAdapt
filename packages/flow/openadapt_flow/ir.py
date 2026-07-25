@@ -1,17 +1,22 @@
-"""Intermediate representation for compiled workflows.
+"""Intermediate representation for compiled workflow programs.
 
-A Workflow is the compiled artifact: an ordered list of Steps, each carrying
-redundant evidence about its target (Anchor), the action to perform, and
-assertions about what the screen should look like afterwards (Postconditions).
+A :class:`Workflow` is the compiled artifact. It can carry either the
+compatibility ``steps`` sequence (the degenerate straight-line program) or a
+``ProgramGraph`` state machine with guarded branches, loops, subflows, and
+exception paths. Every executable action retains redundant target evidence
+(``Anchor``), the operation to perform, and the contracts that must hold before
+and after actuation.
 
 The canonical serialized form is a *bundle directory*:
 
     <bundle>/
-      workflow.json        # Workflow.model_dump_json()
-      templates/*.png      # anchor template crops, referenced by relative path
+      workflow.json[.enc]    # Workflow.model_dump_json(), optionally encrypted
+      manifest.json          # PHI-free integrity and provenance sidecar
+      templates/*[.enc]      # retained target/effect evidence
 
-All coordinates are pixels in the recorded frame's coordinate space.
-Regions are (x, y, w, h). Points are (x, y).
+Pixel regions are ``(x, y, width, height)`` in recorded-frame coordinates;
+structural and relational evidence remains first-class where the substrate
+provides it.
 """
 
 from __future__ import annotations
@@ -1141,6 +1146,20 @@ class BundleProvenance(BaseModel):
         default=None,
         description="Optional ISO expiry; a consumer should re-certify after it",
     )
+    certification_invalidated_at: Optional[str] = Field(
+        default=None,
+        description=(
+            "ISO timestamp when a previously persisted certification stopped "
+            "matching this bundle contract"
+        ),
+    )
+    certification_invalidation_reason: Optional[str] = Field(
+        default=None,
+        description=(
+            "PHI-free reason the persisted certification was invalidated; "
+            "the bundle must be certified again before production use"
+        ),
+    )
 
 
 class BundleManifest(BaseModel):
@@ -1306,6 +1325,13 @@ def _verify_sealed_template_integrity(
 
 
 class Workflow(BaseModel):
+    """Compiled workflow program with linear compatibility and graph execution.
+
+    ``steps`` preserves the original straight-line bundle format. ``program``,
+    when present, is the canonical state machine; its action states reuse the
+    same identity, risk, resolution, postcondition, and effect contracts.
+    """
+
     schema_version: int = SCHEMA_VERSION
     name: str
     recording_id: Optional[str] = None
@@ -1651,6 +1677,8 @@ class Workflow(BaseModel):
         prov.certification_status = status or ("certified" if passed else "failed")
         prov.certified_at = datetime.now(timezone.utc).isoformat()
         prov.expires_at = expires_at
+        prov.certification_invalidated_at = None
+        prov.certification_invalidation_reason = None
         return self.manifest
 
 
