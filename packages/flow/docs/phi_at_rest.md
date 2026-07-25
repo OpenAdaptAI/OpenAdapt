@@ -57,13 +57,17 @@ Encryption-at-rest is now available as an **opt-in** layer
   ```bash
   export OPENADAPT_BUNDLE_KEY='<inject from your secret manager>'
   openadapt-flow seal ./bundle-v2 --out ./bundle-prod
+  openadapt-flow certify ./bundle-prod --policy clinical-write
   ```
 
   It preserves the source, refuses symlinks and existing destinations, stages
   the complete copy privately, verifies the resulting integrity digest, and
-  atomically publishes the encrypted bundle. This command seals
-  `workflow.json` and files under `templates/`; other bundle files are copied
-  unchanged and must not be assumed encrypted. The library primitive
+  atomically publishes the encrypted bundle. Because encryption changes the
+  artifact contract, sealing expires prior certification with an explicit
+  provenance reason; certify the sealed destination, and run any versioned
+  qualification cases against that destination before `qualify certify`. This
+  command seals `workflow.json` and files under `templates/`; other bundle files
+  are copied unchanged and must not be assumed encrypted. The library primitive
   `Workflow.save(bundle_dir, encrypt=True, key=…)` seals the
   serialized `workflow.json` with **AES-256-GCM** and writes it as
   `workflow.json.enc` (no plaintext `workflow.json` on disk), **and seals every

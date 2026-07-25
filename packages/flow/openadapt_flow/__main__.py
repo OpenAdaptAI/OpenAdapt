@@ -1488,6 +1488,11 @@ def _cmd_seal(args: argparse.Namespace) -> int:
         return 2
     print(f"Sealed bundle: {sealed.path}")
     print(f"Content digest: sha256:{sealed.content_digest}")
+    if sealed.certification_invalidated:
+        print(
+            "Prior certification invalidated: certify the sealed destination "
+            "before deployment."
+        )
     return 0
 
 

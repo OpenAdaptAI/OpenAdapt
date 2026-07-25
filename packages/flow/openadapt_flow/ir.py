@@ -1146,6 +1146,20 @@ class BundleProvenance(BaseModel):
         default=None,
         description="Optional ISO expiry; a consumer should re-certify after it",
     )
+    certification_invalidated_at: Optional[str] = Field(
+        default=None,
+        description=(
+            "ISO timestamp when a previously persisted certification stopped "
+            "matching this bundle contract"
+        ),
+    )
+    certification_invalidation_reason: Optional[str] = Field(
+        default=None,
+        description=(
+            "PHI-free reason the persisted certification was invalidated; "
+            "the bundle must be certified again before production use"
+        ),
+    )
 
 
 class BundleManifest(BaseModel):
@@ -1663,6 +1677,8 @@ class Workflow(BaseModel):
         prov.certification_status = status or ("certified" if passed else "failed")
         prov.certified_at = datetime.now(timezone.utc).isoformat()
         prov.expires_at = expires_at
+        prov.certification_invalidated_at = None
+        prov.certification_invalidation_reason = None
         return self.manifest
 
 

@@ -9,6 +9,7 @@ import sys
 import tempfile
 from ctypes import CDLL, c_char_p, c_int, c_uint, get_errno
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from errno import EEXIST, ENOTEMPTY
 from pathlib import Path
 
@@ -26,6 +27,7 @@ class SealedBundle:
 
     path: Path
     content_digest: str
+    certification_invalidated: bool
 
 
 def _lexists(path: Path) -> bool:
@@ -162,34 +164,86 @@ def _publish_no_replace(staging: Path, destination: Path) -> None:
     raise OSError(error, os.strerror(error), destination)
 
 
+def _invalidate_prior_certification(workflow: Workflow) -> bool:
+    """Expire decisions bound to the pre-encryption workflow contract.
+
+    ``Workflow.encrypted`` is sealed into the workflow contract and content
+    digest.  Turning it on therefore creates a new artifact contract even when
+    executable intent is unchanged.  Retain the prior policy and timestamp as
+    provenance, but never carry its success bit or qualification decision into
+    the new encrypted artifact.
+    """
+    provenance = workflow.manifest.provenance if workflow.manifest else None
+    qualification = workflow.qualification
+    had_certification = bool(
+        (qualification is not None and qualification.last_certification is not None)
+        or (
+            provenance is not None
+            and (
+                provenance.certified
+                or provenance.policy_name is not None
+                or provenance.certification_status is not None
+                or provenance.certified_at is not None
+                or provenance.expires_at is not None
+            )
+        )
+    )
+    if not had_certification:
+        return False
+
+    if qualification is not None:
+        qualification.last_certification = None
+    if provenance is not None:
+        invalidated_at = datetime.now(timezone.utc).isoformat()
+        provenance.certified = False
+        provenance.certification_status = "expired"
+        provenance.expires_at = invalidated_at
+        provenance.certification_invalidated_at = invalidated_at
+        provenance.certification_invalidation_reason = (
+            "at-rest sealing changed the workflow contract"
+        )
+    return True
+
+
+def _cleanup_staging(staging: Path | None, original_error: Exception) -> None:
+    if staging is None or not _lexists(staging):
+        return
+    try:
+        shutil.rmtree(staging)
+    except OSError as cleanup_error:
+        raise BundleSealingError(
+            f"{original_error}; private staging cleanup failed: {cleanup_error}"
+        ) from original_error
+
+
 def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
     """Copy, validate, encrypt, verify, and atomically publish a bundle.
 
     The source is never modified. ``OPENADAPT_BUNDLE_KEY`` is the only supported
     key input so the passphrase cannot leak through process arguments.
     """
+    staging: Path | None = None
     try:
-        key = crypto.require_key(None)
-    except crypto.MissingKeyError as exc:
-        raise BundleSealingError(str(exc)) from exc
+        try:
+            key = crypto.require_key(None)
+        except crypto.MissingKeyError as exc:
+            raise BundleSealingError(str(exc)) from exc
 
-    source_path, destination_path = _validate_paths(Path(source), Path(destination))
-    _reject_symlinks(source_path)
-    try:
-        Workflow.load(source_path, key=key, verify_integrity=True)
-    except Exception as exc:
-        raise BundleSealingError(f"source bundle validation failed: {exc}") from exc
+        source_path, destination_path = _validate_paths(Path(source), Path(destination))
+        _reject_symlinks(source_path)
+        try:
+            Workflow.load(source_path, key=key, verify_integrity=True)
+        except Exception as exc:
+            raise BundleSealingError(f"source bundle validation failed: {exc}") from exc
 
-    destination_path.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(
-        tempfile.mkdtemp(
-            prefix=f".{destination_path.name}.seal-",
-            dir=destination_path.parent,
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(
+            tempfile.mkdtemp(
+                prefix=f".{destination_path.name}.seal-",
+                dir=destination_path.parent,
+            )
         )
-    )
-    staging.chmod(0o700)
-    published = False
-    try:
+        staging.chmod(0o700)
         shutil.copytree(
             source_path,
             staging,
@@ -199,6 +253,7 @@ def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
         # Refuse a symlink introduced between the source preflight and copy.
         _reject_symlinks(staging)
         staged_workflow = Workflow.load(staging, key=key, verify_integrity=True)
+        certification_invalidated = _invalidate_prior_certification(staged_workflow)
         staged_workflow.save(staging, encrypt=True, key=key)
         _reject_symlinks(staging)
         sealed = _verify_sealed_bundle(staging, key)
@@ -212,15 +267,14 @@ def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
                 f"destination appeared during sealing: {destination_path}"
             )
         _publish_no_replace(staging, destination_path)
-        published = True
         return SealedBundle(
             path=destination_path,
             content_digest=manifest.content_digest,
+            certification_invalidated=certification_invalidated,
         )
-    except BundleSealingError:
+    except BundleSealingError as exc:
+        _cleanup_staging(staging, exc)
         raise
     except Exception as exc:
+        _cleanup_staging(staging, exc)
         raise BundleSealingError(f"bundle sealing failed: {exc}") from exc
-    finally:
-        if not published and _lexists(staging):
-            shutil.rmtree(staging)
