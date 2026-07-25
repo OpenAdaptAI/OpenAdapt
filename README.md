@@ -161,8 +161,8 @@ boundary only through explicit sanitization and exact-byte approval. Review the
 The local launcher, compiler/runtime, Desktop application, substrate adapters,
 verification interfaces, and basic qualification tools are MIT licensed.
 OpenAdapt Cloud is the commercial multi-tenant control plane for managed
-operation, fleet governance, billing, and enterprise integrations. Safety-
-critical local verification is not paywalled.
+operation, fleet governance, billing, and enterprise integrations. Local
+safety-critical verification is not paywalled.
 
 ## Evidence
 
