@@ -441,24 +441,13 @@ class PlaywrightBackend:
             such as the demo driver may use locators; replay never does).
     """
 
-    def __init__(
-        self,
-        page: "Page",
-        *,
-        system_of_record_reader: Optional[Callable[[], list[dict[str, Any]]]] = None,
-    ) -> None:
+    def __init__(self, page: "Page") -> None:
         """Wrap an existing Playwright page.
 
         Args:
             page: A page created with viewport 1280x800, deviceScaleFactor=1.
-            system_of_record_reader: Optional read-only observer called before
-                and after recorded actions. Its returned records are persisted
-                by :class:`~openadapt_flow.recorder.Recorder` as source-of-record
-                evidence so the compiler can mine effect contracts. Replay
-                never consults this callback.
         """
         self.page = page
-        self._system_of_record_reader = system_of_record_reader
         # Opaque per-backend key keeps the WeakMap private from ordinary page
         # code. Python retains only token material keyed by the public
         # SHA-256 fingerprint; target/row text stays page-local and ephemeral.
@@ -621,20 +610,6 @@ class PlaywrightBackend:
             else None
         )
 
-    @property
-    def system_of_record(self) -> Optional[list[dict[str, Any]]]:
-        """Read the optional recorder-time system-of-record observation.
-
-        This is deliberately opt-in and read-only. A normal browser backend
-        returns ``None`` exactly as before; a qualified recorder can provide a
-        customer-controlled observer so effect bindings are derived from
-        retained evidence instead of invented by the compiler.
-        """
-
-        if self._system_of_record_reader is None:
-            return None
-        return self._system_of_record_reader()
-
     # -- structured-text identity (openadapt_flow.backend.IdentityBackend) --
 
     def structured_text_at(self, x: int, y: int) -> Optional[str]:
@@ -653,8 +628,9 @@ class PlaywrightBackend:
         the node under the point; we require an enclosing ROW-LIKE container
         (``tr`` / ``[role=row]`` / ``li`` / ``[role=listitem]``) so identity is
         judged on the whole record row (MRN + name + DOB + ...), not a single
-        cell, and return its ``aria-label`` (when present) joined with the row's text
-        EXCLUDING the clicked target's own cell/subtree -- that cell's label is
+        cell. An explicit ``data-openadapt-identity`` or accessible row name is
+        authoritative; otherwise the row text EXCLUDING the clicked target's
+        own cell/subtree is used -- that cell's label is
         the mutable evidence the ladder heals through (an Open->View relabel of
         the clicked control must not change identity), mirroring the OCR band
         excluding the target's own crop; identity rests on the row's OTHER
@@ -1299,7 +1275,6 @@ class PlaywrightBackend:
         headless: bool = True,
         *,
         record_video_dir: Optional[str] = None,
-        system_of_record_reader: Optional[Callable[[], list[dict[str, Any]]]] = None,
     ) -> tuple["PlaywrightBackend", Callable[[], None]]:
         """Start Playwright + chromium, open ``url``, and return a backend.
 
@@ -1313,9 +1288,6 @@ class PlaywrightBackend:
                 the page is created directly on the browser as before. The
                 finished video is only flushed to disk after ``close()`` (which
                 closes the context); read its path from ``backend.page.video``.
-            system_of_record_reader: Optional read-only recorder observer; see
-                :attr:`system_of_record`. It is never called by replay itself.
-
         Returns:
             ``(backend, close)`` where ``close()`` shuts down the browser and
             the Playwright driver (flushing the video first, when recording).
@@ -1347,10 +1319,7 @@ class PlaywrightBackend:
         else:
             page = browser.new_page(viewport=viewport, device_scale_factor=1)
         page.goto(url)
-        backend = cls(
-            page,
-            system_of_record_reader=system_of_record_reader,
-        )
+        backend = cls(page)
 
         def close() -> None:
             try:

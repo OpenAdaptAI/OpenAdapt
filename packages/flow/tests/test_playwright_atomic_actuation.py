@@ -115,20 +115,6 @@ _FOCUSED_ROWS_HTML = """<!doctype html><html><head>
 </body></html>"""
 
 
-def test_playwright_recorder_observer_is_explicit_and_read_only() -> None:
-    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
-
-    records = [{"patient_id": "p1", "note": "synthetic"}]
-    ordinary = PlaywrightBackend(object())  # type: ignore[arg-type]
-    observed = PlaywrightBackend(  # type: ignore[arg-type]
-        object(),
-        system_of_record_reader=lambda: records,
-    )
-
-    assert ordinary.system_of_record is None
-    assert observed.system_of_record == records
-
-
 @pytest.mark.parametrize("mutation", ["target", "row"])
 def test_playwright_refuses_mutation_after_fresh_identity(
     mutation,

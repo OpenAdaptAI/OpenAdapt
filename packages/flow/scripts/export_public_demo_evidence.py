@@ -255,7 +255,6 @@ def _record(
         entry_url,
         headless=True,
         record_video_dir=str(video_tmp),
-        system_of_record_reader=_records_reader(base_url),
     )
     environment: dict[str, Any] = {}
     try:
@@ -270,7 +269,12 @@ def _record(
             "platform": platform.platform(),
             "python": platform.python_version(),
         }
-        recorder = Recorder(backend, recording_dir, app_url=entry_url)
+        recorder = Recorder(
+            backend,
+            recording_dir,
+            app_url=entry_url,
+            system_of_record_reader=_records_reader(base_url),
+        )
         recorder.click(*_center(page, ".open-btn"))
         recorder.click(*_center(page, "#new-encounter"))
         recorder.click(*_center(page, "#type-triage"))

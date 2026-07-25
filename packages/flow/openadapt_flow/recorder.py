@@ -13,7 +13,7 @@ Recording format (DESIGN.md):
                          # _before/_after keys when the backend exposes
                          # structural observations (StructuralBackend), and
                          # sor_before/sor_after (a system-of-record snapshot)
-                         # when it exposes SystemOfRecordBackend.
+                         # when a recorder-only observer is configured.
       frames/{i:04d}_before.png
       frames/{i:04d}_after.png   # captured after the action settled
 
@@ -68,6 +68,9 @@ class Recorder:
         out_dir: Path | str,
         *,
         app_url: Optional[str] = None,
+        system_of_record_reader: Optional[
+            Callable[[], Optional[list[dict[str, Any]]]]
+        ] = None,
         settle_interval_s: float = 0.1,
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
@@ -79,6 +82,10 @@ class Recorder:
         self._events_path = self._dir / "events.jsonl"
         self._events_path.write_text("")  # truncate any stale file
         self._app_url = app_url
+        # This observer belongs to recording, not the execution backend. A GUI
+        # backend must never advertise an authoritative business-effect oracle
+        # merely because the recorder can query a separate read-only source.
+        self._system_of_record_reader = system_of_record_reader
         self._settle_interval_s = settle_interval_s
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
@@ -344,12 +351,6 @@ class Recorder:
             ("url", "url"),
             ("page_title", "title"),
             ("page_count", "pages"),
-            # System-of-record snapshot (openadapt_flow.backend.
-            # SystemOfRecordBackend): the app's authoritative records right
-            # now, captured before/after each event so the compiler's effect
-            # miner can derive record_written/field_equals from the delta. A
-            # list value flows through unchanged (a list is not None).
-            ("system_of_record", "sor"),
         ):
             try:
                 value = getattr(self._backend, attr, None)
@@ -357,6 +358,13 @@ class Recorder:
                 value = None
             if value is not None:
                 state[key] = value
+        if self._system_of_record_reader is not None:
+            try:
+                records = self._system_of_record_reader()
+            except Exception:
+                records = None
+            if records is not None:
+                state["sor"] = records
         return state
 
     def _wait_settled(self) -> bytes:
