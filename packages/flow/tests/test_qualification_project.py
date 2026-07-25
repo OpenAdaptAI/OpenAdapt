@@ -703,3 +703,105 @@ def test_cli_initializes_project_without_raw_manifest_editing(
     assert main(["qualify", "explain", str(bundle), "--json"]) == 2
     payload = capsys.readouterr().out
     assert '"representative_case_missing"' in payload
+
+
+def test_cli_identity_extract_pattern_round_trips_exactly(tmp_path: Path) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    init_project(workflow, environment=_environment())
+    workflow.save(bundle)
+    pattern = r"record (?P<value>identity)(?=$)"
+
+    assert (
+        main(
+            [
+                "qualify",
+                "set-identity",
+                str(bundle),
+                "--step",
+                "save",
+                "--signal",
+                "record_id=structured:exact",
+                "--signal-extract",
+                f"record_id={pattern}",
+                "--quorum",
+                "1",
+            ]
+        )
+        == 0
+    )
+
+    loaded = Workflow.load(bundle)
+    assert loaded.qualification is not None
+    policy = loaded.qualification.identity_policies["save"]
+    assert policy.signals[0].extract_pattern == pattern
+
+
+@pytest.mark.parametrize(
+    ("signal", "extract_args", "message"),
+    [
+        (
+            "record_id=structured:exact",
+            ["--signal-extract", "unknown=(?P<value>.+)"],
+            "unknown signal",
+        ),
+        (
+            "record_id=structured:exact",
+            [
+                "--signal-extract",
+                "record_id=(?P<value>.+)",
+                "--signal-extract",
+                "record_id=(?P<value>.+)",
+            ],
+            "repeats signal key",
+        ),
+        (
+            "record_id=structured:exact",
+            ["--signal-extract", "record_id"],
+            "expects KEY=REGEX",
+        ),
+        (
+            "record_id=structured:exact",
+            [],
+            "structured/context identity signals require extract_pattern",
+        ),
+        (
+            "record_id=identifier_region:exact",
+            [
+                "--signal-region",
+                "record_id=10,10,20,20",
+                "--signal-extract",
+                "record_id=(?P<value>.+)",
+            ],
+            "extract_pattern applies only",
+        ),
+    ],
+)
+def test_cli_identity_extract_rejects_invalid_bindings(
+    tmp_path: Path,
+    signal: str,
+    extract_args: list[str],
+    message: str,
+) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    init_project(workflow, environment=_environment())
+    workflow.save(bundle)
+
+    with pytest.raises(SystemExit, match=message):
+        main(
+            [
+                "qualify",
+                "set-identity",
+                str(bundle),
+                "--step",
+                "save",
+                "--signal",
+                signal,
+                *extract_args,
+                "--quorum",
+                "1",
+            ]
+        )

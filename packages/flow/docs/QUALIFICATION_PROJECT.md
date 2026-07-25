@@ -63,6 +63,8 @@ openadapt-flow qualify set-identity bundle \
   --signal record_id=structured:exact \
   --signal secondary_identifier=captured_context:normalized:unicode_nfkc,collapse_whitespace \
   --signal-region secondary_identifier=40,20,240,48 \
+  --signal-extract 'record_id=Record ID:\s*(?P<value>[A-Za-z0-9._-]+)' \
+  --signal-extract 'secondary_identifier=DOB:\s*(?P<value>[0-9/-]+)' \
   --signal-param record_id=patient_id \
   --quorum 2
 
@@ -112,11 +114,13 @@ context bands. A definitive conflict halts even after the numeric quorum has
 been reached, while an unavailable signal can abstain only when the remaining
 independent signals still satisfy the quorum.
 Comparisons are either byte-exact or use only the explicitly listed
-normalizers. Parameter substitution is explicit (`--signal-param`) and matches
-only complete values, so `John` cannot bind inside `Johnson`. Reports retain a
-closed semantic signal key, source, evidence class, and verdict, not the
-observed identity value; arbitrary patient/account labels cannot enter the
-bundle or report.
+normalizers. Structured and captured-context signals require an explicit
+`--signal-extract KEY=REGEX` with exactly one named `value` group, so only the
+intended field can cast a vote. Parameter substitution is explicit
+(`--signal-param`) and matches only complete values, so `John` cannot bind
+inside `Johnson`. Reports retain a closed semantic signal key, source, evidence
+class, and verdict, not the observed identity value; arbitrary patient/account
+labels cannot enter the bundle or report.
 
 When a qualified consequential action uses an `api_binding`, the binding must
 map the qualified semantic identity key to a workflow parameter, reference that

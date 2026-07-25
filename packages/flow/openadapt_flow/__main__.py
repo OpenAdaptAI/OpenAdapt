@@ -1496,6 +1496,7 @@ def _parse_qualification_signal(
     identifier_region: tuple[int, int, int, int] | None,
     signal_regions: dict[str, tuple[int, int, int, int]] | None = None,
     signal_params: dict[str, list[str]] | None = None,
+    signal_extracts: dict[str, str] | None = None,
 ):
     from openadapt_flow.qualification import (
         IdentityEvidenceSource,
@@ -1532,6 +1533,7 @@ def _parse_qualification_signal(
                 else None
             ),
             params=(signal_params or {}).get(key, []),
+            extract_pattern=(signal_extracts or {}).get(key),
         )
     except ValueError as exc:
         raise SystemExit(f"invalid --signal {raw!r}: {exc}") from exc
@@ -1677,13 +1679,24 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
                 except ValueError as exc:
                     raise SystemExit("--signal-param expects KEY=PARAM") from exc
                 signal_params.setdefault(key, []).append(name)
+            signal_extracts: dict[str, str] = {}
+            for raw_extract in args.signal_extract:
+                key, separator, pattern = raw_extract.partition("=")
+                if not separator or not key or not pattern:
+                    raise SystemExit("--signal-extract expects KEY=REGEX")
+                if key in signal_extracts:
+                    raise SystemExit(f"--signal-extract repeats signal key {key!r}")
+                signal_extracts[key] = pattern
             signal_keys = {raw.split("=", 1)[0] for raw in args.signal if "=" in raw}
             unknown_options = sorted(
-                (set(signal_regions) | set(signal_params)).difference(signal_keys)
+                (
+                    set(signal_regions) | set(signal_params) | set(signal_extracts)
+                ).difference(signal_keys)
             )
             if unknown_options:
                 raise SystemExit(
-                    "--signal-region/--signal-param references unknown signal "
+                    "--signal-region/--signal-param/--signal-extract references "
+                    "unknown signal "
                     "key(s): " + ", ".join(unknown_options)
                 )
             signals = [
@@ -1692,6 +1705,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
                     identifier_region=region,
                     signal_regions=signal_regions,
                     signal_params=signal_params,
+                    signal_extracts=signal_extracts,
                 )
                 for raw in args.signal
             ]
@@ -3216,6 +3230,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="KEY=PARAM",
         help="Bind a complete workflow parameter value to an identity signal",
+    )
+    q.add_argument(
+        "--signal-extract",
+        action="append",
+        default=[],
+        metavar="KEY=REGEX",
+        help=(
+            "Extract one named (?P<value>...) field from a structured or "
+            "captured-context signal"
+        ),
     )
     q.add_argument("--quorum", type=int)
     q.set_defaults(func=_cmd_qualify)
