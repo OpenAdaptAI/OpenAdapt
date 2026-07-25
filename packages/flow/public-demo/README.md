@@ -7,7 +7,7 @@ and source-distribution artifacts.
 Generate a new version (never overwrite an existing pack):
 
 ```bash
-python scripts/export_public_demo_evidence.py \
+python -m scripts.export_public_demo_evidence \
   --out public-demo/evidence-packs \
   --pack-id mockmed-triage-v1
 ```
@@ -15,7 +15,7 @@ python scripts/export_public_demo_evidence.py \
 Validate every retained byte and evidence binding:
 
 ```bash
-python scripts/export_public_demo_evidence.py \
+python -m scripts.export_public_demo_evidence \
   --validate public-demo/evidence-packs/mockmed-triage-v1
 ```
 
