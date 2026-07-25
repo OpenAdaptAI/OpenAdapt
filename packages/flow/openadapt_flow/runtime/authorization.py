@@ -120,6 +120,7 @@ class GovernedRunAuthorization(BaseModel):
     runtime_inputs_digest: str = Field(pattern="^[a-f0-9]{64}$")
     admitted_policy_name: str
     execution_profile: Literal["demo", "standard", "regulated"] | None = None
+    minimum_effect_tier: int | None = Field(default=None, ge=1, le=4)
     required_identity_step_ids: tuple[str, ...] = Field(default_factory=tuple)
     unverified_write_approvals: tuple[UnverifiedWriteApproval, ...] = Field(
         default_factory=tuple
@@ -139,6 +140,14 @@ class GovernedRunAuthorization(BaseModel):
             )
         if workflow.manifest is None:
             return "governed run authorization requires a sealed manifest"
+        if self.execution_profile is not None and self.minimum_effect_tier is not None:
+            from openadapt_flow.execution_profiles import required_effect_tier
+
+            actual_tier = required_effect_tier(workflow, self.execution_profile)
+            if actual_tier is None or int(actual_tier) != self.minimum_effect_tier:
+                return (
+                    "workflow effect-verification minimum changed after authorization"
+                )
 
         from openadapt_flow.bundle_validation import compute_content_digest
 

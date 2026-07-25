@@ -210,6 +210,12 @@ class ReadbackSpec(BaseModel):
     renavigation: list[ReadbackNav] = Field(default_factory=list)
 
 
+# A different-path re-navigation must be genuinely independent of the write
+# flow.  Shared by the compiler and runtime so a hand-authored or corrupted
+# contract cannot claim stronger evidence than the compiler would emit.
+MIN_RENAV_ACTIONS = 2
+
+
 class Effect(BaseModel):
     """A typed system-of-record effect (RFC ``Effect``, concrete runtime form).
 

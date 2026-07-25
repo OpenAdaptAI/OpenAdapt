@@ -1046,6 +1046,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     effective_durable = bool(
         configured_durable or (profile is not None and profile.require_durable)
     )
+    effective_require_settled = bool(
+        cfg.runtime.require_settled or (profile is not None and profile.require_settled)
+    )
     if (
         profile is not None
         and profile.require_encryption
@@ -1078,6 +1081,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         pinned_compiler_version=getattr(args, "pin_version", None),
         profile_contract=profile,
         effective_durable=effective_durable if profile is not None else None,
+        effective_require_settled=(
+            effective_require_settled if profile is not None else None
+        ),
     )
     print(report.render())
 
@@ -2177,7 +2183,11 @@ def _maybe_report_run(
     opted_in = bool(getattr(args, "report", False)) or os.environ.get(
         "OPENADAPT_FLOW_REPORT_RUN", ""
     ).lower() in ("1", "true", "yes")
-    if not opted_in or not getattr(report, "success", False):
+    execution_outcome = getattr(report, "execution_outcome", None)
+    success_rail_eligible = bool(getattr(report, "success", False)) and (
+        execution_outcome is None or execution_outcome == "VERIFIED"
+    )
+    if not opted_in or not success_rail_eligible:
         return
     try:
         from openadapt_flow.hosted import report_run

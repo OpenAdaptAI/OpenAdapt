@@ -19,9 +19,10 @@ FAILS CLOSED with a structured reason naming every failed requirement.
    effect contract (and none is an unconfirmed / fabricated binding). A write
    that would be verified by the SCREEN only -- because it declares no
    system-of-record effect -- refuses the run.
-4. **Effect execution** -- Standard and Regulated require an independent
-   verifier in THIS deployment. Demo and the legacy compatibility lane may use
-   exact, bundle-bound approval, but that result remains unverified.
+4. **Effect execution** -- Standard and Regulated require a verifier meeting
+   the workflow's declared evidence tier in THIS deployment. Demo and the
+   legacy compatibility lane may use exact, bundle-bound approval, but that
+   result remains unverified.
 5. **Interstitial admission** -- every bundle/runtime interstitial declaration
    is schema-valid, every explicit asset is sealed in the bundle manifest, and
    the exact declaration digest is recorded for authorization binding.
@@ -54,7 +55,10 @@ from pydantic import BaseModel, Field
 
 from openadapt_flow import crypto
 from openadapt_flow.deployment import DeploymentConfig
-from openadapt_flow.execution_profiles import ExecutionProfileContract
+from openadapt_flow.execution_profiles import (
+    ExecutionProfileContract,
+    required_effect_tier,
+)
 from openadapt_flow.ir import Interstitial, Step, Workflow
 from openadapt_flow.policy import (
     has_screen_postcondition,
@@ -72,6 +76,7 @@ from openadapt_flow.runtime.authorization import (
     runtime_inputs_digest,
 )
 from openadapt_flow.traversal import iter_workflow_steps
+from openadapt_flow.verification import VerificationTier, verifier_effect_tier
 
 #: Default certifying policy for a regulated run when none is configured.
 DEFAULT_POLICY: str = "clinical-write"
@@ -193,6 +198,7 @@ class RunGateReport(BaseModel):
     bundle_content_digest: Optional[str] = Field(default=None, pattern="^[a-f0-9]{64}$")
     required_identity_step_ids: list[str] = Field(default_factory=list)
     effect_verifier_configured: bool = False
+    minimum_effect_tier: Optional[int] = Field(default=None, ge=1, le=4)
     api_actuator_configured: bool = False
     unverified_write_approval_granted: bool = False
     admitted_interstitials_digest: Optional[str] = Field(
@@ -258,6 +264,7 @@ def evaluate_run_gate(
     pinned_compiler_version: Optional[str] = None,
     profile_contract: Optional[ExecutionProfileContract] = None,
     effective_durable: Optional[bool] = None,
+    effective_require_settled: Optional[bool] = None,
 ) -> RunGateReport:
     """Admit or refuse ``workflow`` for a regulated run in this deployment.
 
@@ -297,17 +304,18 @@ def evaluate_run_gate(
         or DEFAULT_POLICY
     )
     steps = list(iter_workflow_steps(workflow))
+    minimum_effect_tier = (
+        required_effect_tier(workflow, profile_contract.profile)
+        if profile_contract is not None
+        else None
+    )
 
     approval_gate = _gate_approval(
         steps,
         effect_verifier,
         api_actuator,
         approval_available,
-        require_independent=(
-            profile_contract.require_independent_effects
-            if profile_contract is not None
-            else False
-        ),
+        minimum_effect_tier=minimum_effect_tier,
         require_approval=(
             profile_contract.require_approval_for_unverified_effects
             if profile_contract is not None
@@ -322,7 +330,13 @@ def evaluate_run_gate(
     interstitial_gate = _gate_interstitials(workflow, interstitials)
     gates = []
     if profile_contract is not None:
-        gates.append(_gate_profile(profile_contract, effective_durable))
+        gates.append(
+            _gate_profile(
+                profile_contract,
+                effective_durable,
+                effective_require_settled,
+            )
+        )
     gates.extend(
         [
             (
@@ -385,6 +399,9 @@ def evaluate_run_gate(
         ),
         required_identity_step_ids=required_identity,
         effect_verifier_configured=effect_verifier is not None,
+        minimum_effect_tier=(
+            int(minimum_effect_tier) if minimum_effect_tier is not None else None
+        ),
         api_actuator_configured=api_actuator is not None,
         unverified_write_approval_granted=(
             effect_verifier is None
@@ -431,6 +448,7 @@ def _not_required(gate: str, detail: str) -> GateResult:
 def _gate_profile(
     contract: ExecutionProfileContract,
     effective_durable: Optional[bool],
+    effective_require_settled: Optional[bool],
 ) -> GateResult:
     """Verify the effective runtime satisfies the selected named posture."""
 
@@ -441,12 +459,21 @@ def _gate_profile(
             f"{contract.profile.value} requires durable execution, but the "
             "effective runtime is not durable",
         )
+    if contract.require_settled and effective_require_settled is not True:
+        return _result(
+            GATE_PROFILE,
+            False,
+            f"{contract.profile.value} requires settled-state detection, but "
+            "the effective runtime does not require settled frames",
+        )
     durability = "required and enabled" if contract.require_durable else "optional"
+    settling = "required and enabled" if contract.require_settled else "optional"
     production = "production" if contract.production else "non-production"
     return _result(
         GATE_PROFILE,
         True,
-        f"{contract.profile.value} ({production}); durability {durability}",
+        f"{contract.profile.value} ({production}); durability {durability}; "
+        f"settled-state detection {settling}",
     )
 
 
@@ -547,31 +574,64 @@ def _gate_approval(
     api_actuator: object | None,
     approval_available: bool,
     *,
-    require_independent: bool = False,
+    minimum_effect_tier: Optional[VerificationTier] = None,
     require_approval: bool = True,
     allow_approval: bool = True,
 ) -> GateResult:
     """Gate 4: writes with no configured verifier need explicit approval.
 
     A consequential write that DECLARES an effect but has NO verifier wired for
-    this deployment cannot be independently verified (its effect would go
+    this deployment cannot be verified (its effect would go
     unchecked). It is admitted ONLY under explicit operator approval; otherwise
     the run halts. Writes that DO have a verifier need nothing here.
     """
     writes = [s for s in steps if is_consequential(s) and has_system_effect(s)]
     if effect_verifier is not None:
+        weak: list[str] = []
+        untyped: list[str] = []
+        observed: list[VerificationTier] = []
+        for step in writes:
+            for effect in step.effects:
+                tier = verifier_effect_tier(effect_verifier, effect)
+                if tier is None:
+                    untyped.append(step.id)
+                elif minimum_effect_tier is not None and not tier.satisfies(
+                    minimum_effect_tier
+                ):
+                    weak.append(step.id)
+                    observed.append(tier)
+        if untyped and minimum_effect_tier is not None:
+            return _result(
+                GATE_APPROVAL,
+                False,
+                f"{len(set(untyped))} consequential write(s) use a verifier "
+                "that does not declare a machine-readable evidence tier",
+                sorted(set(untyped)),
+            )
+        if weak:
+            assert minimum_effect_tier is not None
+            tiers = ", ".join(
+                sorted({tier.name.lower().replace("_", "-") for tier in observed})
+            )
+            return _result(
+                GATE_APPROVAL,
+                False,
+                f"{len(set(weak))} consequential write(s) have {tiers} evidence; "
+                f"this profile requires {minimum_effect_tier.name.lower().replace('_', '-')}",
+                sorted(set(weak)),
+            )
         return _result(
             GATE_APPROVAL,
             True,
-            f"a system-of-record verifier is configured; "
-            f"{len(writes)} declared write(s) are independently verified",
+            f"a verifier satisfying the required evidence tier is configured; "
+            f"{len(writes)} declared write(s) are covered",
         )
     # No verifier: every declared write is unverifiable in this deployment.
     if not writes:
         return _result(
             GATE_APPROVAL,
             True,
-            "no consequential writes require independent verification",
+            "no consequential writes require effect verification",
         )
     direct_api_writes = [
         step
@@ -587,13 +647,13 @@ def _gate_approval(
             "check",
             [step.id for step in direct_api_writes],
         )
-    if require_independent:
+    if minimum_effect_tier is not None:
         return _result(
             GATE_APPROVAL,
             False,
-            f"{len(writes)} consequential write(s) lack the independent verifier "
-            "required by this execution profile; an approval cannot convert "
-            "unverified completion into VERIFIED",
+            f"{len(writes)} consequential write(s) lack a verifier at the "
+            "evidence tier required by this execution profile; an approval "
+            "cannot convert unverified completion into VERIFIED",
             [step.id for step in writes],
         )
     if approval_available and not allow_approval:
@@ -767,6 +827,7 @@ def build_runtime_authorization(
         ),
         admitted_policy_name=report.policy_name,
         execution_profile=report.execution_profile,
+        minimum_effect_tier=report.minimum_effect_tier,
         required_identity_step_ids=tuple(report.required_identity_step_ids),
         unverified_write_approvals=tuple(approvals),
         approval_source=approval_source,

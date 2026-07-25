@@ -47,6 +47,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
 )
+from openadapt_flow.verification import VerificationTier
 
 #: How many bytes of a candidate file the optional content probe reads. An
 #: arrival probe is a sanity check ("the batch header is present"), not a
@@ -92,6 +93,7 @@ class FileArrivalVerifier:
     """
 
     substrate = "file"
+    verification_tier = VerificationTier.INDEPENDENT_SYSTEM
 
     def __init__(
         self,

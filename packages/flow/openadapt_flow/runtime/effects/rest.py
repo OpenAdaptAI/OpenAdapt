@@ -29,6 +29,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
 )
+from openadapt_flow.verification import VerificationTier
 
 
 class RestRecordVerifier:
@@ -52,6 +53,7 @@ class RestRecordVerifier:
     """
 
     substrate = "rest"
+    verification_tier = VerificationTier.INDEPENDENT_SYSTEM
 
     def __init__(
         self,

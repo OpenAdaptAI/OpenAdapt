@@ -1372,7 +1372,12 @@ def _build_break_payload(
     resumed success without exposing or hashing report contents.
     """
     halt = report.halt
-    status = "halt" if halt is not None else "failed"
+    status = (
+        "halt"
+        if report.execution_outcome == "HALTED"
+        or (report.execution_outcome is None and halt is not None)
+        else "failed"
+    )
     resolver_rung = _last_failed_rung(report)
     if resolver_rung is not None and resolver_rung not in _RUN_SUMMARY_RUNGS:
         raise HostedError("report contains an unknown resolution rung")
@@ -1470,7 +1475,9 @@ def report_break(
     except (OSError, ValueError) as exc:
         raise HostedError("report.json is unreadable or invalid") from exc
 
-    if report.halt is None and report.success:
+    if report.execution_outcome == "VERIFIED" or (
+        report.execution_outcome is None and report.halt is None and report.success
+    ):
         return {"emitted": False, "reason": "run succeeded; no halt to report"}
 
     # Launch contract: auto-upload only the schema-minimal descriptor. Even
@@ -2087,10 +2094,17 @@ def report_run(
     except (OSError, ValueError) as exc:
         raise HostedError("report.json is unreadable or invalid") from exc
 
-    if not report.success:
+    success_rail_eligible = report.success and report.execution_outcome in (
+        None,
+        "VERIFIED",
+    )
+    if not success_rail_eligible:
         return {
             "emitted": False,
-            "reason": ("run did not succeed; the halt/failure rail is `report-break`"),
+            "reason": (
+                "run is not VERIFIED; only VERIFIED (or legacy unclassified) "
+                "successes may use the success rail"
+            ),
         }
     if not report.bundle_content_digest:
         raise HostedError(

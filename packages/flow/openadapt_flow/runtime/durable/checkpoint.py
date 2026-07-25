@@ -44,6 +44,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow.ir import EffectVerificationEvidence
 from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 from openadapt_flow.runtime.durable.approval import ApprovalRecord
 from openadapt_flow.runtime.durable.program_checkpoint import (
@@ -126,6 +127,7 @@ class RunCheckpoint(BaseModel):
     effect_verified: Optional[bool] = None
     effect_approved_unverified: bool = False
     effect_contract_hashes: list[str] = Field(default_factory=list)
+    effect_evidence: list[EffectVerificationEvidence] = Field(default_factory=list)
     governed_authorization_id: Optional[str] = None
     governed_approval_source: Optional[str] = None
     postconditions_ok: Optional[bool] = None
@@ -410,6 +412,14 @@ class CheckpointStore:
         for cp in self.program_checkpoints():
             effects.extend(cp.new_effects)
         return effects
+
+    def completed_effect_evidence(self) -> list[EffectVerificationEvidence]:
+        """Structured proof retained for already-confirmed program effects."""
+
+        evidence: list[EffectVerificationEvidence] = []
+        for checkpoint in self.program_checkpoints():
+            evidence.extend(checkpoint.new_effect_evidence)
+        return evidence
 
     def completed_unverified_effect_keys(self) -> list[str]:
         """Already-performed, explicitly approved effect hashes.

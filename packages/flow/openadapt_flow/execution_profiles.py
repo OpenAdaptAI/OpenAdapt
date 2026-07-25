@@ -11,9 +11,12 @@ assembling a potentially contradictory collection of permissive flags.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
+
+from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:
     from openadapt_flow.ir import RunReport, Workflow
@@ -34,7 +37,6 @@ class ExecutionOutcome(str, Enum):
     COMPLETED_UNVERIFIED = "COMPLETED_UNVERIFIED"
     HALTED = "HALTED"
     FAILED = "FAILED"
-    ROLLED_BACK = "ROLLED_BACK"
 
 
 @dataclass(frozen=True)
@@ -46,12 +48,13 @@ class ExecutionProfileContract:
     require_certification: bool
     require_identity_coverage: bool
     require_effect_contracts: bool
-    require_independent_effects: bool
+    minimum_effect_tier: VerificationTier | None
     require_approval_for_unverified_effects: bool
     allow_unverified_write_approval: bool
     require_encryption: bool
     strict_templates: bool
     require_durable: bool
+    require_settled: bool
     default_policy: str | None
 
 
@@ -62,12 +65,13 @@ _CONTRACTS = {
         require_certification=False,
         require_identity_coverage=False,
         require_effect_contracts=False,
-        require_independent_effects=False,
-        require_approval_for_unverified_effects=False,
+        minimum_effect_tier=None,
+        require_approval_for_unverified_effects=True,
         allow_unverified_write_approval=True,
         require_encryption=False,
         strict_templates=False,
         require_durable=False,
+        require_settled=False,
         default_policy=None,
     ),
     ExecutionProfile.STANDARD: ExecutionProfileContract(
@@ -76,12 +80,13 @@ _CONTRACTS = {
         require_certification=True,
         require_identity_coverage=True,
         require_effect_contracts=True,
-        require_independent_effects=True,
+        minimum_effect_tier=VerificationTier.PERSISTED_STATE_REACQUISITION,
         require_approval_for_unverified_effects=False,
         allow_unverified_write_approval=False,
         require_encryption=False,
         strict_templates=False,
         require_durable=True,
+        require_settled=True,
         default_policy="clinical-write",
     ),
     ExecutionProfile.REGULATED: ExecutionProfileContract(
@@ -90,12 +95,13 @@ _CONTRACTS = {
         require_certification=True,
         require_identity_coverage=True,
         require_effect_contracts=True,
-        require_independent_effects=True,
+        minimum_effect_tier=VerificationTier.PERSISTED_STATE_REACQUISITION,
         require_approval_for_unverified_effects=False,
         allow_unverified_write_approval=False,
         require_encryption=True,
         strict_templates=True,
         require_durable=True,
+        require_settled=True,
         default_policy="clinical-write",
     ),
 }
@@ -129,6 +135,24 @@ def execution_profile_contract(
     return _CONTRACTS[resolve_execution_profile(value)]
 
 
+def required_effect_tier(
+    workflow: Workflow,
+    profile: ExecutionProfile | str,
+) -> VerificationTier | None:
+    """Return the strongest profile/project minimum for this workflow."""
+
+    contract = execution_profile_contract(profile)
+    required = contract.minimum_effect_tier
+    if not contract.production:
+        return required
+    project_minimum = getattr(workflow.qualification, "minimum_effect_tier", None)
+    if project_minimum is not None:
+        candidate = VerificationTier(project_minimum)
+        if required is None or int(candidate) < int(required):
+            required = candidate
+    return required
+
+
 def classify_execution_outcome(
     report: RunReport,
     workflow: Workflow,
@@ -138,18 +162,26 @@ def classify_execution_outcome(
 
     Demo success is always visibly non-production.  Standard and Regulated
     success becomes ``VERIFIED`` only when every executed consequential action
-    has an independently confirmed effect.  Therefore an approved-unverified
-    or screen-only consequential result can never be reported as ``VERIFIED``
-    under either production profile.
+    has a confirmed effect at or above the workflow's required evidence tier.
+    Therefore an approved-unverified or immediate-screen-only result can never
+    be reported as ``VERIFIED`` under either production profile.
     """
 
     resolved = resolve_execution_profile(profile)
-    if not report.success:
+    execution_completed = (
+        report.execution_completed
+        if report.execution_completed is not None
+        else report.success
+    )
+    if not execution_completed:
         refusal_step_ids = {"<authorization>", "<params>", "<profile>"}
         governed_halt = (
-            report.halt is not None
-            or report.terminal_outcome in {"halt", "escalate"}
+            report.terminal_outcome in {"halt", "escalate"}
             or any(result.safety_halt for result in report.results)
+            or any(
+                result.failure_category in {"governed_refusal", "safety_halt"}
+                for result in report.results
+            )
             or any(result.step_id in refusal_step_ids for result in report.results)
         )
         return ExecutionOutcome.HALTED if governed_halt else ExecutionOutcome.FAILED
@@ -164,10 +196,23 @@ def classify_execution_outcome(
     consequential = {
         step.id for step in iter_workflow_steps(workflow) if is_consequential(step)
     }
+    minimum = required_effect_tier(workflow, resolved)
+    assert minimum is not None
     for result in report.results:
         if result.skipped or result.step_id not in consequential:
             continue
         if result.effect_approved_unverified or result.effect_verified is not True:
+            return ExecutionOutcome.COMPLETED_UNVERIFIED
+        evidence_hashes = Counter(
+            item.effect_contract_hash
+            for item in result.effect_evidence
+            if item.final_verdict == "confirmed"
+            and item.verification_tier is not None
+            and VerificationTier(item.verification_tier).satisfies(minimum)
+        )
+        if not result.effect_contract_hashes or evidence_hashes != Counter(
+            result.effect_contract_hashes
+        ):
             return ExecutionOutcome.COMPLETED_UNVERIFIED
     return ExecutionOutcome.VERIFIED
 
@@ -180,6 +225,8 @@ def stamp_execution_outcome(
     """Write the profile and precise outcome into ``report``."""
 
     resolved = resolve_execution_profile(profile)
+    if report.execution_completed is None:
+        report.execution_completed = report.success
     outcome = classify_execution_outcome(report, workflow, resolved)
     report.execution_profile = resolved.value
     report.execution_outcome = outcome.value
@@ -187,4 +234,6 @@ def stamp_execution_outcome(
         execution_profile_contract(resolved).production
         and outcome is ExecutionOutcome.VERIFIED
     )
+    if execution_profile_contract(resolved).production:
+        report.success = outcome is ExecutionOutcome.VERIFIED
     return outcome
