@@ -161,8 +161,8 @@ tracking_timeline_schema = ControlOverlayTimelineV2.model_json_schema()
 The same schemas ship under `openadapt_types/schemas/` for TypeScript, Rust,
 and other consumers. Version 1 remains the control-state contract. Version 2
 adds an optional normalized top-level viewport rectangle, the exact source
-viewport and transform, and an exact observation or decoded-media-frame
-binding without changing V1.
+viewport and DPR, and an exact observation or decoded-media-frame binding
+without changing V1.
 
 Overlay schemas reject unknown fields and contain only closed presentation
 labels and canonical statuses. Screenshots, action targets, typed values,
@@ -175,6 +175,8 @@ instead of a linkable raw frame hash. Published media uses the exact media
 SHA-256 and decoded frame index. A renderer draws tracking only when that
 binding matches; it omits the rectangle rather than replaying selectors,
 interpolating movement, or inferring a missing target from adjacent events.
+The runtime does not guess a future viewer transform. Desktop, Cloud, and media
+renderers map the normalized rectangle through their actual content box.
 If multiple runtime states land in one decoded media frame, the producer must
 coalesce them deterministically; it must not invent extra media frames or
 approximate their timing.

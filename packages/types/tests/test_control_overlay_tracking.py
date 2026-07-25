@@ -22,7 +22,6 @@ from openadapt_types import (
     ControlOverlayTargetTrackingV2,
     ControlOverlayTimelineEventV2,
     ControlOverlayTimelineV2,
-    ControlOverlayViewportTransformV2,
 )
 
 DIGEST = "a" * 64
@@ -49,12 +48,6 @@ def _target(*, frame_index: int | None = None) -> ControlOverlayTargetTrackingV2
             width_css_px=1280,
             height_css_px=720,
             device_pixel_ratio=2.0,
-        ),
-        viewport_to_presentation=ControlOverlayViewportTransformV2(
-            scale_x=0.8,
-            scale_y=0.8,
-            offset_x=0.1,
-            offset_y=0.1,
         ),
         binding=binding,
         action_kind=ControlOverlayTargetActionKind.CLICK,
@@ -84,21 +77,20 @@ def test_v2_is_additive_and_exact_observation_matching_is_fail_closed() -> None:
     assert frame.schema_version == CONTROL_OVERLAY_FRAME_V2_SCHEMA
     assert frame.tracking_for_observation(OBSERVATION_HMAC) == frame.target_tracking
     assert frame.tracking_for_observation("c" * 64) is None
-    assert frame.state_id.endswith("target-4e436e63535aa92f")
+    assert ":target-" in frame.state_id
     assert frame.state_id != _frame(1, None).state_id
 
 
-def test_geometry_and_transform_refuse_non_finite_or_out_of_bounds_values() -> None:
+def test_geometry_and_viewport_refuse_non_finite_or_out_of_bounds_values() -> None:
     with pytest.raises(ValidationError, match="exceeds viewport width"):
         ControlOverlayNormalizedRectV2(x=0.8, y=0.0, width=0.3, height=0.1)
     with pytest.raises(ValidationError):
         ControlOverlayNormalizedRectV2(x=float("nan"), y=0.0, width=0.3, height=0.1)
-    with pytest.raises(ValidationError, match="exceeds presentation width"):
-        ControlOverlayViewportTransformV2(
-            scale_x=0.8,
-            scale_y=1.0,
-            offset_x=0.3,
-            offset_y=0.0,
+    with pytest.raises(ValidationError, match="less than or equal to 32768"):
+        ControlOverlaySourceViewportV2(
+            width_css_px=32769,
+            height_css_px=720,
+            device_pixel_ratio=2.0,
         )
 
 
@@ -110,6 +102,7 @@ def test_contract_rejects_selectors_content_and_raw_observation_hash_fields() ->
         "typed_value",
         "url",
         "screenshot",
+        "viewport_to_presentation",
     ):
         candidate = dict(payload)
         candidate[forbidden] = "private"
@@ -154,6 +147,29 @@ def test_timeline_exposes_tracking_only_on_the_exact_decoded_frame() -> None:
     )
     with pytest.raises(ValidationError, match="does not match timeline frame"):
         ControlOverlayTimelineV2.model_validate(payload)
+
+
+def test_timeline_refuses_live_observation_hmac_target_tracking() -> None:
+    with pytest.raises(ValidationError, match="requires a media-frame binding"):
+        ControlOverlayTimelineV2(
+            data_classification=ControlOverlayDataClassification.SYNTHETIC,
+            evidence_pack_id="reference-v2",
+            media_sha256=DIGEST,
+            media_frame_count=120,
+            duration_ms=4000,
+            events=(
+                ControlOverlayTimelineEventV2(
+                    at_ms=0,
+                    media_frame_index=0,
+                    frame=_frame(1, None),
+                ),
+                ControlOverlayTimelineEventV2(
+                    at_ms=1000,
+                    media_frame_index=30,
+                    frame=_frame(2, _target()),
+                ),
+            ),
+        )
 
 
 def test_v2_json_schemas_are_deterministic_packaged_contracts() -> None:

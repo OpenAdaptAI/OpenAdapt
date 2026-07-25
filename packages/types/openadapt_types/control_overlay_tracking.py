@@ -1,7 +1,7 @@
 """Exact, privacy-safe target tracking for control-overlay presentation.
 
 Version 2 is additive: the version 1 control-state and timeline contracts stay
-unchanged.  This module carries only geometry and technical transform metadata.
+unchanged.  This module carries only source geometry and viewport metadata.
 It deliberately excludes selectors, accessibility content, typed values, URLs,
 screenshots, identities, report text, and other customer data.
 
@@ -51,6 +51,7 @@ _TARGET_TRACKING_JSON_SCHEMA_EXTRA = {
     "x-openadapt-render-only-on-exact-binding": True,
     "x-openadapt-missing-binding-behavior": "omit_target",
     "x-openadapt-runtime-resolution-replay": False,
+    "x-openadapt-renderer-mapping": "actual_content_box",
 }
 
 _TARGET_TIMELINE_JSON_SCHEMA_EXTRA = {
@@ -102,44 +103,14 @@ class ControlOverlayNormalizedRectV2(_StrictContract):
 class ControlOverlaySourceViewportV2(_StrictContract):
     """Source viewport used when the runtime resolved the target."""
 
-    width_css_px: StrictInt = Field(gt=0)
-    height_css_px: StrictInt = Field(gt=0)
+    width_css_px: StrictInt = Field(gt=0, le=32768)
+    height_css_px: StrictInt = Field(gt=0, le=32768)
     device_pixel_ratio: StrictFloat = Field(gt=0, le=16)
 
     @model_validator(mode="after")
     def _validate_finite_dpr(self) -> "ControlOverlaySourceViewportV2":
         if not isfinite(self.device_pixel_ratio):
             raise ValueError("device_pixel_ratio must be finite")
-        return self
-
-
-class ControlOverlayViewportTransformV2(_StrictContract):
-    """Explicit source-viewport to presentation-surface transform.
-
-    The source and destination are both normalized.  This bounded transform
-    represents full-viewport scaling and letterboxing without rotation,
-    mirroring, or cropping.  If a producer cannot describe its transform this
-    way, it must omit target tracking rather than approximate it.
-    """
-
-    kind: Literal["axis_aligned_normalized"] = "axis_aligned_normalized"
-    destination_coordinate_space: Literal["presentation_surface_normalized"] = (
-        "presentation_surface_normalized"
-    )
-    scale_x: StrictFloat = Field(gt=0, le=1)
-    scale_y: StrictFloat = Field(gt=0, le=1)
-    offset_x: StrictFloat = Field(ge=0, le=1)
-    offset_y: StrictFloat = Field(ge=0, le=1)
-
-    @model_validator(mode="after")
-    def _validate_extent(self) -> "ControlOverlayViewportTransformV2":
-        values = (self.scale_x, self.scale_y, self.offset_x, self.offset_y)
-        if not all(isfinite(value) for value in values):
-            raise ValueError("viewport transform values must be finite")
-        if self.offset_x + self.scale_x > 1 + 1e-9:
-            raise ValueError("viewport transform exceeds presentation width")
-        if self.offset_y + self.scale_y > 1 + 1e-9:
-            raise ValueError("viewport transform exceeds presentation height")
         return self
 
 
@@ -180,7 +151,6 @@ class ControlOverlayTargetTrackingV2(_StrictContract):
     )
     rect: ControlOverlayNormalizedRectV2
     source_viewport: ControlOverlaySourceViewportV2
-    viewport_to_presentation: ControlOverlayViewportTransformV2
     binding: ControlOverlayTargetBindingV2
     action_kind: ControlOverlayTargetActionKind | None = None
 
@@ -393,10 +363,14 @@ class ControlOverlayTimelineV2(_StrictContract):
             if event.frame.observed_at_monotonic_ms < previous_monotonic:
                 raise ValueError("timeline monotonic timestamps cannot go backwards")
             target = event.frame.target_tracking
-            if target is not None and isinstance(
-                target.binding,
-                ControlOverlayMediaFrameBindingV2,
-            ):
+            if target is not None:
+                if not isinstance(
+                    target.binding,
+                    ControlOverlayMediaFrameBindingV2,
+                ):
+                    raise ValueError(
+                        "timeline target tracking requires a media-frame binding"
+                    )
                 binding = target.binding
                 if binding.media_sha256 != self.media_sha256:
                     raise ValueError("target tracking does not match timeline media")
@@ -449,12 +423,11 @@ class ControlOverlayTimelineV2(_StrictContract):
         if event is None:
             return None
         target = event.frame.target_tracking
-        if target is None:
+        if target is None or not isinstance(
+            target.binding,
+            ControlOverlayMediaFrameBindingV2,
+        ):
             return None
-        if isinstance(target.binding, ControlOverlayMediaFrameBindingV2):
-            return target
-        # The timeline event itself is the retained exact observation-to-frame
-        # alignment for an opaque observation binding.
         return target
 
 

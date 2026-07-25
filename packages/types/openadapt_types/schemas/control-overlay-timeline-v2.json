@@ -272,11 +272,13 @@
         },
         "height_css_px": {
           "exclusiveMinimum": 0,
+          "maximum": 32768,
           "title": "Height Css Px",
           "type": "integer"
         },
         "width_css_px": {
           "exclusiveMinimum": 0,
+          "maximum": 32768,
           "title": "Width Css Px",
           "type": "integer"
         }
@@ -384,21 +386,18 @@
         },
         "source_viewport": {
           "$ref": "#/$defs/ControlOverlaySourceViewportV2"
-        },
-        "viewport_to_presentation": {
-          "$ref": "#/$defs/ControlOverlayViewportTransformV2"
         }
       },
       "required": [
         "rect",
         "source_viewport",
-        "viewport_to_presentation",
         "binding"
       ],
       "title": "ControlOverlayTargetTrackingV2",
       "type": "object",
       "x-openadapt-missing-binding-behavior": "omit_target",
       "x-openadapt-render-only-on-exact-binding": true,
+      "x-openadapt-renderer-mapping": "actual_content_box",
       "x-openadapt-runtime-resolution-replay": false
     },
     "ControlOverlayTimelineEventV2": {
@@ -424,56 +423,6 @@
         "frame"
       ],
       "title": "ControlOverlayTimelineEventV2",
-      "type": "object"
-    },
-    "ControlOverlayViewportTransformV2": {
-      "additionalProperties": false,
-      "description": "Explicit source-viewport to presentation-surface transform.\n\nThe source and destination are both normalized.  This bounded transform\nrepresents full-viewport scaling and letterboxing without rotation,\nmirroring, or cropping.  If a producer cannot describe its transform this\nway, it must omit target tracking rather than approximate it.",
-      "properties": {
-        "destination_coordinate_space": {
-          "const": "presentation_surface_normalized",
-          "default": "presentation_surface_normalized",
-          "title": "Destination Coordinate Space",
-          "type": "string"
-        },
-        "kind": {
-          "const": "axis_aligned_normalized",
-          "default": "axis_aligned_normalized",
-          "title": "Kind",
-          "type": "string"
-        },
-        "offset_x": {
-          "maximum": 1,
-          "minimum": 0,
-          "title": "Offset X",
-          "type": "number"
-        },
-        "offset_y": {
-          "maximum": 1,
-          "minimum": 0,
-          "title": "Offset Y",
-          "type": "number"
-        },
-        "scale_x": {
-          "exclusiveMinimum": 0,
-          "maximum": 1,
-          "title": "Scale X",
-          "type": "number"
-        },
-        "scale_y": {
-          "exclusiveMinimum": 0,
-          "maximum": 1,
-          "title": "Scale Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "scale_x",
-        "scale_y",
-        "offset_x",
-        "offset_y"
-      ],
-      "title": "ControlOverlayViewportTransformV2",
       "type": "object"
     },
     "ControlOverlayWorkflowLabel": {

@@ -75,7 +75,6 @@ from openadapt_types.control_overlay_tracking import (
     ControlOverlayTimelineBindingV2,
     ControlOverlayTimelineEventV2,
     ControlOverlayTimelineV2,
-    ControlOverlayViewportTransformV2,
     build_control_overlay_timeline_v2,
     control_overlay_state_id_v2,
 )
@@ -133,7 +132,6 @@ __all__ = [
     "ControlOverlayTimelineBindingV2",
     "ControlOverlayTimelineEventV2",
     "ControlOverlayTimelineV2",
-    "ControlOverlayViewportTransformV2",
     "build_control_overlay_timeline_v2",
     "control_overlay_state_id_v2",
     # action
