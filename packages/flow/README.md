@@ -128,8 +128,9 @@ plus target flags to `replay`, or drive a real deployment with
 effects, actuation, durable, and policy sections from one config. Recorded
 parameter values are the defaults, and `--param` overrides them at replay.
 Select `--profile regulated` for encrypted, fail-closed production execution,
-`--profile standard` for a certified, durable deployment that does not require
-bundle encryption, or `--profile demo` for an explicitly non-production run.
+`--profile standard` for a certified and durable deployment whose qualified
+storage boundary may supply at-rest encryption, or `--profile demo` for an
+explicitly non-production run.
 Demo completions are `COMPLETED_UNVERIFIED`; Standard and Regulated return
 `VERIFIED` only when every consequential effect is confirmed at the workflow's
 configured minimum evidence tier.
@@ -509,10 +510,13 @@ and are protected by a documented boundary. Identity crops sent to the on-prem
 VLM appliance are deliberately not scrubbed; the control there is on-prem-only
 plus no-retention. Full map: [docs/PRIVACY.md](docs/PRIVACY.md).
 
-At rest, opt-in AES-256-GCM encryption (`OPENADAPT_BUNDLE_KEY`) seals
-`workflow.json`, template crops, and durable checkpoints. KMS integration and
-key rotation remain operator responsibilities, and full-disk encryption is
-still required. Treat every source bundle as PHI. Details:
+At rest, AES-256-GCM encryption (`OPENADAPT_BUNDLE_KEY`) seals `workflow.json`,
+template crops, and durable checkpoints. It is optional for Demo and Standard
+deployments with a qualified encrypted storage boundary, and required by the
+Regulated profile. For an encrypted Standard bundle, the CLI carries the same
+key into its durable checkpoints. KMS integration and key rotation remain
+operator responsibilities, and full-disk encryption is still required. Treat
+every source bundle as PHI. Details:
 [docs/phi_at_rest.md](docs/phi_at_rest.md).
 
 Seal a production candidate without modifying the compiled source bundle:

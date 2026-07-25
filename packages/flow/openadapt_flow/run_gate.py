@@ -889,7 +889,9 @@ def _gate_encryption(
             GATE_ENCRYPTION,
             False,
             "bundle workflow.json is NOT encrypted at rest (AES-256-GCM). "
-            "Re-save with save(encrypt=True) / a configured OPENADAPT_BUNDLE_KEY",
+            "Set OPENADAPT_BUNDLE_KEY, seal a new candidate with "
+            "`openadapt-flow seal SOURCE --out DEST`, then certify that exact "
+            "sealed destination",
         )
     templates, unsealed, uncovered = _template_asset_encryption(workflow, bundle)
     enc_note = "encrypted" if workflow.encrypted else "plaintext (not required)"

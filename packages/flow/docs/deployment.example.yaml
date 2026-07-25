@@ -115,8 +115,9 @@ runtime:
   # demo       -> non-production; uncertified/screen-only completion never
   #               becomes VERIFIED
   # standard   -> certification, sealed manifest, durability, consequential
-  #               identity, and independently verified effects
-  # regulated  -> Standard + encrypted bundle and strictly sealed assets
+  #               identity, and independently verified effects; the qualified
+  #               storage boundary may provide at-rest encryption
+  # regulated  -> Standard + encrypted bundle/assets/checkpoints
   profile: regulated
 
   # Tier-3 durable runtime: checkpoint each verified step, durably PAUSE on a

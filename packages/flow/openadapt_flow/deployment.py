@@ -577,6 +577,7 @@ def build_replayer(
     governed_authorization: Any = None,
     runtime_config: Optional["RuntimeSection"] = None,
     phi_mode: Optional[bool] = None,
+    checkpoint_key: Optional[str] = None,
 ) -> Any:
     """Wire one deployment-qualified backend into the governed Replayer.
 
@@ -590,7 +591,9 @@ def build_replayer(
     fail-closed PHI allowlist (``phi_grounding_allowlist`` /
     ``phi_egress_attested``). When absent, the behavior is exactly the historic
     one: the on-prem appliance is the only VLM fallback and no model grounder is
-    configured.
+    configured. ``checkpoint_key`` domain-separates and encrypts durable state;
+    named-profile CLI runs supply it from ``OPENADAPT_BUNDLE_KEY`` whenever a
+    production bundle is application-sealed.
     """
     import os
 
@@ -712,6 +715,7 @@ def build_replayer(
         use_structural=use_structural,
         pixel_verify_enabled=pixel_verify_enabled,
         governed_authorization=governed_authorization,
+        checkpoint_key=checkpoint_key,
         require_settled=require_settled,
     )
 

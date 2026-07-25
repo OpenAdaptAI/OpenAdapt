@@ -47,10 +47,13 @@ one-way to anyone without the external secret. Manage that secret like any other
   bundle whose steps carry a plaintext identity band (always), and — with the
   `privacy` extra installed — an identifier-bearing postcondition / label.
 
-## Shipped: opt-in AEAD encryption (REM-1 crypto)
+## Shipped: profile-enforced AEAD encryption (REM-1 crypto)
 
-Encryption-at-rest is now available as an **opt-in** layer
-(`openadapt_flow.crypto`), OFF by default so nothing breaks:
+Encryption-at-rest remains opt-in for Demo, low-level embedding, and Standard
+deployments whose qualified storage boundary already supplies it. Regulated
+requires application-level sealing and refuses before actuation when it is
+absent. When Standard uses an application-sealed bundle, the runtime also
+requires encrypted durable state rather than silently mixing protection modes:
 
 - **Bundle.** The production CLI path is:
 
@@ -85,7 +88,10 @@ Encryption-at-rest is now available as an **opt-in** layer
   `Replayer(checkpoint_key=…)` and `resume(…, key=…)`) seals every checkpoint /
   pending-escalation / run-manifest / Phase-2 interpreter checkpoint the same
   way (`…​.json.enc`), so a resumable run's persisted params + effect contracts
-  are ciphertext at rest.
+  are ciphertext at rest. The `run` CLI resolves `OPENADAPT_BUNDLE_KEY` once for
+  the encrypted bundle and reuses it for Regulated durable state and for any
+  application-sealed Standard bundle; a library caller must pass the same key
+  to `Replayer(checkpoint_key=…)`.
 - **Integrity preserved.** The schema-v2 manifest (content digest + per-asset
   SHA-256 + provenance) is sealed over the **plaintext** content *before*
   encryption — including the template crops, whose digests stay over the
