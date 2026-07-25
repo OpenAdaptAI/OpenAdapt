@@ -1423,6 +1423,52 @@ def test_deployment_runtime_accepts_named_profile():
     assert runtime.profile == "standard"
 
 
+@pytest.mark.parametrize(
+    ("profile", "expected_key"),
+    [
+        (ExecutionProfile.DEMO, None),
+        (ExecutionProfile.STANDARD, _KEY),
+        (ExecutionProfile.REGULATED, _KEY),
+    ],
+)
+def test_cli_replayer_wires_checkpoint_encryption_by_profile(
+    monkeypatch, profile, expected_key
+):
+    import openadapt_flow.__main__ as main
+    import openadapt_flow.deployment as deployment
+
+    captured = {}
+
+    def capture(_backend, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(deployment, "build_replayer", capture)
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _KEY)
+    main._configured_replayer(
+        object(),
+        allow_egress=False,
+        effect_verifier=None,
+        api_actuator=None,
+        durable=profile is not ExecutionProfile.DEMO,
+        use_structural=True,
+        governed_authorization=SimpleNamespace(execution_profile=profile.value),
+    )
+
+    assert captured["checkpoint_key"] == expected_key
+
+
+def test_encrypted_demo_does_not_require_durable_checkpoint_key(tmp_path):
+    workflow, _bundle = _sealed(tmp_path, _workflow(), encrypted=True)
+    replayer = Replayer(
+        FakeBackend(),
+        vision=FakeVision(),
+        governed_authorization=_authorization_for(workflow, ExecutionProfile.DEMO),
+    )
+
+    assert replayer._profile_runtime_refusal(workflow) is None
+
+
 def test_demo_declared_write_requires_approval_and_stays_non_production(tmp_path):
     workflow = _key_workflow(
         "demo-write",
@@ -1529,10 +1575,72 @@ def test_replayer_rechecks_regulated_encryption_before_backend_access(tmp_path):
             ExecutionProfile.REGULATED,
         ),
         durable=True,
+        checkpoint_key=_KEY,
         require_settled=True,
     ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "run-regulated")
 
     assert report.execution_outcome == ExecutionOutcome.HALTED.value
     assert report.results[0].step_id == "<profile>"
     assert "encrypted bundle" in (report.results[0].error or "")
+    assert backend.actions == []
+
+
+@pytest.mark.parametrize(
+    "profile", [ExecutionProfile.STANDARD, ExecutionProfile.REGULATED]
+)
+def test_application_sealed_production_run_seals_durable_state(tmp_path, profile):
+    workflow, bundle = _sealed(
+        tmp_path,
+        _key_workflow(f"encrypted-{profile.value}", with_effect=True),
+        encrypted=True,
+    )
+    gate = _gate(
+        workflow,
+        bundle,
+        profile,
+        verifier=_TieredVerifier(),
+        durable=True,
+    )
+    assert gate.passed, gate.render()
+    authorization = build_runtime_authorization(workflow, gate)
+    run_dir = tmp_path / f"encrypted-{profile.value}-run"
+
+    report = Replayer(
+        FakeBackend(),
+        vision=_ReadyVision(),
+        effect_verifier=_TieredVerifier(),
+        governed_authorization=authorization,
+        durable=True,
+        checkpoint_key=_KEY,
+        require_settled=True,
+    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+
+    assert report.execution_outcome == ExecutionOutcome.VERIFIED.value
+    assert list((run_dir / "checkpoints").glob("*.json.enc"))
+    assert not list((run_dir / "checkpoints").glob("*.json"))
+
+
+@pytest.mark.parametrize(
+    "profile", [ExecutionProfile.STANDARD, ExecutionProfile.REGULATED]
+)
+def test_replayer_rechecks_checkpoint_encryption_before_backend_access(
+    tmp_path, profile
+):
+    workflow, bundle = _sealed(tmp_path, _workflow(), encrypted=True)
+    backend = FakeBackend()
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        governed_authorization=_authorization_for(workflow, profile),
+        durable=True,
+        require_settled=True,
+    ).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=tmp_path / f"run-no-checkpoint-key-{profile.value}",
+    )
+
+    assert report.execution_outcome == ExecutionOutcome.HALTED.value
+    assert report.results[0].step_id == "<profile>"
+    assert "encrypted durable checkpoints" in (report.results[0].error or "")
     assert backend.actions == []

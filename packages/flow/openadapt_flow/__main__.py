@@ -412,7 +412,16 @@ def _configured_replayer(
     durable runtime) are identical for browser, Windows, macOS, and
     RDP/remote-display sessions. The caller owns the backend lifecycle.
     """
+    from openadapt_flow import crypto
     from openadapt_flow.deployment import build_replayer
+
+    checkpoint_key = None
+    profile_name = getattr(governed_authorization, "execution_profile", None)
+    if profile_name is not None:
+        from openadapt_flow.execution_profiles import execution_profile_contract
+
+        if execution_profile_contract(profile_name).production:
+            checkpoint_key = crypto.resolve_key(None)
 
     return build_replayer(
         backend,
@@ -424,6 +433,7 @@ def _configured_replayer(
         pixel_verify_enabled=pixel_verify_enabled,
         governed_authorization=governed_authorization,
         runtime_config=runtime_config,
+        checkpoint_key=checkpoint_key,
     )
 
 
@@ -1060,8 +1070,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(
             f"run REFUSED: the {selected_profile.value} profile requires "
             "encrypted bundles; --allow-unencrypted cannot weaken a named "
-            "profile. Select Standard or Demo for a reviewed plaintext "
-            "deployment. Nothing was executed."
+            "profile. Select Standard or Demo only when the qualified storage "
+            "boundary protects plaintext artifacts. Nothing was executed."
         )
         return 2
     backend_cfg = _resolve_backend_config(args, cfg, workflow)
@@ -2898,8 +2908,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Named execution posture (or runtime.profile from --config). Demo "
             "is explicitly non-production; Standard "
             "requires certification, durability, identity, and independently "
-            "verified consequential effects; Regulated additionally requires "
-            "encrypted bundles and strictly sealed evidence assets. Omit only "
+            "verified consequential effects. Regulated additionally requires "
+            "encrypted bundles, strictly sealed evidence assets, and encrypted "
+            "durable checkpoints in a customer-controlled deployment. Omit only "
             "for compatibility with a pre-profile deployment."
         ),
     )

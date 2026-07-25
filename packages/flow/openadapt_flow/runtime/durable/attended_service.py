@@ -268,6 +268,7 @@ def _deployment_executor(
                 pixel_verify_enabled=deployment.runtime.pixel_verify_enabled,
                 governed_authorization=manifest.governed_authorization,
                 runtime_config=deployment.runtime,
+                checkpoint_key=key,
             )
 
         return BoundAttendedExecutor(replayer_for_manifest, key=key)

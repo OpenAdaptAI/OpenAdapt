@@ -906,12 +906,19 @@ class Replayer:
         if authorization is None or authorization.execution_profile is None:
             return None
         profile = authorization.execution_profile
-        if profile in {"standard", "regulated"} and not self.durable:
+        from openadapt_flow.execution_profiles import execution_profile_contract
+
+        contract = execution_profile_contract(profile)
+        if contract.require_durable and not self.durable:
             return f"{profile} execution requires the durable runtime"
-        if profile in {"standard", "regulated"} and not self.require_settled:
+        if contract.require_settled and not self.require_settled:
             return f"{profile} execution requires settled-state detection"
-        if profile == "regulated" and not workflow.encrypted:
-            return "regulated execution requires an encrypted bundle"
+        if contract.require_encryption and not workflow.encrypted:
+            return f"{profile} execution requires an encrypted bundle"
+        if (
+            contract.production and (contract.require_encryption or workflow.encrypted)
+        ) and not self.checkpoint_key:
+            return f"{profile} execution requires encrypted durable checkpoints"
         return None
 
     @staticmethod
