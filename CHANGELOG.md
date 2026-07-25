@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.7.3 (2026-07-25)
+
+### Bug Fixes
+
+- **ci**: Restore verified docs dispatch action
+  ([#1053](https://github.com/OpenAdaptAI/OpenAdapt/pull/1053),
+  [`b6c7712`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b6c7712717630bfe0808aa65609b23c033ed76e2))
+
+### Build System
+
+- **deps**: Bump peter-evans/repository-dispatch from 3 to 4
+  ([#1049](https://github.com/OpenAdaptAI/OpenAdapt/pull/1049),
+  [`bc566d1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bc566d1471d0e75062e8094ca67bb3f58a9c3490))
+
+### Documentation
+
+- Fix README safety wording wrap ([#1048](https://github.com/OpenAdaptAI/OpenAdapt/pull/1048),
+  [`e643d78`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e643d78eef011be1b92107224f96c64875bc60d1))
+
+- Rebuild flagship README ([#1047](https://github.com/OpenAdaptAI/OpenAdapt/pull/1047),
+  [`543a7c1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/543a7c1e4db36fe8340eefd599d56fb03f97c9cd))
+
+
 ## v1.7.2 (2026-07-24)
 
 ### Bug Fixes
