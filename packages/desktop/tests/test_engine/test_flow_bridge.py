@@ -486,12 +486,82 @@ class TestReportParsing:
             (0, {"success": True, "halt": {"outcome": "halt"}}, "unknown"),
             (0, {"success": "yes"}, "unknown"),
             (1, {"halt": "not-structured"}, "unknown"),
+            (
+                0,
+                {
+                    "success": True,
+                    "execution_outcome": "VERIFIED",
+                    "execution_profile": "demo",
+                    "production_eligible": True,
+                    "execution_completed": True,
+                    "outcome_envelope": {
+                        "version": "openadapt.execution-outcome/v1",
+                        "outcome": "VERIFIED",
+                        "profile": "demo",
+                        "production_eligible": True,
+                        "execution_completed": True,
+                        "required_contracts": {
+                            "authorization": 1,
+                            "identity": 0,
+                            "postcondition": 0,
+                            "effect": 1,
+                        },
+                        "passed_contracts": {
+                            "authorization": 1,
+                            "identity": 0,
+                            "postcondition": 0,
+                            "effect": 0,
+                        },
+                        "evidence_classes": ["authorization"],
+                        "model_calls": 0,
+                        "external_network_calls": "none",
+                        "compensation_actions": 0,
+                    },
+                },
+                "unknown",
+            ),
         ],
     )
     def test_classifies_only_explicit_consistent_flow_outcomes(
         self, returncode: int, report: dict, expected: str
     ) -> None:
         assert FlowBridge.classify_outcome(returncode, report) == expected
+
+    def test_verified_outcome_rejects_mismatched_network_observation(self) -> None:
+        report = {
+            "success": True,
+            "model_calls": 0,
+            "external_network_calls": "none",
+            "execution_outcome": "VERIFIED",
+            "execution_profile": "standard",
+            "production_eligible": True,
+            "execution_completed": True,
+            "outcome_envelope": {
+                "version": "openadapt.execution-outcome/v1",
+                "outcome": "VERIFIED",
+                "profile": "standard",
+                "production_eligible": True,
+                "execution_completed": True,
+                "required_contracts": {
+                    "authorization": 1,
+                    "identity": 0,
+                    "postcondition": 0,
+                    "effect": 0,
+                },
+                "passed_contracts": {
+                    "authorization": 1,
+                    "identity": 0,
+                    "postcondition": 0,
+                    "effect": 0,
+                },
+                "evidence_classes": ["authorization"],
+                "model_calls": 0,
+                "external_network_calls": "observed",
+                "compensation_actions": 0,
+            },
+        }
+
+        assert FlowBridge.classify_outcome(0, report) == "unknown"
 
 
 class TestBrowserRuntime:

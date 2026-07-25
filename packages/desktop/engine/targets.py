@@ -196,7 +196,7 @@ class ExecutionTarget(BaseModel):
         return overrides
 
     def record_args(self, out_dir: Path, *, task: str = "") -> list[str]:
-        """Build canonical Flow 1.22.0 ``record`` arguments in private memory.
+        """Build canonical bundled-Flow ``record`` arguments in private memory.
 
         The caller must never place this list on Desktop's own process command
         line. The private record helper reconstructs it only after reading and

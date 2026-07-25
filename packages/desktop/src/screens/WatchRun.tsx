@@ -16,12 +16,60 @@ import {
   CardHead,
   Callout,
   Field,
+  Pill,
 } from "../ui/primitives";
 import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
 import { ReplayMonitor } from "../ui/ReplayMonitor";
 
 type ExecuteMode = "replay" | "run";
-type RunIssue = { message: string; preActionRefusal: boolean };
+type RunIssue = {
+  title: string;
+  message: string;
+  preActionRefusal: boolean;
+};
+
+function issueForReport(report: RunReport): RunIssue | null {
+  if (report.outcome === "COMPLETED_UNVERIFIED") {
+    return {
+      title: "Execution completed without sufficient verification",
+      message:
+        "The workflow finished, but its required evidence did not prove the intended business effect.",
+      preActionRefusal: false,
+    };
+  }
+  if (report.outcome === "FAILED") {
+    return {
+      title: "Execution failed",
+      message:
+        "A runtime or infrastructure failure prevented a verified outcome.",
+      preActionRefusal: false,
+    };
+  }
+  if (report.outcome === "ROLLED_BACK") {
+    return {
+      title: "Execution was rolled back",
+      message:
+        "The configured compensating action completed, so the requested effect was not reported as verified.",
+      preActionRefusal: false,
+    };
+  }
+  if (report.outcome === "unknown") {
+    return {
+      title: "Execution outcome needs verification",
+      message:
+        report.error || "Desktop could not classify the execution outcome.",
+      preActionRefusal: false,
+    };
+  }
+  return null;
+}
+
+const CONTRACT_LABELS = {
+  authorization: "Authorization",
+  identity: "Identity",
+  postcondition: "Postcondition",
+  effect: "Business effect",
+} as const;
 
 export function WatchRun({
   workflowId,
@@ -41,22 +89,26 @@ export function WatchRun({
   );
   const [deploymentConfig, setDeploymentConfig] = useState("");
   const stepsRef = useRef<RunStep[]>([]);
+  const reportGenerationRef = useRef(0);
   const fieldPrefix = useId();
 
-  async function load() {
+  async function load(generation: number) {
     const next = await engineTry<RunReport | null>(
       CMD.GET_RUN_REPORT,
       { workflow_id: workflowId },
       null,
     );
+    if (generation !== reportGenerationRef.current) return;
     if (next) {
       setReport(next);
       stepsRef.current = next.steps ?? [];
+      setRunIssue(issueForReport(next));
     }
   }
 
   useEffect(() => {
-    void load();
+    const generation = ++reportGenerationRef.current;
+    void load(generation);
     const unsubs = [
       onEngineEvent(EVT.LOG_LINE, (step: RunStep | { line: string }) => {
         if (!("index" in step)) return;
@@ -78,15 +130,32 @@ export function WatchRun({
         if (status.workflow_id === workflowId) setRuntime(status);
       }),
     ];
-    return () => unsubs.forEach((promise) => promise.then((u) => u()).catch(() => {}));
+    return () => {
+      reportGenerationRef.current += 1;
+      unsubs.forEach((promise) => promise.then((u) => u()).catch(() => {}));
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowId]);
 
   async function execute(mode: ExecuteMode) {
+    reportGenerationRef.current += 1;
     setRunning(true);
     setRunIssue(null);
     stepsRef.current = [];
-    setReport((current) => (current ? { ...current, steps: [] } : current));
+    setReport((current) =>
+      current
+        ? {
+            ...current,
+            ok: false,
+            outcome: "unknown",
+            error: undefined,
+            steps: [],
+            halt: null,
+            metrics: null,
+            outcome_details: null,
+          }
+        : current,
+    );
     try {
       const response = await engineInvoke<ExecutionResponse>(
         mode === "run" ? CMD.RUN_WORKFLOW : CMD.REPLAY_WORKFLOW,
@@ -100,23 +169,18 @@ export function WatchRun({
       );
       if (response.outcome === "refused") {
         setRunIssue({
+          title: "Execution was refused before action",
           message: response.error,
           preActionRefusal: response.pre_action_refusal,
         });
       } else {
         setReport(response);
         stepsRef.current = response.steps ?? [];
-        if (response.outcome === "unknown") {
-          setRunIssue({
-            message:
-              response.error ||
-              "Desktop could not classify the execution outcome.",
-            preActionRefusal: false,
-          });
-        }
+        setRunIssue(issueForReport(response));
       }
     } catch (error) {
       setRunIssue({
+        title: "Engine connection ended unexpectedly",
         message:
           error instanceof Error
             ? error.message
@@ -218,11 +282,7 @@ export function WatchRun({
         {runIssue && (
           <Callout
             tone="warn"
-            title={
-              runIssue.preActionRefusal
-                ? "Execution was refused before action"
-                : "Execution outcome needs verification"
-            }
+            title={runIssue.title}
           >
             {runIssue.message}{" "}
             {runIssue.preActionRefusal
@@ -251,6 +311,80 @@ export function WatchRun({
               Teach the fix
             </Button>
           </div>
+        </Card>
+      )}
+
+      {report?.outcome_details && (
+        <Card>
+          <CardHead
+            eyebrow="Execution contract"
+            title="Outcome evidence"
+            sub="The runtime reports what the profile required, what passed, and which external capabilities were used."
+          />
+          <div className="row">
+            <Pill tone={report.outcome === "VERIFIED" ? "ok" : "warn"}>
+              {report.outcome.replaceAll("_", " ").toLowerCase()}
+            </Pill>
+            {report.outcome_details.profile && (
+              <Pill tone="neutral">{report.outcome_details.profile}</Pill>
+            )}
+            <Pill
+              tone={
+                report.outcome_details.production_eligible ? "ok" : "neutral"
+              }
+            >
+              {report.outcome_details.production_eligible
+                ? "production eligible"
+                : "not production eligible"}
+            </Pill>
+            <Pill tone={report.outcome_details.execution_completed ? "ok" : "warn"}>
+              {report.outcome_details.execution_completed
+                ? "execution completed"
+                : "execution stopped"}
+            </Pill>
+          </div>
+          <div className="metrics" style={{ marginTop: "var(--space-4)" }}>
+            {(
+              Object.keys(CONTRACT_LABELS) as Array<
+                keyof typeof CONTRACT_LABELS
+              >
+            ).map((contract) => (
+              <div className="metric" key={contract}>
+                <span className="label">{CONTRACT_LABELS[contract]}</span>
+                <span className="metric-value tnum">
+                  {report.outcome_details?.passed_contracts[contract]}/
+                  {report.outcome_details?.required_contracts[contract]}
+                </span>
+              </div>
+            ))}
+            <div className="metric">
+              <span className="label">Model calls</span>
+              <span className="metric-value tnum">
+                {report.outcome_details.model_calls}
+              </span>
+            </div>
+            <div className="metric">
+              <span className="label">External network</span>
+              <span className="metric-value">
+                {report.outcome_details.external_network_calls}
+              </span>
+            </div>
+            <div className="metric">
+              <span className="label">Compensating actions</span>
+              <span className="metric-value tnum">
+                {report.outcome_details.compensation_actions}
+              </span>
+            </div>
+          </div>
+          {report.outcome_details.evidence_classes.length > 0 && (
+            <div className="row" style={{ marginTop: "var(--space-4)" }}>
+              {report.outcome_details.evidence_classes.map((evidence) => (
+                <Pill key={evidence} tone="neutral">
+                  {evidence.replaceAll("_", " ")}
+                </Pill>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 

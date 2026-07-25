@@ -5,6 +5,7 @@ import type {
   QualificationIdentityEnforcement,
   QualificationIdentityMatch,
   QualificationIdentityNormalizer,
+  QualificationIdentitySignalKey,
   QualificationIdentitySourceKind,
   QualificationNode,
   QualificationProject,
@@ -30,6 +31,22 @@ const IDENTITY_REFUSALS = new Set([
   "identity_policy_unenforced",
   "identity_signal_unavailable",
 ]);
+const IDENTITY_KEYS: {
+  value: QualificationIdentitySignalKey;
+  label: string;
+}[] = [
+  { value: "subject_name", label: "Subject name" },
+  { value: "record_id", label: "Record identifier" },
+  { value: "secondary_identifier", label: "Secondary identifier" },
+  { value: "application", label: "Application" },
+  { value: "session", label: "Session" },
+  { value: "workflow_state", label: "Workflow state" },
+];
+const DEDICATED_IDENTITY_SOURCES = new Set<QualificationIdentitySourceKind>([
+  "application",
+  "session",
+  "workflow_state",
+]);
 const EFFECT_REFUSALS = new Set([
   "effect_contract_missing",
   "effect_policy_missing",
@@ -39,17 +56,62 @@ const EFFECT_REFUSALS = new Set([
 ]);
 
 interface IdentitySignalDraft {
-  key: string;
-  field: string;
+  id: string;
+  key: QualificationIdentitySignalKey;
   source: QualificationIdentitySourceKind;
   match: QualificationIdentityMatch;
   normalizers: QualificationIdentityNormalizer[];
+  region: string;
+  extractPattern: string;
+  expectedValue: string;
+  params: string;
 }
 
-function defaultIdentityField(source: QualificationIdentitySourceKind): string {
-  if (source === "structured") return "structured_identity";
-  if (source === "identifier_region") return "identifier_region";
-  return "captured_context";
+function defaultIdentityKey(
+  source: QualificationIdentitySourceKind,
+): QualificationIdentitySignalKey {
+  if (source === "application" || source === "session" || source === "workflow_state") {
+    return source;
+  }
+  return "record_id";
+}
+
+function encodedRegion(
+  region?: [number, number, number, number] | null,
+): string {
+  return region?.join(", ") || "";
+}
+
+function parsedRegion(value: string): [number, number, number, number] | null {
+  const parts = value
+    .split(",")
+    .map((item) => Number(item.trim()));
+  if (
+    parts.length !== 4 ||
+    parts.some((item) => !Number.isInteger(item)) ||
+    parts[2] <= 0 ||
+    parts[3] <= 0
+  ) {
+    return null;
+  }
+  return parts as [number, number, number, number];
+}
+
+function identityKeysForSource(
+  source: QualificationIdentitySourceKind,
+): QualificationIdentitySignalKey[] {
+  if (source === "application" || source === "session" || source === "workflow_state") {
+    return [source];
+  }
+  return ["subject_name", "record_id", "secondary_identifier"];
+}
+
+function signalNeedsRegion(source: QualificationIdentitySourceKind): boolean {
+  return source === "identifier_region" || source === "captured_context";
+}
+
+function signalNeedsExtraction(source: QualificationIdentitySourceKind): boolean {
+  return source === "structured" || source === "captured_context";
 }
 
 function identityLabel(node: QualificationNode): string {
@@ -250,11 +312,15 @@ export function Qualification({
     setIdentityEnforcement(policy?.enforcement || "canonical_ladder");
     setIdentitySignals(
       (policy?.signals || []).map((signal, index) => ({
-        key: `${selectedActionId}-${signal.field}-${index}`,
-        field: signal.field,
+        id: `${selectedActionId}-${signal.key}-${index}`,
+        key: signal.key,
         source: signal.source,
         match: signal.match,
         normalizers: signal.normalizers,
+        region: encodedRegion(signal.region),
+        extractPattern: signal.extract_pattern || "",
+        expectedValue: signal.expected_value || "",
+        params: (signal.params || []).join(", "),
       })),
     );
     setIdentityQuorum(Math.max(1, policy?.quorum || 1));
@@ -357,24 +423,30 @@ export function Qualification({
     setIdentitySignals((current) => [
       ...current,
       {
-        key: `${selectedActionId}-${source}-${Date.now()}`,
-        field: `${defaultIdentityField(source)}${
-          duplicateCount ? `_${duplicateCount + 1}` : ""
-        }`,
+        id: `${selectedActionId}-${source}-${Date.now()}-${duplicateCount}`,
+        key: defaultIdentityKey(source),
         source,
         match: "exact",
         normalizers: [],
+        region: encodedRegion(
+          selectedControls?.identity.sources.find(
+            (candidate) => candidate.kind === source,
+          )?.region,
+        ),
+        extractPattern: "",
+        expectedValue: "",
+        params: "",
       },
     ]);
   }
 
   function updateIdentitySignal(
-    key: string,
-    update: Partial<Omit<IdentitySignalDraft, "key">>,
+    id: string,
+    update: Partial<Omit<IdentitySignalDraft, "id">>,
   ) {
     setIdentitySignals((current) =>
       current.map((signal) =>
-        signal.key === key ? { ...signal, ...update } : signal,
+        signal.id === id ? { ...signal, ...update } : signal,
       ),
     );
   }
@@ -393,11 +465,30 @@ export function Qualification({
           signals:
             identityEnforcement === "signal_quorum"
               ? identitySignals.map((signal) => ({
-                  field: signal.field.trim(),
+                  key: signal.key,
                   source: signal.source,
                   match: signal.match,
                   normalizers:
                     signal.match === "normalized" ? signal.normalizers : [],
+                  region:
+                    signal.source === "identifier_region" ||
+                    signal.source === "captured_context"
+                      ? parsedRegion(signal.region)
+                      : null,
+                  extract_pattern:
+                    signal.source === "structured" ||
+                    signal.source === "captured_context"
+                      ? signal.extractPattern.trim()
+                      : null,
+                  expected_value: DEDICATED_IDENTITY_SOURCES.has(signal.source)
+                    ? signal.expectedValue.trim()
+                    : null,
+                  params: DEDICATED_IDENTITY_SOURCES.has(signal.source)
+                    ? []
+                    : signal.params
+                        .split(",")
+                        .map((value) => value.trim())
+                        .filter(Boolean),
                 }))
               : [],
           quorum: identityEnforcement === "signal_quorum" ? identityQuorum : 0,
@@ -1043,7 +1134,7 @@ export function Qualification({
                       </Pill>
                     )}
                     <span className="page-sub">
-                      {selectedControls.identity.sources.length} retained source
+                      {selectedControls.identity.sources.length} identity source
                       {selectedControls.identity.sources.length === 1 ? "" : "s"}
                     </span>
                   </div>
@@ -1095,19 +1186,13 @@ export function Qualification({
 
                       {identityEnforcement === "signal_quorum" && (
                         <>
-                          <Callout tone="warn" title="Quorum intent is fail-closed">
-                            Flow versions this policy but does not yet enforce named
-                            signal quorums at runtime. Certification will retain an
-                            identity_policy_unenforced refusal until that runtime
-                            support is present.
-                          </Callout>
                           {identitySignals.map((signal, index) => {
                             const retained = selectedControls.identity.sources.find(
                               (source) => source.kind === signal.source,
                             );
                             return (
                               <div
-                                key={signal.key}
+                                key={signal.id}
                                 style={{
                                   borderTop: "1px solid var(--border)",
                                   marginTop: "var(--space-4)",
@@ -1122,7 +1207,7 @@ export function Qualification({
                                       setIdentitySignals((current) =>
                                         current.filter(
                                           (candidate) =>
-                                            candidate.key !== signal.key,
+                                            candidate.id !== signal.id,
                                         ),
                                       );
                                       setIdentityQuorum((current) =>
@@ -1141,39 +1226,66 @@ export function Qualification({
                                 </div>
                                 <div className="grid grid-2">
                                   <div className="field">
-                                    <label htmlFor={`identity-field-${signal.key}`}>
-                                      Field name
-                                    </label>
-                                    <input
-                                      id={`identity-field-${signal.key}`}
-                                      className="input"
-                                      value={signal.field}
-                                      onChange={(event) =>
-                                        updateIdentitySignal(signal.key, {
-                                          field: event.target.value,
-                                        })
-                                      }
-                                    />
-                                  </div>
-                                  <div className="field">
-                                    <label htmlFor={`identity-source-${signal.key}`}>
-                                      Retained source
+                                    <label htmlFor={`identity-key-${signal.id}`}>
+                                      Identity signal
                                     </label>
                                     <select
-                                      id={`identity-source-${signal.key}`}
+                                      id={`identity-key-${signal.id}`}
                                       className="input"
-                                      value={signal.source}
+                                      value={signal.key}
                                       onChange={(event) =>
-                                        updateIdentitySignal(signal.key, {
-                                          source: event.target
-                                            .value as QualificationIdentitySourceKind,
+                                        updateIdentitySignal(signal.id, {
+                                          key: event.target
+                                            .value as QualificationIdentitySignalKey,
                                         })
                                       }
+                                    >
+                                      {IDENTITY_KEYS.filter((key) =>
+                                        identityKeysForSource(signal.source).includes(
+                                          key.value,
+                                        ),
+                                      ).map((key) => (
+                                        <option
+                                          key={`${signal.id}-${key.value}`}
+                                          value={key.value}
+                                        >
+                                          {key.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="field">
+                                    <label htmlFor={`identity-source-${signal.id}`}>
+                                      Evidence source
+                                    </label>
+                                    <select
+                                      id={`identity-source-${signal.id}`}
+                                      className="input"
+                                      value={signal.source}
+                                      onChange={(event) => {
+                                        const source = event.target
+                                          .value as QualificationIdentitySourceKind;
+                                        const sourceEvidence =
+                                          selectedControls.identity.sources.find(
+                                            (candidate) =>
+                                              candidate.kind === source,
+                                          );
+                                        updateIdentitySignal(signal.id, {
+                                          source,
+                                          key: defaultIdentityKey(source),
+                                          region: encodedRegion(
+                                            sourceEvidence?.region,
+                                          ),
+                                          extractPattern: "",
+                                          expectedValue: "",
+                                          params: "",
+                                        });
+                                      }}
                                     >
                                       {selectedControls.identity.sources.map(
                                         (source) => (
                                           <option
-                                            key={`${signal.key}-${source.kind}`}
+                                            key={`${signal.id}-${source.kind}`}
                                             value={source.kind}
                                           >
                                             {source.label}
@@ -1188,17 +1300,17 @@ export function Qualification({
                                     )}
                                   </div>
                                   <div className="field">
-                                    <label htmlFor={`identity-match-${signal.key}`}>
+                                    <label htmlFor={`identity-match-${signal.id}`}>
                                       Comparison
                                     </label>
                                     <select
-                                      id={`identity-match-${signal.key}`}
+                                      id={`identity-match-${signal.id}`}
                                       className="input"
                                       value={signal.match}
                                       onChange={(event) => {
                                         const match = event.target
                                           .value as QualificationIdentityMatch;
-                                        updateIdentitySignal(signal.key, {
+                                        updateIdentitySignal(signal.id, {
                                           match,
                                           normalizers:
                                             match === "normalized" &&
@@ -1217,6 +1329,107 @@ export function Qualification({
                                       </option>
                                     </select>
                                   </div>
+                                  {DEDICATED_IDENTITY_SOURCES.has(signal.source) && (
+                                    <div className="field">
+                                      <label htmlFor={`identity-expected-${signal.id}`}>
+                                        Qualified expected value
+                                      </label>
+                                      <input
+                                        id={`identity-expected-${signal.id}`}
+                                        className="input mono"
+                                        value={signal.expectedValue}
+                                        onChange={(event) =>
+                                          updateIdentitySignal(signal.id, {
+                                            expectedValue: event.target.value,
+                                          })
+                                        }
+                                        placeholder={
+                                          signal.source === "session"
+                                            ? "64-character session digest"
+                                            : signal.source === "application"
+                                              ? "accuro or https://app.example"
+                                              : "patient-chart"
+                                        }
+                                        spellCheck={false}
+                                      />
+                                      <span className="page-sub">
+                                        PHI-free value compared with the live runtime
+                                        observation immediately before actuation.
+                                      </span>
+                                    </div>
+                                  )}
+                                  {signalNeedsExtraction(signal.source) && (
+                                    <div className="field">
+                                      <label htmlFor={`identity-extract-${signal.id}`}>
+                                        Value extraction pattern
+                                      </label>
+                                      <input
+                                        id={`identity-extract-${signal.id}`}
+                                        className="input mono"
+                                        value={signal.extractPattern}
+                                        onChange={(event) =>
+                                          updateIdentitySignal(signal.id, {
+                                            extractPattern: event.target.value,
+                                          })
+                                        }
+                                        placeholder="Record ID:\\s*(?P<value>[A-Z0-9-]+)"
+                                        spellCheck={false}
+                                      />
+                                      <span className="page-sub">
+                                        One regular-expression group named value keeps
+                                        unrelated text out of this identity vote.
+                                      </span>
+                                    </div>
+                                  )}
+                                  {!DEDICATED_IDENTITY_SOURCES.has(signal.source) && (
+                                    <div className="field">
+                                      <label htmlFor={`identity-params-${signal.id}`}>
+                                        Parameter bindings
+                                      </label>
+                                      <input
+                                        id={`identity-params-${signal.id}`}
+                                        className="input mono"
+                                        value={signal.params}
+                                        onChange={(event) =>
+                                          updateIdentitySignal(signal.id, {
+                                            params: event.target.value,
+                                          })
+                                        }
+                                        placeholder="record_id, date_of_birth"
+                                        spellCheck={false}
+                                      />
+                                      <span className="page-sub">
+                                        Optional comma-separated workflow parameters
+                                        represented by this evidence.
+                                      </span>
+                                    </div>
+                                  )}
+                                  {signalNeedsRegion(signal.source) && (
+                                    <div className="field">
+                                      <label htmlFor={`identity-region-${signal.id}`}>
+                                        Qualified screen region
+                                      </label>
+                                      <input
+                                        id={`identity-region-${signal.id}`}
+                                        className="input mono"
+                                        value={signal.region}
+                                        readOnly={signal.source === "identifier_region"}
+                                        onChange={(event) =>
+                                          updateIdentitySignal(signal.id, {
+                                            region: event.target.value,
+                                          })
+                                        }
+                                        placeholder="x, y, width, height"
+                                        spellCheck={false}
+                                      />
+                                      {signal.source === "identifier_region" && (
+                                        <span className="page-sub">
+                                          Bound to the identifier region retained by
+                                          the demonstration.
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                                 {signal.match === "normalized" && (
                                   <div className="field">
@@ -1224,7 +1437,7 @@ export function Qualification({
                                     {IDENTITY_NORMALIZERS.map((normalizer) => (
                                       <label
                                         className="check-row"
-                                        key={`${signal.key}-${normalizer.value}`}
+                                        key={`${signal.id}-${normalizer.value}`}
                                       >
                                         <input
                                           type="checkbox"
@@ -1241,7 +1454,7 @@ export function Qualification({
                                                   (value) =>
                                                     value !== normalizer.value,
                                                 );
-                                            updateIdentitySignal(signal.key, {
+                                            updateIdentitySignal(signal.id, {
                                               normalizers,
                                             });
                                           }}
@@ -1298,10 +1511,19 @@ export function Qualification({
                           (identitySignals.length === 0 ||
                             identitySignals.some(
                               (signal) =>
-                                !signal.field.trim() ||
                                 (signal.match === "normalized" &&
-                                  signal.normalizers.length === 0),
+                                  signal.normalizers.length === 0) ||
+                                (signalNeedsExtraction(signal.source) &&
+                                  !signal.extractPattern.trim()) ||
+                                (DEDICATED_IDENTITY_SOURCES.has(signal.source) &&
+                                  !signal.expectedValue.trim()) ||
+                                (signalNeedsRegion(signal.source) &&
+                                  parsedRegion(signal.region) === null),
                             ) ||
+                            new Set(identitySignals.map((signal) => signal.key))
+                              .size !== identitySignals.length ||
+                            new Set(identitySignals.map((signal) => signal.source))
+                              .size !== identitySignals.length ||
                             identityQuorum < 1 ||
                             identityQuorum > identitySignals.length))
                       }

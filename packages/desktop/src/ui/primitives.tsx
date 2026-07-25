@@ -63,6 +63,7 @@ const PILL_MAP: Record<StepState, { cls: string; label: string }> = {
   running: { cls: "pill-run", label: "running" },
   verified: { cls: "pill-ok", label: "verified" },
   halted: { cls: "pill-warn", label: "halted" },
+  attention: { cls: "pill-warn", label: "needs attention" },
   failed: { cls: "pill-crit", label: "failed" },
 };
 

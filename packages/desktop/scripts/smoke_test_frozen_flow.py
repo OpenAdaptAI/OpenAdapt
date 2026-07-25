@@ -94,9 +94,66 @@ def main() -> int:
         results = report.get("results") or []
         if not results or not all(item.get("ok") is True for item in results):
             raise RuntimeError("frozen replay did not produce an all-success report")
+        if report.get("execution_outcome") != "COMPLETED_UNVERIFIED":
+            raise RuntimeError(
+                "Demo replay did not preserve the precise COMPLETED_UNVERIFIED outcome"
+            )
+        if (
+            report.get("execution_profile") != "demo"
+            or report.get("production_eligible") is not False
+            or report.get("execution_completed") is not True
+        ):
+            raise RuntimeError(
+                "Demo replay did not remain completed and explicitly non-production"
+            )
+        envelope = report.get("outcome_envelope")
+        if not isinstance(envelope, dict) or (
+            envelope.get("version") != "openadapt.execution-outcome/v1"
+            or envelope.get("outcome") != report.get("execution_outcome")
+            or envelope.get("profile") != report.get("execution_profile")
+            or envelope.get("production_eligible") != report.get("production_eligible")
+            or envelope.get("execution_completed") != report.get("execution_completed")
+        ):
+            raise RuntimeError("frozen replay did not emit a bound v1 outcome envelope")
+        for contract_counts in ("required_contracts", "passed_contracts"):
+            counts = envelope.get(contract_counts)
+            if not isinstance(counts, dict) or set(counts) != {
+                "authorization",
+                "identity",
+                "postcondition",
+                "effect",
+            }:
+                raise RuntimeError(
+                    f"frozen replay emitted invalid {contract_counts} evidence counts"
+                )
+        if any(
+            envelope["passed_contracts"][contract]
+            > envelope["required_contracts"][contract]
+            for contract in envelope["required_contracts"]
+        ):
+            raise RuntimeError("frozen replay reported more passed than required contracts")
         metrics = report.get("metrics") or {}
-        if metrics.get("model_calls", 0) != 0 or metrics.get("cost_usd", 0) != 0:
+        if (
+            report.get("model_calls") != 0
+            or envelope.get("model_calls") != 0
+            or metrics.get("model_calls", 0) != 0
+            or metrics.get("cost_usd", 0) != 0
+        ):
             raise RuntimeError("healthy frozen replay unexpectedly used a model or incurred cost")
+        network_observation = report.get("external_network_calls")
+        if (
+            network_observation not in {"none", "observed", "unknown"}
+            or envelope.get("external_network_calls") != network_observation
+        ):
+            raise RuntimeError(
+                "frozen replay did not bind its external-network observation to the outcome"
+            )
+        from engine.flow_bridge import FlowBridge
+
+        if FlowBridge.classify_outcome(0, report) != "COMPLETED_UNVERIFIED":
+            raise RuntimeError(
+                "Desktop rejected the precise outcome emitted by its frozen Flow runtime"
+            )
 
         second_output, warm_seconds = _run(
             [*flow, "demo-record", "--out", str(root / "recording-warm")],
@@ -123,6 +180,9 @@ def main() -> int:
                     "replay_seconds": round(replay_seconds, 3),
                     "warm_record_seconds": round(warm_seconds, 3),
                     "steps": len(results),
+                    "outcome": report["execution_outcome"],
+                    "production_eligible": report["production_eligible"],
+                    "external_network_calls": network_observation,
                     "silent_incorrect_successes": 0,
                     "model_calls": 0,
                 },

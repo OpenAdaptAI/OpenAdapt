@@ -26,14 +26,145 @@ import time
 from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Callable, Literal, cast
 
 from loguru import logger
 
 FLOW_BIN = "openadapt-flow"
 EMBEDDED_FLOW_MODE = "__openadapt_flow__"
 EMBEDDED_FLOW_RECORD_MODE = "__openadapt_flow_record_config__"
-FlowOutcome = Literal["success", "halt", "unknown"]
+FlowOutcome = Literal[
+    "VERIFIED",
+    "COMPLETED_UNVERIFIED",
+    "HALTED",
+    "FAILED",
+    "ROLLED_BACK",
+    "success",
+    "halt",
+    "unknown",
+]
+PRECISE_FLOW_OUTCOMES = frozenset(
+    {
+        "VERIFIED",
+        "COMPLETED_UNVERIFIED",
+        "HALTED",
+        "FAILED",
+        "ROLLED_BACK",
+    }
+)
+_OUTCOME_PROFILES = frozenset({"demo", "standard", "regulated"})
+_OUTCOME_CONTRACT_KEYS = frozenset({"authorization", "identity", "postcondition", "effect"})
+_OUTCOME_EVIDENCE_CLASSES = frozenset(
+    {
+        "authorization",
+        "identity",
+        "postcondition",
+        "effect_tier_1",
+        "effect_tier_2",
+        "effect_tier_3",
+        "effect_tier_4",
+        "model",
+        "compensation",
+    }
+)
+_OUTCOME_ENVELOPE_KEYS = frozenset(
+    {
+        "version",
+        "outcome",
+        "profile",
+        "production_eligible",
+        "execution_completed",
+        "required_contracts",
+        "passed_contracts",
+        "evidence_classes",
+        "model_calls",
+        "external_network_calls",
+        "compensation_actions",
+    }
+)
+
+
+def _contract_counts(value: object) -> dict[str, int] | None:
+    if not isinstance(value, dict) or set(value) != _OUTCOME_CONTRACT_KEYS:
+        return None
+    if any(
+        not isinstance(count, int) or isinstance(count, bool) or count < 0
+        for count in value.values()
+    ):
+        return None
+    return cast(dict[str, int], value)
+
+
+def _valid_precise_envelope(report: dict, envelope: dict, outcome: object) -> bool:
+    """Mirror Flow's v1 envelope invariants at the Desktop trust boundary."""
+
+    if set(envelope) != _OUTCOME_ENVELOPE_KEYS:
+        return False
+    profile = envelope.get("profile")
+    if profile is not None and profile not in _OUTCOME_PROFILES:
+        return False
+    production = envelope.get("production_eligible")
+    completed = envelope.get("execution_completed")
+    if not isinstance(production, bool) or not isinstance(completed, bool):
+        return False
+    required = _contract_counts(envelope.get("required_contracts"))
+    passed = _contract_counts(envelope.get("passed_contracts"))
+    if required is None or passed is None:
+        return False
+    if any(passed[key] > required[key] for key in _OUTCOME_CONTRACT_KEYS):
+        return False
+    evidence = envelope.get("evidence_classes")
+    if (
+        not isinstance(evidence, list)
+        or any(
+            not isinstance(item, str) or item not in _OUTCOME_EVIDENCE_CLASSES for item in evidence
+        )
+        or len(evidence) != len(set(evidence))
+    ):
+        return False
+    model_calls = envelope.get("model_calls")
+    compensation_actions = envelope.get("compensation_actions")
+    if (
+        not isinstance(model_calls, int)
+        or isinstance(model_calls, bool)
+        or model_calls < 0
+        or not isinstance(compensation_actions, int)
+        or isinstance(compensation_actions, bool)
+        or compensation_actions < 0
+        or envelope.get("external_network_calls") not in {"none", "observed", "unknown"}
+    ):
+        return False
+    if "external_network_calls" in report and (
+        report.get("external_network_calls") not in {"none", "observed", "unknown"}
+        or report.get("external_network_calls") != envelope.get("external_network_calls")
+    ):
+        return False
+    if outcome in {"VERIFIED", "COMPLETED_UNVERIFIED"} and completed is not True:
+        return False
+    if outcome == "VERIFIED":
+        if (
+            required != passed
+            or profile not in {"standard", "regulated"}
+            or production is not True
+            or required["authorization"] < 1
+        ):
+            return False
+    elif production is not False:
+        return False
+    has_compensation = "compensation" in evidence
+    if has_compensation != (compensation_actions > 0):
+        return False
+    if (outcome == "ROLLED_BACK") != (compensation_actions > 0):
+        return False
+    return (
+        isinstance(report.get("success"), bool)
+        and report.get("execution_profile") == profile
+        and report.get("production_eligible") == production
+        and isinstance(report.get("production_eligible"), bool)
+        and report.get("execution_completed") == completed
+        and isinstance(report.get("execution_completed"), bool)
+        and report.get("model_calls") == model_calls
+    )
 
 
 class FlowNotAvailableError(RuntimeError):
@@ -485,18 +616,35 @@ class FlowBridge:
 
     @staticmethod
     def classify_outcome(returncode: int, report: dict) -> FlowOutcome:
-        """Classify only explicit Flow 1.22.0 success or halt evidence.
+        """Classify only explicit, internally consistent Flow outcomes.
 
-        Flow's connector defines success as exit 0 plus a true ``success``
-        field, and a halt from ``terminal_outcome == "halt"`` or a structured
-        ``halt`` record.  Desktop additionally rejects contradictory reports
-        (for example ``success: true`` together with a halt) as unknown.
+        Current runtimes must carry a matching precise outcome envelope:
+        only ``VERIFIED`` is a Desktop success. ``COMPLETED_UNVERIFIED``,
+        ``FAILED``, and ``ROLLED_BACK`` remain explicit non-success states.
+        Reports from earlier bundled runtimes retain the narrow legacy
+        success/halt classification.
         """
 
         halt = report.get("halt")
         explicit_halt = report.get("terminal_outcome") == "halt" or (
             isinstance(halt, dict) and bool(halt)
         )
+        precise = report.get("execution_outcome")
+        if precise is not None:
+            envelope = report.get("outcome_envelope")
+            if precise not in PRECISE_FLOW_OUTCOMES or not isinstance(envelope, dict):
+                return "unknown"
+            if (
+                envelope.get("version") != "openadapt.execution-outcome/v1"
+                or envelope.get("outcome") != precise
+                or not _valid_precise_envelope(report, envelope, precise)
+            ):
+                return "unknown"
+            if precise == "VERIFIED":
+                if returncode != 0 or report.get("success") is not True or explicit_halt:
+                    return "unknown"
+            return cast(FlowOutcome, precise)
+
         terminal = report.get("terminal_outcome")
         explicit_success = (
             returncode == 0
@@ -523,6 +671,15 @@ class FlowBridge:
             return halt
         if report.get("terminal_outcome") == "halt":
             return {"outcome": "halt"}
+        envelope = report.get("outcome_envelope")
+        if (
+            report.get("execution_outcome") == "HALTED"
+            and isinstance(envelope, dict)
+            and envelope.get("version") == "openadapt.execution-outcome/v1"
+            and envelope.get("outcome") == "HALTED"
+            and _valid_precise_envelope(report, envelope, "HALTED")
+        ):
+            return {"outcome": "HALTED"}
         if report.get("status") == "halt":
             return report
         return None

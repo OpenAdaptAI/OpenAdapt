@@ -12,6 +12,44 @@ from engine.config import EngineConfig
 from engine.controller import RecordingState
 from engine.db import IndexDB
 from engine.dispatch import EngineDispatcher, EngineServices
+from engine.flow_bridge import FlowBridge
+
+
+def _precise_report(
+    outcome: str,
+    *,
+    production_eligible: bool,
+    execution_completed: bool,
+) -> dict:
+    required = {"authorization": 1, "identity": 0, "postcondition": 0, "effect": 0}
+    passed = dict(required)
+    if outcome == "COMPLETED_UNVERIFIED":
+        required["effect"] = 1
+    compensation_actions = 1 if outcome == "ROLLED_BACK" else 0
+    evidence = ["authorization"]
+    if compensation_actions:
+        evidence.append("compensation")
+    return {
+        "success": outcome == "VERIFIED",
+        "model_calls": 0,
+        "execution_outcome": outcome,
+        "execution_profile": "standard",
+        "production_eligible": production_eligible,
+        "execution_completed": execution_completed,
+        "outcome_envelope": {
+            "version": "openadapt.execution-outcome/v1",
+            "outcome": outcome,
+            "profile": "standard",
+            "production_eligible": production_eligible,
+            "execution_completed": execution_completed,
+            "required_contracts": required,
+            "passed_contracts": passed,
+            "evidence_classes": evidence,
+            "model_calls": 0,
+            "external_network_calls": "none",
+            "compensation_actions": compensation_actions,
+        },
+    }
 
 
 class FakeController:
@@ -749,6 +787,135 @@ class TestLibraryCommands:
         states = [data["state"] for event, data in events if event == "replay_progress"]
         assert states == ["running", "unknown"]
         assert "done" not in states
+
+    @pytest.mark.parametrize(
+        (
+            "outcome",
+            "production_eligible",
+            "execution_completed",
+            "progress_state",
+        ),
+        [
+            ("VERIFIED", True, True, "done"),
+            ("COMPLETED_UNVERIFIED", False, True, "completed_unverified"),
+            ("HALTED", False, False, "halted"),
+            ("FAILED", False, False, "failed"),
+            ("ROLLED_BACK", False, True, "rolled_back"),
+        ],
+    )
+    def test_precise_outcomes_survive_dispatch(
+        self,
+        deps,
+        tmp_path: Path,
+        outcome: str,
+        production_eligible: bool,
+        execution_completed: bool,
+        progress_state: str,
+    ) -> None:
+        disp, db, events = deps
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        db.insert_bundle("bnd1", str(bundle), capture_id="cap1")
+
+        class Bridge:
+            def replay(self, _bundle, out_dir, *, config):
+                from engine.flow_bridge import FlowResult
+
+                (out_dir / "report.json").write_text(
+                    json.dumps(
+                        _precise_report(
+                            outcome,
+                            production_eligible=production_eligible,
+                            execution_completed=execution_completed,
+                        )
+                    )
+                )
+                returncode = 0 if outcome == "VERIFIED" else 1
+                return FlowResult(
+                    ok=returncode == 0,
+                    returncode=returncode,
+                    out_dir=out_dir,
+                )
+
+        disp.services._flow_bridge = Bridge()
+        result = disp.dispatch(
+            "replay_workflow",
+            {
+                "workflow_id": "bnd1",
+                "target": {
+                    "backend": "citrix",
+                    "rdp_readiness_text": "Patient Search",
+                },
+            },
+        )
+
+        assert result["outcome"] == outcome
+        assert result["ok"] is (outcome == "VERIFIED")
+        details = result["outcome_details"]
+        assert details["profile"] == "standard"
+        assert details["production_eligible"] is production_eligible
+        assert details["model_calls"] == 0
+        assert details["external_network_calls"] == "none"
+        assert details["compensation_actions"] == (
+            1 if outcome == "ROLLED_BACK" else 0
+        )
+        states = [data["state"] for event, data in events if event == "replay_progress"]
+        assert states == ["running", progress_state]
+        assert db.list_runs(limit=1)[0]["status"] == outcome
+        if outcome == "HALTED":
+            assert result["halt"]["reason"]
+
+    def test_legacy_flow_success_remains_ok(self, deps, tmp_path: Path) -> None:
+        disp, _db, _events = deps
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "report.json").write_text(json.dumps({"success": True}))
+
+        result = disp._run_report(run_dir, "bnd1", "run-1", outcome="success")
+
+        assert result["outcome"] == "success"
+        assert result["ok"] is True
+
+    def test_verified_outcome_rejects_completed_compensation(self) -> None:
+        report = _precise_report(
+            "VERIFIED",
+            production_eligible=True,
+            execution_completed=True,
+        )
+        report["outcome_envelope"]["compensation_actions"] = 1
+        report["outcome_envelope"]["evidence_classes"].append("compensation")
+
+        assert FlowBridge.classify_outcome(0, report) == "unknown"
+
+    def test_stored_verified_outcome_is_revalidated_from_retained_report(
+        self, deps, tmp_path: Path
+    ) -> None:
+        disp, db, _events = deps
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        report = _precise_report(
+            "VERIFIED",
+            production_eligible=True,
+            execution_completed=True,
+        )
+        (run_dir / "report.json").write_text(json.dumps(report))
+        db.insert_run("run-1", str(run_dir), bundle_id=None)
+        db.update_run("run-1", status="VERIFIED")
+
+        report["outcome_envelope"]["compensation_actions"] = 1
+        report["outcome_envelope"]["evidence_classes"].append("compensation")
+        (run_dir / "report.json").write_text(json.dumps(report))
+
+        result = disp._run_report(
+            run_dir,
+            workflow_id=None,
+            run_id="run-1",
+            outcome=db.list_runs(limit=1)[0]["status"],
+        )
+
+        assert result["outcome"] == "unknown"
+        assert result["ok"] is False
+        assert "no longer proves" in result["error"]
 
     def test_invocation_exception_reports_unknown_effect_state(self, deps, tmp_path: Path) -> None:
         disp, db, events = deps
