@@ -1475,6 +1475,15 @@ def report_break(
     except (OSError, ValueError) as exc:
         raise HostedError("report.json is unreadable or invalid") from exc
 
+    if report.execution_outcome == "COMPLETED_UNVERIFIED":
+        return {
+            "emitted": False,
+            "reason": (
+                "run completed without sufficient verification; "
+                "COMPLETED_UNVERIFIED stays local until the precise outcome "
+                "rail is available"
+            ),
+        }
     if report.execution_outcome == "VERIFIED" or (
         report.execution_outcome is None and report.halt is None and report.success
     ):

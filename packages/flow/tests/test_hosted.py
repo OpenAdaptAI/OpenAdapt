@@ -1377,6 +1377,45 @@ def test_report_break_success_run_emits_nothing(tmp_path, monkeypatch):
     assert result["emitted"] is False
 
 
+def test_report_break_keeps_completed_unverified_local_before_resolution(
+    tmp_path, monkeypatch
+):
+    run_dir = tmp_path / "runs" / "completed-unverified"
+    RunReport(
+        workflow_name="demo",
+        started_at="2026-01-01T00:00:00Z",
+        execution_profile="demo",
+        execution_outcome="COMPLETED_UNVERIFIED",
+        execution_completed=True,
+        success=True,
+    ).save(run_dir)
+    monkeypatch.setattr(
+        hosted,
+        "resolve_host",
+        lambda *a, **k: pytest.fail("must not resolve a host for local-only outcome"),
+    )
+    monkeypatch.setattr(
+        hosted,
+        "resolve_token",
+        lambda *a, **k: pytest.fail("must not resolve a token for local-only outcome"),
+    )
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *a, **k: pytest.fail("must not POST a local-only outcome"),
+    )
+
+    result = hosted.report_break(
+        run_dir,
+        workflow_id=_WORKFLOW_UUID,
+        host="https://h.test",
+        token="tok",
+    )
+
+    assert result["emitted"] is False
+    assert "COMPLETED_UNVERIFIED stays local" in result["reason"]
+
+
 def test_report_break_missing_report(tmp_path):
     with pytest.raises(hosted.HostedError, match="report.json"):
         hosted.report_break(
