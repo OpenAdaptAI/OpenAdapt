@@ -14,6 +14,43 @@ from openadapt_flow.runtime.replayer import Replayer
 from tests.test_replayer import FakeVision, Match, make_png
 
 
+def _visual_case(tmp_path, page):
+    box = page.locator("#target").bounding_box()
+    assert box is not None
+    point = (
+        int(round(box["x"] + box["width"] / 2)),
+        int(round(box["y"] + box["height"] / 2)),
+    )
+    region = (
+        int(round(box["x"])),
+        int(round(box["y"])),
+        int(round(box["width"])),
+        int(round(box["height"])),
+    )
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=point, region=region, confidence=0.99),
+        Match(point=point, region=region, confidence=0.99),
+    ]
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "submit.png").write_bytes(make_png((20, 10)))
+    step = Step(
+        id="submit",
+        intent="submit patient update",
+        action=ActionKind.CLICK,
+        risk="irreversible",
+        anchor=Anchor(
+            template="templates/submit.png",
+            region=region,
+            click_point=point,
+            ocr_text="Submit",
+            structured_identity="MRN-1Jane Sample",
+        ),
+    )
+    return vision, bundle, step
+
+
 @pytest.mark.parametrize("mutation", ["target", "row"])
 def test_playwright_refuses_mutation_after_fresh_identity(
     mutation,
@@ -80,6 +117,74 @@ def test_playwright_refuses_mutation_after_fresh_identity(
     assert clicked == []
 
 
+@pytest.mark.parametrize("mutation", ["clone_handler", "hidden_attribute"])
+def test_visual_fallback_refuses_pixel_identical_post_identity_mutation(
+    tmp_path,
+    mutation,
+) -> None:
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    class MutatingBackend(PlaywrightBackend):
+        identity_reads = 0
+
+        def structured_text_at(self, x, y):
+            observed = super().structured_text_at(x, y)
+            self.identity_reads += 1
+            if self.identity_reads == 2:
+                if mutation == "clone_handler":
+                    self.page.evaluate(
+                        """() => {
+                            const target = document.querySelector('#target');
+                            const replacement = target.cloneNode(true);
+                            replacement.setAttribute(
+                                'onclick', "window.clicked.push('wrong')"
+                            );
+                            target.replaceWith(replacement);
+                        }"""
+                    )
+                else:
+                    self.page.evaluate(
+                        """() => {
+                            document.querySelector('#target').dataset.destination =
+                                'wrong';
+                        }"""
+                    )
+            return observed
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": 800, "height": 400},
+            device_scale_factor=1,
+        )
+        page.set_content(
+            """<!doctype html><html><body>
+            <table><tbody><tr>
+              <td>MRN-1</td><td>Jane Sample</td>
+              <td><button id="target" data-destination="correct"
+                onclick="window.clicked.push(this.dataset.destination)">
+                Submit</button></td>
+            </tr></tbody></table>
+            <script>window.clicked = [];</script>
+            </body></html>"""
+        )
+        backend = MutatingBackend(page)
+        vision, bundle, step = _visual_case(tmp_path, page)
+        report = Replayer(backend, vision=vision, use_structural=False).run(
+            Workflow(name="visual-browser-race", steps=[step]),
+            bundle_dir=bundle,
+            run_dir=tmp_path / "run",
+        )
+        clicked = page.evaluate("window.clicked")
+        browser.close()
+
+    assert backend.identity_reads == 2
+    assert report.success is False
+    assert report.results[0].safety_halt is True
+    assert clicked == []
+
+
 def test_playwright_visual_fallback_uses_identity_bound_dom_click(tmp_path) -> None:
     sync = pytest.importorskip("playwright.sync_api")
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
@@ -101,39 +206,7 @@ def test_playwright_visual_fallback_uses_identity_bound_dom_click(tmp_path) -> N
             </body></html>"""
         )
         backend = PlaywrightBackend(page)
-        box = page.locator("#target").bounding_box()
-        assert box is not None
-        point = (
-            int(round(box["x"] + box["width"] / 2)),
-            int(round(box["y"] + box["height"] / 2)),
-        )
-        region = (
-            int(round(box["x"])),
-            int(round(box["y"])),
-            int(round(box["width"])),
-            int(round(box["height"])),
-        )
-        vision = FakeVision()
-        vision.template_results = [
-            Match(point=point, region=region, confidence=0.99),
-            Match(point=point, region=region, confidence=0.99),
-        ]
-        bundle = tmp_path / "bundle"
-        (bundle / "templates").mkdir(parents=True)
-        (bundle / "templates" / "submit.png").write_bytes(make_png((20, 10)))
-        step = Step(
-            id="submit",
-            intent="submit patient update",
-            action=ActionKind.CLICK,
-            risk="irreversible",
-            anchor=Anchor(
-                template="templates/submit.png",
-                region=region,
-                click_point=point,
-                ocr_text="Submit",
-                structured_identity="MRN-1Jane Sample",
-            ),
-        )
+        vision, bundle, step = _visual_case(tmp_path, page)
 
         report = Replayer(
             backend,

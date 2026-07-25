@@ -255,6 +255,14 @@ class GuardedCoordinateActionBackend(Protocol):
     remote backend's one-shot actuation lease.
     """
 
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        """Bind one identity-bearing actionable target before identity readback."""
+        ...
+
+    def cancel_guarded_coordinate(self) -> None:
+        """Cancel and clean any unconsumed guarded-coordinate binding."""
+        ...
+
     def act_guarded_coordinate(
         self,
         x: int,

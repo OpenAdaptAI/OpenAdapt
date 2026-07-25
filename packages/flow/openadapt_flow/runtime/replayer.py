@@ -2704,6 +2704,9 @@ class Replayer:
                         result.failure_category = "governed_refusal"
                         result.effect_results.append(error)
 
+            if error is not None:
+                self._cancel_guarded_coordinate()
+
             if error is None:
                 # Structural postconditions compare against the final observed
                 # state immediately before action delivery.  Readiness gates,
@@ -2822,6 +2825,7 @@ class Replayer:
                     error = heal_outcome.halt_reason
                     result.error = error
         except OcrResolutionRefused as exc:
+            self._cancel_guarded_coordinate()
             # Repeated target/landmark OCR is a deterministic ambiguity, not a
             # transient absence. Surface it as a typed operator-visible safety
             # halt immediately; never retry into weaker evidence or actuation.
@@ -2833,6 +2837,7 @@ class Replayer:
                 f"({step.intent}): {exc} — no action was admitted"
             )
         except StructuralResolutionRefused as exc:
+            self._cancel_guarded_coordinate()
             # Ambiguity, disappearance, or a stale resolve->act fingerprint is
             # an intentional fail-closed refusal. Record it as a safety halt,
             # never as an incidental backend crash and never retry via pixels.
@@ -2844,6 +2849,7 @@ class Replayer:
                 f"({step.intent}): {exc} — no action was admitted"
             )
         except Exception as exc:  # defensive: report, don't crash the run
+            self._cancel_guarded_coordinate()
             result.ok = False
             result.failure_category = "runtime_failure"
             result.error = f"Step '{step.id}' raised {type(exc).__name__}: {exc}"
@@ -3589,6 +3595,12 @@ class Replayer:
             and self._step_has_identity_contract(step, workflow)
         )
 
+    def _cancel_guarded_coordinate(self) -> None:
+        """Clean an unconsumed local coordinate lease, if one was armed."""
+
+        if isinstance(self.backend, GuardedCoordinateActionBackend):
+            self.backend.cancel_guarded_coordinate()
+
     def _revalidate_consequential_actuation(
         self,
         step: Step,
@@ -3654,15 +3666,32 @@ class Replayer:
                 "before actuation — refusing to act; run aborted"
             )
         elif fresh_resolution is not None:
-            error = self._identity_gate_error(
-                step,
-                fresh_resolution,
-                fresh_png,
-                params,
-                workflow,
-                bundle_dir,
-                result,
+            guarded_coordinate = (
+                self._requires_atomic_identity_click(step, workflow)
+                and fresh_resolution.rung != "structural"
+                and not isinstance(self.backend, RemoteActuationBackend)
+                and isinstance(self.backend, GuardedCoordinateActionBackend)
             )
+            if guarded_coordinate:
+                cast(
+                    GuardedCoordinateActionBackend, self.backend
+                ).arm_guarded_coordinate(*fresh_resolution.point)
+            try:
+                error = self._identity_gate_error(
+                    step,
+                    fresh_resolution,
+                    fresh_png,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                )
+            except Exception:
+                if guarded_coordinate:
+                    self._cancel_guarded_coordinate()
+                raise
+            if error is not None and guarded_coordinate:
+                self._cancel_guarded_coordinate()
         return fresh_resolution, fresh_region, fresh_png, error
 
     def _resolve_step(

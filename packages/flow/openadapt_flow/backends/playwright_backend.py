@@ -168,11 +168,11 @@ _INSTALL_GUARD_BODY_JS = r"""
         }
         tokenMap.delete(args.token);
     };
-    entry.observer = new MutationObserver(() => {
-        if (!el.isConnected || describe(el).descriptor !== entry.descriptor) {
-            invalidate();
-        }
-    });
+    // Any mutation in the target's record boundary after arming invalidates
+    // the lease. Descriptor equality is deliberately irrelevant: hidden
+    // attributes and pixel-identical node replacement can still change the
+    // action that a click performs.
+    entry.observer = new MutationObserver(invalidate);
     entry.observer.observe(observed.row || el, {
         attributes: true,
         childList: true,
@@ -224,6 +224,17 @@ _BIND_COORDINATE_TARGET_JS = (
     + ";"
     + _INSTALL_GUARD_BODY_JS
     + "}"
+)
+
+_STRUCTURED_TEXT_AT_JS = (
+    r"""([px, py]) => {
+    const el = document.elementFromPoint(px, py);
+    if (!el) return null;
+    const describe = """
+    + _DESCRIBE_TARGET_JS
+    + r""";
+    return describe(el).rowIdentity || null;
+}"""
 )
 
 _GUARD_CURRENT_JS = (
@@ -299,6 +310,9 @@ class PlaywrightBackend:
         # SHA-256 fingerprint; target/row text stays page-local and ephemeral.
         self._structural_store_key = f"__oaflow_structural_{uuid.uuid4().hex}"
         self._structural_tokens: dict[str, str] = {}
+        self._guarded_coordinate: Optional[
+            tuple[tuple[int, int], str, str, tuple[float, float]]
+        ] = None
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -367,49 +381,7 @@ class PlaywrightBackend:
         """
         try:
             result = self.page.evaluate(
-                """([px, py]) => {
-                    const el = document.elementFromPoint(px, py);
-                    if (!el) return null;
-                    // Identity is a REPEATED-STRUCTURE (record-list) concept:
-                    // only a genuine row-like container carries it. A
-                    // standalone control (a Save button) has no row ancestor;
-                    // its own text is a MUTABLE label the resolution ladder
-                    // heals through, so we return null and leave it to the OCR
-                    // / heal path -- mirroring the OCR band excluding the
-                    // target's own label.
-                    const row = el.closest(
-                        'tr, [role="row"], li, [role="listitem"]'
-                    );
-                    if (!row) return null;
-                    // Exclude the CLICKED target's own cell/subtree: its label
-                    // is the mutable evidence the ladder heals through (an
-                    // Open->View relabel of the clicked control must NOT change
-                    // identity), mirroring the OCR band excluding the target's
-                    // own crop. Identity rests on the row's OTHER cells.
-                    const own = el.closest(
-                        'td, th, [role="cell"], [role="gridcell"]'
-                    ) || el;
-                    own.setAttribute('data-oaflow-own', '1');
-                    let body = '';
-                    try {
-                        const clone = row.cloneNode(true);
-                        const marked = clone.querySelector(
-                            '[data-oaflow-own="1"]'
-                        );
-                        if (marked) marked.remove();
-                        body = clone.textContent || '';
-                    } finally {
-                        own.removeAttribute('data-oaflow-own');
-                    }
-                    const parts = [];
-                    const aria = row.getAttribute
-                        ? row.getAttribute('aria-label') : null;
-                    if (aria) parts.push(aria);
-                    if (body) parts.push(body);
-                    const joined = parts.join(' ')
-                        .replace(/\\s+/g, ' ').trim();
-                    return joined || null;
-                }""",
+                _STRUCTURED_TEXT_AT_JS,
                 [int(x), int(y)],
             )
         except Exception:
@@ -705,24 +677,10 @@ class PlaywrightBackend:
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
-    def act_guarded_coordinate(
-        self,
-        x: int,
-        y: int,
-        *,
-        expected_frame_sha256: str,
-        double: bool = False,
-    ) -> ActionDeliveryReceipt:
-        """Click a visually resolved DOM target without a coordinate race.
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        """Bind a visual point to its exact DOM target before identity readback."""
 
-        This method binds the exact actionable element and row descriptor at
-        the verified point, then confirms the current frame still matches the
-        identity-verified frame. A MutationObserver guards the short interval
-        between that frame check and Playwright's real pointer delivery.
-        Canvas or otherwise opaque targets cannot provide this binding and are
-        refused.
-        """
-
+        self.cancel_guarded_coordinate()
         point = (int(x), int(y))
         token = uuid.uuid4().hex
         try:
@@ -750,6 +708,54 @@ class PlaywrightBackend:
                 raise StructuralResolutionRefused(
                     "visual DOM actuation could not bind the resolved point"
                 )
+            fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
+            self._guarded_coordinate = (
+                point,
+                fingerprint,
+                token,
+                (float(offset[0]), float(offset[1])),
+            )
+        except Exception:
+            self._cleanup_guard(token)
+            raise
+
+    def cancel_guarded_coordinate(self) -> None:
+        """Cancel and clean the current one-shot visual DOM binding."""
+
+        pending = self._guarded_coordinate
+        self._guarded_coordinate = None
+        if pending is not None:
+            self._cleanup_guard(pending[2])
+
+    def act_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        """Consume the target binding armed before the fresh identity read.
+
+        Screenshot equality remains an additional exact-frame check. The
+        already-armed MutationObserver covers hidden mutations, pixel-identical
+        node replacement, and every target/row subtree change from before the
+        identity observation through Playwright's real pointer delivery.
+        """
+
+        point = (int(x), int(y))
+        pending = self._guarded_coordinate
+        self._guarded_coordinate = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "visual DOM actuation has no pre-identity target binding"
+            )
+        armed_point, fingerprint, token, offset = pending
+        try:
+            if armed_point != point:
+                raise StructuralResolutionRefused(
+                    "visual DOM actuation point changed after target binding"
+                )
             if hashlib.sha256(self.screenshot()).hexdigest() != expected_frame_sha256:
                 raise StructuralResolutionRefused(
                     "visual frame changed after identity verification"
@@ -774,7 +780,6 @@ class PlaywrightBackend:
             ) from exc
         finally:
             self._cleanup_guard(token)
-        fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
         return ActionDeliveryReceipt(
             receipt_id=f"playwright-coordinate-{uuid.uuid4().hex}",
             operation=(

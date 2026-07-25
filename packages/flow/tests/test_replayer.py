@@ -168,6 +168,7 @@ class FakeBackend:
         self._text_value = ""
         self._select_all = False
         self._type_accept_results = list(type_accept_results or [])
+        self._guarded_point = None
 
     @property
     def viewport(self):
@@ -179,6 +180,12 @@ class FakeBackend:
     def click(self, x, y, *, double=False):
         self.actions.append(("click", x, y, double))
 
+    def arm_guarded_coordinate(self, x, y):
+        self._guarded_point = (int(x), int(y))
+
+    def cancel_guarded_coordinate(self):
+        self._guarded_point = None
+
     def act_guarded_coordinate(
         self,
         x,
@@ -187,6 +194,10 @@ class FakeBackend:
         expected_frame_sha256,
         double=False,
     ):
+        point = self._guarded_point
+        self._guarded_point = None
+        if point != (int(x), int(y)):
+            raise RuntimeError("guarded coordinate target was not pre-armed")
         if hashlib.sha256(self._frame).hexdigest() != expected_frame_sha256:
             raise RuntimeError("guarded coordinate frame changed")
         self.click(x, y, double=double)
