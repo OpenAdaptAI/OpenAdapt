@@ -415,6 +415,34 @@ def test_readiness_probe_refuses_locked_or_unexpected_session() -> None:
     assert transport.pointer_events == []
 
 
+def test_bound_actuation_refuses_same_session_content_change_before_input() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(transport, readiness_probe=lambda _png: True)
+    backend.acquire_actuation_frame()
+    # The session and framebuffer dimensions remain stable, but one pixel
+    # changes after target/identity resolution.
+    changed = transport.screens[0].copy()
+    changed.putpixel((0, 0), (244, 245, 245))
+    transport.screens[0] = changed
+
+    with pytest.raises(RuntimeError, match="frame content changed"):
+        backend.click(*BUTTON_CENTER)
+
+    assert transport.pointer_events == []
+
+
+def test_observation_invalidates_bound_actuation_before_input() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(transport)
+    backend.acquire_actuation_frame()
+    backend.screenshot()
+
+    with pytest.raises(RuntimeError, match="invalidated"):
+        backend.click(*BUTTON_CENTER)
+
+    assert transport.pointer_events == []
+
+
 def test_coordinate_click_requires_prior_frame_lease(
     transport: FakeRDPTransport, backend: FreeRDPBackend
 ) -> None:

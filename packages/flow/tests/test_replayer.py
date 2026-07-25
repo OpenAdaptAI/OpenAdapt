@@ -201,6 +201,28 @@ class FakeBackend:
         return self._text_value if self._text_value_supported else None
 
 
+class RemoteLeaseBackend(FakeBackend):
+    """Opaque-remote fake exposing the optional two-phase actuation seam."""
+
+    def __init__(self, *, initial_frame: bytes, fresh_frame: bytes):
+        super().__init__(frame=initial_frame)
+        self.fresh_frame = fresh_frame
+        self.acquire_count = 0
+        self.click_attempts = 0
+        self.raise_after_click = False
+
+    def acquire_actuation_frame(self) -> bytes:
+        self.acquire_count += 1
+        self._frame = self.fresh_frame
+        return self._frame
+
+    def click(self, x, y, *, double=False):
+        self.click_attempts += 1
+        self.actions.append(("click", x, y, double))
+        if self.raise_after_click:
+            raise TimeoutError("delivery outcome uncertain")
+
+
 def click_step(
     step_id="s1",
     *,
@@ -289,6 +311,127 @@ def test_happy_path_click_then_param_type(bundle, run_dir):
     assert report.results[0].after_png == "steps/s1_after.png"
     assert report.results[0].postconditions_ok is True
     assert report.results[0].elapsed_ms > 0
+
+
+def test_consequential_remote_click_re_resolves_on_fresh_frame(bundle, run_dir):
+    initial = make_png(color=(240, 240, 240))
+    fresh = make_png(color=(239, 240, 240))
+    backend = RemoteLeaseBackend(initial_frame=initial, fresh_frame=fresh)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(170, 125), region=(160, 120, 50, 20), confidence=0.95),
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        # Raw risk remains reversible, but the canonical fail-closed classifier
+        # recognizes the Save control as write-shaped.
+        Workflow(name="wf", steps=[click_step(risk="reversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert backend.acquire_count == 1
+    assert backend.actions == [("click", 170, 125, False)]
+    assert report.results[0].resolution.point == (170, 125)
+
+
+def test_consequential_remote_anchored_type_reacquires_after_focus_click(
+    bundle, run_dir
+):
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+    ]
+    step = Step(
+        id="type1",
+        intent="type governed value",
+        action=ActionKind.TYPE,
+        anchor=click_step().anchor,
+        text="hello",
+        risk="irreversible",
+    )
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert backend.acquire_count == 2
+    assert backend.actions == [
+        ("click", 110, 105, False),
+        ("type", "hello"),
+    ]
+
+
+def test_consequential_remote_fresh_frame_ambiguity_halts_before_input(bundle, run_dir):
+    class FreshAmbiguityVision(FakeVision):
+        def find_text(
+            self,
+            screen_png,
+            text,
+            *,
+            region=None,
+            min_ratio=0.8,
+            raise_on_ambiguity=False,
+        ):
+            del screen_png, text, region, min_ratio
+            if raise_on_ambiguity:
+                raise AmbiguousOcrMatchError("two fresh-frame candidates qualify")
+            return None
+
+    backend = RemoteLeaseBackend(
+        initial_frame=make_png(),
+        fresh_frame=make_png(color=(239, 240, 240)),
+    )
+    vision = FreshAmbiguityVision()
+    # Initial template resolution succeeds. Fresh local/global template
+    # resolution misses, then OCR refuses the competing candidates.
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        None,
+        None,
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert report.results[0].safety_halt is True
+    assert backend.actions == []
+
+
+def test_remote_post_delivery_timeout_is_never_retried(bundle, run_dir):
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    backend.raise_after_click = True
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert "delivery outcome uncertain" in report.results[0].error
+    assert backend.acquire_count == 1
+    assert backend.click_attempts == 1
+    assert backend.actions == [("click", 110, 105, False)]
 
 
 def test_missing_param_fails_step_and_aborts_run(bundle, run_dir):
@@ -1020,6 +1163,35 @@ def test_identity_mismatch_refuses_to_click(bundle, run_dir):
     assert result.identity.coverage < 0.8
     assert "Identity check failed" in result.error
     assert "refusing to act" in result.error
+
+
+def test_consequential_remote_reruns_identity_on_fresh_frame(bundle, run_dir):
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
+    ]
+    vision.ocr_results = [
+        [OcrLine("Jane Sample Knee pain referral High")],
+        [OcrLine("Taylor Duplicate Knee pain referral High")],
+    ]
+    step = context_click_step(
+        "Jane Sample Knee pain referral High", risk="irreversible"
+    )
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.acquire_count == 1
+    assert backend.actions == []
+    assert report.results[0].identity.status == "mismatch"
+    assert "Identity check failed" in report.results[0].error
 
 
 def test_identity_verified_clicks_normally(bundle, run_dir):

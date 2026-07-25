@@ -53,6 +53,7 @@ client automatically when none is injected.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import struct
 import sys
@@ -61,7 +62,12 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Optional, Protocol, runtime_checkable
 
+from PIL import Image
+
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_LEASE_NONE = 0
+_LEASE_ARMED = 1
+_LEASE_INVALIDATED = 2
 
 
 class RemoteDisplayError(RuntimeError):
@@ -230,6 +236,16 @@ def _png_size(png: bytes) -> tuple[int, int]:
         raise ValueError("not a PNG frame")
     w, h = struct.unpack(">II", png[16:24])
     return int(w), int(h)
+
+
+def _canonical_rgb_digest(png: bytes) -> bytes:
+    """Hash decoded dimensions and RGB pixels, not PNG container bytes."""
+    with Image.open(io.BytesIO(png)) as image:
+        rgb = image.convert("RGB")
+        digest = hashlib.sha256()
+        digest.update(struct.pack(">II", *rgb.size))
+        digest.update(rgb.tobytes())
+        return digest.digest()
 
 
 def _split_chord(key: str) -> tuple[list[str], str]:
@@ -414,6 +430,8 @@ class RemoteDisplayBackend:
         self._scale_y: float = 1.0
         self._frame_window: Optional[WindowInfo] = None
         self._last_frame_monotonic: Optional[float] = None
+        self._last_frame_digest: Optional[bytes] = None
+        self._actuation_lease_state = _LEASE_NONE
         # Serialize capture/geometry validation with the entire input gesture;
         # otherwise another thread can replace the frame lease between mouse
         # down and up or between a key's down/up edges.
@@ -533,6 +551,67 @@ class RemoteDisplayBackend:
             self._scale = scale_x  # compatibility for existing diagnostics
             self._frame_window = win
             self._last_frame_monotonic = time.monotonic()
+            self._last_frame_digest = _canonical_rgb_digest(png)
+            # An ordinary observation is not permission to perform a
+            # consequential remote action.  Only acquire_actuation_frame arms
+            # the one-shot content lease after focus/readiness are established.
+            # If another observation arrives while a lease is armed, preserve
+            # that fact as INVALIDATED so the next input cannot silently fall
+            # back to the ordinary reversible-input path.
+            if self._actuation_lease_state == _LEASE_ARMED:
+                self._actuation_lease_state = _LEASE_INVALIDATED
+            return png
+
+    def acquire_actuation_frame(self) -> bytes:
+        """Acquire the exact client window and arm a one-shot content lease.
+
+        The runtime re-resolves the target and record identity on the returned
+        frame.  The next input method captures once more under ``_input_lock``
+        and refuses before its first input edge if the frame changed.
+        """
+        with self._input_lock:
+            if self._require_input_trust and not self._client.input_trusted():
+                raise RemoteDisplayError(
+                    "process is not trusted to inject OS input; refusing to "
+                    "acquire a remote actuation lease"
+                )
+            win = self._resolve_window(refresh=True)
+            self._client.activate(win.pid)
+            time.sleep(self._settle_s)
+            win = self._resolve_window(refresh=True)
+            if (
+                not win.on_screen
+                or self._client.frontmost_pid() != win.pid
+                or self._client.key_window_id(win.pid) != win.window_id
+            ):
+                raise RemoteDisplayError(
+                    "the exact remote-display window is not visible, "
+                    "app-frontmost, and keyboard-frontmost; refusing to acquire "
+                    "an actuation lease"
+                )
+            png = self.screenshot()
+            assert self._frame_window is not None
+            lease = self._frame_window
+            current = self._resolve_window(refresh=True)
+            if (
+                current.window_id != lease.window_id
+                or current.pid != lease.pid
+                or current.bounds != lease.bounds
+                or not current.on_screen
+                or self._client.frontmost_pid() != current.pid
+                or self._client.key_window_id(current.pid) != current.window_id
+            ):
+                raise RemoteDisplayError(
+                    "remote-display window identity, focus, or geometry changed "
+                    "while acquiring the actuation frame"
+                )
+            if self._readiness_probe is not None and not self._readiness_probe(png):
+                self._actuation_lease_state = _LEASE_INVALIDATED
+                raise RemoteDisplayError(
+                    "remote-display readiness probe rejected the fresh actuation "
+                    "frame (locked, disconnected, or unexpected session)"
+                )
+            self._actuation_lease_state = _LEASE_ARMED
             return png
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
@@ -665,22 +744,43 @@ class RemoteDisplayBackend:
                     f"input point {(x, y)!r} is outside captured frame "
                     f"{self._viewport!r}"
                 )
-        if self._readiness_probe is not None:
+        if self._actuation_lease_state == _LEASE_INVALIDATED:
+            raise RemoteDisplayError(
+                "remote-display actuation lease was invalidated by another "
+                "observation; refusing input and requiring a fresh lease"
+            )
+        if self._readiness_probe is not None or (
+            self._actuation_lease_state == _LEASE_ARMED
+        ):
             # Check current pixels without replacing the resolver's coordinate
-            # lease. This detects a lock/disconnect that appears after capture
-            # while preserving the requirement to re-resolve before acting on
-            # changed content.
+            # lease. This detects a lock/disconnect or content change after the
+            # runtime re-resolved the fresh actuation frame.
             png, px_w, px_h = self._client.capture(current.window_id)
             if _png_size(png) != self._viewport or (px_w, px_h) != self._viewport:
+                self._actuation_lease_state = _LEASE_INVALIDATED
                 raise RemoteDisplayError(
                     "remote-display dimensions changed during readiness check; "
                     "capture and re-resolve before input"
                 )
-            if not self._readiness_probe(png):
+            if self._readiness_probe is not None and not self._readiness_probe(png):
+                self._actuation_lease_state = _LEASE_INVALIDATED
                 raise RemoteDisplayError(
                     "remote-display readiness probe rejected the current frame "
                     "(locked, disconnected, or unexpected session); refusing input"
                 )
+            if self._actuation_lease_state == _LEASE_ARMED:
+                # Consume once before the first input edge.  A double click or
+                # multi-character type is one gesture and must not invalidate
+                # itself after its first state-changing edge.
+                digest = _canonical_rgb_digest(png)
+                if self._last_frame_digest is None or digest != self._last_frame_digest:
+                    self._actuation_lease_state = _LEASE_INVALIDATED
+                    raise RemoteDisplayError(
+                        "remote-display frame content changed after target and "
+                        "identity resolution; refusing input and requiring a "
+                        "fresh actuation lease"
+                    )
+                self._actuation_lease_state = _LEASE_NONE
         # Activation, window resolution, capture and readiness/OCR may all
         # block. Re-resolve the exact window/key identity and age again at the
         # last common point before input.

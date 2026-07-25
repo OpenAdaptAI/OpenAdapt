@@ -43,7 +43,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional
 
-from openadapt_flow.backend import Backend, StructuralResolutionRefused
+from openadapt_flow.backend import (
+    Backend,
+    RemoteActuationBackend,
+    StructuralResolutionRefused,
+)
 from openadapt_flow.bundle_validation import compute_parameter_schema_digest
 from openadapt_flow.ir import (
     ActionKind,
@@ -71,6 +75,7 @@ from openadapt_flow.ir import (
 )
 from openadapt_flow.privacy import scrub_image_bytes as _scrub_png
 from openadapt_flow.privacy import scrub_text as _scrub_phi
+from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
@@ -2463,92 +2468,16 @@ class Replayer:
                     step, before_png, bundle_dir, workflow
                 )
             result.resolution = resolution
-            if (
-                error is None
-                and resolution is not None
-                and step.action
-                in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.TYPE)
-                and step.anchor is not None
-                and (
-                    step.anchor.context_text
-                    or step.anchor.structured_identity
-                    or step.anchor.identity_template
-                    or step.anchor.identifier_crop
+            if error is None and resolution is not None:
+                error = self._identity_gate_error(
+                    step,
+                    resolution,
+                    before_png,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
                 )
-            ):
-                # Identity gate: the ladder proves the resolved target LOOKS
-                # right at a plausible position; the recorded context band
-                # proves it IS the recorded target (or, for a parameterized
-                # target, the run's entity). Wrong identity must never be
-                # clicked — data drift in repeated structures (rows/cards)
-                # otherwise redirects the whole tail of the workflow to the
-                # wrong entity with a green report (VALIDATION.md, Track A).
-                # Anchored TYPE steps are gated too: their focusing click is
-                # a click like any other (compiled bundles currently emit
-                # TYPE steps without anchors, so this arm is exercised by
-                # hand-built workflows; the guard is cheap and closes the
-                # gap either way).
-                check = self._verify_identity(
-                    step, resolution, before_png, params, workflow, bundle_dir
-                )
-                result.identity = check
-                if check.status == "mismatch":
-                    error = (
-                        f"Identity check failed for step '{step.id}' "
-                        f"({step.intent}): a target was found positionally "
-                        f"(rung '{resolution.rung}', confidence "
-                        f"{resolution.confidence:.2f}) but its surrounding "
-                        f"text does not match the recorded target's — "
-                        f"expected {check.expected!r}, observed "
-                        f"{check.observed!r}"
-                        + (
-                            f" (parameter '{check.param}')"
-                            if check.param
-                            else f" (coverage {check.coverage:.2f})"
-                        )
-                        + " — refusing to act; run aborted"
-                    )
-                elif check.status in ("unreadable", "abstain") and (
-                    step.risk == "irreversible"
-                    or (
-                        self.governed_authorization is not None
-                        and self.governed_authorization.requires_verified_identity(
-                            step.id
-                        )
-                    )
-                ):
-                    reason = (
-                        "rests on a glyph-confusable identifier OCR may have "
-                        "collapsed (a same-name/same-DOB homonym cannot be "
-                        "ruled out)"
-                        if check.status == "abstain"
-                        else "could not be read from the live screen "
-                        "(context band OCR found no usable text)"
-                    )
-                    governed = (
-                        self.governed_authorization is not None
-                        and self.governed_authorization.requires_verified_identity(
-                            step.id
-                        )
-                    )
-                    scope = (
-                        "requires verified identity under the governed run policy"
-                        if governed
-                        else "is irreversible"
-                    )
-                    error = (
-                        f"Step '{step.id}' ({step.intent}) {scope} and its target "
-                        f"identity {reason} — needs human confirmation; refusing "
-                        "to act"
-                    )
-                    if governed:
-                        result.safety_halt = True
-                if (
-                    error is not None
-                    and self.governed_authorization is not None
-                    and self.governed_authorization.requires_verified_identity(step.id)
-                ):
-                    result.safety_halt = True
             # System-of-record effect verification -- SNAPSHOT the record just
             # before the (consequential) action, so the post-action verifier
             # can count only what THIS step wrote (delta / at-most-once /
@@ -2609,6 +2538,29 @@ class Replayer:
             if self._governed_asset_mutation is not None:
                 error = self._governed_asset_mutation
                 result.safety_halt = True
+
+            if error is None:
+                (
+                    resolution,
+                    matched_region,
+                    before_png,
+                    error,
+                ) = self._revalidate_remote_actuation(
+                    step,
+                    resolution,
+                    matched_region,
+                    before_png,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                )
+                result.resolution = resolution
+                if before_png is not last_frame:
+                    result.before_png = self._save_step_png(
+                        run_dir, step.id, "before", before_png
+                    )
+                    last_frame = before_png
 
             if error is None:
                 # Structural postconditions compare against the final observed
@@ -3039,6 +2991,147 @@ class Replayer:
         result.effect_verified = True
         return None
 
+    def _identity_gate_error(
+        self,
+        step: Step,
+        resolution: Resolution,
+        frame_png: bytes,
+        params: dict[str, str],
+        workflow: Workflow,
+        bundle_dir: Path,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Run the target-identity contract on one exact observed frame."""
+        if (
+            step.action
+            not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.TYPE)
+            or step.anchor is None
+            or not (
+                step.anchor.context_text
+                or step.anchor.structured_identity
+                or step.anchor.identity_template
+                or step.anchor.identifier_crop
+            )
+        ):
+            return None
+
+        check = self._verify_identity(
+            step, resolution, frame_png, params, workflow, bundle_dir
+        )
+        result.identity = check
+        governed = (
+            self.governed_authorization is not None
+            and self.governed_authorization.requires_verified_identity(step.id)
+        )
+        if check.status == "mismatch":
+            error = (
+                f"Identity check failed for step '{step.id}' "
+                f"({step.intent}): a target was found positionally "
+                f"(rung '{resolution.rung}', confidence "
+                f"{resolution.confidence:.2f}) but its surrounding "
+                f"text does not match the recorded target's — "
+                f"expected {check.expected!r}, observed "
+                f"{check.observed!r}"
+                + (
+                    f" (parameter '{check.param}')"
+                    if check.param
+                    else f" (coverage {check.coverage:.2f})"
+                )
+                + " — refusing to act; run aborted"
+            )
+        elif check.status in ("unreadable", "abstain") and (
+            step.risk == "irreversible" or governed
+        ):
+            reason = (
+                "rests on a glyph-confusable identifier OCR may have "
+                "collapsed (a same-name/same-DOB homonym cannot be ruled out)"
+                if check.status == "abstain"
+                else "could not be read from the live screen "
+                "(context band OCR found no usable text)"
+            )
+            scope = (
+                "requires verified identity under the governed run policy"
+                if governed
+                else "is irreversible"
+            )
+            error = (
+                f"Step '{step.id}' ({step.intent}) {scope} and its target "
+                f"identity {reason} — needs human confirmation; refusing to act"
+            )
+        else:
+            error = None
+        if error is not None and governed:
+            result.safety_halt = True
+        return error
+
+    def _remote_step_is_consequential(self, step: Step) -> bool:
+        authorization = self.governed_authorization
+        return is_consequential(step) or (
+            authorization is not None
+            and authorization.requires_verified_identity(step.id)
+        )
+
+    def _revalidate_remote_actuation(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        matched_region: Optional[Region],
+        before_png: bytes,
+        params: dict[str, str],
+        workflow: Workflow,
+        bundle_dir: Path,
+        result: StepResult,
+    ) -> tuple[
+        Optional[Resolution],
+        Optional[Region],
+        bytes,
+        Optional[str],
+    ]:
+        """Acquire, re-resolve, and identity-check a consequential remote step.
+
+        ``RemoteActuationBackend`` arms a one-shot exact-frame lease.  Its input
+        method captures once more under the backend lock and refuses before the
+        first input edge if the frame changed after this method returned.
+        Reversible remote actions retain the ordinary replay path.
+        """
+        if not self._remote_step_is_consequential(step) or not isinstance(
+            self.backend, RemoteActuationBackend
+        ):
+            return resolution, matched_region, before_png, None
+
+        try:
+            fresh_png = self.backend.acquire_actuation_frame()
+        except Exception as exc:  # noqa: BLE001 - backend boundary must halt
+            if self.governed_authorization is not None:
+                result.safety_halt = True
+            detail = _scrub_phi(str(exc)) or type(exc).__name__
+            return (
+                resolution,
+                matched_region,
+                before_png,
+                "Remote actuation preflight HALTED before input for step "
+                f"'{step.id}' ({step.intent}): {detail}",
+            )
+
+        fresh_resolution, fresh_region, error = self._resolve_step(
+            step, fresh_png, bundle_dir, workflow
+        )
+        if error is not None:
+            if self.governed_authorization is not None:
+                result.safety_halt = True
+            return fresh_resolution, fresh_region, fresh_png, error
+        if fresh_resolution is not None:
+            error = self._identity_gate_error(
+                step,
+                fresh_resolution,
+                fresh_png,
+                params,
+                workflow,
+                bundle_dir,
+                result,
+            )
+        return fresh_resolution, fresh_region, fresh_png, error
+
     def _resolve_step(
         self,
         step: Step,
@@ -3230,9 +3323,38 @@ class Replayer:
                     and resolution.structural_handle is not None
                     else None
                 )
-                # Fresh baseline AFTER the focusing click so its own focus
-                # ring never counts as "input landed".
-                before_png = self.backend.screenshot()
+                # Fresh baseline AFTER the focusing click so its own focus ring
+                # never counts as "input landed". A consequential remote TYPE
+                # is a second input gesture after that click, so reacquire and
+                # re-run target/identity before typing; the focusing click
+                # consumed the first one-shot remote lease.
+                if self._remote_step_is_consequential(step) and isinstance(
+                    self.backend, RemoteActuationBackend
+                ):
+                    (
+                        refreshed,
+                        refreshed_region,
+                        before_png,
+                        remote_error,
+                    ) = self._revalidate_remote_actuation(
+                        step,
+                        resolution,
+                        field_region,
+                        before_png,
+                        params,
+                        workflow,
+                        bundle_dir,
+                        result,
+                    )
+                    if remote_error is not None:
+                        return remote_error
+                    if refreshed is not None:
+                        resolution = refreshed
+                        result.resolution = refreshed
+                        field_point = refreshed.point
+                    field_region = refreshed_region
+                else:
+                    before_png = self.backend.screenshot()
             elif self._prev_was_click(workflow, step_index, graph_ctx):
                 field_point = self._last_click_point
                 field_region = self._last_click_region
