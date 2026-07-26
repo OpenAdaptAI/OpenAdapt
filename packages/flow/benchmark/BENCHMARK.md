@@ -90,3 +90,45 @@ openadapt-flow benchmark --n-compiled 100 --n-agent 20 --out benchmark/
 Requires `ANTHROPIC_API_KEY` (or `~/.anthropic/api_key`). The agent arm
 costs real money (about $5.43 at list price for
 20 runs when this was generated).
+
+## Workflow complexity across the benchmark suite (2026-07-26)
+
+An honest assessment of what the suite exercised BEFORE the multi-system
+benchmarks landed: mostly single-application, linear, worklist-driven form
+fills of roughly 5-15 recorded steps, with the fault-model studies driving a
+single consequential write. Real back-office work is longer, cross-system,
+document- and email-driven, and exception-heavy. The `ap_invoice` and
+`o2c_recon` benchmarks were added to close that gap; the table below states
+the shape of each benchmark so the difference is not overstated either (the
+new benchmarks actuate through the api tier and do not measure GUI
+perception; see each README).
+
+| benchmark | steps (executed actions) | apps | input/output modalities | branching | exception paths |
+|---|---|---|---|---|---|
+| MockMed encounter (this file) | 6 compiled steps | 1 | browser GUI | none | none |
+| MockLoan disbursement | ~6 compiled steps | 1 | browser GUI | none | none |
+| `openemr_local` registration | ~15-25 UI actions | 1 | browser GUI (real EMR) | none | duplicate-search confirm |
+| `openimis_claims` claim entry | ~10-20 UI actions | 1 | browser GUI (real AGPL app, repo-only) | none | none |
+| `frappe_lending` loan application | ~10 UI actions | 1 | browser GUI (real app) | none | none |
+| `canvas_ladder` / `rdp_ladder` / `citrix_ica_hdx` | 1-3 probe actions | 1 | pixel-only surface | none | qualification refusals |
+| `effect_e2e` / `silent_wrong_action` / `lending_fault_model` | 1 consequential write | 1 | REST + SQLite | none | 10-class fault taxonomy |
+| `effectbench` task pack | 1-3 writes per task | 1 | app API/DB oracles | none | per-task faults |
+| **`ap_invoice`** (new) | **32** | **2** (ERP + mail gateway) | email in (maildir), PDF document, REST API, UI gateway, email out | 2 branch points (match route; discount eligibility) | 4: missing PO, ambiguous duplicate, collateral adjacent-row overwrite, uncertain payment delivery (`RECONCILIATION_REQUIRED` + suppressed retry) |
+| **`o2c_recon`** (new) | **26** | **2** (billing + ledger) | CSV worklist in, CSV results write-back (re-read), REST API, UI gateway, 2 SQLite systems of record | 3-way branch (match / adjust / missing) | 4: missing record (explicit halt terminal), ambiguous duplicate, stale snapshot (optimistic concurrency), phantom file write |
+
+Both new benchmarks run every consequential write through the real
+`Replayer`'s api actuation tier after the real Standard-profile run gate admits
+the sealed bundle and binds a single-use authorization to its exact inputs.
+Every write is verified through a separate persisted-state read (read-only SQL,
+REST oracles, a maildir read, or a CSV re-read) and judged by a direct-file
+adjudicator whose expectations come from immutable source fixtures rather than
+the prepared worklist. This is not an independent service/failure domain. Zero
+model calls; healthy-path
+governed runs classify `VERIFIED` under the Section-3 transaction taxonomy.
+Measured headline over both benchmarks (n=3 per cell; 60 base runs): governed
+silent-incorrect-success 0/30 governed runs and healthy-path over-halts 0/6;
+naive banner-oracle
+silent-incorrect-success 6/30 (the collateral overwrite and the phantom
+write-back classes). Deterministic coverage
+matrix, not a sampled incidence rate. See `benchmark/ap_invoice/README.md`
+and `benchmark/o2c_recon/README.md` for what each does and does not prove.
