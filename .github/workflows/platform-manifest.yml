@@ -1,0 +1,50 @@
+name: Platform manifest and source boundary
+
+# Validates platform-manifest.json against the real published artifacts
+# (PyPI, status.json) and enforces the open-core source boundary.
+# See docs/platform-manifest.md and scripts/check_source_boundary.py.
+
+on:
+  pull_request:
+    branches:
+      - '**'
+  push:
+    branches:
+      - main
+  schedule:
+    # Weekly drift check: a component release without a manifest regeneration
+    # should fail here, loudly, even if no PR touches this repo.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-platform-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Validate platform manifest against published artifacts
+        run: python scripts/validate_platform_manifest.py
+
+  check-source-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Check open-core source boundary
+        run: python scripts/check_source_boundary.py

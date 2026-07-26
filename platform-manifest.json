@@ -1,0 +1,184 @@
+{
+  "manifest_kind": "openadapt-platform-release-manifest",
+  "schema_version": "1.0.0",
+  "generated_at": "2026-07-26T19:20:22+00:00",
+  "release_channel": "beta",
+  "components": {
+    "launcher": {
+      "package": "openadapt",
+      "version": "1.7.3",
+      "source": "pypi",
+      "requires_python": "<3.13,>=3.10",
+      "artifacts": [
+        {
+          "type": "bdist_wheel",
+          "filename": "openadapt-1.7.3-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/08/58/990f7f31360b0be723e004271b1e7016708c21627b1910f3bef751e11f45/openadapt-1.7.3-py3-none-any.whl",
+          "sha256": "f173f1454802bc01c966f973755d6657af9b968cbc0318483d75751adc79b9d0"
+        },
+        {
+          "type": "sdist",
+          "filename": "openadapt-1.7.3.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/d1/f8/fed8b98bdc39376e7bd1aa9cccba22a415f54eb225b1f262d8126d9353d7/openadapt-1.7.3.tar.gz",
+          "sha256": "5a7d63bfacea0b579d06d48886348ce0bce38db7c55e04839ea9d860c36e6d79"
+        }
+      ]
+    },
+    "flow": {
+      "package": "openadapt-flow",
+      "version": "1.23.0",
+      "source": "pypi",
+      "requires_python": "<3.13,>=3.10",
+      "artifacts": [
+        {
+          "type": "bdist_wheel",
+          "filename": "openadapt_flow-1.23.0-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/54/f7/632b13c60ba805cfd22614dc4c73285c06c2b7d698c124d9c45104623c18/openadapt_flow-1.23.0-py3-none-any.whl",
+          "sha256": "b5d10dfc294479866d6dddd4c1a6afc9164414f0634703173b7e440dc0133bec"
+        },
+        {
+          "type": "sdist",
+          "filename": "openadapt_flow-1.23.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/f6/e5/8957790965a0fc5cde4e8f8dc8664c3db682d1b09881abf05f013fd3f495/openadapt_flow-1.23.0.tar.gz",
+          "sha256": "b16e181ac1f8b84f825b418ca9c6608cd408bde9ccd94d0a7e62db515d2145be"
+        }
+      ]
+    },
+    "capture": {
+      "package": "openadapt-capture",
+      "version": "1.1.1",
+      "source": "pypi",
+      "requires_python": ">=3.10",
+      "artifacts": [
+        {
+          "type": "bdist_wheel",
+          "filename": "openadapt_capture-1.1.1-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/3b/66/f6ea4cb9a5e9515370e59574c7caf8f827807af877d251db17047010c871/openadapt_capture-1.1.1-py3-none-any.whl",
+          "sha256": "76f6fdc9bd81dd3a72445fd8ebd918654a732765d5aae848d5f56dc62d1bf97d"
+        },
+        {
+          "type": "sdist",
+          "filename": "openadapt_capture-1.1.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/6f/65/11c5c49eeee83b10595c87269f83d1d1dbc6f4e2e04f51885441d064e295/openadapt_capture-1.1.1.tar.gz",
+          "sha256": "7022d41b37f3a8fbf30f5e89df2373d3bfacc0e13ab8c9b6c1770f76126fbd6b"
+        }
+      ]
+    },
+    "desktop": {
+      "package": "openadapt-desktop",
+      "version": "0.14.0",
+      "source": "pypi",
+      "requires_python": ">=3.11",
+      "artifacts": [
+        {
+          "type": "bdist_wheel",
+          "filename": "openadapt_desktop-0.14.0-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/dc/5f/f2cf2d6fdaab8a400e95065d2f4e1810665b3a9352879967fab5c9e9f957/openadapt_desktop-0.14.0-py3-none-any.whl",
+          "sha256": "7ee5a1d2e00f5cbd887edd070916e53530c9548b04713a1aa7d9960f2d313082"
+        },
+        {
+          "type": "sdist",
+          "filename": "openadapt_desktop-0.14.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/d9/47/64ceeecd28345145ee3ee5cd796806f14fc5c339c52778ae41507661ec76/openadapt_desktop-0.14.0.tar.gz",
+          "sha256": "44a50bd2c126524a76b4d0c0eb0bed9f24667940f735eed1dfed03dce7e9862b"
+        }
+      ]
+    }
+  },
+  "compatibility": {
+    "python": ">=3.10,<3.13",
+    "launcher_requires": {
+      "openadapt-capture": [
+        ">=1.0.4,<2.0.0"
+      ],
+      "openadapt-evals": [
+        ">=0.1.0"
+      ],
+      "openadapt-flow": [
+        ">=1.20.1,<2.0.0"
+      ],
+      "openadapt-grounding": [
+        ">=0.1.0"
+      ],
+      "openadapt-ml": [
+        ">=0.2.0"
+      ],
+      "openadapt-retrieval": [
+        ">=0.1.0"
+      ],
+      "openadapt-viewer": [
+        ">=0.1.0"
+      ]
+    }
+  },
+  "supported_os": [
+    "windows",
+    "macos",
+    "linux"
+  ],
+  "substrate_drivers": [
+    {
+      "name": "Browser",
+      "public_label": "Available",
+      "delivery": "Local, managed OpenAdapt Cloud, or customer-controlled"
+    },
+    {
+      "name": "Windows",
+      "public_label": "Available",
+      "delivery": "Local or customer-controlled"
+    },
+    {
+      "name": "macOS",
+      "public_label": "Available",
+      "delivery": "Local or customer-controlled"
+    },
+    {
+      "name": "Linux",
+      "public_label": "Available",
+      "delivery": "Local or customer-controlled"
+    },
+    {
+      "name": "RDP",
+      "public_label": "Available",
+      "delivery": "Local or customer-controlled"
+    },
+    {
+      "name": "Citrix / VDI",
+      "public_label": "Available",
+      "delivery": "Local or customer-controlled"
+    },
+    {
+      "name": "Hosted Cloud",
+      "public_label": "Beta",
+      "delivery": "Managed browser runner and control plane"
+    }
+  ],
+  "qualification_evidence": [
+    {
+      "id": "openadapt-public-status",
+      "kind": "status-document",
+      "url": "https://openadapt.ai/status.json",
+      "description": "Canonical machine-readable release, capability, and substrate qualification status, maintained in openadapt-web (public/status.json)."
+    },
+    {
+      "id": "flow-public-demo-evidence-packs",
+      "kind": "evidence-pack-collection",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "path": "public-demo/evidence-packs",
+      "description": "Versioned public evidence packs (for example mockmed-triage-v3) with per-pack manifest.json files: synthetic-patient replay evidence including fault-injection trials."
+    },
+    {
+      "id": "flow-effectbench-task-pack",
+      "kind": "benchmark-manifest",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "path": "benchmark/effectbench/task_pack/manifest.json",
+      "description": "Effect-verification benchmark task pack manifest used by the flow qualification harness."
+    }
+  ],
+  "signature": {
+    "algorithm": null,
+    "value": null,
+    "status": "unsigned (signing infrastructure pending)",
+    "plan": "docs/platform-manifest.md#signing-plan"
+  }
+}

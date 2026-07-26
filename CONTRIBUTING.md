@@ -43,6 +43,40 @@ replay, repair, policy, and backend work belongs there.
 - Update documentation as needed
 - Keep PRs focused and small
 
+## Licensing and the open-core boundary
+
+OpenAdapt is open-core. The public repositories (this launcher,
+`openadapt-flow`, `openadapt-capture`, `openadapt-desktop`, and the other
+`openadapt-*` engine repos) are MIT licensed: the mechanism and the public
+interfaces are open. The hosted control plane (OpenAdapt Cloud) is a
+proprietary commercial service, and certain data and empirical tuning stay
+private by policy.
+
+What this means for contributions to the public repos:
+
+- Do not contribute application-specific recipes, customer fixtures, or
+  proprietary system identifiers derived from real deployments (for example,
+  automation content tied to a specific customer's EHR configuration). CI
+  runs `scripts/check_source_boundary.py` to reject that class of content.
+- Do not contribute deployment-derived corpora, tuned adversary parameters,
+  thresholds, oracle or connector recipes, or datasets tied to real systems
+  of record. Synthetic, reproducible fixtures are welcome.
+- Do not copy or vendor GPL/AGPL/SSPL or otherwise non-MIT-compatible
+  material into these repositories or their built packages.
+- The OpenAdapt name and logo are trademarks and are not covered by the MIT
+  License; see [TRADEMARKS.md](TRADEMARKS.md).
+
+## Developer Certificate of Origin
+
+By submitting a contribution you certify the
+[Developer Certificate of Origin (DCO) 1.1](https://developercertificate.org/):
+that you wrote the contribution or otherwise have the right to submit it
+under the MIT License. Signing off your commits (`git commit -s`) is
+appreciated but the certification applies to every contribution regardless.
+
+A Contributor License Agreement (CLA) is under consideration but has not
+been adopted; today the DCO plus the MIT License govern contributions.
+
 ## Questions?
 
 - [Discord](https://discord.gg/yF527cQbDG)
