@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "content_digest": "df39b4cf364a48b87aaa1c9e9db5395122b7ac0deb7641f6be985b8bc8e5e23d",
+  "file_hashes": {
+    "templates/step_000.png": "46a75b5d63ceaad4bee942ccf2a6ca3d2b4f6327509df7eff2cc7ddb2c9fd389",
+    "templates/step_000_expect.png": "337e403fec476cc955bcf5f1d96902119d9c2fadc03e201c0c2fbc2475d03646",
+    "templates/step_001.png": "9d17fc905b1902add82cad885c72fe446a23e0334fc4db58592d2369e85f26a5",
+    "templates/step_001_expect.png": "ccbbb335c8160188198df18beb48bd88082b7bb1e5c1cd987d6766afb62c0773",
+    "templates/step_002.png": "e6a0e0718b00c26280e32928b744217d00a7e010ab9825da27724e2debc9b805",
+    "templates/step_002_expect.png": "f66608f19f3acf0ba8d86a39ecdd04781eb320787885039ab1eefee3835c83de",
+    "templates/step_003.png": "2cb01de3e45c7c6cd6526f1b6f9c1a4f86bee1a5e4f8e3f6fbf7150470cf5f2c",
+    "templates/step_003_expect.png": "68cd40d6bd0abdf81beb40dd4202bac784a4b55492f803cdd5fb1e7ab8f76941",
+    "templates/step_005.png": "5d8163520ba8355f44ffe0cd06a26be6bfe5d6660bcff1395dc82d4da3aa0ac1",
+    "templates/step_005_expect.png": "0919dca8fe883ad52eae6359f9da3494cb57c68e006ea4ba314d61e15787ea47"
+  },
+  "provenance": {
+    "compiler_version": "1.23.0",
+    "source_recording_sha256": null,
+    "compiler_config_sha256": "479f143ba6970af144553f82f66990463129ee6606852260478c9c2a79b7f91d",
+    "created_at": "2026-07-26T06:33:18.850095+00:00",
+    "policy_name": "clinical-write",
+    "certified": true,
+    "certification_status": "certified",
+    "certified_at": "2026-07-26T06:34:46.576470+00:00",
+    "expires_at": null,
+    "certification_invalidated_at": null,
+    "certification_invalidation_reason": null
+  },
+  "encrypted": false
+}

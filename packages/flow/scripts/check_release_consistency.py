@@ -10,6 +10,7 @@ import math
 import os
 import re
 import stat
+import subprocess
 import tarfile
 import zipfile
 from email.parser import BytesParser
@@ -605,6 +606,27 @@ def _validate_public_artifact_inventory(
             "public artifact inventory hash mismatch; explicitly regenerate and "
             f"review it: {changed}"
         )
+    git_marker = root / ".git"
+    if git_marker.exists():
+        tracked_result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            check=False,
+            capture_output=True,
+        )
+        if tracked_result.returncode != 0:
+            raise ValueError(
+                "could not verify that public artifact inventory paths are tracked "
+                "by git"
+            )
+        tracked = {
+            path.decode("utf-8") for path in tracked_result.stdout.split(b"\0") if path
+        }
+        untracked = sorted(expected - tracked)
+        if untracked:
+            raise ValueError(
+                "public artifact inventory contains files that are not tracked by "
+                f"git: {untracked}"
+            )
     return inventory
 
 
