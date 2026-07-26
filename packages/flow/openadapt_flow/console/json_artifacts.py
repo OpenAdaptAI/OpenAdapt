@@ -36,6 +36,7 @@ _RUN_ROOT_FILES = {
 _BUNDLE_ROOT_FILES = {
     "annotations.json",
     "manifest.json",
+    "param_proposals.json",
     "workflow.json",
 }
 _CHECKPOINT_PREFIXES = ("step_", "pstate_")
@@ -46,6 +47,7 @@ _ROOT_LABELS = {
     "attended_decisions.json": "Attended decisions",
     "governed_policy.json": "Governed policy",
     "manifest.json": "Bundle manifest",
+    "param_proposals.json": "Flagged parameter proposals",
     "pending_escalation.json": "Pending escalation",
     "report.json": "Run report",
     "workflow.json": "Compiled workflow",

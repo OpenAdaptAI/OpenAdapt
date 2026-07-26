@@ -131,6 +131,59 @@ _INIT_JS = r"""
     return SECRET_NAMES.indexOf(n) >= 0 || SECRET_NAMES.indexOf(i) >= 0;
   }
 
+  function fieldLabel(el) {
+    // Best available human label for the receiving field, best-first:
+    // associated <label for=...>, wrapping <label>, aria-label,
+    // aria-labelledby, placeholder, name attribute, title. Mirrors
+    // PlaywrightBackend.focused_field_label exactly. Passive metadata for
+    // the compile-time parameter-proposal pass; NEVER the field's value.
+    try {
+      const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      if (el.id) {
+        try {
+          const forLabel = document.querySelector(
+            'label[for="' + CSS.escape(el.id) + '"]'
+          );
+          const t = clean(forLabel && forLabel.textContent);
+          if (t) return t;
+        } catch (e) {}
+      }
+      const wrapping = el.closest('label');
+      if (wrapping) {
+        // Label TEXT only: a control nested inside the label (e.g. a
+        // <textarea>) contributes its typed VALUE to textContent -- strip
+        // embedded controls so the captured label is never the value.
+        const cloned = wrapping.cloneNode(true);
+        for (const child of cloned.querySelectorAll(
+            'input, textarea, select, [contenteditable=""],' +
+            ' [contenteditable="true"], [role="textbox"]')) {
+          child.remove();
+        }
+        const t = clean(cloned.textContent);
+        if (t) return t;
+      }
+      const aria = clean(el.getAttribute('aria-label'));
+      if (aria) return aria;
+      const labelledby = el.getAttribute('aria-labelledby');
+      if (labelledby) {
+        const parts = [];
+        for (const id of labelledby.split(/\s+/)) {
+          const ref = document.getElementById(id);
+          const t = clean(ref && ref.textContent);
+          if (t) parts.push(t);
+        }
+        if (parts.length) return parts.join(' ');
+      }
+      const placeholder = clean(el.getAttribute('placeholder'));
+      if (placeholder) return placeholder;
+      const name = clean(el.getAttribute('name'));
+      if (name) return name;
+      const title = clean(el.getAttribute('title'));
+      if (title) return title;
+    } catch (e) {}
+    return null;
+  }
+
   function emit(o) { try { window.__oaflow_emit(o); } catch (e) {} }
 
   document.addEventListener('click', (e) => {
@@ -151,6 +204,7 @@ _INIT_JS = r"""
     const o = {
       kind: 'input',
       field: el.name || el.id || null,
+      label: fieldLabel(el),
       secret: secret,
       rect: [Math.round(r.left), Math.round(r.top),
              Math.round(r.width), Math.round(r.height)],
@@ -363,12 +417,15 @@ class InteractiveRecorder:
         if self._pending_type is None:
             self._pending_type = {
                 "field": field,
+                "label": ev.get("label"),
                 "secret": bool(ev.get("secret")),
                 "value": "",
                 "rect": ev.get("rect"),
             }
         pt = self._pending_type
         pt["secret"] = pt["secret"] or bool(ev.get("secret"))
+        if ev.get("label"):
+            pt["label"] = ev["label"]
         if ev.get("rect"):
             pt["rect"] = ev["rect"]
         if not pt["secret"]:
@@ -394,11 +451,18 @@ class InteractiveRecorder:
         assert self.recorder is not None
         after_png = pt.get("after_frame")
         structural_after = pt.get("structural_after")
+        # The receiving field's label rides on every TYPE event as PASSIVE
+        # evidence (never the value): the compiler's deterministic
+        # parameter-proposal pass names a proposed parameter from it, gated
+        # behind operator confirmation (compiler.annotate.FieldLabelAnnotator).
+        label_evidence: dict[str, Any] = {}
+        if pt.get("label"):
+            label_evidence["field_label"] = pt["label"]
         if pt["secret"]:
             rect = pt.get("rect") or None
             redact = tuple(rect) if rect and rect[2] and rect[3] else None
             self.recorder.record_observed(
-                {"kind": "type"},
+                {"kind": "type", **label_evidence},
                 before_png=self._last_frame,
                 structural_before=structural_before,
                 param=field or "secret",
@@ -409,7 +473,7 @@ class InteractiveRecorder:
             )
         elif field and field in self._param_fields:
             self.recorder.record_observed(
-                {"kind": "type", "text": pt["value"]},
+                {"kind": "type", "text": pt["value"], **label_evidence},
                 before_png=self._last_frame,
                 structural_before=structural_before,
                 param=field,
@@ -419,8 +483,13 @@ class InteractiveRecorder:
         else:
             # Non-secret, unparameterized: recorded as a literal (replayed
             # verbatim), matching the demo driver's username/note handling.
+            # The field rect rides along so the compiler's nearby-OCR label
+            # fallback has a place to look when no DOM label exists.
+            rect = pt.get("rect") or None
+            if rect and rect[2] and rect[3]:
+                label_evidence["field_rect"] = [int(v) for v in rect]
             self.recorder.record_observed(
-                {"kind": "type", "text": pt["value"]},
+                {"kind": "type", "text": pt["value"], **label_evidence},
                 before_png=self._last_frame,
                 structural_before=structural_before,
                 after_png=after_png,

@@ -127,6 +127,15 @@ plus target flags to `replay`, or drive a real deployment with
 `openadapt-flow run bundle --config deploy.yaml`, which reads the backend,
 effects, actuation, durable, and policy sections from one config. Recorded
 parameter values are the defaults, and `--param` overrides them at replay.
+
+**You don't have to name parameters up front.** The recorder passively
+captures each typed field's label (DOM/accessibility, or nearby OCR on pixel
+paths), and `compile` proposes a parameter named from it (`"Insurance No."`
+-> `insurance_no`). Proposals are never applied silently: `compile` lists
+them once for confirm / rename / mark-secret / keep-constant (on a TTY), or
+non-interactively via `--accept-params insurance_no` /
+`--params-from decisions.json`; unconfirmed values stay exactly as
+demonstrated. An explicit `--param` always wins and suppresses the proposal.
 Select `--profile regulated` for encrypted, fail-closed production execution,
 `--profile standard` for a certified and durable deployment whose qualified
 storage boundary may supply at-rest encryption, or `--profile demo` for an

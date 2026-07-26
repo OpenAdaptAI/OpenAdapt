@@ -13,9 +13,10 @@ import hashlib
 import json
 import logging
 import math
+import re
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional, cast
+from typing import TYPE_CHECKING, Iterable, Literal, Optional, cast
 
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
@@ -714,6 +715,59 @@ def _text_preview(text: str, limit: int = 24) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+# Nearby-OCR field-label fallback (used by the pass-1 TYPE branch when the
+# event carries a field_rect but no recorded field_label): a form label sits
+# LEFT of or ABOVE its field, close by. Bounds keep the fallback conservative
+# (a distant heading must not become a parameter name).
+LABEL_OCR_MAX_LEFT_GAP_PX = 220
+LABEL_OCR_MAX_ABOVE_GAP_PX = 90
+LABEL_OCR_MAX_CHARS = 80
+
+
+def _field_label_from_ocr(
+    lines: list[OcrLine], rect: tuple[int, int, int, int]
+) -> Optional[str]:
+    """Nearest OCR line left of / above a field rect -- the form-label heuristic.
+
+    LAST-RESORT label evidence for substrates with no DOM/a11y label seam:
+    given the typed field's on-screen rectangle (recorded as ``field_rect``),
+    pick the closest OCR line that sits where a form label sits -- immediately
+    LEFT of the field (vertically overlapping) or immediately ABOVE it
+    (horizontally overlapping or left-aligned). Lines inside the rect (the
+    field's own contents), too far away, or empty are rejected; ties go to
+    the smaller gap, with LEFT preferred over ABOVE at equal distance.
+    Deterministic, uses the already-cached OCR of the BEFORE frame (no extra
+    model or engine calls beyond the frame's one OCR pass).
+    """
+    rx, ry, rw, rh = (int(v) for v in rect)
+    if rw <= 0 or rh <= 0:
+        return None
+    best: Optional[tuple[float, int, str]] = None  # (gap, tiebreak, text)
+    for line in lines:
+        text = " ".join(line.text.split())
+        if not text or len(text) > LABEL_OCR_MAX_CHARS:
+            continue
+        lx, ly, lw, lh = (int(v) for v in line.region)
+        cx, cy = lx + lw / 2, ly + lh / 2
+        if rx <= cx <= rx + rw and ry <= cy <= ry + rh:
+            continue  # inside the field: its value, not its label
+        v_overlap = min(ly + lh, ry + rh) - max(ly, ry)
+        h_overlap = min(lx + lw, rx + rw) - max(lx, rx)
+        left_gap = rx - (lx + lw)
+        above_gap = ry - (ly + lh)
+        if v_overlap > 0 and 0 <= left_gap <= LABEL_OCR_MAX_LEFT_GAP_PX:
+            candidate = (float(left_gap), 0, text)
+        elif (h_overlap > 0 or abs(lx - rx) <= 40) and (
+            0 <= above_gap <= LABEL_OCR_MAX_ABOVE_GAP_PX
+        ):
+            candidate = (float(above_gap), 1, text)
+        else:
+            continue
+        if best is None or candidate[:2] < best[:2]:
+            best = candidate
+    return best[2] if best is not None else None
+
+
 def _identity_unarmed_reason(
     frame_lines: list[OcrLine],
     *,
@@ -918,12 +972,92 @@ def _emit_identifier_crop(
     return crop_rel, region, None
 
 
+# Parameter names must be usable as ValueExpr(param=...) / ApiBinding threads
+# and environment-variable stems -- the same shape ir.ApiBinding enforces.
+_PARAM_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+
+
+def _apply_param_overrides(
+    events: list[dict],
+    params: dict[str, str],
+    secret_params: list[str],
+    *,
+    param_overrides: dict[str, str],
+    secret_param_steps: frozenset[str],
+) -> list[str]:
+    """Apply operator-CONFIRMED parameter decisions to the raw events, in place.
+
+    The one-shot confirm pass (``compiler.param_confirm``) resolves flagged
+    field-label proposals into decisions; this function is their single
+    application point. Each ``{step_id: name}`` entry turns that TYPE event's
+    demonstrated constant into ``param=name`` exactly as if the demonstrator
+    had recorded it that way, so every downstream safeguard (postcondition
+    exclusion, leakage lint, secret handling) sees a first-class parameter.
+    Fail-loud on ANY inconsistent decision -- an override that cannot be
+    applied exactly as confirmed must never be silently dropped.
+
+    Returns:
+        Demonstrated values of compile-time SECRET steps (excluded from
+        postconditions by the caller; never placed in ``params``).
+    """
+    unknown_secret = secret_param_steps - set(param_overrides)
+    if unknown_secret:
+        raise ValueError(
+            "secret_param_steps must be a subset of param_overrides step ids; "
+            f"extra: {sorted(unknown_secret)}"
+        )
+    by_id = {f"step_{int(e['i']):03d}": e for e in events}
+    secret_values: list[str] = []
+    for step_id, pname in sorted(param_overrides.items()):
+        if not _PARAM_NAME_RE.match(pname):
+            raise ValueError(
+                f"param override for {step_id}: invalid parameter name {pname!r}"
+            )
+        event = by_id.get(step_id)
+        if event is None:
+            raise ValueError(f"param override for unknown step id {step_id!r}")
+        if event.get("kind") != "type":
+            raise ValueError(
+                f"param override for {step_id}: not a TYPE step "
+                f"(kind={event.get('kind')!r})"
+            )
+        if event.get("param") or event.get("secret"):
+            raise ValueError(
+                f"param override for {step_id}: step already carries an "
+                "explicit param/secret (the demonstrator's naming wins)"
+            )
+        text = event.get("text")
+        if not isinstance(text, str) or not text:
+            raise ValueError(
+                f"param override for {step_id}: no demonstrated text to parameterize"
+            )
+        if pname in params or pname in secret_params:
+            raise ValueError(
+                f"param override for {step_id}: name {pname!r} already "
+                "declared by the recording"
+            )
+        event["param"] = pname
+        if step_id in secret_param_steps:
+            # Compile-time secret: the BUNDLE carries no literal. (The
+            # recording still does -- see the compile_recording docstring
+            # caveat -- so the value is still postcondition-excluded.)
+            event["secret"] = True
+            event.pop("text", None)
+            secret_params.append(pname)
+            secret_values.append(text)
+        else:
+            params[pname] = text
+    return secret_values
+
+
 def compile_recording(
     recording_dir: Path | str,
     out_bundle_dir: Path | str,
     *,
     name: str,
     risk_overrides: Optional[dict[str, str]] = None,
+    param_overrides: Optional[dict[str, str]] = None,
+    secret_param_steps: Optional[Iterable[str]] = None,
     mine_effects: bool = False,
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
@@ -974,6 +1108,30 @@ def compile_recording(
         risk_overrides: Optional ``{step_id: risk}`` map (step ids are
             positional: ``step_000`` is the first recorded event). Values
             must be ``"reversible"`` or ``"irreversible"``.
+        param_overrides: Optional ``{step_id: param_name}`` map turning a
+            demonstrated TYPE constant into a named parameter -- the
+            OPERATOR-CONFIRMED application of a field-label proposal (the
+            one-shot confirm pass, ``compiler.param_confirm``; see also
+            ``compiler.annotate.FieldLabelAnnotator``). Applied at the EVENT
+            level before compilation, so the value flows through exactly the
+            recorded-``param=`` machinery: example/default in
+            ``workflow.params`` + ``param_specs``, postcondition exclusion,
+            and the parameter-leakage lint. Fails loud on an unknown step id,
+            a non-TYPE step, a step that already carries an explicit
+            ``param``/secret, an empty typed value, or a duplicate/invalid
+            name. Human confirmation is the CONTRACT here: the param name is
+            the thread the effect verifier binds to (``ValueExpr(param=...)``)
+            so it is never silently inferred.
+        secret_param_steps: Optional step ids (a subset of
+            ``param_overrides`` keys) whose confirmed parameter is a SECRET:
+            the bundle carries NO literal (``step.text`` is None,
+            ``step.secret`` is True, the name joins ``secret_params``) and the
+            value is injected at replay from
+            ``OPENADAPT_FLOW_SECRET_<PARAM>``. CAVEAT (documented, honest):
+            marking secret at COMPILE time protects the BUNDLE only -- the
+            recording itself was made without ``--secret``, so its
+            events.jsonl and frames still hold the demonstrated value;
+            re-record with ``--secret`` for full at-rest secrecy.
         mine_effects: Opt-in system-of-record effect mining
             (``compiler.effect_mining``). When True, each step gets candidate
             typed ``Effect``s auto-derived from what the demonstration observed:
@@ -1034,6 +1192,19 @@ def compile_recording(
             ) from exc
     events = _load_events(recording)
     params: dict[str, str] = dict(meta.get("params") or {})
+    secret_params: list[str] = list(meta.get("secret_params") or [])
+    # Operator-CONFIRMED parameter decisions (the one-shot confirm pass):
+    # applied at the EVENT level, before anything else reads the events, so a
+    # confirmed parameter flows through the exact machinery a recorded
+    # ``param=`` uses -- example/default, postcondition exclusion, leakage
+    # lint, secret handling. Fails loud on any inconsistent decision.
+    secret_exclude_values = _apply_param_overrides(
+        events,
+        params,
+        secret_params,
+        param_overrides=dict(param_overrides or {}),
+        secret_param_steps=frozenset(secret_param_steps or ()),
+    )
     viewport = meta.get("viewport")
     # Recording-wide marked identifier region (desktop `record --identifier
     # X,Y,W,H` — a pixel capture has no field identity, so the operator marks
@@ -1055,6 +1226,9 @@ def compile_recording(
             text = event.get("text")
             if text:
                 param_values.append(text)
+    # A compile-time secret's demonstrated value is excluded from
+    # postconditions too, even though it never lands in workflow.params.
+    param_values.extend(secret_exclude_values)
     exclude_texts: tuple[str, ...] = tuple(dict.fromkeys(param_values))
 
     # The recording date arms the near/far date split in the volatility
@@ -1257,6 +1431,32 @@ def compile_recording(
             param = event.get("param")
             text = event.get("text")
             secret = bool(event.get("secret"))
+            # Receiving-field label EVIDENCE (ergonomic parameter naming):
+            # best is the recorder's passive DOM/a11y capture on the event
+            # (``field_label``); last resort is the nearest OCR line left
+            # of / above the recorded field rect on the BEFORE frame. Pure
+            # metadata -- never read at replay; it only feeds the flagged,
+            # operator-confirmed parameter proposals (FieldLabelAnnotator).
+            field_label: Optional[str] = None
+            raw_label = event.get("field_label")
+            if isinstance(raw_label, str) and raw_label.strip():
+                field_label = " ".join(raw_label.split())
+            else:
+                raw_rect = event.get("field_rect")
+                if (
+                    before_png is not None
+                    and isinstance(raw_rect, (list, tuple))
+                    and len(raw_rect) == 4
+                ):
+                    field_label = _field_label_from_ocr(
+                        cached_lines(i, "before", before_png),
+                        (
+                            int(raw_rect[0]),
+                            int(raw_rect[1]),
+                            int(raw_rect[2]),
+                            int(raw_rect[3]),
+                        ),
+                    )
             if secret:
                 # A secret's literal value is never in the recording, so it
                 # is never in the bundle either: the step carries only the
@@ -1277,6 +1477,7 @@ def compile_recording(
                         text=text,
                         param=param,
                         secret=secret,
+                        field_label=field_label,
                     ),
                     before_png,
                     after_png,
@@ -1453,7 +1654,7 @@ def compile_recording(
             pname: ParamSpec(name=pname, type=ParamKind.STRING, example=value)
             for pname, value in params.items()
         },
-        secret_params=list(meta.get("secret_params") or []),
+        secret_params=secret_params,
         steps=steps,
     )
 
@@ -1473,7 +1674,9 @@ def compile_recording(
         ),
         "mine_effects": mine_effects,
         "name": name,
+        "param_overrides": dict(sorted((param_overrides or {}).items())),
         "risk_overrides": dict(sorted((risk_overrides or {}).items())),
+        "secret_param_steps": sorted(secret_param_steps or ()),
     }
     compiler_config_sha256 = hashlib.sha256(
         json.dumps(
@@ -1501,6 +1704,66 @@ def compile_recording(
             + "\n  ".join(violations)
         )
 
+    # DETERMINISTIC field-label parameter proposals (no model, $0, always on):
+    # a typed constant whose step carries field_label evidence yields a
+    # slugified name proposal, emitted through the SAME confirm-don't-trust
+    # pipeline as model annotations. Every such proposal is CONSEQUENTIAL
+    # (constant -> run-varying parameter changes what the workflow does), so
+    # apply_annotations FLAGS it and applies NOTHING -- the sidecar
+    # ``param_proposals.json`` only feeds the one-shot operator confirm pass
+    # (compiler.param_confirm). Unconfirmed proposals stay constants
+    # (fail-closed; the bundle replays byte-for-byte as demonstrated). The
+    # sidecar carries MASKED values only; steps whose demonstrator already
+    # passed ``param=`` (or that this compile parameterized via confirmed
+    # ``param_overrides``) emit no proposal.
+    from openadapt_flow.compiler.annotate import (
+        FieldLabelAnnotator,
+        apply_annotations,
+        mask_value,
+    )
+
+    label_result = apply_annotations(workflow, FieldLabelAnnotator())
+    label_proposals: list[dict[str, Optional[str]]] = []
+    for sa in label_result.proposals.steps:
+        for prop in sa.params:
+            label_proposals.append(
+                {
+                    "step_id": sa.step_id,
+                    "name": prop.name,
+                    "field_label": prop.source_label,
+                    "masked_example": (
+                        mask_value(prop.example) if prop.example else None
+                    ),
+                }
+            )
+    if label_proposals:
+        (bundle / "param_proposals.json").write_text(
+            json.dumps(
+                {
+                    "note": (
+                        "Flagged field-label parameter proposals -- "
+                        "NOT applied. Run the confirm pass "
+                        "(openadapt-flow compile, interactive or "
+                        "--accept-params/--params-from) to turn a proposal "
+                        "into a parameter; unconfirmed proposals remain "
+                        "demonstrated constants."
+                    ),
+                    "proposals": label_proposals,
+                },
+                indent=2,
+            )
+        )
+        for flag in label_result.flagged:
+            logger.warning(
+                "field-label parameter proposal (needs operator confirmation) %s: %s",
+                flag.step_id,
+                flag.detail,
+            )
+    else:
+        # A recompile after the confirm pass must not leave a stale sidecar
+        # behind: the sidecar always reflects the OUTSTANDING proposals.
+        (bundle / "param_proposals.json").unlink(missing_ok=True)
+
     # Opt-in COMPILE-TIME model annotation (off by default). Runs LAST, over the
     # fully-built workflow. Applies model proposals with the confirm-don't-trust
     # asymmetry (risk upgrade / type-enrichment applied; downgrade /
@@ -1508,10 +1771,7 @@ def compile_recording(
     # sidecar. COMPILE-TIME ONLY: the replayer never reads this and makes ZERO
     # model calls. Off -> `workflow` and the bundle are byte-identical to today.
     if annotate:
-        from openadapt_flow.compiler.annotate import (
-            AnthropicStepAnnotator,
-            apply_annotations,
-        )
+        from openadapt_flow.compiler.annotate import AnthropicStepAnnotator
 
         ann = annotator if annotator is not None else AnthropicStepAnnotator()
         result = apply_annotations(workflow, ann)

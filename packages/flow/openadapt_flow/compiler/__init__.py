@@ -4,9 +4,11 @@ from openadapt_flow.compiler.annotate import (
     AnnotationResult,
     AnthropicStepAnnotator,
     FakeStepAnnotator,
+    FieldLabelAnnotator,
     StepAnnotator,
     WorkflowProposals,
     apply_annotations,
+    slugify_label,
 )
 from openadapt_flow.compiler.codegen import render_workflow_py
 from openadapt_flow.compiler.compile import compile_recording, lint_param_leakage
@@ -28,6 +30,15 @@ from openadapt_flow.compiler.loop_authoring import (
     author_data_driven_loop,
     body_param_names,
     resolve_column_map,
+)
+from openadapt_flow.compiler.param_confirm import (
+    ParamDecision,
+    ParamProposal,
+    apply_decisions,
+    decisions_from_accept_list,
+    decisions_from_file,
+    decisions_interactive,
+    load_proposals,
 )
 
 __all__ = [
@@ -59,4 +70,15 @@ __all__ = [
     "FakeStepAnnotator",
     "StepAnnotator",
     "WorkflowProposals",
+    # Ergonomic parameter identification: deterministic field-label proposals
+    # (flagged, never auto-applied) + the one-shot operator confirm pass.
+    "FieldLabelAnnotator",
+    "slugify_label",
+    "ParamDecision",
+    "ParamProposal",
+    "apply_decisions",
+    "decisions_from_accept_list",
+    "decisions_from_file",
+    "decisions_interactive",
+    "load_proposals",
 ]

@@ -743,13 +743,61 @@ def _cmd_demo_record(args: argparse.Namespace) -> int:
 
 
 def _cmd_compile(args: argparse.Namespace) -> int:
+    import json
+
     from openadapt_flow.compiler import compile_recording
+    from openadapt_flow.compiler import param_confirm as pc
 
     workflow = compile_recording(Path(args.recording), Path(args.out), name=args.name)
     print(
         f"Compiled {len(workflow.steps)} steps into {args.out} "
         f"(workflow: {workflow.name!r})"
     )
+
+    # One-shot confirm pass for flagged field-label parameter proposals.
+    # Fail-closed: with no decision channel (no flags, no TTY) every proposal
+    # stays a demonstrated constant and the bundle above is final.
+    if args.params_from and args.accept_params:
+        raise SystemExit("use --params-from or --accept-params, not both")
+    proposals = pc.load_proposals(Path(args.out))
+    if not proposals:
+        return 0
+    decisions: list[pc.ParamDecision] = []
+    if args.params_from:
+        decisions_json = json.loads(Path(args.params_from).read_text())
+        if not isinstance(decisions_json, dict):
+            raise SystemExit("--params-from: file must be a JSON object")
+        decisions = pc.decisions_from_file(proposals, decisions_json)
+    elif args.accept_params:
+        names = [n.strip() for n in args.accept_params.split(",") if n.strip()]
+        decisions = pc.decisions_from_accept_list(proposals, names)
+    elif sys.stdin.isatty() and sys.stdout.isatty() and not args.no_confirm_params:
+        decisions = pc.decisions_interactive(proposals)
+    else:
+        print(
+            f"{len(proposals)} field-label parameter proposal(s) left "
+            "unconfirmed (kept as demonstrated constants). Review "
+            f"{Path(args.out) / pc.PROPOSALS_FILENAME} and re-run with "
+            "--accept-params or --params-from to confirm."
+        )
+        return 0
+    if not decisions:
+        print("No parameter proposals confirmed; bundle unchanged.")
+        return 0
+    pc.apply_decisions(
+        Path(args.recording), Path(args.out), name=args.name, decisions=decisions
+    )
+    for d in decisions:
+        kind = "secret parameter" if d.secret else "parameter"
+        print(f"  confirmed {kind} {d.name!r} ({d.step_id})")
+        if d.secret:
+            print(
+                f"    note: supply OPENADAPT_FLOW_SECRET_{d.name.upper()} at "
+                "replay; the bundle carries no literal, but the RECORDING "
+                "still does (re-record with --secret for full at-rest "
+                "secrecy)."
+            )
+    print(f"Recompiled with {len(decisions)} confirmed parameter(s).")
     return 0
 
 
@@ -2736,6 +2784,36 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("recording", help="Recording directory")
     p.add_argument("--out", required=True, help="Output bundle directory")
     p.add_argument("--name", required=True, help="Workflow name")
+    p.add_argument(
+        "--accept-params",
+        default=None,
+        metavar="NAME1,NAME2",
+        help=(
+            "Non-interactive confirm pass: accept these flagged field-label "
+            "parameter proposals as-is (comma-separated proposed names; see "
+            "param_proposals.json in the bundle). Proposals not listed stay "
+            "demonstrated constants. Unknown names fail loud."
+        ),
+    )
+    p.add_argument(
+        "--params-from",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Non-interactive confirm pass: JSON decision file mapping each "
+            'proposed name to {"action": "confirm"|"rename"|"secret"|'
+            '"constant", "name": "<new name, for rename>"}. Unlisted '
+            "proposals stay constants (fail-closed)."
+        ),
+    )
+    p.add_argument(
+        "--no-confirm-params",
+        action="store_true",
+        help=(
+            "Skip the interactive parameter review even on a TTY; flagged "
+            "proposals stay demonstrated constants."
+        ),
+    )
     p.set_defaults(func=_cmd_compile)
 
     p = sub.add_parser(

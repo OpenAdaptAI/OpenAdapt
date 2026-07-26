@@ -174,6 +174,43 @@ class IdentityBackend(Protocol):
 
 
 @runtime_checkable
+class FieldLabelBackend(Protocol):
+    """Optional RECORD-TIME field-label capability a backend MAY expose.
+
+    When a demonstrator types into a field, the RECORDER (not the replayer)
+    asks the backend for the focused field's best available human label so a
+    non-engineer never has to name parameters in code: the label becomes
+    passive evidence (``field_label`` on the TYPE event and
+    ``ir.Step.field_label``) that the compile-time parameter-proposal pass
+    turns into a slugified, OPERATOR-CONFIRMED parameter name (see
+    ``compiler.annotate.FieldLabelAnnotator``).
+
+    Implementations read whatever structured layer they own:
+
+    - a browser backend (Playwright) reads the focused element's associated
+      DOM ``<label>``, ``aria-label`` / ``aria-labelledby``, ``placeholder``,
+      ``name`` attribute, or ``title`` -- in that order;
+    - a native desktop backend reads the accessibility label of the focused
+      control (UIA ``Name``, macOS ``AXTitle``/``AXDescription``, AT-SPI
+      accessible name) where that seam exists.
+
+    This is PASSIVE metadata capture only: querying the label must never
+    change focus, field contents, or timing beyond a cheap read, and a
+    pixel-only substrate simply returns None (the compiler may then fall back
+    to nearby-OCR evidence where the recording carries a field rectangle).
+    Never called at replay.
+    """
+
+    def focused_field_label(self) -> Optional[str]:
+        """Return the focused field's best available label, or None.
+
+        Whitespace-collapsed; None when no field is focused, the backend has
+        no structured layer, or on any momentary failure (never raises).
+        """
+        ...
+
+
+@runtime_checkable
 class ExecutionContextIdentityBackend(Protocol):
     """Optional live identities that cannot be inferred from record-row text."""
 

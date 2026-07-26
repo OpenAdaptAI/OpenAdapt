@@ -138,18 +138,34 @@ def _structural_payload(content: dict, shape: str) -> dict:
     return content["program"]["states"]["s1"]["step"]["anchor"]["structural"]
 
 
+def _step_payloads(content: dict, shape: str) -> list[dict]:
+    """The exact Step JSON objects in either IR shape (linear or program)."""
+
+    if shape == "linear":
+        return list(content["steps"])
+    return [
+        state["step"]
+        for state in content["program"]["states"].values()
+        if state.get("step") is not None
+    ]
+
+
 def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
     """Render the digest content emitted immediately before frame_path existed.
 
-    This intentionally navigates to the exact owning StructuralLocator rather
-    than recursively stripping a key name. The latter would reproduce the
-    integrity bug this regression is meant to prevent.
+    This intentionally navigates to the exact owning StructuralLocator (and
+    Step, for the later ``field_label`` addition) rather than recursively
+    stripping a key name. The latter would reproduce the integrity bug this
+    regression is meant to prevent.
     """
 
     content = wf.model_dump(mode="json", exclude={"manifest"})
     content.pop("interstitials", None)  # pre-existing reviewed v2 omission
     locator = _structural_payload(content, shape)
     assert locator.pop("frame_path") in (None, [])
+    for step in _step_payloads(content, shape):
+        # Reviewed v2 omission: field_label evidence postdates these seals.
+        assert step.pop("field_label") is None
     return content
 
 
@@ -190,8 +206,10 @@ def _write_synthetic_pre_field_bundle(
     wf.manifest = manifest
 
     raw = wf.model_dump(mode="json")
-    # The historical workflow JSON itself did not contain the field either.
+    # The historical workflow JSON itself did not contain the fields either.
     assert _structural_payload(raw, shape).pop("frame_path") in (None, [])
+    for step in _step_payloads(raw, shape):
+        assert step.pop("field_label") is None
     serialized = json.dumps(raw, sort_keys=True).encode("utf-8")
 
     if encrypted:

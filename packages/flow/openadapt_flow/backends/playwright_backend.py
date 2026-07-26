@@ -379,6 +379,60 @@ _EDITABLE_VALUE_JS = r"""(el) => {
     return el.textContent || '';
 }"""
 
+# Best available human label for a (focused) editable field, best-first:
+# associated <label for=...>, wrapping <label>, aria-label, aria-labelledby,
+# placeholder, name attribute, title. Whitespace-collapsed; null when the
+# element is not an editable field or carries no label evidence. PASSIVE
+# record-time metadata only (see openadapt_flow.backend.FieldLabelBackend).
+_FIELD_LABEL_JS = r"""(el) => {
+    if (!el.matches(
+            'input, textarea, select, [contenteditable=""],' +
+            ' [contenteditable="true"], [role="textbox"]')) return null;
+    const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    if (el.id) {
+        try {
+            const forLabel = document.querySelector(
+                'label[for="' + CSS.escape(el.id) + '"]'
+            );
+            const t = clean(forLabel && forLabel.textContent);
+            if (t) return t;
+        } catch (e) {}
+    }
+    const wrapping = el.closest('label');
+    if (wrapping) {
+        // Label TEXT only: a control nested inside the label (e.g. a
+        // <textarea>) contributes its typed VALUE to textContent -- strip
+        // embedded controls so the captured label is never the value.
+        const cloned = wrapping.cloneNode(true);
+        for (const child of cloned.querySelectorAll(
+                'input, textarea, select, [contenteditable=""],' +
+                ' [contenteditable="true"], [role="textbox"]')) {
+            child.remove();
+        }
+        const t = clean(cloned.textContent);
+        if (t) return t;
+    }
+    const aria = clean(el.getAttribute('aria-label'));
+    if (aria) return aria;
+    const labelledby = el.getAttribute('aria-labelledby');
+    if (labelledby) {
+        const parts = [];
+        for (const id of labelledby.split(/\s+/)) {
+            const ref = document.getElementById(id);
+            const t = clean(ref && ref.textContent);
+            if (t) parts.push(t);
+        }
+        if (parts.length) return parts.join(' ');
+    }
+    const placeholder = clean(el.getAttribute('placeholder'));
+    if (placeholder) return placeholder;
+    const name = clean(el.getAttribute('name'));
+    if (name) return name;
+    const title = clean(el.getAttribute('title'));
+    if (title) return title;
+    return null;
+}"""
+
 _GUARD_CONTAINS_POINT_JS = r"""(el, point) => {
     const [px, py] = point;
     const hit = document.elementFromPoint(px, py);
@@ -947,6 +1001,33 @@ class PlaywrightBackend:
     def focused_text_value(self) -> Optional[str]:
         """Return the exact value of the currently focused editable control."""
 
+        return self._focused_element_eval(_EDITABLE_VALUE_JS)
+
+    def focused_field_label(self) -> Optional[str]:
+        """Return the focused field's best available human label, or None.
+
+        RECORD-TIME seam (:class:`openadapt_flow.backend.FieldLabelBackend`):
+        when the demonstrator types, the recorder captures the receiving
+        field's label -- associated DOM ``<label>``, ``aria-label`` /
+        ``aria-labelledby``, ``placeholder``, ``name`` attribute, or ``title``,
+        best-first -- as passive evidence for the compile-time
+        parameter-proposal pass. A cheap read-only DOM query on the focused
+        element (same frame-descent discipline as :meth:`focused_text_value`);
+        never called at replay, never raises.
+        """
+
+        return self._focused_element_eval(_FIELD_LABEL_JS)
+
+    def _focused_element_eval(self, js: str) -> Optional[str]:
+        """Evaluate ``js`` on the focused element, descending nested frames.
+
+        The focused element is bound in its EXACT document/frame context: at
+        each iframe/frame boundary the descent re-proves the frame chain
+        (selector uniqueness, identity, geometry) before entering, mirroring
+        :meth:`_frame_point`'s fail-closed posture. Returns the string result
+        or None on any mismatch/failure (never raises).
+        """
+
         scope: Any = self.page
         frame_path: list[str] = []
         try:
@@ -965,7 +1046,7 @@ class PlaywrightBackend:
                             scope, tuple(frame_path), box
                         ):
                             return None
-                        result = focused.evaluate(_EDITABLE_VALUE_JS)
+                        result = focused.evaluate(js)
                         return result if isinstance(result, str) else None
                     if len(frame_path) >= 8:
                         return None

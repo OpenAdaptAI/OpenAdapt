@@ -39,6 +39,16 @@ the identity ladder refuses rather than guesses:
   demonstrated constant into a new run-varying parameter, changing what the
   workflow does -- is FLAGGED, never applied.
 
+Alongside the opt-in model annotator, :class:`FieldLabelAnnotator` is a
+DETERMINISTIC (no-model, $0, always-safe-to-run) proposal source: a typed
+value whose step carries recorded ``field_label`` evidence yields a parameter
+proposal named by slugifying that label (:func:`slugify_label`). It emits
+through the SAME pipeline with the SAME gate -- every label-derived proposal is
+consequential, so it is flagged for the one-shot operator confirm pass
+(``compiler.param_confirm``), never silently applied. The parameter name is
+the thread the effect verifier binds to (``ValueExpr(param=...)``), so naming
+is human-confirmed, never inferred behind the operator's back.
+
 The model call sits behind the :class:`StepAnnotator` ``Protocol``. Tests use
 :class:`FakeStepAnnotator` (deterministic, no network). The real
 :class:`AnthropicStepAnnotator` calls Anthropic ONLY at compile and ONLY when the
@@ -52,6 +62,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import unicodedata
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
@@ -100,6 +112,15 @@ class ParamProposal(BaseModel):
             "True when applying would make a demonstrated constant vary per run"
             " (a behaviour change -> FLAG, never apply). False for a pure"
             " type-enrichment of an existing parameter (safe -> apply)."
+        ),
+    )
+    source_label: Optional[str] = Field(
+        default=None,
+        description=(
+            "The recorded field label this proposal's name was derived from"
+            " (deterministic FieldLabelAnnotator proposals only) -- shown to"
+            " the operator in the one-shot confirm pass. None for model"
+            " proposals."
         ),
     )
     rationale: str = ""
@@ -162,6 +183,123 @@ class FakeStepAnnotator:
         return WorkflowProposals(
             steps=[sa for sa in self._proposals.steps if sa.step_id in ids]
         )
+
+
+def slugify_label(label: str, *, max_len: int = 64) -> Optional[str]:
+    """Deterministically slugify a recorded field label into a parameter name.
+
+    Rules (no model, no locale surprises):
+
+    1. Unicode-normalize (NFKD) and drop combining marks, so accented labels
+       slug the same with or without their accents.
+    2. Lowercase.
+    3. Remove apostrophes entirely (``"Patient's"`` -> ``patients``, not
+       ``patient_s``).
+    4. Every other run of non-alphanumeric characters becomes ONE underscore
+       (``"Insurance No."`` -> ``insurance_no``).
+    5. Strip leading/trailing underscores; truncate to ``max_len``.
+    6. A name starting with a digit is prefixed ``f_`` (parameter names must
+       match ``ir.ApiBinding``'s ``^[A-Za-z_]...`` shape).
+
+    Returns None when nothing usable survives (empty/symbol-only label).
+    """
+    decomposed = unicodedata.normalize("NFKD", label)
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    stripped = stripped.lower().replace("'", "").replace("’", "")
+    slug = re.sub(r"[^a-z0-9]+", "_", stripped).strip("_")
+    if not slug:
+        return None
+    slug = slug[:max_len].strip("_")
+    if not slug:
+        return None
+    if slug[0].isdigit():
+        slug = f"f_{slug}"
+    return slug
+
+
+def mask_value(value: str) -> str:
+    """Mask the middle of a demonstrated value for operator display.
+
+    Keeps just enough of the ends to be recognizable (first and last
+    character for short values, two at each end for longer ones) and masks
+    the middle -- the confirm pass must let an operator recognize "that's the
+    insurance number I typed" without reprinting the full value.
+    """
+    n = len(value)
+    if n <= 2:
+        return "*" * n
+    keep = 1 if n <= 8 else 2
+    return value[:keep] + "*" * (n - 2 * keep) + value[-keep:]
+
+
+class FieldLabelAnnotator:
+    """DETERMINISTIC (no-model) parameter proposals from recorded field labels.
+
+    A typed value whose TYPE step carries ``field_label`` evidence (captured
+    passively at record time -- DOM/a11y label, or the compiler's nearby-OCR
+    fallback) yields a proposed parameter named by slugifying that label
+    (``"Insurance No."`` -> ``insurance_no``). Every proposal is marked
+    ``consequential=True``: turning a demonstrated constant into a
+    run-varying parameter changes what the workflow does, so
+    :func:`apply_annotations` FLAGS it ``needs_operator_confirmation`` and
+    NEVER applies it. The one-shot confirm pass
+    (``compiler.param_confirm`` / ``openadapt-flow compile``) is the only
+    thing that turns a proposal into a real parameter.
+
+    Suppression rules (explicit intent always wins, and nothing is proposed
+    twice):
+
+    - a step that already carries ``param=`` (the demonstrator named it) or
+      ``secret`` emits NO proposal;
+    - a slug that collides with an already-declared parameter name is
+      skipped;
+    - two steps whose labels slug identically get ``name``, ``name_2``, ...
+      in step order (deterministic).
+
+    Zero model calls, zero network, zero keys -- safe to run on EVERY compile.
+    """
+
+    def annotate(
+        self, workflow: Workflow, *, captured_state: Optional[dict] = None
+    ) -> WorkflowProposals:
+        declared = set(workflow.params) | set(workflow.param_specs)
+        declared |= set(workflow.secret_params)
+        proposed: set[str] = set()
+        steps: list[StepAnnotation] = []
+        for step in workflow.steps:
+            if step.action.value != "type" or step.secret:
+                continue
+            if step.param is not None:
+                continue  # explicit param= wins: no proposal
+            if not step.text or not step.field_label:
+                continue
+            slug = slugify_label(step.field_label)
+            if slug is None or slug in declared:
+                continue
+            name = slug
+            suffix = 2
+            while name in proposed:
+                name = f"{slug}_{suffix}"
+                suffix += 1
+            proposed.add(name)
+            steps.append(
+                StepAnnotation(
+                    step_id=step.id,
+                    params=[
+                        ParamProposal(
+                            name=name,
+                            type=ParamKind.STRING,
+                            example=step.text,
+                            consequential=True,
+                            source_label=step.field_label,
+                            rationale=(
+                                f"typed into the field labeled {step.field_label!r}"
+                            ),
+                        )
+                    ],
+                )
+            )
+        return WorkflowProposals(steps=steps)
 
 
 class AnthropicStepAnnotator:
@@ -482,7 +620,8 @@ def _apply_param(
     # flagged consequential, or naming a value that is not yet a parameter --
     # would change what the workflow does, so it is flagged, never applied.
     if proposal.consequential or existing is None:
-        detail = f"model proposed making {name!r} a {proposal.type.value} parameter"
+        source = "field label" if proposal.source_label is not None else "model"
+        detail = f"{source} proposed making {name!r} a {proposal.type.value} parameter"
         if existing is None:
             detail += " (would make a demonstrated constant vary per run)"
         if proposal.rationale:

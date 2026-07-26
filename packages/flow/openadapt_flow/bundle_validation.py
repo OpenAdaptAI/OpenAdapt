@@ -120,6 +120,15 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             omitted_values=(None, []),
             reason="absent/empty paths both mean the pre-field top document",
         ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="field_label",
+            omitted_values=(None,),
+            reason=(
+                "absent field-label evidence predates the v2 field; a step "
+                "CARRYING a label is new content and changes the digest"
+            ),
+        ),
     ),
 }
 

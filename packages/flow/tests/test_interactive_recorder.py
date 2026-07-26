@@ -124,6 +124,38 @@ def test_recording_shape_matches_the_demonstration(recording: Path) -> None:
     assert any(e.get("structured_identity") for e in events if e["kind"] == "click")
 
 
+def test_field_labels_captured_passively_on_type_events(recording: Path) -> None:
+    """The in-page listener captures each receiving field's DOM label
+    (<label for=...> in MockMed) as passive TYPE-event evidence -- the
+    ergonomic-parameter ladder's record-time half. The secret field's label is
+    captured too (it is the label, never the value)."""
+    type_events = [e for e in _events(recording) if e["kind"] == "type"]
+    labels = [e.get("field_label") for e in type_events]
+    assert labels == ["Username", "Password", "Note"]
+    # The literal typed values are NOT what was captured.
+    assert SECRET not in json.dumps(labels)
+
+
+def test_unparameterized_label_yields_flagged_proposal_only(bundle: Path) -> None:
+    """The username field was typed WITHOUT --param, so its label yields a
+    flagged proposal (sidecar) -- and nothing else: the compiled step stays a
+    literal constant until an operator confirms."""
+    from openadapt_flow.compiler import param_confirm as pc
+
+    workflow = Workflow.load(bundle)
+    username_steps = [
+        s for s in workflow.steps if s.field_label == "Username" and not s.secret
+    ]
+    assert username_steps and username_steps[0].param is None
+    assert username_steps[0].text == "nurse.demo"
+
+    proposals = pc.load_proposals(bundle)
+    assert [p.name for p in proposals] == ["username"]
+    assert proposals[0].field_label == "Username"
+    # note (explicit --param) and password (secret) must NOT be proposed.
+    assert all(p.name not in ("note", "password") for p in proposals)
+
+
 def test_secret_auto_detected_and_never_persisted(recording: Path) -> None:
     meta = json.loads((recording / "meta.json").read_text())
     assert meta["secret_params"] == ["password"]

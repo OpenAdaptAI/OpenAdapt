@@ -867,6 +867,20 @@ class Step(BaseModel):
             " replay is a clear, fail-fast error (see runtime.Replayer)."
         ),
     )
+    field_label: Optional[str] = Field(
+        default=None,
+        description=(
+            "TYPE steps only: the receiving field's best available label,"
+            " captured PASSIVELY at record time (DOM <label>/aria-label/"
+            "placeholder/name for web; accessibility label for native where"
+            " the seam exists; nearby-OCR text as a compile-time fallback)."
+            " Pure evidence for the compile-time parameter-proposal pass and"
+            " the operator confirm review -- NEVER read at replay, and never"
+            " a source of silent parameterization: a label-derived parameter"
+            " proposal is always gated behind operator confirmation (see"
+            " compiler.annotate.FieldLabelAnnotator)."
+        ),
+    )
     key: Optional[str] = None  # for KEY, e.g. "Enter"
     scroll_dx: Optional[int] = None  # for SCROLL: wheel delta, px right
     scroll_dy: Optional[int] = None  # for SCROLL: wheel delta, px down

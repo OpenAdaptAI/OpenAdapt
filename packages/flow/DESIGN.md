@@ -181,6 +181,57 @@ design for it, don't call any API).
 Also emit a readable Python *rendering* of the workflow (`workflow.py` in the
 bundle, generated, not parsed back) so humans can code-review the automation.
 
+### Ergonomic parameter identification (field labels -> confirmed params)
+
+A non-engineer demonstrator should never have to name parameters in code.
+Three pieces close that gap without ever inferring behavior silently:
+
+1. **Record-time label capture (passive).** When a TYPE event is recorded,
+   the receiving field's best available label is captured as evidence:
+   the browser recorders read the DOM (`<label for>`, wrapping `<label>`,
+   `aria-label`/`aria-labelledby`, `placeholder`, `name`, `title`, in that
+   order; `PlaywrightBackend.focused_field_label` for driven recordings,
+   the in-page listener for `record --url`), native backends may expose the
+   same seam from their accessibility tree
+   (`openadapt_flow.backend.FieldLabelBackend`), and pixel paths fall back
+   to the nearest OCR line left of / above the recorded `field_rect` at
+   compile time. The label lands on the event (`field_label`) and the
+   compiled step (`ir.Step.field_label`). No prompts, no model calls, no
+   behavior change to recording; a substrate with no seam simply records
+   nothing.
+2. **Deterministic proposals at compile (flagged, never applied).**
+   `compiler.annotate.FieldLabelAnnotator` slugifies each labeled typed
+   constant into a proposed parameter name (`"Insurance No."` ->
+   `insurance_no`) and emits it through the existing annotation pipeline.
+   Turning a demonstrated constant into a run-varying parameter is a
+   CONSEQUENTIAL inference, so every proposal is flagged
+   `needs_operator_confirmation`, the same honesty asymmetry as model
+   annotations (safe direction applied, behavior changes gated). A step the
+   demonstrator already parameterized (`param=` / `--param` / secret) emits
+   no proposal: explicit naming always wins. Outstanding proposals live in
+   the bundle sidecar `param_proposals.json` (demonstrated values masked).
+3. **One-shot operator confirm (`openadapt-flow compile`).** After compile,
+   the flagged proposals are reviewed in one batch (proposed name, source
+   field label, middle-masked demonstrated value) with choices
+   confirm / rename / mark-secret / keep-constant (interactive on a TTY;
+   `--accept-params name1,name2` or `--params-from decisions.json` for
+   automation). Accepted decisions recompile the recording with
+   `param_overrides`, so a confirmed parameter flows through the exact
+   recorded-`param=` machinery: example/default in `params`/`param_specs`,
+   postcondition exclusion, the leakage lint, and secret handling
+   (mark-secret strips the literal from the bundle and moves the name to
+   `secret_params`; the recording itself still holds the demo value; only
+   re-recording with `--secret` gives full at-rest secrecy). Unconfirmed
+   proposals remain constants: fail-closed, byte-for-byte the demonstrated
+   behavior.
+
+Why confirmation is mandatory (identity rationale): the parameter name is the
+thread everything else binds to: the effect verifier's
+`ValueExpr(param=...)` bindings, `--param name=value` run inputs,
+`OPENADAPT_FLOW_SECRET_<PARAM>` secrets, and worklist row keys. A silently
+guessed name would silently rebind what the workflow *verifies*, so naming is
+human-confirmed, never inferred.
+
 ## Runtime
 
 ```python

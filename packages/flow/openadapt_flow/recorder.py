@@ -7,6 +7,11 @@ Recording format (DESIGN.md):
                          #  "params": {"<param_name>": "<value typed>"}}
       events.jsonl       # {"i":0,"kind":"click","x":123,"y":45,"t":1.20}
                          # {"i":1,"kind":"type","text":"...","param":"note",...}
+                         # TYPE events also carry "field_label" (the receiving
+                         # field's DOM/a11y label, captured passively when the
+                         # backend exposes it) and, from the interactive
+                         # recorder, "field_rect" (the field's viewport rect,
+                         # for the compiler's nearby-OCR label fallback).
                          # {"i":2,"kind":"key","key":"Enter","t":3.10}
                          # {"i":3,"kind":"scroll","dx":0,"dy":400,"t":4.02}
                          # Events additionally carry url/title/pages
@@ -113,12 +118,24 @@ class Recorder:
     def type_text(self, text: str, param: Optional[str] = None) -> None:
         """Type text into the focused element, recording the event.
 
+        The receiving field's best available label is captured PASSIVELY when
+        the backend exposes the ``focused_field_label`` seam
+        (:class:`openadapt_flow.backend.FieldLabelBackend`) and stored as
+        ``field_label`` on the event -- pure evidence for the compile-time
+        parameter-proposal pass (no behavior change, no prompts, no model
+        calls; see ``compiler.annotate.FieldLabelAnnotator``).
+
         Args:
             text: The literal text typed during the demonstration.
             param: If set, the typed value is a workflow parameter with this
                 name; it is included on the event and in ``meta.json`` params.
         """
         event: dict[str, Any] = {"kind": "type", "text": text}
+        # Read the label BEFORE acting: focus is already on the receiving
+        # field (the demonstrator clicked it), and typing may navigate.
+        field_label = self._focused_field_label()
+        if field_label:
+            event["field_label"] = field_label
         if param is not None:
             event["param"] = param
             self._params[param] = text
@@ -317,6 +334,29 @@ class Recorder:
         out = io.BytesIO()
         frame.save(out, format="PNG")
         return out.getvalue()
+
+    def _focused_field_label(self) -> Optional[str]:
+        """Best available label of the focused field, if the backend can say.
+
+        Backends MAY expose ``focused_field_label``
+        (:class:`openadapt_flow.backend.FieldLabelBackend`): the focused
+        field's DOM/accessibility label, captured as passive TYPE-event
+        evidence so the compiler can PROPOSE (never silently apply) a
+        human-named parameter for the typed value. Pixel-only backends (no
+        such method) or a momentary failure yield None; recording proceeds
+        unchanged either way.
+        """
+        getter = getattr(self._backend, "focused_field_label", None)
+        if getter is None:
+            return None
+        try:
+            label = getter()
+        except Exception:
+            return None
+        if not isinstance(label, str):
+            return None
+        label = " ".join(label.split())
+        return label or None
 
     def _structured_identity_at(self, x: int, y: int) -> Optional[str]:
         """Structured (DOM / a11y) identity text under (x, y), if available.
