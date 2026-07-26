@@ -936,6 +936,32 @@ class Replayer:
             heal_mod.write_healed_bundle(
                 workflow, bundle_dir, Path(save_healed_to), new_crops
             )
+            if new_crops:
+                # Governed repair promotion (Section 9): the healed bundle is
+                # a lifecycle CANDIDATE, never an implicitly active bundle. A
+                # detached repair/candidate.json (binding diff by digest,
+                # privacy-safe failure fingerprints, contract-invariant
+                # verdict) is written into it; promotion to active requires
+                # the explicit lifecycle (campaigns, human approval, staged
+                # canary) driven by `openadapt-flow repair`. Registration
+                # failure fails CLOSED by absence: without the record the
+                # healed bundle cannot enter the promotion lifecycle at all.
+                from openadapt_flow.repair.registration import (
+                    register_bundle_candidate,
+                )
+
+                try:
+                    register_bundle_candidate(
+                        Path(bundle_dir),
+                        Path(save_healed_to),
+                        source="heal",
+                        evidence_run_dir=Path(run_dir),
+                    )
+                except Exception as exc:
+                    print(
+                        "repair candidate registration failed (the healed "
+                        f"bundle stays ungoverned and non-promotable): {exc}"
+                    )
 
         return self._finalize_report(report, workflow, run_dir)
 

@@ -73,7 +73,11 @@ unarmed, and `clinical-write` refuses additional identity, system-effect, and
 idempotency gaps. That is the safety boundary working, not a setup failure. The
 permissive policy is only a smoke gate. Replay serves MockMed and writes
 `report.json`, an illustrated `REPORT.md`, and reviewable repair patches under
-`heals/`.
+`heals/`. A healed bundle written by `--save-healed-to` is a repair
+*candidate*, never an implicitly active bundle: promoting it goes through the
+governed lifecycle (`openadapt-flow repair`: reviewed diff, replay + fault
+campaigns, human approval, staged canary, one-command rollback). See
+[docs/REPAIR_LIFECYCLE.md](docs/REPAIR_LIFECYCLE.md).
 
 The nightly clean-machine test runs this complete install-to-uninstall journey
 on Linux, macOS, and Windows. See the

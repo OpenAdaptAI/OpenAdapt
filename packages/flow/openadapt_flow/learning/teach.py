@@ -443,6 +443,26 @@ def teach(
     out_bundle = Path(out)
     updated.save(out_bundle)
     _copy_templates(Path(bundle), out_bundle)
+    # Governed repair promotion (Section 9): the taught bundle is a lifecycle
+    # CANDIDATE, never an implicitly active bundle. A detached
+    # repair/candidate.json is written into it; promotion to active requires
+    # the explicit lifecycle (campaigns, human approval, staged canary) via
+    # `openadapt-flow repair`. Registration failure fails CLOSED by absence:
+    # without the record the taught bundle cannot enter the lifecycle at all.
+    from openadapt_flow.repair.registration import register_bundle_candidate
+
+    try:
+        register_bundle_candidate(
+            Path(bundle),
+            out_bundle,
+            source="teach",
+            evidence_run_dir=Path(run_dir),
+        )
+    except Exception as exc:
+        print(
+            "repair candidate registration failed (the taught bundle stays "
+            f"ungoverned and non-promotable): {exc}"
+        )
     return TeachResult(
         skill_id=sid, promoted=True, outcome=outcome, out_bundle=out_bundle
     )

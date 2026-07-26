@@ -2430,6 +2430,19 @@ def _cmd_teach(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_repair(args: argparse.Namespace) -> int:
+    """Governed repair promotion lifecycle (see docs/REPAIR_LIFECYCLE.md).
+
+    candidate -> reviewed -> replay_passed -> fault_passed -> approved ->
+    staged -> canary -> active, with hard fail-closed gates between states,
+    human-only approval, atomic hash-verified activation, a bounded
+    self-halting canary, and one-command rollback.
+    """
+    from openadapt_flow.repair.cli import run_repair_command
+
+    return run_repair_command(args)
+
+
 def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     """Add the backend-selector flags (``--backend`` + targets) to a subparser.
 
@@ -3620,6 +3633,194 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.set_defaults(func=_cmd_teach)
+
+    p = sub.add_parser(
+        "repair",
+        help=(
+            "Governed repair promotion lifecycle: register a proposed (healed "
+            "or taught) bundle as a CANDIDATE, review its diff, run the replay "
+            "and fault campaigns, approve (human), stage, canary, and roll "
+            "back. A proposed bundle NEVER becomes active without this "
+            "lifecycle. See docs/REPAIR_LIFECYCLE.md"
+        ),
+    )
+    rsub = p.add_subparsers(dest="repair_cmd", required=True)
+
+    def _repair_store_flag(rp: argparse.ArgumentParser) -> None:
+        rp.add_argument(
+            "--store",
+            default=None,
+            help=(
+                "Repair store directory (candidates, staged bundles by hash, "
+                "and the atomic ACTIVE.json pointer). Default: repair-store/"
+            ),
+        )
+
+    r = rsub.add_parser(
+        "register",
+        help=(
+            "Register a (prior, proposed) bundle pair as a repair candidate; "
+            "refuses (fail closed) any contract weakening without a new "
+            "qualification revision"
+        ),
+    )
+    r.add_argument("proposed", help="The proposed (healed / taught) bundle")
+    r.add_argument(
+        "--prior",
+        default=None,
+        help=(
+            "The prior bundle the proposal derives from (omit to import the "
+            "detached repair/candidate.json the engine wrote into the "
+            "proposed bundle)"
+        ),
+    )
+    r.add_argument(
+        "--source",
+        choices=["heal", "teach", "manual", "model_suggestion"],
+        default="manual",
+        help="Where the proposal came from (default: manual)",
+    )
+    r.add_argument(
+        "--evidence",
+        default=None,
+        help=(
+            "Run directory holding the failure evidence (heals/<step>/ "
+            "frames); required later by the campaigns"
+        ),
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser("list", help="List candidates and their lifecycle states")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "show", help="Show a candidate's reviewable diff, campaigns, and state"
+    )
+    r.add_argument("candidate_id")
+    r.add_argument(
+        "--json", action="store_true", help="Also print the full candidate record"
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser("review", help="Record a human review of the candidate's diff")
+    r.add_argument("candidate_id")
+    r.add_argument(
+        "--reviewed-by",
+        default=None,
+        help="Reviewer identity (default: the invoking OS user)",
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "campaign",
+        help=(
+            "Run a campaign against the candidate's evidence frames: 'replay' "
+            "(healthy drift battery must all pass) or 'fault' (ambiguity / "
+            "wrong-entity / stale-target / dialog / verifier-failure frames "
+            "must all be REFUSED)"
+        ),
+    )
+    r.add_argument("candidate_id")
+    r.add_argument("--kind", choices=["replay", "fault"], required=True)
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "approve",
+        help=(
+            "HUMAN approval gating promotion; refuses unless the diff was "
+            "reviewed and BOTH campaigns passed. Binds the exact bundle hashes"
+        ),
+    )
+    r.add_argument("candidate_id")
+    r.add_argument(
+        "--approved-by",
+        default=None,
+        help=(
+            "Approver identity recorded on the approval (default: the "
+            "invoking OS user; REQUIRED with --non-interactive)"
+        ),
+    )
+    r.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help=(
+            "Skip the confirmation prompt (automation). Requires an explicit "
+            "--approved-by human identity"
+        ),
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "stage",
+        help=(
+            "Copy BOTH bundles into the store by content hash and re-verify "
+            "them byte-exact (prior too, so rollback is always local)"
+        ),
+    )
+    r.add_argument("candidate_id")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "canary",
+        help=(
+            "Atomically activate the staged bundle in CANARY mode: a bounded "
+            "first-N-runs window with per-run verification before full active"
+        ),
+    )
+    r.add_argument("candidate_id")
+    r.add_argument(
+        "--max-runs",
+        type=int,
+        default=None,
+        help="Canary window size (default: the candidate's configured window)",
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "canary-record",
+        help=(
+            "Record one canary run from its run directory; any "
+            "silent-incorrect or verification regression auto-reverts to the "
+            "prior bundle"
+        ),
+    )
+    r.add_argument("candidate_id")
+    r.add_argument("--run-dir", required=True, help="The completed run directory")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "rollback",
+        help=(
+            "One-command rollback: restore the prior bundle hash as the active pointer"
+        ),
+    )
+    r.add_argument(
+        "--candidate-id",
+        default=None,
+        help="Candidate to roll back (default: the currently active one)",
+    )
+    r.add_argument(
+        "--by",
+        default=None,
+        help="Operator identity recorded on the rollback (default: OS user)",
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "status", help="Show the atomic active-bundle pointer and its lineage"
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
 
     p = sub.add_parser(
         "connect",
