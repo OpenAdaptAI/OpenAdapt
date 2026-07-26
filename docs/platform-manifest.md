@@ -36,7 +36,15 @@ it fails loudly. If a launcher release train is in flight (pyproject.toml
 ahead of PyPI), pass `--allow-unreleased-launcher`; the manifest still records
 the published version.
 
-Regenerate the manifest after each component release and commit the result.
+The launcher release workflow regenerates and validates the manifest after the
+new launcher artifacts are visible on PyPI, then commits the exact published
+URLs and digests back to `main`. This ordering is intentional: the manifest
+cannot truthfully name a launcher release before its immutable artifacts exist.
+If publication or reconciliation fails, `main` remains red and the release
+workflow opens or updates a failure issue rather than weakening validation.
+
+Regenerate and commit the manifest manually after other component releases;
+the scheduled validator catches component or public-status drift.
 
 ## How it is validated
 

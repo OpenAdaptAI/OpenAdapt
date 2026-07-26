@@ -5,6 +5,8 @@ name: Release and PyPI Publish
 # - build-and-attest: can only read source and issue artifact attestations;
 # - publish-pypi: receives only the project-scoped PyPI token;
 # - publish-github: may only attach assets to the GitHub Release.
+# - reconcile-platform-manifest: updates main only after PyPI exposes the exact
+#   released bytes, then validates the complete platform contract.
 #
 # Every third-party action is pinned to a full commit SHA. Dependabot should
 # propose reviewed SHA updates rather than following mutable tags.
@@ -155,14 +157,66 @@ jobs:
           github_token: ${{ github.token }}
           tag: ${{ needs.release.outputs.tag }}
 
+  reconcile-platform-manifest:
+    needs: [release, publish-pypi]
+    if: >-
+      ${{ needs.release.outputs.released == 'true' &&
+          needs.publish-pypi.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout released main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.ADMIN_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Regenerate and validate the published platform manifest
+        run: |
+          for attempt in $(seq 1 12); do
+            if python scripts/generate_platform_manifest.py; then
+              break
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              echo "PyPI did not expose the released launcher artifacts in time." >&2
+              exit 1
+            fi
+            echo "Published artifacts are not visible yet; retrying in 15 seconds."
+            sleep 15
+          done
+          python scripts/validate_platform_manifest.py
+          python scripts/validate_platform_manifest.py --offline
+
+      - name: Commit the reconciled manifest
+        run: |
+          if git diff --quiet -- platform-manifest.json; then
+            echo "platform-manifest.json already matches the published release."
+            exit 0
+          fi
+          git config user.name "OpenAdapt Bot"
+          git config user.email "bot@openadapt.ai"
+          git add platform-manifest.json
+          git commit -m "chore(release): reconcile platform manifest"
+          git push origin HEAD:main
+
   report-release-failure:
-    needs: [release, build-and-attest, publish-pypi, publish-github]
+    needs:
+      [release, build-and-attest, publish-pypi, publish-github, reconcile-platform-manifest]
     if: >-
       ${{ always() &&
           (needs.release.result == 'failure' ||
            needs.build-and-attest.result == 'failure' ||
            needs.publish-pypi.result == 'failure' ||
-           needs.publish-github.result == 'failure') }}
+           needs.publish-github.result == 'failure' ||
+           needs.reconcile-platform-manifest.result == 'failure') }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -175,11 +229,12 @@ jobs:
           BUILD_RESULT: ${{ needs.build-and-attest.result }}
           PYPI_RESULT: ${{ needs.publish-pypi.result }}
           GITHUB_RESULT: ${{ needs.publish-github.result }}
+          MANIFEST_RESULT: ${{ needs.reconcile-platform-manifest.result }}
         run: |
           TITLE="Release workflow failed on main"
           BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          release=${RELEASE_RESULT}, build-and-attest=${BUILD_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}.
+          release=${RELEASE_RESULT}, build-and-attest=${BUILD_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, reconcile-platform-manifest=${MANIFEST_RESULT}.
 
           Until this is fixed, do not assume that the Git tag, PyPI files, GitHub assets, and attestations are mutually complete."
           EXISTING=$(gh issue list --repo "${{ github.repository }}" --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
