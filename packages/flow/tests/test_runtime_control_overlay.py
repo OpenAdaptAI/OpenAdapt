@@ -231,6 +231,24 @@ def test_each_begin_rotates_private_observation_binding() -> None:
     assert first != second
 
 
+def test_private_observation_sink_receives_bytes_outside_canonical_frame() -> None:
+    public_frames = []
+    private_observations = []
+    emitter = RuntimeControlOverlayEmitter(
+        public_frames.append,
+        observation_sink=lambda frame, png: private_observations.append(
+            (frame.event_sequence, png)
+        ),
+        unix_ms_clock=_clock([1_000]),
+        monotonic_ms_clock=_clock([50.0]),
+    )
+    emitter.begin(profile="demo")
+    emitter.emit_phase("observing", observation_png=b"private-screen")
+
+    assert private_observations == [(0, b"private-screen")]
+    assert "private-screen" not in public_frames[0].model_dump_json()
+
+
 class _Backend:
     viewport = (20, 20)
 

@@ -522,6 +522,7 @@ class Replayer:
         self.control_overlay = control_overlay
         self.control_overlay_error: Optional[str] = None
         self._control_overlay_disabled = False
+        self._control_overlay_last_observation_png: Optional[bytes] = None
 
     # -- public API ----------------------------------------------------------
 
@@ -911,6 +912,7 @@ class Replayer:
 
         self.control_overlay_error = None
         self._control_overlay_disabled = False
+        self._control_overlay_last_observation_png = None
         if self.control_overlay is None:
             return
         try:
@@ -934,6 +936,7 @@ class Replayer:
         current_step: Optional[int] = None,
         total_steps: Optional[int] = None,
         target_tracking: Optional[Any] = None,
+        observation_png: Optional[bytes] = None,
     ) -> None:
         if self.control_overlay is None or self._control_overlay_disabled:
             return
@@ -943,7 +946,10 @@ class Replayer:
                 current_step=current_step,
                 total_steps=total_steps,
                 target_tracking=target_tracking,
+                observation_png=observation_png,
             )
+            if observation_png is not None:
+                self._control_overlay_last_observation_png = observation_png
         except Exception as exc:
             self.control_overlay_error = type(exc).__name__
             self._control_overlay_disabled = True
@@ -1012,7 +1018,10 @@ class Replayer:
         try:
             if outcome is None:
                 raise ValueError("run report has no exact execution outcome")
-            self.control_overlay.emit_terminal(outcome)
+            self.control_overlay.emit_terminal(
+                outcome,
+                observation_png=self._control_overlay_last_observation_png,
+            )
         except Exception as exc:
             self.control_overlay_error = type(exc).__name__
             self._control_overlay_disabled = True
@@ -2761,12 +2770,6 @@ class Replayer:
         overlay_current, overlay_total = self._control_overlay_progress(
             workflow, step_index, graph_ctx
         )
-        self._emit_control_overlay_phase(
-            "observing",
-            current_step=overlay_current,
-            total_steps=overlay_total,
-        )
-
         # API/tool tier -- the TOP of the capability ladder. When the step
         # carries an api_binding and an ApiActuator is configured, PERFORM the
         # write via the API (deterministic, $0, no GUI), CONFIRM it with the
@@ -2805,6 +2808,12 @@ class Replayer:
         )
         result.before_png = self._save_step_png(run_dir, step.id, "before", before_png)
         last_frame = before_png
+        self._emit_control_overlay_phase(
+            "observing",
+            current_step=overlay_current,
+            total_steps=overlay_total,
+            observation_png=before_png,
+        )
         # System-of-record pre-state, snapshotted just before the action when
         # the step declares effects (see the block guarding self._act below).
         effect_pre_state: Optional[EffectState] = None
@@ -3038,6 +3047,7 @@ class Replayer:
                     current_step=overlay_current,
                     total_steps=overlay_total,
                     target_tracking=overlay_target,
+                    observation_png=before_png,
                 )
                 try:
                     error = self._act(
@@ -3070,14 +3080,15 @@ class Replayer:
                     result.safety_halt = True
 
             if error is None:
-                self._emit_control_overlay_phase(
-                    "verifying",
-                    current_step=overlay_current,
-                    total_steps=overlay_total,
-                )
                 try:
                     after_png = self.vision.wait_settled(self.backend)
                     last_frame = after_png
+                    self._emit_control_overlay_phase(
+                        "verifying",
+                        current_step=overlay_current,
+                        total_steps=overlay_total,
+                        observation_png=after_png,
+                    )
                     postconditions_ok, last_frame, failed = self._check_postconditions(
                         step, after_png, bundle_dir, start_state, result
                     )
