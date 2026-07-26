@@ -18,6 +18,7 @@ Behavior under test (import-light -- no browser, no OCR):
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 import re
@@ -286,6 +287,10 @@ def _run_id(client: TestClient, *, halted: bool = False, paused: bool = False) -
     )
 
 
+def _json_artifact_id(relative_path: str) -> str:
+    return hashlib.sha256(relative_path.encode("utf-8")).hexdigest()[:24]
+
+
 # ---------------------------------------------------------------------------
 # 1. read surface
 # ---------------------------------------------------------------------------
@@ -463,6 +468,107 @@ def test_artifact_served_and_traversal_refused(console_env):
     for evil in ("../replay-paused/report.json", "/etc/passwd", "..%2f..", ".."):
         r = client.get(f"/api/runs/{run_id}/artifact", params={"id": evil})
         assert r.status_code == 404, evil
+
+
+def test_explicit_local_json_viewer_preserves_exact_run_and_bundle_artifacts(
+    console_env,
+):
+    client = _client(console_env)
+    run_id = _run_id(client, halted=True)
+    evidence = console_env["halted"] / "evidence"
+    evidence.mkdir()
+    events = b'{"event":"resolve"}\n{"event":"verify"}\n'
+    (evidence / "events.jsonl").write_bytes(events)
+
+    listed = client.get(f"/api/artifacts/json/runs/{run_id}").json()
+    by_id = {item["id"]: item for item in listed}
+    report_id = _json_artifact_id("report.json")
+    events_id = _json_artifact_id("evidence/events.jsonl")
+    assert by_id[report_id]["label"] == "Run report"
+    assert by_id[events_id]["label"].startswith("Run evidence ")
+    assert "evidence/events.jsonl" not in str(listed)
+
+    report = client.get(f"/api/artifacts/json/runs/{run_id}/{report_id}")
+    assert report.status_code == 200
+    body = report.json()
+    assert body["document"]["params"]["patient_id"] == "MRN-SECRET"
+    assert (
+        body["sha256"]
+        == hashlib.sha256(
+            (console_env["halted"] / "report.json").read_bytes()
+        ).hexdigest()
+    )
+    raw = client.get(f"/api/artifacts/json/runs/{run_id}/{report_id}/raw")
+    assert raw.content == (console_env["halted"] / "report.json").read_bytes()
+    assert raw.headers["x-content-sha256"] == body["sha256"]
+
+    jsonl = client.get(f"/api/artifacts/json/runs/{run_id}/{events_id}").json()
+    assert jsonl["document"] == [{"event": "resolve"}, {"event": "verify"}]
+    assert (
+        client.get(f"/api/artifacts/json/runs/{run_id}/{events_id}/raw").content
+        == events
+    )
+
+    bundle_id = _workflow_id(client, n_steps=3)
+    bundle_artifacts = client.get(f"/api/artifacts/json/workflows/{bundle_id}").json()
+    assert {item["label"] for item in bundle_artifacts} >= {
+        "Compiled workflow",
+        "Bundle manifest",
+    }
+
+
+def test_local_json_viewer_refuses_secrets_symlinks_and_resource_abuse(
+    console_env, tmp_path
+):
+    client = _client(console_env)
+    run_id = _run_id(client, halted=True)
+    run = console_env["halted"]
+    (run / "params.json").write_text('{"secret":"never-list"}')
+    (run / "attended_capability.json").write_text('{"capability":"never-list"}')
+    sensitive_step = "Jane-Roe-MRN-7788"
+    heal_dir = run / "heals" / sensitive_step
+    heal_dir.mkdir(parents=True)
+    (heal_dir / "heal.json").write_text('{"status":"proposed"}')
+    evidence = run / "evidence"
+    evidence.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"outside":true}')
+    linked = evidence / "linked.json"
+    try:
+        linked.symlink_to(outside)
+    except OSError:
+        pass
+    (evidence / "too-large.json").write_bytes(b" " * (5 * 1024 * 1024 + 1))
+    (evidence / "too-deep.json").write_text("[" * 102 + "0" + "]" * 102)
+    (evidence / "too-many.json").write_text("[" + ",".join(["0"] * 20_001) + "]")
+    (evidence / "invalid.json").write_text("{not json")
+
+    listed = client.get(f"/api/artifacts/json/runs/{run_id}").json()
+    listed_ids = {item["id"] for item in listed}
+    assert _json_artifact_id("params.json") not in listed_ids
+    assert _json_artifact_id("attended_capability.json") not in listed_ids
+    assert _json_artifact_id("evidence/linked.json") not in listed_ids
+    assert "linked.json" not in str(listed)
+    assert sensitive_step not in str(listed)
+    assert _json_artifact_id(f"heals/{sensitive_step}/heal.json") in listed_ids
+    assert (
+        client.get(f"/api/artifacts/json/runs/{run_id}/{'0' * 24}").status_code == 404
+    )
+    for label in (
+        "evidence/too-large.json",
+        "evidence/too-deep.json",
+        "evidence/too-many.json",
+    ):
+        artifact_id = _json_artifact_id(label)
+        assert artifact_id in listed_ids
+        assert (
+            client.get(f"/api/artifacts/json/runs/{run_id}/{artifact_id}").status_code
+            == 413
+        )
+    invalid_id = _json_artifact_id("evidence/invalid.json")
+    assert (
+        client.get(f"/api/artifacts/json/runs/{run_id}/{invalid_id}").status_code == 422
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -824,7 +930,7 @@ def test_static_ui_has_no_inline_handlers_or_artifact_paths(console_env):
     assert "payload.approver" not in script
 
 
-def test_sensitive_bundle_and_run_values_never_cross_api(console_env):
+def test_sensitive_bundle_and_run_values_never_cross_summary_api(console_env):
     client = _client(console_env)
     bundle_id = _workflow_id(client, n_steps=3)
     workflow = client.get(f"/api/workflows/{bundle_id}").json()

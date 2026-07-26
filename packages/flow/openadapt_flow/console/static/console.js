@@ -20,6 +20,7 @@ let currentActions = {list: [], postBase: ""};
 let currentSkillActions = [];
 let pendingExec = null;
 let artifactObjectUrls = [];
+let currentJsonViewer = null;
 
 function consumeBootstrapToken() {
   const rawFragment = window.location.hash.slice(1);
@@ -72,6 +73,22 @@ const safeNumber = (value, fallback = "—") => {
   const number = Number(value);
   return Number.isFinite(number) ? esc(number) : fallback;
 };
+const humanBytes = (value) => {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes)) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+};
+
+function artifactLinks(artifacts, scope, ownerId) {
+  if (!artifacts.length) return '<p class="muted">no viewable local JSON artifacts</p>';
+  return `<div class="artifact-links">${artifacts.map((artifact) => `
+    <a class="artifact-link" href="#/${scope}/${enc(ownerId)}/artifacts/${enc(artifact.id)}">
+      <span class="mono">${esc(artifact.label)}</span>
+      <span class="muted">${esc(artifact.format.toUpperCase())} · ${esc(humanBytes(artifact.size_bytes))}</span>
+    </a>`).join("")}</div>`;
+}
 
 function statusChip(summary) {
   if (summary.load_error) {
@@ -142,6 +159,7 @@ function covCard(label, numerator, denominator, unit) {
 async function viewWorkflowDetail(id, policy) {
   const detail = await api(`/api/workflows/${id}${policy ? `?policy=${enc(policy)}` : ""}`);
   const summary = detail.summary;
+  const artifacts = await api(`/api/artifacts/json/workflows/${id}`);
   if (detail.load_error) {
     return `<h2>${esc(summary.id)}</h2><p class="chip err">unreadable</p>
       <pre class="cmd">${esc(detail.load_error)}</pre>
@@ -237,6 +255,9 @@ async function viewWorkflowDetail(id, policy) {
     ${lintRows ? `<table><tr><th>Severity</th><th>Code</th></tr>${lintRows}</table>`
                : '<p class="muted">no coverage gaps found</p>'}
     <h2>Versions & diffs</h2>${diffSelector}
+    <h2>Local artifacts</h2>
+    <p class="muted">Exact protected bundle JSON. It stays on this computer and is shown only in this authenticated console.</p>
+    ${artifactLinks(artifacts, "workflows", summary.id)}
     <h2>Actions</h2>${renderActions(actions, `/api/workflows/${id}/actions/`)}`;
 }
 
@@ -389,6 +410,7 @@ async function viewRunDetail(id) {
     return `<h2>${esc(summary.id)}</h2><pre class="cmd">${esc(summary.load_error)}</pre>`;
   }
   const actions = await api(`/api/runs/${id}/actions`);
+  const artifacts = await api(`/api/artifacts/json/runs/${id}`);
 
   let haltHtml = "";
   if (detail.halt) {
@@ -466,7 +488,206 @@ async function viewRunDetail(id) {
     ${detail.checkpoints.length ? `<details><summary>${safeNumber(detail.checkpoints.length, "0")} durable checkpoint(s)</summary>
       <table><tr><th>File</th><th>Step</th><th>At</th></tr>${detail.checkpoints.map((checkpoint) =>
       `<tr><td class="mono">protected</td><td class="mono">${safeNumber(checkpoint.step_index)}</td><td>${fmtTime(checkpoint.created_at)}</td></tr>`).join("")}</table></details>` : ""}
+    <h2>Local evidence artifacts</h2>
+    <p class="muted">Exact protected run JSON/JSONL. It stays on this computer and is shown only in this authenticated console.</p>
+    ${artifactLinks(artifacts, "runs", summary.id)}
     <h2>Actions</h2>${renderActions(actions, `/api/runs/${id}/actions/`)}`;
+}
+
+function pointerToken(value) {
+  return String(value).replaceAll("~", "~0").replaceAll("/", "~1");
+}
+
+function pointerTokens(pointer) {
+  if (pointer === "") return [];
+  if (!pointer.startsWith("/")) throw new Error("JSON Pointer must start with /");
+  return pointer.slice(1).split("/").map((token) => {
+    if (/~(?:[^01]|$)/.test(token)) throw new Error("JSON Pointer escape is invalid");
+    return token.replaceAll("~1", "/").replaceAll("~0", "~");
+  });
+}
+
+function resolveJsonPointer(document, pointer) {
+  let value = document;
+  for (const token of pointerTokens(pointer)) {
+    if (Array.isArray(value)) {
+      if (!/^(0|[1-9][0-9]*)$/.test(token) || Number(token) >= value.length) {
+        throw new Error("JSON Pointer does not exist");
+      }
+      value = value[Number(token)];
+    } else if (value && typeof value === "object" && Object.hasOwn(value, token)) {
+      value = value[token];
+    } else {
+      throw new Error("JSON Pointer does not exist");
+    }
+  }
+  return value;
+}
+
+function childPointer(parent, key) {
+  return `${parent}/${pointerToken(key)}`;
+}
+
+function jsonValueClass(value) {
+  if (value === null) return "null";
+  if (typeof value === "string") return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  return "compound";
+}
+
+function jsonPrimitive(value) {
+  return value === null ? "null" : JSON.stringify(value);
+}
+
+function pointerHref(baseRoute, pointer) {
+  return `${baseRoute}?pointer=${enc(pointer)}`;
+}
+
+function renderJsonChildren(value, pointer, targetPointer, baseRoute) {
+  if (Array.isArray(value)) {
+    let html = "";
+    for (let index = 0; index < value.length; index += 1) {
+      html += renderJsonNode(String(index), value[index], childPointer(pointer, index), targetPointer, baseRoute);
+    }
+    return html;
+  }
+  let html = "";
+  for (const key of Object.keys(value)) {
+    html += renderJsonNode(key, value[key], childPointer(pointer, key), targetPointer, baseRoute);
+  }
+  return html;
+}
+
+function renderJsonNode(key, value, pointer, targetPointer, baseRoute) {
+  const keyHtml = key === null
+    ? '<span class="json-root-label">document</span>'
+    : `<span class="json-key">${esc(JSON.stringify(key))}</span><span class="json-colon">:</span>`;
+  const deepLink = `<a class="json-deep-link" href="${esc(pointerHref(baseRoute, pointer))}"
+    aria-label="Link to JSON Pointer ${esc(pointer || "root")}" title="Copyable JSON Pointer">#</a>`;
+  if (value === null || typeof value !== "object") {
+    return `<div class="json-leaf" data-json-pointer="${esc(pointer)}">${keyHtml}
+      <span class="json-value ${jsonValueClass(value)}">${esc(jsonPrimitive(value))}</span>${deepLink}</div>`;
+  }
+  const count = Array.isArray(value) ? value.length : Object.keys(value).length;
+  const preview = Array.isArray(value) ? `Array(${count})` : `{${count}}`;
+  const open = pointer === "" || targetPointer === pointer || targetPointer.startsWith(`${pointer}/`);
+  return `<details class="json-node" data-json-pointer="${esc(pointer)}" ${open ? "open" : ""}>
+    <summary>${keyHtml}<span class="json-preview">${esc(preview)}</span>${deepLink}</summary>
+    <div class="json-children" data-json-children data-hydrated="${open ? "true" : "false"}">${open ? renderJsonChildren(value, pointer, targetPointer, baseRoute) : ""}</div>
+  </details>`;
+}
+
+function searchJsonDocument(document, query, baseRoute) {
+  const needle = query.trim().toLocaleLowerCase();
+  if (!needle) return "";
+  const matches = [];
+  const stack = [{value: document, pointer: "", key: "document"}];
+  while (stack.length && matches.length < 100) {
+    const item = stack.pop();
+    const primitive = item.value === null || typeof item.value !== "object"
+      ? jsonPrimitive(item.value)
+      : "";
+    if (`${item.key} ${item.pointer} ${primitive}`.toLocaleLowerCase().includes(needle)) {
+      matches.push(item);
+    }
+    if (Array.isArray(item.value)) {
+      for (let index = item.value.length - 1; index >= 0; index -= 1) {
+        stack.push({
+          value: item.value[index],
+          pointer: childPointer(item.pointer, index),
+          key: String(index),
+        });
+      }
+    } else if (item.value && typeof item.value === "object") {
+      const keys = Object.keys(item.value);
+      for (let index = keys.length - 1; index >= 0; index -= 1) {
+        const key = keys[index];
+        stack.push({value: item.value[key], pointer: childPointer(item.pointer, key), key});
+      }
+    }
+  }
+  if (!matches.length) return '<p class="muted">No matches.</p>';
+  return `<div class="json-search-matches">${matches.map((match) => `
+    <a href="${esc(pointerHref(baseRoute, match.pointer))}">
+      <span class="mono">${esc(match.pointer || "/")}</span>
+      <span>${esc(match.key)}</span>
+      ${match.value === null || typeof match.value !== "object"
+        ? `<span class="muted">${esc(jsonPrimitive(match.value).slice(0, 120))}</span>`
+        : ""}
+    </a>`).join("")}</div>${matches.length === 100 ? '<p class="muted">Showing the first 100 matches.</p>' : ""}`;
+}
+
+async function viewJsonArtifact(scope, ownerId, artifactId, queryParams) {
+  const artifact = await api(`/api/artifacts/json/${scope}/${ownerId}/${artifactId}`);
+  const section = scope === "runs" ? "runs" : "workflows";
+  const backRoute = `#/${section}/${enc(ownerId)}`;
+  const baseRoute = `${backRoute}/artifacts/${enc(artifactId)}`;
+  const requestedPointer = queryParams.get("pointer") || "";
+  let targetPointer = requestedPointer;
+  let pointerError = "";
+  try {
+    resolveJsonPointer(artifact.document, requestedPointer);
+  } catch (error) {
+    targetPointer = "";
+    pointerError = error.message || "JSON Pointer is invalid";
+  }
+  currentJsonViewer = {
+    scope,
+    ownerId,
+    artifactId,
+    artifact,
+    baseRoute,
+    targetPointer,
+  };
+  return `<p><a href="${backRoute}">← Back to ${section === "runs" ? "run" : "workflow"}</a></p>
+    <div class="json-viewer-head">
+      <div><h2>${esc(artifact.label)}</h2>
+        <p class="muted mono">sha256 ${esc(artifact.sha256)}</p></div>
+      <div class="json-viewer-actions">
+        <button data-json-action="copy">Copy</button>
+        <button data-json-action="raw">Raw</button>
+        <button data-json-action="download">Download</button>
+        <span id="json-action-status" class="muted" aria-live="polite"></span>
+      </div>
+    </div>
+    <div class="json-viewer-meta">
+      <span class="chip info">${esc(artifact.format.toUpperCase())}</span>
+      <span>${esc(humanBytes(artifact.size_bytes))}</span>
+      <span>${safeNumber(artifact.node_count, "0")} nodes</span>
+      <span>depth ${safeNumber(artifact.max_depth, "0")}</span>
+      <span class="chip">local only</span>
+    </div>
+    ${pointerError ? `<p class="chip err">${esc(pointerError)}</p>` : ""}
+    <label class="json-search-label" for="json-search">Search keys, values, or JSON Pointers</label>
+    <input id="json-search" class="json-search" type="search" autocomplete="off" placeholder="Search this artifact…">
+    <div id="json-search-results" aria-live="polite"></div>
+    <pre id="json-raw" class="json-raw" hidden></pre>
+    <div class="json-tree" id="json-tree">${renderJsonNode(null, artifact.document, "", targetPointer, baseRoute)}</div>`;
+}
+
+async function fetchCurrentJsonRaw() {
+  if (!currentJsonViewer) throw new Error("No JSON artifact is open");
+  const {scope, ownerId, artifactId} = currentJsonViewer;
+  const response = await fetch(
+    `/api/artifacts/json/${scope}/${enc(ownerId)}/${enc(artifactId)}/raw`,
+    {headers: requestHeaders()},
+  );
+  if (!response.ok) throw new Error("The local artifact is no longer available");
+  return response;
+}
+
+function activateJsonViewer() {
+  if (!currentJsonViewer || !currentJsonViewer.targetPointer) return;
+  requestAnimationFrame(() => {
+    const target = [...document.querySelectorAll("[data-json-pointer]")].find(
+      (node) => node.dataset.jsonPointer === currentJsonViewer.targetPointer,
+    );
+    if (target) {
+      target.classList.add("json-target");
+      target.scrollIntoView({block: "center"});
+    }
+  });
 }
 
 async function viewSkills() {
@@ -639,19 +860,28 @@ async function route() {
     link.classList.toggle("active", link.dataset.nav === nav));
   const main = $("#main");
   clearArtifactObjectUrls();
+  currentJsonViewer = null;
   main.innerHTML = '<p class="muted">Loading…</p>';
   try {
     let html;
     const diffIndex = parts.indexOf("diff");
+    const artifactIndex = parts.indexOf("artifacts");
+    const queryParams = new URLSearchParams(query || "");
     if (nav === "attention") {
       html = await viewAttention();
+    } else if ((nav === "workflows" || nav === "runs") && artifactIndex > 0) {
+      html = await viewJsonArtifact(
+        nav,
+        enc(parts.slice(1, artifactIndex).join("/")),
+        enc(parts[artifactIndex + 1] || ""),
+        queryParams,
+      );
     } else if (nav === "workflows" && diffIndex > 0) {
       html = await viewDiff(
         enc(parts.slice(1, diffIndex).join("/")),
         enc(parts.slice(diffIndex + 1).join("/")),
       );
     } else if (nav === "workflows" && parts.length > 1) {
-      const queryParams = new URLSearchParams(query || "");
       html = await viewWorkflowDetail(
         enc(parts.slice(1).join("/")),
         queryParams.get("policy"),
@@ -667,12 +897,54 @@ async function route() {
     }
     main.innerHTML = html;
     await hydrateAuthenticatedImages();
+    activateJsonViewer();
   } catch (error) {
     main.innerHTML = `<p class="chip err">error</p><pre class="cmd">${esc(JSON.stringify(error.body || String(error), null, 2))}</pre>`;
   }
 }
 
 document.addEventListener("click", async (event) => {
+  const jsonAction = event.target.closest("[data-json-action]");
+  if (jsonAction && currentJsonViewer) {
+    const action = jsonAction.dataset.jsonAction;
+    const actionStatus = $("#json-action-status");
+    if (actionStatus) actionStatus.textContent = "";
+    jsonAction.disabled = true;
+    const originalLabel = jsonAction.textContent;
+    try {
+      const response = await fetchCurrentJsonRaw();
+      if (action === "copy") {
+        await navigator.clipboard.writeText(await response.text());
+        jsonAction.textContent = "Copied";
+        if (actionStatus) actionStatus.textContent = "Exact artifact copied.";
+      } else if (action === "raw") {
+        const raw = $("#json-raw");
+        raw.textContent = await response.text();
+        raw.hidden = !raw.hidden;
+        jsonAction.textContent = raw.hidden ? "Raw" : "Hide raw";
+      } else if (action === "download") {
+        const objectUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = currentJsonViewer.artifact.download_name || "openadapt-artifact.json";
+        link.hidden = true;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+        if (actionStatus) actionStatus.textContent = "Download started.";
+      }
+    } catch (error) {
+      jsonAction.textContent = "Unavailable";
+      if (actionStatus) actionStatus.textContent = "The protected local artifact could not be read.";
+    } finally {
+      jsonAction.disabled = false;
+      if (action !== "raw") {
+        window.setTimeout(() => { jsonAction.textContent = originalLabel; }, 1200);
+      }
+    }
+    return;
+  }
   const routeTarget = event.target.closest("[data-route]");
   if (routeTarget && !event.target.closest("a")) {
     window.location.hash = routeTarget.dataset.route;
@@ -709,6 +981,31 @@ document.addEventListener("click", async (event) => {
     return;
   }
 });
+
+document.addEventListener("input", (event) => {
+  if (event.target.id !== "json-search" || !currentJsonViewer) return;
+  const output = $("#json-search-results");
+  output.innerHTML = searchJsonDocument(
+    currentJsonViewer.artifact.document,
+    event.target.value,
+    currentJsonViewer.baseRoute,
+  );
+});
+
+document.addEventListener("toggle", (event) => {
+  const node = event.target;
+  if (!node.matches || !node.matches("details.json-node") || !node.open || !currentJsonViewer) return;
+  const children = node.querySelector(":scope > [data-json-children]");
+  if (!children || children.dataset.hydrated === "true") return;
+  const pointer = node.dataset.jsonPointer || "";
+  try {
+    const value = resolveJsonPointer(currentJsonViewer.artifact.document, pointer);
+    children.innerHTML = renderJsonChildren(value, pointer, "", currentJsonViewer.baseRoute);
+    children.dataset.hydrated = "true";
+  } catch (error) {
+    children.textContent = "This JSON Pointer is no longer available.";
+  }
+}, true);
 
 $("#modal-cancel").addEventListener("click", closeModal);
 $("#modal-go").addEventListener("click", () => pendingExec && pendingExec());

@@ -10,9 +10,10 @@ makes the secure Needs Attention queue the first view; it does not weaken or
 remove the normal console. Attended mutations additionally require an exact
 engine-issued pause capability and a deployment-bound action service.
 
-Browser DTOs use opaque ids and explicit projections; protected workflow
-labels, parameters, identity evidence, local paths, and raw reports do not
-cross the API boundary. Run artifacts are limited to PNGs explicitly
+Browser summary DTOs use opaque ids and explicit projections; protected
+workflow labels, parameters, identity evidence, and local paths do not cross
+that API boundary. Raw JSON is available only through the explicit protected
+local-artifact viewer. Run screenshots remain limited to PNGs explicitly
 referenced by the protected report and resolved without following symlinks.
 """
 
@@ -24,7 +25,7 @@ import os
 import secrets
 import shlex
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -34,7 +35,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from openadapt_flow import __version__
 from openadapt_flow.console import actions as actions_mod
 from openadapt_flow.console import attention as attention_mod
-from openadapt_flow.console import data
+from openadapt_flow.console import data, json_artifacts
 from openadapt_flow.runtime.durable.approval import ResumeRefused
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRefused,
@@ -490,6 +491,64 @@ def create_app(
     def run_detail(run_id: str) -> dict[str, Any]:
         run_dir = _resolve_run(runs, run_id)
         return data.run_detail(runs, run_dir)
+
+    # -- explicit local JSON artifacts -------------------------------------
+
+    def json_artifact_owner(
+        scope: str, owner_id: str
+    ) -> tuple[Path, Literal["runs", "workflows"]]:
+        if scope == "runs":
+            return _resolve_run(runs, owner_id), "runs"
+        if scope == "workflows":
+            return _resolve_bundle(bundles, owner_id), "workflows"
+        raise HTTPException(status_code=404, detail="no such artifact scope")
+
+    def load_json_artifact(
+        scope: str, owner_id: str, artifact_id: str
+    ) -> json_artifacts.LoadedJsonArtifact:
+        owner, admitted_scope = json_artifact_owner(scope, owner_id)
+        artifact = json_artifacts.resolve_artifact(
+            owner,
+            artifact_id,
+            scope=admitted_scope,
+        )
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="no such JSON artifact")
+        try:
+            return json_artifacts.load_artifact(artifact)
+        except json_artifacts.JsonArtifactError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    @app.get("/api/artifacts/json/{scope}/{owner_id}")
+    def json_artifact_list(scope: str, owner_id: str) -> list[dict[str, Any]]:
+        owner, admitted_scope = json_artifact_owner(scope, owner_id)
+        return [
+            artifact.public()
+            for artifact in json_artifacts.list_artifacts(
+                owner,
+                scope=admitted_scope,
+            )
+        ]
+
+    @app.get("/api/artifacts/json/{scope}/{owner_id}/{artifact_id}")
+    def json_artifact_document(
+        scope: str, owner_id: str, artifact_id: str
+    ) -> dict[str, Any]:
+        return load_json_artifact(scope, owner_id, artifact_id).public()
+
+    @app.get("/api/artifacts/json/{scope}/{owner_id}/{artifact_id}/raw")
+    def json_artifact_raw(scope: str, owner_id: str, artifact_id: str) -> Response:
+        loaded = load_json_artifact(scope, owner_id, artifact_id)
+        media_type = (
+            "application/json"
+            if loaded.artifact.format == "json"
+            else "application/x-ndjson"
+        )
+        return Response(
+            loaded.raw,
+            media_type=media_type,
+            headers={"X-Content-SHA256": loaded.sha256},
+        )
 
     # -- needs attention ----------------------------------------------------
 
