@@ -324,7 +324,12 @@ class FlowBridge:
     # --- low-level ---
 
     def _run(
-        self, args: list[str], out_dir: Path | None = None, timeout: float | None = None
+        self,
+        args: list[str],
+        out_dir: Path | None = None,
+        timeout: float | None = None,
+        *,
+        env_overrides: dict[str, str] | None = None,
     ) -> FlowResult:
         prefix = _flow_command(self.flow_bin)
         if prefix is None:
@@ -333,12 +338,15 @@ class FlowBridge:
             )
         cmd = [*prefix, *args]
         logger.debug("flow: {cmd}", cmd=_safe_command_for_log(cmd))
+        env = _subprocess_env()
+        if env_overrides:
+            env.update(env_overrides)
         proc = self._runner(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=_subprocess_env(),
+            env=env,
         )
         return FlowResult(
             ok=proc.returncode == 0,
@@ -516,6 +524,8 @@ class FlowBridge:
         timeout: float | None = None,
         *,
         config: Path | None = None,
+        params_file: Path | None = None,
+        env_overrides: dict[str, str] | None = None,
     ) -> FlowResult:
         """Replay a bundle; returns the run directory in ``out_dir`` if given."""
         args = ["replay", str(bundle_dir)]
@@ -523,9 +533,16 @@ class FlowBridge:
             args += ["--run-dir", str(out_dir)]
         if config:
             args += ["--config", str(config)]
+        if params_file:
+            args += ["--params-file", str(params_file)]
         if url:
             args += ["--url", url]
-        return self._run(args, out_dir=out_dir, timeout=timeout)
+        return self._run(
+            args,
+            out_dir=out_dir,
+            timeout=timeout,
+            env_overrides=env_overrides,
+        )
 
     def run(
         self,
@@ -534,6 +551,8 @@ class FlowBridge:
         out_dir: Path | None = None,
         timeout: float | None = None,
         authorization_file: Path | None = None,
+        params_file: Path | None = None,
+        env_overrides: dict[str, str] | None = None,
     ) -> FlowResult:
         """Run a bundle under a deployment config.
 
@@ -547,7 +566,14 @@ class FlowBridge:
             args += ["--run-dir", str(out_dir)]
         if authorization_file:
             args += ["--authorization-file", str(authorization_file)]
-        return self._run(args, out_dir=out_dir, timeout=timeout)
+        if params_file:
+            args += ["--params-file", str(params_file)]
+        return self._run(
+            args,
+            out_dir=out_dir,
+            timeout=timeout,
+            env_overrides=env_overrides,
+        )
 
     def run_supports_authorization(self) -> bool:
         """Probe (once) whether the installed flow CLI accepts ``--authorization-file``."""
@@ -576,6 +602,7 @@ class FlowBridge:
         name: str | None = None,
         token: str | None = None,
         timeout: float | None = None,
+        env_overrides: dict[str, str] | None = None,
     ) -> FlowResult:
         """Upload through the same pinned Flow runtime as every other verb."""
 
@@ -584,7 +611,7 @@ class FlowBridge:
             args += ["--name", name]
         if token:
             args += ["--token", token]
-        return self._run(args, timeout=timeout)
+        return self._run(args, timeout=timeout, env_overrides=env_overrides)
 
     def teach(
         self,

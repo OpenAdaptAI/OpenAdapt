@@ -216,7 +216,14 @@ class EngineDispatcher:
             "bind_qualification_effect": self.bind_qualification_effect,
             "set_qualification_effect_verification": (self.set_qualification_effect_verification),
             "set_qualification_minimum_effect_tier": (self.set_qualification_minimum_effect_tier),
+            "add_qualification_case": self.add_qualification_case,
+            "run_qualification_case": self.run_qualification_case,
+            "import_qualification_results": self.import_qualification_results,
             "certify_qualification": self.certify_qualification,
+            "version_qualification_workflow": self.version_qualification_workflow,
+            "seal_qualification_workflow": self.seal_qualification_workflow,
+            "export_qualification_workflow": self.export_qualification_workflow,
+            "deploy_qualification_workflow": self.deploy_qualification_workflow,
             # cloud sync / push
             "push_workflow": self.push_workflow,
             "get_sync_state": self.get_sync_state,
@@ -694,6 +701,19 @@ class EngineDispatcher:
         run_id = uuid.uuid4().hex[:8]
         run_dir = self.config.data_dir / "runs" / f"{'run' if run else 'replay'}-{run_id}"
         run_dir.mkdir(parents=True, exist_ok=True)
+        params_file = None
+        qualification_case_id = params.get("_qualification_case_id")
+        if qualification_case_id is not None:
+            from engine.qualification_lifecycle import case_parameters_path
+
+            params_file = case_parameters_path(
+                self.config.data_dir,
+                workflow_id=str(workflow_id),
+                case_id=str(qualification_case_id),
+            )
+        from engine.bundle_keys import bundle_key_environment
+
+        bundle_env = bundle_key_environment(str(workflow_id))
         backend = target.backend if target is not None else "configured"
         # A selected config always exists (validated above). The historical
         # governed-run default remains fail-loud when absent; a direct target
@@ -765,17 +785,24 @@ class EngineDispatcher:
                     if run:
                         # A missing historical default stays fail-loud in Flow.
                         config_path = staged_config or default_config
+                        run_kwargs: dict[str, Any] = {"out_dir": run_dir}
+                        if params_file is not None:
+                            run_kwargs["params_file"] = params_file
+                        if bundle_env:
+                            run_kwargs["env_overrides"] = bundle_env
                         result = self.services.flow_bridge.run(
-                            bundle,
-                            config_path,
-                            out_dir=run_dir,
+                            bundle, config_path, **run_kwargs
                         )
                     else:
-                        result = self.services.flow_bridge.replay(
-                            bundle,
-                            out_dir=run_dir,
-                            config=staged_config,
-                        )
+                        replay_kwargs: dict[str, Any] = {
+                            "out_dir": run_dir,
+                            "config": staged_config,
+                        }
+                        if params_file is not None:
+                            replay_kwargs["params_file"] = params_file
+                        if bundle_env:
+                            replay_kwargs["env_overrides"] = bundle_env
+                        result = self.services.flow_bridge.replay(bundle, **replay_kwargs)
                 except Exception:
                     # Once invocation begins, delivery/effect state is unknown.
                     # Never echo exception text: it may contain config values.
@@ -1176,6 +1203,12 @@ class EngineDispatcher:
             raise ValueError("Workflow bundle contains a symbolic link and cannot be edited safely")
         return resolved
 
+    @staticmethod
+    def _qualification_bundle_key(bundle_id: str) -> str | None:
+        from engine.bundle_keys import load_bundle_key
+
+        return load_bundle_key(bundle_id)
+
     def get_qualification(self, **params: Any) -> dict:
         """Inspect Flow's canonical graph, coverage, and certification contract."""
 
@@ -1189,6 +1222,7 @@ class EngineDispatcher:
                 bundle,
                 workflow_id=workflow_id,
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
@@ -1227,6 +1261,7 @@ class EngineDispatcher:
                 required_capabilities=[str(item) for item in raw_capabilities],
                 minimum_effect_tier=int(params.get("minimum_effect_tier", 3)),
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
             self.services.db.update_bundle(workflow_id, status="qualification_pending")
             return result
@@ -1254,6 +1289,7 @@ class EngineDispatcher:
                     str(params["explanation"]) if params.get("explanation") is not None else None
                 ),
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
             self.services.db.update_bundle(
                 workflow_id,
@@ -1282,6 +1318,7 @@ class EngineDispatcher:
                 workflow_id=workflow_id,
                 step_id=str(params.get("step_id") or ""),
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
             self.services.db.update_bundle(
                 workflow_id,
@@ -1318,6 +1355,7 @@ class EngineDispatcher:
                 signals=raw_signals,
                 quorum=int(params.get("quorum", 0)),
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
             self.services.db.update_bundle(
                 workflow_id,
@@ -1364,6 +1402,7 @@ class EngineDispatcher:
                 effect_index=int(raw_index) if raw_index is not None else None,
                 verification_tier=int(params.get("verification_tier", 3)),
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
             self.services.db.update_bundle(
                 workflow_id,
@@ -1394,6 +1433,7 @@ class EngineDispatcher:
                 effect_index=int(params.get("effect_index", -1)),
                 verification_tier=int(params.get("verification_tier", 3)),
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
             self.services.db.update_bundle(
                 workflow_id,
@@ -1422,6 +1462,7 @@ class EngineDispatcher:
                 workflow_id=workflow_id,
                 minimum_effect_tier=int(params.get("minimum_effect_tier", 3)),
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
             self.services.db.update_bundle(
                 workflow_id,
@@ -1429,6 +1470,194 @@ class EngineDispatcher:
                     "certified" if result.get("certification_current") else "qualification_pending"
                 ),
             )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def add_qualification_case(self, **params: Any) -> dict:
+        """Add a typed case and keep its optional parameter fixture local."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            add_qualification_case,
+        )
+        from engine.qualification_lifecycle import store_case_parameters
+
+        workflow_id = str(params.get("workflow_id") or "")
+        case_id = str(params.get("case_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            from engine.qualification import inspect_bundle
+
+            current = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            secret_params = {
+                str(item["name"])
+                for item in current.get("controls", {}).get("parameters", [])
+                if item.get("secret")
+            }
+            input_ref = None
+            parameters_json = params.get("parameters_json")
+            if parameters_json is not None:
+                _path, input_ref = store_case_parameters(
+                    self.config.data_dir,
+                    workflow_id=workflow_id,
+                    case_id=case_id,
+                    parameters_json=str(parameters_json),
+                    forbidden_keys=secret_params,
+                )
+            result = add_qualification_case(
+                bundle,
+                workflow_id=workflow_id,
+                case_id=case_id,
+                kind=str(params.get("kind") or "representative"),
+                description=str(params.get("description") or ""),
+                input_ref=input_ref,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def run_qualification_case(self, **params: Any) -> dict:
+        """Execute, hash, sign, and retain one case against the exact revision."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            prepare_local_qualification_runner,
+            record_local_qualification_result,
+        )
+        from engine.qualification_lifecycle import (
+            retain_run_evidence,
+            store_case_parameters,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        case_id = str(params.get("case_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            from engine.qualification import inspect_bundle
+
+            current = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            if not any(
+                str(item.get("id")) == case_id
+                for item in (current.get("project") or {}).get("cases", [])
+            ):
+                raise ValueError(f"Unknown qualification case {case_id!r}")
+            secret_params = {
+                str(item["name"])
+                for item in current.get("controls", {}).get("parameters", [])
+                if item.get("secret")
+            }
+            parameters_json = params.get("parameters_json")
+            if parameters_json is not None:
+                store_case_parameters(
+                    self.config.data_dir,
+                    workflow_id=workflow_id,
+                    case_id=case_id,
+                    parameters_json=str(parameters_json),
+                    forbidden_keys=secret_params,
+                )
+            prepared = prepare_local_qualification_runner(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            execution_params = {
+                "workflow_id": workflow_id,
+                "_qualification_case_id": case_id,
+            }
+            if params.get("target") is not None:
+                execution_params["target"] = params["target"]
+            if params.get("deployment_config") is not None:
+                execution_params["deployment_config"] = params["deployment_config"]
+            execution = self._replay_or_run(execution_params, run=True)
+            if execution.get("pre_action_refusal"):
+                return {
+                    "ok": False,
+                    "workflow_id": workflow_id,
+                    "error": execution.get("error") or "Case execution was refused",
+                    "case_run": execution,
+                }
+            run_id = str(execution.get("run_id") or "")
+            run = self.services.db.get_run(run_id)
+            if not run or not run.get("run_path"):
+                raise ValueError("Qualification run did not retain a local evidence directory")
+            evidence = retain_run_evidence(
+                bundle,
+                case_id=case_id,
+                run_id=run_id,
+                run_dir=Path(str(run["run_path"])),
+            )
+            outcome_map = {
+                "VERIFIED": "verified",
+                "COMPLETED_UNVERIFIED": "completed_unverified",
+                "HALTED": "halted",
+                "FAILED": "failed",
+                "ROLLED_BACK": "rolled_back",
+                "halt": "halted",
+                "success": "completed_unverified",
+                "unknown": "failed",
+            }
+            raw_outcome = str(execution.get("outcome") or "unknown")
+            observed_outcome = outcome_map.get(raw_outcome, "failed")
+            capabilities = (
+                prepared.get("project", {})
+                .get("environment", {})
+                .get("required_capabilities", [])
+            )
+            result = record_local_qualification_result(
+                bundle,
+                workflow_id=workflow_id,
+                case_id=case_id,
+                observed_outcome=observed_outcome,
+                evidence=evidence,
+                runner_capabilities=[str(value) for value in capabilities],
+                detail_code=(
+                    None if raw_outcome in {"VERIFIED", "HALTED"} else raw_outcome.lower()
+                ),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            result["case_run"] = execution
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def import_qualification_results(self, **params: Any) -> dict:
+        """Import canonical signed results and re-verify every local evidence hash."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            import_qualification_results,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            result = import_qualification_results(
+                self._qualification_bundle_dir(workflow_id),
+                workflow_id=workflow_id,
+                signed_results_json=str(params.get("signed_results_json") or ""),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
             return result
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
@@ -1446,6 +1675,7 @@ class EngineDispatcher:
                 bundle,
                 workflow_id=workflow_id,
                 policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
             )
             self.services.db.update_bundle(
                 workflow_id,
@@ -1453,6 +1683,208 @@ class EngineDispatcher:
                     "certified" if result.get("certification_current") else "qualification_failed"
                 ),
             )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def _new_bundle_version(self, workflow_id: str) -> tuple[str, int, Path, dict]:
+        source = self.services.db.get_bundle(workflow_id)
+        if source is None:
+            raise ValueError(f"Unknown workflow {workflow_id}")
+        version = int(source.get("version") or 1) + 1
+        new_id = f"{workflow_id}-v{version}-{uuid.uuid4().hex[:6]}"
+        destination = self.config.data_dir / "bundles" / new_id
+        return new_id, version, destination, source
+
+    def _register_bundle_version(
+        self,
+        *,
+        bundle_id: str,
+        version: int,
+        destination: Path,
+        source: dict,
+        status: str,
+    ) -> None:
+        self.services.db.insert_bundle(
+            bundle_id,
+            str(destination),
+            capture_id=source.get("capture_id"),
+        )
+        self.services.db.update_bundle(
+            bundle_id,
+            workflow_name=source.get("workflow_name") or "",
+            version=version,
+            steps=int(source.get("steps") or 0),
+            schema_version=int(source.get("schema_version") or 2),
+            status=status,
+        )
+
+    def version_qualification_workflow(self, **params: Any) -> dict:
+        """Create an exact local working version without altering its predecessor."""
+
+        import shutil
+
+        from engine.bundle_keys import copy_bundle_key, delete_bundle_key
+        from engine.qualification_lifecycle import copy_bundle_version
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            source_path = self._qualification_bundle_dir(workflow_id)
+            new_id, version, destination, source = self._new_bundle_version(workflow_id)
+            copy_bundle_version(source_path, destination)
+            encrypted = (destination / "workflow.json.enc").is_file()
+            if encrypted:
+                copy_bundle_key(workflow_id, new_id)
+            self._register_bundle_version(
+                bundle_id=new_id,
+                version=version,
+                destination=destination,
+                source=source,
+                status=str(source.get("status") or "qualification_pending"),
+            )
+            return {"ok": True, "workflow_id": new_id, "version": version}
+        except Exception as exc:
+            if "destination" in locals():
+                shutil.rmtree(destination, ignore_errors=True)
+            if "new_id" in locals():
+                delete_bundle_key(new_id)
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def seal_qualification_workflow(self, **params: Any) -> dict:
+        """Create an encrypted version through Flow's atomic sealing command."""
+
+        import shutil
+
+        from engine.bundle_keys import delete_bundle_key, generate_bundle_key
+        from engine.qualification import inspect_bundle, seal_qualification_bundle
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            source_path = self._qualification_bundle_dir(workflow_id)
+            current = inspect_bundle(
+                source_path,
+                workflow_id=workflow_id,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            if current["graph"]["bundle"]["encrypted"]:
+                raise ValueError("This workflow version is already sealed and encrypted")
+            new_id, version, destination, source = self._new_bundle_version(workflow_id)
+            key = generate_bundle_key(new_id)
+            verified = seal_qualification_bundle(
+                source_path,
+                destination,
+                workflow_id=new_id,
+                destination_key=key,
+            )
+            self._register_bundle_version(
+                bundle_id=new_id,
+                version=version,
+                destination=destination,
+                source=source,
+                status=(
+                    "certified"
+                    if verified.get("certification_current")
+                    else "qualification_pending"
+                ),
+            )
+            return {
+                "ok": True,
+                "workflow_id": new_id,
+                "version": version,
+                "certification_current": verified.get("certification_current", False),
+            }
+        except Exception as exc:
+            if "destination" in locals():
+                shutil.rmtree(destination, ignore_errors=True)
+            if "new_id" in locals():
+                delete_bundle_key(new_id)
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def export_qualification_workflow(self, **params: Any) -> dict:
+        """Export the exact certified encrypted artifact to a deterministic archive."""
+
+        import hashlib
+
+        from engine.qualification import inspect_bundle
+        from engine.qualification_lifecycle import export_certified_bundle
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            qualified = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            if not qualified.get("certification_current"):
+                raise ValueError("Certify this exact workflow version before export")
+            if not qualified["graph"]["bundle"]["encrypted"]:
+                raise ValueError("Seal and encrypt this workflow version before export")
+            row = self.services.db.get_bundle(workflow_id) or {}
+            exports = self.config.data_dir / "exports"
+            staging = exports / f".{workflow_id}-{uuid.uuid4().hex}.zip"
+            digest = export_certified_bundle(bundle, staging)
+            destination = exports / (
+                f"{workflow_id}-v{int(row.get('version') or 1)}-{digest[:12]}.zip"
+            )
+            if destination.exists():
+                existing = hashlib.sha256(destination.read_bytes()).hexdigest()
+                if existing != digest:
+                    raise ValueError("An export with this artifact identity is inconsistent")
+                staging.unlink()
+            else:
+                staging.replace(destination)
+            return {
+                "ok": True,
+                "workflow_id": workflow_id,
+                "path": str(destination),
+                "sha256": digest,
+            }
+        except Exception as exc:
+            if "staging" in locals():
+                staging.unlink(missing_ok=True)
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def deploy_qualification_workflow(self, **params: Any) -> dict:
+        """Send an exact certified sealed artifact through Flow's governed push path."""
+
+        from engine.auth.store import auth_header
+        from engine.bundle_keys import bundle_key_environment
+        from engine.qualification import inspect_bundle
+        from engine.qualification_lifecycle import parse_flow_push
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            qualified = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            if not qualified.get("certification_current"):
+                raise ValueError("Certify this exact workflow version before deployment")
+            if not qualified["graph"]["bundle"]["encrypted"]:
+                raise ValueError("Seal and encrypt this workflow version before deployment")
+            if not self.services.flow_bridge.supports_command("push"):
+                raise ValueError("The bundled Flow runtime does not support governed deployment")
+            env = bundle_key_environment(workflow_id)
+            authorization = auth_header().get("Authorization", "")
+            if authorization.startswith("Bearer "):
+                env["OPENADAPT_INGEST_TOKEN"] = authorization.removeprefix("Bearer ")
+            pushed = self.services.flow_bridge.push(
+                bundle,
+                kind="bundle",
+                host=self.config.hosted_host,
+                env_overrides=env,
+            )
+            result = parse_flow_push(pushed.stdout, pushed.stderr, ok=pushed.ok)
+            result["workflow_id"] = result.get("workflow_id") or workflow_id
+            if result.get("deployed"):
+                self.services.db.update_bundle(
+                    workflow_id,
+                    workflow_id=result["workflow_id"],
+                    status="deployed",
+                )
             return result
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}

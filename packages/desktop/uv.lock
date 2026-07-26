@@ -1425,6 +1425,8 @@ name = "openadapt-desktop"
 version = "0.14.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography", version = "48.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "cryptography", version = "49.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
     { name = "httpx" },
     { name = "keyring" },
     { name = "loguru" },
@@ -1440,7 +1442,6 @@ dependencies = [
 
 [package.optional-dependencies]
 build = [
-    { name = "cryptography", version = "48.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
     { name = "onnxruntime", version = "1.20.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
     { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
     { name = "openadapt-flow" },
@@ -1462,7 +1463,8 @@ full = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", marker = "extra == 'enterprise'" },
-    { name = "cryptography", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin' and extra == 'build'", specifier = "==48.0.0" },
+    { name = "cryptography", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'", specifier = ">=48,<50" },
+    { name = "cryptography", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==48.0.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "keyring", specifier = ">=24" },
     { name = "loguru" },

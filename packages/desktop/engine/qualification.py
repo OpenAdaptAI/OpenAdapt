@@ -14,6 +14,8 @@ did not produce.
 from __future__ import annotations
 
 import hashlib
+import json
+from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
@@ -52,15 +54,23 @@ def _flow_api() -> dict[str, Any]:
             IdentityNormalizer,
             IdentityPolicy,
             IdentitySignalPolicy,
+            QualificationCase,
+            QualificationCaseKind,
+            QualificationCaseResult,
+            QualificationOutcome,
             VerificationTier,
+            add_case,
             certify_project,
             evaluate_qualification,
             init_project,
+            record_case_results,
             save_qualified_workflow,
             set_action_classification,
             set_effect_policy,
             set_identity_policy,
             set_minimum_effect_tier,
+            set_trusted_runner_key,
+            sign_case_result,
             workflow_contract_sha256,
         )
         from openadapt_flow.traversal import iter_workflow_steps
@@ -80,6 +90,10 @@ def _flow_api() -> dict[str, Any]:
         "build_program_graph": build_program_graph,
         "ActionRiskClass": ActionRiskClass,
         "ActionRiskClassification": ActionRiskClassification,
+        "QualificationCase": QualificationCase,
+        "QualificationCaseKind": QualificationCaseKind,
+        "QualificationCaseResult": QualificationCaseResult,
+        "QualificationOutcome": QualificationOutcome,
         "EnvironmentBoundary": EnvironmentBoundary,
         "IdentityEnforcement": IdentityEnforcement,
         "IdentityEvidenceSource": IdentityEvidenceSource,
@@ -89,10 +103,14 @@ def _flow_api() -> dict[str, Any]:
         "IdentityPolicy": IdentityPolicy,
         "IdentitySignalPolicy": IdentitySignalPolicy,
         "VerificationTier": VerificationTier,
+        "add_case": add_case,
         "certify_project": certify_project,
         "evaluate_qualification": evaluate_qualification,
         "init_project": init_project,
+        "record_case_results": record_case_results,
         "save_qualified_workflow": save_qualified_workflow,
+        "set_trusted_runner_key": set_trusted_runner_key,
+        "sign_case_result": sign_case_result,
         "set_action_classification": set_action_classification,
         "set_effect_policy": set_effect_policy,
         "set_identity_policy": set_identity_policy,
@@ -101,10 +119,10 @@ def _flow_api() -> dict[str, Any]:
     }
 
 
-def _load(bundle_dir: Path):
+def _load(bundle_dir: Path, *, key: str | None = None):
     api = _flow_api()
     try:
-        return api["Workflow"].load(bundle_dir)
+        return api["Workflow"].load(bundle_dir, key=key)
     except Exception as exc:
         if "duplicate_step_id" in str(exc):
             raise QualificationError(
@@ -369,12 +387,12 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
     return {"parameters": parameters, "actions": actions}
 
 
-def _save(workflow, bundle_dir: Path) -> None:
+def _save(workflow, bundle_dir: Path, *, key: str | None = None) -> None:
     """Reseal the bundle through Flow's canonical qualified-artifact saver."""
 
     try:
-        _flow_api()["save_qualified_workflow"](workflow, bundle_dir)
-        type(workflow).load(bundle_dir)
+        _flow_api()["save_qualified_workflow"](workflow, bundle_dir, key=key)
+        type(workflow).load(bundle_dir, key=key)
     except Exception as exc:
         raise QualificationError(f"Could not reseal the qualified bundle: {exc}") from exc
 
@@ -408,11 +426,12 @@ def inspect_bundle(
     *,
     workflow_id: str,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Return graph, canonical project/report, controls, and exact refusals."""
 
     api = _flow_api()
-    workflow = _load(bundle_dir)
+    workflow = _load(bundle_dir, key=bundle_key)
     policy = _policy(policy_source)
     graph_payload = api["build_program_graph"](workflow).model_dump(mode="json")
     lint = api["lint_workflow"](workflow)
@@ -470,6 +489,7 @@ def initialize_qualification(
     required_capabilities: list[str] | None = None,
     minimum_effect_tier: int = 3,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Attach the canonical v1 project to an existing compiled workflow."""
 
@@ -489,7 +509,7 @@ def initialize_qualification(
         raise QualificationError("environment_digest must be a SHA-256 hex digest")
 
     api = _flow_api()
-    workflow = _load(bundle_dir)
+    workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is not None:
         raise QualificationError(
             "This workflow already has a qualification project; reopen it to continue."
@@ -508,13 +528,14 @@ def initialize_qualification(
             environment=environment,
             minimum_effect_tier=api["VerificationTier"](minimum_effect_tier),
         )
-        _save(workflow, bundle_dir)
+        _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
         policy_source=policy_source,
+        bundle_key=bundle_key,
     )
 
 
@@ -526,6 +547,7 @@ def set_action_risk(
     risk: QualificationRisk,
     explanation: str | None = None,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Set canonical business risk while preserving executable risk invariants."""
 
@@ -534,7 +556,7 @@ def set_action_risk(
             "risk must be read_only, state_changing, consequential, or irreversible"
         )
     api = _flow_api()
-    workflow = _load(bundle_dir)
+    workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is None:
         raise QualificationError(
             "Initialize the qualification boundary before reviewing action risk."
@@ -557,13 +579,14 @@ def set_action_risk(
                 operator_confirmed=True,
             ),
         )
-        _save(workflow, bundle_dir)
+        _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
         policy_source=policy_source,
+        bundle_key=bundle_key,
     )
 
 
@@ -573,6 +596,7 @@ def arm_action_identity(
     workflow_id: str,
     step_id: str,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Arm retained identity evidence and bind canonical-ladder enforcement."""
 
@@ -584,6 +608,7 @@ def arm_action_identity(
         signals=[],
         quorum=0,
         policy_source=policy_source,
+        bundle_key=bundle_key,
     )
 
 
@@ -596,6 +621,7 @@ def set_action_identity_policy(
     signals: list[dict[str, Any]],
     quorum: int,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Arm retained evidence and persist Flow's canonical identity policy."""
 
@@ -604,7 +630,7 @@ def set_action_identity_policy(
             "enforcement must be canonical_ladder or signal_quorum"
         )
     api = _flow_api()
-    workflow = _load(bundle_dir)
+    workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is None:
         raise QualificationError(
             "Initialize the qualification boundary before setting identity."
@@ -696,13 +722,14 @@ def set_action_identity_policy(
             workflow,
             identity_policy,
         )
-        _save(workflow, bundle_dir)
+        _save(workflow, bundle_dir, key=bundle_key)
     except (QualificationError, ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
         policy_source=policy_source,
+        bundle_key=bundle_key,
     )
 
 
@@ -714,11 +741,12 @@ def set_action_effect_verification(
     effect_index: int,
     verification_tier: int,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Set the minimum evidence tier required for one declared Flow effect."""
 
     api = _flow_api()
-    workflow = _load(bundle_dir)
+    workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is None:
         raise QualificationError(
             "Initialize the qualification boundary before setting effect verification."
@@ -735,13 +763,14 @@ def set_action_effect_verification(
             effect_index=effect_index,
             tier=api["VerificationTier"](verification_tier),
         )
-        _save(workflow, bundle_dir)
+        _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
         policy_source=policy_source,
+        bundle_key=bundle_key,
     )
 
 
@@ -751,11 +780,12 @@ def set_project_minimum_effect_tier(
     workflow_id: str,
     minimum_effect_tier: int,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Version the project's canonical minimum effect-verification strength."""
 
     api = _flow_api()
-    workflow = _load(bundle_dir)
+    workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is None:
         raise QualificationError(
             "Initialize the qualification boundary before setting minimum effect strength."
@@ -765,13 +795,14 @@ def set_project_minimum_effect_tier(
             workflow,
             api["VerificationTier"](minimum_effect_tier),
         )
-        _save(workflow, bundle_dir)
+        _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
         policy_source=policy_source,
+        bundle_key=bundle_key,
     )
 
 
@@ -792,6 +823,7 @@ def bind_action_effect(
     effect_index: int | None = None,
     verification_tier: int = 3,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Bind an executable Flow effect and its canonical evidence-strength policy."""
 
@@ -806,7 +838,7 @@ def bind_action_effect(
 
     api = _flow_api()
     Effect, EffectKind, ValueExpr = _effect_api()
-    workflow = _load(bundle_dir)
+    workflow = _load(bundle_dir, key=bundle_key)
     project = workflow.qualification
     if project is None:
         raise QualificationError(
@@ -896,13 +928,247 @@ def bind_action_effect(
             effect_index=effect_index,
             tier=api["VerificationTier"](verification_tier),
         )
-        _save(workflow, bundle_dir)
+        _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
         policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
+def add_qualification_case(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    case_id: str,
+    kind: str,
+    description: str = "",
+    input_ref: str | None = None,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Add one typed representative/fault case through Flow's canonical API."""
+
+    api = _flow_api()
+    workflow = _load(bundle_dir, key=bundle_key)
+    if workflow.qualification is None:
+        raise QualificationError(
+            "Initialize the qualification boundary before adding cases."
+        )
+    try:
+        case_kind = api["QualificationCaseKind"](kind)
+        expected = "verified" if case_kind.value == "representative" else "halted"
+        api["add_case"](
+            workflow,
+            api["QualificationCase"](
+                id=case_id,
+                kind=case_kind,
+                description=description,
+                input_ref=input_ref,
+                expected_outcome=expected,
+            ),
+        )
+        _save(workflow, bundle_dir, key=bundle_key)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
+def prepare_local_qualification_runner(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Trust this Desktop installation's protected qualification signer."""
+
+    from engine.qualification_keys import KEY_ID, qualification_signer
+
+    api = _flow_api()
+    workflow = _load(bundle_dir, key=bundle_key)
+    if workflow.qualification is None:
+        raise QualificationError(
+            "Initialize the qualification boundary before running cases."
+        )
+    _private_key, public_key = qualification_signer()
+    try:
+        api["set_trusted_runner_key"](
+            workflow,
+            key_id=KEY_ID,
+            public_key_base64=public_key,
+        )
+        _save(workflow, bundle_dir, key=bundle_key)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
+def record_local_qualification_result(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    case_id: str,
+    observed_outcome: str,
+    evidence: list[dict[str, str]],
+    runner_capabilities: list[str],
+    detail_code: str | None = None,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Sign and retain one exact local run result for the current revision."""
+
+    from engine.qualification_keys import KEY_ID, RUNNER_ID, qualification_signer
+
+    api = _flow_api()
+    workflow = _load(bundle_dir, key=bundle_key)
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError(
+            "Initialize the qualification boundary before recording case evidence."
+        )
+    case = next((candidate for candidate in project.cases if candidate.id == case_id), None)
+    if case is None:
+        raise QualificationError(f"Unknown qualification case {case_id!r}")
+    private_key, _public_key = qualification_signer()
+    observed = api["QualificationOutcome"](observed_outcome)
+    status = "passed" if observed_outcome == case.expected_outcome.value and evidence else "failed"
+    try:
+        result = api["QualificationCaseResult"](
+            case_id=case.id,
+            project_id=project.project_id,
+            project_revision=project.revision,
+            project_contract_sha256=project.contract_sha256(),
+            workflow_contract_sha256=api["workflow_contract_sha256"](workflow),
+            environment_contract_sha256=project.environment.contract_sha256(),
+            environment_digest=project.environment.environment_digest,
+            runtime_version=project.environment.runtime_version,
+            runner_id=RUNNER_ID,
+            runner_capabilities=runner_capabilities,
+            status=status,
+            observed_outcome=observed,
+            evidence=evidence,
+            detail_code=detail_code,
+            attestation_key_id=KEY_ID,
+        )
+        signed = api["sign_case_result"](result, private_key=private_key)
+        api["record_case_results"](
+            workflow,
+            [signed],
+            evidence_root=bundle_dir / "qualification-evidence",
+        )
+        _save(workflow, bundle_dir, key=bundle_key)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
+def import_qualification_results(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    signed_results_json: str,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Validate and import signed runner results with local evidence hashes."""
+
+    if len(signed_results_json.encode("utf-8")) > 1_000_000:
+        raise QualificationError("Signed qualification results exceed 1 MB")
+    try:
+        payload = json.loads(signed_results_json)
+    except json.JSONDecodeError as exc:
+        raise QualificationError("Signed qualification results are not valid JSON") from exc
+    raw_results = payload.get("results") if isinstance(payload, dict) else payload
+    if not isinstance(raw_results, list) or not raw_results:
+        raise QualificationError("Signed qualification results must contain a non-empty list")
+
+    api = _flow_api()
+    workflow = _load(bundle_dir, key=bundle_key)
+    try:
+        results = [api["QualificationCaseResult"].model_validate(item) for item in raw_results]
+        api["record_case_results"](
+            workflow,
+            results,
+            evidence_root=bundle_dir / "qualification-evidence",
+        )
+        _save(workflow, bundle_dir, key=bundle_key)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
+def seal_qualification_bundle(
+    source: Path,
+    destination: Path,
+    *,
+    workflow_id: str,
+    destination_key: str,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+) -> dict:
+    """Copy and encrypt one exact bundle through the pinned Flow artifact API."""
+
+    from engine.qualification_lifecycle import copy_bundle_version
+
+    api = _flow_api()
+    workflow = _load(source)
+    if workflow.encrypted:
+        raise QualificationError("This workflow version is already sealed and encrypted")
+
+    project = workflow.qualification
+    provenance = workflow.manifest.provenance if workflow.manifest else None
+    if project is not None:
+        project.last_certification = None
+    if provenance is not None and (
+        provenance.certified
+        or provenance.policy_name is not None
+        or provenance.certification_status is not None
+    ):
+        provenance.certified = False
+        provenance.certification_status = "expired"
+        provenance.expires_at = datetime.now(timezone.utc).isoformat()
+
+    try:
+        copy_bundle_version(source, destination)
+        workflow.save(destination, encrypt=True, key=destination_key)
+        verified = api["Workflow"].load(destination, key=destination_key)
+        if not verified.encrypted or (destination / "workflow.json").exists():
+            raise QualificationError("Flow did not produce a ciphertext-only workflow")
+        if any((destination / "templates").glob("*.png")):
+            raise QualificationError("Flow left a plaintext template in the sealed bundle")
+    except Exception as exc:
+        if isinstance(exc, QualificationError):
+            raise
+        raise QualificationError(f"Could not seal the workflow version: {exc}") from exc
+
+    return inspect_bundle(
+        destination,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=destination_key,
     )
 
 
@@ -911,11 +1177,12 @@ def certify_bundle(
     *,
     workflow_id: str,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
 ) -> dict:
     """Run Flow's canonical certification and persist the versioned report."""
 
     api = _flow_api()
-    workflow = _load(bundle_dir)
+    workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is None:
         raise QualificationError(
             "Initialize the qualification boundary before running certification."
@@ -927,13 +1194,14 @@ def certify_bundle(
             policy=policy,
             evidence_root=bundle_dir / "qualification-evidence",
         )
-        _save(workflow, bundle_dir)
+        _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     result = inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
         policy_source=policy_source,
+        bundle_key=bundle_key,
     )
     result["certification_attempt"] = report.model_dump(mode="json")
     return result

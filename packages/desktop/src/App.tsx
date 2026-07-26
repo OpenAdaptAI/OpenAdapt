@@ -245,6 +245,7 @@ export default function App() {
           <Qualification
             workflowId={route.id}
             onBack={() => setRoute({ name: "library" })}
+            onOpenWorkflow={(id) => setRoute({ name: "qualify", id })}
           />
         )}
         {route.name === "record" && (

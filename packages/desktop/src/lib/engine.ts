@@ -43,7 +43,14 @@ export const CMD = {
     "set_qualification_effect_verification",
   SET_QUALIFICATION_MINIMUM_EFFECT_TIER:
     "set_qualification_minimum_effect_tier",
+  ADD_QUALIFICATION_CASE: "add_qualification_case",
+  RUN_QUALIFICATION_CASE: "run_qualification_case",
+  IMPORT_QUALIFICATION_RESULTS: "import_qualification_results",
   CERTIFY_QUALIFICATION: "certify_qualification",
+  VERSION_QUALIFICATION_WORKFLOW: "version_qualification_workflow",
+  SEAL_QUALIFICATION_WORKFLOW: "seal_qualification_workflow",
+  EXPORT_QUALIFICATION_WORKFLOW: "export_qualification_workflow",
+  DEPLOY_QUALIFICATION_WORKFLOW: "deploy_qualification_workflow",
   // cloud sync / push
   PUSH_WORKFLOW: "push_workflow",
   GET_SYNC_STATE: "get_sync_state",

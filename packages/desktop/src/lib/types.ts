@@ -104,6 +104,13 @@ export type QualificationRisk =
   | "irreversible";
 export type QualificationExecutableRisk = "reversible" | "irreversible";
 export type QualificationEffectKind = "record_written" | "field_equals";
+export type QualificationCaseKind =
+  | "representative"
+  | "ambiguity"
+  | "wrong_identity"
+  | "stale_identity"
+  | "weak_effect"
+  | "missing_effect";
 export type QualificationIdentitySourceKind =
   | "structured"
   | "identifier_region"
@@ -271,6 +278,7 @@ export interface QualificationProject {
       id: string;
       kind: string;
       description: string;
+      input_ref?: string | null;
       expected_outcome: string;
       required: boolean;
       results: unknown[];

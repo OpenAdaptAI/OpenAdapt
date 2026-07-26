@@ -97,6 +97,25 @@ class TestFlowBridgeInvocation:
         # The run directory is passed via --run-dir (not --out).
         assert "--run-dir" in command
 
+    def test_qualification_inputs_and_bundle_key_stay_out_of_argv(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls))
+        params = tmp_path / "case-params.json"
+        bridge.run(
+            tmp_path / "bundle",
+            tmp_path / "cfg.yaml",
+            out_dir=tmp_path / "run",
+            params_file=params,
+            env_overrides={"OPENADAPT_BUNDLE_KEY": "protected-key"},
+        )
+        run_command, run_env = calls[0]
+        assert run_command[run_command.index("--params-file") + 1] == str(params)
+        assert "protected-key" not in run_command
+        assert run_env["OPENADAPT_BUNDLE_KEY"] == "protected-key"
+
     def test_replay_uses_run_dir(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
         calls: list = []

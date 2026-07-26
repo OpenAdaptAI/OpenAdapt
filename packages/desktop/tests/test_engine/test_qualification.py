@@ -1,9 +1,35 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from base64 import b64encode
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from engine.config import EngineConfig
+from engine.db import IndexDB
+from engine.dispatch import EngineDispatcher, EngineServices
+from engine.qualification import (
+    QualificationError,
+    add_qualification_case,
+    arm_action_identity,
+    bind_action_effect,
+    certify_bundle,
+    environment_digest_from_identifier,
+    initialize_qualification,
+    inspect_bundle,
+    prepare_local_qualification_runner,
+    record_local_qualification_result,
+    seal_qualification_bundle,
+    set_action_effect_verification,
+    set_action_identity_policy,
+    set_action_risk,
+    set_project_minimum_effect_tier,
+)
+from engine.qualification_lifecycle import retain_run_evidence
 
 pytest.importorskip("openadapt_flow.qualification")
 
@@ -19,23 +45,6 @@ from openadapt_flow.ir import (  # noqa: E402
 from openadapt_flow.qualification import IdentitySignalPolicy  # noqa: E402
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind  # noqa: E402
 from openadapt_flow.traversal import iter_workflow_steps  # noqa: E402
-
-from engine.config import EngineConfig
-from engine.db import IndexDB
-from engine.dispatch import EngineDispatcher, EngineServices
-from engine.qualification import (
-    QualificationError,
-    arm_action_identity,
-    bind_action_effect,
-    certify_bundle,
-    environment_digest_from_identifier,
-    initialize_qualification,
-    inspect_bundle,
-    set_action_effect_verification,
-    set_action_identity_policy,
-    set_action_risk,
-    set_project_minimum_effect_tier,
-)
 
 
 def _bundle(path: Path, *steps: Step, params: dict[str, str] | None = None) -> Path:
@@ -116,6 +125,105 @@ def test_environment_identifier_digest_is_reproducible_but_explicitly_operator_d
         required_capabilities=[],
     )
     assert result["project"]["environment"]["environment_digest"] == exact_measured_digest
+
+
+def test_local_case_run_is_signed_and_bound_to_exact_retained_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    _initialize(bundle)
+    added = add_qualification_case(
+        bundle,
+        workflow_id="wf-1",
+        case_id="representative-local",
+        kind="representative",
+        input_ref="desktop-input://wf-1/representative-local",
+    )
+
+    private = Ed25519PrivateKey.generate()
+    private_raw = private.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_raw = private.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    monkeypatch.setattr(
+        "engine.qualification_keys.qualification_signer",
+        lambda: (private_raw, b64encode(public_raw).decode("ascii")),
+    )
+    prepared = prepare_local_qualification_runner(bundle, workflow_id="wf-1")
+    revision = prepared["project"]["revision"]
+    evidence_path = (
+        bundle
+        / "qualification-evidence"
+        / "representative-local"
+        / "run-1"
+        / "report.json"
+    )
+    evidence_path.parent.mkdir(parents=True)
+    evidence_path.write_text('{"execution_outcome":"VERIFIED"}', encoding="utf-8")
+    result = record_local_qualification_result(
+        bundle,
+        workflow_id="wf-1",
+        case_id="representative-local",
+        observed_outcome="verified",
+        evidence=[
+            {
+                "kind": "run_report",
+                "sha256": hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+                "relative_path": "representative-local/run-1/report.json",
+            }
+        ],
+        runner_capabilities=["structural_observation", "actuation"],
+    )
+    case = next(
+        item
+        for item in result["project"]["cases"]
+        if item["id"] == "representative-local"
+    )
+
+    assert added["project"]["cases"][-1]["input_ref"].startswith("desktop-input://")
+    assert result["project"]["revision"] == revision
+    assert case["results"][0]["status"] == "passed"
+    assert case["results"][0]["attestation_signature"]
+
+
+def test_retained_case_receipt_binds_report_without_copying_sensitive_body(
+    tmp_path: Path,
+) -> None:
+    bundle = tmp_path / "bundle"
+    run = tmp_path / "run"
+    run.mkdir()
+    report = {
+        "execution_outcome": "VERIFIED",
+        "production_eligible": True,
+        "execution_completed": True,
+        "patient_name": "Sensitive Person",
+        "outcome_envelope": {
+            "required_contracts": {"effect": 1},
+            "passed_contracts": {"effect": 1},
+            "evidence_classes": ["independent_effect"],
+            "external_network_calls": "none",
+        },
+    }
+    (run / "report.json").write_text(json.dumps(report), encoding="utf-8")
+
+    references = retain_run_evidence(
+        bundle,
+        case_id="representative-1",
+        run_id="run-1",
+        run_dir=run,
+    )
+    receipt = (bundle / "qualification-evidence" / references[0]["relative_path"]).read_text()
+
+    assert "Sensitive Person" not in receipt
+    assert hashlib.sha256(receipt.encode()).hexdigest() == references[0]["sha256"]
 
 
 def test_inspection_exposes_durable_target_evidence_without_flattening_to_coordinates(
@@ -233,6 +341,30 @@ def test_encrypted_bundle_without_configured_key_refuses_without_disk_change(
     }
     assert after == before
     assert not (bundle / "workflow.json").exists()
+
+
+def test_seal_creates_ciphertext_version_and_preserves_plaintext_source(
+    tmp_path: Path,
+) -> None:
+    source = _bundle(
+        tmp_path / "source",
+        Step(id="save", intent="Save", action=ActionKind.CLICK),
+    )
+    original = (source / "workflow.json").read_bytes()
+    destination = tmp_path / "sealed"
+
+    result = seal_qualification_bundle(
+        source,
+        destination,
+        workflow_id="wf-sealed",
+        destination_key="desktop-sealed-version-key",
+    )
+
+    assert result["graph"]["bundle"]["encrypted"] is True
+    assert (source / "workflow.json").read_bytes() == original
+    assert (destination / "workflow.json.enc").is_file()
+    assert not (destination / "workflow.json").exists()
+    assert Workflow.load(destination, key="desktop-sealed-version-key").encrypted is True
 
 
 def test_canonical_risk_review_reseals_and_preserves_executable_irreversibility(
@@ -835,3 +967,31 @@ def test_dispatcher_round_trips_editable_identity_and_effect_contracts(
     assert minimum["project"]["minimum_effect_tier"] == 2
     assert minimum["project"]["revision"] == initialized["project"]["revision"] + 3
     assert row["status"] == "qualification_pending"
+
+
+def test_dispatcher_versions_exact_bundle_without_mutating_source(tmp_path: Path) -> None:
+    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+    bundle = _bundle(
+        config.data_dir / "bundles" / "wf-1",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    original = (bundle / "workflow.json").read_bytes()
+    db = IndexDB(tmp_path / "index.db")
+    db.initialize()
+    db.insert_bundle("wf-1", str(bundle))
+    db.update_bundle("wf-1", workflow_name="Versioned workflow", version=1, steps=1)
+    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
+    try:
+        result = dispatcher.dispatch(
+            "version_qualification_workflow", {"workflow_id": "wf-1"}
+        )
+        version = db.get_bundle(result["workflow_id"])
+    finally:
+        db.close()
+
+    assert result["ok"] is True
+    assert result["workflow_id"] != "wf-1"
+    assert version is not None
+    assert version["version"] == 2
+    assert Path(version["bundle_path"]).joinpath("workflow.json").read_bytes() == original
+    assert (bundle / "workflow.json").read_bytes() == original

@@ -14,6 +14,7 @@ import type {
   QualificationTargetKind,
 } from "../lib/types";
 import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
+import { QualificationLifecycle } from "./QualificationLifecycle";
 
 const POLICY = "clinical-write";
 const IDENTITY_NORMALIZERS: {
@@ -180,9 +181,11 @@ function certificationState(project: QualificationProject): {
 export function Qualification({
   workflowId,
   onBack,
+  onOpenWorkflow = () => undefined,
 }: {
   workflowId: string;
   onBack: () => void;
+  onOpenWorkflow?: (workflowId: string) => void;
 }) {
   const [project, setProject] = useState<QualificationProject | null>(null);
   const [error, setError] = useState("");
@@ -1848,70 +1851,12 @@ export function Qualification({
           </Card>
 
           {project.project && (
-            <Card>
-              <CardHead
-                eyebrow={`Revision ${project.project.revision}`}
-                title="Qualification cases"
-                sub="Representative runs must finish VERIFIED. Ambiguity, wrong or stale identity, and weak or missing effects must halt with signed evidence from the declared runner."
-              />
-              <div className="metrics">
-                <div className="metric">
-                  <span className="label">Required cases</span>
-                  <span className="metric-value">{project.report.case_count}</span>
-                </div>
-                <div className="metric">
-                  <span className="label">Passed this revision</span>
-                  <span className="metric-value">
-                    {project.report.passed_case_count}
-                  </span>
-                </div>
-                <div className="metric">
-                  <span className="label">Environment</span>
-                  <span className="metric-value mono">
-                    {project.project.environment.environment_digest.slice(0, 10)}…
-                  </span>
-                </div>
-                <div className="metric">
-                  <span className="label">Runtime</span>
-                  <span className="metric-value">
-                    {project.project.environment.runtime_version}
-                  </span>
-                </div>
-              </div>
-              <div className="page-sub mono" style={{ marginTop: "var(--space-3)" }}>
-                environment contract SHA-256{" "}
-                {project.project.environment.environment_digest}
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Case</th>
-                    <th>Expected</th>
-                    <th>Current evidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {project.project.cases
-                    .filter((item) => item.required)
-                    .map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          <strong>{item.kind.replaceAll("_", " ")}</strong>
-                          <div className="page-sub mono">{item.id}</div>
-                        </td>
-                        <td>{item.expected_outcome.toUpperCase()}</td>
-                        <td>
-                          <Pill tone={item.results.length ? "ok" : "warn"}>
-                            {item.results.length
-                              ? `${item.results.length} imported`
-                              : "run required"}
-                          </Pill>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </Card>
+            <QualificationLifecycle
+              workflowId={workflowId}
+              project={project}
+              onProject={setProject}
+              onOpenWorkflow={onOpenWorkflow}
+            />
           )}
 
           {(project.report.refusals.length > 0 ||
