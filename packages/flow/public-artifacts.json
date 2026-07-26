@@ -4,6 +4,7 @@
     "artifact_suffixes": [
       ".7z",
       ".arrow",
+      ".avi",
       ".bin",
       ".cfg",
       ".conf",
@@ -21,6 +22,9 @@
       ".json",
       ".jsonl",
       ".mjs",
+      ".mkv",
+      ".mov",
+      ".mp4",
       ".npy",
       ".npz",
       ".onnx",
@@ -37,6 +41,7 @@
       ".toml",
       ".tsv",
       ".wasm",
+      ".webm",
       ".webp",
       ".yaml",
       ".yml",
@@ -1883,6 +1888,10 @@
       "sha256": "a91f85da34bf137e7fefbb1d5ec7baddd9a2256d931cfdbec238bdc52a7559d7"
     },
     {
+      "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-ambiguity/trial-01/halt.webm",
+      "sha256": "b2c811ff0b09a9581c34c1fa5524158b1eb3e204d5c63b3dab82d668d34a6576"
+    },
+    {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-ambiguity/trial-01/oracle.json",
       "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
     },
@@ -1977,6 +1986,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-missing-effect/trial-01/events.jsonl",
       "sha256": "bfad48babc94d76a4cb369cb04df6c8e38278143f64536425e179f0344a15bf2"
+    },
+    {
+      "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-missing-effect/trial-01/halt.webm",
+      "sha256": "af085356dbfed4cfda483df07fd9da088c349bad28a9261234da5358732f7dff"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-missing-effect/trial-01/oracle.json",
@@ -2255,6 +2268,10 @@
       "sha256": "e9aac6e38059cefa2952765e3692ae2931da17c972ba8ef06fc57022c49bc224"
     },
     {
+      "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-stale-identity/trial-01/halt.webm",
+      "sha256": "6af5729a96f281f1ca386093850ababfcfe2dca053d0c58c2c56ce5d73052442"
+    },
+    {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-stale-identity/trial-01/oracle.json",
       "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
     },
@@ -2349,6 +2366,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-weak-effect/trial-01/events.jsonl",
       "sha256": "633fb2c63f0a72462b11739edfd88dab2e8b22e39287379aac636df636d4dfc2"
+    },
+    {
+      "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-weak-effect/trial-01/halt.webm",
+      "sha256": "b1f1dd8d11429d3ffd53a488c1d5ad34628532a67fe1cf27918dd860ddc5024c"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-weak-effect/trial-01/oracle.json",
@@ -2627,6 +2648,10 @@
       "sha256": "50acc12e737f2008cef9ec8d1f112606ee4c20e531d169ad07c240de022e7a84"
     },
     {
+      "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-wrong-identity/trial-01/halt.webm",
+      "sha256": "b15e927a6828e4154649d26d1ac1b4de6f11841f0eed94c5a4ae66097bef1197"
+    },
+    {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/fault-wrong-identity/trial-01/oracle.json",
       "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
     },
@@ -2729,6 +2754,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/representative/trial-01/outcome.json",
       "sha256": "742e1fe45d5be237e069b31c48a85132c04fec1fd3384c8b4c9a0f896cd5d718"
+    },
+    {
+      "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/representative/trial-01/replay.webm",
+      "sha256": "bcf4e20e50134e84529b28312087b077ef3f0c1c3e519e9ac7a4d9e657bb6069"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/cases/representative/trial-01/run/checkpoints/_manifest.json",
@@ -3003,6 +3032,10 @@
       "sha256": "0c346b7bb23ad508d1731655c2c7e7947776fcd6256334b3b6fb2194b477e461"
     },
     {
+      "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/media/recording.webm",
+      "sha256": "f15bea447b26fd2c9f55c22d0e8e065aa4bf009af779a1b8e75be808491c908c"
+    },
+    {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/qualification/project.json",
       "sha256": "a6819c3dcf91d99ecb325be3d44cca6404dae6cb134c2fd8187299f1a95490a7"
     },
@@ -3123,6 +3156,10 @@
       "sha256": "bca25dce7eec8d9317c4a7051aab40480c15ec12db5a3823041181e463043a40"
     },
     {
+      "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-ambiguity/trial-01/halt.webm",
+      "sha256": "79b525fc6a16982c3857165704b1391b0bf289957870efa9ed2781d2c7f6a5ea"
+    },
+    {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-ambiguity/trial-01/oracle.json",
       "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
     },
@@ -3217,6 +3254,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-missing-effect/trial-01/events.jsonl",
       "sha256": "6ac475acf54bb53a66a1b2a044e318be7e130ded6a8b87e15aedf782d260c147"
+    },
+    {
+      "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-missing-effect/trial-01/halt.webm",
+      "sha256": "0d513a530baf60d04bf135197e5c5da83315d85c509969f8da3538d8dfa96c86"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-missing-effect/trial-01/oracle.json",
@@ -3495,6 +3536,10 @@
       "sha256": "96880fae22a6d690bb318baa57a694df8104ec7355e55b8e282ba4068c574e61"
     },
     {
+      "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-stale-identity/trial-01/halt.webm",
+      "sha256": "11047fca0880108a20f2f6465cde1270b223663a6dafc94cc0c94cb1dd8d6a3d"
+    },
+    {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-stale-identity/trial-01/oracle.json",
       "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
     },
@@ -3589,6 +3634,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-weak-effect/trial-01/events.jsonl",
       "sha256": "806d8f76c5a5433b092a3f56e761a3cce0db18134fee3660553a8db9e97750f9"
+    },
+    {
+      "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-weak-effect/trial-01/halt.webm",
+      "sha256": "9304add04ad97d35dc2cb698f5e1340305d53e34bdef2e86743e26fab53201b8"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-weak-effect/trial-01/oracle.json",
@@ -3867,6 +3916,10 @@
       "sha256": "d158dded31b9256c9c1454e880cb0bde935e297704d412c44ff73ad8f77a39a0"
     },
     {
+      "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-wrong-identity/trial-01/halt.webm",
+      "sha256": "2c72c7bcb44ca0cf274c280c890f7afce6620afa569f02a4db0d5f98c735b33b"
+    },
+    {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/fault-wrong-identity/trial-01/oracle.json",
       "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
     },
@@ -3969,6 +4022,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/representative/trial-01/outcome.json",
       "sha256": "61c6ce5e1dbbe350f935e243461f864416f49b4d7bf8f2bb71386baac6ff1e29"
+    },
+    {
+      "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/representative/trial-01/replay.webm",
+      "sha256": "7e1bbe78f2573d18772504025701effcb91103d24b9cffdd8c6a1f029da46425"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/cases/representative/trial-01/run/checkpoints/_manifest.json",
@@ -4241,6 +4298,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/compiled/program-graph.json",
       "sha256": "b3e6862e1c1e142858e4e5237a4af90af26c9515ce0e8cec194ba6998558d6b8"
+    },
+    {
+      "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/media/recording.webm",
+      "sha256": "5004a40404842d44b579622b838e406145d271ce93869c71f6827a18238087aa"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v2/artifacts/qualification/project.json",
