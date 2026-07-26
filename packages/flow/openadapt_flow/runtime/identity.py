@@ -480,6 +480,42 @@ def context_from_lines(
     return joined
 
 
+def identifier_text_from_lines(
+    lines: Iterable[Any],
+    *,
+    region: Optional[Region] = None,
+    min_confidence: float = 0.5,
+    reference_date: Optional[date] = None,
+) -> Optional[str]:
+    """Extract identity text belonging to an identifier region.
+
+    ``region`` filters full-frame OCR lines without re-OCRing a crop. OCR can
+    segment or recognize identical pixels differently when invoked on a full
+    frame versus a newly cropped image. Compilation and the first replay
+    attempt therefore both use full-frame OCR plus this exact region filter;
+    the upscaled retry passes ``region=None`` because its input is already the
+    identifier crop.
+    """
+    kept: list[tuple[int, int, str]] = []
+    for line in lines:
+        text = (getattr(line, "text", "") or "").strip()
+        if not text or getattr(line, "confidence", 0.0) < min_confidence:
+            continue
+        if is_volatile_line(text, reference_date=reference_date):
+            continue
+        x, y, w, h = line.region
+        if region is not None:
+            rx, ry, rw, rh = region
+            center_x = x + w // 2
+            center_y = y + h // 2
+            if not (rx <= center_x < rx + rw and ry <= center_y < ry + rh):
+                continue
+        kept.append((int(y), int(x), text))
+    kept.sort()
+    joined = " ".join(text for _, _, text in kept)
+    return joined if len(squash(joined)) >= MIN_CONTEXT_CHARS else None
+
+
 def _kept_context_lines(
     lines: Iterable[Any],
     *,

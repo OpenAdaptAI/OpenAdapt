@@ -1,13 +1,14 @@
 {
   "accepted": true,
-  "base_commit": "",
-  "candidate_commit": "972ed38f9213aee89ad0ad5244a5de5a35847ef1",
+  "base_commit": "a36660d6ad7bce3229c0fc5f80121e285e8e67c2",
+  "candidate_commit": "8a5d1eca52c9fa362299812c0e79c2d1e06e0aaf",
   "caveat": "no-DOM HTML5-canvas class (the class Citrix Workspace-web presents) -- NOT Citrix ICA/HDX (no HDX codecs, no ICA compression, no Workspace-client input path), NOT an aardwolf/RDP transport proof, and the drift is simulated-on-a-real-session (not WAN/HDX capture).",
   "contract": {
     "healthy_effect_confirmed": true,
     "healthy_structural_rung_used": 0,
     "healthy_visual_rungs_used": {
-      "template": 3
+      "ocr": 1,
+      "template": 2
     },
     "healthy_zero_model_calls": true,
     "moderate_drift_no_silent_wrong_write": true,
@@ -30,10 +31,11 @@
     "connect_or_frame_failure",
     "healthy_contract_violation",
     "effect_not_confirmed",
+    "moderate_drift_over_halt",
     "silent_wrong_write_or_model_call",
     "drift_not_safely_halted"
   ],
-  "generated_at": "2026-07-20T18:51:18.115815+00:00",
+  "generated_at": "2026-07-26T22:16:53.257760+00:00",
   "model_calls": 0,
   "oracle": "docker exec cat of the kiosk-persisted note file",
   "run_count": 3,
@@ -41,30 +43,32 @@
   "substrate": "no-dom-html5-canvas-novnc-tigervnc-linux-kiosk",
   "successes": 3,
   "task": "record->compile->replay a patient-note write through the vision-only resolver ladder over a no-DOM HTML5 <canvas> (noVNC), with no structural backend; confirm the write via an independent document oracle; and halt under injected DPI/theme/JPEG drift",
-  "total_s": 44.241,
+  "total_s": 47.096,
   "trials": [
     {
       "effect_confirmed": true,
-      "effect_expected": "MRN A1001\tfollowup in two weeks",
-      "effect_observed": "MRN A1001\tfollowup in two weeks",
+      "effect_expected": "MRN 24682\tfollowup in two weeks",
+      "effect_observed": "MRN 24682\tfollowup in two weeks",
       "failure_class": null,
       "kind": "healthy_record_compile_replay",
       "model_calls": 0,
       "passed": true,
       "rung_counts": {
-        "template": 3
+        "ocr": 1,
+        "template": 2
       },
       "structural_rung_used": 0,
       "success": true,
       "trial": 1,
       "visual_rungs_used": {
-        "template": 3
+        "ocr": 1,
+        "template": 2
       }
     },
     {
-      "drift": "downscale_0.4x + theme_invert + jpeg_q8 (legible; simulated on real session)",
-      "effect_expected": "MRN A1001\tfollowup in two weeks",
-      "effect_observed": "MRN A1001\tfollowup in two weeks",
+      "drift": "downscale_0.4x + theme_invert + jpeg_q12 (legible; simulated on real session)",
+      "effect_expected": "MRN 24682\tfollowup in two weeks",
+      "effect_observed": "MRN 24682\tfollowup in two weeks",
       "failure_class": null,
       "halted": false,
       "kind": "moderate_drift_no_silent_wrong_write",

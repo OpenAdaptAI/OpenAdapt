@@ -226,14 +226,17 @@ def run_lifecycle(
             log=logs / "05-compile.log",
         )
 
-        # The bundled tutorial is deliberately not production-certified. Lint
-        # must refuse its unarmed irreversible click, while the smoke policy can
-        # still certify the deterministic execution tutorial.
+        # The bundled tutorial is deliberately not production-certified. The
+        # default lint command is an inspection surface: it exits nonzero only
+        # for errors while still rendering warnings. Production admission uses
+        # the explicit strict contract, which must refuse this bundle's
+        # uncovered irreversible click. The permissive smoke policy can still
+        # certify the deterministic execution tutorial.
         _run(
-            [*cli, "lint", str(bundle)],
+            [*cli, "lint", str(bundle), "--strict"],
             cwd=artifacts,
             env=env,
-            log=logs / "06-lint-expected-refusal.log",
+            log=logs / "06-strict-lint-expected-refusal.log",
             expected=1,
         )
         _run(

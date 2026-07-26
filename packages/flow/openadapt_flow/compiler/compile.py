@@ -50,6 +50,7 @@ from openadapt_flow.runtime.identity import (
     context_from_lines,
     context_region_from_lines,
     coverage,
+    identifier_text_from_lines,
 )
 from openadapt_flow.vision.hashing import phash_distance, phash_png
 from openadapt_flow.vision.ocr import OcrLine, normalize_text, ocr
@@ -1405,6 +1406,21 @@ def compile_recording(
                     reference_date=reference_date,
                 )
             )
+            # The OCR fallback must compare like-for-like evidence. Derive the
+            # persisted identity template from the original full-frame OCR
+            # lines filtered to the exact identifier region. Re-OCRing a crop
+            # can segment or recognize identical pixels differently (notably
+            # l/1 and O/0), while replacing the original row context can drop
+            # names/DOBs on some OCR builds.
+            if identifier_region is not None:
+                cropped_context = identifier_text_from_lines(
+                    frame_lines,
+                    region=identifier_region,
+                    min_confidence=MIN_OCR_CONFIDENCE,
+                    reference_date=reference_date,
+                )
+                if cropped_context is not None:
+                    context_text = cropped_context
             anchor = Anchor(
                 template=template_rel,
                 region=crop_region,

@@ -7,6 +7,7 @@ solid (non-blinking) caret, and fixed DejaVu fonts keep rendering identical
 run-to-run. Saving a note writes it to SAVE_PATH so an out-of-band
 DocumentHashVerifier oracle can confirm the effect with no app API.
 """
+
 import os
 import signal
 import tkinter as tk
@@ -20,8 +21,12 @@ else:
     BG, FG, ROW_BG, BTN_BG = "#f4f6f8", "#101418", "#ffffff", "#2d6fd8"
 
 PATIENTS = [
-    ("Ada Lovelace", "MRN A1001"),
-    ("Grace Hopper", "MRN B2002"),
+    # Avoid O/0 and I/l/1 in this availability fixture's record IDs. Those
+    # glyph classes are intentionally unverifiable from OCR alone and belong
+    # in the separate fail-closed identity corpus, whereas moderate drift here
+    # must remain resolvable without a model or human confirmation.
+    ("Ada Lovelace", "MRN 24682"),
+    ("Grace Hopper", "MRN 73594"),
 ]
 
 state = {"active": None, "saved": False}
@@ -41,18 +46,31 @@ def main() -> None:
     root.overrideredirect(True)
     root.after(200, root.focus_force)
 
-    tk.Label(root, text="OpenAdapt Clinic Fixture  -  Patient Notes",
-             font=("DejaVu Sans", 26, "bold"), bg=BG, fg=FG).place(x=60, y=40)
+    tk.Label(
+        root,
+        text="OpenAdapt Clinic Fixture  -  Patient Notes",
+        font=("DejaVu Sans", 26, "bold"),
+        bg=BG,
+        fg=FG,
+    ).place(x=60, y=40)
 
-    tk.Label(root, text="Roster", font=("DejaVu Sans", 16, "bold"),
-             bg=BG, fg=FG).place(x=60, y=120)
+    tk.Label(root, text="Roster", font=("DejaVu Sans", 16, "bold"), bg=BG, fg=FG).place(
+        x=60, y=120
+    )
 
-    active_lbl = tk.Label(root, text="Active: (none)", font=("DejaVu Sans", 16),
-                          bg=BG, fg=FG)
-    active_lbl.place(x=60, y=470)
+    active_lbl = tk.Label(
+        root, text="Active: (none)", font=("DejaVu Sans", 16), bg=BG, fg=FG
+    )
+    # Keep the selected-record banner on the same visual row as the
+    # consequential Save action. The compiler's pixel-only identity band then
+    # retains the patient/MRN rather than the mutable note being submitted.
+    # This mirrors real clinical forms, where the active record banner remains
+    # visible beside or immediately above the commit control.
+    active_lbl.place(x=60, y=630)
 
-    status_lbl = tk.Label(root, text="", font=("DejaVu Sans", 16, "bold"),
-                          bg=BG, fg="#1a7f37")
+    status_lbl = tk.Label(
+        root, text="", font=("DejaVu Sans", 16, "bold"), bg=BG, fg="#1a7f37"
+    )
     status_lbl.place(x=60, y=690)
 
     def select(name, mrn, btn):
@@ -64,18 +82,34 @@ def main() -> None:
 
     row_btns = []
     for i, (name, mrn) in enumerate(PATIENTS):
-        b = tk.Button(root, text=f"{name}    {mrn}",
-                      font=("DejaVu Sans", 18), width=34, anchor="w",
-                      bg=ROW_BG, fg=FG, activebackground=ROW_BG,
-                      relief="raised", bd=2)
+        b = tk.Button(
+            root,
+            text=f"{name}    {mrn}",
+            font=("DejaVu Sans", 18),
+            width=34,
+            anchor="w",
+            bg=ROW_BG,
+            fg=FG,
+            activebackground=ROW_BG,
+            relief="raised",
+            bd=2,
+        )
         b.config(command=lambda n=name, m=mrn, bb=b: select(n, m, bb))
         b.place(x=60, y=170 + i * 70)
         row_btns.append(b)
 
-    tk.Label(root, text="Clinical note", font=("DejaVu Sans", 16, "bold"),
-             bg=BG, fg=FG).place(x=60, y=530)
-    note = tk.Entry(root, font=("DejaVu Sans", 18), width=44,
-                    bg=ROW_BG, fg=FG, insertbackground=FG, insertofftime=0)
+    tk.Label(
+        root, text="Clinical note", font=("DejaVu Sans", 16, "bold"), bg=BG, fg=FG
+    ).place(x=60, y=530)
+    note = tk.Entry(
+        root,
+        font=("DejaVu Sans", 18),
+        width=44,
+        bg=ROW_BG,
+        fg=FG,
+        insertbackground=FG,
+        insertofftime=0,
+    )
     note.place(x=60, y=570)
     # Clicking the field claims both the toplevel X focus and the widget focus,
     # so RDP-forwarded keystrokes land here even with no window manager.
@@ -85,8 +119,9 @@ def main() -> None:
         active = state["active"]
         text = note.get()
         if not active or not text:
-            status_lbl.config(text="Refused: select a patient and enter a note",
-                              fg="#b42318")
+            status_lbl.config(
+                text="Refused: select a patient and enter a note", fg="#b42318"
+            )
             return
         os.makedirs(os.path.dirname(SAVE_PATH), exist_ok=True)
         with open(SAVE_PATH, "w") as f:
@@ -94,9 +129,16 @@ def main() -> None:
         state["saved"] = True
         status_lbl.config(text=f"Saved note for {active[0]}", fg="#1a7f37")
 
-    tk.Button(root, text="Save Note", font=("DejaVu Sans", 18, "bold"),
-              width=16, bg=BTN_BG, fg="#ffffff", activebackground=BTN_BG,
-              command=save).place(x=760, y=566)
+    tk.Button(
+        root,
+        text="Save Note",
+        font=("DejaVu Sans", 18, "bold"),
+        width=16,
+        bg=BTN_BG,
+        fg="#ffffff",
+        activebackground=BTN_BG,
+        command=save,
+    ).place(x=760, y=626)
 
     # In-place trial reset (SIGUSR1): clear the form and delete the saved note
     # WITHOUT destroying the window -- so the RDP display never goes black and

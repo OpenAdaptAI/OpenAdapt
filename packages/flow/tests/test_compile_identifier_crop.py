@@ -46,7 +46,9 @@ from openadapt_flow.compiler.compile import (
 )
 from openadapt_flow.ir import ActionKind, Resolution, Workflow
 from openadapt_flow.runtime import identity as identity_mod
+from openadapt_flow.runtime.identity_template import verify_template_identity
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.vision.ocr import OcrLine
 
 VIEWPORT = (1280, 800)
 # A patient identity row: name + DOB (far from the recording date => kept as
@@ -229,6 +231,59 @@ def test_meta_marked_region_applies_to_pixel_recording(tmp_path: Path) -> None:
     assert anchor is not None
     assert anchor.identifier_region == tuple(marked)
     assert anchor.identifier_crop is not None
+
+
+def test_identity_template_filters_full_frame_ocr_to_identifier_region(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The template uses the same full-frame OCR scope replay will use."""
+    marked = [60, ROW_Y - 24, 560, 40]
+    correct = "MARIA GARCIA RECORD ZX24683"
+    full_frame_misread = "MARIA GARCIA RECORD ZX24689"
+
+    def fake_ocr(_png: bytes, *, region=None):
+        if region == tuple(marked):
+            return [OcrLine(text=correct, region=tuple(marked), confidence=0.99)]
+        if region is None:
+            return [
+                OcrLine(
+                    text=full_frame_misread,
+                    region=(80, ROW_Y - 20, 520, 35),
+                    confidence=0.99,
+                ),
+                OcrLine(
+                    text="Open",
+                    region=(992, ROW_Y - 18, 70, 30),
+                    confidence=0.99,
+                ),
+            ]
+        return [
+            OcrLine(
+                text="Open",
+                region=(992, ROW_Y - 18, 70, 30),
+                confidence=0.99,
+            )
+        ]
+
+    monkeypatch.setattr("openadapt_flow.compiler.compile.ocr", fake_ocr)
+    recording, bundle = _build_recording(
+        tmp_path,
+        with_structured=False,
+        event_identifier_region=marked,
+    )
+
+    anchor = _click_step(
+        compile_recording(recording, bundle, name="scoped-identity")
+    ).anchor
+
+    assert anchor is not None and anchor.identity_template is not None
+    assert (
+        verify_template_identity(anchor.identity_template, full_frame_misread).status
+        == "verified"
+    )
+    assert (
+        verify_template_identity(anchor.identity_template, correct).status != "verified"
+    )
 
 
 def test_invalid_marked_region_degrades_to_band_with_warning(

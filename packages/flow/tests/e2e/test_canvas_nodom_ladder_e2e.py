@@ -78,6 +78,8 @@ def test_no_dom_canvas_vision_ladder_contract(canvas_fixture, tmp_path):
     assert healthy["visual_rungs_used"], healthy
     assert healthy["effect_confirmed"], healthy
 
+    assert moderate["resolved_and_correct"], moderate
+    assert moderate["effect_observed"] == moderate["effect_expected"], moderate
     assert not moderate["wrong_write"], moderate
     assert moderate["model_calls"] == 0, moderate
 

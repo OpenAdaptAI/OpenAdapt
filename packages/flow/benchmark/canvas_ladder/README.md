@@ -39,11 +39,10 @@ structural backend**, and asserts the validation contract across three regimes
    and the write **independently confirmed** by a document oracle (the note the
    kiosk persisted equals the intended value).
 2. **moderate drift** — a laggy-but-**legible** degraded frame (DPI downscale +
-   theme-inversion + JPEG). The invariant proven here is **never a silent WRONG
-   write**: the ladder resolves to the **correct** target (via OCR + geometry)
-   and writes the **correct** value. This is deliberately *not* an "always
-   halt" assertion — over-halting on a still-readable frame would be a useless
-   false refusal.
+   theme-inversion + JPEG). The ladder must resolve to the **correct** target
+   and write the **correct** value. A silent wrong write is a safety failure;
+   halting on this still-readable case is an availability failure. Both fail
+   the acceptance gate.
 3. **severe drift** — a genuinely **illegible** frame (heavy downscale +
    Gaussian blur + inversion + hard JPEG; the roster/MRN are unreadable). The
    ladder finds **no confident target and HALTS** — no write, no model call. It

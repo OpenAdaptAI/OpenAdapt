@@ -133,7 +133,7 @@
     },
     {
       "path": "benchmark/canvas_ladder/results.json",
-      "sha256": "0a42afcda4853b7f9cc7e135e7c6a2a71373f0aa0ef39cb67a54c1eacdd5f8ad"
+      "sha256": "4502affb014de71e5c584e48cef5bc6a7631983e2517551d5ea9c20c8a0668e2"
     },
     {
       "path": "benchmark/citrix_ica_hdx/results.json",
