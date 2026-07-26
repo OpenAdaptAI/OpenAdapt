@@ -12,6 +12,7 @@ from openadapt_capture.events import (
     ActionEvent,
     Event,
     KeyDownEvent,
+    KeyShortcutEvent,
     KeyTypeEvent,
     KeyUpEvent,
     MouseClickEvent,
@@ -37,6 +38,45 @@ MOUSE_MOVE_MERGE_MIN_IDX_DELTA = 5  # minimum events between groups
 DOUBLE_CLICK_INTERVAL_SECONDS = 0.5  # default double-click interval
 DOUBLE_CLICK_DISTANCE_PIXELS = 5.0  # default double-click distance
 KEY_TYPE_MERGE_INTERVAL_SECONDS = 0.5  # merge adjacent KeyTypeEvents within this interval
+
+_MODIFIER_ALIASES = {
+    "alt": "alt",
+    "alt_gr": "alt",
+    "alt_l": "alt",
+    "alt_r": "alt",
+    "cmd": "meta",
+    "cmd_l": "meta",
+    "cmd_r": "meta",
+    "command": "meta",
+    "control": "ctrl",
+    "ctrl": "ctrl",
+    "ctrl_l": "ctrl",
+    "ctrl_r": "ctrl",
+    "meta": "meta",
+    "shift": "shift",
+    "shift_l": "shift",
+    "shift_r": "shift",
+}
+_MODIFIER_ORDER = {"ctrl": 0, "alt": 1, "shift": 2, "meta": 3}
+
+
+def _keyboard_key(event: KeyDownEvent | KeyUpEvent) -> str:
+    """Return one bounded, stable identifier for a captured key event."""
+
+    value = (
+        event.canonical_key_name
+        or event.key_name
+        or event.canonical_key_char
+        or event.key_char
+        or event.canonical_key_vk
+        or event.key_vk
+        or ""
+    )
+    return str(value).strip().lower()
+
+
+def _modifier_for(event: KeyDownEvent | KeyUpEvent) -> str | None:
+    return _MODIFIER_ALIASES.get(_keyboard_key(event))
 
 
 def _first_structural_observation(
@@ -157,19 +197,58 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
     pressed_keys: set[str] = set()
 
     def flush_buffer() -> None:
-        """Convert buffer to KeyTypeEvent and add to result."""
+        """Convert one raw keyboard sequence without losing modifier intent."""
         if not keyboard_buffer:
             return
 
-        # Extract typed characters from press events
-        chars = []
-        for event in keyboard_buffer:
-            if isinstance(event, KeyDownEvent) and event.key_char:
-                chars.append(event.key_char)
+        down_events = [
+            event for event in keyboard_buffer if isinstance(event, KeyDownEvent)
+        ]
+        modifiers = sorted(
+            {
+                modifier
+                for event in down_events
+                if (modifier := _modifier_for(event)) is not None
+            },
+            key=_MODIFIER_ORDER.__getitem__,
+        )
+        triggers = [event for event in down_events if _modifier_for(event) is None]
+        first_event = keyboard_buffer[0]
 
-        text = "".join(chars)
-        if text or keyboard_buffer:
-            first_event = keyboard_buffer[0]
+        # Shift plus a printable character is ordinary typing. Control, Alt,
+        # Meta, or Shift plus a named/non-printable key is a shortcut. A
+        # multi-trigger sequence remains a KeyTypeEvent with all raw children;
+        # downstream conversion can refuse it rather than inventing an order.
+        is_single_shortcut = (
+            bool(modifiers)
+            and len(triggers) == 1
+            and not (
+                modifiers == ["shift"]
+                and bool(
+                    triggers[0].canonical_key_char or triggers[0].key_char
+                )
+            )
+        )
+        if is_single_shortcut:
+            trigger = _keyboard_key(triggers[0])
+            if trigger:
+                result.append(
+                    KeyShortcutEvent(
+                        timestamp=first_event.timestamp,
+                        modifiers=modifiers,
+                        key=trigger,
+                        children=list(keyboard_buffer),
+                        structural_observation=_first_structural_observation(
+                            list(keyboard_buffer)
+                        ),
+                    )
+                )
+        else:
+            text = "".join(
+                event.key_char
+                for event in down_events
+                if event.key_char and _modifier_for(event) is None
+            )
             type_event = KeyTypeEvent(
                 timestamp=first_event.timestamp,
                 text=text,
@@ -546,6 +625,7 @@ def get_action_events(events: list[Event]) -> list[ActionEvent]:
         MouseDoubleClickEvent,
         MouseDragEvent,
         KeyTypeEvent,
+        KeyShortcutEvent,
     )
     return [e for e in events if isinstance(e, action_types)]
 

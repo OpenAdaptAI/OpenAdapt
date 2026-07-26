@@ -17,6 +17,7 @@ from openadapt_capture.events import (
     Event,
     EventType,
     KeyDownEvent,
+    KeyShortcutEvent,
     KeyTypeEvent,
     KeyUpEvent,
     MouseClickEvent,
@@ -47,6 +48,7 @@ EVENT_TYPE_MAP: dict[str, type[Event]] = {
     EventType.MOUSE_DOUBLECLICK.value: MouseDoubleClickEvent,
     EventType.MOUSE_DRAG.value: MouseDragEvent,
     EventType.KEY_TYPE.value: KeyTypeEvent,
+    EventType.KEY_SHORTCUT.value: KeyShortcutEvent,
 }
 
 

@@ -28,6 +28,7 @@ from openadapt_capture.events import (
 )
 from openadapt_capture.events import (
     KeyDownEvent,
+    KeyShortcutEvent,
     KeyTypeEvent,
     KeyUpEvent,
     MouseDownEvent,
@@ -351,6 +352,8 @@ class Action:
 
         Returns list of key names like ['ctrl', 'space'] or ['enter'].
         """
+        if isinstance(self.event, KeyShortcutEvent):
+            return [*self.event.modifiers, self.event.key]
         if isinstance(self.event, KeyTypeEvent):
             key_names = []
             seen = set()

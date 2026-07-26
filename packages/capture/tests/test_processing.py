@@ -3,6 +3,7 @@
 
 from openadapt_capture.events import (
     KeyDownEvent,
+    KeyShortcutEvent,
     KeyTypeEvent,
     KeyUpEvent,
     MouseButton,
@@ -110,6 +111,37 @@ class TestMergeConsecutiveKeyboardEvents:
         ]
         result = merge_consecutive_keyboard_events(events)
         assert len(result) == 3  # KeyTypeEvent("a"), MouseMove, KeyTypeEvent("b")
+
+    def test_preserves_modifier_chord_as_typed_shortcut(self):
+        events = [
+            KeyDownEvent(timestamp=1.0, key_name="control"),
+            KeyDownEvent(timestamp=1.1, key_name="shift"),
+            KeyDownEvent(timestamp=1.2, key_char="s"),
+            KeyUpEvent(timestamp=1.3, key_char="s"),
+            KeyUpEvent(timestamp=1.4, key_name="shift"),
+            KeyUpEvent(timestamp=1.5, key_name="control"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyShortcutEvent)
+        assert result[0].modifiers == ["ctrl", "shift"]
+        assert result[0].key == "s"
+
+    def test_shift_printable_character_remains_typed_text(self):
+        events = [
+            KeyDownEvent(timestamp=1.0, key_name="shift"),
+            KeyDownEvent(timestamp=1.1, key_char="A"),
+            KeyUpEvent(timestamp=1.2, key_char="A"),
+            KeyUpEvent(timestamp=1.3, key_name="shift"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyTypeEvent)
+        assert result[0].text == "A"
 
 
 class TestMergeConsecutiveMouseMoveEvents:

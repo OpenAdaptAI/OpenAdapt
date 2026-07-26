@@ -267,6 +267,27 @@ class KeyTypeEvent(ActionBaseEvent):
     )
 
 
+class KeyShortcutEvent(ActionBaseEvent):
+    """A modifier chord demonstrated by the operator.
+
+    ``modifiers`` is canonicalized by the processing pipeline (``ctrl``,
+    ``alt``, ``shift``, ``meta``). ``key`` is the single non-modifier trigger.
+    The raw down/up sequence remains in ``children`` so conversion never has to
+    reconstruct the demonstrated chord from display text.
+    """
+
+    type: Literal[EventType.KEY_SHORTCUT] = EventType.KEY_SHORTCUT
+    modifiers: list[str] = Field(
+        min_length=1,
+        description="Canonical modifier keys held for the chord",
+    )
+    key: str = Field(min_length=1, description="Non-modifier trigger key")
+    children: list[KeyDownEvent | KeyUpEvent] = Field(
+        default_factory=list,
+        description="Raw keyboard events retained for provenance",
+    )
+
+
 # =============================================================================
 # Union type for all events
 # =============================================================================
@@ -282,6 +303,7 @@ ActionEvent = (
     | MouseDoubleClickEvent
     | MouseDragEvent
     | KeyTypeEvent
+    | KeyShortcutEvent
 )
 
 ScreenEvent = ScreenFrameEvent

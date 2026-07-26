@@ -5,6 +5,7 @@ from openadapt_capture.events import (
     AudioChunkEvent,
     EventType,
     KeyDownEvent,
+    KeyShortcutEvent,
     KeyTypeEvent,
     KeyUpEvent,
     MouseButton,
@@ -167,6 +168,24 @@ class TestKeyboardEvents:
         assert event.type == EventType.KEY_TYPE
         assert event.text == "hi"
         assert len(event.children) == 4
+
+    def test_key_shortcut_event(self):
+        children = [
+            KeyDownEvent(timestamp=1.0, key_name="ctrl"),
+            KeyDownEvent(timestamp=1.1, key_char="s"),
+            KeyUpEvent(timestamp=1.2, key_char="s"),
+            KeyUpEvent(timestamp=1.3, key_name="ctrl"),
+        ]
+        event = KeyShortcutEvent(
+            timestamp=1.0,
+            modifiers=["ctrl"],
+            key="s",
+            children=children,
+        )
+
+        assert event.model_dump()["type"] == "key.shortcut"
+        assert event.modifiers == ["ctrl"]
+        assert event.key == "s"
 
 
 class TestScreenEvents:

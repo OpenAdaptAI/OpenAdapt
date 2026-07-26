@@ -44,6 +44,7 @@ from openadapt_capture.events import (
     Event,
     EventType,
     KeyDownEvent,
+    KeyShortcutEvent,
     KeyTypeEvent,
     KeyUpEvent,
     MouseButton,
@@ -186,6 +187,7 @@ __all__ = [
     "KeyDownEvent",
     "KeyUpEvent",
     "KeyTypeEvent",
+    "KeyShortcutEvent",
     # Screen/audio events
     "ScreenFrameEvent",
     "AudioChunkEvent",

@@ -8,6 +8,8 @@ import pytest
 from openadapt_capture.events import (
     EventType,
     KeyDownEvent,
+    KeyShortcutEvent,
+    KeyUpEvent,
     MouseButton,
     MouseDownEvent,
     MouseMoveEvent,
@@ -115,6 +117,39 @@ class TestCaptureStorage:
             assert len(events) == 1
             assert events[0].x == 100.0
             assert events[0].y == 200.0
+
+    def test_shortcut_round_trips_with_raw_children(self, temp_db):
+        children = [
+            KeyDownEvent(timestamp=1.0, key_name="ctrl"),
+            KeyDownEvent(timestamp=1.1, key_char="s"),
+            KeyUpEvent(timestamp=1.2, key_char="s"),
+            KeyUpEvent(timestamp=1.3, key_name="ctrl"),
+        ]
+        shortcut = KeyShortcutEvent(
+            timestamp=1.0,
+            modifiers=["ctrl"],
+            key="s",
+            children=children,
+        )
+
+        with CaptureStorage(temp_db) as storage:
+            storage.write_event(shortcut)
+            loaded = storage.get_events()
+            stored_rows = storage.get_events(include_children=True)
+
+        assert len(loaded) == 1
+        restored = loaded[0]
+        assert isinstance(restored, KeyShortcutEvent)
+        assert restored.modifiers == ["ctrl"]
+        assert restored.key == "s"
+        assert restored.children == []
+        assert [event.type for event in stored_rows] == [
+            EventType.KEY_SHORTCUT,
+            EventType.KEY_DOWN,
+            EventType.KEY_DOWN,
+            EventType.KEY_UP,
+            EventType.KEY_UP,
+        ]
 
     def test_write_multiple_events(self, temp_db):
         """Test writing multiple events."""
