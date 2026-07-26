@@ -191,6 +191,43 @@ defines what can be claimed for a new deployment.
 The pre-1.0 monolith remains available under [`legacy/`](legacy/) for migration
 history. New product and engine development belongs in `openadapt-flow`.
 
+<details>
+<summary><strong>Research and legacy history</strong></summary>
+
+These surfaces are preserved for continuity and are not part of the supported
+product. None of them are required to record, compile, replay, or verify a
+workflow, and the compiler makes no generative-model calls on its healthy path.
+
+**Research packages.** A separate research line studies whether human
+demonstrations can improve the accuracy of general computer-use models. It is a
+different question from compiling one demonstration into a deterministic script.
+
+| Package | Research focus | Repository |
+|---------|----------------|------------|
+| `openadapt-ml` | Training and inference for multimodal GUI-action models | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
+| `openadapt-evals` | Benchmark evaluation for GUI agents | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
+| `openadapt-retrieval` | Multimodal demonstration retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
+| `openadapt-grounding` | UI element localization / grounding models | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
+
+Install with `pip install "openadapt[ml,evals]"`. See the
+[research thesis](https://github.com/OpenAdaptAI/openadapt-ml/blob/main/docs/research_thesis.md)
+for methodology, results, and limits.
+
+**Development and operations tooling.** `openadapt-wright`, `openadapt-herald`,
+`openadapt-crier`, `openadapt-consilium`, `openadapt-telemetry`, and
+`openadapt-viewer` support development and operations. They are not required by
+the compiler runtime.
+
+**Pre-1.0 monolith.** The historical monolithic codebase (v0.46.0) is frozen
+under [`legacy/`](legacy/) and remains installable with
+`pip install openadapt==0.46.0`. See
+[docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) for the migration guide. Early
+demonstrations:
+[Twitter](https://twitter.com/abrichr/status/1784307190062342237) and
+[Loom](https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0).
+
+</details>
+
 ## Contributing and support
 
 Launcher, packaging, and unified-CLI changes belong here. Compiler, runtime,
