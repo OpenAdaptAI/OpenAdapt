@@ -133,6 +133,15 @@ class StructuralLocator(BaseModel):
         default=None,
         description="Stable CSS/DOM selector, e.g. '#open-p1' (browser)",
     )
+    frame_path: Optional[list[str]] = Field(
+        default=None,
+        max_length=8,
+        description=(
+            "Outermost-to-innermost CSS selectors for iframe/frame elements "
+            "containing a browser target. Each selector must resolve uniquely "
+            "in its parent frame; absent means the top-level document."
+        ),
+    )
     role: Optional[str] = Field(
         default=None,
         description="ARIA / UIA control role, e.g. 'button', 'link'",

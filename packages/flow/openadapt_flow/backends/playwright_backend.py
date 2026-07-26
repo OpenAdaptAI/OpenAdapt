@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Optional
 from urllib.parse import urlsplit
@@ -75,6 +76,27 @@ _SESSION_IDENTITY_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _WORKFLOW_STATE_IDENTITY_PATTERN = re.compile(
     r"^[a-z0-9](?:[a-z0-9._:-]{0,126}[a-z0-9])?$"
 )
+
+
+@dataclass
+class _StructuralGuard:
+    """Private one-shot binding retaining only token, scope, and frame selectors."""
+
+    token: str
+    scope: Any
+    frame_path: tuple[str, ...]
+    context: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _FramePoint:
+    """A top-level point projected into one concrete document viewport."""
+
+    scope: Any
+    x: float
+    y: float
+    frame_path: tuple[str, ...]
+
 
 # The descriptor stays inside the page-local guard store. It binds the exact
 # actionable node, its ancestry, and the enclosing record row while excluding
@@ -407,6 +429,115 @@ _CLEAN_GUARD_JS = r"""(args) => {
     if (tokenMap instanceof Map) tokenMap.delete(args.token);
 }"""
 
+_STRUCTURAL_LOCATOR_AT_JS = r"""([px, py]) => {
+    const el = document.elementFromPoint(px, py);
+    if (!el) return null;
+    const actionable = el.closest(
+        'button, a[href], input, select, textarea,' +
+        ' [role="button"], [role="link"], [role="menuitem"],' +
+        ' [role="tab"], [role="option"], [onclick], [data-id]'
+    ) || el;
+    const tag = actionable.tagName.toLowerCase();
+    let selector = null;
+    const id = actionable.id;
+    if (id && document.querySelectorAll(
+            '#' + CSS.escape(id)).length === 1) {
+        selector = '#' + CSS.escape(id);
+    }
+    let role = actionable.getAttribute('role');
+    if (!role) {
+        const map = {button: 'button', a: 'link', input: 'textbox',
+            select: 'combobox', textarea: 'textbox'};
+        role = map[tag] || null;
+        if (tag === 'a' && !actionable.getAttribute('href')) role = null;
+    }
+    let name = actionable.getAttribute('aria-label');
+    if (!name) {
+        const text = (actionable.textContent || '').replace(/\s+/g, ' ').trim();
+        name = text ? text.slice(0, 120) : null;
+    }
+    if (!selector && !(role && name)) return null;
+    return {selector: selector, role: role, name: name};
+}"""
+
+_FRAME_SELECTOR_JS = r"""(el) => {
+    const doc = el.ownerDocument;
+    const unique = (selector) => {
+        try { return doc.querySelectorAll(selector).length === 1; }
+        catch (_) { return false; }
+    };
+    if (el.id) {
+        const byId = '#' + CSS.escape(el.id);
+        if (unique(byId)) return byId;
+    }
+    const segments = [];
+    let node = el;
+    while (node && node !== doc.documentElement) {
+        const tag = node.tagName.toLowerCase();
+        let index = 1;
+        for (let sibling = node.previousElementSibling; sibling;
+                sibling = sibling.previousElementSibling) {
+            if (sibling.tagName === node.tagName) index += 1;
+        }
+        segments.unshift(tag + ':nth-of-type(' + index + ')');
+        const candidate = segments.join(' > ');
+        if (unique(candidate)) return candidate;
+        node = node.parentElement;
+    }
+    return null;
+}"""
+
+_PROJECT_FRAME_POINT_JS = r"""(el, point) => {
+    const [px, py] = point;
+    if (document.elementFromPoint(px, py) !== el) return null;
+
+    // getBoundingClientRect can safely invert only positive axis-aligned
+    // scale/translation. Reject rotation, skew, mirroring, perspective, and
+    // 3-D transforms on the frame or any ancestor rather than guessing.
+    const epsilon = 1e-7;
+    for (let node = el; node; node = node.parentElement) {
+        const style = window.getComputedStyle(node);
+        if (style.perspective && style.perspective !== 'none') return null;
+        const rotate = style.rotate;
+        if (rotate && rotate !== 'none' && rotate !== '0deg') return null;
+        const scale = style.scale;
+        if (scale && scale !== 'none') {
+            const components = scale.trim().split(/\s+/).map(Number);
+            if (components.length < 1 || components.length > 2 ||
+                    components.some(value => !Number.isFinite(value) || value <= 0)) {
+                return null;
+            }
+        }
+        const transform = style.transform;
+        if (transform && transform !== 'none') {
+            let matrix;
+            try { matrix = new DOMMatrixReadOnly(transform); }
+            catch (_) { return null; }
+            if (!matrix.is2D || Math.abs(matrix.b) > epsilon ||
+                    Math.abs(matrix.c) > epsilon || matrix.a <= 0 || matrix.d <= 0) {
+                return null;
+            }
+        }
+    }
+
+    const rect = el.getBoundingClientRect();
+    const offsetWidth = Number(el.offsetWidth);
+    const offsetHeight = Number(el.offsetHeight);
+    if (!(rect.width > 0 && rect.height > 0 &&
+            offsetWidth > 0 && offsetHeight > 0)) return null;
+    const scaleX = rect.width / offsetWidth;
+    const scaleY = rect.height / offsetHeight;
+    if (!(Number.isFinite(scaleX) && Number.isFinite(scaleY) &&
+            scaleX > 0 && scaleY > 0)) return null;
+    const contentX = rect.left + Number(el.clientLeft) * scaleX;
+    const contentY = rect.top + Number(el.clientTop) * scaleY;
+    const localX = (px - contentX) / scaleX;
+    const localY = (py - contentY) / scaleY;
+    const inside = localX >= 0 && localY >= 0 &&
+        localX < Number(el.clientWidth) && localY < Number(el.clientHeight);
+    return inside ? {inside: true, x: localX, y: localY} : {inside: false};
+}"""
+
 
 def _normalize_chord(key: str) -> str:
     """Normalize a key or chord like ``'Meta+a'`` to Playwright's format.
@@ -452,7 +583,7 @@ class PlaywrightBackend:
         # code. Python retains only token material keyed by the public
         # SHA-256 fingerprint; target/row text stays page-local and ephemeral.
         self._structural_store_key = f"__oaflow_structural_{uuid.uuid4().hex}"
-        self._structural_tokens: dict[str, str] = {}
+        self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[
             tuple[tuple[int, int], str, str, tuple[float, float], bool]
         ] = None
@@ -506,7 +637,7 @@ class PlaywrightBackend:
         if not pending:
             return True
         try:
-            return bool(
+            root_valid = bool(
                 self.page.evaluate(
                     _BIND_CONTEXT_IDENTITY_JS,
                     {
@@ -518,16 +649,19 @@ class PlaywrightBackend:
             )
         except Exception:
             return False
+        if not root_valid:
+            return False
+        # A child frame has its own Window and guard store, while application,
+        # session, and workflow-state identity are deliberately top-level
+        # contracts. Retain only those bounded values in Python and compare
+        # them again immediately before delivery. The target descriptor and
+        # row identity remain exclusively inside the child frame.
+        for guard in self._structural_tokens.values():
+            guard.context[kind] = value
+        return True
 
-    def application_identity(self) -> Optional[str]:
-        """Return the live browser origin as a bounded application identity.
-
-        Only the current page's HTTP(S) origin is observed. User information,
-        path, query, and fragment are never included, so record identifiers and
-        other sensitive navigation state cannot enter identity evidence.
-        Default ports are omitted and non-web or malformed URLs return
-        ``None``.
-        """
+    def _application_identity_value(self) -> Optional[str]:
+        """Observe the top-level origin without mutating any pending guard."""
 
         try:
             current_url = self.page.url
@@ -552,6 +686,19 @@ class PlaywrightBackend:
         ):
             origin += f":{port}"
         if len(origin) > 320:
+            return None
+        return origin
+
+    def application_identity(self) -> Optional[str]:
+        """Return and bind the live top-level browser origin.
+
+        User information, path, query, and fragment are never included, so
+        record identifiers and other sensitive navigation state cannot enter
+        identity evidence. Default ports are omitted.
+        """
+
+        origin = self._application_identity_value()
+        if origin is None:
             return None
         return origin if self._bind_context_identity("application", origin) else None
 
@@ -609,6 +756,33 @@ class PlaywrightBackend:
             if self._bind_context_identity("workflow_state", observed)
             else None
         )
+
+    def _context_guard_is_current(self, guard: _StructuralGuard) -> bool:
+        """Re-read every bound top-level identity immediately before input."""
+
+        for kind, expected in guard.context.items():
+            if kind == "application":
+                observed = self._application_identity_value()
+            elif kind == "session":
+                value = self._context_meta_content(_SESSION_IDENTITY_META)
+                observed = (
+                    value
+                    if value is not None and _SESSION_IDENTITY_PATTERN.fullmatch(value)
+                    else None
+                )
+            elif kind == "workflow_state":
+                value = self._context_meta_content(_WORKFLOW_STATE_IDENTITY_META)
+                observed = (
+                    value
+                    if value is not None
+                    and _WORKFLOW_STATE_IDENTITY_PATTERN.fullmatch(value)
+                    else None
+                )
+            else:  # defensive: a new unreviewed identity kind cannot pass
+                return False
+            if observed != expected:
+                return False
+        return True
 
     # -- structured-text identity (openadapt_flow.backend.IdentityBackend) --
 
@@ -709,6 +883,132 @@ class PlaywrightBackend:
 
     # -- structural action (openadapt_flow.backend.StructuralActionBackend) --
 
+    def _frame_point(self, x: int, y: int) -> Optional[_FramePoint]:
+        """Follow the actual hit-tested frame chain and project into its document.
+
+        At each document boundary ``elementFromPoint`` must return the exact
+        iframe/frame element we descend through. Hidden, occluded, and
+        ``pointer-events:none`` frames therefore cannot contribute structural
+        evidence. Entering frame content fails closed if the selector,
+        positive axis-aligned transform, or child-frame mapping cannot be
+        proven; it never falls back to the parent document.
+        """
+
+        scope: Any = self.page
+        local_x = float(x)
+        local_y = float(y)
+        path: list[str] = []
+        for _depth in range(9):
+            hit = None
+            candidate = None
+            try:
+                hit = scope.evaluate_handle(
+                    "([px, py]) => document.elementFromPoint(px, py)",
+                    [local_x, local_y],
+                ).as_element()
+                if hit is None:
+                    return None
+                tag = hit.evaluate("el => el.localName")
+                if tag not in {"iframe", "frame"}:
+                    return _FramePoint(scope, local_x, local_y, tuple(path))
+
+                projection = hit.evaluate(_PROJECT_FRAME_POINT_JS, [local_x, local_y])
+                if not isinstance(projection, dict):
+                    return None
+                # A hit on the frame's border belongs to the parent document.
+                if projection.get("inside") is not True:
+                    return _FramePoint(scope, local_x, local_y, tuple(path))
+                if len(path) >= 8:
+                    return None
+                selector = hit.evaluate(_FRAME_SELECTOR_JS)
+                if not isinstance(selector, str) or not selector or len(selector) > 512:
+                    return None
+                matches = scope.locator(selector)
+                if matches.count() != 1:
+                    return None
+                candidate = matches.element_handle()
+                if candidate is None or not hit.evaluate(
+                    "(el, candidate) => el === candidate", candidate
+                ):
+                    return None
+                child = hit.content_frame()
+                if child is None:
+                    return None
+                child_width, child_height = child.evaluate(
+                    "() => [window.innerWidth, window.innerHeight]"
+                )
+                next_x = float(projection["x"])
+                next_y = float(projection["y"])
+                if not (
+                    0 <= next_x < float(child_width)
+                    and 0 <= next_y < float(child_height)
+                ):
+                    return None
+                path.append(selector)
+                scope = child
+                local_x = next_x
+                local_y = next_y
+            except Exception:
+                return None
+            finally:
+                if candidate is not None:
+                    candidate.dispose()
+                if hit is not None:
+                    hit.dispose()
+        return None
+
+    def _resolve_scope(self, frame_path: tuple[str, ...]) -> Optional[Any]:
+        scope: Any = self.page
+        for frame_selector in frame_path:
+            frame_elements = scope.locator(frame_selector)
+            count = frame_elements.count()
+            if count == 0:
+                return None
+            if count != 1:
+                raise StructuralResolutionRefused(
+                    "DOM frame path is ambiguous: "
+                    f"selector={frame_selector!r}, candidate_count={count}"
+                )
+            handle = frame_elements.element_handle()
+            if handle is None:
+                return None
+            child = handle.content_frame()
+            if child is None:
+                return None
+            scope = child
+        return scope
+
+    def _frame_chain_matches(
+        self,
+        scope: Any,
+        frame_path: tuple[str, ...],
+        box: dict[str, Any],
+    ) -> bool:
+        """Re-prove the exact hit-tested frame chain at a target box center."""
+
+        try:
+            x = int(round(float(box["x"]) + float(box["width"]) / 2))
+            y = int(round(float(box["y"]) + float(box["height"]) / 2))
+        except (KeyError, TypeError, ValueError):
+            return False
+        point = self._frame_point(x, y)
+        return bool(
+            point is not None
+            and point.scope == scope
+            and point.frame_path == frame_path
+        )
+
+    def _locator_with_scope(self, locator: StructuralLocator) -> tuple[Any, Any] | None:
+        frame_path = tuple(locator.frame_path or ())
+        scope = self._resolve_scope(frame_path)
+        if scope is None:
+            return None
+        if locator.selector:
+            return scope, scope.locator(locator.selector)
+        if locator.role and locator.name:
+            return scope, scope.get_by_role(locator.role, name=locator.name, exact=True)
+        return None
+
     def structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:
         """Return a stable DOM locator for the element under (x, y).
 
@@ -720,41 +1020,12 @@ class PlaywrightBackend:
         anchor). Coordinate space matches :meth:`click`.
         """
         try:
-            result = self.page.evaluate(
-                """([px, py]) => {
-                    const el = document.elementFromPoint(px, py);
-                    if (!el) return null;
-                    const actionable = el.closest(
-                        'button, a[href], input, select, textarea,' +
-                        ' [role="button"], [role="link"], [role="menuitem"],' +
-                        ' [role="tab"], [role="option"], [onclick], [data-id]'
-                    ) || el;
-                    const tag = actionable.tagName.toLowerCase();
-                    let selector = null;
-                    const id = actionable.id;
-                    if (id && document.querySelectorAll(
-                            '#' + CSS.escape(id)).length === 1) {
-                        selector = '#' + CSS.escape(id);
-                    }
-                    let role = actionable.getAttribute('role');
-                    if (!role) {
-                        const map = {button: 'button', a: 'link',
-                            input: 'textbox', select: 'combobox',
-                            textarea: 'textbox'};
-                        role = map[tag] || null;
-                        if (tag === 'a' &&
-                                !actionable.getAttribute('href')) role = null;
-                    }
-                    let name = actionable.getAttribute('aria-label');
-                    if (!name) {
-                        const t = (actionable.textContent || '')
-                            .replace(/\\s+/g, ' ').trim();
-                        name = t ? t.slice(0, 120) : null;
-                    }
-                    if (!selector && !(role && name)) return null;
-                    return {selector: selector, role: role, name: name};
-                }""",
-                [int(x), int(y)],
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return None
+            result = point.scope.evaluate(
+                _STRUCTURAL_LOCATOR_AT_JS,
+                [point.x, point.y],
             )
         except Exception:
             return None
@@ -762,6 +1033,7 @@ class PlaywrightBackend:
             return None
         return StructuralLocator(
             selector=result.get("selector"),
+            frame_path=list(point.frame_path) or None,
             role=result.get("role"),
             name=result.get("name"),
         )
@@ -779,9 +1051,10 @@ class PlaywrightBackend:
         and its enclosing-row identity for same-operation delivery.
         """
         try:
-            loc = self._locator(locator)
-            if loc is None:
+            resolved = self._locator_with_scope(locator)
+            if resolved is None:
                 return None
+            scope, loc = resolved
             candidate_count = loc.count()
             if candidate_count == 0:
                 return None
@@ -789,29 +1062,57 @@ class PlaywrightBackend:
                 raise StructuralResolutionRefused(
                     f"DOM locator is ambiguous: candidate_count={candidate_count}"
                 )
-            token = uuid.uuid4().hex
-            observed = loc.evaluate(
-                _BIND_STRUCTURAL_TARGET_JS,
-                {
-                    "storeKey": self._structural_store_key,
-                    "tokenAttribute": self._token_attribute(token),
-                    "token": token,
-                    "requireRowIdentity": False,
-                },
-            )
-            if not isinstance(observed, dict):
-                return None
-            point = observed.get("point")
-            region = observed.get("region")
+            box = loc.bounding_box()
             if (
-                not isinstance(point, list)
-                or len(point) != 2
-                or not all(isinstance(value, int) for value in point)
-                or not isinstance(region, list)
-                or len(region) != 4
-                or not all(isinstance(value, int) for value in region)
+                not isinstance(box, dict)
+                or float(box["width"]) <= 0
+                or float(box["height"]) <= 0
+                or not self._frame_chain_matches(
+                    scope, tuple(locator.frame_path or ()), box
+                )
             ):
                 return None
+            token = uuid.uuid4().hex
+            try:
+                observed = loc.evaluate(
+                    _BIND_STRUCTURAL_TARGET_JS,
+                    {
+                        "storeKey": self._structural_store_key,
+                        "tokenAttribute": self._token_attribute(token),
+                        "token": token,
+                        "requireRowIdentity": False,
+                    },
+                )
+                box = loc.bounding_box()
+                if (
+                    not isinstance(observed, dict)
+                    or not isinstance(box, dict)
+                    or not self._frame_chain_matches(
+                        scope, tuple(locator.frame_path or ()), box
+                    )
+                ):
+                    self._cleanup_guard(token, scope)
+                    return None
+                if float(box["width"]) <= 0 or float(box["height"]) <= 0:
+                    self._cleanup_guard(token, scope)
+                    return None
+                point = (
+                    int(round(float(box["x"]) + float(box["width"]) / 2)),
+                    int(round(float(box["y"]) + float(box["height"]) / 2)),
+                )
+                vw, vh = self.viewport
+                if not (0 <= point[0] < vw and 0 <= point[1] < vh):
+                    self._cleanup_guard(token, scope)
+                    return None
+                region = (
+                    int(round(float(box["x"]))),
+                    int(round(float(box["y"]))),
+                    int(round(float(box["width"]))),
+                    int(round(float(box["height"]))),
+                )
+            except Exception:
+                self._cleanup_guard(token, scope)
+                raise
             fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
             # Bound Python-side token retention. Page-side entries are weak and
             # disappear with their DOM nodes; an evicted token is unusable.
@@ -819,11 +1120,15 @@ class PlaywrightBackend:
                 evicted = self._structural_tokens.pop(
                     next(iter(self._structural_tokens))
                 )
-                self._cleanup_guard(evicted)
-            self._structural_tokens[fingerprint] = token
+                self._cleanup_guard(evicted.token, evicted.scope)
+            self._structural_tokens[fingerprint] = _StructuralGuard(
+                token=token,
+                scope=scope,
+                frame_path=tuple(locator.frame_path or ()),
+            )
             return StructuralHandle(
-                point=(point[0], point[1]),
-                region=(region[0], region[1], region[2], region[3]),
+                point=point,
+                region=region,
                 target_fingerprint=fingerprint,
                 supported_operations=["dom_click", "dom_double_click"],
             )
@@ -833,19 +1138,17 @@ class PlaywrightBackend:
             return None
 
     def _locator(self, locator: StructuralLocator) -> Any:
-        if locator.selector:
-            return self.page.locator(locator.selector)
-        if locator.role and locator.name:
-            return self.page.get_by_role(locator.role, name=locator.name, exact=True)
-        return None
+        resolved = self._locator_with_scope(locator)
+        return None if resolved is None else resolved[1]
 
     @staticmethod
     def _token_attribute(token: str) -> str:
         return f"{_TOKEN_ATTRIBUTE_PREFIX}{token}"
 
-    def _cleanup_guard(self, token: str) -> None:
+    def _cleanup_guard(self, token: str, scope: Any = None) -> None:
+        scope = self.page if scope is None else scope
         try:
-            self.page.evaluate(
+            scope.evaluate(
                 _CLEAN_GUARD_JS,
                 {
                     "storeKey": self._structural_store_key,
@@ -860,18 +1163,19 @@ class PlaywrightBackend:
     def _cancel_structural_guards(self) -> None:
         """Clean element-resolution guards no keyboard action will consume."""
 
-        tokens = list(self._structural_tokens.values())
+        guards = list(self._structural_tokens.values())
         self._structural_tokens.clear()
-        for token in tokens:
-            self._cleanup_guard(token)
+        for guard in guards:
+            self._cleanup_guard(guard.token, guard.scope)
 
     def cancel_pending_structural_guards(self) -> None:
         """Discard handles that an immediate fresh re-resolution replaces."""
 
         self._cancel_structural_guards()
 
-    def _token_locator(self, token: str) -> Any:
-        return self.page.locator(f"[{self._token_attribute(token)}]")
+    def _token_locator(self, token: str, scope: Any = None) -> Any:
+        scope = self.page if scope is None else scope
+        return scope.locator(f"[{self._token_attribute(token)}]")
 
     def _guard_is_current(
         self,
@@ -918,23 +1222,41 @@ class PlaywrightBackend:
             raise StructuralResolutionRefused(
                 "guarded DOM actuation requires a target fingerprint"
             )
-        token = self._structural_tokens.pop(fingerprint, None)
-        if token is None:
+        guard = self._structural_tokens.pop(fingerprint, None)
+        if guard is None:
             raise StructuralResolutionRefused(
                 "guarded DOM actuation token is missing, stale, or already consumed"
             )
-        loc = self._locator(locator)
-        if loc is None:
-            self._cleanup_guard(token)
-            raise StructuralResolutionRefused(
-                "guarded DOM actuation requires an exact structural locator"
-            )
         try:
-            if loc.count() != 1 or not self._guard_is_current(loc, token):
+            resolved = self._locator_with_scope(locator)
+            if resolved is None:
+                raise StructuralResolutionRefused(
+                    "guarded DOM actuation requires an exact structural locator"
+                )
+            scope, loc = resolved
+            if (
+                scope != guard.scope
+                or tuple(locator.frame_path or ()) != guard.frame_path
+            ):
+                raise StructuralResolutionRefused(
+                    "guarded DOM frame context changed before delivery"
+                )
+            if not self._context_guard_is_current(guard):
+                raise StructuralResolutionRefused(
+                    "guarded DOM execution context changed before delivery"
+                )
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                scope, guard.frame_path, box
+            ):
+                raise StructuralResolutionRefused(
+                    "guarded DOM frame chain changed before delivery"
+                )
+            if loc.count() != 1 or not self._guard_is_current(loc, guard.token):
                 raise StructuralResolutionRefused(
                     "guarded DOM target or record identity changed before delivery"
                 )
-            token_locator = self._token_locator(token)
+            token_locator = self._token_locator(guard.token, guard.scope)
             if token_locator.count() != 1:
                 raise StructuralResolutionRefused(
                     "guarded DOM token is missing or ambiguous at delivery"
@@ -950,7 +1272,7 @@ class PlaywrightBackend:
                 "guarded DOM target changed or became unactionable before delivery"
             ) from exc
         finally:
-            self._cleanup_guard(token)
+            self._cleanup_guard(guard.token, guard.scope)
         return ActionDeliveryReceipt(
             receipt_id=f"playwright-{uuid.uuid4().hex}",
             operation="dom_double_click" if double else "dom_click",
