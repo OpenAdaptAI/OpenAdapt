@@ -10,13 +10,22 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass
-from typing import Literal, Protocol, runtime_checkable
+from typing import Annotated, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 STRUCTURAL_OBSERVATION_SCHEMA_VERSION = (
     "openadapt.capture.structural-observation/v1"
 )
+MAX_STRUCTURAL_TEXT_LENGTH = 512
+MAX_STRUCTURAL_ANCESTRY_DEPTH = 32
+
+_PROVIDER_PATTERN = r"^[a-z][a-z0-9_.-]*$"
+_StructuralText = Annotated[str, Field(max_length=MAX_STRUCTURAL_TEXT_LENGTH)]
+_ProviderIdentifier = Annotated[
+    str,
+    Field(min_length=1, max_length=64, pattern=_PROVIDER_PATTERN),
+]
 
 _logger = logging.getLogger(__name__)
 
@@ -37,16 +46,19 @@ class StructuralElement(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    automation_id: str | None = None
-    role: str | None = None
-    role_source: Literal["pywinauto_friendly_class"] | None = None
-    control_type: str | None = None
-    name: str | None = None
-    class_name: str | None = None
-    framework_id: str | None = None
+    automation_id: _StructuralText | None = None
+    role: _StructuralText | None = None
+    role_source: _ProviderIdentifier | None = None
+    control_type: _StructuralText | None = None
+    name: _StructuralText | None = None
+    class_name: _StructuralText | None = None
+    framework_id: _StructuralText | None = None
     native_window_handle: int | None = None
     bounds: StructuralBounds | None = None
-    supported_patterns: list[str] | None = None
+    supported_patterns: list[_StructuralText] | None = Field(
+        default=None,
+        max_length=64,
+    )
 
 
 class StructuralAncestor(BaseModel):
@@ -54,12 +66,12 @@ class StructuralAncestor(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    automation_id: str | None = None
-    role: str | None = None
-    role_source: Literal["pywinauto_friendly_class"] | None = None
-    control_type: str | None = None
-    name: str | None = None
-    class_name: str | None = None
+    automation_id: _StructuralText | None = None
+    role: _StructuralText | None = None
+    role_source: _ProviderIdentifier | None = None
+    control_type: _StructuralText | None = None
+    name: _StructuralText | None = None
+    class_name: _StructuralText | None = None
     bounds: StructuralBounds | None = None
 
 
@@ -69,7 +81,7 @@ class StructuralProcessIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     process_id: int | None = Field(default=None, ge=0)
-    process_name: str | None = None
+    process_name: _StructuralText | None = None
 
 
 class StructuralWindowIdentity(BaseModel):
@@ -77,9 +89,9 @@ class StructuralWindowIdentity(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    title: str | None = None
-    automation_id: str | None = None
-    class_name: str | None = None
+    title: _StructuralText | None = None
+    automation_id: _StructuralText | None = None
+    class_name: _StructuralText | None = None
     native_window_handle: int | None = None
     bounds: StructuralBounds | None = None
 
@@ -103,14 +115,22 @@ class StructuralObservation(BaseModel):
     schema_version: Literal[
         "openadapt.capture.structural-observation/v1"
     ] = STRUCTURAL_OBSERVATION_SCHEMA_VERSION
-    provider: Literal["windows_uia"]
+    provider: _ProviderIdentifier = Field(
+        description=(
+            "Accessibility-provider identifier. Capture currently emits "
+            "windows_uia; other providers remain opt-in observer extensions."
+        ),
+    )
     event_timestamp: float
     observed_at: float
     query_kind: Literal["point", "focused"]
     element: StructuralElement
     process: StructuralProcessIdentity | None = None
     window: StructuralWindowIdentity | None = None
-    ancestry: list[StructuralAncestor] | None = None
+    ancestry: list[StructuralAncestor] | None = Field(
+        default=None,
+        max_length=MAX_STRUCTURAL_ANCESTRY_DEPTH,
+    )
     candidate_count: int | None = Field(default=None, ge=0)
     candidate_context: StructuralCandidateContext | None = None
 
@@ -183,6 +203,8 @@ def observe_structural_action(
 
 
 __all__ = [
+    "MAX_STRUCTURAL_ANCESTRY_DEPTH",
+    "MAX_STRUCTURAL_TEXT_LENGTH",
     "STRUCTURAL_OBSERVATION_SCHEMA_VERSION",
     "StructuralAncestor",
     "StructuralBounds",

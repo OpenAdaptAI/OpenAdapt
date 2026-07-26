@@ -17,6 +17,8 @@ from collections.abc import Callable
 from typing import Any
 
 from openadapt_capture.structural import (
+    MAX_STRUCTURAL_ANCESTRY_DEPTH,
+    MAX_STRUCTURAL_TEXT_LENGTH,
     StructuralAncestor,
     StructuralBounds,
     StructuralCandidateContext,
@@ -175,7 +177,12 @@ def _present_string(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     stripped = value.strip()
-    return stripped or None
+    # Accessibility providers may expose arbitrarily large document or window
+    # strings as names. Never retain a partial identity: omit over-limit text
+    # so downstream compilation cannot mistake a truncation for exact evidence.
+    if not stripped or len(stripped) > MAX_STRUCTURAL_TEXT_LENGTH:
+        return None
+    return stripped
 
 
 def _present_int(value: Any) -> int | None:
@@ -398,7 +405,7 @@ def _observe_with_runtime(
     if process_id is not None:
         process = StructuralProcessIdentity(
             process_id=process_id,
-            process_name=process_name_resolver(process_id),
+            process_name=_present_string(process_name_resolver(process_id)),
         )
     candidate_count, candidate_context = _candidate_cardinality(target)
     return StructuralObservation(
@@ -431,6 +438,11 @@ class WindowsUIAStructuralObserver:
         clock: Callable[[], float] = time.time,
         maximum_ancestry_depth: int = 12,
     ) -> None:
+        if not 0 < maximum_ancestry_depth <= MAX_STRUCTURAL_ANCESTRY_DEPTH:
+            raise ValueError(
+                "maximum_ancestry_depth must be between 1 and "
+                f"{MAX_STRUCTURAL_ANCESTRY_DEPTH}"
+            )
         self._runtime = runtime
         self._runtime_factory = runtime_factory
         self._apartment_factory = apartment_factory

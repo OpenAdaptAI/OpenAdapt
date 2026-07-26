@@ -154,6 +154,13 @@ be disabled with
 another read-only observer through `Recorder(..., structural_observer=...)`
 using the public `StructuralObserver` protocol.
 
+Accessibility text remains inside the local raw-capture boundary and is bounded
+to 512 characters per field. Longer provider values are omitted rather than
+truncated, so partial text is never presented to the compiler as exact identity
+evidence. The versioned observation contract accepts namespaced provider IDs for
+future macOS Accessibility and Linux AT-SPI observers, but this package currently
+emits only `windows_uia` observations.
+
 UIA describes the local Windows accessibility tree. It does not cross an
 RDP/Citrix pixel boundary into the remote application; those demonstrations
 retain window-scoped pixels and coordinates for Flow's remote visual compiler.

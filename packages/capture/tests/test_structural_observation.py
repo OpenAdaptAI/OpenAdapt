@@ -8,10 +8,14 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from openadapt_capture.capture import CaptureSession
 from openadapt_capture.db import create_db, crud
 from openadapt_capture.recorder import on_click, write_action_event
 from openadapt_capture.structural import (
+    MAX_STRUCTURAL_ANCESTRY_DEPTH,
+    MAX_STRUCTURAL_TEXT_LENGTH,
     StructuralElement,
     StructuralObservation,
     StructuralObservationRequest,
@@ -190,6 +194,63 @@ def test_windows_uia_observer_returns_exact_available_evidence() -> None:
     ]
     assert window.descendant_queries == [{"control_type": "Button"}]
     assert "framework_id" not in observed.element.model_dump(exclude_none=True)
+
+
+def test_windows_uia_omits_oversized_text_instead_of_truncating_identity() -> None:
+    oversized = "x" * (MAX_STRUCTURAL_TEXT_LENGTH + 1)
+    target = _Wrapper(
+        automation_id="member-id",
+        control_type="Edit",
+        name=oversized,
+        role="Edit",
+        process_id=42,
+        title=oversized,
+    )
+    target._top = target
+    observer = WindowsUIAStructuralObserver(
+        runtime=SimpleNamespace(
+            from_point=lambda _x, _y: target,
+            focused_element=lambda: target,
+        ),
+        process_name_resolver=lambda _process_id: oversized,
+    )
+
+    observed = observer.observe(
+        StructuralObservationRequest(
+            event_timestamp=101.0,
+            action_name="click",
+            x=25,
+            y=35,
+        )
+    )
+
+    assert observed is not None
+    assert observed.element.automation_id == "member-id"
+    assert observed.element.name is None
+    assert observed.process is not None
+    assert observed.process.process_name is None
+    assert observed.window is not None
+    assert observed.window.title is None
+
+
+def test_structural_contract_accepts_namespaced_extension_provider() -> None:
+    observation = StructuralObservation(
+        provider="example_macos_ax",
+        event_timestamp=101.0,
+        observed_at=101.1,
+        query_kind="focused",
+        element=StructuralElement(role="AXTextField"),
+    )
+
+    assert observation.provider == "example_macos_ax"
+
+
+def test_windows_uia_ancestry_depth_is_bounded() -> None:
+    with pytest.raises(ValueError, match="maximum_ancestry_depth"):
+        WindowsUIAStructuralObserver(
+            runtime=SimpleNamespace(),
+            maximum_ancestry_depth=MAX_STRUCTURAL_ANCESTRY_DEPTH + 1,
+        )
 
 
 def test_pywinauto_runtime_quantizes_points_and_uses_exact_focused_api() -> None:
