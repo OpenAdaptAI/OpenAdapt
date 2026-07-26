@@ -2238,7 +2238,7 @@ requires-dist = [
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.1.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
-    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.2.0,<0.4.0" },
+    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.5.0,<0.6.0" },
     { name = "opencv-python-headless", specifier = ">=4.9" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "playwright", specifier = ">=1.44" },
@@ -2302,14 +2302,14 @@ presidio = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.3.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2e/04/81afdf8ffa820cbf99c4d1d0b733ad13eb5072bc7bb5f4ae768a0f8e85e4/openadapt_types-0.3.0.tar.gz", hash = "sha256:7a6760a957a9266b91a09771ed84378d7673e41c0be79cd1f6d026c05ec4e51b", size = 55355 }
+sdist = { url = "https://files.pythonhosted.org/packages/55/b8/e3764cb9f6c0e9acbc6efdbd2f83f2883739c4e2cbf345f80512e30e155b/openadapt_types-0.5.0.tar.gz", hash = "sha256:89dd3d7240b6a61785934738a39fc7a4177fefc6d28f995a3876a6a1263adf65", size = 74240 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/63/eb7d4b025d4796e7c71da7f155936f0174ecf44400408740b707cb6862c7/openadapt_types-0.3.0-py3-none-any.whl", hash = "sha256:72d7c2a301121c2cdbcb57095b2b5193e0780741a01d7571b3bed021b214bfe7", size = 22928 },
+    { url = "https://files.pythonhosted.org/packages/12/bc/84e180a74811b92c8545136bb097aa6488709027f08614b78f9ed9cb193e/openadapt_types-0.5.0-py3-none-any.whl", hash = "sha256:d4740e0c7e29f258469bccd1ce5450c4b4d79b6e3107ac687e66a412b9a6341b", size = 42742 },
 ]
 
 [[package]]

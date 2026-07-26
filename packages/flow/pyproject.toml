@@ -136,13 +136,11 @@ capture = ["openadapt-capture>=1.1.0"]
 # only (emit / benchmark round-trip); never on the replay hot path. The shim
 # imports openadapt-types lazily, so the core stays importable without it.
 # Bounded pin: openadapt-types is 0-based semver (major_on_zero=false), so
-# breaking changes land at the MINOR level. The shim in interop/types.py is
-# field-exact against the 0.2.x/0.3.x schema; cap below the next (breaking)
-# 0.4.0 and floor at the earliest tested minor. The `interop-types` CI job
-# installs this extra so the shim is type-checked and tested against the real
-# package (see .github/workflows/ci.yml). Raise the ceiling only after
-# validating the shim against a new minor.
-interop = ["openadapt-types>=0.2.0,<0.4.0"]
+# breaking changes land at the MINOR level. The action shim and runtime-overlay
+# producer are field-exact against the released 0.5.x schemas. The
+# `interop-types` CI job type-checks and tests both boundaries against the real
+# package; raise the ceiling only after validating the next minor.
+interop = ["openadapt-types>=0.5.0,<0.6.0"]
 
 [project.scripts]
 openadapt-flow = "openadapt_flow.__main__:main"

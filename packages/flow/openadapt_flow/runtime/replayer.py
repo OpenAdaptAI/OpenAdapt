@@ -42,12 +42,13 @@ import time
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, cast
 from urllib.parse import urlsplit
 
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
+    BrowserPresentationGeometryBackend,
     FocusedElementActuationLeaseBackend,
     GuardedCoordinateActionBackend,
     GuardedKeyboardActionBackend,
@@ -119,6 +120,9 @@ from openadapt_flow.runtime.effects import (
 from openadapt_flow.runtime.resolver import is_below_ocr, pad_region, resolve
 from openadapt_flow.verification import verifier_effect_tier
 from openadapt_flow.vision.ocr import OcrResolutionRefused
+
+if TYPE_CHECKING:
+    from openadapt_flow.runtime.control_overlay import RuntimeControlOverlayEmitter
 
 # REGION_STABLE template check: how far the expected content may shift from
 # the recorded region (real apps re-layout by a few pixels between runs),
@@ -331,6 +335,10 @@ class Replayer:
             dismissal is audited and must pass its declared visual clearance;
             otherwise replay halts. Merged with the bundle's own
             ``Workflow.interstitials``. None (default) => no handling.
+        control_overlay: Optional presentation-only canonical event producer.
+            It has no execution authority. Sink/schema errors are retained on
+            ``control_overlay_error`` and disable later presentation events;
+            they never change actuation or the evidence-qualified run outcome.
     """
 
     def __init__(
@@ -355,6 +363,7 @@ class Replayer:
         require_settled: bool = False,
         settle_readiness_timeout_s: float = 10.0,
         interstitials: Optional[list[Interstitial]] = None,
+        control_overlay: Optional["RuntimeControlOverlayEmitter"] = None,
     ) -> None:
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
@@ -510,6 +519,9 @@ class Replayer:
         self._workflow_interstitials: tuple[Interstitial, ...] = ()
         self._workflow_interstitial_snapshot: tuple[str, ...] = ()
         self._workflow_interstitial_snapshot_error: Optional[str] = None
+        self.control_overlay = control_overlay
+        self.control_overlay_error: Optional[str] = None
+        self._control_overlay_disabled = False
 
     # -- public API ----------------------------------------------------------
 
@@ -670,6 +682,7 @@ class Replayer:
                 self._screenshots_may_leave_box or prior_screenshots_may_leave_box
             ),
         )
+        self._begin_control_overlay(report.execution_profile)
         if self.governed_authorization is not None:
             profile_refusal = self._profile_runtime_refusal(workflow)
             if profile_refusal is not None:
@@ -683,9 +696,7 @@ class Replayer:
                     )
                 )
                 report.success = False
-                self._stamp_execution_outcome(report, workflow)
-                report.save(run_dir)
-                return report
+                return self._finalize_report(report, workflow, run_dir)
             refusal, assets = self.governed_authorization.validate_execution_snapshot(
                 workflow,
                 bundle_dir=bundle_dir,
@@ -739,9 +750,7 @@ class Replayer:
                     )
                 )
                 report.success = False
-                self._stamp_execution_outcome(report, workflow)
-                report.save(run_dir)
-                return report
+                return self._finalize_report(report, workflow, run_dir)
         self._record_identity_coverage(workflow, report)
         new_crops: dict[str, bytes] = {}
         # Per-run reset; the attribute is declared in __init__.
@@ -774,9 +783,7 @@ class Replayer:
             )
             report.success = False
             report.total_ms = (time.monotonic() - t_run) * 1000.0
-            self._stamp_execution_outcome(report, workflow)
-            report.save(run_dir)
-            return report
+            return self._finalize_report(report, workflow, run_dir)
 
         durable_run = None
         if self.durable:
@@ -883,9 +890,7 @@ class Replayer:
                 workflow, bundle_dir, Path(save_healed_to), new_crops
             )
 
-        self._stamp_execution_outcome(report, workflow)
-        report.save(run_dir)
-        return report
+        return self._finalize_report(report, workflow, run_dir)
 
     @staticmethod
     def _stamp_execution_outcome(report: RunReport, workflow: Workflow) -> None:
@@ -900,6 +905,140 @@ class Replayer:
             workflow,
             report.execution_profile,
         )
+
+    def _begin_control_overlay(self, profile: Optional[str]) -> None:
+        """Start an optional presentation rail without affecting execution."""
+
+        self.control_overlay_error = None
+        self._control_overlay_disabled = False
+        if self.control_overlay is None:
+            return
+        try:
+            if profile is None:
+                raise ValueError("run report has no execution profile")
+            self.control_overlay.begin(profile=profile)
+            # Prime browser-only presentation metadata at the run boundary,
+            # never between final target revalidation and one-shot delivery.
+            # Subsequent reads are cache-only and fail closed if viewport
+            # dimensions changed.
+            if isinstance(self.backend, BrowserPresentationGeometryBackend):
+                self.backend.browser_presentation_viewport()
+        except Exception as exc:
+            self.control_overlay_error = type(exc).__name__
+            self._control_overlay_disabled = True
+
+    def _emit_control_overlay_phase(
+        self,
+        phase: str,
+        *,
+        current_step: Optional[int] = None,
+        total_steps: Optional[int] = None,
+        target_tracking: Optional[Any] = None,
+    ) -> None:
+        if self.control_overlay is None or self._control_overlay_disabled:
+            return
+        try:
+            self.control_overlay.emit_phase(
+                phase,
+                current_step=current_step,
+                total_steps=total_steps,
+                target_tracking=target_tracking,
+            )
+        except Exception as exc:
+            self.control_overlay_error = type(exc).__name__
+            self._control_overlay_disabled = True
+
+    def _control_overlay_browser_target(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        matched_region: Optional[Region],
+        observation_png: bytes,
+    ) -> Optional[Any]:
+        """Build presentation-only geometry from the final resolved target.
+
+        Only a backend that explicitly advertises top-level browser CSS
+        geometry can produce this V2 target.  Missing/invalid presentation
+        metadata omits the rectangle without disabling the status rail or
+        influencing execution.
+        """
+
+        if (
+            self.control_overlay is None
+            or self._control_overlay_disabled
+            or resolution is None
+            or not isinstance(self.backend, BrowserPresentationGeometryBackend)
+        ):
+            return None
+        viewport = self.backend.browser_presentation_viewport()
+        if viewport is None:
+            return None
+        # Visual ladder regions are screenshot-pixel coordinates.  The
+        # reference browser runner records CSS-scale screenshots (DPR 1); for
+        # any other DPR, omit visual tracking until an exact pixel-to-CSS
+        # projection is retained.  Structural handle regions are already CSS
+        # viewport coordinates and remain exact at any DPR.
+        if resolution.structural_handle is None and viewport[2] != 1.0:
+            return None
+        region = (
+            resolution.structural_handle.region
+            if resolution.structural_handle is not None
+            and resolution.structural_handle.region is not None
+            else matched_region
+        )
+        if region is None:
+            return None
+        action_kind = {
+            ActionKind.CLICK: "click",
+            ActionKind.DOUBLE_CLICK: "double_click",
+            ActionKind.TYPE: "type",
+            ActionKind.SCROLL: "scroll",
+        }.get(step.action)
+        if action_kind is None:
+            return None
+        try:
+            return self.control_overlay.browser_target_tracking(
+                observation_png=observation_png,
+                region_css_px=region,
+                viewport=viewport,
+                action_kind=action_kind,
+            )
+        except Exception:
+            return None
+
+    def _emit_control_overlay_terminal(self, outcome: Optional[str]) -> None:
+        if self.control_overlay is None or self._control_overlay_disabled:
+            return
+        try:
+            if outcome is None:
+                raise ValueError("run report has no exact execution outcome")
+            self.control_overlay.emit_terminal(outcome)
+        except Exception as exc:
+            self.control_overlay_error = type(exc).__name__
+            self._control_overlay_disabled = True
+
+    def _finalize_report(
+        self,
+        report: RunReport,
+        workflow: Workflow,
+        run_dir: Path,
+    ) -> RunReport:
+        """Persist exact evidence first, then project its terminal outcome."""
+
+        self._stamp_execution_outcome(report, workflow)
+        report.save(run_dir)
+        self._emit_control_overlay_terminal(report.execution_outcome)
+        return report
+
+    @staticmethod
+    def _control_overlay_progress(
+        workflow: Workflow,
+        step_index: int,
+        graph_ctx: Optional["_GraphStepContext"],
+    ) -> tuple[Optional[int], Optional[int]]:
+        if workflow.program is not None or graph_ctx is not None:
+            return None, None
+        return step_index + 1, len(workflow.steps)
 
     def _profile_runtime_refusal(self, workflow: Workflow) -> Optional[str]:
         """Recheck load-bearing profile invariants at the actuation boundary."""
@@ -2619,6 +2758,14 @@ class Replayer:
         """
         t0 = time.monotonic()
         result = StepResult(step_id=step.id, intent=step.intent, ok=False)
+        overlay_current, overlay_total = self._control_overlay_progress(
+            workflow, step_index, graph_ctx
+        )
+        self._emit_control_overlay_phase(
+            "observing",
+            current_step=overlay_current,
+            total_steps=overlay_total,
+        )
 
         # API/tool tier -- the TOP of the capability ladder. When the step
         # carries an api_binding and an ApiActuator is configured, PERFORM the
@@ -2630,7 +2777,13 @@ class Replayer:
         # yet performed (the no-double-write contract). See
         # openadapt_flow.runtime.actuators.
         if self.api_actuator is not None and step.api_binding is not None:
-            if self._try_api_tier(step, params, result, workflow=workflow):
+            if self._try_api_tier(
+                step,
+                params,
+                result,
+                workflow=workflow,
+                step_index=step_index,
+            ):
                 if not result.ok and result.failure_category is None:
                     result.safety_halt = True
                     result.failure_category = (
@@ -2874,6 +3027,18 @@ class Replayer:
                 # the workflow action as URL_CHANGED, TITLE_CHANGED, or
                 # NEW_TAB_OPENED.
                 start_state = self._structural_state()
+                overlay_target = self._control_overlay_browser_target(
+                    step,
+                    resolution,
+                    matched_region,
+                    before_png,
+                )
+                self._emit_control_overlay_phase(
+                    "executing",
+                    current_step=overlay_current,
+                    total_steps=overlay_total,
+                    target_tracking=overlay_target,
+                )
                 try:
                     error = self._act(
                         step,
@@ -2905,6 +3070,11 @@ class Replayer:
                     result.safety_halt = True
 
             if error is None:
+                self._emit_control_overlay_phase(
+                    "verifying",
+                    current_step=overlay_current,
+                    total_steps=overlay_total,
+                )
                 try:
                     after_png = self.vision.wait_settled(self.backend)
                     last_frame = after_png
@@ -3280,6 +3450,7 @@ class Replayer:
         result: StepResult,
         *,
         workflow: Workflow,
+        step_index: int,
     ) -> bool:
         """Perform ``step.api_binding``'s write via the API and confirm it.
 
@@ -3392,6 +3563,14 @@ class Replayer:
             result.effect_results.append(refusal)
             result.error = refusal
             return True
+        overlay_current, overlay_total = self._control_overlay_progress(
+            workflow, step_index, None
+        )
+        self._emit_control_overlay_phase(
+            "executing",
+            current_step=overlay_current,
+            total_steps=overlay_total,
+        )
         outcome = self.api_actuator.actuate(binding, params)
 
         from openadapt_flow.runtime.actuators import ActuationStatus
@@ -3422,6 +3601,11 @@ class Replayer:
         # verdict HALTs. The GUI resolve/act (and screen postconditions) are
         # SKIPPED -- the record, not the screen, is the oracle for an API write.
         result.effect_results.append(f"[api] actuated {outcome.reason}")
+        self._emit_control_overlay_phase(
+            "verifying",
+            current_step=overlay_current,
+            total_steps=overlay_total,
+        )
         error = self._verify_effects(step, before, result, effects=effects)
         result.ok = error is None
         result.error = error

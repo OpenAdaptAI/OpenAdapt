@@ -9,6 +9,7 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -588,6 +589,8 @@ class PlaywrightBackend:
             tuple[tuple[int, int], str, str, tuple[float, float], bool]
         ] = None
         self._guarded_keyboard: Optional[tuple[str, str]] = None
+        self._presentation_viewport_loaded = False
+        self._presentation_viewport: Optional[tuple[int, int, float]] = None
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -596,6 +599,33 @@ class PlaywrightBackend:
         if size is None:  # pragma: no cover - viewport always set by launch()
             return VIEWPORT
         return (size["width"], size["height"])
+
+    def browser_presentation_viewport(self) -> Optional[tuple[int, int, float]]:
+        """Return exact top-level CSS geometry for an external overlay.
+
+        This is presentation metadata only.  It neither injects into the page
+        nor exposes a selector or target identity, and replay never consumes it
+        for resolution, actuation, or verification.
+        """
+
+        size = self.page.viewport_size
+        if size is None:
+            return None
+        dimensions = (int(size["width"]), int(size["height"]))
+        if self._presentation_viewport_loaded:
+            cached = self._presentation_viewport
+            if cached is None or cached[:2] != dimensions:
+                return None
+            return cached
+        self._presentation_viewport_loaded = True
+        try:
+            dpr = float(self.page.evaluate("() => window.devicePixelRatio"))
+            if not math.isfinite(dpr) or dpr <= 0:
+                return None
+            self._presentation_viewport = (*dimensions, dpr)
+        except Exception:
+            self._presentation_viewport = None
+        return self._presentation_viewport
 
     # -- structural observations (openadapt_flow.backend.StructuralBackend) --
 

@@ -264,10 +264,13 @@ jobs:
         run: python -c "import openadapt_types; print(openadapt_types.__file__)"
 
       - name: Test openadapt-types boundary (no skips)
-        run: pytest -q tests/test_interop_types.py
+        run: pytest -q tests/test_interop_types.py tests/test_runtime_control_overlay.py
 
       - name: Type-check boundary against released schema
-        run: mypy --config-file .github/mypy-interop.ini openadapt_flow/interop/types.py
+        run: >-
+          mypy --config-file .github/mypy-interop.ini
+          openadapt_flow/interop/types.py
+          openadapt_flow/runtime/control_overlay.py
 
   # --- PHI governance guard (PHI audit REM-1) ------------------------------
   # Refuses to let a compiled bundle carrying a plaintext patient identity band

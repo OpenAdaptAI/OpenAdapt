@@ -191,6 +191,22 @@ class ExecutionContextIdentityBackend(Protocol):
 
 
 @runtime_checkable
+class BrowserPresentationGeometryBackend(Protocol):
+    """Optional exact browser geometry for an out-of-page presentation layer.
+
+    This capability does not inject markup, expose a selector, or participate
+    in target resolution.  It lets the presentation-only control-overlay rail
+    normalize an already-resolved rectangle to the top-level browser CSS
+    viewport.  Native desktop and pixel-only RDP/Citrix backends deliberately
+    do not implement it; those coordinate spaces require their own contracts.
+    """
+
+    def browser_presentation_viewport(self) -> Optional[tuple[int, int, float]]:
+        """Return ``(CSS width, CSS height, device pixel ratio)`` or ``None``."""
+        ...
+
+
+@runtime_checkable
 class StructuralActionBackend(Protocol):
     """Optional STRUCTURAL action capability a backend MAY expose.
 
