@@ -168,7 +168,9 @@ def _run_flow(argv: list[str]) -> None:
     show_default=True,
     help="New directory for the recording, bundle, and run report.",
 )
-@click.option("--headed", is_flag=True, help="Show the browser while the tutorial runs.")
+@click.option(
+    "--headed", is_flag=True, help="Show the browser while the tutorial runs."
+)
 def quickstart(out: Path, headed: bool) -> None:
     """Run the complete local tutorial: record, compile, check, and replay.
 
@@ -243,9 +245,7 @@ def quickstart(out: Path, headed: bool) -> None:
         "Connect this computer when you want Cloud history and collaboration: "
         "https://app.openadapt.ai/dashboard/settings/ingest"
     )
-    click.echo(
-        "Qualify a consequential workflow: https://openadapt.ai/qualify"
-    )
+    click.echo("Qualify a consequential workflow: https://openadapt.ai/qualify")
 
 
 @main.group(cls=_FlowPassthroughGroup)
