@@ -4316,7 +4316,7 @@
     },
     {
       "path": "schemas/public-demo-evidence-v1.json",
-      "sha256": "fe0b4b20a4338d8c4ea39a5d2e7b788dafa56e73639a084dd263f86f2a9f3baa"
+      "sha256": "fc7bca6e1ea0cfc9c70c11368d7b59d542f75f98f2dbaf4d869247225e53c1fd"
     },
     {
       "path": "schemas/runtime-validation-attestation-v1.json",

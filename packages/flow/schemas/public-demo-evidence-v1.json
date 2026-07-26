@@ -125,7 +125,6 @@
         "required_case_kinds",
         "outcome_counts",
         "model_calls",
-        "external_network_calls",
         "screenshots_may_leave_box",
         "wrong_target_actions",
         "silent_incorrect_successes",
@@ -137,6 +136,18 @@
         "minimum_effect_tier",
         "qualification_passed",
         "caveats"
+      ],
+      "oneOf": [
+        {
+          "required": ["external_network_calls"]
+        },
+        {
+          "required": [
+            "runtime_network_observation_counts",
+            "browser_request_count",
+            "off_box_or_third_party_egress_observed"
+          ]
+        }
       ],
       "properties": {
         "environment_digest": {
@@ -151,6 +162,22 @@
         },
         "external_network_calls": {
           "const": 0
+        },
+        "runtime_network_observation_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "none": {"type": "integer", "minimum": 0},
+            "observed": {"type": "integer", "minimum": 0},
+            "unknown": {"type": "integer", "minimum": 0}
+          }
+        },
+        "browser_request_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "off_box_or_third_party_egress_observed": {
+          "const": false
         },
         "screenshots_may_leave_box": {
           "const": false
@@ -209,6 +236,22 @@
             "minimum_effect_tier"
           ]
         },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["demonstration", "verified", "halted"],
+          "properties": {
+            "demonstration": {
+              "$ref": "#/$defs/presentationRecording"
+            },
+            "verified": {
+              "$ref": "#/$defs/presentationRun"
+            },
+            "halted": {
+              "$ref": "#/$defs/presentationRun"
+            }
+          }
+        },
         "cases": {
           "type": "array",
           "minItems": 6,
@@ -263,6 +306,52 @@
           "type": "string",
           "minLength": 1
         }
+      }
+    },
+    "presentationRecording": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "raw_media",
+        "media",
+        "timeline",
+        "frame_pts"
+      ],
+      "properties": {
+        "source_kind": {"const": "source_recording"},
+        "raw_media": {"$ref": "#/$defs/fileRef"},
+        "media": {"$ref": "#/$defs/fileRef"},
+        "timeline": {"$ref": "#/$defs/fileRef"},
+        "frame_pts": {"$ref": "#/$defs/fileRef"}
+      }
+    },
+    "presentationRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "case_id",
+        "trial",
+        "report",
+        "outcome",
+        "oracle",
+        "raw_media",
+        "media",
+        "timeline",
+        "frame_pts"
+      ],
+      "properties": {
+        "source_kind": {"const": "run"},
+        "case_id": {"type": "string", "minLength": 1},
+        "trial": {"type": "integer", "minimum": 1},
+        "report": {"$ref": "#/$defs/fileRef"},
+        "outcome": {"$ref": "#/$defs/fileRef"},
+        "oracle": {"$ref": "#/$defs/fileRef"},
+        "raw_media": {"$ref": "#/$defs/fileRef"},
+        "media": {"$ref": "#/$defs/fileRef"},
+        "timeline": {"$ref": "#/$defs/fileRef"},
+        "frame_pts": {"$ref": "#/$defs/fileRef"}
       }
     },
     "cropBinding": {

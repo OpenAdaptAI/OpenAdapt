@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -40,6 +41,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Literal, Optional
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from jsonschema import Draft202012Validator
@@ -586,6 +588,7 @@ def _record(
             "recording", observation_png=backend.screenshot()
         )
         recorder.finish()
+        _browser_network_observation(page, base_url=base_url)
     finally:
         close()
     _finish_video(video_tmp, media_dir / "recording.webm")
@@ -747,6 +750,57 @@ def _origin(url: str) -> str:
     return url.rstrip("/").split("?", 1)[0]
 
 
+def _require_loopback_url(url: str) -> None:
+    """Reject any configured or browser-observed off-box destination."""
+
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.hostname is None
+    ):
+        raise EvidencePackError(f"invalid public-demo network destination: {url!r}")
+    try:
+        loopback = ipaddress.ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        loopback = parsed.hostname.lower() == "localhost"
+    if not loopback:
+        raise EvidencePackError(
+            f"public-demo observed an off-box network destination: {url!r}"
+        )
+
+
+def _browser_network_observation(page: Any, *, base_url: str) -> dict[str, Any]:
+    """Summarize actual browser destinations without publishing their URLs.
+
+    The synthetic exporter configures only the loopback MockMed app/verifier.
+    Navigation and resource timing entries provide a second, browser-observed
+    check.  This proves the bounded off-box/third-party boundary; it does not
+    pretend that loopback HTTP means zero network calls.
+    """
+
+    _require_loopback_url(base_url)
+    raw_urls = page.evaluate(
+        """() => [
+            ...performance.getEntriesByType('navigation'),
+            ...performance.getEntriesByType('resource'),
+        ].map((entry) => entry.name)"""
+    )
+    if not isinstance(raw_urls, list) or not raw_urls:
+        raise EvidencePackError("browser exposed no navigation/resource observations")
+    urls: list[str] = []
+    for value in raw_urls:
+        if not isinstance(value, str) or not value:
+            raise EvidencePackError("browser returned an invalid network observation")
+        _require_loopback_url(value)
+        urls.append(value)
+    return {
+        "browser_request_count": len(urls),
+        "off_box_or_third_party_egress_observed": False,
+    }
+
+
 def _case_plan() -> list[dict[str, Any]]:
     """Machine conditions keyed to the canonical qualification case ids."""
 
@@ -872,6 +926,7 @@ def _outcome_envelope(
     report: RunReport,
     report_path: Path,
     oracle: dict[str, Any],
+    network_observation: dict[str, Any],
 ) -> dict[str, Any]:
     if report.execution_outcome is None:
         raise EvidencePackError("run report has no precise execution outcome")
@@ -888,7 +943,11 @@ def _outcome_envelope(
         "execution_completed": report.execution_completed,
         "report_sha256": _sha256(report_path),
         "model_calls": report.model_calls,
-        "external_network_calls": 0,
+        "runtime_network_observation": report.external_network_calls,
+        "browser_request_count": network_observation["browser_request_count"],
+        "off_box_or_third_party_egress_observed": network_observation[
+            "off_box_or_third_party_egress_observed"
+        ],
         "screenshots_may_leave_box": report.screenshots_may_leave_box,
         "duration_ms": report.total_ms,
         "wrong_target_action": oracle["wrong_target_action"],
@@ -959,6 +1018,7 @@ def _run_case_trial(
     presentation = (
         _PresentationCapture(mode="governed") if clip_id is not None else None
     )
+    network_observation: dict[str, Any] | None = None
     try:
         verifier = RestRecordVerifier(
             base_url,
@@ -1004,8 +1064,14 @@ def _run_case_trial(
             execution_entry_url=entry_url,
         )
         backend.page.wait_for_timeout(200)
+        network_observation = _browser_network_observation(
+            backend.page,
+            base_url=base_url,
+        )
     finally:
         close()
+    if network_observation is None:
+        raise EvidencePackError("run retained no browser network observation")
     if record_video:
         _finish_video(
             media_tmp,
@@ -1040,6 +1106,7 @@ def _run_case_trial(
         report=report,
         report_path=report_path,
         oracle=oracle,
+        network_observation=network_observation,
     )
     _write_json(trial_dir / "outcome.json", envelope)
     if report.execution_outcome != case["expected"]:
@@ -1270,6 +1337,46 @@ def _assemble_manifest(
     recording = root / "artifacts" / "recording"
     bundle = root / "artifacts" / "bundle"
     qualification = root / "artifacts" / "qualification"
+    presentation = root / "artifacts" / "presentation"
+    case_by_id = {str(case["case_id"]): case for case in cases}
+    if len(case_by_id) != len(cases):
+        raise EvidencePackError("public-demo case ids are not unique")
+
+    def presentation_media(clip_id: str) -> dict[str, Any]:
+        return {
+            "media": _ref_for(root, presentation / f"{clip_id}.webm"),
+            "timeline": _ref_for(
+                root, presentation / f"{clip_id}.control-overlay.v2.json"
+            ),
+            "frame_pts": _ref_for(root, presentation / f"{clip_id}.frame-pts-us.json"),
+        }
+
+    def run_presentation(clip_id: str, case_id: str) -> dict[str, Any]:
+        case = case_by_id.get(case_id)
+        if case is None:
+            raise EvidencePackError(f"presentation source case is missing: {case_id}")
+        return {
+            "source_kind": "run",
+            "case_id": case_id,
+            "trial": 1,
+            "report": case["reports"][0],
+            "outcome": case["outcome_envelopes"][0],
+            "oracle": case["oracles"][0],
+            "raw_media": case["media"],
+            **presentation_media(clip_id),
+        }
+
+    network_observations = Counter(report.external_network_calls for report in reports)
+    browser_request_count = sum(
+        int(envelope["browser_request_count"])
+        for case in cases
+        for envelope in case["outcomes"]
+    )
+    off_box_egress_observed = any(
+        bool(envelope["off_box_or_third_party_egress_observed"])
+        for case in cases
+        for envelope in case["outcomes"]
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "pack": {
@@ -1306,7 +1413,11 @@ def _assemble_manifest(
             ),
             "outcome_counts": dict(sorted(outcomes.items())),
             "model_calls": sum(report.model_calls for report in reports),
-            "external_network_calls": 0,
+            "runtime_network_observation_counts": dict(
+                sorted(network_observations.items())
+            ),
+            "browser_request_count": browser_request_count,
+            "off_box_or_third_party_egress_observed": off_box_egress_observed,
             "screenshots_may_leave_box": any(
                 report.screenshots_may_leave_box for report in reports
             ),
@@ -1335,7 +1446,7 @@ def _assemble_manifest(
             "caveats": [
                 "First-party synthetic MockMed task; not customer production evidence.",
                 "Bound to the exact app, browser, viewport, runtime, and source commit in this pack.",
-                "Loopback HTTP is used for the local app and independent read-back; no external service is contacted.",
+                "The runtime conservatively records network activity as observed. Every configured and browser-observed destination in this isolated campaign was loopback; no off-box or third-party egress was observed.",
                 "Three trials per required condition establish this bounded campaign only.",
                 "The synthetic reference app exposes a stable demo-mode idempotency key so the compiler can retain and verify a real at-most-once contract.",
             ],
@@ -1364,6 +1475,17 @@ def _assemble_manifest(
                 "report": _ref_for(root, qualification / "report.json"),
                 "passed": qualification_report["passed"],
                 "minimum_effect_tier": int(project.minimum_effect_tier),
+            },
+            "presentation": {
+                "demonstration": {
+                    "source_kind": "source_recording",
+                    "raw_media": _ref_for(
+                        root, root / "artifacts" / "media" / "recording.webm"
+                    ),
+                    **presentation_media("demonstration"),
+                },
+                "verified": run_presentation("verified", "representative"),
+                "halted": run_presentation("halted", "fault-ambiguity"),
             },
             "cases": cases,
             "crop_bindings": crop_bindings,
@@ -1618,13 +1740,28 @@ def _validate_presentation_artifacts(
     *,
     inventory: dict[str, dict[str, Any]],
     pack_id: str,
+    artifacts: dict[str, Any],
 ) -> None:
+    presentation = artifacts["presentation"]
+    cases = {str(case["case_id"]): case for case in artifacts["cases"]}
+    if len(cases) != len(artifacts["cases"]):
+        raise EvidencePackError("public-demo case ids are not unique")
     for clip_id in ("demonstration", "verified", "halted"):
-        prefix = f"artifacts/presentation/{clip_id}"
-        media_relative = f"{prefix}.webm"
-        timeline_relative = f"{prefix}.control-overlay.v2.json"
-        pts_relative = f"{prefix}.frame-pts-us.json"
-        for relative in (media_relative, timeline_relative, pts_relative):
+        clip = presentation[clip_id]
+        media_relative = str(clip["media"]["path"])
+        timeline_relative = str(clip["timeline"]["path"])
+        pts_relative = str(clip["frame_pts"]["path"])
+        expected_prefix = f"artifacts/presentation/{clip_id}"
+        if (
+            media_relative != f"{expected_prefix}.webm"
+            or timeline_relative != f"{expected_prefix}.control-overlay.v2.json"
+            or pts_relative != f"{expected_prefix}.frame-pts-us.json"
+        ):
+            raise EvidencePackError(
+                f"presentation mapping uses non-canonical paths: {clip_id}"
+            )
+        for ref in (clip["media"], clip["timeline"], clip["frame_pts"]):
+            relative = str(ref["path"])
             if relative not in inventory:
                 raise EvidencePackError(
                     f"public presentation artifact is not inventoried: {relative}"
@@ -1737,6 +1874,13 @@ def _validate_presentation_artifacts(
                     )
         frames = [event["frame"] for event in events]
         if clip_id == "demonstration":
+            if (
+                clip["source_kind"] != "source_recording"
+                or clip["raw_media"] != artifacts["source_recording"]["media"]
+            ):
+                raise EvidencePackError(
+                    "demonstration presentation is not bound to the source recording"
+                )
             if any(
                 frame.get("mode") != "demonstration"
                 or frame.get("profile") != "demo"
@@ -1749,9 +1893,46 @@ def _validate_presentation_artifacts(
                     "and carry no execution proof"
                 )
         else:
-            expected_terminal = "verified" if clip_id == "verified" else "halted"
+            case = cases.get(str(clip["case_id"]))
+            trial_index = int(clip["trial"]) - 1
             if (
-                any(
+                clip["source_kind"] != "run"
+                or case is None
+                or trial_index < 0
+                or trial_index >= len(case["reports"])
+                or clip["report"] != case["reports"][trial_index]
+                or clip["outcome"] != case["outcome_envelopes"][trial_index]
+                or clip["oracle"] != case["oracles"][trial_index]
+                or clip["raw_media"] != case["media"]
+            ):
+                raise EvidencePackError(
+                    f"{clip_id} presentation source mapping does not match its case"
+                )
+            report_path = _safe_file(root, str(clip["report"]["path"]))
+            report = RunReport.model_validate_json(
+                report_path.read_text(encoding="utf-8")
+            )
+            outcome = json.loads(
+                _safe_file(root, str(clip["outcome"]["path"])).read_text(
+                    encoding="utf-8"
+                )
+            )
+            oracle = json.loads(
+                _safe_file(root, str(clip["oracle"]["path"])).read_text(
+                    encoding="utf-8"
+                )
+            )
+            expected_outcome = "VERIFIED" if clip_id == "verified" else "HALTED"
+            expected_terminal = expected_outcome.lower()
+            if (
+                report.execution_outcome != expected_outcome
+                or report.execution_profile != "standard"
+                or outcome.get("report_sha256") != _sha256(report_path)
+                or outcome.get("observed_outcome") != expected_outcome
+                or outcome.get("expected_outcome") != expected_outcome
+                or outcome.get("matched_expectation") is not True
+                or oracle.get("passed") is not True
+                or any(
                     frame.get("mode") != "governed"
                     or frame.get("profile") != "standard"
                     for frame in frames
@@ -1836,13 +2017,21 @@ def validate_pack(pack_dir: Path | str) -> dict[str, Any]:
     validate_refs(manifest["task"])
     validate_refs(manifest["artifacts"])
 
-    _validate_presentation_artifacts(
-        root,
-        inventory=inventory,
-        pack_id=str(manifest["pack"]["id"]),
-    )
-
     artifacts = manifest["artifacts"]
+    exact_network_boundary = (
+        "runtime_network_observation_counts" in manifest["evaluation"]
+    )
+    if exact_network_boundary and "presentation" not in artifacts:
+        raise EvidencePackError(
+            "exact-bound public-demo pack is missing presentation provenance"
+        )
+    if "presentation" in artifacts:
+        _validate_presentation_artifacts(
+            root,
+            inventory=inventory,
+            pack_id=str(manifest["pack"]["id"]),
+            artifacts=artifacts,
+        )
     for binding in artifacts["crop_bindings"]:
         crop = _safe_file(root, binding["crop_path"])
         source = _safe_file(root, binding["source_frame_path"])
@@ -1869,15 +2058,41 @@ def validate_pack(pack_dir: Path | str) -> dict[str, Any]:
     silent_wrong = 0
     wrong_target = 0
     over_halts = 0
+    report_count = 0
+    total_duration_ms = 0.0
+    runtime_network_observations: Counter[str] = Counter()
+    browser_request_count = 0
+    off_box_egress_observed = False
+    screenshots_may_leave_box = False
+    case_ids: set[str] = set()
+    case_kinds: list[str] = []
+    trials_per_case: set[int] = set()
+    evaluation = manifest["evaluation"]
     for case in artifacts["cases"]:
+        case_id = str(case["case_id"])
+        if case_id in case_ids:
+            raise EvidencePackError(f"duplicate public-demo case id: {case_id}")
+        case_ids.add(case_id)
+        case_kinds.append(str(case["kind"]))
         expected = case["expected_outcome"]
-        if len(case["reports"]) < 3:
-            raise EvidencePackError(f"{case['case_id']} has fewer than 3 trials")
-        for report_ref, outcome_ref, oracle_ref in zip(
-            case["reports"],
-            case["outcome_envelopes"],
-            case["oracles"],
-            strict=True,
+        trial_count = len(case["reports"])
+        trials_per_case.add(trial_count)
+        if trial_count < 3 or any(
+            len(case[key]) != trial_count
+            for key in ("outcome_envelopes", "outcomes", "oracles", "events")
+        ):
+            raise EvidencePackError(
+                f"{case_id} does not retain one complete artifact set per trial"
+            )
+        for trial, (report_ref, outcome_ref, inline_outcome, oracle_ref) in enumerate(
+            zip(
+                case["reports"],
+                case["outcome_envelopes"],
+                case["outcomes"],
+                case["oracles"],
+                strict=True,
+            ),
+            start=1,
         ):
             report_path = _safe_file(root, report_ref["path"])
             report = RunReport.model_validate_json(
@@ -1890,34 +2105,98 @@ def validate_pack(pack_dir: Path | str) -> dict[str, Any]:
                 _safe_file(root, oracle_ref["path"]).read_text(encoding="utf-8")
             )
             if (
-                outcome["report_sha256"] != _sha256(report_path)
+                inline_outcome != outcome
+                or outcome["report_sha256"] != _sha256(report_path)
                 or outcome["observed_outcome"] != report.execution_outcome
                 or outcome["expected_outcome"] != expected
+                or outcome.get("case_id") != case_id
+                or outcome.get("trial") != trial
                 or not outcome["matched_expectation"]
                 or not oracle["passed"]
+                or outcome.get("screenshots_may_leave_box")
+                != report.screenshots_may_leave_box
+                or (
+                    exact_network_boundary
+                    and (
+                        outcome.get("runtime_network_observation")
+                        != report.external_network_calls
+                        or not isinstance(outcome.get("browser_request_count"), int)
+                        or isinstance(outcome.get("browser_request_count"), bool)
+                        or outcome["browser_request_count"] < 1
+                        or outcome.get("off_box_or_third_party_egress_observed")
+                        is not False
+                    )
+                )
             ):
                 raise EvidencePackError(
                     f"case outcome/report/oracle mismatch: {case['case_id']}"
                 )
             outcomes[report.execution_outcome or ""] += 1
+            report_count += 1
             model_calls += report.model_calls
+            total_duration_ms += report.total_ms
+            runtime_network_observations[report.external_network_calls] += 1
+            if exact_network_boundary:
+                browser_request_count += outcome["browser_request_count"]
+                off_box_egress_observed = off_box_egress_observed or bool(
+                    outcome["off_box_or_third_party_egress_observed"]
+                )
+            screenshots_may_leave_box = (
+                screenshots_may_leave_box or report.screenshots_may_leave_box
+            )
             silent_wrong += int(oracle["silent_incorrect_success"])
             wrong_target += int(oracle["wrong_target_action"])
             over_halts += int(
                 report.execution_outcome == "HALTED" and expected != "HALTED"
             )
-    evaluation = manifest["evaluation"]
+    qualification_report = json.loads(
+        _safe_file(root, artifacts["qualification"]["report"]["path"]).read_text(
+            encoding="utf-8"
+        )
+    )
     if (
         dict(sorted(outcomes.items())) != evaluation["outcome_counts"]
+        or evaluation["case_count"] != len(case_ids)
+        or len(trials_per_case) != 1
+        or evaluation["trials_per_case"] != next(iter(trials_per_case))
+        or evaluation["run_count"] != report_count
+        or evaluation["run_count"]
+        != evaluation["case_count"] * evaluation["trials_per_case"]
+        or sorted(evaluation["required_case_kinds"]) != sorted(case_kinds)
         or model_calls != evaluation["model_calls"]
+        or (
+            exact_network_boundary
+            and (
+                dict(sorted(runtime_network_observations.items()))
+                != evaluation["runtime_network_observation_counts"]
+                or browser_request_count != evaluation["browser_request_count"]
+                or off_box_egress_observed
+                != evaluation["off_box_or_third_party_egress_observed"]
+            )
+        )
+        or not math.isclose(
+            total_duration_ms,
+            float(evaluation["total_duration_ms"]),
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
         or silent_wrong != evaluation["silent_incorrect_successes"]
         or wrong_target != evaluation["wrong_target_actions"]
         or over_halts != evaluation["over_halts"]
         or model_calls != 0
         or silent_wrong != 0
         or wrong_target != 0
-        or evaluation["external_network_calls"] != 0
+        or (exact_network_boundary and off_box_egress_observed)
+        or (
+            not exact_network_boundary and evaluation.get("external_network_calls") != 0
+        )
+        or screenshots_may_leave_box != evaluation["screenshots_may_leave_box"]
         or evaluation["screenshots_may_leave_box"] is not False
+        or evaluation["required_contracts"] != qualification_report["case_count"]
+        or evaluation["passed_contracts"] != qualification_report["passed_case_count"]
+        or artifacts["qualification"]["passed"] != qualification_report["passed"]
+        or evaluation["minimum_effect_tier"]
+        != artifacts["qualification"]["minimum_effect_tier"]
         or evaluation["qualification_passed"] is not True
     ):
         raise EvidencePackError("evaluation aggregate does not match case evidence")
