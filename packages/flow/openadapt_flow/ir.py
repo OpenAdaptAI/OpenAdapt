@@ -1908,6 +1908,17 @@ class EffectVerificationEvidence(BaseModel):
     final_verdict: Literal["confirmed", "refuted", "indeterminate"]
     reconciliation_completed: bool = False
     reconciliation_actions: int = Field(default=0, ge=0)
+    #: What the verifier OBSERVED about the business effect in the system of
+    #: record, independent of the pass/fail verdict. This is what lets a halted
+    #: run state honestly what is known about the write: "absent" (the verifier
+    #: established NO record was written -> HALTED_BEFORE_EFFECT), "conflicting"
+    #: (a record WAS written but is a duplicate / wrong value -> a business
+    #: effect that must be RECONCILED), "unknown" (the record could not be read,
+    #: or a refutation carried no count, so absence cannot be claimed ->
+    #: RECONCILIATION_REQUIRED, fail-safe), or "present" (accompanies a CONFIRMED
+    #: or reconciled effect). Additive; defaults to the fail-safe "unknown" so an
+    #: evidence record that predates this field never asserts "no effect".
+    observed_effect: Literal["present", "absent", "conflicting", "unknown"] = "unknown"
 
 
 class StepResult(BaseModel):
@@ -2132,6 +2143,53 @@ class ExecutionOutcomeEnvelope(BaseModel):
         return self
 
 
+class EffectJournalEntry(BaseModel):
+    """One consequential step's transaction-effect record (PHI-free).
+
+    The effect journal is the per-step ledger the reconciliation model reads.
+    For each consequential step it states the INTENDED effect (by stable
+    contract hash), the ATTEMPT state (delivered / uncertain / actuated / not
+    actuated), the OBSERVED effect the independent verifier read from the
+    system of record, how FRESH that verification was, and any COLLATERAL delta
+    (reconciling compensations applied). It carries no record values,
+    parameters, or free text -- only typed evidence already present on the
+    :class:`StepResult`, so it can be persisted in the run's evidence output
+    without leaking PHI.
+    """
+
+    step_id: str
+    intent: str
+    consequential: bool = True
+    #: Stable, non-secret digests of the effect contracts THIS step intended to
+    #: apply (mirrors ``StepResult.effect_contract_hashes``).
+    intended_effect_contract_hashes: list[str] = Field(default_factory=list)
+    #: How far actuation got before verification: the write was never actuated,
+    #: was delivered through the GUI/native ladder, was delivered via the API
+    #: tier, or the action API raised AFTER delivery may have begun (the #250
+    #: uncertain-delivery path -- never blind-retried).
+    attempt_state: Literal[
+        "not_actuated", "delivered", "actuated_api", "delivery_uncertain"
+    ] = "not_actuated"
+    #: The verifier's independent read of the business effect, taken as the worst
+    #: case across this step's declared effects (unknown < conflicting < absent
+    #: < present is NOT the ordering; see the classifier -- "conflicting" and
+    #: "unknown" both force reconciliation, "absent" proves no effect).
+    observed_effect: Literal["present", "absent", "conflicting", "unknown"] = "unknown"
+    #: True when every declared effect was CONFIRMED at/above the required tier.
+    effect_verified: Optional[bool] = None
+    #: Whether this was an approved-but-unverified GUI write (risk accepted).
+    approved_unverified: bool = False
+    #: Verifier freshness: whether independent verification actually ran this
+    #: run, and the ISO-8601 instant a delivery-uncertainty was observed (the
+    #: tightest freshness signal we retain, present only on the #250 path).
+    verification_performed: bool = False
+    observed_at: Optional[str] = None
+    #: Collateral delta: count of reconciling compensation actions completed for
+    #: this step (0 when none). Nonzero means the system of record was mutated to
+    #: undo a detected duplicate / collateral write.
+    collateral_reconciliation_actions: int = Field(default=0, ge=0)
+
+
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
@@ -2176,6 +2234,78 @@ class RunReport(BaseModel):
         description=(
             "Versioned PHI-free outcome, contract coverage, evidence classes, "
             "model calls, and external-network-call observability."
+        ),
+    )
+    # -- Section 3: explicit transaction / reconciliation semantics ------------
+    # The coarse ``execution_outcome`` (VERIFIED/HALTED/FAILED/...) is refined
+    # into a first-class TERMINAL TRANSACTION outcome that states what is known
+    # about the BUSINESS EFFECT. Additive and derived from the same typed
+    # evidence: ``execution_outcome`` and ``outcome_envelope`` are unchanged, so
+    # every existing consumer keeps working (see openadapt_flow.transaction).
+    transaction_outcome: Optional[
+        Literal[
+            "VERIFIED",
+            "HALTED_BEFORE_EFFECT",
+            "RECONCILIATION_REQUIRED",
+            "FAILED_PLATFORM",
+            "CANCELED",
+            "REJECTED_POLICY",
+            "COMPLETED_UNVERIFIED",
+            "ROLLED_BACK",
+        ]
+    ] = Field(
+        default=None,
+        description=(
+            "Terminal transaction outcome describing what is known about the "
+            "business effect. Refines the coarse execution_outcome without "
+            "replacing it."
+        ),
+    )
+    transaction_billable: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether this run represents a chargeable business outcome. A "
+            "FAILED_PLATFORM (OpenAdapt/platform fault) and a Demo-only "
+            "COMPLETED_UNVERIFIED are never billable."
+        ),
+    )
+    transaction_platform_fault: Optional[bool] = Field(
+        default=None,
+        description=(
+            "True only for FAILED_PLATFORM: an OpenAdapt/platform failure that "
+            "occurred before any possible business effect, distinct from a "
+            "customer/governed outcome."
+        ),
+    )
+    effect_journal: list[EffectJournalEntry] = Field(
+        default_factory=list,
+        description=(
+            "Per consequential-step transaction ledger (intended effect, "
+            "attempt state, observed effect, verifier freshness, collateral "
+            "delta). PHI-free; the substrate the reconciliation model reads."
+        ),
+    )
+    idempotency_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "Caller-supplied at-most-once key for this run. When an "
+            "idempotency ledger is configured, a repeat with the same key is "
+            "suppressed rather than re-actuated."
+        ),
+    )
+    idempotent_replay: bool = Field(
+        default=False,
+        description=(
+            "True when this run was SUPPRESSED as a duplicate of a prior run "
+            "that already actuated under the same idempotency key. No "
+            "consequential action was re-performed."
+        ),
+    )
+    canceled: bool = Field(
+        default=False,
+        description=(
+            "True when the run was canceled before any business effect could "
+            "occur. Drives the CANCELED terminal transaction outcome."
         ),
     )
     execution_target_kind: Optional[ExecutionTargetKind] = Field(

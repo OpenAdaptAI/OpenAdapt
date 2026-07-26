@@ -42,7 +42,7 @@ import json
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Literal, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -474,6 +474,33 @@ class EffectVerdict(BaseModel):
     @property
     def confirmed(self) -> bool:
         return self.verdict is Verdict.CONFIRMED
+
+    @property
+    def observed_effect(self) -> Literal["present", "absent", "conflicting", "unknown"]:
+        """Honest read of the BUSINESS EFFECT behind this verdict.
+
+        Independent of pass/fail, this states what the system of record showed
+        so a halted run can distinguish "no write happened" from "a write may
+        have happened":
+
+        - ``present``: CONFIRMED -- the effect landed and is correct.
+        - ``absent``: REFUTED with an observed count of zero -- the verifier
+          established that NO record was written (a screen may claim success,
+          but nothing landed). This is what makes HALTED_BEFORE_EFFECT honest.
+        - ``conflicting``: REFUTED with a nonzero observed count -- a record WAS
+          written but is a duplicate / partial / wrong value. A business effect
+          occurred and must be reconciled.
+        - ``unknown``: INDETERMINATE (system of record unreachable/unreadable),
+          or a REFUTED verdict that carried no count. Absence cannot be claimed;
+          fail safe to reconciliation.
+        """
+        if self.verdict is Verdict.CONFIRMED:
+            return "present"
+        if self.verdict is Verdict.INDETERMINATE:
+            return "unknown"
+        if self.observed_count is None:
+            return "unknown"
+        return "absent" if self.observed_count == 0 else "conflicting"
 
 
 @runtime_checkable

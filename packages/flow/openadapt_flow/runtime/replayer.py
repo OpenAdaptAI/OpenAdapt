@@ -123,6 +123,7 @@ from openadapt_flow.vision.ocr import OcrResolutionRefused
 
 if TYPE_CHECKING:
     from openadapt_flow.runtime.control_overlay import RuntimeControlOverlayEmitter
+    from openadapt_flow.transaction import IdempotencyLedger
 
 # REGION_STABLE template check: how far the expected content may shift from
 # the recorded region (real apps re-layout by a few pixels between runs),
@@ -364,6 +365,7 @@ class Replayer:
         settle_readiness_timeout_s: float = 10.0,
         interstitials: Optional[list[Interstitial]] = None,
         control_overlay: Optional["RuntimeControlOverlayEmitter"] = None,
+        idempotency_ledger: Optional["IdempotencyLedger"] = None,
     ) -> None:
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
@@ -523,6 +525,11 @@ class Replayer:
         self.control_overlay_error: Optional[str] = None
         self._control_overlay_disabled = False
         self._control_overlay_last_observation_png: Optional[bytes] = None
+        # At-most-once ledger (Section 3). When set together with a
+        # caller-supplied ``idempotency_key`` on run(), a repeat under the same
+        # key is SUPPRESSED before any actuation (never blind-retried). None
+        # (default) leaves the run path byte-for-byte unchanged.
+        self.idempotency_ledger = idempotency_ledger
 
     # -- public API ----------------------------------------------------------
 
@@ -538,6 +545,7 @@ class Replayer:
         resume_from: Optional[int] = None,
         resume_program: Optional[ProgramCheckpoint] = None,
         run_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
         execution_target_kind: Optional[ExecutionTargetKind] = None,
         execution_origin: Optional[str] = None,
         execution_entry_url: Optional[str] = None,
@@ -592,6 +600,13 @@ class Replayer:
                 New runs generate one; resumed legs preserve the manifest value
                 so attended capabilities and effect idempotency remain bound to
                 the same logical run.
+            idempotency_key: Caller-supplied at-most-once key for this run
+                (Section 3). When the Replayer was built with an
+                ``idempotency_ledger``, the key is RESERVED before any
+                actuation; a later run that supplies the same key is SUPPRESSED
+                (``idempotent_replay=True``, no consequential action
+                re-performed) rather than blind-retried. None (default) leaves
+                behavior unchanged.
             execution_target_kind: Resolved backend token (web, windows, macos,
                 linux, rdp, or citrix). Runtime validation binds this report
                 field into the signed substrate-aware attestation.
@@ -682,8 +697,39 @@ class Replayer:
             screenshots_may_leave_box=(
                 self._screenshots_may_leave_box or prior_screenshots_may_leave_box
             ),
+            idempotency_key=idempotency_key,
         )
         self._begin_control_overlay(report.execution_profile)
+        # At-most-once idempotency (Section 3): a repeat under an already-seen
+        # key is SUPPRESSED before any actuation. A durable RESUME carries the
+        # same logical run_id and legitimately re-enters with the same key, so it
+        # is exempt (its own completed-effect ledger already prevents re-writes).
+        if (
+            idempotency_key is not None
+            and self.idempotency_ledger is not None
+            and resume_from is None
+            and resume_program is None
+        ):
+            if self.idempotency_ledger.seen(idempotency_key):
+                report.results.append(
+                    StepResult(
+                        step_id="<idempotency>",
+                        intent="suppress duplicate actuation for idempotency key",
+                        ok=False,
+                        failure_category="governed_refusal",
+                        error=(
+                            "a run with this idempotency key already actuated; "
+                            "refusing to re-actuate the consequential write "
+                            "-- reconcile current state before resuming"
+                        ),
+                    )
+                )
+                report.idempotent_replay = True
+                report.success = False
+                return self._finalize_report(report, workflow, run_dir)
+            # Reserve BEFORE any actuation: if this run crashes after the write,
+            # a naive retry is blocked and must reconcile rather than double-act.
+            self.idempotency_ledger.reserve(idempotency_key, run_id=self._run_id)
         if self.governed_authorization is not None:
             profile_refusal = self._profile_runtime_refusal(workflow)
             if profile_refusal is not None:
@@ -1035,6 +1081,17 @@ class Replayer:
         """Persist exact evidence first, then project its terminal outcome."""
 
         self._stamp_execution_outcome(report, workflow)
+        # Record the terminal transaction outcome against the reserved key so a
+        # later duplicate (suppressed above) can surface what already happened.
+        # The suppressed replay itself never overwrites the original outcome.
+        if (
+            self.idempotency_ledger is not None
+            and report.idempotency_key is not None
+            and not report.idempotent_replay
+        ):
+            self.idempotency_ledger.record_outcome(
+                report.idempotency_key, report.transaction_outcome
+            )
         report.save(run_dir)
         self._emit_control_overlay_terminal(report.execution_outcome)
         return report
@@ -3773,6 +3830,7 @@ class Replayer:
                         verification_tier=(int(tier) if tier is not None else None),
                         initial_verdict=verdict.verdict.value,
                         final_verdict=verdict.verdict.value,
+                        observed_effect=verdict.observed_effect,
                     )
                 )
                 result.effect_results.append(
@@ -3804,6 +3862,7 @@ class Replayer:
                             verification_tier=(int(tier) if tier is not None else None),
                             initial_verdict=verdict.verdict.value,
                             final_verdict=final_verdict.verdict.value,
+                            observed_effect=final_verdict.observed_effect,
                             reconciliation_completed=True,
                             reconciliation_actions=comp.actions_taken,
                         )
@@ -3823,6 +3882,7 @@ class Replayer:
                         verification_tier=(int(tier) if tier is not None else None),
                         initial_verdict=verdict.verdict.value,
                         final_verdict=final_verdict.verdict.value,
+                        observed_effect=final_verdict.observed_effect,
                         reconciliation_actions=comp.actions_taken,
                     )
                 )
@@ -3848,6 +3908,7 @@ class Replayer:
                     verification_tier=(int(tier) if tier is not None else None),
                     initial_verdict=verdict.verdict.value,
                     final_verdict=verdict.verdict.value,
+                    observed_effect=verdict.observed_effect,
                 )
             )
             result.effect_results.append(

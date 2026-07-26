@@ -280,6 +280,12 @@ def stamp_execution_outcome(
     elif outcome is ExecutionOutcome.ROLLED_BACK:
         report.success = False
     report.outcome_envelope = build_outcome_envelope(report, workflow)
+    # Section 3: refine the coarse outcome into a first-class terminal
+    # transaction outcome + effect journal. Additive -- reads the fields set
+    # above and never mutates them (leaf import; see openadapt_flow.transaction).
+    from openadapt_flow.transaction import stamp_transaction_outcome
+
+    stamp_transaction_outcome(report, workflow)
     return outcome
 
 

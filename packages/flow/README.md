@@ -133,7 +133,11 @@ storage boundary may supply at-rest encryption, or `--profile demo` for an
 explicitly non-production run.
 Demo completions are `COMPLETED_UNVERIFIED`; Standard and Regulated return
 `VERIFIED` only when every consequential effect is confirmed at the workflow's
-configured minimum evidence tier.
+configured minimum evidence tier. Every run also carries a first-class
+`transaction_outcome` that states what is known about the business effect
+(`VERIFIED`, `HALTED_BEFORE_EFFECT`, `RECONCILIATION_REQUIRED`, `FAILED_PLATFORM`,
+`CANCELED`, `REJECTED_POLICY`, `COMPLETED_UNVERIFIED`) plus a per-step effect
+journal.
 See [execution profiles](docs/EXECUTION_PROFILES.md).
 
 **Secrets never get recorded.** An `input[type=password]` field (or any field
