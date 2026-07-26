@@ -1,0 +1,66 @@
+{
+  "data_classification": "synthetic",
+  "duration_ms": 2622,
+  "events": [
+    {
+      "at_ms": 0,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 0,
+        "mode": "governed",
+        "observed_at_monotonic_ms": 1276826403.845958,
+        "observed_at_unix_ms": 1785047614313,
+        "phase": "observing",
+        "presentation": true,
+        "profile": "standard",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:observing:governed:standard:1:6:no-pause:no-resume:no-stop:no-target",
+        "status": "Observing the application",
+        "step": {
+          "current": 1,
+          "total": 6
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Governed workflow"
+      },
+      "media_frame_index": 0
+    },
+    {
+      "at_ms": 872,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 1,
+        "mode": "governed",
+        "observed_at_monotonic_ms": 1276827276.27375,
+        "observed_at_unix_ms": 1785047615186,
+        "phase": "halted",
+        "presentation": true,
+        "profile": "standard",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:halted:governed:standard:no-step:no-total:no-pause:no-resume:no-stop:no-target",
+        "status": "Halted instead of guessing",
+        "step": {
+          "current": null,
+          "total": null
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Governed workflow"
+      },
+      "media_frame_index": 1
+    }
+  ],
+  "evidence_pack_id": "mockmed-triage-v3",
+  "media_frame_count": 3,
+  "media_sha256": "1ddbcf330fab3dc166380d4dbc845a1344c09b6db503d02a5e26cf986b8dbfd7",
+  "schema_version": "openadapt.control-overlay-timeline/v2"
+}

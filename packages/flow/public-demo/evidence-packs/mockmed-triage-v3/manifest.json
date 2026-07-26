@@ -1,0 +1,4253 @@
+{
+  "artifacts": {
+    "cases": [
+      {
+        "case_id": "representative",
+        "events": [
+          {
+            "bytes": 10079,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/representative/trial-01/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "77ca4495a4b995728898f1257dd4a06f4ce3efc087f44660c837c9f1a79db8cd"
+          },
+          {
+            "bytes": 10081,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/representative/trial-02/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "75efcfbeaae69823ff5431754cf47e69fb016ceb1524897b336548104781f034"
+          },
+          {
+            "bytes": 10080,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/representative/trial-03/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "bf10d256800cf1923bb5595a4b459a439b51bfa956d9a1eb1335ba403b6c4346"
+          }
+        ],
+        "expected_outcome": "VERIFIED",
+        "kind": "representative",
+        "media": {
+          "bytes": 96543,
+          "media_type": "video/webm",
+          "path": "artifacts/cases/representative/trial-01/replay.webm",
+          "role": "media",
+          "sha256": "2e851470bc6ce308100806fed2a1ac3286897eb0b3e29bb1d614956f84818b5c"
+        },
+        "oracles": [
+          {
+            "bytes": 581,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-01/oracle.json",
+            "role": "case_evidence",
+            "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+          },
+          {
+            "bytes": 581,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-02/oracle.json",
+            "role": "case_evidence",
+            "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+          },
+          {
+            "bytes": 581,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-03/oracle.json",
+            "role": "case_evidence",
+            "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+          }
+        ],
+        "outcome_envelopes": [
+          {
+            "bytes": 743,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-01/outcome.json",
+            "role": "case_evidence",
+            "sha256": "2490ffb95383f423ffd91db9302ed481266be657da291e1282012de2e6ecd85b"
+          },
+          {
+            "bytes": 744,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-02/outcome.json",
+            "role": "case_evidence",
+            "sha256": "076dffad7ff49711cb9a91275e669bfb149df64df8f8a0a56388910a29ec8b4b"
+          },
+          {
+            "bytes": 743,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-03/outcome.json",
+            "role": "case_evidence",
+            "sha256": "4b8354bf06135569752074ffa8eac65531bc78f572e9537ebcf987b33157f901"
+          }
+        ],
+        "outcomes": [
+          {
+            "browser_request_count": 4,
+            "case_id": "representative",
+            "duration_ms": 4335.764083079994,
+            "execution_completed": true,
+            "execution_profile": "standard",
+            "expected_outcome": "VERIFIED",
+            "failed_step_id": null,
+            "halt": null,
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "VERIFIED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": true,
+            "report_sha256": "671f71918768a1cfb2dcd3147b2ed2983834aaa0b0ca6fef3a71857da34263f6",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 1,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 4,
+            "case_id": "representative",
+            "duration_ms": 4154.6010409947485,
+            "execution_completed": true,
+            "execution_profile": "standard",
+            "expected_outcome": "VERIFIED",
+            "failed_step_id": null,
+            "halt": null,
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "VERIFIED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": true,
+            "report_sha256": "06ad74363d7b0fdb44d9d6be95dde029a2fef56b62a0a746b70d912fa23bc6a1",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 2,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 4,
+            "case_id": "representative",
+            "duration_ms": 4220.599125139415,
+            "execution_completed": true,
+            "execution_profile": "standard",
+            "expected_outcome": "VERIFIED",
+            "failed_step_id": null,
+            "halt": null,
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "VERIFIED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": true,
+            "report_sha256": "0a9675be8e3dbf420113c21b1013469bc2437e797df1c3e0f31c59b88b28d524",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 3,
+            "wrong_target_action": false
+          }
+        ],
+        "poster": {
+          "bytes": 31599,
+          "media_type": "image/png",
+          "path": "artifacts/cases/representative/trial-01/run/steps/step_005_after.png",
+          "role": "case_evidence",
+          "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+        },
+        "reports": [
+          {
+            "bytes": 15429,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-01/run/report.json",
+            "role": "case_evidence",
+            "sha256": "671f71918768a1cfb2dcd3147b2ed2983834aaa0b0ca6fef3a71857da34263f6"
+          },
+          {
+            "bytes": 15432,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-02/run/report.json",
+            "role": "case_evidence",
+            "sha256": "06ad74363d7b0fdb44d9d6be95dde029a2fef56b62a0a746b70d912fa23bc6a1"
+          },
+          {
+            "bytes": 15430,
+            "media_type": "application/json",
+            "path": "artifacts/cases/representative/trial-03/run/report.json",
+            "role": "case_evidence",
+            "sha256": "0a9675be8e3dbf420113c21b1013469bc2437e797df1c3e0f31c59b88b28d524"
+          }
+        ]
+      },
+      {
+        "case_id": "fault-ambiguity",
+        "events": [
+          {
+            "bytes": 926,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-ambiguity/trial-01/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "775d376d9928b74ce625d9a8475e1c68e98bfec5d4f0b569da287b26f04babf0"
+          },
+          {
+            "bytes": 926,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-ambiguity/trial-02/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "2f0da376423a903fd604d648367b8c0993c1b727148f85a1a476ecc087d61748"
+          },
+          {
+            "bytes": 926,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-ambiguity/trial-03/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "43c7c8efb32da54d9e64ebae0a220098398b55165cefbc9c0c2d9dd135184ac4"
+          }
+        ],
+        "expected_outcome": "HALTED",
+        "kind": "ambiguity",
+        "media": {
+          "bytes": 38646,
+          "media_type": "video/webm",
+          "path": "artifacts/cases/fault-ambiguity/trial-01/halt.webm",
+          "role": "media",
+          "sha256": "8943df6f85c72a2601de034065b0ce2abfb4a4986582842db4529da59f0ba92d"
+        },
+        "oracles": [
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-01/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          },
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-02/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          },
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-03/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          }
+        ],
+        "outcome_envelopes": [
+          {
+            "bytes": 1422,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-01/outcome.json",
+            "role": "case_evidence",
+            "sha256": "9a39b9f2a3a9d937ce445e725a0f1af6ed6c89bd50bd008f79fa8883bb10c4b5"
+          },
+          {
+            "bytes": 1423,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-02/outcome.json",
+            "role": "case_evidence",
+            "sha256": "8594c341d2806dd05d7783859545fa7fc361cb41d8fc1a8ce6276b572d65f627"
+          },
+          {
+            "bytes": 1423,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-03/outcome.json",
+            "role": "case_evidence",
+            "sha256": "71df2a7eb93c83c6092dea6fcb743d5b67134a32c08d9af8515239938dd2ba13"
+          }
+        ],
+        "outcomes": [
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-ambiguity",
+            "duration_ms": 144.7359169833362,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "JaneSample",
+                "Knee painreferral",
+                "High",
+                "Open",
+                "Knee pain referral",
+                "AlexTestcase",
+                "Cardiologyfollow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatologyconsult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Structural safety refusal for step 'step_000' (click 'Open'): DOM locator is ambiguous: candidate_count=2 — no action was admitted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "eab84b483a442b2651023532518eb1e1785fd037f8d1108c52bcc196da5a4eb5",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 1,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-ambiguity",
+            "duration_ms": 150.33266600221395,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "JaneSample",
+                "Knee painreferral",
+                "High",
+                "Open",
+                "Knee pain referral",
+                "AlexTestcase",
+                "Cardiologyfollow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatologyconsult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Structural safety refusal for step 'step_000' (click 'Open'): DOM locator is ambiguous: candidate_count=2 — no action was admitted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "88d373e2696aa86acbb26bc2bddcd9c8b68e4163f1442283d359d098aacbf31a",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 2,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-ambiguity",
+            "duration_ms": 149.08495801500976,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "JaneSample",
+                "Knee painreferral",
+                "High",
+                "Open",
+                "Knee pain referral",
+                "AlexTestcase",
+                "Cardiologyfollow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatologyconsult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Structural safety refusal for step 'step_000' (click 'Open'): DOM locator is ambiguous: candidate_count=2 — no action was admitted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "69c53cc9237237cf2ebcef0eaca446b416b9816b3dfd13a1b21e81064f2c8d45",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 3,
+            "wrong_target_action": false
+          }
+        ],
+        "poster": {
+          "bytes": 39758,
+          "media_type": "image/png",
+          "path": "artifacts/cases/fault-ambiguity/trial-01/run/steps/step_000_after.png",
+          "role": "case_evidence",
+          "sha256": "395adf2a20b0b258343d77b521240dc0adf8229ac9957661aa6855e3d8d4148f"
+        },
+        "reports": [
+          {
+            "bytes": 4000,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-01/run/report.json",
+            "role": "case_evidence",
+            "sha256": "eab84b483a442b2651023532518eb1e1785fd037f8d1108c52bcc196da5a4eb5"
+          },
+          {
+            "bytes": 4001,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-02/run/report.json",
+            "role": "case_evidence",
+            "sha256": "88d373e2696aa86acbb26bc2bddcd9c8b68e4163f1442283d359d098aacbf31a"
+          },
+          {
+            "bytes": 4001,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-ambiguity/trial-03/run/report.json",
+            "role": "case_evidence",
+            "sha256": "69c53cc9237237cf2ebcef0eaca446b416b9816b3dfd13a1b21e81064f2c8d45"
+          }
+        ]
+      },
+      {
+        "case_id": "fault-wrong-identity",
+        "events": [
+          {
+            "bytes": 1511,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-wrong-identity/trial-01/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "863f9faec0d8c4cf9810978ce19bbd773a766914309d080c87d6a11ae11d7684"
+          },
+          {
+            "bytes": 1511,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-wrong-identity/trial-02/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "96e30f226726afd07b3c45bac5c5201de1e9902a8e1df13c3f0049f6174bfcd4"
+          },
+          {
+            "bytes": 1510,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-wrong-identity/trial-03/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "d64d3f7c9529c821ad06836f163b7e3d0ffdb5f3a1340d00bb59b2626d3efed6"
+          }
+        ],
+        "expected_outcome": "HALTED",
+        "kind": "wrong_identity",
+        "media": {
+          "bytes": 39677,
+          "media_type": "video/webm",
+          "path": "artifacts/cases/fault-wrong-identity/trial-01/halt.webm",
+          "role": "media",
+          "sha256": "dab0c588e55e22c5c5a7778aca03d05d14ad2fad79df8e2f803c24d2c60c25b0"
+        },
+        "oracles": [
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-01/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          },
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-02/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          },
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-03/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          }
+        ],
+        "outcome_envelopes": [
+          {
+            "bytes": 1653,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-01/outcome.json",
+            "role": "case_evidence",
+            "sha256": "d9fb104e3ebf775c8ec7c83b00f1e5ae39cc415a506b8afcd509723f6882749a"
+          },
+          {
+            "bytes": 1653,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-02/outcome.json",
+            "role": "case_evidence",
+            "sha256": "9cc68c12dc943e00970c9bb0e76883855fddf612d4042a43048bdb1a2fde5c2e"
+          },
+          {
+            "bytes": 1653,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-03/outcome.json",
+            "role": "case_evidence",
+            "sha256": "2d2a737e2c0e50e1e7b6235134cc6099fa9c070f8483911d3142ab8f84577343"
+          }
+        ],
+        "outcomes": [
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-wrong-identity",
+            "duration_ms": 160.53583286702633,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "Taylor Duplicate",
+                "Kneepainreferral",
+                "High",
+                "Open",
+                "JaneSample",
+                "Knee pain referral",
+                "AlexTestcase",
+                "Cardiologyfollow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatologyconsult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Taylor DuplicateKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "0617612df693fa3d3b88ecf9668b09a013727b1561f0e6b3e7a7f649f7b00ad1",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 1,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-wrong-identity",
+            "duration_ms": 221.76658385433257,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "Taylor Duplicate",
+                "Kneepainreferral",
+                "High",
+                "Open",
+                "JaneSample",
+                "Knee pain referral",
+                "AlexTestcase",
+                "Cardiologyfollow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatologyconsult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Taylor DuplicateKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "95b99deb7d1b8d1688ea84efda4df933505188e93d07a874ba1c54e38d6189f7",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 2,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-wrong-identity",
+            "duration_ms": 171.16762488149107,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "Taylor Duplicate",
+                "Kneepainreferral",
+                "High",
+                "Open",
+                "JaneSample",
+                "Knee pain referral",
+                "AlexTestcase",
+                "Cardiologyfollow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatologyconsult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Taylor DuplicateKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "7397e7e5668dad37cf5c1ee16c4e6bcda3fa2a5537280f67cbb6f6b6dbcd2bdc",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 3,
+            "wrong_target_action": false
+          }
+        ],
+        "poster": {
+          "bytes": 39941,
+          "media_type": "image/png",
+          "path": "artifacts/cases/fault-wrong-identity/trial-01/run/steps/step_000_after.png",
+          "role": "case_evidence",
+          "sha256": "d99076ca95354216c80ea82a3be00908b680b998879ac0bdd97f435d12bbdecf"
+        },
+        "reports": [
+          {
+            "bytes": 4966,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-01/run/report.json",
+            "role": "case_evidence",
+            "sha256": "0617612df693fa3d3b88ecf9668b09a013727b1561f0e6b3e7a7f649f7b00ad1"
+          },
+          {
+            "bytes": 4966,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-02/run/report.json",
+            "role": "case_evidence",
+            "sha256": "95b99deb7d1b8d1688ea84efda4df933505188e93d07a874ba1c54e38d6189f7"
+          },
+          {
+            "bytes": 4965,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-wrong-identity/trial-03/run/report.json",
+            "role": "case_evidence",
+            "sha256": "7397e7e5668dad37cf5c1ee16c4e6bcda3fa2a5537280f67cbb6f6b6dbcd2bdc"
+          }
+        ]
+      },
+      {
+        "case_id": "fault-stale-identity",
+        "events": [
+          {
+            "bytes": 1736,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-stale-identity/trial-01/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "5abad1bccb7ea1f50af72cddda2475c147195d174d73268b586565d714df8beb"
+          },
+          {
+            "bytes": 1737,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-stale-identity/trial-02/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "b00b8575f32339c5c9a5331a61bd66d3bb15b1279d3384e47c0de4bd0a1338e7"
+          },
+          {
+            "bytes": 1736,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-stale-identity/trial-03/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "53844b0eba58d71ca531511d4d2a8199fcef29a7df2bcc8e2584b1bc3f705580"
+          }
+        ],
+        "expected_outcome": "HALTED",
+        "kind": "stale_identity",
+        "media": {
+          "bytes": 41986,
+          "media_type": "video/webm",
+          "path": "artifacts/cases/fault-stale-identity/trial-01/halt.webm",
+          "role": "media",
+          "sha256": "40630b3351706aabcc52b7d696a9c591abd1724edc7f923834f20feb76f35d5a"
+        },
+        "oracles": [
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-01/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          },
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-02/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          },
+          {
+            "bytes": 369,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-03/oracle.json",
+            "role": "case_evidence",
+            "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+          }
+        ],
+        "outcome_envelopes": [
+          {
+            "bytes": 1610,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-01/outcome.json",
+            "role": "case_evidence",
+            "sha256": "c4b78f376d65b1e125efd10fe7fd3d4861c32f7424df329e1e29db6dee2dde08"
+          },
+          {
+            "bytes": 1610,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-02/outcome.json",
+            "role": "case_evidence",
+            "sha256": "c05c03c7a24d14f0dcca247037912520df4d4fe1baef70a715b9b2afd2d828ec"
+          },
+          {
+            "bytes": 1611,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-03/outcome.json",
+            "role": "case_evidence",
+            "sha256": "bad4b016d3849c4de425c8eff9df9cf09215d79abf3fc4e0ae7922468e7d3286"
+          }
+        ],
+        "outcomes": [
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-stale-identity",
+            "duration_ms": 262.8754999022931,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "Changed Identity",
+                "Knee pain referral",
+                "High",
+                "Open",
+                "AlexTestcase",
+                "Cardiology follow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatology consult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Changed IdentityKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "a221646f81c3e47338396d1b0680863f6e48be9bb33686a0c21139b04a93ffcc",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 1,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-stale-identity",
+            "duration_ms": 292.4801248591393,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "Changed Identity",
+                "Knee pain referral",
+                "High",
+                "Open",
+                "AlexTestcase",
+                "Cardiology follow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatology consult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Changed IdentityKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "f4e8a225adacaa8b0ba8749b1f38ce0d9cd53fcfd8b4e62e5bf3a5f9cf0260f7",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 2,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 3,
+            "case_id": "fault-stale-identity",
+            "duration_ms": 270.75737505219877,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_000",
+            "halt": {
+              "completed_intents": [],
+              "intent": "click 'Open'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo —all data is fake",
+                "Referral Tasks",
+                "Patient",
+                "Reason",
+                "Priority",
+                "Action",
+                "Changed Identity",
+                "Knee pain referral",
+                "High",
+                "Open",
+                "AlexTestcase",
+                "Cardiology follow-up",
+                "Medium",
+                "Sam Specimen",
+                "Dermatology consult",
+                "Low"
+              ],
+              "outcome": "halt",
+              "reason": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Changed IdentityKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+              "state_id": "step_000"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "068c97c47efa9c6d15636d38f448614a883e29c584a3a8a6f27be4c8129ae709",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 3,
+            "wrong_target_action": false
+          }
+        ],
+        "poster": {
+          "bytes": 35632,
+          "media_type": "image/png",
+          "path": "artifacts/cases/fault-stale-identity/trial-01/run/steps/step_000_after.png",
+          "role": "case_evidence",
+          "sha256": "00dcb835d496c495f07e56390ee635114243f8643f287fb17c092ef59cc72cf8"
+        },
+        "reports": [
+          {
+            "bytes": 5334,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-01/run/report.json",
+            "role": "case_evidence",
+            "sha256": "a221646f81c3e47338396d1b0680863f6e48be9bb33686a0c21139b04a93ffcc"
+          },
+          {
+            "bytes": 5335,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-02/run/report.json",
+            "role": "case_evidence",
+            "sha256": "f4e8a225adacaa8b0ba8749b1f38ce0d9cd53fcfd8b4e62e5bf3a5f9cf0260f7"
+          },
+          {
+            "bytes": 5335,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-stale-identity/trial-03/run/report.json",
+            "role": "case_evidence",
+            "sha256": "068c97c47efa9c6d15636d38f448614a883e29c584a3a8a6f27be4c8129ae709"
+          }
+        ]
+      },
+      {
+        "case_id": "fault-weak-effect",
+        "events": [
+          {
+            "bytes": 10590,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-weak-effect/trial-01/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "c4e55f237b413244620ff5d1ed8e9069001beb7d0bfff5dbae19952b6bf61abc"
+          },
+          {
+            "bytes": 10595,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-weak-effect/trial-02/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "55be41175576c3770c6fa027a2cdcc88ea8528a6d9001a44a372ed7ac29378ab"
+          },
+          {
+            "bytes": 10595,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-weak-effect/trial-03/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "1f58911beff166cd4233067971fa51c342bcf6ac32841de16609b17b993d0d3f"
+          }
+        ],
+        "expected_outcome": "HALTED",
+        "kind": "weak_effect",
+        "media": {
+          "bytes": 160816,
+          "media_type": "video/webm",
+          "path": "artifacts/cases/fault-weak-effect/trial-01/halt.webm",
+          "role": "media",
+          "sha256": "f25f38ee5312352568273aa16913d870f8a28a104cab7dced86adc55d65c94fb"
+        },
+        "oracles": [
+          {
+            "bytes": 560,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-01/oracle.json",
+            "role": "case_evidence",
+            "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+          },
+          {
+            "bytes": 560,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-02/oracle.json",
+            "role": "case_evidence",
+            "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+          },
+          {
+            "bytes": 560,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-03/oracle.json",
+            "role": "case_evidence",
+            "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+          }
+        ],
+        "outcome_envelopes": [
+          {
+            "bytes": 1746,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-01/outcome.json",
+            "role": "case_evidence",
+            "sha256": "0a0f7eb0e085a5acfe6112bd40647b1e3f761580aa310d9d5899311ff3e3ede5"
+          },
+          {
+            "bytes": 1746,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-02/outcome.json",
+            "role": "case_evidence",
+            "sha256": "ccfe65d228a323726fbeec5d99aa42aaa90a5978d586b6f368c42628e8465bbf"
+          },
+          {
+            "bytes": 1746,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-03/outcome.json",
+            "role": "case_evidence",
+            "sha256": "65bf9d533e1824dbfc0a36e92539d8a2e854ab23b0fedc55e57f71a9a7b9ac68"
+          }
+        ],
+        "outcomes": [
+          {
+            "browser_request_count": 4,
+            "case_id": "fault-weak-effect",
+            "duration_ms": 9086.244416888803,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_005",
+            "halt": {
+              "completed_intents": [
+                "click 'Open'",
+                "click 'New Encounter'",
+                "click 'Triage'",
+                "click at (480, 268)",
+                "type <note>"
+              ],
+              "intent": "click 'Save Encounter'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo — all data is fake",
+                "JaneSample—MRNP1—DOB1980-01-01",
+                "Encountersaved-",
+                "Syntheticfollow-upin twoweeks",
+                "NewEncounter",
+                "Encounters",
+                "·Triage—Synthetic follow-up in two weeks"
+              ],
+              "outcome": "halt",
+              "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): field_equals refuted against the rest system of record and could not be reconciled (escalated) — [rest] field_equals: field 'note' is '', expected 'Synthetic follow-up in two weeks' (the system of record contradicts the declared outcome) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+              "state_id": "step_005"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "990716ace802fe3a04edbb7a42bdbb5af56109596108026df995e053c7a81482",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 1,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 4,
+            "case_id": "fault-weak-effect",
+            "duration_ms": 9152.651792159304,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_005",
+            "halt": {
+              "completed_intents": [
+                "click 'Open'",
+                "click 'New Encounter'",
+                "click 'Triage'",
+                "click at (480, 268)",
+                "type <note>"
+              ],
+              "intent": "click 'Save Encounter'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo — all data is fake",
+                "JaneSample—MRNP1—DOB1980-01-01",
+                "Encountersaved-",
+                "Syntheticfollow-upin twoweeks",
+                "NewEncounter",
+                "Encounters",
+                "·Triage—Synthetic follow-up in two weeks"
+              ],
+              "outcome": "halt",
+              "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): field_equals refuted against the rest system of record and could not be reconciled (escalated) — [rest] field_equals: field 'note' is '', expected 'Synthetic follow-up in two weeks' (the system of record contradicts the declared outcome) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+              "state_id": "step_005"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "ceaa645bf23c5d227191f2ea45e45f19b251885575c11e48f72e81c240eb47b7",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 2,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 4,
+            "case_id": "fault-weak-effect",
+            "duration_ms": 9418.731499928981,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_005",
+            "halt": {
+              "completed_intents": [
+                "click 'Open'",
+                "click 'New Encounter'",
+                "click 'Triage'",
+                "click at (480, 268)",
+                "type <note>"
+              ],
+              "intent": "click 'Save Encounter'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo — all data is fake",
+                "JaneSample—MRNP1—DOB1980-01-01",
+                "Encountersaved-",
+                "Syntheticfollow-upin twoweeks",
+                "NewEncounter",
+                "Encounters",
+                "·Triage—Synthetic follow-up in two weeks"
+              ],
+              "outcome": "halt",
+              "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): field_equals refuted against the rest system of record and could not be reconciled (escalated) — [rest] field_equals: field 'note' is '', expected 'Synthetic follow-up in two weeks' (the system of record contradicts the declared outcome) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+              "state_id": "step_005"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "282b6495aa71a1b1f78425efcb1c8858b3652dcc141646f69b8ff4797cdf8ed0",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 3,
+            "wrong_target_action": false
+          }
+        ],
+        "poster": {
+          "bytes": 31599,
+          "media_type": "image/png",
+          "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_005_after.png",
+          "role": "case_evidence",
+          "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+        },
+        "reports": [
+          {
+            "bytes": 16933,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-01/run/report.json",
+            "role": "case_evidence",
+            "sha256": "990716ace802fe3a04edbb7a42bdbb5af56109596108026df995e053c7a81482"
+          },
+          {
+            "bytes": 16938,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-02/run/report.json",
+            "role": "case_evidence",
+            "sha256": "ceaa645bf23c5d227191f2ea45e45f19b251885575c11e48f72e81c240eb47b7"
+          },
+          {
+            "bytes": 16938,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-weak-effect/trial-03/run/report.json",
+            "role": "case_evidence",
+            "sha256": "282b6495aa71a1b1f78425efcb1c8858b3652dcc141646f69b8ff4797cdf8ed0"
+          }
+        ]
+      },
+      {
+        "case_id": "fault-missing-effect",
+        "events": [
+          {
+            "bytes": 10179,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-missing-effect/trial-01/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "7c8f6db333b2b27ab78eb7d9c4753a552167ae9b3f03547c2d814bae1159c735"
+          },
+          {
+            "bytes": 10177,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-missing-effect/trial-02/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "8a40295a3a9617d45444e7303fc21e4d142449252cee15b1889746b77b4237f0"
+          },
+          {
+            "bytes": 10175,
+            "media_type": "application/x-ndjson",
+            "path": "artifacts/cases/fault-missing-effect/trial-03/events.jsonl",
+            "role": "case_evidence",
+            "sha256": "f2d96752869e106fef6322b6454a68a494946d376ba85945938eff82127ada71"
+          }
+        ],
+        "expected_outcome": "HALTED",
+        "kind": "missing_effect",
+        "media": {
+          "bytes": 159896,
+          "media_type": "video/webm",
+          "path": "artifacts/cases/fault-missing-effect/trial-01/halt.webm",
+          "role": "media",
+          "sha256": "87c34c66f50ff70e28395e6545e8ced16cd59928e6f3774b027d195c0e4fd9b3"
+        },
+        "oracles": [
+          {
+            "bytes": 384,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-01/oracle.json",
+            "role": "case_evidence",
+            "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+          },
+          {
+            "bytes": 384,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-02/oracle.json",
+            "role": "case_evidence",
+            "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+          },
+          {
+            "bytes": 384,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-03/oracle.json",
+            "role": "case_evidence",
+            "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+          }
+        ],
+        "outcome_envelopes": [
+          {
+            "bytes": 1768,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-01/outcome.json",
+            "role": "case_evidence",
+            "sha256": "c55d71fe474b37f42cdedc2c296737cc567bfd55e8a3585e14098962b2ae60eb"
+          },
+          {
+            "bytes": 1767,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-02/outcome.json",
+            "role": "case_evidence",
+            "sha256": "7d82fb93321424fab4f3493b415bf06f855210d21aca323b9031960645ff6a2b"
+          },
+          {
+            "bytes": 1768,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-03/outcome.json",
+            "role": "case_evidence",
+            "sha256": "7e1b0769baa6f26e58e1e7b19c4df9e0b345e3a7a26e735160b1b4b54658bf1e"
+          }
+        ],
+        "outcomes": [
+          {
+            "browser_request_count": 4,
+            "case_id": "fault-missing-effect",
+            "duration_ms": 8968.485708115622,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_005",
+            "halt": {
+              "completed_intents": [
+                "click 'Open'",
+                "click 'New Encounter'",
+                "click 'Triage'",
+                "click at (480, 268)",
+                "type <note>"
+              ],
+              "intent": "click 'Save Encounter'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo — all data is fake",
+                "JaneSample—MRNP1—DOB1980-01-01",
+                "Encountersaved-",
+                "Syntheticfollow-upin twoweeks",
+                "NewEncounter",
+                "Encounters",
+                "·Triage—Synthetic follow-up in two weeks"
+              ],
+              "outcome": "halt",
+              "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+              "state_id": "step_005"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "6681073b23ec99c973131cdb96ea38263dc56f45bf8e30ba3a98bcacb6245aac",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 1,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 4,
+            "case_id": "fault-missing-effect",
+            "duration_ms": 9242.32737510465,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_005",
+            "halt": {
+              "completed_intents": [
+                "click 'Open'",
+                "click 'New Encounter'",
+                "click 'Triage'",
+                "click at (480, 268)",
+                "type <note>"
+              ],
+              "intent": "click 'Save Encounter'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo — all data is fake",
+                "JaneSample—MRNP1—DOB1980-01-01",
+                "Encountersaved-",
+                "Syntheticfollow-upin twoweeks",
+                "NewEncounter",
+                "Encounters",
+                "·Triage—Synthetic follow-up in two weeks"
+              ],
+              "outcome": "halt",
+              "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+              "state_id": "step_005"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "a0a945fc5aec29e058ddbf1a40243829ffcd25c21ff699afbd52747e3d771d60",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 2,
+            "wrong_target_action": false
+          },
+          {
+            "browser_request_count": 4,
+            "case_id": "fault-missing-effect",
+            "duration_ms": 9328.066084068269,
+            "execution_completed": false,
+            "execution_profile": "standard",
+            "expected_outcome": "HALTED",
+            "failed_step_id": "step_005",
+            "halt": {
+              "completed_intents": [
+                "click 'Open'",
+                "click 'New Encounter'",
+                "click 'Triage'",
+                "click at (480, 268)",
+                "type <note>"
+              ],
+              "intent": "click 'Save Encounter'",
+              "observed_texts": [
+                "MockMed",
+                "Clinical demo — all data is fake",
+                "JaneSample—MRNP1—DOB1980-01-01",
+                "Encountersaved-",
+                "Syntheticfollow-upin twoweeks",
+                "NewEncounter",
+                "Encounters",
+                "·Triage—Synthetic follow-up in two weeks"
+              ],
+              "outcome": "halt",
+              "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+              "state_id": "step_005"
+            },
+            "matched_expectation": true,
+            "model_calls": 0,
+            "observed_outcome": "HALTED",
+            "off_box_or_third_party_egress_observed": false,
+            "oracle_passed": true,
+            "production_eligible": false,
+            "report_sha256": "cb2c639863cc11e0185e146d9830bc91f227bbdccf6532c68ddb627f244b6d3e",
+            "runtime_network_observation": "observed",
+            "schema_version": "openadapt.public-demo-outcome/v1",
+            "screenshots_may_leave_box": false,
+            "silent_incorrect_success": false,
+            "trial": 3,
+            "wrong_target_action": false
+          }
+        ],
+        "poster": {
+          "bytes": 31599,
+          "media_type": "image/png",
+          "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_005_after.png",
+          "role": "case_evidence",
+          "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+        },
+        "reports": [
+          {
+            "bytes": 16420,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-01/run/report.json",
+            "role": "case_evidence",
+            "sha256": "6681073b23ec99c973131cdb96ea38263dc56f45bf8e30ba3a98bcacb6245aac"
+          },
+          {
+            "bytes": 16417,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-02/run/report.json",
+            "role": "case_evidence",
+            "sha256": "a0a945fc5aec29e058ddbf1a40243829ffcd25c21ff699afbd52747e3d771d60"
+          },
+          {
+            "bytes": 16416,
+            "media_type": "application/json",
+            "path": "artifacts/cases/fault-missing-effect/trial-03/run/report.json",
+            "role": "case_evidence",
+            "sha256": "cb2c639863cc11e0185e146d9830bc91f227bbdccf6532c68ddb627f244b6d3e"
+          }
+        ]
+      }
+    ],
+    "compiled": {
+      "content_digest": "df39b4cf364a48b87aaa1c9e9db5395122b7ac0deb7641f6be985b8bc8e5e23d",
+      "program_graph": {
+        "bytes": 12223,
+        "media_type": "application/json",
+        "path": "artifacts/compiled/program-graph.json",
+        "role": "program_graph",
+        "sha256": "f0a29afe04c344f565425431997296c276295ccc7202df4f91744c082a7b2fda"
+      },
+      "program_graph_html": {
+        "bytes": 24900,
+        "media_type": "text/html",
+        "path": "artifacts/compiled/program-graph.html",
+        "role": "program_graph",
+        "sha256": "91b83df8987284af588456d165375ce01c6d05314bd9f47c97491740f6feaada"
+      },
+      "workflow": {
+        "bytes": 57464,
+        "media_type": "application/json",
+        "path": "artifacts/bundle/workflow.json",
+        "role": "compiled_bundle",
+        "sha256": "d404cc07f7e1b1b534a274003057c0142460ab19f64966b7154a070b19d7d785"
+      },
+      "workflow_contract_sha256": "576eba564c76320bbd684d38c72332e9bda0ad2b68c2666098f65a371abeaa48",
+      "workflow_source": {
+        "bytes": 3268,
+        "media_type": "text/x-python",
+        "path": "artifacts/bundle/workflow.py",
+        "role": "compiled_bundle",
+        "sha256": "e42e09b8b10f0864facec0c081ced0932c84ad378599dc7805af81650013aa7d"
+      }
+    },
+    "crop_bindings": [
+      {
+        "crop_path": "artifacts/bundle/templates/step_000.png",
+        "crop_sha256": "46a75b5d63ceaad4bee942ccf2a6ca3d2b4f6327509df7eff2cc7ddb2c9fd389",
+        "region": [
+          695,
+          154,
+          160,
+          64
+        ],
+        "source_frame_path": "artifacts/recording/frames/0000_before.png",
+        "source_frame_sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe",
+        "step_id": "step_000"
+      },
+      {
+        "crop_path": "artifacts/bundle/templates/step_001.png",
+        "crop_sha256": "9d17fc905b1902add82cad885c72fe446a23e0334fc4db58592d2369e85f26a5",
+        "region": [
+          34,
+          127,
+          160,
+          64
+        ],
+        "source_frame_path": "artifacts/recording/frames/0001_before.png",
+        "source_frame_sha256": "95f240328c3e7e5b8ba9fbb3adebe48891c378a5b9ecc5aa4de55c613189b870",
+        "step_id": "step_001"
+      },
+      {
+        "crop_path": "artifacts/bundle/templates/step_002.png",
+        "crop_sha256": "e6a0e0718b00c26280e32928b744217d00a7e010ab9825da27724e2debc9b805",
+        "region": [
+          5,
+          182,
+          160,
+          64
+        ],
+        "source_frame_path": "artifacts/recording/frames/0002_before.png",
+        "source_frame_sha256": "c9a35595904c645af4664987a5f94d6665c0cbf6efb74c3bf69920ca8ad950dc",
+        "step_id": "step_002"
+      },
+      {
+        "crop_path": "artifacts/bundle/templates/step_003.png",
+        "crop_sha256": "2cb01de3e45c7c6cd6526f1b6f9c1a4f86bee1a5e4f8e3f6fbf7150470cf5f2c",
+        "region": [
+          400,
+          236,
+          160,
+          64
+        ],
+        "source_frame_path": "artifacts/recording/frames/0003_before.png",
+        "source_frame_sha256": "8d2d2d2a56a8d089b11f1e97926c06f0c1d7076e080d0ffbd70b0bf1691aeae3",
+        "step_id": "step_003"
+      },
+      {
+        "crop_path": "artifacts/bundle/templates/step_005.png",
+        "crop_sha256": "5d8163520ba8355f44ffe0cd06a26be6bfe5d6660bcff1395dc82d4da3aa0ac1",
+        "region": [
+          54,
+          425,
+          160,
+          64
+        ],
+        "source_frame_path": "artifacts/recording/frames/0005_before.png",
+        "source_frame_sha256": "d4da8dbaf7fa257e89d78a08854ccd50c8277c3fcb12efe2614d3fa4508a3026",
+        "step_id": "step_005"
+      }
+    ],
+    "presentation": {
+      "demonstration": {
+        "frame_pts": {
+          "bytes": 303,
+          "media_type": "application/json",
+          "path": "artifacts/presentation/demonstration.frame-pts-us.json",
+          "role": "evidence",
+          "sha256": "088c04fd9e3cee60cc17562d3fd9332cd4fefd672ff2b98fb37544c1e3d1a5dd"
+        },
+        "media": {
+          "bytes": 77376,
+          "media_type": "video/webm",
+          "path": "artifacts/presentation/demonstration.webm",
+          "role": "media",
+          "sha256": "fd601246d3b044a96a030049850af36d96aa8689b553f0ef27343a7be9bd6b23"
+        },
+        "raw_media": {
+          "bytes": 82320,
+          "media_type": "video/webm",
+          "path": "artifacts/media/recording.webm",
+          "role": "media",
+          "sha256": "14654e8b52376241c8d0bb4f136a6a5ae1780eb1b34e560b45ddda4bdd3cfc03"
+        },
+        "source_kind": "source_recording",
+        "timeline": {
+          "bytes": 6344,
+          "media_type": "application/json",
+          "path": "artifacts/presentation/demonstration.control-overlay.v2.json",
+          "role": "evidence",
+          "sha256": "5786ee348149e91d8d0bff25fbf5b4351a84861441d8cfab4ca85c49892b5e41"
+        }
+      },
+      "halted": {
+        "case_id": "fault-ambiguity",
+        "frame_pts": {
+          "bytes": 241,
+          "media_type": "application/json",
+          "path": "artifacts/presentation/halted.frame-pts-us.json",
+          "role": "evidence",
+          "sha256": "38493f9747635c98d2dd9094157ebbe4dfaab18b7f32fdfe299cb9f8cdc4a148"
+        },
+        "media": {
+          "bytes": 32237,
+          "media_type": "video/webm",
+          "path": "artifacts/presentation/halted.webm",
+          "role": "media",
+          "sha256": "1ddbcf330fab3dc166380d4dbc845a1344c09b6db503d02a5e26cf986b8dbfd7"
+        },
+        "oracle": {
+          "bytes": 369,
+          "media_type": "application/json",
+          "path": "artifacts/cases/fault-ambiguity/trial-01/oracle.json",
+          "role": "case_evidence",
+          "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+        },
+        "outcome": {
+          "bytes": 1422,
+          "media_type": "application/json",
+          "path": "artifacts/cases/fault-ambiguity/trial-01/outcome.json",
+          "role": "case_evidence",
+          "sha256": "9a39b9f2a3a9d937ce445e725a0f1af6ed6c89bd50bd008f79fa8883bb10c4b5"
+        },
+        "raw_media": {
+          "bytes": 38646,
+          "media_type": "video/webm",
+          "path": "artifacts/cases/fault-ambiguity/trial-01/halt.webm",
+          "role": "media",
+          "sha256": "8943df6f85c72a2601de034065b0ce2abfb4a4986582842db4529da59f0ba92d"
+        },
+        "report": {
+          "bytes": 4000,
+          "media_type": "application/json",
+          "path": "artifacts/cases/fault-ambiguity/trial-01/run/report.json",
+          "role": "case_evidence",
+          "sha256": "eab84b483a442b2651023532518eb1e1785fd037f8d1108c52bcc196da5a4eb5"
+        },
+        "source_kind": "run",
+        "timeline": {
+          "bytes": 1981,
+          "media_type": "application/json",
+          "path": "artifacts/presentation/halted.control-overlay.v2.json",
+          "role": "evidence",
+          "sha256": "a9fe75a8f8a8380b8990b3f3f8ced12d854236f191af707993be5d3f24d2ea00"
+        },
+        "trial": 1
+      },
+      "verified": {
+        "case_id": "representative",
+        "frame_pts": {
+          "bytes": 461,
+          "media_type": "application/json",
+          "path": "artifacts/presentation/verified.frame-pts-us.json",
+          "role": "evidence",
+          "sha256": "c056fd53d9c8f64cf6da2c51806e3533a7d8f025e5981e9e2cfd4ef6bc9d9e2f"
+        },
+        "media": {
+          "bytes": 78310,
+          "media_type": "video/webm",
+          "path": "artifacts/presentation/verified.webm",
+          "role": "media",
+          "sha256": "aa1694582fd2a1cace1d705198a67ff4e170b8801aa87304df4292b4cc675dfb"
+        },
+        "oracle": {
+          "bytes": 581,
+          "media_type": "application/json",
+          "path": "artifacts/cases/representative/trial-01/oracle.json",
+          "role": "case_evidence",
+          "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+        },
+        "outcome": {
+          "bytes": 743,
+          "media_type": "application/json",
+          "path": "artifacts/cases/representative/trial-01/outcome.json",
+          "role": "case_evidence",
+          "sha256": "2490ffb95383f423ffd91db9302ed481266be657da291e1282012de2e6ecd85b"
+        },
+        "raw_media": {
+          "bytes": 96543,
+          "media_type": "video/webm",
+          "path": "artifacts/cases/representative/trial-01/replay.webm",
+          "role": "media",
+          "sha256": "2e851470bc6ce308100806fed2a1ac3286897eb0b3e29bb1d614956f84818b5c"
+        },
+        "report": {
+          "bytes": 15429,
+          "media_type": "application/json",
+          "path": "artifacts/cases/representative/trial-01/run/report.json",
+          "role": "case_evidence",
+          "sha256": "671f71918768a1cfb2dcd3147b2ed2983834aaa0b0ca6fef3a71857da34263f6"
+        },
+        "source_kind": "run",
+        "timeline": {
+          "bytes": 19326,
+          "media_type": "application/json",
+          "path": "artifacts/presentation/verified.control-overlay.v2.json",
+          "role": "evidence",
+          "sha256": "78951ddae280675d6ee9d498f1bc3c569d1a798feae46feb0c1e04077057b140"
+        },
+        "trial": 1
+      }
+    },
+    "qualification": {
+      "minimum_effect_tier": 1,
+      "passed": true,
+      "project": {
+        "bytes": 21462,
+        "media_type": "application/json",
+        "path": "artifacts/qualification/project.json",
+        "role": "qualification",
+        "sha256": "da7430ef1e441ac5b6e167178b44d4d903d4936904320a27022a47102e05aae5"
+      },
+      "report": {
+        "bytes": 779,
+        "media_type": "application/json",
+        "path": "artifacts/qualification/report.json",
+        "role": "qualification",
+        "sha256": "0ed09462390a24ca368c6883d04b8db4cca26969d6d0a61c073a47036bd5657b"
+      }
+    },
+    "source_recording": {
+      "events": {
+        "bytes": 2945,
+        "media_type": "application/x-ndjson",
+        "path": "artifacts/recording/events.jsonl",
+        "role": "source_recording",
+        "sha256": "1a8950e8cd6bea70d21243ed3ac701ee855741836a3a58e8aebc87285255f996"
+      },
+      "frame_count": 12,
+      "media": {
+        "bytes": 82320,
+        "media_type": "video/webm",
+        "path": "artifacts/media/recording.webm",
+        "role": "media",
+        "sha256": "14654e8b52376241c8d0bb4f136a6a5ae1780eb1b34e560b45ddda4bdd3cfc03"
+      },
+      "meta": {
+        "bytes": 298,
+        "media_type": "application/json",
+        "path": "artifacts/recording/meta.json",
+        "role": "source_recording",
+        "sha256": "6cb798a6552b6c1fadce0dcd0cfa467923456443ec9eb2d5740061ad916068df"
+      }
+    }
+  },
+  "evaluation": {
+    "browser_request_count": 63,
+    "case_count": 6,
+    "caveats": [
+      "First-party synthetic MockMed task; not customer production evidence.",
+      "Bound to the exact app, browser, viewport, runtime, and source commit in this pack.",
+      "The runtime conservatively records network activity as observed. Every configured and browser-observed destination in this isolated campaign was loopback; no off-box or third-party egress was observed.",
+      "Three trials per required condition establish this bounded campaign only.",
+      "The synthetic reference app exposes a stable demo-mode idempotency key so the compiler can retain and verify a real at-most-once contract."
+    ],
+    "environment_digest": "e1b4c3e1da9029be74aab7fa7e340a0556382c9bdd38a7aa151eb7cb3f49aff4",
+    "minimum_effect_tier": 1,
+    "model_calls": 0,
+    "off_box_or_third_party_egress_observed": false,
+    "oracle": {
+      "kind": "independent_system_of_record",
+      "summary": "GET /api/db is independent of browser pixels and the runtime report; target state is held in the local MockMed fault server.",
+      "verification_tier": 1,
+      "verifier": "openadapt_flow.runtime.effects.rest.RestRecordVerifier"
+    },
+    "outcome_counts": {
+      "HALTED": 15,
+      "VERIFIED": 3
+    },
+    "over_halts": 0,
+    "passed_contracts": 6,
+    "qualification_passed": true,
+    "required_case_kinds": [
+      "ambiguity",
+      "missing_effect",
+      "representative",
+      "stale_identity",
+      "weak_effect",
+      "wrong_identity"
+    ],
+    "required_contracts": 6,
+    "run_count": 18,
+    "runtime_network_observation_counts": {
+      "observed": 18
+    },
+    "screenshots_may_leave_box": false,
+    "silent_incorrect_successes": 0,
+    "total_duration_ms": 69731.20770789683,
+    "trials_per_case": 3,
+    "wrong_target_actions": 0
+  },
+  "files": [
+    {
+      "bytes": 1688,
+      "media_type": "application/json",
+      "path": "artifacts/bundle/manifest.json",
+      "role": "compiled_bundle",
+      "sha256": "941c62f0d7f53493a8aa9bcb2e69ad90e0ec61869bfb5d4d0dc5f8f85cddc3e7"
+    },
+    {
+      "bytes": 2505,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_000.png",
+      "role": "compiled_bundle",
+      "sha256": "46a75b5d63ceaad4bee942ccf2a6ca3d2b4f6327509df7eff2cc7ddb2c9fd389"
+    },
+    {
+      "bytes": 21930,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_000_expect.png",
+      "role": "compiled_bundle",
+      "sha256": "337e403fec476cc955bcf5f1d96902119d9c2fadc03e201c0c2fbc2475d03646"
+    },
+    {
+      "bytes": 3116,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_001.png",
+      "role": "compiled_bundle",
+      "sha256": "9d17fc905b1902add82cad885c72fe446a23e0334fc4db58592d2369e85f26a5"
+    },
+    {
+      "bytes": 18546,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_001_expect.png",
+      "role": "compiled_bundle",
+      "sha256": "ccbbb335c8160188198df18beb48bd88082b7bb1e5c1cd987d6766afb62c0773"
+    },
+    {
+      "bytes": 3573,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_002.png",
+      "role": "compiled_bundle",
+      "sha256": "e6a0e0718b00c26280e32928b744217d00a7e010ab9825da27724e2debc9b805"
+    },
+    {
+      "bytes": 5009,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_002_expect.png",
+      "role": "compiled_bundle",
+      "sha256": "f66608f19f3acf0ba8d86a39ecdd04781eb320787885039ab1eefee3835c83de"
+    },
+    {
+      "bytes": 317,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_003.png",
+      "role": "compiled_bundle",
+      "sha256": "2cb01de3e45c7c6cd6526f1b6f9c1a4f86bee1a5e4f8e3f6fbf7150470cf5f2c"
+    },
+    {
+      "bytes": 5686,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_003_expect.png",
+      "role": "compiled_bundle",
+      "sha256": "68cd40d6bd0abdf81beb40dd4202bac784a4b55492f803cdd5fb1e7ab8f76941"
+    },
+    {
+      "bytes": 3250,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_005.png",
+      "role": "compiled_bundle",
+      "sha256": "5d8163520ba8355f44ffe0cd06a26be6bfe5d6660bcff1395dc82d4da3aa0ac1"
+    },
+    {
+      "bytes": 11751,
+      "media_type": "image/png",
+      "path": "artifacts/bundle/templates/step_005_expect.png",
+      "role": "compiled_bundle",
+      "sha256": "0919dca8fe883ad52eae6359f9da3494cb57c68e006ea4ba314d61e15787ea47"
+    },
+    {
+      "bytes": 57464,
+      "media_type": "application/json",
+      "path": "artifacts/bundle/workflow.json",
+      "role": "compiled_bundle",
+      "sha256": "d404cc07f7e1b1b534a274003057c0142460ab19f64966b7154a070b19d7d785"
+    },
+    {
+      "bytes": 3268,
+      "media_type": "text/x-python",
+      "path": "artifacts/bundle/workflow.py",
+      "role": "compiled_bundle",
+      "sha256": "e42e09b8b10f0864facec0c081ced0932c84ad378599dc7805af81650013aa7d"
+    },
+    {
+      "bytes": 926,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "775d376d9928b74ce625d9a8475e1c68e98bfec5d4f0b569da287b26f04babf0"
+    },
+    {
+      "bytes": 38646,
+      "media_type": "video/webm",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/halt.webm",
+      "role": "media",
+      "sha256": "8943df6f85c72a2601de034065b0ce2abfb4a4986582842db4529da59f0ba92d"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1422,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/outcome.json",
+      "role": "case_evidence",
+      "sha256": "9a39b9f2a3a9d937ce445e725a0f1af6ed6c89bd50bd008f79fa8883bb10c4b5"
+    },
+    {
+      "bytes": 2629,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "b15f386e886e5a6a80e838e95458f9cf4954b235b7c261f4df3c77b8074edf7f"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "4e64820d1c80309b25f06b320ace50d0c84e79abb6d8824d2c526c2114e7ed12"
+    },
+    {
+      "bytes": 1000,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "bcb49cfba4ffbd1faaeac22627dbc7a38cb8b632930bea86a8044194a8fee2bf"
+    },
+    {
+      "bytes": 4000,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/run/report.json",
+      "role": "case_evidence",
+      "sha256": "eab84b483a442b2651023532518eb1e1785fd037f8d1108c52bcc196da5a4eb5"
+    },
+    {
+      "bytes": 39758,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "395adf2a20b0b258343d77b521240dc0adf8229ac9957661aa6855e3d8d4148f"
+    },
+    {
+      "bytes": 39758,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-ambiguity/trial-01/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "395adf2a20b0b258343d77b521240dc0adf8229ac9957661aa6855e3d8d4148f"
+    },
+    {
+      "bytes": 926,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "2f0da376423a903fd604d648367b8c0993c1b727148f85a1a476ecc087d61748"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1423,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/outcome.json",
+      "role": "case_evidence",
+      "sha256": "8594c341d2806dd05d7783859545fa7fc361cb41d8fc1a8ce6276b572d65f627"
+    },
+    {
+      "bytes": 2629,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "21494fa7f4697bc73e12493af789b7fd11de41bbe5beaa435636497e13e1e387"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "0b5c3a158a69aaf916cb4119b2dd5432814f2beb1c3fc5ded9cdd3a682c522e8"
+    },
+    {
+      "bytes": 1000,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "b5e11dd15d9b4819ad2509e0cbf9df245077cf59f1945abcc3d428241456f8a5"
+    },
+    {
+      "bytes": 4001,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/run/report.json",
+      "role": "case_evidence",
+      "sha256": "88d373e2696aa86acbb26bc2bddcd9c8b68e4163f1442283d359d098aacbf31a"
+    },
+    {
+      "bytes": 39758,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "395adf2a20b0b258343d77b521240dc0adf8229ac9957661aa6855e3d8d4148f"
+    },
+    {
+      "bytes": 39758,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-ambiguity/trial-02/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "395adf2a20b0b258343d77b521240dc0adf8229ac9957661aa6855e3d8d4148f"
+    },
+    {
+      "bytes": 926,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "43c7c8efb32da54d9e64ebae0a220098398b55165cefbc9c0c2d9dd135184ac4"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1423,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/outcome.json",
+      "role": "case_evidence",
+      "sha256": "71df2a7eb93c83c6092dea6fcb743d5b67134a32c08d9af8515239938dd2ba13"
+    },
+    {
+      "bytes": 2629,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "40da7e45c21eae8412517cad1ac2f7ef602f09a423951cf144166434fb2130e2"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "e28fad703e2600fe3d7066f05e9660021b95d6d6424b3e382e9a09a6d2fd3f1d"
+    },
+    {
+      "bytes": 1000,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "75a44675f8b5f294efca8aae62b6c9fbf1be331154163068f85a8f1f33426ffd"
+    },
+    {
+      "bytes": 4001,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/run/report.json",
+      "role": "case_evidence",
+      "sha256": "69c53cc9237237cf2ebcef0eaca446b416b9816b3dfd13a1b21e81064f2c8d45"
+    },
+    {
+      "bytes": 39758,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "395adf2a20b0b258343d77b521240dc0adf8229ac9957661aa6855e3d8d4148f"
+    },
+    {
+      "bytes": 39758,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-ambiguity/trial-03/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "395adf2a20b0b258343d77b521240dc0adf8229ac9957661aa6855e3d8d4148f"
+    },
+    {
+      "bytes": 10179,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "7c8f6db333b2b27ab78eb7d9c4753a552167ae9b3f03547c2d814bae1159c735"
+    },
+    {
+      "bytes": 159896,
+      "media_type": "video/webm",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/halt.webm",
+      "role": "media",
+      "sha256": "87c34c66f50ff70e28395e6545e8ced16cd59928e6f3774b027d195c0e4fd9b3"
+    },
+    {
+      "bytes": 384,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/oracle.json",
+      "role": "case_evidence",
+      "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+    },
+    {
+      "bytes": 1768,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/outcome.json",
+      "role": "case_evidence",
+      "sha256": "c55d71fe474b37f42cdedc2c296737cc567bfd55e8a3585e14098962b2ae60eb"
+    },
+    {
+      "bytes": 4980,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "3275f5bf0820cd02bac1851257b8f92d2d97f0e0f49dec352e3c9476ca76604a"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "453e68c281e394087e87d715df2fd548172c21fddd5a921871dfe22c8fbd9d91"
+    },
+    {
+      "bytes": 1545,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "d7c09f90e3b2dc929395b036c5dc4d9e3fbe7cd349d09c832630e573ff5e3436"
+    },
+    {
+      "bytes": 1562,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "b7c693792fc49ef973fab3f07ada2eebc405ef6e762eab091fd5a5d694aca193"
+    },
+    {
+      "bytes": 1554,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "9461e6de4373ef50d48b8a126c9eaadde165887ff7f444d0694f6f94db38cc35"
+    },
+    {
+      "bytes": 1561,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "132f4192612201b5f22f81f1fae75f3c340a55a6c8efd6d9001e5d178bc6021f"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "327b09ffcaaa61112c7e2c56286dc8552b6cebb0c7d27d4587710fa1ebdbcdd6"
+    },
+    {
+      "bytes": 1529,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "d977cefd27b057d00f6494d5842b1e51842496a972a300f97c9a320b1c3d637c"
+    },
+    {
+      "bytes": 16420,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/report.json",
+      "role": "case_evidence",
+      "sha256": "6681073b23ec99c973131cdb96ea38263dc56f45bf8e30ba3a98bcacb6245aac"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-01/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 10177,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "8a40295a3a9617d45444e7303fc21e4d142449252cee15b1889746b77b4237f0"
+    },
+    {
+      "bytes": 384,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/oracle.json",
+      "role": "case_evidence",
+      "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+    },
+    {
+      "bytes": 1767,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/outcome.json",
+      "role": "case_evidence",
+      "sha256": "7d82fb93321424fab4f3493b415bf06f855210d21aca323b9031960645ff6a2b"
+    },
+    {
+      "bytes": 4980,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "7d9a35c8aa500c93bc88a9f7f992ead89d9bed4c719528ab284e38ee13e6461a"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "2aaa5fef7bdc21c3795abf543080dde960a25d87ac81b388b30e84e6205684b6"
+    },
+    {
+      "bytes": 1546,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "1bd6dec9f83b48c7c280d32c94d38ea9e00501e0050347c44331e563d39e6ec2"
+    },
+    {
+      "bytes": 1562,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "e6296847273e4229bd05ccfb8d62999ed041322f584b0c359bc848a647538b6c"
+    },
+    {
+      "bytes": 1553,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "b18bc507e04625df537723ad315d91ec77919d77446268bf817149a7c467e3da"
+    },
+    {
+      "bytes": 1561,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "9dc695db1b02aa27e88a18cd1e354b155c72b2713807d3554c2b8ea440072d84"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "c58c0b1ea8a7a366d27acf60f4a152b7accb5564db520df6c7eb6fc2704b9112"
+    },
+    {
+      "bytes": 1529,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "a2d09c8d4ba59d75a831349849a92c4a37ddf24e8aa014e92950497b4eae1886"
+    },
+    {
+      "bytes": 16417,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/report.json",
+      "role": "case_evidence",
+      "sha256": "a0a945fc5aec29e058ddbf1a40243829ffcd25c21ff699afbd52747e3d771d60"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31499,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-02/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "a8201e29326123adbf2662cbce74d9de7e636210904b41038ae84e17bce8fa23"
+    },
+    {
+      "bytes": 10175,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "f2d96752869e106fef6322b6454a68a494946d376ba85945938eff82127ada71"
+    },
+    {
+      "bytes": 384,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/oracle.json",
+      "role": "case_evidence",
+      "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+    },
+    {
+      "bytes": 1768,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/outcome.json",
+      "role": "case_evidence",
+      "sha256": "7e1b0769baa6f26e58e1e7b19c4df9e0b345e3a7a26e735160b1b4b54658bf1e"
+    },
+    {
+      "bytes": 4980,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "c10a51dd6160d5e6be8baba8b2c841ebf6c75aa7540fe26dc07f3322e29087f5"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "5bc56938ff83f3d7db2dccba604603e1528c749a340a03ab0c558117085e50a3"
+    },
+    {
+      "bytes": 1545,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "1e45cc02889599416295e7f1811903b25da5fe8bc0c66c437a67acb1db38e16f"
+    },
+    {
+      "bytes": 1563,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "4d019358d36fd7a2aa381b09dee43e98b744aa7c2c40dfb5099ea51be0ba7f89"
+    },
+    {
+      "bytes": 1552,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "0be49b831a5b930068956e0f84bb08ff260fd1663683076b1a496af888f7e21b"
+    },
+    {
+      "bytes": 1560,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "e3b40d4707ebcad923b73ea05557c5f252385f29ed8762d8139d1a1a078fbfcc"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "5f46cab3b94d73c367e4ef207f751e2250291425f47b3025419df2fb36072b1c"
+    },
+    {
+      "bytes": 1529,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "a715bc0c9d423f5a85a7c0c7548eefc1d63843f28e7f5cb6765b4d9daac46932"
+    },
+    {
+      "bytes": 16416,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/report.json",
+      "role": "case_evidence",
+      "sha256": "cb2c639863cc11e0185e146d9830bc91f227bbdccf6532c68ddb627f244b6d3e"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-missing-effect/trial-03/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 1736,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "5abad1bccb7ea1f50af72cddda2475c147195d174d73268b586565d714df8beb"
+    },
+    {
+      "bytes": 41986,
+      "media_type": "video/webm",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/halt.webm",
+      "role": "media",
+      "sha256": "40630b3351706aabcc52b7d696a9c591abd1724edc7f923834f20feb76f35d5a"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1610,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/outcome.json",
+      "role": "case_evidence",
+      "sha256": "c4b78f376d65b1e125efd10fe7fd3d4861c32f7424df329e1e29db6dee2dde08"
+    },
+    {
+      "bytes": 2823,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "69b2362399dad9ddb20d92993476377ce9fcfdc72b98b15dc26feaadc414d5f6"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "e82f3672a2c6c88eb0e45b8b7d53169c5a817aea80b776dbd3ea1c37216e27e9"
+    },
+    {
+      "bytes": 1242,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "87f9406efbfbbea29f7a24b0bf7e31c5e85e85f1795de01c18b7b3d7930965c0"
+    },
+    {
+      "bytes": 5334,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/run/report.json",
+      "role": "case_evidence",
+      "sha256": "a221646f81c3e47338396d1b0680863f6e48be9bb33686a0c21139b04a93ffcc"
+    },
+    {
+      "bytes": 35632,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "00dcb835d496c495f07e56390ee635114243f8643f287fb17c092ef59cc72cf8"
+    },
+    {
+      "bytes": 35632,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-stale-identity/trial-01/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "00dcb835d496c495f07e56390ee635114243f8643f287fb17c092ef59cc72cf8"
+    },
+    {
+      "bytes": 1737,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "b00b8575f32339c5c9a5331a61bd66d3bb15b1279d3384e47c0de4bd0a1338e7"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1610,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/outcome.json",
+      "role": "case_evidence",
+      "sha256": "c05c03c7a24d14f0dcca247037912520df4d4fe1baef70a715b9b2afd2d828ec"
+    },
+    {
+      "bytes": 2823,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "e0eebe9081096d06d6dbd7037282166621a3ed07914a78d5ac7efdc240d94378"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "d015f34f9644b8bca8d59b8f83f9e4e1ac59c36f42c063e17050ecae1c1fc901"
+    },
+    {
+      "bytes": 1242,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "c5baba31a00a91233afdceed8ee570c1dcbb2d9884a24061eb608edc9a58b409"
+    },
+    {
+      "bytes": 5335,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/run/report.json",
+      "role": "case_evidence",
+      "sha256": "f4e8a225adacaa8b0ba8749b1f38ce0d9cd53fcfd8b4e62e5bf3a5f9cf0260f7"
+    },
+    {
+      "bytes": 35632,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "00dcb835d496c495f07e56390ee635114243f8643f287fb17c092ef59cc72cf8"
+    },
+    {
+      "bytes": 35632,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-stale-identity/trial-02/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "00dcb835d496c495f07e56390ee635114243f8643f287fb17c092ef59cc72cf8"
+    },
+    {
+      "bytes": 1736,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "53844b0eba58d71ca531511d4d2a8199fcef29a7df2bcc8e2584b1bc3f705580"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1611,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/outcome.json",
+      "role": "case_evidence",
+      "sha256": "bad4b016d3849c4de425c8eff9df9cf09215d79abf3fc4e0ae7922468e7d3286"
+    },
+    {
+      "bytes": 2823,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "58d58c4ec4f4ddddbd3fd6ecaa07c7b33b3e7fee544b45263a530989a0a68f9c"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "de00d9a182202921f27333874993ae794a27a1b8ccca690e2f236fda1e4141fb"
+    },
+    {
+      "bytes": 1242,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "0c837744001599605e0d37d2fc7cade4753be082cced5a508cce67f451b2e5ed"
+    },
+    {
+      "bytes": 5335,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/run/report.json",
+      "role": "case_evidence",
+      "sha256": "068c97c47efa9c6d15636d38f448614a883e29c584a3a8a6f27be4c8129ae709"
+    },
+    {
+      "bytes": 35632,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "00dcb835d496c495f07e56390ee635114243f8643f287fb17c092ef59cc72cf8"
+    },
+    {
+      "bytes": 35632,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-stale-identity/trial-03/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "00dcb835d496c495f07e56390ee635114243f8643f287fb17c092ef59cc72cf8"
+    },
+    {
+      "bytes": 10590,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "c4e55f237b413244620ff5d1ed8e9069001beb7d0bfff5dbae19952b6bf61abc"
+    },
+    {
+      "bytes": 160816,
+      "media_type": "video/webm",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/halt.webm",
+      "role": "media",
+      "sha256": "f25f38ee5312352568273aa16913d870f8a28a104cab7dced86adc55d65c94fb"
+    },
+    {
+      "bytes": 560,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/oracle.json",
+      "role": "case_evidence",
+      "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+    },
+    {
+      "bytes": 1746,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/outcome.json",
+      "role": "case_evidence",
+      "sha256": "0a0f7eb0e085a5acfe6112bd40647b1e3f761580aa310d9d5899311ff3e3ede5"
+    },
+    {
+      "bytes": 4978,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "3381f30607191b7939eb7a4ed885a32528b1ca5b6e20e7b68bf9d4ca2106f748"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "84960b921db7679a134049c6052390a91b90fb23aa9441c9a15b7d5917f997d3"
+    },
+    {
+      "bytes": 1546,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "e95ae94287327bdaa57a95cb587a5ba635921787bcdc9328ae84cf4feb39cc3d"
+    },
+    {
+      "bytes": 1562,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "30e5ae7fe852c8a8de1adfda1fc53ea10e96f21e467971fc5e0b9bbea9f5e219"
+    },
+    {
+      "bytes": 1554,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "233fb8b947113cdb9f207f3bcf83d2f8f1d78af21a770dbb40d6b6f0c0e25bba"
+    },
+    {
+      "bytes": 1560,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "370d199fa3c17cde2fc4204f740517b35c082184103c586066cd8743f498fbff"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "154a75d36af83af8e0db378b1840f001a1c54ecd6c50a25306b7a503ac4a8d1c"
+    },
+    {
+      "bytes": 1598,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "66fdeaad18bb543603fc4a5b15bbd7aa0c6f51574ef7b0b2e057a53d29d75a86"
+    },
+    {
+      "bytes": 16933,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/report.json",
+      "role": "case_evidence",
+      "sha256": "990716ace802fe3a04edbb7a42bdbb5af56109596108026df995e053c7a81482"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31499,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-01/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "a8201e29326123adbf2662cbce74d9de7e636210904b41038ae84e17bce8fa23"
+    },
+    {
+      "bytes": 10595,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "55be41175576c3770c6fa027a2cdcc88ea8528a6d9001a44a372ed7ac29378ab"
+    },
+    {
+      "bytes": 560,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/oracle.json",
+      "role": "case_evidence",
+      "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+    },
+    {
+      "bytes": 1746,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/outcome.json",
+      "role": "case_evidence",
+      "sha256": "ccfe65d228a323726fbeec5d99aa42aaa90a5978d586b6f368c42628e8465bbf"
+    },
+    {
+      "bytes": 4978,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "46350254a081688be5c47011de7d8dffa451253aac8d40f540afb5e171ecab08"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "f2f65788921b1089b9470df9624c2a12fc63be4f219fd5e7c58878a136c4996a"
+    },
+    {
+      "bytes": 1546,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "5606a3ade93452d7f1de3eeed7c48334ecf3b7adb548c2ca3a4871a82b7dfd12"
+    },
+    {
+      "bytes": 1563,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "9816bcc9175ca2b67624d1529a34c9227b4e6094c52234ee57ed5254c95d51ec"
+    },
+    {
+      "bytes": 1554,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "d8d4393ec9d99498f35f57bb8efdb458aabef3209892ea168a46174d40ad6e3d"
+    },
+    {
+      "bytes": 1561,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "ea8b2355d35da5436a27f6c16be84b2b1ae03843f1a739118b0f0dadbe3be831"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "193b1e45186b8aa54c43709760a2d95ac8ba66686955078eba91d5312327255f"
+    },
+    {
+      "bytes": 1598,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "92362b8bd08a6ee39e54c84a5918476101c8d2df7a4050f88b86cc8d1ec2325c"
+    },
+    {
+      "bytes": 16938,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/report.json",
+      "role": "case_evidence",
+      "sha256": "ceaa645bf23c5d227191f2ea45e45f19b251885575c11e48f72e81c240eb47b7"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31499,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-02/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "a8201e29326123adbf2662cbce74d9de7e636210904b41038ae84e17bce8fa23"
+    },
+    {
+      "bytes": 10595,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "1f58911beff166cd4233067971fa51c342bcf6ac32841de16609b17b993d0d3f"
+    },
+    {
+      "bytes": 560,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/oracle.json",
+      "role": "case_evidence",
+      "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+    },
+    {
+      "bytes": 1746,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/outcome.json",
+      "role": "case_evidence",
+      "sha256": "65bf9d533e1824dbfc0a36e92539d8a2e854ab23b0fedc55e57f71a9a7b9ac68"
+    },
+    {
+      "bytes": 4978,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "c7752cd3a3c30433cd9a595ef4a815f5e2812400928ecd7a7c7a3f61ee9def62"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "a0359ec46b52d06c8329c78d923ad880ce29a614ff99ae259257d17d0ab0caad"
+    },
+    {
+      "bytes": 1546,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "2a014e5d65d6a1def328498ce7c861b43c1485056e9d81679fe5dca99003198b"
+    },
+    {
+      "bytes": 1563,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "73e611527b1e4f3dfaf319d104e83fc7b4d87de6b4fe752479a7438822ad81f4"
+    },
+    {
+      "bytes": 1554,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "becb2d19f4549f5dde97ae8b8504ea67d2159f05238890432d81ee64e7f68295"
+    },
+    {
+      "bytes": 1561,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "d5deb39ad8efdf28b95fc6cc15b2b20043a9445eb93ed2770c90f76239164626"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "c4d7f949bbf675f35a2f8e9068634b9240e1e73b6e511064916123c7d17f29ef"
+    },
+    {
+      "bytes": 1598,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "42bd67577781d0a8de18fb6a0a3379111dff4acc011327655a5b7054d930f559"
+    },
+    {
+      "bytes": 16938,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/report.json",
+      "role": "case_evidence",
+      "sha256": "282b6495aa71a1b1f78425efcb1c8858b3652dcc141646f69b8ff4797cdf8ed0"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31499,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-weak-effect/trial-03/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "a8201e29326123adbf2662cbce74d9de7e636210904b41038ae84e17bce8fa23"
+    },
+    {
+      "bytes": 1511,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "863f9faec0d8c4cf9810978ce19bbd773a766914309d080c87d6a11ae11d7684"
+    },
+    {
+      "bytes": 39677,
+      "media_type": "video/webm",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/halt.webm",
+      "role": "media",
+      "sha256": "dab0c588e55e22c5c5a7778aca03d05d14ad2fad79df8e2f803c24d2c60c25b0"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1653,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/outcome.json",
+      "role": "case_evidence",
+      "sha256": "d9fb104e3ebf775c8ec7c83b00f1e5ae39cc415a506b8afcd509723f6882749a"
+    },
+    {
+      "bytes": 2817,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "a3bc410088fa63c1238e67626a5bdbe5bfdef566138f96e9d7e7bcfd7c99799e"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "f8c9b9229409dfed1bd9124eb0d4acc7fc114b40b5df9d120dde284a96d6eaaa"
+    },
+    {
+      "bytes": 1240,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "48bbc6538c31fc7a2234e7c08fd9b1d31bc25c4742a2c0477db52ee2eae53ebd"
+    },
+    {
+      "bytes": 4966,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/run/report.json",
+      "role": "case_evidence",
+      "sha256": "0617612df693fa3d3b88ecf9668b09a013727b1561f0e6b3e7a7f649f7b00ad1"
+    },
+    {
+      "bytes": 39941,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "d99076ca95354216c80ea82a3be00908b680b998879ac0bdd97f435d12bbdecf"
+    },
+    {
+      "bytes": 39941,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-wrong-identity/trial-01/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "d99076ca95354216c80ea82a3be00908b680b998879ac0bdd97f435d12bbdecf"
+    },
+    {
+      "bytes": 1511,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "96e30f226726afd07b3c45bac5c5201de1e9902a8e1df13c3f0049f6174bfcd4"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1653,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/outcome.json",
+      "role": "case_evidence",
+      "sha256": "9cc68c12dc943e00970c9bb0e76883855fddf612d4042a43048bdb1a2fde5c2e"
+    },
+    {
+      "bytes": 2817,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "c8fadf9f7b17b1d03fad3f7768f720c46aa0442b67288865fc46383f7bcfac8f"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "171629ef1a3746d2f32558c44ba33d40c0b2592667b6818a939f00129490531e"
+    },
+    {
+      "bytes": 1240,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "05ca639d34c7ba6172200073309b024f05315708f3264a58d638392ac146e77f"
+    },
+    {
+      "bytes": 4966,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/run/report.json",
+      "role": "case_evidence",
+      "sha256": "95b99deb7d1b8d1688ea84efda4df933505188e93d07a874ba1c54e38d6189f7"
+    },
+    {
+      "bytes": 39941,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "d99076ca95354216c80ea82a3be00908b680b998879ac0bdd97f435d12bbdecf"
+    },
+    {
+      "bytes": 39941,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-wrong-identity/trial-02/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "d99076ca95354216c80ea82a3be00908b680b998879ac0bdd97f435d12bbdecf"
+    },
+    {
+      "bytes": 1510,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "d64d3f7c9529c821ad06836f163b7e3d0ffdb5f3a1340d00bb59b2626d3efed6"
+    },
+    {
+      "bytes": 369,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/oracle.json",
+      "role": "case_evidence",
+      "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+    },
+    {
+      "bytes": 1653,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/outcome.json",
+      "role": "case_evidence",
+      "sha256": "2d2a737e2c0e50e1e7b6235134cc6099fa9c070f8483911d3142ab8f84577343"
+    },
+    {
+      "bytes": 2817,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "71c9e3042b9c9e8b10c88e86ebd7861cfe0329a33f89a6d06881eb7a02a878b7"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "a9e6ed269359a9caea60264ad536183536db6960f9570e26e8eb782d064b731f"
+    },
+    {
+      "bytes": 1240,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/run/pending_escalation.json",
+      "role": "case_evidence",
+      "sha256": "fe33bf1e8972eab4861ff7d46c61436b1f1305af531edfa8bd88ec5301aad6b8"
+    },
+    {
+      "bytes": 4965,
+      "media_type": "application/json",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/run/report.json",
+      "role": "case_evidence",
+      "sha256": "7397e7e5668dad37cf5c1ee16c4e6bcda3fa2a5537280f67cbb6f6b6dbcd2bdc"
+    },
+    {
+      "bytes": 39941,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "d99076ca95354216c80ea82a3be00908b680b998879ac0bdd97f435d12bbdecf"
+    },
+    {
+      "bytes": 39941,
+      "media_type": "image/png",
+      "path": "artifacts/cases/fault-wrong-identity/trial-03/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "d99076ca95354216c80ea82a3be00908b680b998879ac0bdd97f435d12bbdecf"
+    },
+    {
+      "bytes": 10079,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/representative/trial-01/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "77ca4495a4b995728898f1257dd4a06f4ce3efc087f44660c837c9f1a79db8cd"
+    },
+    {
+      "bytes": 581,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/oracle.json",
+      "role": "case_evidence",
+      "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+    },
+    {
+      "bytes": 743,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/outcome.json",
+      "role": "case_evidence",
+      "sha256": "2490ffb95383f423ffd91db9302ed481266be657da291e1282012de2e6ecd85b"
+    },
+    {
+      "bytes": 96543,
+      "media_type": "video/webm",
+      "path": "artifacts/cases/representative/trial-01/replay.webm",
+      "role": "media",
+      "sha256": "2e851470bc6ce308100806fed2a1ac3286897eb0b3e29bb1d614956f84818b5c"
+    },
+    {
+      "bytes": 4496,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/representative/trial-01/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "66744c67f8e7591823b3d9678c830bf96795e5f6fbb94d36630e6cc84f321c36"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "cb46bb486d4afb14ccf1443a5f2d18a240231db655770eac964d49efb59e4e25"
+    },
+    {
+      "bytes": 1546,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "983a2b69f8cca4821bc78c6a4e9d489de7e3478100176f87c677a5925a2d465a"
+    },
+    {
+      "bytes": 1563,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "59c4fba5dfecab146f75810ec782242f3007741518d3b7c0a006d5a0ba07f746"
+    },
+    {
+      "bytes": 1553,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "4f51e63127cbc65cd06b41d38033dac10ee825b4bce611d190195b8bf5db2d4e"
+    },
+    {
+      "bytes": 1561,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "723c96f656346638e75d7f89f05d4dfedf5e8762d997ad071eaa9c07743cd8ab"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "90ec1a5827685919dbc1dafd425f89f3343aa6176cee50dd9d8d2ef914302e1b"
+    },
+    {
+      "bytes": 2373,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/run/checkpoints/step_0005_step_005.json",
+      "role": "case_evidence",
+      "sha256": "af8afd2700d53a599e83ab92aeba6c9be32f65a3594ac68d8c3fb2121f56024e"
+    },
+    {
+      "bytes": 15429,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-01/run/report.json",
+      "role": "case_evidence",
+      "sha256": "671f71918768a1cfb2dcd3147b2ed2983834aaa0b0ca6fef3a71857da34263f6"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23522,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "95f240328c3e7e5b8ba9fbb3adebe48891c378a5b9ecc5aa4de55c613189b870"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27344,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "58f1714e31a3f511b5310539b433536169163c74f224402b7dafed32588d0c72"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31494,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-01/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "019102af701afd1c0103fd3fefe8af7b88f0f1fae2d75e28b79875efee143e93"
+    },
+    {
+      "bytes": 10081,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/representative/trial-02/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "75efcfbeaae69823ff5431754cf47e69fb016ceb1524897b336548104781f034"
+    },
+    {
+      "bytes": 581,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/oracle.json",
+      "role": "case_evidence",
+      "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+    },
+    {
+      "bytes": 744,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/outcome.json",
+      "role": "case_evidence",
+      "sha256": "076dffad7ff49711cb9a91275e669bfb149df64df8f8a0a56388910a29ec8b4b"
+    },
+    {
+      "bytes": 4496,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/representative/trial-02/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "4cfb220d293845937f8d1091bdbc7a18f9c00daaa20f26973604961d1c38109c"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "08704fe3e82c4443f7c6b774deb84d1fbebf2f2966ed4356dbe97d378cd2c69d"
+    },
+    {
+      "bytes": 1546,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "867fca62cd1a75d4f67e51f702c484341b9d2a3bde457dbe318604bd8bdb55c1"
+    },
+    {
+      "bytes": 1563,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "3645331b595e29daa8ffe4940e08d941ed14fdb202cdd7f99328706df9c8e064"
+    },
+    {
+      "bytes": 1553,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "127977647d2da0a967dd3bd97075425612bed63ad71bec0f6b9ee2fc71046863"
+    },
+    {
+      "bytes": 1560,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "b3c501d23b5b3ada76ea300a212720b3f5e54462f3c38602ad8d83f407b4d9d9"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "d7ceb2d89421f09ac35a4d7c7c89393d5b66dbdb8a6ddc3fc2e8d838cef4dc57"
+    },
+    {
+      "bytes": 2374,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/run/checkpoints/step_0005_step_005.json",
+      "role": "case_evidence",
+      "sha256": "0bb1e910b276f9dff68d7cca2ec6fe77a2f3bbaac0d5517b38d8119afaca2868"
+    },
+    {
+      "bytes": 15432,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-02/run/report.json",
+      "role": "case_evidence",
+      "sha256": "06ad74363d7b0fdb44d9d6be95dde029a2fef56b62a0a746b70d912fa23bc6a1"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27347,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "c9a35595904c645af4664987a5f94d6665c0cbf6efb74c3bf69920ca8ad950dc"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31499,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-02/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "a8201e29326123adbf2662cbce74d9de7e636210904b41038ae84e17bce8fa23"
+    },
+    {
+      "bytes": 10080,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/cases/representative/trial-03/events.jsonl",
+      "role": "case_evidence",
+      "sha256": "bf10d256800cf1923bb5595a4b459a439b51bfa956d9a1eb1335ba403b6c4346"
+    },
+    {
+      "bytes": 581,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/oracle.json",
+      "role": "case_evidence",
+      "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+    },
+    {
+      "bytes": 743,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/outcome.json",
+      "role": "case_evidence",
+      "sha256": "4b8354bf06135569752074ffa8eac65531bc78f572e9537ebcf987b33157f901"
+    },
+    {
+      "bytes": 4496,
+      "media_type": "text/markdown",
+      "path": "artifacts/cases/representative/trial-03/run/REPORT.md",
+      "role": "case_evidence",
+      "sha256": "85bc57a16fc2bc0aae2ae94c74fe22b06642b1662700271373fea083357f5fef"
+    },
+    {
+      "bytes": 1182,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/run/checkpoints/_manifest.json",
+      "role": "case_evidence",
+      "sha256": "58ea34e96a71b0998ac55ed41fb76b2126ec678419cc4c24da4abaa5d0e5ce18"
+    },
+    {
+      "bytes": 1546,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/run/checkpoints/step_0000_step_000.json",
+      "role": "case_evidence",
+      "sha256": "50764790995d0f5f80af478c8888326c162d6466b28cc9f445868c468e650bea"
+    },
+    {
+      "bytes": 1562,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/run/checkpoints/step_0001_step_001.json",
+      "role": "case_evidence",
+      "sha256": "e0dadb4f3374d9c8379b928f7075a86df5ed676502abe0e1564f1e6aac2911c5"
+    },
+    {
+      "bytes": 1553,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/run/checkpoints/step_0002_step_002.json",
+      "role": "case_evidence",
+      "sha256": "eff04865a88d9b45312541f4d0acd92f6d6ac03d3e83b5b38c514d063fec2bfd"
+    },
+    {
+      "bytes": 1561,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/run/checkpoints/step_0003_step_003.json",
+      "role": "case_evidence",
+      "sha256": "e9469560b1d144267e93d0de74c45b8beca000545d4921612db5283ae2704082"
+    },
+    {
+      "bytes": 736,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/run/checkpoints/step_0004_step_004.json",
+      "role": "case_evidence",
+      "sha256": "258ed8735fd06845fb88628c1fd586e908658a0f8aa75be611bd14f38291ea08"
+    },
+    {
+      "bytes": 2373,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/run/checkpoints/step_0005_step_005.json",
+      "role": "case_evidence",
+      "sha256": "178c247ba850295f0b6cd19781de04bb21bac00c0251c3dcd181cbb6748dff0e"
+    },
+    {
+      "bytes": 15430,
+      "media_type": "application/json",
+      "path": "artifacts/cases/representative/trial-03/run/report.json",
+      "role": "case_evidence",
+      "sha256": "0a9675be8e3dbf420113c21b1013469bc2437e797df1c3e0f31c59b88b28d524"
+    },
+    {
+      "bytes": 23523,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_000_after.png",
+      "role": "case_evidence",
+      "sha256": "bc5ecdd6b0b6becdf72fd736840f9ceb3a8f5c28a94b7ca93d18ac47b113e3b6"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_000_before.png",
+      "role": "case_evidence",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27348,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_001_after.png",
+      "role": "case_evidence",
+      "sha256": "c93494363bb067164bd0da1d4f48ee33acde619800f66f2b91b297477336c4ca"
+    },
+    {
+      "bytes": 23522,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_001_before.png",
+      "role": "case_evidence",
+      "sha256": "95f240328c3e7e5b8ba9fbb3adebe48891c378a5b9ecc5aa4de55c613189b870"
+    },
+    {
+      "bytes": 27400,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_002_after.png",
+      "role": "case_evidence",
+      "sha256": "5b0d35f3b6f60ac321573c3a6ce36c096dc0abe44dbe6c756ba344b3eec820ca"
+    },
+    {
+      "bytes": 27344,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_002_before.png",
+      "role": "case_evidence",
+      "sha256": "58f1714e31a3f511b5310539b433536169163c74f224402b7dafed32588d0c72"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_003_after.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 27399,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_003_before.png",
+      "role": "case_evidence",
+      "sha256": "88c5c3e8d39579d6e11389459ae38256f57a12841526e45990dc52f4401d0870"
+    },
+    {
+      "bytes": 31501,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_004_after.png",
+      "role": "case_evidence",
+      "sha256": "d47fd457fc12221ca37db9aab4a098d754fbb086f4e5f6607c12b5090d4bf97c"
+    },
+    {
+      "bytes": 27618,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_004_before.png",
+      "role": "case_evidence",
+      "sha256": "7f6806cac79efad47ed1472e525954cb5f65b1a18943f785bf13c336cabda03c"
+    },
+    {
+      "bytes": 31599,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_005_after.png",
+      "role": "case_evidence",
+      "sha256": "ba6033fa67a091fd53200f591cab85e4b8e1759f38d4f11def4f3ab8f989b2d4"
+    },
+    {
+      "bytes": 31494,
+      "media_type": "image/png",
+      "path": "artifacts/cases/representative/trial-03/run/steps/step_005_before.png",
+      "role": "case_evidence",
+      "sha256": "019102af701afd1c0103fd3fefe8af7b88f0f1fae2d75e28b79875efee143e93"
+    },
+    {
+      "bytes": 24900,
+      "media_type": "text/html",
+      "path": "artifacts/compiled/program-graph.html",
+      "role": "program_graph",
+      "sha256": "91b83df8987284af588456d165375ce01c6d05314bd9f47c97491740f6feaada"
+    },
+    {
+      "bytes": 12223,
+      "media_type": "application/json",
+      "path": "artifacts/compiled/program-graph.json",
+      "role": "program_graph",
+      "sha256": "f0a29afe04c344f565425431997296c276295ccc7202df4f91744c082a7b2fda"
+    },
+    {
+      "bytes": 82320,
+      "media_type": "video/webm",
+      "path": "artifacts/media/recording.webm",
+      "role": "media",
+      "sha256": "14654e8b52376241c8d0bb4f136a6a5ae1780eb1b34e560b45ddda4bdd3cfc03"
+    },
+    {
+      "bytes": 6344,
+      "media_type": "application/json",
+      "path": "artifacts/presentation/demonstration.control-overlay.v2.json",
+      "role": "evidence",
+      "sha256": "5786ee348149e91d8d0bff25fbf5b4351a84861441d8cfab4ca85c49892b5e41"
+    },
+    {
+      "bytes": 303,
+      "media_type": "application/json",
+      "path": "artifacts/presentation/demonstration.frame-pts-us.json",
+      "role": "evidence",
+      "sha256": "088c04fd9e3cee60cc17562d3fd9332cd4fefd672ff2b98fb37544c1e3d1a5dd"
+    },
+    {
+      "bytes": 77376,
+      "media_type": "video/webm",
+      "path": "artifacts/presentation/demonstration.webm",
+      "role": "media",
+      "sha256": "fd601246d3b044a96a030049850af36d96aa8689b553f0ef27343a7be9bd6b23"
+    },
+    {
+      "bytes": 1981,
+      "media_type": "application/json",
+      "path": "artifacts/presentation/halted.control-overlay.v2.json",
+      "role": "evidence",
+      "sha256": "a9fe75a8f8a8380b8990b3f3f8ced12d854236f191af707993be5d3f24d2ea00"
+    },
+    {
+      "bytes": 241,
+      "media_type": "application/json",
+      "path": "artifacts/presentation/halted.frame-pts-us.json",
+      "role": "evidence",
+      "sha256": "38493f9747635c98d2dd9094157ebbe4dfaab18b7f32fdfe299cb9f8cdc4a148"
+    },
+    {
+      "bytes": 32237,
+      "media_type": "video/webm",
+      "path": "artifacts/presentation/halted.webm",
+      "role": "media",
+      "sha256": "1ddbcf330fab3dc166380d4dbc845a1344c09b6db503d02a5e26cf986b8dbfd7"
+    },
+    {
+      "bytes": 19326,
+      "media_type": "application/json",
+      "path": "artifacts/presentation/verified.control-overlay.v2.json",
+      "role": "evidence",
+      "sha256": "78951ddae280675d6ee9d498f1bc3c569d1a798feae46feb0c1e04077057b140"
+    },
+    {
+      "bytes": 461,
+      "media_type": "application/json",
+      "path": "artifacts/presentation/verified.frame-pts-us.json",
+      "role": "evidence",
+      "sha256": "c056fd53d9c8f64cf6da2c51806e3533a7d8f025e5981e9e2cfd4ef6bc9d9e2f"
+    },
+    {
+      "bytes": 78310,
+      "media_type": "video/webm",
+      "path": "artifacts/presentation/verified.webm",
+      "role": "media",
+      "sha256": "aa1694582fd2a1cace1d705198a67ff4e170b8801aa87304df4292b4cc675dfb"
+    },
+    {
+      "bytes": 21462,
+      "media_type": "application/json",
+      "path": "artifacts/qualification/project.json",
+      "role": "qualification",
+      "sha256": "da7430ef1e441ac5b6e167178b44d4d903d4936904320a27022a47102e05aae5"
+    },
+    {
+      "bytes": 779,
+      "media_type": "application/json",
+      "path": "artifacts/qualification/report.json",
+      "role": "qualification",
+      "sha256": "0ed09462390a24ca368c6883d04b8db4cca26969d6d0a61c073a47036bd5657b"
+    },
+    {
+      "bytes": 2945,
+      "media_type": "application/x-ndjson",
+      "path": "artifacts/recording/events.jsonl",
+      "role": "source_recording",
+      "sha256": "1a8950e8cd6bea70d21243ed3ac701ee855741836a3a58e8aebc87285255f996"
+    },
+    {
+      "bytes": 23522,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0000_after.png",
+      "role": "source_recording",
+      "sha256": "95f240328c3e7e5b8ba9fbb3adebe48891c378a5b9ecc5aa4de55c613189b870"
+    },
+    {
+      "bytes": 35249,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0000_before.png",
+      "role": "source_recording",
+      "sha256": "44ec36e83492639eeb90ec6a8888be4242e85de3a508cea28a2906bcb12e2ebe"
+    },
+    {
+      "bytes": 27347,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0001_after.png",
+      "role": "source_recording",
+      "sha256": "c9a35595904c645af4664987a5f94d6665c0cbf6efb74c3bf69920ca8ad950dc"
+    },
+    {
+      "bytes": 23522,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0001_before.png",
+      "role": "source_recording",
+      "sha256": "95f240328c3e7e5b8ba9fbb3adebe48891c378a5b9ecc5aa4de55c613189b870"
+    },
+    {
+      "bytes": 27393,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0002_after.png",
+      "role": "source_recording",
+      "sha256": "8d2d2d2a56a8d089b11f1e97926c06f0c1d7076e080d0ffbd70b0bf1691aeae3"
+    },
+    {
+      "bytes": 27347,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0002_before.png",
+      "role": "source_recording",
+      "sha256": "c9a35595904c645af4664987a5f94d6665c0cbf6efb74c3bf69920ca8ad950dc"
+    },
+    {
+      "bytes": 27616,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0003_after.png",
+      "role": "source_recording",
+      "sha256": "8a3c5f2a1a6d1816b42227a818afe24a0c1d7362791773cb6f18d1fcd1b314d9"
+    },
+    {
+      "bytes": 27393,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0003_before.png",
+      "role": "source_recording",
+      "sha256": "8d2d2d2a56a8d089b11f1e97926c06f0c1d7076e080d0ffbd70b0bf1691aeae3"
+    },
+    {
+      "bytes": 31499,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0004_after.png",
+      "role": "source_recording",
+      "sha256": "d4da8dbaf7fa257e89d78a08854ccd50c8277c3fcb12efe2614d3fa4508a3026"
+    },
+    {
+      "bytes": 27616,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0004_before.png",
+      "role": "source_recording",
+      "sha256": "8a3c5f2a1a6d1816b42227a818afe24a0c1d7362791773cb6f18d1fcd1b314d9"
+    },
+    {
+      "bytes": 31598,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0005_after.png",
+      "role": "source_recording",
+      "sha256": "09b63152f50688a01352cbab13a1ea33e2d837b36180c866849ec4cdfaeaa599"
+    },
+    {
+      "bytes": 31499,
+      "media_type": "image/png",
+      "path": "artifacts/recording/frames/0005_before.png",
+      "role": "source_recording",
+      "sha256": "d4da8dbaf7fa257e89d78a08854ccd50c8277c3fcb12efe2614d3fa4508a3026"
+    },
+    {
+      "bytes": 298,
+      "media_type": "application/json",
+      "path": "artifacts/recording/meta.json",
+      "role": "source_recording",
+      "sha256": "6cb798a6552b6c1fadce0dcd0cfa467923456443ec9eb2d5740061ad916068df"
+    }
+  ],
+  "pack": {
+    "generated_at": "2026-07-26T06:34:46.672290+00:00",
+    "id": "mockmed-triage-v3",
+    "immutable": true,
+    "version": 1
+  },
+  "provenance": {
+    "application": {
+      "license": "MIT",
+      "name": "OpenAdapt MockMed synthetic reference",
+      "source_path": "openadapt_flow/mockmed",
+      "source_sha256": "55daa0cce6c23a74264e2a752287cf68d4d38213e8ed77a73124a689427fe917",
+      "synthetic_data_only": true,
+      "version": "sha256:55daa0cce6c23a74264e2a752287cf68d4d38213e8ed77a73124a689427fe917"
+    },
+    "data_classification": "synthetic_sample",
+    "exporter": "scripts/export_public_demo_evidence.py",
+    "license": "MIT",
+    "openadapt_flow_version": "1.23.0",
+    "repository": "https://github.com/OpenAdaptAI/openadapt-flow",
+    "runtime": {
+      "browser": "chromium",
+      "browser_version": "149.0.7827.55",
+      "device_scale_factor": 1,
+      "headless": true,
+      "platform": "macOS-15.7.3-arm64-arm-64bit",
+      "python": "3.11.9",
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+      "viewport": [
+        1280,
+        800
+      ]
+    },
+    "source_commit": "0253f053d31eb0b41926fd7b19a2fd22f063b7e6",
+    "source_tree_clean": true
+  },
+  "schema_version": "openadapt.public-demo-evidence/v1",
+  "task": {
+    "parameter_names": [
+      "note"
+    ],
+    "program_graph_ref": {
+      "bytes": 12223,
+      "media_type": "application/json",
+      "path": "artifacts/compiled/program-graph.json",
+      "role": "program_graph",
+      "sha256": "f0a29afe04c344f565425431997296c276295ccc7202df4f91744c082a7b2fda"
+    },
+    "target_kind": "web",
+    "workflow_name": "mockmed-triage"
+  }
+}

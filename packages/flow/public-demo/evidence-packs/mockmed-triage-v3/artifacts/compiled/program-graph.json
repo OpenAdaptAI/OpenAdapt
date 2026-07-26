@@ -1,0 +1,509 @@
+{
+  "bundle": {
+    "action_count": 6,
+    "api_binding_count": 0,
+    "contains_phi": false,
+    "created_at": "2026-07-26T06:33:18.849883+00:00",
+    "effect_count": 2,
+    "encrypted": false,
+    "halt_point_count": 1,
+    "identity_armed_count": 5,
+    "identity_unarmed_count": 0,
+    "irreversible_count": 1,
+    "is_program": false,
+    "name": "mockmed-triage",
+    "params": [
+      {
+        "choices": [],
+        "example": "Synthetic follow-up in two weeks",
+        "name": "note",
+        "required": true,
+        "secret": false,
+        "type": "string"
+      }
+    ],
+    "phi_scrubbed": false,
+    "provenance": {
+      "certification_status": "certified",
+      "certified": true,
+      "compiler_version": "1.23.0",
+      "content_digest": "df39b4cf364a48b87aaa1c9e9db5395122b7ac0deb7641f6be985b8bc8e5e23d",
+      "expires_at": null,
+      "policy_name": "clinical-write",
+      "source_recording_sha256": null
+    },
+    "schema_version": 2,
+    "step_count": 6,
+    "viewport": [
+      1280,
+      800
+    ]
+  },
+  "edges": [
+    {
+      "guard": null,
+      "kind": "sequence",
+      "label": "",
+      "source": "step_000",
+      "target": "step_001"
+    },
+    {
+      "guard": null,
+      "kind": "sequence",
+      "label": "",
+      "source": "step_001",
+      "target": "step_002"
+    },
+    {
+      "guard": null,
+      "kind": "sequence",
+      "label": "",
+      "source": "step_002",
+      "target": "step_003"
+    },
+    {
+      "guard": null,
+      "kind": "sequence",
+      "label": "",
+      "source": "step_003",
+      "target": "step_004"
+    },
+    {
+      "guard": null,
+      "kind": "sequence",
+      "label": "",
+      "source": "step_004",
+      "target": "step_005"
+    },
+    {
+      "guard": null,
+      "kind": "sequence",
+      "label": "",
+      "source": "step_005",
+      "target": "__end__"
+    }
+  ],
+  "nodes": [
+    {
+      "action": "click",
+      "api_summary": null,
+      "badges": [
+        "identity gate"
+      ],
+      "effects": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "halts": [],
+      "has_api_binding": false,
+      "id": "step_000",
+      "identity": {
+        "applicable": true,
+        "armed": true,
+        "has_identifier_crop": false,
+        "has_structured": true,
+        "phi_free": true,
+        "reason": null
+      },
+      "index": 0,
+      "key": null,
+      "kind": "action",
+      "outcome": null,
+      "param": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "reason": "",
+      "resolution": {
+        "rungs": [
+          {
+            "detail": "",
+            "label": "API / tool call",
+            "name": "api",
+            "present": false
+          },
+          {
+            "detail": "#open-p1",
+            "label": "DOM / accessibility selector",
+            "name": "structural",
+            "present": true
+          },
+          {
+            "detail": "templates/step_000.png",
+            "label": "Image template match",
+            "name": "template",
+            "present": true
+          },
+          {
+            "detail": "Open",
+            "label": "OCR text match",
+            "name": "ocr",
+            "present": true
+          },
+          {
+            "detail": "2 landmark(s)",
+            "label": "Nearby-landmark geometry",
+            "name": "landmarks",
+            "present": true
+          }
+        ],
+        "top_rung": "structural"
+      },
+      "risk": "reversible",
+      "secret": false,
+      "title": "click 'Open'",
+      "wait_until": null
+    },
+    {
+      "action": "click",
+      "api_summary": null,
+      "badges": [
+        "identity gate"
+      ],
+      "effects": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "halts": [],
+      "has_api_binding": false,
+      "id": "step_001",
+      "identity": {
+        "applicable": true,
+        "armed": true,
+        "has_identifier_crop": false,
+        "has_structured": true,
+        "phi_free": true,
+        "reason": null
+      },
+      "index": 1,
+      "key": null,
+      "kind": "action",
+      "outcome": null,
+      "param": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "reason": "",
+      "resolution": {
+        "rungs": [
+          {
+            "detail": "",
+            "label": "API / tool call",
+            "name": "api",
+            "present": false
+          },
+          {
+            "detail": "#new-encounter",
+            "label": "DOM / accessibility selector",
+            "name": "structural",
+            "present": true
+          },
+          {
+            "detail": "templates/step_001.png",
+            "label": "Image template match",
+            "name": "template",
+            "present": true
+          },
+          {
+            "detail": "New Encounter",
+            "label": "OCR text match",
+            "name": "ocr",
+            "present": true
+          },
+          {
+            "detail": "2 landmark(s)",
+            "label": "Nearby-landmark geometry",
+            "name": "landmarks",
+            "present": true
+          }
+        ],
+        "top_rung": "structural"
+      },
+      "risk": "reversible",
+      "secret": false,
+      "title": "click 'New Encounter'",
+      "wait_until": null
+    },
+    {
+      "action": "click",
+      "api_summary": null,
+      "badges": [
+        "identity gate"
+      ],
+      "effects": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "halts": [],
+      "has_api_binding": false,
+      "id": "step_002",
+      "identity": {
+        "applicable": true,
+        "armed": true,
+        "has_identifier_crop": false,
+        "has_structured": true,
+        "phi_free": true,
+        "reason": null
+      },
+      "index": 2,
+      "key": null,
+      "kind": "action",
+      "outcome": null,
+      "param": null,
+      "postconditions": [
+        "region_stable"
+      ],
+      "reason": "",
+      "resolution": {
+        "rungs": [
+          {
+            "detail": "",
+            "label": "API / tool call",
+            "name": "api",
+            "present": false
+          },
+          {
+            "detail": "#type-triage",
+            "label": "DOM / accessibility selector",
+            "name": "structural",
+            "present": true
+          },
+          {
+            "detail": "templates/step_002.png",
+            "label": "Image template match",
+            "name": "template",
+            "present": true
+          },
+          {
+            "detail": "Triage",
+            "label": "OCR text match",
+            "name": "ocr",
+            "present": true
+          },
+          {
+            "detail": "2 landmark(s)",
+            "label": "Nearby-landmark geometry",
+            "name": "landmarks",
+            "present": true
+          }
+        ],
+        "top_rung": "structural"
+      },
+      "risk": "reversible",
+      "secret": false,
+      "title": "click 'Triage'",
+      "wait_until": null
+    },
+    {
+      "action": "click",
+      "api_summary": null,
+      "badges": [
+        "identity gate"
+      ],
+      "effects": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "halts": [],
+      "has_api_binding": false,
+      "id": "step_003",
+      "identity": {
+        "applicable": true,
+        "armed": true,
+        "has_identifier_crop": false,
+        "has_structured": true,
+        "phi_free": true,
+        "reason": null
+      },
+      "index": 3,
+      "key": null,
+      "kind": "action",
+      "outcome": null,
+      "param": null,
+      "postconditions": [
+        "region_stable"
+      ],
+      "reason": "",
+      "resolution": {
+        "rungs": [
+          {
+            "detail": "",
+            "label": "API / tool call",
+            "name": "api",
+            "present": false
+          },
+          {
+            "detail": "#note-label",
+            "label": "DOM / accessibility selector",
+            "name": "structural",
+            "present": true
+          },
+          {
+            "detail": "templates/step_003.png",
+            "label": "Image template match",
+            "name": "template",
+            "present": true
+          },
+          {
+            "detail": "",
+            "label": "OCR text match",
+            "name": "ocr",
+            "present": false
+          },
+          {
+            "detail": "2 landmark(s)",
+            "label": "Nearby-landmark geometry",
+            "name": "landmarks",
+            "present": true
+          }
+        ],
+        "top_rung": "structural"
+      },
+      "risk": "reversible",
+      "secret": false,
+      "title": "click target 'Note'",
+      "wait_until": null
+    },
+    {
+      "action": "type",
+      "api_summary": null,
+      "badges": [],
+      "effects": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "halts": [],
+      "has_api_binding": false,
+      "id": "step_004",
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "has_identifier_crop": false,
+        "has_structured": false,
+        "phi_free": false,
+        "reason": null
+      },
+      "index": 4,
+      "key": null,
+      "kind": "action",
+      "outcome": null,
+      "param": "note",
+      "postconditions": [],
+      "reason": "",
+      "resolution": null,
+      "risk": "reversible",
+      "secret": false,
+      "title": "type <note>",
+      "wait_until": null
+    },
+    {
+      "action": "click",
+      "api_summary": null,
+      "badges": [
+        "irreversible",
+        "identity gate",
+        "effect check"
+      ],
+      "effects": [
+        {
+          "kind": "record_written",
+          "needs_operator_confirmation": false,
+          "risk": "irreversible",
+          "summary": "exactly 1 record(s) where patient_id=p1, type=Triage, source=replay, key=mockmed-triage-p1-v1"
+        },
+        {
+          "kind": "field_equals",
+          "needs_operator_confirmation": false,
+          "risk": "irreversible",
+          "summary": "record field note == Synthetic follow-up in two weeks"
+        }
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "halts": [
+        "halts if the system-of-record effect is not confirmed"
+      ],
+      "has_api_binding": false,
+      "id": "step_005",
+      "identity": {
+        "applicable": true,
+        "armed": true,
+        "has_identifier_crop": false,
+        "has_structured": true,
+        "phi_free": true,
+        "reason": null
+      },
+      "index": 5,
+      "key": null,
+      "kind": "action",
+      "outcome": null,
+      "param": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "reason": "",
+      "resolution": {
+        "rungs": [
+          {
+            "detail": "",
+            "label": "API / tool call",
+            "name": "api",
+            "present": false
+          },
+          {
+            "detail": "#save-encounter",
+            "label": "DOM / accessibility selector",
+            "name": "structural",
+            "present": true
+          },
+          {
+            "detail": "templates/step_005.png",
+            "label": "Image template match",
+            "name": "template",
+            "present": true
+          },
+          {
+            "detail": "Save Encounter",
+            "label": "OCR text match",
+            "name": "ocr",
+            "present": true
+          },
+          {
+            "detail": "2 landmark(s)",
+            "label": "Nearby-landmark geometry",
+            "name": "landmarks",
+            "present": true
+          }
+        ],
+        "top_rung": "structural"
+      },
+      "risk": "irreversible",
+      "secret": false,
+      "title": "click 'Save Encounter'",
+      "wait_until": null
+    },
+    {
+      "action": null,
+      "api_summary": null,
+      "badges": [],
+      "effects": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "halts": [],
+      "has_api_binding": false,
+      "id": "__end__",
+      "identity": null,
+      "index": 6,
+      "key": null,
+      "kind": "terminal",
+      "outcome": "success",
+      "param": null,
+      "postconditions": [],
+      "reason": "",
+      "resolution": null,
+      "risk": null,
+      "secret": false,
+      "title": "Success",
+      "wait_until": null
+    }
+  ],
+  "spec_version": 1
+}

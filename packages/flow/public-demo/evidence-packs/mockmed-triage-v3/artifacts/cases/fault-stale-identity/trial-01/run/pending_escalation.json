@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "workflow_name": "mockmed-triage",
+  "step_index": 0,
+  "step_id": "step_000",
+  "intent": "click 'Open'",
+  "state_id": null,
+  "category": "identity",
+  "reason": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Changed IdentityKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+  "detail": [],
+  "proposed_options": [
+    "Confirm the resolved target is the intended entity (the identity band could not be certified), then resume",
+    "Approve and RESUME from the last verified checkpoint (re-runs only this step onward; already-confirmed steps are not repeated)",
+    "Abort the run and discard the pending escalation"
+  ],
+  "resume_from_index": 0,
+  "resume_from_step_id": null,
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "status": "pending",
+  "stale_after_s": 604800.0,
+  "program": false,
+  "program_frames": [],
+  "program_checkpoint_seq": 0,
+  "program_history_hash": "",
+  "delivery_uncertainty": null,
+  "created_at": "2026-07-26T06:33:42.441354+00:00"
+}
