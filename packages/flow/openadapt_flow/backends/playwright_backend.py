@@ -89,6 +89,34 @@ class _StructuralGuard:
     context: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass
+class _CoordinateGuard:
+    """One-shot visual target lease in one exact document/frame context."""
+
+    point: tuple[int, int]
+    local_point: tuple[float, float]
+    fingerprint: str
+    token: str
+    offset: tuple[float, float]
+    allow_editable: bool
+    scope: Any
+    frame_path: tuple[str, ...]
+    context: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class _KeyboardGuard:
+    """One-shot focused-element lease in one exact document/frame context."""
+
+    point: tuple[int, int]
+    local_point: tuple[float, float]
+    fingerprint: str
+    token: str
+    scope: Any
+    frame_path: tuple[str, ...]
+    context: dict[str, str] = field(default_factory=dict)
+
+
 @dataclass(frozen=True)
 class _FramePoint:
     """A top-level point projected into one concrete document viewport."""
@@ -184,8 +212,8 @@ _INSTALL_GUARD_BODY_JS = r"""
     }
     const cx = Math.round(rect.x + rect.width / 2);
     const cy = Math.round(rect.y + rect.height / 2);
-    const ax = Number.isFinite(args.x) ? Math.round(args.x) : cx;
-    const ay = Number.isFinite(args.y) ? Math.round(args.y) : cy;
+    const ax = Number.isFinite(args.x) ? Number(args.x) : cx;
+    const ay = Number.isFinite(args.y) ? Number(args.y) : cy;
     if (ax < 0 || ay < 0 || ax >= window.innerWidth ||
             ay >= window.innerHeight) {
         return null;
@@ -323,6 +351,35 @@ _STRUCTURED_TEXT_AT_JS = (
     return describe(el).rowIdentity || null;
 }"""
 )
+
+_TEXT_VALUE_AT_JS = r"""([px, py]) => {
+    const hit = document.elementFromPoint(px, py);
+    if (!hit) return null;
+    const el = hit.closest(
+        'input, textarea, [contenteditable=""], [contenteditable="true"],' +
+        ' [role="textbox"]'
+    );
+    if (!el) return null;
+    if ('value' in el && typeof el.value === 'string') return el.value;
+    if (el.isContentEditable || el.getAttribute('role') === 'textbox') {
+        return el.textContent || '';
+    }
+    return null;
+}"""
+
+_EDITABLE_VALUE_JS = r"""(el) => {
+    if (!el.matches(
+            'input, textarea, [contenteditable=""], [contenteditable="true"],' +
+            ' [role="textbox"]')) return null;
+    if ('value' in el && typeof el.value === 'string') return el.value;
+    return el.textContent || '';
+}"""
+
+_GUARD_CONTAINS_POINT_JS = r"""(el, point) => {
+    const [px, py] = point;
+    const hit = document.elementFromPoint(px, py);
+    return Boolean(hit && (hit === el || el.contains(hit)));
+}"""
 
 _CONTEXT_CURRENT_JS = r"""(entry) => {
     const metaName = {
@@ -585,10 +642,8 @@ class PlaywrightBackend:
         # SHA-256 fingerprint; target/row text stays page-local and ephemeral.
         self._structural_store_key = f"__oaflow_structural_{uuid.uuid4().hex}"
         self._structural_tokens: dict[str, _StructuralGuard] = {}
-        self._guarded_coordinate: Optional[
-            tuple[tuple[int, int], str, str, tuple[float, float], bool]
-        ] = None
-        self._guarded_keyboard: Optional[tuple[str, str]] = None
+        self._guarded_coordinate: Optional[_CoordinateGuard] = None
+        self._guarded_keyboard: Optional[_KeyboardGuard] = None
         self._presentation_viewport_loaded = False
         self._presentation_viewport: Optional[tuple[int, int, float]] = None
 
@@ -686,7 +741,14 @@ class PlaywrightBackend:
         # contracts. Retain only those bounded values in Python and compare
         # them again immediately before delivery. The target descriptor and
         # row identity remain exclusively inside the child frame.
-        for guard in self._structural_tokens.values():
+        guards: list[_StructuralGuard | _CoordinateGuard | _KeyboardGuard] = list(
+            self._structural_tokens.values()
+        )
+        if self._guarded_coordinate is not None:
+            guards.append(self._guarded_coordinate)
+        if self._guarded_keyboard is not None:
+            guards.append(self._guarded_keyboard)
+        for guard in guards:
             guard.context[kind] = value
         return True
 
@@ -787,7 +849,10 @@ class PlaywrightBackend:
             else None
         )
 
-    def _context_guard_is_current(self, guard: _StructuralGuard) -> bool:
+    def _context_guard_is_current(
+        self,
+        guard: _StructuralGuard | _CoordinateGuard | _KeyboardGuard,
+    ) -> bool:
         """Re-read every bound top-level identity immediately before input."""
 
         for kind, expected in guard.context.items():
@@ -846,9 +911,12 @@ class PlaywrightBackend:
         falls back to the OCR tier.
         """
         try:
-            result = self.page.evaluate(
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return None
+            result = point.scope.evaluate(
                 _STRUCTURED_TEXT_AT_JS,
-                [int(x), int(y)],
+                [point.x, point.y],
             )
         except Exception:
             return None
@@ -864,52 +932,66 @@ class PlaywrightBackend:
         visual verifier.
         """
         try:
-            result = self.page.evaluate(
-                """([px, py]) => {
-                    const hit = document.elementFromPoint(px, py);
-                    if (!hit) return null;
-                    const el = hit.closest(
-                        'input, textarea, [contenteditable="true"],' +
-                        ' [role="textbox"]'
-                    );
-                    if (!el) return null;
-                    if ('value' in el && typeof el.value === 'string') {
-                        return el.value;
-                    }
-                    if (el.isContentEditable ||
-                            el.getAttribute('role') === 'textbox') {
-                        return el.textContent || '';
-                    }
-                    return null;
-                }""",
-                [int(x), int(y)],
-            )
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return None
+            result = point.scope.evaluate(_TEXT_VALUE_AT_JS, [point.x, point.y])
         except Exception:
             return None
         return result if isinstance(result, str) else None
 
     def focused_text_value(self) -> Optional[str]:
         """Return the exact value of the currently focused editable control."""
+
+        scope: Any = self.page
+        frame_path: list[str] = []
         try:
-            result = self.page.evaluate(
-                """() => {
-                    const el = document.activeElement;
-                    if (!el) return null;
-                    const editable = el.matches(
-                        'input, textarea, [contenteditable="true"],' +
-                        ' [role="textbox"]'
-                    ) ? el : null;
-                    if (!editable) return null;
-                    if ('value' in editable &&
-                            typeof editable.value === 'string') {
-                        return editable.value;
-                    }
-                    return editable.textContent || '';
-                }"""
-            )
+            for _depth in range(9):
+                focused = scope.evaluate_handle(
+                    "() => document.activeElement"
+                ).as_element()
+                if focused is None:
+                    return None
+                candidate = None
+                try:
+                    tag = focused.evaluate("el => el.localName")
+                    if tag not in {"iframe", "frame"}:
+                        box = focused.bounding_box()
+                        if not isinstance(box, dict) or not self._frame_chain_matches(
+                            scope, tuple(frame_path), box
+                        ):
+                            return None
+                        result = focused.evaluate(_EDITABLE_VALUE_JS)
+                        return result if isinstance(result, str) else None
+                    if len(frame_path) >= 8:
+                        return None
+                    selector = focused.evaluate(_FRAME_SELECTOR_JS)
+                    if (
+                        not isinstance(selector, str)
+                        or not selector
+                        or len(selector) > 512
+                    ):
+                        return None
+                    matches = scope.locator(selector)
+                    if matches.count() != 1:
+                        return None
+                    candidate = matches.element_handle()
+                    if candidate is None or not focused.evaluate(
+                        "(el, expected) => el === expected", candidate
+                    ):
+                        return None
+                    child = focused.content_frame()
+                    if child is None:
+                        return None
+                    frame_path.append(selector)
+                    scope = child
+                finally:
+                    if candidate is not None:
+                        candidate.dispose()
+                    focused.dispose()
+            return None
         except Exception:
             return None
-        return result if isinstance(result, str) else None
 
     # -- structural action (openadapt_flow.backend.StructuralActionBackend) --
 
@@ -1229,6 +1311,46 @@ class PlaywrightBackend:
         except Exception:
             return False
 
+    def _point_guard_is_current(
+        self,
+        guard: _CoordinateGuard | _KeyboardGuard,
+        locator: Any,
+        *,
+        require_focused: bool = False,
+    ) -> bool:
+        """Re-prove a top-level point, child scope, token, and live context."""
+
+        if not self._context_guard_is_current(guard):
+            return False
+        current = self._frame_point(*guard.point)
+        if (
+            current is None
+            or current.scope != guard.scope
+            or current.frame_path != guard.frame_path
+            or not math.isclose(
+                current.x, guard.local_point[0], rel_tol=0.0, abs_tol=1e-6
+            )
+            or not math.isclose(
+                current.y, guard.local_point[1], rel_tol=0.0, abs_tol=1e-6
+            )
+        ):
+            return False
+        try:
+            return bool(
+                locator.count() == 1
+                and self._guard_is_current(
+                    locator,
+                    guard.token,
+                    require_focused=require_focused,
+                )
+                and locator.evaluate(
+                    _GUARD_CONTAINS_POINT_JS,
+                    [current.x, current.y],
+                )
+            )
+        except Exception:
+            return False
+
     def act_structural(
         self,
         locator: StructuralLocator,
@@ -1358,15 +1480,22 @@ class PlaywrightBackend:
         self.cancel_guarded_coordinate()
         point = (int(x), int(y))
         token = uuid.uuid4().hex
+        scope: Any = self.page
         try:
-            observed = self.page.evaluate(
+            frame_point = self._frame_point(*point)
+            if frame_point is None:
+                raise StructuralResolutionRefused(
+                    "visual point has no exact hit-tested DOM frame context"
+                )
+            scope = frame_point.scope
+            observed = scope.evaluate(
                 _BIND_COORDINATE_TARGET_JS,
                 {
                     "storeKey": self._structural_store_key,
                     "tokenAttribute": self._token_attribute(token),
                     "token": token,
-                    "x": point[0],
-                    "y": point[1],
+                    "x": frame_point.x,
+                    "y": frame_point.y,
                     "requireRowIdentity": True,
                     "allowEditable": allow_editable,
                 },
@@ -1376,24 +1505,31 @@ class PlaywrightBackend:
                     "visual point is not an identity-bearing actionable DOM element"
                 )
             offset = observed.get("offset")
+            bound_point = observed.get("point")
             if (
                 not isinstance(offset, list)
                 or len(offset) != 2
                 or not all(isinstance(value, (int, float)) for value in offset)
+                or not isinstance(bound_point, list)
+                or len(bound_point) != 2
+                or not all(isinstance(value, (int, float)) for value in bound_point)
             ):
                 raise StructuralResolutionRefused(
                     "visual DOM actuation could not bind the resolved point"
                 )
             fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
-            self._guarded_coordinate = (
-                point,
-                fingerprint,
-                token,
-                (float(offset[0]), float(offset[1])),
-                allow_editable,
+            self._guarded_coordinate = _CoordinateGuard(
+                point=point,
+                local_point=(float(bound_point[0]), float(bound_point[1])),
+                fingerprint=fingerprint,
+                token=token,
+                offset=(float(offset[0]), float(offset[1])),
+                allow_editable=allow_editable,
+                scope=scope,
+                frame_path=frame_point.frame_path,
             )
         except Exception:
-            self._cleanup_guard(token)
+            self._cleanup_guard(token, scope)
             raise
 
     def arm_guarded_coordinate(self, x: int, y: int) -> None:
@@ -1412,7 +1548,7 @@ class PlaywrightBackend:
         pending = self._guarded_coordinate
         self._guarded_coordinate = None
         if pending is not None:
-            self._cleanup_guard(pending[2])
+            self._cleanup_guard(pending.token, pending.scope)
 
     def act_guarded_coordinate(
         self,
@@ -1439,9 +1575,11 @@ class PlaywrightBackend:
             raise StructuralResolutionRefused(
                 "visual DOM actuation has no pre-identity target binding"
             )
-        armed_point, fingerprint, token, offset, _editable = pending
+        operation = (
+            "guarded_coordinate_double_click" if double else "guarded_coordinate_click"
+        )
         try:
-            if armed_point != point:
+            if pending.point != point:
                 raise StructuralResolutionRefused(
                     "visual DOM actuation point changed after target binding"
                 )
@@ -1450,18 +1588,55 @@ class PlaywrightBackend:
             # lease below; remote pixel backends continue to enforce their
             # exact fresh-frame lease.
             del expected_frame_sha256
-            token_locator = self._token_locator(token)
-            if token_locator.count() != 1 or not self._guard_is_current(
-                token_locator, token
+            token_locator = self._token_locator(pending.token, pending.scope)
+            if not self._point_guard_is_current(
+                pending,
+                token_locator,
             ):
                 raise StructuralResolutionRefused(
-                    "visual target or record identity changed before delivery"
+                    "visual target, frame, record, or context changed before delivery"
                 )
-            position = {"x": offset[0], "y": offset[1]}
-            if double:
-                token_locator.dblclick(position=position, timeout=1000)
-            else:
-                token_locator.click(position=position, timeout=1000)
+            position = {"x": pending.offset[0], "y": pending.offset[1]}
+            try:
+                if double:
+                    token_locator.dblclick(
+                        position=position,
+                        timeout=1000,
+                        trial=True,
+                    )
+                else:
+                    token_locator.click(
+                        position=position,
+                        timeout=1000,
+                        trial=True,
+                    )
+            except Exception as exc:
+                raise StructuralResolutionRefused(
+                    "identity-bound visual target was unactionable during its "
+                    "pre-dispatch trial"
+                ) from exc
+            if not self._point_guard_is_current(
+                pending,
+                token_locator,
+            ):
+                raise StructuralResolutionRefused(
+                    "visual target, frame, record, or context changed after the "
+                    "pre-dispatch actionability trial"
+                )
+            try:
+                if double:
+                    token_locator.dblclick(position=position, timeout=1000)
+                else:
+                    token_locator.click(position=position, timeout=1000)
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation=operation,
+                    native=False,
+                    target_fingerprint=pending.fingerprint,
+                    cause_type=type(exc).__name__,
+                ) from exc
+        except ActionDeliveryUncertain:
+            raise
         except StructuralResolutionRefused:
             raise
         except Exception as exc:
@@ -1469,16 +1644,12 @@ class PlaywrightBackend:
                 "identity-bound visual target became unactionable before delivery"
             ) from exc
         finally:
-            self._cleanup_guard(token)
+            self._cleanup_guard(pending.token, pending.scope)
         return ActionDeliveryReceipt(
             receipt_id=f"playwright-coordinate-{uuid.uuid4().hex}",
-            operation=(
-                "guarded_coordinate_double_click"
-                if double
-                else "guarded_coordinate_click"
-            ),
+            operation=operation,
             native=False,
-            target_fingerprint=fingerprint,
+            target_fingerprint=pending.fingerprint,
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -1492,15 +1663,24 @@ class PlaywrightBackend:
         self.cancel_pending_structural_guards()
         self.cancel_guarded_keyboard()
         token = uuid.uuid4().hex
+        scope: Any = self.page
         try:
-            observed = self.page.evaluate(
+            point = (int(x), int(y))
+            frame_point = self._frame_point(*point)
+            if frame_point is None:
+                raise StructuralResolutionRefused(
+                    "consequential keyboard action has no exact hit-tested "
+                    "DOM frame context"
+                )
+            scope = frame_point.scope
+            observed = scope.evaluate(
                 _BIND_FOCUSED_TARGET_JS,
                 {
                     "storeKey": self._structural_store_key,
                     "tokenAttribute": self._token_attribute(token),
                     "token": token,
-                    "x": int(x),
-                    "y": int(y),
+                    "x": frame_point.x,
+                    "y": frame_point.y,
                     "requireRowIdentity": True,
                     "requireFocused": True,
                 },
@@ -1510,10 +1690,26 @@ class PlaywrightBackend:
                     "consequential keyboard action has no focused "
                     "identity-bearing DOM target at the resolved point"
                 )
+            bound_point = observed.get("point")
+            if (
+                not isinstance(bound_point, list)
+                or len(bound_point) != 2
+                or not all(isinstance(value, (int, float)) for value in bound_point)
+            ):
+                raise StructuralResolutionRefused(
+                    "focused keyboard target could not bind the resolved point"
+                )
             fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
-            self._guarded_keyboard = (fingerprint, token)
+            self._guarded_keyboard = _KeyboardGuard(
+                point=point,
+                local_point=(float(bound_point[0]), float(bound_point[1])),
+                fingerprint=fingerprint,
+                token=token,
+                scope=scope,
+                frame_path=frame_point.frame_path,
+            )
         except Exception:
-            self._cleanup_guard(token)
+            self._cleanup_guard(token, scope)
             raise
 
     def cancel_guarded_keyboard(self) -> None:
@@ -1522,7 +1718,7 @@ class PlaywrightBackend:
         pending = self._guarded_keyboard
         self._guarded_keyboard = None
         if pending is not None:
-            self._cleanup_guard(pending[1])
+            self._cleanup_guard(pending.token, pending.scope)
 
     def guarded_keyboard_frame(self) -> bytes:
         """Capture a caret-stable frame without mutating the focused field.
@@ -1566,23 +1762,33 @@ class PlaywrightBackend:
             raise StructuralResolutionRefused(
                 "keyboard actuation has no pre-identity focused-element lease"
             )
-        fingerprint, token = pending
         try:
             # Retain the protocol argument for cross-backend compatibility.
             # The browser's one-shot focused-element/record/context lease is
             # the authoritative race guard. Full-frame byte equality is both
             # weaker semantically and unstable around caret painting.
             del expected_frame_sha256
-            token_locator = self._token_locator(token)
-            if token_locator.count() != 1 or not self._guard_is_current(
+            token_locator = self._token_locator(pending.token, pending.scope)
+            if not self._point_guard_is_current(
+                pending,
                 token_locator,
-                token,
                 require_focused=True,
             ):
                 raise StructuralResolutionRefused(
-                    "focused keyboard target or record changed before delivery"
+                    "focused keyboard target, frame, record, or context changed "
+                    "before delivery"
                 )
-            deliver(token_locator)
+            try:
+                deliver(token_locator)
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation=operation,
+                    native=False,
+                    target_fingerprint=pending.fingerprint,
+                    cause_type=type(exc).__name__,
+                ) from exc
+        except ActionDeliveryUncertain:
+            raise
         except StructuralResolutionRefused:
             raise
         except Exception as exc:
@@ -1590,12 +1796,12 @@ class PlaywrightBackend:
                 "identity-bound keyboard target became unactionable before delivery"
             ) from exc
         finally:
-            self._cleanup_guard(token)
+            self._cleanup_guard(pending.token, pending.scope)
         return ActionDeliveryReceipt(
             receipt_id=f"playwright-keyboard-{uuid.uuid4().hex}",
             operation=operation,
             native=False,
-            target_fingerprint=fingerprint,
+            target_fingerprint=pending.fingerprint,
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
