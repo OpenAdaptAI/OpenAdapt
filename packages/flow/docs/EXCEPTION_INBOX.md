@@ -84,11 +84,14 @@ replayed, or undeclared cursor or receipt refuses instead of guessing.
 - Browser mutations also require a valid Host, same-origin request,
   `application/json`, and the session CSRF token.
 - The authenticated local OS account is recorded as the operator.
-- Queue records use opaque IDs and category-derived copy. Workflow names,
-  parameters, raw halt reasons, observed text, local paths, and raw reports do
-  not enter the DTO.
-- Artifact lookup accepts only report-referenced PNG IDs and never follows a
-  symlink.
+- Queue and summary records use opaque IDs and category-derived copy. Workflow
+  names, parameters, raw halt reasons, observed text, local paths, and raw
+  reports do not enter those DTOs. Protected values appear only when the local
+  operator explicitly opens an admitted JSON/JSONL artifact.
+- Artifact lookup accepts only report-referenced PNG IDs or bounded JSON
+  families selected by opaque IDs. It never accepts a filesystem path or
+  follows a symlink. The viewer reads only the configured local roots and has
+  no Cloud or other network transport.
 - The notification endpoint returns only a count and `#/attention`; it is the
   PHI-free seam for a desktop/tray OS notification.
 

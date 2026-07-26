@@ -1,9 +1,11 @@
 """Authenticated loopback operator console over engine artifacts.
 
 The browser receives explicit redacted projections of compiled bundles, run
-reports, durable pause/approval state, and versioned skill libraries. It does
-not receive raw workflow/report models, protected labels, parameter values, or
-local paths. The console invents no new engine semantics:
+reports, durable pause/approval state, and versioned skill libraries. Protected
+labels and parameter values appear only when the local operator explicitly
+opens an admitted JSON/JSONL artifact in the bearer-authenticated viewer;
+filesystem paths never cross the API boundary. The console invents no new engine
+semantics:
 
 - Every number it shows is computed by the SAME callables the CLI uses
   (``policy.evaluate_policy`` / ``policy.lint_workflow`` / the identity- and
