@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.9.0 (2026-07-26)
+
+### Chores
+
+- Refresh published platform manifest ([#1059](https://github.com/OpenAdaptAI/OpenAdapt/pull/1059),
+  [`21341f1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/21341f1576511e24a4b7af1f537f33c0a87c14bc))
+
+### Continuous Integration
+
+- **release**: Reconcile platform manifest after publish
+  ([#1058](https://github.com/OpenAdaptAI/OpenAdapt/pull/1058),
+  [`dbbb50c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dbbb50c5af07e4100fb3536d46ce2bbc8a84c789))
+
+### Features
+
+- Add one-command local quickstart ([#1059](https://github.com/OpenAdaptAI/OpenAdapt/pull/1059),
+  [`21341f1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/21341f1576511e24a4b7af1f537f33c0a87c14bc))
+
+
 ## v1.8.0 (2026-07-26)
 
 ### Build System
