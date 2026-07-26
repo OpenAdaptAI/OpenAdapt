@@ -1,44 +1,74 @@
+import { useEffect, useState } from "react";
+import { CMD, engineTry } from "../lib/engine";
 import type {
+  CapabilityReport,
+  CapabilityState,
   ExecutionTarget,
+  SurfaceCapability,
   TargetBackend,
 } from "../lib/types";
 import { Callout, Field, Pill } from "./primitives";
 
 export const TARGETS: Record<
   TargetBackend,
-  { label: string; availability: "Beta" | "Available"; description: string }
+  { label: string; description: string }
 > = {
   web: {
     label: "Browser",
-    availability: "Beta",
     description: "A web page opened and driven by OpenAdapt.",
   },
   windows: {
     label: "Windows",
-    availability: "Available",
     description: "A native Windows desktop connected through the local WAA agent.",
   },
   macos: {
     label: "macOS",
-    availability: "Available",
     description: "One native Mac application window.",
   },
   linux: {
     label: "Linux",
-    availability: "Available",
     description: "One exact Linux application window through AT-SPI.",
   },
   rdp: {
     label: "RDP",
-    availability: "Available",
     description: "A network RDP session or a local remote-desktop client window.",
   },
   citrix: {
     label: "Citrix",
-    availability: "Available",
     description: "The local Citrix Workspace or Viewer session window.",
   },
 };
+
+type PillTone = "neutral" | "ok" | "run" | "warn" | "crit";
+
+/**
+ * Pill copy per detected capability state. "Available" is shown ONLY when the
+ * engine's detection (engine/capabilities.py) reports it; before the report
+ * arrives, or without an engine, the pill says the state is being checked.
+ */
+export const CAPABILITY_PILLS: Record<
+  CapabilityState,
+  { label: string; tone: PillTone }
+> = {
+  available: { label: "Available", tone: "ok" },
+  driver_required: { label: "Driver required", tone: "warn" },
+  permission_required: { label: "Permission required", tone: "warn" },
+  unsupported_host: { label: "Not on this host", tone: "crit" },
+};
+
+export function capabilityPill(
+  capability: SurfaceCapability | null | undefined,
+): { label: string; tone: PillTone } {
+  if (!capability) {
+    return { label: "Checking availability", tone: "neutral" };
+  }
+  return (
+    CAPABILITY_PILLS[capability.state] ?? {
+      label: "Availability unknown",
+      tone: "neutral",
+    }
+  );
+}
 
 export type RdpMode = "network" | "window";
 
@@ -65,14 +95,39 @@ export function ExecutionTargetForm({
   onChange,
   idPrefix,
   disabled = false,
+  capabilities,
 }: {
   target: ExecutionTarget;
   onChange: (target: ExecutionTarget) => void;
   idPrefix: string;
   disabled?: boolean;
+  /**
+   * Optional pre-fetched capability report. When omitted, the form queries
+   * the engine itself (get_capabilities) and degrades to "Checking
+   * availability" offline. Selecting a non-available surface stays allowed:
+   * the user may be configuring ahead of installing a driver or grant.
+   */
+  capabilities?: CapabilityReport | null;
 }) {
   const selected = TARGETS[target.backend];
   const rdpMode = rdpModeForTarget(target);
+  const [fetched, setFetched] = useState<CapabilityReport | null>(null);
+  const external = capabilities !== undefined;
+  useEffect(() => {
+    if (external) return;
+    let cancelled = false;
+    void engineTry<CapabilityReport | null>(CMD.GET_CAPABILITIES, {}, null).then(
+      (report) => {
+        if (!cancelled) setFetched(report);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [external]);
+  const report = external ? capabilities : fetched;
+  const capability = report?.surfaces?.[target.backend] ?? null;
+  const pill = capabilityPill(capability);
 
   function selectBackend(backend: TargetBackend) {
     onChange(
@@ -113,9 +168,15 @@ export function ExecutionTargetForm({
         className="row target-summary"
         id={`${idPrefix}-backend-description`}
       >
-        <Pill tone="neutral">{selected.availability}</Pill>
+        <Pill tone={pill.tone}>{pill.label}</Pill>
         <span className="page-sub">{selected.description}</span>
       </div>
+      {capability && capability.state !== "available" && (
+        <p className="page-sub" data-testid={`${idPrefix}-capability-detail`}>
+          {capability.detail}
+          {capability.remediation ? ` ${capability.remediation}` : ""}
+        </p>
+      )}
 
       <TargetFields
         target={target}

@@ -30,6 +30,36 @@ export interface ExecutionTarget {
   rdp_readiness_text?: string;
 }
 
+/**
+ * Capability-aware surface availability (engine/capabilities.py), schema
+ * "openadapt-desktop.capability-report/v1". The engine's detection is the
+ * single source of truth; the UI never claims "Available" without it.
+ */
+export type CapabilityState =
+  | "available"
+  | "driver_required"
+  | "permission_required"
+  | "unsupported_host";
+
+export interface SurfaceCapability {
+  state: CapabilityState;
+  detail: string;
+  remediation: string | null;
+  driver: { name: string; version: string | null } | null;
+}
+
+export interface CapabilityReport {
+  schema: string;
+  generated_at: string;
+  host: {
+    os: string;
+    os_version: string;
+    arch: string;
+    app_version: string;
+  };
+  surfaces: Partial<Record<TargetBackend, SurfaceCapability>>;
+}
+
 export type StepState =
   | "pending"
   | "running"

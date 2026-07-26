@@ -24,6 +24,28 @@ class FakeKeyring:
 
 
 @pytest.fixture(autouse=True)
+def all_surfaces_capable(monkeypatch):
+    """Keep engine tests hermetic against the host's real driver/permission state.
+
+    The capability gate (engine.capabilities) probes the live host, so an
+    unpatched dispatcher test would pass or refuse depending on which drivers
+    and macOS grants the CI box happens to have. Stub every surface as
+    available; capability tests exercise the real probes directly and refusal
+    tests monkeypatch ``detect_capability`` with a non-available state.
+    """
+    from engine import capabilities
+
+    def _available(surface: str) -> capabilities.SurfaceCapability:
+        return capabilities.SurfaceCapability(
+            surface=surface,
+            state="available",
+            detail="stubbed available for hermetic engine tests",
+        )
+
+    monkeypatch.setattr(capabilities, "detect_capability", _available)
+
+
+@pytest.fixture(autouse=True)
 def fake_keyring(monkeypatch) -> FakeKeyring:
     """Patch the auth store to use an in-memory keyring backend.
 

@@ -98,6 +98,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             "optional --watch-parent-stdin"
         )
     target, out_dir, task, stop_path, ready_path = _request(Path(args[0]))
+
+    # Same capability gate as the dispatcher (engine.capabilities is the single
+    # source of truth): refuse fast with precise remediation instead of letting
+    # the Flow recorder die opaquely inside its backend construction.
+    from engine.capabilities import CapabilityError, ensure_backend_capability
+
+    try:
+        ensure_backend_capability(target.backend, action="record")
+    except CapabilityError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
     flow_args = target.record_args(out_dir, task=task)
 
     from openadapt_flow.__main__ import main as flow_main

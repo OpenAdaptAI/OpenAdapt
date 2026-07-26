@@ -32,14 +32,25 @@ def test_public_metadata_identifies_beta_supporting_surface() -> None:
     assert pyproject["project"]["scripts"] == {"openadapt-desktop": "engine.cli:main"}
 
 
-def test_target_authoring_uses_unified_available_vocabulary_and_shared_form() -> None:
+def test_target_authoring_uses_detected_availability_vocabulary_and_shared_form() -> None:
     form = (ROOT / "src/ui/ExecutionTargetForm.tsx").read_text()
     record = (ROOT / "src/screens/RecordReview.tsx").read_text()
     watch = (ROOT / "src/screens/WatchRun.tsx").read_text()
     readme = (ROOT / "README.md").read_text()
 
-    assert '"Beta"' in form
-    assert '"Available"' in form
+    # Availability is DETECTED (engine/capabilities.py), never hardcoded:
+    # "Available" appears only as the pill for the detected-available state.
+    assert 'availability:' not in form
+    assert '"Beta"' not in form
+    assert 'label: "Available", tone: "ok"' in form
+    for state_label in (
+        '"Driver required"',
+        '"Permission required"',
+        '"Not on this host"',
+        '"Checking availability"',
+    ):
+        assert state_label in form
+    assert "get_capabilities" in form or "GET_CAPABILITIES" in form
     for expired in ("Early access", "Exploratory", "Qualification-specific"):
         assert expired not in form
         assert expired not in readme

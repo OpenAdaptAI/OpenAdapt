@@ -238,6 +238,8 @@ class EngineDispatcher:
             # OS permissions
             "check_permissions": self.check_permissions,
             "request_input_monitoring": self.request_input_monitoring,
+            # capability-aware surface availability (engine.capabilities)
+            "get_capabilities": self.get_capabilities,
             # review / egress gate
             "scrub_capture": self.scrub_capture,
             "approve_review": self.approve_review,
@@ -297,6 +299,14 @@ class EngineDispatcher:
                     )
                 target.validate_record_required()
             except ValueError as exc:
+                message = str(exc)
+                self.emit("recording_error", {"error": message})
+                raise ValueError(message) from None
+            from engine.capabilities import CapabilityError, ensure_backend_capability
+
+            try:
+                ensure_backend_capability(target.backend, action="record")
+            except CapabilityError as exc:
                 message = str(exc)
                 self.emit("recording_error", {"error": message})
                 raise ValueError(message) from None
@@ -674,6 +684,13 @@ class EngineDispatcher:
             target, deployment_config = self._execution_target(params)
         except ValueError as exc:
             return self._pre_action_refusal(str(exc))
+        if target is not None:
+            from engine.capabilities import CapabilityError, ensure_backend_capability
+
+            try:
+                ensure_backend_capability(target.backend, action="run" if run else "replay")
+            except CapabilityError as exc:
+                return self._pre_action_refusal(str(exc))
         run_id = uuid.uuid4().hex[:8]
         run_dir = self.config.data_dir / "runs" / f"{'run' if run else 'replay'}-{run_id}"
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -1710,6 +1727,18 @@ class EngineDispatcher:
         if not _mac_preflight_input_monitoring():
             _mac_request_input_monitoring()
         return self.check_permissions()
+
+    def get_capabilities(self, **params: Any) -> dict:
+        """Return the machine-readable capability report for every surface.
+
+        The report is produced by :mod:`engine.capabilities`, the same module
+        that gates record/replay/run, so the UI's pills and the engine's
+        refusal messages can never disagree. Detection is prompt-free and
+        never raises.
+        """
+        from engine.capabilities import capability_report
+
+        return capability_report()
 
     # ------------------------------------------------------- review / egress
 

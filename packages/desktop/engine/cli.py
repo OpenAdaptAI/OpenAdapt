@@ -17,6 +17,7 @@ Usage:
     openadapt-desktop health
     openadapt-desktop cleanup
     openadapt-desktop config
+    openadapt-desktop capabilities [--json]
     openadapt-desktop doctor
 """
 
@@ -404,6 +405,34 @@ def cmd_config(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     print(engine.config.model_dump_json(indent=2))
 
 
+def cmd_capabilities(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Report capability-aware execution-surface availability."""
+    import json
+
+    from engine.capabilities import capability_report
+
+    report = capability_report()
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2))
+        return
+
+    host = report["host"]
+    print("Execution surface availability")
+    print(f"  Host: {host['os']} {host['os_version']} ({host['arch']}), "
+          f"app v{host['app_version']}")
+    print("=" * 72)
+    for surface, cap in report["surfaces"].items():
+        driver = cap.get("driver") or {}
+        driver_text = ""
+        if driver.get("name"):
+            driver_text = f" [{driver['name']} {driver.get('version') or 'version unknown'}]"
+        print(f"  {surface:<8} {cap['state']:<20}{driver_text}")
+        print(f"           {cap['detail']}")
+        if cap.get("remediation"):
+            print(f"           Fix: {cap['remediation']}")
+    print("=" * 72)
+
+
 def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """Check system dependencies and configuration."""
     from engine import __version__
@@ -536,6 +565,7 @@ _COMMANDS = {
     "health": cmd_health,
     "cleanup": cmd_cleanup,
     "config": cmd_config,
+    "capabilities": cmd_capabilities,
     "doctor": cmd_doctor,
 }
 
@@ -635,6 +665,13 @@ def main(argv: list[str] | None = None) -> None:
 
     # config
     subparsers.add_parser("config", help="Show configuration")
+
+    # capabilities
+    p = subparsers.add_parser(
+        "capabilities",
+        help="Report capability-aware execution-surface availability",
+    )
+    p.add_argument("--json", action="store_true", help="Emit the machine-readable report")
 
     # doctor
     subparsers.add_parser("doctor", help="Check dependencies and configuration")

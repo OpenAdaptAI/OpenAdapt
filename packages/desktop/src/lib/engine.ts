@@ -65,6 +65,8 @@ export const CMD = {
   // OS permissions (screen recording / accessibility / input monitoring)
   CHECK_PERMISSIONS: "check_permissions",
   REQUEST_INPUT_MONITORING: "request_input_monitoring",
+  // capability-aware surface availability (engine/capabilities.py)
+  GET_CAPABILITIES: "get_capabilities",
   // review / egress gate (existing engine surface)
   SCRUB_CAPTURE: "scrub_capture",
   APPROVE_REVIEW: "approve_review",
