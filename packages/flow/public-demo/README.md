@@ -7,23 +7,31 @@ and source-distribution artifacts.
 Generate a new version (never overwrite an existing pack):
 
 ```bash
+pip install -e '.[dev,interop]'
 python -m scripts.export_public_demo_evidence \
   --out public-demo/evidence-packs \
-  --pack-id mockmed-triage-v2
+  --pack-id mockmed-triage-v3
 ```
+
+Generation also requires separately provisioned `ffmpeg` and `ffprobe`; neither
+executable is embedded in OpenAdapt packages or the retained evidence pack.
 
 Validate every retained byte and evidence binding:
 
 ```bash
 python -m scripts.export_public_demo_evidence \
-  --validate public-demo/evidence-packs/mockmed-triage-v2
+  --validate public-demo/evidence-packs/mockmed-triage-v3
 ```
 
-`mockmed-triage-v1` remains retained as the immutable first export. The current
-`v2` pack binds the finalized browser actuation guard and record-identity
-semantics to a new source commit instead of rewriting prior evidence.
+`mockmed-triage-v1` and `v2` remain retained as immutable prior exports. The
+current `v3` pack adds fresh presentation derivatives bound to canonical
+runtime-overlay events, exact decoded-frame indexes, and inventoried media/PTS
+digests instead of retrofitting timing onto the older raw videos.
 
 The target data is first-party synthetic MockMed data. The recording, compiled
 bundle, program graph, qualification project/report, governed run reports,
 outcome envelopes, raw videos, frames, and source-of-record oracles are actual
 artifacts rather than fixture-shaped Cloud UI records.
+The three `artifacts/presentation` WebMs are explicitly derived viewing media;
+the raw recording and governed run videos remain unchanged and separately
+inventory-bound.

@@ -49,6 +49,9 @@ ExecutionOutcome: TypeAlias = Literal[
     "ROLLED_BACK",
 ]
 OverlayFrameSink: TypeAlias = Callable[[ControlOverlayFrameV2], None]
+OverlayObservationSink: TypeAlias = Callable[
+    [ControlOverlayFrameV2, bytes | None], None
+]
 MillisecondsClock: TypeAlias = Callable[[], int | float]
 ObservationKeyFactory: TypeAlias = Callable[[], bytes]
 
@@ -86,12 +89,14 @@ class RuntimeControlOverlayEmitter:
         observation_key_factory: ObservationKeyFactory = lambda: secrets.token_bytes(
             32
         ),
+        observation_sink: OverlayObservationSink | None = None,
     ) -> None:
         self._sink = sink
         self._mode = ControlOverlayMode(mode)
         self._unix_ms_clock = unix_ms_clock
         self._monotonic_ms_clock = monotonic_ms_clock
         self._observation_key_factory = observation_key_factory
+        self._observation_sink = observation_sink
         self._observation_hmac_key: bytes | None = None
         self._profile: ControlOverlayProfile | None = None
         self._next_sequence = 0
@@ -121,6 +126,7 @@ class RuntimeControlOverlayEmitter:
         current_step: int | None = None,
         total_steps: int | None = None,
         target_tracking: ControlOverlayTargetTrackingV2 | None = None,
+        observation_png: bytes | None = None,
     ) -> ControlOverlayFrameV2:
         """Emit an exact runtime phase; all presentation strings are canonical."""
 
@@ -143,10 +149,16 @@ class RuntimeControlOverlayEmitter:
             current_step=current_step,
             total_steps=total_steps,
             target_tracking=target_tracking,
+            observation_png=observation_png,
             terminal=False,
         )
 
-    def emit_terminal(self, outcome: ExecutionOutcome | str) -> ControlOverlayFrameV2:
+    def emit_terminal(
+        self,
+        outcome: ExecutionOutcome | str,
+        *,
+        observation_png: bytes | None = None,
+    ) -> ControlOverlayFrameV2:
         """Emit only an exact evidence-qualified ``RunReport.execution_outcome``.
 
         Generic success booleans and legacy strings such as ``SUCCESS`` are
@@ -164,6 +176,7 @@ class RuntimeControlOverlayEmitter:
             current_step=None,
             total_steps=None,
             target_tracking=None,
+            observation_png=observation_png,
             terminal=True,
         )
 
@@ -254,6 +267,7 @@ class RuntimeControlOverlayEmitter:
         current_step: int | None,
         total_steps: int | None,
         target_tracking: ControlOverlayTargetTrackingV2 | None,
+        observation_png: bytes | None,
         terminal: bool,
     ) -> ControlOverlayFrameV2:
         if self._profile is None:
@@ -292,6 +306,13 @@ class RuntimeControlOverlayEmitter:
         if terminal:
             self._terminal = True
         self._sink(frame)
+        if self._observation_sink is not None:
+            # Private presentation capture is deliberately out-of-band: the
+            # screenshot never enters the canonical event or an external
+            # transport.  Exporters/viewers can retain the exact already-held
+            # observation without taking a new browser screenshot between
+            # final revalidation and one-shot actuation.
+            self._observation_sink(frame, observation_png)
         return frame
 
 
