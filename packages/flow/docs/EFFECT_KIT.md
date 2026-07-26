@@ -26,8 +26,9 @@ from the reference apps.
    at-most-once counts, idempotency keys, and `{param: ...}` references that
    bind to the run's governed parameters. Contracts are substrate-neutral.
 2. **The deployment declares WHERE truth lives** — the `effects:` section of
-   `deployment.yaml` wires exactly one `EffectVerifier` (REST / FHIR / SQL /
-   file / document-hash) plus its secret-isolated auth.
+   `deployment.yaml` wires exactly one `EffectVerifier` (REST / GraphQL /
+   FHIR / SQL / file / email / document / document-hash, or a registered
+   plugin adapter) plus its secret-isolated auth.
 3. **The runtime refuses to guess.** Every verdict is CONFIRMED / REFUTED /
    INDETERMINATE; both non-confirmed verdicts HALT. A step that declares
    effects with no verifier configured HALTs. An escalated failure emits a
@@ -45,8 +46,11 @@ from the reference apps.
 | `onscreen` | `OnScreenReadbackVerifier` | re-OCR the saved value off the live screen — the **no-API default** for GUI-only recordings; auto-derived from the demonstration. **Different-path** (re-open the record) is default-eligible; **same-surface** (re-read the write's own form) is opt-in only | measured in `benchmark/effect_readback/` — different-path false-CONFIRM 0, same-surface > 0. **A read-back CONFIRMED is a consistency signal, NOT transactional proof** (`docs/LIMITS.md`) |
 | `rest` | `RestRecordVerifier` | GET a JSON records document (templatable path, secret-isolated auth headers) | live in CI against the MockMed transactional back end; Frappe-shaped read in the reference matrix (PR #131) |
 | `fhir` | `FhirEffectVerifier` | FHIR R4 search → flattened resources | CI against a byte-faithful fake FHIR server; **opt-in live test** against a real local OpenEMR |
+| `graphql` | `GraphQLRecordVerifier` | ONE read-only GraphQL query (a `mutation`/`subscription` refuses to construct), records extracted at a dotted path; optional freshness window → STALE demotion | **contract-proven in CI against a fake session** -- read-only guard, entity binding, error-body handling, staleness; not live-proven against a production GraphQL endpoint |
 | `sql` | `SqlRecordVerifier` | ONE read-only SELECT (enforced whitelist), rows judged like any substrate | **contract-proven in CI against sqlite fixtures only** — the query/whitelist/verdict logic is what's proven, not any specific production database |
 | `file` | `FileArrivalVerifier` | directory / SFTP listing → `size_ok` + `fresh` + `content_match` per candidate | **contract-proven in CI against temp dirs and a fake SFTP transport** — not live-proven against a real SFTP server |
+| `email` | `MaildirDeliveryVerifier` | maildir / SMTP-capture directory → one record per message (`to`, `subject`, `message_id`, body probe, freshness); verifies delivery TO THE CAPTURE POINT, not end-to-end receipt | **contract-proven in CI against maildir/tmp-dir fixtures** (wrong recipient, duplicate send, leak-to-other-recipient collateral hook) -- not live-proven against a production MTA |
+| `document` | `DocumentArrivalVerifier` | report arrival + **parseable-content assertion**: each candidate parses (JSON dotted paths or named-regex groups) into judgeable fields; a corrupt report REFUTEs a `parseable: True` contract | **contract-proven in CI against temp-dir fixtures** (corrupt report, wrong entity, duplicates, stale mtime) |
 | `document-hash` | `DocumentHashVerifier` | SHA-256 of each document in a store | live in CI (no external service) |
 
 All substrates share one judge (`runtime/effects/_common.py`), so
@@ -107,10 +111,17 @@ Per-kind required fields:
 |---|---|---|
 | `onscreen` | (none — auto-derived from the demo) | `readback_region`, `readback_min_ratio` (hand-config fallback) |
 | `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `path_params`, `auth` |
+| `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
 | `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env`, `verify_tls` |
 | `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env` |
 | `file` | `root` | `file_pattern`, `file_min_size`, `file_mtime_window_s`, `file_content_probe` |
+| `email` | `root` | `mail_pattern`, `file_mtime_window_s` (freshness), `file_content_probe` (body regex) |
+| `document` | `root` | `file_pattern`, `document_format` (`json` \| `text`), `document_field_paths`, `document_text_pattern`, `file_mtime_window_s` |
 | `document-hash` | `root` | `glob` |
+
+Any kind additionally accepts the evidence-minimization fields
+`evidence_redact_fields` / `evidence_keep_fields` (see "Evidence minimization"
+below).
 
 The `sql` kind refuses to construct unless `sql_query` passes the read-only
 statement filter (single statement, `SELECT`/`WITH` leading keyword, no
@@ -124,6 +135,123 @@ privileges. The role is the real enforcement; the filter catches config
 mistakes early. The SFTP variant of `file` is programmatic-only (inject a
 paramiko-compatible `transport` into `FileArrivalVerifier`); YAML wires local
 directories.
+
+## The verifier adapter platform
+
+Every substrate above implements ONE stable interface
+(`openadapt_flow/runtime/effects/adapter.py`), so "add a system of record"
+means "implement the interface", first-party or as a customer plugin. The
+lifecycle every adapter honors:
+
+1. **configure** -- the constructor / registered factory, called with the
+   deployment's `effects:` section and the governed run params. Secrets
+   arrive as env-var / secret-manager REFERENCES (never literals, isolated
+   from the actuation session's credentials) and entity + tenant binding uses
+   `ValueExpr({param: ...})`, both resolved here -- fail LOUD on anything
+   missing.
+2. **test-connection** -- `test_connection()`: a read-only reachability probe
+   (never a write, never raises) for operator preflight.
+3. **capture-before** -- `capture_pre_state()`: the baseline snapshot for
+   delta (`count_new_only`), duplicate, and collateral accounting.
+4. **capture-after** -- `capture_post_state()`: a fresh post-action snapshot
+   (default: the same read), also fed to collateral-effect hooks.
+5. **verdict** -- `verify()`: poll-until-settled within the effect's deadline
+   (`Effect.timeout_s` -- an asynchronous write that never settles is a
+   failure, not a pass), judge with the shared judge (cardinality
+   zero / exactly-one / exact-N via `expected_count`; duplicates via
+   `count_new_only` + `idempotency_key`; collateral loss via
+   `forbid_collateral_loss` plus substrate-specific `collateral_hooks`),
+   optionally enforce a freshness window, then minimize evidence.
+
+### Result classes and the transaction taxonomy
+
+`classify_adapter_result` refines the three-valued verdict into six explicit
+result classes; `transaction_outcome_for` maps them onto the terminal
+transaction taxonomy. **No non-confirmed class maps to a pass** -- the
+refinement tells the operator WHICH failure they are reconciling, it never
+softens one:
+
+| Adapter result | Meaning | Transaction outcome |
+|---|---|---|
+| `confirmed` | effect present, correct, fresh | (step proceeds; run-level `VERIFIED` is decided by the run classifier) |
+| `refuted` | affirmatively ABSENT (observed count zero) | `HALTED_BEFORE_EFFECT` |
+| `conflicting` | a write LANDED but is duplicated / wrong-valued / collateral | `RECONCILIATION_REQUIRED` |
+| `unavailable` | system of record unreachable / credential failure | `RECONCILIATION_REQUIRED` |
+| `stale` | data read but outside the declared freshness window | `RECONCILIATION_REQUIRED` |
+| `indeterminate` | cannot certify for another reason (e.g. unreadable baseline) | `RECONCILIATION_REQUIRED` |
+
+### Confidence tiers (screen read-back is demoted, explicitly)
+
+Every adapter advertises a `VerificationTier` (lower = stronger); execution
+profiles gate on the tier, never on prose:
+
+| Tier | Label | What it proves | Adapters |
+|---|---|---|---|
+| 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`, `file`, `email`, `document`, `document-hash` |
+| 2 | `independent-session` | same app, separately authenticated read-only session | customer adapter through the plugin interface |
+| 3 | `reacquired-state` | the app's own UI re-navigated to re-fetch persisted state | `onscreen` with a different-path read-back |
+| 4 | `screen-consistency` | the same surface the write drove still shows the value | `onscreen` same-surface |
+
+**Same-application screen read-back is a LOWER-CONFIDENCE consistency check,
+never independent system-of-record proof** -- an optimistic UI can paint
+success while nothing persisted. The onscreen adapter declares
+`independent_system_of_record = False` in code, and `docs/LIMITS.md` carries
+the measured false-CONFIRM evidence behind the demotion.
+
+### Adapter matrix
+
+| Adapter | Status | Notes |
+|---|---|---|
+| REST read-back | **supported** | `rest` |
+| GraphQL read-back | **supported** | `graphql`; read-only guard, freshness window |
+| FHIR R4 | **supported** | `fhir`; a FHIR profile over HTTP read-back with resource/entity binding (`search_param_exprs`); opt-in live-OpenEMR test |
+| read-only SQL | **supported** | `sql`; whitelist + read-only role |
+| file / SFTP arrival | **supported / programmatic SFTP** | `file`; SFTP today via an injected paramiko-compatible `transport` |
+| maildir / SMTP-capture email delivery | **supported** | `email`; delivery to the capture point |
+| document / report arrival + parse | **supported** | `document` |
+| document store (exact bytes) | **supported** | `document-hash` |
+| on-screen read-back | **supported (demoted)** | `onscreen`; tiers 3-4, consistency only |
+| customer plugin | **supported (SDK seam)** | any kind via the entry-point group below |
+
+### Evidence minimization (field-level redaction)
+
+Any kind accepts `evidence_redact_fields` (denylist) or
+`evidence_keep_fields` (allowlist): the named record fields in every emitted
+verdict's evidence (matched records; observed/expected values when the
+effect's read-back field is named) are replaced with opaque markers. This
+avoids making low-entropy identifiers recoverable through a digest dictionary.
+The verdict itself is never altered -- redaction minimizes evidence, it cannot
+soften a failure into a pass.
+
+### Shipping your own adapter (plugin SDK)
+
+A customer package implements the interface and registers a factory; no
+OpenAdapt fork required. The worked reference is
+`tests/example_verifier_plugin.py` (a CSV-ledger adapter exercising every
+platform obligation), qualified in `tests/test_verifier_adapter_platform.py`.
+
+1. Subclass `VerifierAdapterBase` (or match the `VerifierAdapter` protocol):
+   set `substrate` + `verification_tier`, implement `capture_pre_state`
+   (one fresh, fail-safe read -- return `reachable=False`, never raise) and
+   `verify` (use the shared `poll_until_settled` + the shared judge so
+   cardinality/duplicate/collateral semantics match every other substrate).
+2. Write a factory with the `VerifierFactory` signature
+   `(cfg, params) -> verifier` that reads its config from the `effects:`
+   section and FAILS LOUD on missing fields or secrets.
+3. Register it under the entry-point group in your package:
+
+   ```toml
+   [project.entry-points."openadapt_flow.effect_verifiers"]
+   csv-ledger = "acme_verifiers.csv_ledger:build_csv_ledger_verifier"
+   ```
+
+   (or programmatically: `register_verifier_factory("csv-ledger", factory)`).
+4. Deploy with `effects: {kind: csv-ledger, ...}` -- `build_effect_verifier`
+   resolves built-ins first (a plugin can never shadow a built-in kind), then
+   the registry; a plugin that fails to import fails the build loudly.
+5. Qualify it with the platform's adversarial fixture set (stale data, wrong
+   entity, duplicate rows, settlement timeout, credential failure ->
+   UNAVAILABLE) -- copy the per-adapter test modules as the template.
 
 ## Reconciliation tasks (interface only — deliberately no engine)
 

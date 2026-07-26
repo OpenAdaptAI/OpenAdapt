@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectState,
@@ -48,7 +49,7 @@ def sha256_file(path: Path, *, chunk: int = 1 << 16) -> str:
     return h.hexdigest()
 
 
-class DocumentHashVerifier:
+class DocumentHashVerifier(VerifierAdapterBase):
     """Verify effects against a directory of written documents.
 
     Args:

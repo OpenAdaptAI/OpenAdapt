@@ -45,6 +45,7 @@ import time
 from typing import Any, Callable, Iterable, Mapping, Optional
 
 from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectState,
@@ -126,7 +127,7 @@ def assert_read_only_sql(query: str) -> str:
     return text
 
 
-class SqlRecordVerifier:
+class SqlRecordVerifier(VerifierAdapterBase):
     """Verify effects against a SQL system of record with a read-only SELECT.
 
     Args:

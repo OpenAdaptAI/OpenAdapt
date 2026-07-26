@@ -463,6 +463,17 @@ class EffectVerdict(BaseModel):
     #: shape), so a caller / compensator can act on them (e.g. delete the
     #: extras of a duplicate).
     matched_records: list[dict[str, Any]] = Field(default_factory=list)
+    #: True when this (INDETERMINATE) verdict was caused by the system of
+    #: record being UNREACHABLE/unreadable at verify time (transport or
+    #: credential failure) -- the adapter platform refines it to the explicit
+    #: UNAVAILABLE result (``adapter.classify_adapter_result``). Additive;
+    #: default False keeps every pre-existing verdict byte-identical.
+    unavailable: bool = False
+    #: True when the read succeeded but the evidence lies OUTSIDE the
+    #: adapter's declared freshness window (``adapter.enforce_freshness``):
+    #: the read cannot certify the CURRENT state -> STALE, an INDETERMINATE
+    #: refinement, never a pass. Additive; default False.
+    stale: bool = False
 
     @property
     def should_halt(self) -> bool:

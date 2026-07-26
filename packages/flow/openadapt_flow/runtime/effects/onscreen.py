@@ -49,6 +49,7 @@ from __future__ import annotations
 import difflib
 from typing import Any, Optional
 
+from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     MIN_RENAV_ACTIONS,
     Effect,
@@ -120,7 +121,7 @@ def _normalize(text: str) -> str:
     return " ".join(text.lower().split())
 
 
-class OnScreenReadbackVerifier:
+class OnScreenReadbackVerifier(VerifierAdapterBase):
     """Verify a write by OCR-reading the saved value off the screen.
 
     Args:
@@ -143,6 +144,14 @@ class OnScreenReadbackVerifier:
 
     substrate = "onscreen"
     verification_tier = VerificationTier.IMMEDIATE_SCREEN
+    #: Explicit demotion (adapter platform): a screen read-back shares the
+    #: application surface the actuation drove, so its CONFIRMED is a
+    #: LOWER-CONFIDENCE CONSISTENCY CHECK -- never independent
+    #: system-of-record proof. Execution profiles gate on the tier
+    #: (``verification_tier_for``: different-path re-navigation earns tier 3,
+    #: same-surface stays tier 4); this flag makes the demotion visible to any
+    #: caller inspecting the verifier directly.
+    independent_system_of_record = False
 
     @staticmethod
     def verification_tier_for(effect: Effect) -> VerificationTier:

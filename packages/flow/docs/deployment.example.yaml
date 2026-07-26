@@ -36,17 +36,25 @@ actuation:
   timeout_s: 5.0
 
 # -- effects: the system of record consequential writes are verified against -
-# kind: none | rest | fhir | sql | file | document-hash
+# kind: none | rest | graphql | fhir | sql | file | email | document |
+#       document-hash | a registered plugin kind
 #   none          -> no verifier (Standard/Regulated refuse consequential
 #                    writes; Demo may use an exact explicit approval, recorded
 #                    as approved-unverified; direct API writes still refuse)
 #   rest          -> JSON REST SoR (e.g. MockMed /api/db, Frappe REST)
+#   graphql       -> a READ-ONLY GraphQL query against the SoR (mutations
+#                    refuse to construct)
 #   fhir          -> FHIR R4 search (e.g. OpenEMR)
 #   sql           -> a read-only SELECT against the app database (enforced
 #                    statement whitelist; the verifier cannot write)
 #   file          -> file/SFTP arrival (pattern + size>0 + mtime freshness +
 #                    optional content probe)
+#   email         -> maildir / SMTP-capture delivery verification
+#   document      -> report arrival + PARSEABLE-content assertion (JSON path
+#                    or named-regex extraction judged like record fields)
 #   document-hash -> a filesystem document store (exact SHA-256 content)
+#   <plugin>      -> any kind registered under the
+#                    openadapt_flow.effect_verifiers entry-point group
 #
 # Kit conventions (docs/EFFECT_KIT.md):
 #   * SECRETS ARE REFERENCES: auth / access_token_env / sql_password_env name
@@ -102,9 +110,40 @@ effects:
   # file_mtime_window_s: 120
   # file_content_probe: "^BATCH_HEADER"
 
+  # graphql (used when kind: graphql; endpoint = base_url, auth as above) ----
+  # graphql_query: >-
+  #   query Claims($claim: ID!) { claims(id: $claim) { nodes { id claim_id } } }
+  # graphql_variables:
+  #   claim: { param: claim_id }           # entity binding, bound per-run
+  # graphql_records_path: data.claims.nodes
+  # graphql_freshness_field: updated_at    # optional: CONFIRMED evidence older
+  # graphql_freshness_window_s: 120        # than the window is STALE -> halt
+
+  # email (used when kind: email; a Maildir root or a directory of .eml) -----
+  # root: /var/lib/mail-capture
+  # mail_pattern: "*.eml"
+  # file_mtime_window_s: 300               # freshness for the `fresh` flag
+  # file_content_probe: "Claim .* submitted"
+
+  # document (used when kind: document; arrival + parseable content) ---------
+  # root: /var/lib/reports/outbox
+  # file_pattern: "claim_*.json"
+  # document_format: json                  # json | text
+  # document_field_paths:                  # record field -> dotted JSON path
+  #   claim_id: claim.id
+  #   status: claim.status
+  # document_text_pattern: "claim=(?P<claim_id>\\S+)"   # text format instead
+  # file_mtime_window_s: 300
+
   # document-hash (used when kind: document-hash) ----------------------------
   # root: /var/lib/exports
   # glob: "**/*.pdf"
+
+  # evidence minimization (any kind): field-level redaction of emitted
+  # evidence (matched records + observed/expected values). Values are replaced
+  # by opaque markers; the VERDICT itself is never altered.
+  # evidence_redact_fields: [ssn, dob]
+  # evidence_keep_fields: [id, status]     # allowlist variant
 
   timeout_s: 5.0
   poll_interval_s: 0.2

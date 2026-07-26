@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectState,
@@ -70,7 +71,7 @@ class ArrivalTransport(Protocol):
     def open(self, path: str, mode: str = "rb") -> Any: ...
 
 
-class FileArrivalVerifier:
+class FileArrivalVerifier(VerifierAdapterBase):
     """Verify that a conforming file ARRIVED in a directory or SFTP endpoint.
 
     Args:
@@ -207,10 +208,11 @@ class FileArrivalVerifier:
         content_match: bool,
     ) -> dict[str, Any]:
         size_ok = size >= self.min_size
+        age_s = now - mtime
         fresh = (
             True
             if self.mtime_window_s is None
-            else (now - mtime) <= self.mtime_window_s
+            else -self.mtime_window_s <= age_s <= self.mtime_window_s
         )
         return {
             # Identity includes size+mtime so an in-place rewrite counts as a

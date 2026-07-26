@@ -24,6 +24,7 @@ import time
 from typing import Any, Optional
 
 from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectState,
@@ -32,7 +33,7 @@ from openadapt_flow.runtime.effects.effect import (
 from openadapt_flow.verification import VerificationTier
 
 
-class RestRecordVerifier:
+class RestRecordVerifier(VerifierAdapterBase):
     """Verify effects against a JSON REST system of record.
 
     Args:

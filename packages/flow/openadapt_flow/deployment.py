@@ -159,10 +159,15 @@ class EffectsConfig(BaseModel):
       bound to the record each run actually writes.
     """
 
-    #: ``none`` | ``onscreen`` | ``rest`` | ``fhir`` | ``sql`` | ``file`` |
-    #: ``document-hash``. ``onscreen`` is the no-API screen read-back oracle
-    #: (the auto-derived default for GUI-only recordings); it reads the saved
-    #: value off the live backend, so it needs no external system of record.
+    #: ``none`` | ``onscreen`` | ``rest`` | ``graphql`` | ``fhir`` | ``sql`` |
+    #: ``file`` | ``email`` | ``document`` | ``document-hash``, or a PLUGIN
+    #: kind registered under the
+    #: ``openadapt_flow.effect_verifiers`` entry-point group (the customer
+    #: adapter SDK seam -- see docs/EFFECT_KIT.md). ``onscreen`` is the no-API
+    #: screen read-back oracle (the auto-derived default for GUI-only
+    #: recordings); it reads the saved value off the live backend, so it needs
+    #: no external system of record -- and it is explicitly the
+    #: LOWER-CONFIDENCE consistency tier, never independent proof.
     kind: str = "none"
 
     # -- onscreen (no-API screen read-back; auto-derived per-effect region) ---
@@ -187,6 +192,44 @@ class EffectsConfig(BaseModel):
     #: with ``path_params: {applicant: {param: applicant}}``. Empty -> the
     #: path is used verbatim (no formatting), byte-identical to before.
     path_params: dict[str, ValueExpr] = Field(default_factory=dict)
+
+    # -- graphql (GraphQL read-back query against the SoR) -------------------
+    #: The READ-ONLY query document returning the candidate records
+    #: (a ``mutation``/``subscription`` refuses to construct). Uses the shared
+    #: ``base_url`` as the endpoint and the shared ``auth`` for headers.
+    graphql_query: Optional[str] = None
+    #: Query variables (entity/tenant binding): literal or ``{param: ...}``.
+    graphql_variables: dict[str, ValueExpr] = Field(default_factory=dict)
+    #: Dotted path to the records LIST in the response (``data.loans.nodes``).
+    graphql_records_path: str = "data"
+    #: Record field carrying a timestamp; with ``graphql_freshness_window_s``,
+    #: CONFIRMED evidence older than the window is demoted to STALE (halt).
+    graphql_freshness_field: Optional[str] = None
+    graphql_freshness_window_s: Optional[float] = None
+
+    # -- email (maildir / SMTP-capture delivery verification) ----------------
+    #: (uses the shared ``root``) filename glob for the flat-directory layout
+    #: (a Maildir root with ``cur``/``new`` is detected automatically).
+    mail_pattern: str = "*.eml"
+    #: (email also reuses ``file_mtime_window_s`` for the ``fresh`` flag and
+    #: ``file_content_probe`` as the body-content regex.)
+
+    # -- document (report arrival + parseable-content assertion) -------------
+    #: (uses the shared ``root`` + ``file_pattern`` + ``file_mtime_window_s``)
+    #: ``json`` extracts ``document_field_paths`` (record field -> dotted
+    #: path); ``text`` extracts ``document_text_pattern``'s named groups.
+    document_format: str = "json"
+    document_field_paths: dict[str, str] = Field(default_factory=dict)
+    document_text_pattern: Optional[str] = None
+
+    # -- evidence minimization (any kind) ------------------------------------
+    #: Record fields whose values must be replaced by an opaque redaction
+    #: marker in every emitted verdict's evidence -- matched records and, when
+    #: it names the effect's read-back field, observed/expected values. The
+    #: verdict itself is never altered (redaction cannot soften a failure).
+    evidence_redact_fields: list[str] = Field(default_factory=list)
+    #: Allowlist variant: when set, every evidence field NOT named is redacted.
+    evidence_keep_fields: Optional[list[str]] = None
 
     # -- fhir (FHIR R4 search, e.g. OpenEMR) ---------------------------------
     resource_type: str = "Observation"
@@ -241,7 +284,11 @@ class EffectsConfig(BaseModel):
     poll_interval_s: float = 0.2
 
     @field_validator(
-        "path_params", "search_param_exprs", "sql_query_params", mode="before"
+        "path_params",
+        "search_param_exprs",
+        "sql_query_params",
+        "graphql_variables",
+        mode="before",
     )
     @classmethod
     def _coerce_value_exprs(cls, v: Any) -> Any:
@@ -768,16 +815,43 @@ def build_effect_verifier(
         cfg: The deployment's ``effects`` section.
         params: The governed run parameters (``--params-file`` / ``--param``
             values). Configs that bind ``{param: ...}`` references
-            (``path_params`` / ``search_param_exprs`` / ``sql_query_params``)
-            are resolved against these AT CONSTRUCTION, so the verifier probes
-            the record THIS run writes. A config with no references ignores
-            ``params`` entirely (fully back-compatible).
+            (``path_params`` / ``search_param_exprs`` / ``sql_query_params`` /
+            ``graphql_variables``) are resolved against these AT CONSTRUCTION,
+            so the verifier probes the record THIS run writes. A config with
+            no references ignores ``params`` entirely (fully back-compatible).
+
+    Resolution order for ``kind``: built-in adapters, then plugin factories registered under the
+    ``openadapt_flow.effect_verifiers`` entry-point group or via
+    ``register_verifier_factory`` (the customer adapter SDK seam). When the
+    config sets ``evidence_redact_fields`` / ``evidence_keep_fields``, the
+    built verifier is wrapped so every verdict's evidence is minimized.
 
     Raises:
         ValueError: on an unknown ``kind``, a missing required field, an
             unresolved ``{param: ...}`` reference, or a missing secret env var
             (fail loud rather than wire a broken verifier).
     """
+    verifier = _build_effect_verifier_unredacted(cfg, params)
+    if verifier is None:
+        return None
+    if cfg.evidence_redact_fields or cfg.evidence_keep_fields is not None:
+        from openadapt_flow.runtime.effects.adapter import (
+            RedactingVerifier,
+            RedactionPolicy,
+        )
+
+        policy = RedactionPolicy(
+            redact_fields=list(cfg.evidence_redact_fields),
+            keep_fields=cfg.evidence_keep_fields,
+        )
+        return RedactingVerifier(verifier, policy)
+    return verifier
+
+
+def _build_effect_verifier_unredacted(
+    cfg: EffectsConfig, params: Optional[Mapping[str, str]] = None
+) -> Optional[Any]:
+    """The per-kind construction behind :func:`build_effect_verifier`."""
     kind = (cfg.kind or "none").strip().lower()
     if kind in ("none", ""):
         return None
@@ -912,9 +986,79 @@ def build_effect_verifier(
 
         return DocumentHashVerifier(cfg.root, glob=cfg.glob)
 
+    if kind == "graphql":
+        if not cfg.base_url:
+            raise ValueError("effects.kind 'graphql' requires effects.base_url")
+        if not cfg.graphql_query:
+            raise ValueError("effects.kind 'graphql' requires effects.graphql_query")
+        from openadapt_flow.runtime.effects import GraphQLRecordVerifier
+
+        headers = cfg.auth.resolve_headers() if cfg.auth is not None else None
+        variables: Optional[dict[str, str]] = None
+        if cfg.graphql_variables:
+            variables = _resolve_config_exprs(
+                "graphql_variables", cfg.graphql_variables, params
+            )
+        return GraphQLRecordVerifier(
+            cfg.base_url,
+            query=cfg.graphql_query,
+            variables=variables,
+            records_path=cfg.graphql_records_path,
+            headers=headers,
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
+            freshness_field=cfg.graphql_freshness_field,
+            freshness_window_s=cfg.graphql_freshness_window_s,
+        )
+
+    if kind == "email":
+        if not cfg.root:
+            raise ValueError("effects.kind 'email' requires effects.root")
+        from openadapt_flow.runtime.effects import MaildirDeliveryVerifier
+
+        return MaildirDeliveryVerifier(
+            cfg.root,
+            pattern=cfg.mail_pattern,
+            mtime_window_s=cfg.file_mtime_window_s,
+            content_probe=cfg.file_content_probe,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
+    if kind == "document":
+        if not cfg.root:
+            raise ValueError("effects.kind 'document' requires effects.root")
+        if cfg.document_format not in ("json", "text"):
+            raise ValueError(
+                "effects.document_format must be 'json' or 'text' "
+                f"(got {cfg.document_format!r})"
+            )
+        from typing import cast
+
+        from openadapt_flow.runtime.effects import DocumentArrivalVerifier
+
+        document_format = cast(Literal["json", "text"], cfg.document_format)
+        return DocumentArrivalVerifier(
+            cfg.root,
+            pattern=cfg.file_pattern,
+            format=document_format,
+            field_paths=cfg.document_field_paths or None,
+            text_pattern=cfg.document_text_pattern,
+            mtime_window_s=cfg.file_mtime_window_s,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
+    # Plugin seam: a customer adapter registered programmatically or under the
+    # 'openadapt_flow.effect_verifiers' entry-point group serves its own kind.
+    from openadapt_flow.runtime.effects.adapter import resolve_verifier_factory
+
+    factory = resolve_verifier_factory(kind)
+    if factory is not None:
+        return factory(cfg, params)
+
     raise ValueError(
         f"unknown effects.kind {cfg.kind!r} "
-        "(expected: none | onscreen | rest | fhir | sql | file | document-hash)"
+        "(expected: none | onscreen | rest | graphql | fhir | sql | file | "
+        "email | document | document-hash, or a registered plugin kind)"
     )
 
 

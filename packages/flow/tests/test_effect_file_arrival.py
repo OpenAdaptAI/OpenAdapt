@@ -79,6 +79,16 @@ class TestLocalArrival:
         verdict = v.verify(_effect(count_new_only=False), before)
         assert verdict.verdict is Verdict.REFUTED
 
+    def test_far_future_mtime_outside_window_not_fresh(self, tmp_path: Path):
+        path = tmp_path / "future.csv"
+        path.write_text("data")
+        future = time.time() + 3600
+        os.utime(path, (future, future))
+        v = FileArrivalVerifier(tmp_path, pattern="*.csv", mtime_window_s=60)
+        before = v.capture_pre_state()
+        verdict = v.verify(_effect(count_new_only=False), before)
+        assert verdict.verdict is Verdict.REFUTED
+
     def test_content_probe(self, tmp_path: Path):
         v = FileArrivalVerifier(
             tmp_path, pattern="*.csv", content_probe=r"^BATCH_HEADER"

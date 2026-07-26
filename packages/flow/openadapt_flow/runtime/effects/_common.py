@@ -36,12 +36,15 @@ def new_records_only(
     return [r for r in matched if stable_id(r) not in before_ids]
 
 
-def _indeterminate(effect: Effect, substrate: str, reason: str) -> EffectVerdict:
+def _indeterminate(
+    effect: Effect, substrate: str, reason: str, *, unavailable: bool = False
+) -> EffectVerdict:
     return EffectVerdict(
         verdict=Verdict.INDETERMINATE,
         kind=effect.kind,
         substrate=substrate,
         reason=reason,
+        unavailable=unavailable,
     )
 
 
@@ -72,6 +75,7 @@ def judge_records(
             substrate,
             "system of record unreachable at verify time -- cannot certify "
             "the declared outcome/effect; HALT (never assume success)",
+            unavailable=True,
         )
 
     matched = [r for r in current if record_matches(r, effect.match)]

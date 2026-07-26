@@ -42,6 +42,7 @@ import time
 from typing import Any, Optional
 
 from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectState,
@@ -79,7 +80,7 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
     return node
 
 
-class FhirEffectVerifier:
+class FhirEffectVerifier(VerifierAdapterBase):
     """Verify effects against an OpenEMR FHIR R4 system of record.
 
     Args:
