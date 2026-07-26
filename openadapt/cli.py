@@ -25,7 +25,9 @@ Usage:
     openadapt doctor
 """
 
+import os
 import sys
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -133,6 +135,19 @@ def main():
 # =============================================================================
 
 
+def _invoke_flow(argv: list[str]) -> int:
+    """Invoke the canonical engine once and return its exit code."""
+    try:
+        from openadapt_flow.__main__ import main as flow_main
+    except ImportError:
+        click.echo("Error: openadapt-flow not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        click.echo("Engine only: pip install openadapt-flow", err=True)
+        return 1
+
+    return int(flow_main(argv))
+
+
 def _run_flow(argv: list[str]) -> None:
     """Delegate to the openadapt-flow CLI, preserving its exit code.
 
@@ -142,15 +157,95 @@ def _run_flow(argv: list[str]) -> None:
     Imported lazily so ``openadapt`` (and ``openadapt flow --help``) work
     even when openadapt-flow isn't installed.
     """
-    try:
-        from openadapt_flow.__main__ import main as flow_main
-    except ImportError:
-        click.echo("Error: openadapt-flow not installed.", err=True)
-        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
-        click.echo("Engine only: pip install openadapt-flow", err=True)
-        sys.exit(1)
+    sys.exit(_invoke_flow(argv))
 
-    sys.exit(flow_main(argv))
+
+@main.command("quickstart")
+@click.option(
+    "--out",
+    type=click.Path(path_type=Path),
+    default=Path("openadapt-quickstart"),
+    show_default=True,
+    help="New directory for the recording, bundle, and run report.",
+)
+@click.option(
+    "--headed", is_flag=True, help="Show the browser while the tutorial runs."
+)
+def quickstart(out: Path, headed: bool) -> None:
+    """Run the complete local tutorial: record, compile, check, and replay.
+
+    This is the shortest path to a real OpenAdapt run. It uses the bundled
+    synthetic tutorial, keeps every artifact on this computer, and enables no
+    model or Cloud call. The output directory is never overwritten.
+    """
+    root = out.expanduser().resolve()
+    if root.exists():
+        raise click.UsageError(
+            f"Output already exists: {root}. Pass --out with a new directory."
+        )
+
+    recording = root / "recording"
+    bundle = root / "bundle"
+    run_dir = root / "run"
+    steps = [
+        ("Record the tutorial", ["demo-record", "--out", str(recording)]),
+        (
+            "Compile the recording",
+            [
+                "compile",
+                str(recording),
+                "--out",
+                str(bundle),
+                "--name",
+                "local-quickstart",
+            ],
+        ),
+        (
+            "Certify the tutorial",
+            ["certify", str(bundle), "--policy", "permissive"],
+        ),
+        (
+            "Replay locally",
+            ["replay", str(bundle), "--run-dir", str(run_dir)],
+        ),
+    ]
+    if headed:
+        steps[0][1].append("--headed")
+        steps[-1][1].append("--headed")
+
+    for index, (label, argv) in enumerate(steps, start=1):
+        click.echo(f"\n[{index}/{len(steps)}] {label}")
+        # The bundled tutorial contains synthetic identity-like strings. Keep
+        # the ordinary report warning meaningful for real workflows by making
+        # this one known-safe fixture explicit, then restore the operator's
+        # environment immediately after replay.
+        scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
+        if argv[0] == "replay" and scrub in (None, "auto"):
+            os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+        try:
+            code = _invoke_flow(argv)
+        finally:
+            if argv[0] == "replay" and scrub in (None, "auto"):
+                if scrub is None:
+                    os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
+                else:
+                    os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
+        if code:
+            raise click.ClickException(
+                f"{label} stopped with exit code {code}. "
+                f"Any completed artifacts remain in {root}."
+            )
+
+    click.echo("\nLocal quickstart complete.")
+    click.echo(f"Bundle: {bundle}")
+    click.echo(f"Run evidence: {run_dir}")
+    click.echo("No model or Cloud call was enabled.")
+    click.echo(f"Inspect qualification gaps: openadapt flow lint {bundle}")
+    click.echo(
+        "Connect this computer when you want Cloud history and collaboration: "
+        "https://app.openadapt.ai/dashboard/settings/ingest"
+    )
+    click.echo("Qualify a consequential workflow: https://openadapt.ai/qualify")
 
 
 @main.group(cls=_FlowPassthroughGroup)

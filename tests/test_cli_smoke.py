@@ -75,6 +75,43 @@ def test_version_command():
     assert result.exit_code == 0
 
 
+def test_quickstart_runs_one_local_lifecycle_without_overwriting(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "openadapt.cli._invoke_flow",
+        lambda argv: calls.append(list(argv)) or 0,
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli_main, ["quickstart", "--out", "first-run"])
+        assert result.exit_code == 0, result.output
+
+    assert [call[0] for call in calls] == [
+        "demo-record",
+        "compile",
+        "certify",
+        "replay",
+    ]
+    assert calls[2][-1] == "permissive"
+    assert "No model or Cloud call was enabled" in result.output
+
+
+def test_quickstart_refuses_an_existing_output(monkeypatch):
+    monkeypatch.setattr(
+        "openadapt.cli._invoke_flow",
+        lambda _argv: pytest.fail("engine must not run before output refusal"),
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("existing").mkdir()
+        result = runner.invoke(cli_main, ["quickstart", "--out", "existing"])
+
+    assert result.exit_code != 0
+    assert "Output already exists" in result.output
+
+
 def test_version_flag_matches_installed_metadata():
     """`openadapt --version` must print the real installed distribution
     version (importlib.metadata), never a hardcoded string that can drift

@@ -41,27 +41,24 @@ runtime:
 python -m pip install --upgrade openadapt
 ```
 
-Run the bundled synthetic workflow. It needs no account, target application,
-API key, or operating-system automation permissions:
+Run the complete bundled tutorial with one command. It needs no account,
+target application, API key, or operating-system automation permissions:
 
 ```bash
-openadapt flow demo-record --out rec
-openadapt flow compile rec --out bundle --name mockmed-triage
-openadapt flow certify bundle --policy permissive
-openadapt flow replay bundle --run-dir run
+openadapt quickstart
 ```
 
 You now have:
 
-- `rec/`: the demonstrated interaction and retained target evidence
-- `bundle/`: the inspectable compiled workflow
-- `run/REPORT.md`: the ordered actions, evidence, outcome, and any halt reason
+- `openadapt-quickstart/recording/`: the demonstrated interaction and retained target evidence
+- `openadapt-quickstart/bundle/`: the inspectable compiled workflow
+- `openadapt-quickstart/run/REPORT.md`: the ordered actions, evidence, outcome, and any halt reason
 
 Inspect the program and its deployment gaps:
 
 ```bash
-openadapt flow visualize bundle --out graph.html
-openadapt flow lint bundle
+openadapt flow visualize openadapt-quickstart/bundle --out graph.html
+openadapt flow lint openadapt-quickstart/bundle
 ```
 
 The bundled workflow is a tutorial, not a production certification. Qualifying
