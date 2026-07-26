@@ -180,6 +180,20 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
         if (cursor === row) break;
         cursor = parent;
     }
+    // Retain the complete live DOM state for the bounded record boundary,
+    // excluding only OpenAdapt's own random lease attribute.  This remains in
+    // the page-local guard store; it is never returned in a report.  Comparing
+    // the final state, rather than treating every MutationObserver callback as
+    // irreversible, admits framework-owned hover/actionability churn only
+    // when the exact same Element and DOM state have been restored.
+    const boundary = (row || node).cloneNode(true);
+    for (const candidate of [boundary, ...boundary.querySelectorAll('*')]) {
+        for (const attr of Array.from(candidate.attributes || [])) {
+            if (attr.name.startsWith('data-openadapt-actuation-')) {
+                candidate.removeAttribute(attr.name);
+            }
+        }
+    }
     return {
         descriptor: JSON.stringify([
             1,
@@ -194,6 +208,7 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
             ],
             ancestry,
             rowIdentity,
+            boundary.outerHTML,
         ]),
         rowIdentity: rowIdentity,
         row: row,
@@ -253,17 +268,6 @@ _INSTALL_GUARD_BODY_JS = r"""
         tokenMap.delete(args.token);
     };
     entry.invalidate = invalidate;
-    // Any mutation in the target's record boundary after arming invalidates
-    // the lease. Descriptor equality is deliberately irrelevant: hidden
-    // attributes and pixel-identical node replacement can still change the
-    // action that a click performs.
-    entry.observer = new MutationObserver(invalidate);
-    entry.observer.observe(observed.row || el, {
-        attributes: true,
-        childList: true,
-        characterData: true,
-        subtree: true,
-    });
     if (args.requireFocused) {
         if (document.activeElement !== el) {
             invalidate();
@@ -1361,12 +1365,15 @@ class PlaywrightBackend:
         """Atomically verify and click the exact DOM target resolved earlier.
 
         A strict locator must still resolve to the token-bound Element and its
-        unchanged target/row descriptor. A short-lived MutationObserver removes
-        the token on intervening identity mutation. The final action is a
-        Playwright click/dblclick on that unique random-token locator, preserving
-        Playwright's native pointer sequence and actionability checks rather
-        than synthesizing DOM events. A replacement element or changed record
-        row is a refusal, never a coordinate fallback.
+        unchanged complete bounded DOM descriptor. The same checks are repeated
+        after Playwright's actionability trial and immediately before the real
+        input, so transient framework presentation churn is admitted only when
+        the exact same Element and DOM state have been restored. The final
+        action is a Playwright click/dblclick on that unique random-token
+        locator, preserving Playwright's native pointer sequence rather than
+        synthesizing DOM events. A replacement element, lasting hidden
+        attribute change, or changed record row is a refusal, never a coordinate
+        fallback.
         """
 
         fingerprint = handle.target_fingerprint

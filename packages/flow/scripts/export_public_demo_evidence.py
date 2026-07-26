@@ -355,6 +355,55 @@ def _probe_frame_presentation_times_us(
     return presentation_times_us
 
 
+def _probe_video_sample_end_us(
+    ffprobe: str,
+    media_path: Path,
+) -> int:
+    """Return the exact end of the final encoded video sample.
+
+    A frame timestamp identifies the start of a sample, not the media duration.
+    The public viewer must retain the complete terminal hold, so bind the
+    timeline to ``max(PTS + duration)`` across the encoded video packets.
+    """
+
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "packet=pts_time,duration_time",
+            "-of",
+            "json",
+            str(media_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    raw_packets = payload.get("packets") if isinstance(payload, dict) else None
+    if not isinstance(raw_packets, list) or not raw_packets:
+        raise EvidencePackError(f"ffprobe found no video packets in {media_path}")
+    sample_end_us = 0
+    for item in raw_packets:
+        pts = item.get("pts_time") if isinstance(item, dict) else None
+        duration = item.get("duration_time") if isinstance(item, dict) else None
+        if not isinstance(pts, str) or not isinstance(duration, str):
+            raise EvidencePackError(f"ffprobe omitted packet timing in {media_path}")
+        end_us = (Decimal(pts) + Decimal(duration)) * Decimal(1_000_000)
+        if end_us != end_us.to_integral_value():
+            raise EvidencePackError(
+                f"ffprobe returned a sub-microsecond sample end in {media_path}"
+            )
+        sample_end_us = max(sample_end_us, int(end_us))
+    if sample_end_us <= 0:
+        raise EvidencePackError(f"ffprobe returned an empty duration for {media_path}")
+    return sample_end_us
+
+
 def _write_presentation_clip(
     *,
     capture: _PresentationCapture,
@@ -397,7 +446,7 @@ def _write_presentation_clip(
 
     ffmpeg, ffprobe = _presentation_tools()
     presentation_dir.mkdir(parents=True, exist_ok=True)
-    media_path = presentation_dir / f"{clip_id}.webm"
+    media_path = presentation_dir / f"{clip_id}.mp4"
     timeline_path = presentation_dir / f"{clip_id}.control-overlay.v2.json"
     pts_path = presentation_dir / f"{clip_id}.frame-pts-us.json"
     with tempfile.TemporaryDirectory(
@@ -453,17 +502,23 @@ def _write_presentation_clip(
                 str(concat_path),
                 "-an",
                 "-fps_mode",
-                "vfr",
+                "passthrough",
+                "-enc_time_base",
+                "demux",
                 "-c:v",
-                "libvpx-vp9",
-                "-lossless",
-                "1",
-                "-deadline",
-                "good",
-                "-cpu-used",
-                "2",
+                "libx264",
+                "-preset",
+                "slow",
+                "-crf",
+                "18",
+                "-bf",
+                "0",
                 "-pix_fmt",
                 "yuv420p",
+                "-video_track_timescale",
+                "1000000",
+                "-movflags",
+                "+faststart",
                 str(media_path),
             ],
             check=True,
@@ -493,7 +548,16 @@ def _write_presentation_clip(
         )
 
     media_sha256 = _sha256(media_path)
-    duration_ms = presentation_times_us[-1] // 1_000
+    sample_end_us = _probe_video_sample_end_us(ffprobe, media_path)
+    if sample_end_us <= presentation_times_us[-1]:
+        raise EvidencePackError(
+            f"{clip_id} final decoded sample has no retained duration"
+        )
+    if sample_end_us % 1_000:
+        raise EvidencePackError(
+            f"{clip_id} final decoded sample does not end on a media millisecond"
+        )
+    duration_ms = sample_end_us // 1_000
     timeline = build_runtime_control_overlay_timeline_v2(
         capture.frames,
         data_classification=ControlOverlayDataClassification.SYNTHETIC,
@@ -1247,6 +1311,7 @@ def _media_type(path: Path) -> str:
         ".html": "text/html",
         ".py": "text/x-python",
         ".png": "image/png",
+        ".mp4": "video/mp4",
         ".webm": "video/webm",
     }.get(path.suffix.lower(), "application/octet-stream")
 
@@ -1258,7 +1323,7 @@ def _role(path: str) -> str:
         return "compiled_bundle"
     if "/qualification/" in path:
         return "qualification"
-    if path.endswith(".webm"):
+    if path.endswith((".mp4", ".webm")):
         return "media"
     if "/cases/" in path:
         return "case_evidence"
@@ -1345,7 +1410,7 @@ def _assemble_manifest(
 
     def presentation_media(clip_id: str) -> dict[str, Any]:
         return {
-            "media": _ref_for(root, presentation / f"{clip_id}.webm"),
+            "media": _ref_for(root, presentation / f"{clip_id}.mp4"),
             "timeline": _ref_for(
                 root, presentation / f"{clip_id}.control-overlay.v2.json"
             ),
@@ -1754,7 +1819,7 @@ def _validate_presentation_artifacts(
         pts_relative = str(clip["frame_pts"]["path"])
         expected_prefix = f"artifacts/presentation/{clip_id}"
         if (
-            media_relative != f"{expected_prefix}.webm"
+            media_relative not in {f"{expected_prefix}.mp4", f"{expected_prefix}.webm"}
             or timeline_relative != f"{expected_prefix}.control-overlay.v2.json"
             or pts_relative != f"{expected_prefix}.frame-pts-us.json"
         ):
@@ -1806,13 +1871,22 @@ def _validate_presentation_artifacts(
             raise EvidencePackError(
                 f"exact-PTS sidecar does not bind decoded media: {pts_relative}"
             )
+        expected_duration_ms = presentation_times_us[-1] // 1_000
+        if media_path.suffix.lower() == ".mp4":
+            _ffmpeg, ffprobe = _presentation_tools()
+            sample_end_us = _probe_video_sample_end_us(ffprobe, media_path)
+            if sample_end_us % 1_000:
+                raise EvidencePackError(
+                    f"presentation media does not end on a millisecond: {media_relative}"
+                )
+            expected_duration_ms = sample_end_us // 1_000
         if (
             timeline.get("schema_version") != "openadapt.control-overlay-timeline/v2"
             or timeline.get("data_classification") != "synthetic"
             or timeline.get("evidence_pack_id") != pack_id
             or timeline.get("media_sha256") != media_sha256
             or timeline.get("media_frame_count") != len(presentation_times_us)
-            or timeline.get("duration_ms") != presentation_times_us[-1] // 1_000
+            or timeline.get("duration_ms") != expected_duration_ms
         ):
             raise EvidencePackError(
                 f"control-overlay timeline does not bind media: {timeline_relative}"

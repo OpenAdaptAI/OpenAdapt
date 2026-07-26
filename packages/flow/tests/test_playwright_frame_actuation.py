@@ -79,6 +79,42 @@ def test_nested_frame_locator_delivers_once_in_top_level_coordinates(
         backend.act_structural(locator, handle)
 
 
+def test_transient_actionability_attribute_churn_is_revalidated_and_admitted(
+    framed_backend,
+) -> None:
+    backend, _page, frame = framed_backend
+    frame.locator("#target").evaluate(
+        """el => el.addEventListener('mousemove', () => {
+            el.setAttribute('data-focus', 'true');
+            el.removeAttribute('data-focus');
+        })"""
+    )
+    locator, _box = _target_locator(backend, frame)
+    handle = backend.locate_structural(locator)
+    assert handle is not None
+
+    backend.act_structural(locator, handle)
+
+    assert frame.evaluate("window.clicks") == 1
+
+
+def test_lasting_hidden_target_attribute_change_refuses_delivery(
+    framed_backend,
+) -> None:
+    backend, _page, frame = framed_backend
+    locator, _box = _target_locator(backend, frame)
+    handle = backend.locate_structural(locator)
+    assert handle is not None
+
+    frame.locator("#target").evaluate(
+        "el => el.setAttribute('data-action-route', 'wrong-record')"
+    )
+
+    with pytest.raises(StructuralResolutionRefused, match="changed before delivery"):
+        backend.act_structural(locator, handle)
+    assert frame.evaluate("window.clicks") == 0
+
+
 def test_frame_path_and_target_ambiguity_refuse_before_arming() -> None:
     sync = pytest.importorskip("playwright.sync_api")
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend

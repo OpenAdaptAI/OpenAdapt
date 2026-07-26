@@ -72,9 +72,8 @@ from openimis_claims.fixture import (  # noqa: E402
     OpenIMISFixture,
 )
 
-from openadapt_flow.backend import StructuralResolutionRefused  # noqa: E402
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa: E402
-from openadapt_flow.ir import StructuralHandle, StructuralLocator  # noqa: E402
+from openadapt_flow.ir import StructuralLocator  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 DEPLOYMENT_YAML = (
@@ -99,7 +98,10 @@ class OpenIMISEligibilityBackend(PlaywrightBackend):
     the checked policyholder.  This narrow adapter records stable semantic
     locators and a structured identity string that includes the run's insuree
     number for dialog-scoped actions.  The compiler parameterizes that value,
-    so replay verifies the current run's policyholder before acting.
+    so replay verifies the current run's policyholder before acting. Structural
+    delivery remains inherited from :class:`PlaywrightBackend`, including its
+    unique-candidate refusal and one-shot mutation fingerprint between resolve
+    and actuation.
     """
 
     _STRUCTURAL_JS = r"""([px, py]) => {
@@ -109,14 +111,14 @@ class OpenIMISEligibilityBackend(PlaywrightBackend):
         const placeholder = input ? (input.getAttribute('placeholder') || '') : '';
         if (placeholder.startsWith('Insuree enquiry')) {
             return {
-                selector: 'input[placeholder^="Insuree enquiry"]',
+                selector: 'input[placeholder^="Insuree enquiry"]:visible',
                 role: 'textbox',
                 name: 'Insuree enquiry'
             };
         }
         if (placeholder.startsWith('Search Service')) {
             return {
-                selector: 'input[placeholder^="Search Service"]',
+                selector: 'input[placeholder^="Search Service"]:visible',
                 role: 'textbox',
                 name: 'Search Service'
             };
@@ -209,78 +211,6 @@ class OpenIMISEligibilityBackend(PlaywrightBackend):
                 return None
             context["insurance_no"] = dialogs[0][0]
         return json.dumps(context, separators=(",", ":"))
-
-    def locate_structural(self, locator: StructuralLocator) -> StructuralHandle | None:
-        """Refuse duplicate semantic candidates instead of falling to pixels.
-
-        The generic browser backend treats an ambiguous structural locator as
-        a miss so less specialized workflows may continue down the evidence
-        ladder.  This reference adapter authors exact semantic locators for
-        every clicked control, so more than one live candidate is a record/
-        dialog ambiguity and must halt rather than let a visual rung pick one.
-        """
-        if locator.selector:
-            candidates = self.page.locator(locator.selector)
-        elif locator.role and locator.name:
-            candidates = self.page.get_by_role(
-                locator.role,  # type: ignore[arg-type]
-                name=locator.name,
-                exact=True,
-            )
-        else:
-            return None
-        try:
-            visible_indices = candidates.evaluate_all(
-                """elements => elements.flatMap((el, index) => {
-                    const style = window.getComputedStyle(el);
-                    const rect = el.getBoundingClientRect();
-                    const visible = style.display !== 'none'
-                        && style.visibility !== 'hidden'
-                        && style.visibility !== 'collapse'
-                        && rect.width > 0 && rect.height > 0
-                        && rect.right > 0 && rect.bottom > 0
-                        && rect.left < window.innerWidth
-                        && rect.top < window.innerHeight;
-                    return visible ? [index] : [];
-                })"""
-            )
-            if not isinstance(visible_indices, list) or not all(
-                isinstance(index, int) for index in visible_indices
-            ):
-                return None
-            if len(visible_indices) > 1:
-                raise StructuralResolutionRefused(
-                    "openIMIS eligibility target is structurally ambiguous"
-                )
-            if not visible_indices:
-                return None
-            candidate = candidates.nth(visible_indices[0])
-            box = candidate.bounding_box()
-            if not box or box["width"] <= 0 or box["height"] <= 0:
-                return None
-            cx = int(round(box["x"] + box["width"] / 2))
-            cy = int(round(box["y"] + box["height"] / 2))
-            vw, vh = self.viewport
-            if not (0 <= cx < vw and 0 <= cy < vh):
-                return None
-            topmost = candidate.evaluate(
-                """(el, pt) => {
-                    const n = document.elementFromPoint(pt[0], pt[1]);
-                    return !!n && (n === el || el.contains(n));
-                }""",
-                [cx, cy],
-            )
-            if not topmost:
-                return None
-            return StructuralHandle(point=(cx, cy), candidate_count=1)
-        except StructuralResolutionRefused:
-            raise
-        except Exception:
-            # Observation failures are a miss; the resolver may use other
-            # evidence, but a proven multi-candidate ambiguity above is a
-            # terminal refusal and never reaches a weaker rung.
-            return None
-
 
 def eligibility_effects() -> list[Any]:
     """The eligibility outcome bound to the run's ``insurance_no``.

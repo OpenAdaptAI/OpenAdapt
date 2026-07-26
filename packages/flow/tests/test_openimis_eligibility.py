@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from openadapt_flow.backend import StructuralResolutionRefused
+from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.deployment import build_effect_verifier, load_deployment
 from openadapt_flow.ir import StructuralLocator
 from openadapt_flow.runtime.effects import (
@@ -64,7 +64,7 @@ def test_browser_adapter_records_stable_structural_and_run_bound_identity() -> N
                     "dialog_identifiers": [["999000003"]],
                 }
             return {
-                "selector": 'input[placeholder^="Search Service"]',
+                "selector": 'input[placeholder^="Search Service"]:visible',
                 "role": "textbox",
                 "name": "Search Service",
             }
@@ -72,7 +72,7 @@ def test_browser_adapter_records_stable_structural_and_run_bound_identity() -> N
     backend = OpenIMISEligibilityBackend(Page())  # type: ignore[arg-type]
     locator = backend.structural_locator_at(320, 240)
     assert locator == StructuralLocator(
-        selector='input[placeholder^="Search Service"]',
+        selector='input[placeholder^="Search Service"]:visible',
         role="textbox",
         name="Search Service",
     )
@@ -115,63 +115,11 @@ def test_browser_adapter_refuses_ambiguous_record_dialogs(
     assert backend.structured_text_at(320, 240) is None
 
 
-def test_browser_adapter_refuses_ambiguous_structural_candidates() -> None:
-    class Candidates:
-        @staticmethod
-        def evaluate_all(script: str) -> list[int]:
-            return [0, 1]
-
-    class Page:
-        @staticmethod
-        def locator(selector: str) -> Candidates:
-            assert selector == 'input[placeholder^="Search Service"]'
-            return Candidates()
-
-    backend = OpenIMISEligibilityBackend(Page())  # type: ignore[arg-type]
-    with pytest.raises(StructuralResolutionRefused, match="ambiguous"):
-        backend.locate_structural(
-            StructuralLocator(selector='input[placeholder^="Search Service"]')
-        )
-
-
-def test_browser_adapter_ignores_hidden_structural_duplicate() -> None:
-    class Candidate:
-        @staticmethod
-        def bounding_box() -> dict[str, float]:
-            return {"x": 100, "y": 50, "width": 40, "height": 20}
-
-        @staticmethod
-        def evaluate(script: str, point: list[int]) -> bool:
-            assert point == [120, 60]
-            return True
-
-    class Candidates:
-        @staticmethod
-        def evaluate_all(script: str) -> list[int]:
-            # CSS matched a hidden React template at index 0 and the sole live
-            # control at index 1; only the latter is returned by the JS filter.
-            return [1]
-
-        @staticmethod
-        def nth(index: int) -> Candidate:
-            assert index == 1
-            return Candidate()
-
-    class Page:
-        viewport_size = {"width": 1280, "height": 800}
-
-        @staticmethod
-        def locator(selector: str) -> Candidates:
-            assert selector == 'input[placeholder^="Search Service"]'
-            return Candidates()
-
-    backend = OpenIMISEligibilityBackend(Page())  # type: ignore[arg-type]
-    handle = backend.locate_structural(
-        StructuralLocator(selector='input[placeholder^="Search Service"]')
+def test_browser_adapter_uses_the_hardened_playwright_actuation_guard() -> None:
+    assert (
+        OpenIMISEligibilityBackend.locate_structural
+        is PlaywrightBackend.locate_structural
     )
-    assert handle is not None
-    assert handle.point == (120, 60)
-    assert handle.candidate_count == 1
 
 
 def _report(*, success: bool, verdict: str | None, earlier_ok: bool = True):
