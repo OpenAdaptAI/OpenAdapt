@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v1.8.0 (2026-07-26)
+
+### Build System
+
+- **deps**: Bump astral-sh/setup-uv from 8.3.2 to 9.0.0
+  ([#1052](https://github.com/OpenAdaptAI/OpenAdapt/pull/1052),
+  [`e89db9e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e89db9e899b9b5c751c2e0c3f804af521b5d7c19))
+
+- **deps**: Update CodeQL actions together
+  ([#1054](https://github.com/OpenAdaptAI/OpenAdapt/pull/1054),
+  [`fe0309d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fe0309dfd6d84c79201db30a78733d92edb09147))
+
+### Documentation
+
+- Preserve research and legacy history in flagship README
+  ([#1056](https://github.com/OpenAdaptAI/OpenAdapt/pull/1056),
+  [`203ced5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/203ced5d1ae1517a99f2a9d3548e675e49fa5aab))
+
+### Features
+
+- Platform release manifest v1 + open-core licensing boundary
+  ([#1057](https://github.com/OpenAdaptAI/OpenAdapt/pull/1057),
+  [`984cb8b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/984cb8b0575174fa10bff29c34511d37c4e76620))
+
+
 ## v1.7.3 (2026-07-25)
 
 ### Bug Fixes
