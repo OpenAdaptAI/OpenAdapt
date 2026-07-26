@@ -85,14 +85,14 @@ export function Settings({
     }
   }
 
-  async function setOverlayPresentation(next: boolean) {
+  async function setOverlayExport(next: boolean) {
     setOverlayError(null);
     try {
       await saveOverlayPresentation(next);
       setIncludeOverlay(next);
     } catch {
       setOverlayError(
-        "This system could not apply the requested screen-capture policy. The previous setting was kept.",
+        "OpenAdapt could not save the presentation-export preference. Raw capture remains overlay-free, and the previous export setting was kept.",
       );
     }
   }
@@ -160,19 +160,20 @@ export function Settings({
             type="checkbox"
             checked={includeOverlay}
             onChange={(event) =>
-              void setOverlayPresentation(event.target.checked)
+              void setOverlayExport(event.target.checked)
             }
           />
           <span>
-            Include the OpenAdapt overlay in presentation recordings
+            Include the OpenAdapt overlay in presentation exports
             <span className="hint" style={{ display: "block" }}>
-              Off asks the operating system to exclude the overlay from capture.
-              Turn this on deliberately when exporting a product demonstration.
+              Raw recordings and evidence always exclude it. Turn this on to
+              add the status and exact retained target timeline to a separate
+              presentation export.
             </span>
           </span>
         </label>
         {overlayError && (
-          <Callout tone="warn" title="Overlay capture policy unchanged">
+          <Callout tone="warn" title="Overlay export preference unchanged">
             {overlayError}
           </Callout>
         )}

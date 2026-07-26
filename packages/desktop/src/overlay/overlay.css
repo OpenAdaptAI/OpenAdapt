@@ -11,15 +11,28 @@ body:has(.control-overlay),
   background: color-mix(in srgb, var(--slate-0) 94%, transparent);
   border: 1px solid var(--line-strong);
   border-top: 2px solid var(--run-lift);
+  border-radius: 16px;
+  bottom: 0;
   box-shadow: var(--shadow-pop);
   color: var(--fog-1);
   display: grid;
   font-size: var(--fs-caption);
   grid-template-columns: minmax(0, 1fr) auto;
-  height: 100vh;
+  left: 0;
   min-width: 0;
-  position: relative;
+  overflow: hidden;
+  position: absolute;
   user-select: none;
+  width: 100%;
+}
+
+.control-overlay.compact {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 72px;
+}
+
+.control-overlay.expanded {
+  height: 100vh;
 }
 
 .control-overlay.phase-recording {
@@ -40,52 +53,19 @@ body:has(.control-overlay),
   border-top-color: var(--success-lift);
 }
 
-.control-overlay.presentation {
-  background: var(--slate-0);
-  background: color-mix(in srgb, var(--slate-0) 88%, transparent);
-  border-width: 2px;
-}
-
 .overlay-main {
   align-items: center;
   cursor: default;
-  display: grid;
-  gap: var(--space-2);
-  grid-template-columns: auto minmax(0, 1fr);
-  min-width: 0;
-  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
-}
-
-.overlay-mark {
-  border-right: 1px solid var(--line-strong);
   display: flex;
-  flex-direction: column;
-  font-family: var(--font-display);
-  font-size: var(--fs-sm);
-  line-height: 1.05;
-  padding-right: var(--space-3);
-}
-
-.overlay-open {
-  color: var(--fog-2);
-  font-weight: var(--fw-regular);
-}
-
-.demo-badge {
-  color: var(--warn-lift);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.08em;
-  margin-top: var(--space-1);
-  text-transform: uppercase;
-  white-space: nowrap;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
 }
 
 .overlay-copy {
   min-width: 0;
 }
 
-.overlay-meta {
+.overlay-primary {
   align-items: center;
   display: flex;
   gap: var(--space-2);
@@ -93,29 +73,112 @@ body:has(.control-overlay),
   white-space: nowrap;
 }
 
-.overlay-meta strong {
+.overlay-primary strong {
   color: var(--fog-0);
   font-size: var(--fs-sm);
-  max-width: 160px;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.overlay-meta span {
-  color: var(--fog-3);
+.overlay-step,
+.overlay-profile,
+.overlay-safety {
   font-family: var(--font-mono);
+  font-size: 10px;
 }
 
-.overlay-status {
-  align-items: center;
+.overlay-step {
   color: var(--fog-2);
+}
+
+.overlay-profile {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  color: var(--fog-2);
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.overlay-safety {
+  background: color-mix(in srgb, var(--run-lift) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--run-lift) 50%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--fog-1);
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+}
+
+.phase-halted .overlay-safety,
+.phase-completed_unverified .overlay-safety,
+.phase-rolled_back .overlay-safety,
+.phase-failed .overlay-safety {
+  background: color-mix(in srgb, var(--warn-lift) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warn-lift) 50%, transparent);
+}
+
+.phase-verified .overlay-safety {
+  background: color-mix(in srgb, var(--success-lift) 14%, transparent);
+  border-color: color-mix(in srgb, var(--success-lift) 50%, transparent);
+}
+
+.overlay-secondary,
+.overlay-details {
+  align-items: center;
+  color: var(--fog-3);
   display: flex;
   gap: var(--space-2);
   margin-top: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
 }
 
+.overlay-rail {
+  align-items: center;
+  color: var(--fog-3);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  text-transform: uppercase;
+}
+
+.overlay-rail i {
+  background: var(--line-strong);
+  flex: 1;
+  height: 1px;
+}
+
+.overlay-secondary span,
+.overlay-details span {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay-secondary span + span::before {
+  color: var(--line-strong);
+  content: "·";
+  margin-right: var(--space-2);
+}
+
+.overlay-details {
+  border-top: 1px solid var(--line);
+  color: var(--fog-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.overlay-details strong {
+  color: var(--fog-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .overlay-pulse {
+  flex: 0 0 auto;
   background: var(--run-lift);
   border-radius: var(--radius-pill);
   height: 7px;

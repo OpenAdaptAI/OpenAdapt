@@ -1,60 +1,18 @@
-import type { ControlOverlayState, OverlayPhase } from "./state";
-import { overlayAllowsInteraction, overlayStatusText } from "./state";
+import type { ControlOverlayState } from "./state";
+import { overlayAllowsInteraction } from "./state";
+import {
+  CONTROL_OVERLAY_FRAME_VERSION,
+  CONTROL_OVERLAY_STATUS_BY_PHASE,
+  CONTROL_OVERLAY_WORKFLOW_LABEL_BY_MODE,
+  type ControlOverlayFrameV2,
+} from "./generated/contract";
 
-export const CONTROL_OVERLAY_FRAME_VERSION =
-  "openadapt.control-overlay-frame/v1" as const;
-
-/**
- * Deterministic, PHI-safe frame for UI rendering or later video composition.
- * The only time fields are compositor alignment metadata. There is deliberately
- * no screenshot, action target, typed value, identity, evidence payload, URL,
- * or free-form runtime text in this contract.
- */
-export interface ControlOverlayFrameV1 {
-  schema_version: typeof CONTROL_OVERLAY_FRAME_VERSION;
-  /** Stable semantic identity; repeated equivalent states share this ID. */
-  state_id: string;
-  /** Monotonic ordering for repeated visits to the same semantic state. */
-  event_sequence: number;
-  /** Wall-clock alignment for recordings produced outside the app. */
-  observed_at_unix_ms: number;
-  /** Monotonic alignment immune to wall-clock corrections. */
-  observed_at_monotonic_ms: number;
-  visible: boolean;
-  phase: OverlayPhase;
-  workflow_label: string;
-  mode: "demonstration" | "replay" | "governed" | "managed";
-  profile: "demo" | "standard" | "regulated" | null;
-  step: {
-    current: number | null;
-    total: number | null;
-  };
-  controls: {
-    pause: boolean;
-    resume: boolean;
-    stop: boolean;
-  };
-  status: string;
-  presentation: boolean;
-}
+export { CONTROL_OVERLAY_FRAME_VERSION } from "./generated/contract";
 
 export interface OverlayFrameTiming {
   event_sequence: number;
   observed_at_unix_ms: number;
   observed_at_monotonic_ms: number;
-}
-
-function presentationWorkflowLabel(state: ControlOverlayState): string {
-  switch (state.mode) {
-    case "demonstration":
-      return "Workflow demonstration";
-    case "governed":
-      return "Governed workflow";
-    case "managed":
-      return "Managed workflow";
-    default:
-      return "Workflow replay";
-  }
 }
 
 export function controlOverlayStateId(state: ControlOverlayState): string {
@@ -71,17 +29,16 @@ export function controlOverlayStateId(state: ControlOverlayState): string {
     controls.pause ? "pause" : "no-pause",
     controls.resume ? "resume" : "no-resume",
     controls.stop ? "stop" : "no-stop",
+    // V2 state identity binds the exact optional target projection. Desktop's
+    // local status producer never guesses a target; Flow supplies it later.
+    "no-target",
   ].join(":");
 }
 
 export function buildControlOverlayFrame(
   state: ControlOverlayState,
-  presentation: boolean,
   timing: OverlayFrameTiming,
-): ControlOverlayFrameV1 {
-  const workflowLabel = presentation
-    ? presentationWorkflowLabel(state)
-    : state.localWorkflowLabel;
+): ControlOverlayFrameV2 {
   const controls = overlayAllowsInteraction(state.phase)
     ? { ...state.controls }
     : { pause: false, resume: false, stop: false };
@@ -93,12 +50,13 @@ export function buildControlOverlayFrame(
     observed_at_monotonic_ms: timing.observed_at_monotonic_ms,
     visible: state.visible,
     phase: state.phase,
-    workflow_label: workflowLabel,
+    workflow_label: CONTROL_OVERLAY_WORKFLOW_LABEL_BY_MODE[state.mode],
     mode: state.mode,
     profile: state.profile,
     step: { current: state.currentStep, total: state.totalSteps },
     controls,
-    status: overlayStatusText(state),
-    presentation,
+    status: CONTROL_OVERLAY_STATUS_BY_PHASE[state.phase],
+    target_tracking: null,
+    presentation: true,
   };
 }

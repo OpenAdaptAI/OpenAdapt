@@ -1430,6 +1430,7 @@ dependencies = [
     { name = "loguru" },
     { name = "openadapt-capture" },
     { name = "openadapt-privacy" },
+    { name = "openadapt-types" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1471,6 +1472,7 @@ requires-dist = [
     { name = "openadapt-desktop", extras = ["enterprise"], marker = "extra == 'full'" },
     { name = "openadapt-flow", marker = "extra == 'build'", specifier = "==1.23.0" },
     { name = "openadapt-privacy", specifier = ">=1.0.0" },
+    { name = "openadapt-types", specifier = "==0.5.0" },
     { name = "psutil" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
@@ -1517,6 +1519,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/80/65/fb6ea671d07984a99d7f3f147e162d16428454185e5f84c4d7dd3d12d84f/openadapt_privacy-1.0.0.tar.gz", hash = "sha256:6756fd0e4df68df98217f8d8fa0cd67e9b8879610bb0822209656965e19b3d7d", size = 53443 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4c/fd/7bf1e621f372bbd620b272d3c1504b01e6ad60959322115ea35e198a0f80/openadapt_privacy-1.0.0-py3-none-any.whl", hash = "sha256:52fdf09c48466cd02d336e1129ad17d4e528e7cf06a484ba00c1a2aed06ad818", size = 17085 },
+]
+
+[[package]]
+name = "openadapt-types"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/55/b8/e3764cb9f6c0e9acbc6efdbd2f83f2883739c4e2cbf345f80512e30e155b/openadapt_types-0.5.0.tar.gz", hash = "sha256:89dd3d7240b6a61785934738a39fc7a4177fefc6d28f995a3876a6a1263adf65", size = 74240 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/bc/84e180a74811b92c8545136bb097aa6488709027f08614b78f9ed9cb193e/openadapt_types-0.5.0-py3-none-any.whl", hash = "sha256:d4740e0c7e29f258469bccd1ce5450c4b4d79b6e3107ac687e66a412b9a6341b", size = 42742 },
 ]
 
 [[package]]

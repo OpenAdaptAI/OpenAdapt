@@ -420,6 +420,10 @@ export interface ReplayProgress {
   profile?: "demo" | "standard" | "regulated" | null;
   current_step?: number | null;
   total_steps?: number | null;
+  duration_s?: number | null;
+  evidence_classes?: string[];
+  model_calls?: number | null;
+  external_network_calls?: "none" | "observed" | "unknown" | null;
 }
 
 export interface SyncState {
@@ -453,6 +457,23 @@ export interface FfmpegRuntimeStatus {
   path?: string | null;
   ffprobe_path?: string | null;
   detail?: string | null;
+}
+
+export interface PresentationExportStatus {
+  ready: boolean;
+  reason?: string | null;
+  media_sha256?: string;
+  media_frame_count?: number;
+}
+
+export interface PresentationExportResult {
+  ok: true;
+  path: string;
+  sha256: string;
+  source_media_sha256: string;
+  media_frame_count: number;
+  raw_media_unchanged: true;
+  placement_policy: "step-stable-collision-aware-bottom-corner";
 }
 
 // Runner lane (EXPERIMENTAL — outbound dispatch loop, spec §2).

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { emit, listen } from "@tauri-apps/api/event";
+import { emit } from "@tauri-apps/api/event";
 import {
   CMD,
   EVT,
   engineInvoke,
   engineTry,
+  ensureControlOverlayCaptureExcluded,
   inTauri,
   onEngineEvent,
   setControlOverlayInteractive,
-  setControlOverlayPresentation,
   setControlOverlayVisible,
 } from "../lib/engine";
 import type {
@@ -18,11 +18,15 @@ import type {
   RunStep,
   Workflow,
 } from "../lib/types";
-import { overlayPresentationEnabled } from "./preferences";
 import { buildControlOverlayFrame } from "./contract";
 import {
   EMPTY_OVERLAY_STATE,
   overlayAllowsInteraction,
+  overlayExpands,
+  overlayPlainStatus,
+  overlaySafetyLabel,
+  overlaySecondaryItems,
+  overlayShowsExecutionRail,
   reduceControlOverlay,
   type ControlOverlayInput,
 } from "./state";
@@ -47,12 +51,10 @@ function modeLabel(
 
 export function ControlOverlay() {
   const [state, setState] = useState(EMPTY_OVERLAY_STATE);
-  const [presentation, setPresentation] = useState(
-    overlayPresentationEnabled,
-  );
   const [busy, setBusy] = useState(false);
   const [controlError, setControlError] = useState(false);
   const [capturePolicyReady, setCapturePolicyReady] = useState(false);
+  const [nowUnixMs, setNowUnixMs] = useState(Date.now);
   const frameSequence = useRef(0);
 
   function send(input: ControlOverlayInput) {
@@ -61,7 +63,7 @@ export function ControlOverlay() {
 
   useEffect(() => {
     let cancelled = false;
-    void setControlOverlayPresentation(presentation)
+    void ensureControlOverlayCaptureExcluded()
       .then(() => {
         if (!cancelled) setCapturePolicyReady(true);
       })
@@ -91,7 +93,11 @@ export function ControlOverlay() {
         send({ kind: "recording-error" }),
       ),
       onEngineEvent<ReplayProgress>(EVT.REPLAY_PROGRESS, (progress) => {
-        send({ kind: "replay-progress", progress });
+        send({
+          kind: "replay-progress",
+          progress,
+          observedAtUnixMs: Date.now(),
+        });
         if (progress.state === "running") {
           void engineTry<Workflow[]>(CMD.GET_WORKFLOWS, {}, []).then(
             (workflows) => {
@@ -122,23 +128,22 @@ export function ControlOverlay() {
       }),
     ];
 
-    if (inTauri()) {
-      unsubs.push(
-        listen<boolean>("overlay://presentation", (event) =>
-          setPresentation(Boolean(event.payload)),
-        ),
-      );
-    }
-
     return () => {
       cancelled = true;
       unsubs.forEach((promise) => promise.then((stop) => stop()).catch(() => {}));
     };
-    // The native presentation event owns subsequent updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const interactive = overlayAllowsInteraction(state.phase);
+  const expanded = overlayExpands(state.phase);
+
+  useEffect(() => {
+    if (!state.visible || state.startedAtUnixMs === null || expanded) return;
+    setNowUnixMs(Date.now());
+    const timer = window.setInterval(() => setNowUnixMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [expanded, state.startedAtUnixMs, state.visible]);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,24 +176,13 @@ export function ControlOverlay() {
     return () => window.clearTimeout(timeout);
   }, [state.phase, state.visible]);
 
-  const displayFrame = useMemo(
-    () => {
-      return buildControlOverlayFrame(state, presentation, {
-        event_sequence: 0,
-        observed_at_unix_ms: 0,
-        observed_at_monotonic_ms: 0,
-      });
-    },
-    [presentation, state],
-  );
-
   useEffect(() => {
     if (!inTauri()) return;
     // Always broadcast the presentation-safe projection. A future deterministic
     // video compositor can consume this exact event without seeing the local
     // workflow label, even when the local overlay itself is content-protected.
     frameSequence.current += 1;
-    const safeFrame = buildControlOverlayFrame(state, true, {
+    const safeFrame = buildControlOverlayFrame(state, {
       event_sequence: frameSequence.current,
       observed_at_unix_ms: Date.now(),
       observed_at_monotonic_ms: Math.round(performance.now() * 1000) / 1000,
@@ -202,8 +196,12 @@ export function ControlOverlay() {
     }
     if (state.currentStep !== null) return `Step ${state.currentStep}`;
     if (state.totalSteps !== null) return `${state.totalSteps} steps`;
-    return "";
+    return "Step pending";
   }, [state.currentStep, state.totalSteps]);
+  const secondaryItems = useMemo(
+    () => overlaySecondaryItems(state, nowUnixMs),
+    [nowUnixMs, state],
+  );
 
   async function control(action: "pause" | "resume" | "stop") {
     const supported =
@@ -246,25 +244,44 @@ export function ControlOverlay() {
 
   return (
     <section
-      className={`control-overlay phase-${state.phase} ${presentation ? "presentation" : ""}`}
+      className={`control-overlay phase-${state.phase} ${expanded ? "expanded" : "compact"}`}
       aria-label="OpenAdapt automation controls"
     >
       <div className="overlay-main" data-tauri-drag-region>
-        <div className="overlay-mark" aria-label="OpenAdapt">
-          <span className="overlay-open">Open</span>
-          <strong>Adapt</strong>
-          {presentation && <span className="demo-badge">demo view</span>}
-        </div>
         <div className="overlay-copy" data-tauri-drag-region>
-          <div className="overlay-meta" data-tauri-drag-region>
-            <strong>{displayFrame.workflow_label}</strong>
-            <span>{modeLabel(state.mode, state.profile)}</span>
-            {stepLabel && <span>{stepLabel}</span>}
-          </div>
-          <div className="overlay-status" role="status" aria-live="polite">
+          <div className="overlay-primary" role="status" aria-live="polite">
             <span className="overlay-pulse" aria-hidden="true" />
-            {displayFrame.status}
+            <strong>{overlayPlainStatus(state.phase)}</strong>
+            <span className="overlay-step">{stepLabel}</span>
+            {state.profile && (
+              <span className="overlay-profile">{state.profile}</span>
+            )}
+            <span className="overlay-safety">
+              {overlaySafetyLabel(state.phase)}
+            </span>
           </div>
+          {overlayShowsExecutionRail(state.phase) && (
+            <div className="overlay-rail" aria-label="Resolve, act, verify">
+              <span>Resolve</span>
+              <i aria-hidden="true" />
+              <span>Act</span>
+              <i aria-hidden="true" />
+              <span>Verify</span>
+            </div>
+          )}
+          {secondaryItems.length > 0 && (
+            <div className="overlay-secondary" data-tauri-drag-region>
+              {secondaryItems.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          )}
+          {expanded && (
+            <div className="overlay-details" data-tauri-drag-region>
+              <strong>{state.localWorkflowLabel}</strong>
+              <span>{modeLabel(state.mode, state.profile)}</span>
+            </div>
+          )}
         </div>
       </div>
 

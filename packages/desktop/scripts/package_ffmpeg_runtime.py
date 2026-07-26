@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 
 FFMPEG_VERSION = "8.1.2"
-RUNTIME_REVISION = "r1"
+RUNTIME_REVISION = "r2"
 SOURCE_URL = f"https://ffmpeg.org/releases/ffmpeg-{FFMPEG_VERSION}.tar.xz"
 SOURCE_SIGNATURE_URL = f"{SOURCE_URL}.asc"
 SOURCE_SHA256 = "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
@@ -122,8 +122,8 @@ def manifest_entry(bundle_dir: Path, archive: Path, target: str, build_id: str) 
                 "--disable-network",
             ],
             "forbidden_build_flags": ["--enable-gpl", "--enable-nonfree"],
-            "required_encoders": ["mpeg4", "png"],
-            "required_muxers": ["mp4", "image2pipe"],
+            "required_encoders": ["mpeg4", "png", "rawvideo"],
+            "required_muxers": ["mp4", "image2pipe", "rawvideo"],
         },
         "source": {
             "url": SOURCE_URL,

@@ -81,6 +81,7 @@ def test_record_lifecycle_uses_workflow_command_timeout() -> None:
 
     assert '"start_recording"' in workflow_match
     assert '"stop_recording"' in workflow_match
+    assert '"export_presentation_video"' in workflow_match
 
 
 def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:

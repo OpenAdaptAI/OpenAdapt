@@ -199,6 +199,8 @@ class EngineDispatcher:
             "get_workflows": self.get_workflows,
             "get_captures": self.get_captures,
             "get_storage_usage": self.get_storage_usage,
+            "get_presentation_export_status": self.get_presentation_export_status,
+            "export_presentation_video": self.export_presentation_video,
             # the loop: compile -> replay/run -> teach
             "compile_recording": self.compile_recording,
             "replay_workflow": self.replay_workflow,
@@ -596,6 +598,31 @@ class EngineDispatcher:
         )
         return {"captures": captures}
 
+    def _presentation_capture_dir(self, params: dict[str, Any]) -> Path:
+        capture_id = str(params.get("capture_id") or "")
+        capture = self.services.db.get_capture(capture_id) if capture_id else None
+        if not capture:
+            raise ValueError(f"Unknown capture {capture_id or '<missing>'}")
+        capture_dir = Path(str(capture["capture_path"])).resolve(strict=True)
+        captures_root = (self.config.data_dir / "captures").resolve(strict=False)
+        try:
+            capture_dir.relative_to(captures_root)
+        except ValueError as error:
+            raise ValueError("Capture path is outside the local capture boundary") from error
+        if capture_dir == captures_root or not capture_dir.is_dir():
+            raise ValueError("Capture path is not a capture directory")
+        return capture_dir
+
+    def get_presentation_export_status(self, **params: Any) -> dict:
+        from engine.presentation_export import presentation_export_status
+
+        return presentation_export_status(self._presentation_capture_dir(params))
+
+    def export_presentation_video(self, **params: Any) -> dict:
+        from engine.presentation_export import export_presentation_video
+
+        return export_presentation_video(self._presentation_capture_dir(params))
+
     def get_storage_usage(self, **params: Any) -> dict:
         """Return local storage usage."""
         return self.services.storage.get_storage_usage()
@@ -815,6 +842,22 @@ class EngineDispatcher:
                 ),
                 "current_step": len(report.get("steps") or []) or None,
                 "total_steps": report.get("total_steps"),
+                "duration_s": (report.get("metrics") or {}).get("duration_s"),
+                "evidence_classes": (
+                    report.get("outcome_details", {}).get("evidence_classes")
+                    if isinstance(report.get("outcome_details"), dict)
+                    else []
+                ),
+                "model_calls": (
+                    report.get("outcome_details", {}).get("model_calls")
+                    if isinstance(report.get("outcome_details"), dict)
+                    else None
+                ),
+                "external_network_calls": (
+                    report.get("outcome_details", {}).get("external_network_calls")
+                    if isinstance(report.get("outcome_details"), dict)
+                    else None
+                ),
             },
         )
         return report

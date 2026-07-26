@@ -3,8 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import {
   engineInvoke,
   engineTry,
+  ensureControlOverlayCaptureExcluded,
   setControlOverlayInteractive,
-  setControlOverlayPresentation,
   setControlOverlayVisible,
 } from "../lib/engine";
 import { ControlOverlay } from "./ControlOverlay";
@@ -15,10 +15,10 @@ vi.mock("../lib/engine", async (importOriginal) => {
     ...original,
     engineInvoke: vi.fn(),
     engineTry: vi.fn(),
+    ensureControlOverlayCaptureExcluded: vi.fn(() => Promise.resolve()),
     inTauri: vi.fn(() => false),
     onEngineEvent: vi.fn(() => Promise.resolve(() => {})),
     setControlOverlayInteractive: vi.fn(() => Promise.resolve()),
-    setControlOverlayPresentation: vi.fn(() => Promise.resolve()),
     setControlOverlayVisible: vi.fn(() => Promise.resolve()),
   };
 });
@@ -29,11 +29,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-it("keeps an active presentation overlay click-through and hides its controls", async () => {
-  window.localStorage.setItem(
-    "openadapt.control-overlay.include-in-recordings.v1",
-    "true",
-  );
+it("keeps an active overlay capture-excluded and hides its controls", async () => {
   vi.mocked(engineTry).mockResolvedValue({
     recording: true,
     paused: false,
@@ -42,9 +38,11 @@ it("keeps an active presentation overlay click-through and hides its controls", 
 
   render(<ControlOverlay />);
 
-  expect(await screen.findByText("Watching your demonstration")).toBeTruthy();
+  expect(await screen.findByText("Recording demonstration")).toBeTruthy();
+  expect(screen.getByText("Step pending")).toBeTruthy();
+  expect(screen.getByText("LOCAL CAPTURE")).toBeTruthy();
   await waitFor(() =>
-    expect(setControlOverlayPresentation).toHaveBeenCalledWith(true),
+    expect(ensureControlOverlayCaptureExcluded).toHaveBeenCalledOnce(),
   );
   await waitFor(() =>
     expect(setControlOverlayInteractive).toHaveBeenCalledWith(false),

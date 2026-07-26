@@ -411,6 +411,32 @@ class TestRecordingCommands:
 
 
 class TestLibraryCommands:
+    def test_presentation_export_is_capture_scoped(self, deps, monkeypatch, tmp_path) -> None:
+        disp, db, _events = deps
+        capture = disp.config.data_dir / "captures" / "capture"
+        capture.mkdir(parents=True)
+        db.insert_capture("cap-present", str(capture), "2026-07-25T00:00:00Z")
+        inspected: list[Path] = []
+        monkeypatch.setattr(
+            "engine.presentation_export.presentation_export_status",
+            lambda path: inspected.append(path) or {"ready": True},
+        )
+
+        assert disp.dispatch(
+            "get_presentation_export_status",
+            {"capture_id": "cap-present"},
+        ) == {"ready": True}
+        assert inspected == [capture]
+
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        db.insert_capture("cap-outside", str(outside), "2026-07-25T00:00:00Z")
+        with pytest.raises(ValueError, match="outside the local capture boundary"):
+            disp.dispatch(
+                "get_presentation_export_status",
+                {"capture_id": "cap-outside"},
+            )
+
     def test_get_workflows_from_bundles(self, deps) -> None:
         disp, db, _e = deps
         db.insert_bundle("bnd1", "/tmp/b", capture_id="cap1")
@@ -870,6 +896,9 @@ class TestLibraryCommands:
         assert states == ["running", progress_state]
         terminal = [data for event, data in events if event == "replay_progress"][-1]
         assert terminal["outcome"] == outcome
+        assert terminal["evidence_classes"] == details["evidence_classes"]
+        assert terminal["model_calls"] == 0
+        assert terminal["external_network_calls"] == "none"
         assert db.list_runs(limit=1)[0]["status"] == outcome
         if outcome == "HALTED":
             assert result["halt"]["reason"]

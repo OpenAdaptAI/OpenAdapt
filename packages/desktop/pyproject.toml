@@ -27,6 +27,9 @@ classifiers = [
 dependencies = [
     "openadapt-capture>=1.1.0",
     "openadapt-privacy>=1.0.0",
+    # Exact cross-surface status/target contract used by the presentation
+    # exporter and by the generated TypeScript projection checked into src/.
+    "openadapt-types==0.5.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "PyYAML>=6.0,<7",

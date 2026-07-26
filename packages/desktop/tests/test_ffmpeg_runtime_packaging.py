@@ -57,7 +57,7 @@ def test_runtime_archive_is_deterministic_and_manifest_is_exact(tmp_path: Path) 
         bundle,
         archive_a,
         "aarch64-apple-darwin",
-        f"ffmpeg-{FFMPEG_VERSION}-r1-aarch64-apple-darwin",
+        f"ffmpeg-{FFMPEG_VERSION}-r2-aarch64-apple-darwin",
     )
     assert entry["source"]["sha256"] == SOURCE_SHA256
     assert entry["source"]["signing_key_fingerprint"] == SIGNING_KEY_FINGERPRINT
@@ -70,6 +70,8 @@ def test_runtime_archive_is_deterministic_and_manifest_is_exact(tmp_path: Path) 
         "--enable-gpl",
         "--enable-nonfree",
     ]
+    assert "rawvideo" in entry["probe"]["required_encoders"]
+    assert "rawvideo" in entry["probe"]["required_muxers"]
 
 
 def test_runtime_manifest_refuses_missing_probe_or_license(tmp_path: Path) -> None:
@@ -157,7 +159,7 @@ def test_runtime_workflow_is_pinned_attested_and_separate_from_installers() -> N
         "--enable-ffmpeg",
         "--enable-ffprobe",
         "--enable-demuxer=concat,image2,mov,rawvideo",
-        "--enable-muxer=mp4,null,image2,image2pipe",
+        "--enable-muxer=mp4,null,image2,image2pipe,rawvideo",
         "--enable-filter=scale,format,setpts,select",
     ):
         assert flag in script
@@ -165,6 +167,8 @@ def test_runtime_workflow_is_pinned_attested_and_separate_from_installers() -> N
     assert "h264_mf" not in script
     assert "--enable-mediafoundation" not in script
     assert "software_fallback_encoder" in script
+    assert "--enable-encoder=png,mpeg4,rawvideo" in script
+    assert "-c:v rawvideo -f rawvideo" in script
 
 
 def test_runtime_builder_normalizes_windows_paths_and_materializes_smoke_bytes() -> None:

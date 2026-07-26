@@ -123,8 +123,13 @@ impl SidecarInner {
         }
 
         let timeout = match cmd {
-            "start_recording" | "stop_recording" | "compile_recording" | "replay_workflow"
-            | "run_workflow" | "teach_fix" => WORKFLOW_COMMAND_TIMEOUT,
+            "start_recording"
+            | "stop_recording"
+            | "compile_recording"
+            | "replay_workflow"
+            | "run_workflow"
+            | "teach_fix"
+            | "export_presentation_video" => WORKFLOW_COMMAND_TIMEOUT,
             _ => COMMAND_TIMEOUT,
         };
         match tokio::time::timeout(timeout, rx).await {

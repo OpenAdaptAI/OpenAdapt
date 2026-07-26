@@ -2,7 +2,7 @@
 set -euo pipefail
 
 FFMPEG_VERSION="${FFMPEG_VERSION:-8.1.2}"
-RUNTIME_REVISION="${RUNTIME_REVISION:-r1}"
+RUNTIME_REVISION="${RUNTIME_REVISION:-r2}"
 SOURCE_SHA256="${SOURCE_SHA256:-464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c}"
 TARGET_TRIPLE="${TARGET_TRIPLE:?TARGET_TRIPLE is required}"
 SOURCE_ARCHIVE="${SOURCE_ARCHIVE:?SOURCE_ARCHIVE is required}"
@@ -65,7 +65,7 @@ common_args=(
   "--enable-swscale"
   "--enable-protocol=file,pipe"
   "--enable-demuxer=concat,image2,mov,rawvideo"
-  "--enable-muxer=mp4,null,image2,image2pipe"
+  "--enable-muxer=mp4,null,image2,image2pipe,rawvideo"
   "--enable-decoder=png,mpeg4,h264,rawvideo"
   "--enable-parser=h264,mpeg4video"
   "--enable-filter=scale,format,setpts,select"
@@ -79,7 +79,7 @@ case "${TARGET_TRIPLE}" in
       "--arch=arm64"
       "--cc=clang"
       "--enable-videotoolbox"
-      "--enable-encoder=png,mpeg4,h264_videotoolbox"
+      "--enable-encoder=png,mpeg4,rawvideo,h264_videotoolbox"
     )
     hardware_encoder="h264_videotoolbox"
     ;;
@@ -88,7 +88,7 @@ case "${TARGET_TRIPLE}" in
       "--arch=x86_64"
       "--cc=clang"
       "--enable-videotoolbox"
-      "--enable-encoder=png,mpeg4,h264_videotoolbox"
+      "--enable-encoder=png,mpeg4,rawvideo,h264_videotoolbox"
     )
     hardware_encoder="h264_videotoolbox"
     ;;
@@ -97,7 +97,7 @@ case "${TARGET_TRIPLE}" in
       "--arch=x86_64"
       "--cc=gcc"
       "--pkg-config-flags=--static"
-      "--enable-encoder=png,mpeg4"
+      "--enable-encoder=png,mpeg4,rawvideo"
     )
     ;;
   x86_64-pc-windows-msvc)
@@ -110,7 +110,7 @@ case "${TARGET_TRIPLE}" in
       "--cc=gcc"
       "--pkg-config-flags=--static"
       "--extra-ldflags=-static"
-      "--enable-encoder=png,mpeg4"
+      "--enable-encoder=png,mpeg4,rawvideo"
     )
     ;;
   *)
@@ -177,9 +177,13 @@ grep -Eq '^[[:space:]]*V[^[:space:]]*[[:space:]]+mpeg4[[:space:]]' \
   "${bundle_dir}/PROVENANCE/ffmpeg-encoders.txt"
 grep -Eq '^[[:space:]]*V[^[:space:]]*[[:space:]]+png[[:space:]]' \
   "${bundle_dir}/PROVENANCE/ffmpeg-encoders.txt"
+grep -Eq '^[[:space:]]*V[^[:space:]]*[[:space:]]+rawvideo[[:space:]]' \
+  "${bundle_dir}/PROVENANCE/ffmpeg-encoders.txt"
 grep -Eq '^[[:space:]]*E[[:space:]]+mp4[[:space:]]' \
   "${bundle_dir}/PROVENANCE/ffmpeg-muxers.txt"
 grep -Eq '^[[:space:]]*E[[:space:]]+image2pipe[[:space:]]' \
+  "${bundle_dir}/PROVENANCE/ffmpeg-muxers.txt"
+grep -Eq '^[[:space:]]*E[[:space:]]+rawvideo[[:space:]]' \
   "${bundle_dir}/PROVENANCE/ffmpeg-muxers.txt"
 
 case "${TARGET_TRIPLE}" in
@@ -294,6 +298,9 @@ PY
 "${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
   -i "${smoke_dir}/raw-input.mp4" -vf 'select=eq(n\,0)' -frames:v 1 \
   -f image2pipe -vcodec png -y "${smoke_dir}/decoded.png"
+"${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
+  -i "${smoke_dir}/raw-input.mp4" -frames:v 25 -pix_fmt rgba \
+  -c:v rawvideo -f rawvideo -y "${smoke_dir}/decoded.rgba"
 
 "${python_cmd}" - "${smoke_dir}" <<'PY'
 import json
@@ -307,6 +314,7 @@ assert video["codec_name"] == "mpeg4"
 assert (video["width"], video["height"]) == (16, 16)
 assert int(video["nb_read_frames"]) == 25
 assert (root / "decoded.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+assert len((root / "decoded.rgba").read_bytes()) == 25 * 16 * 16 * 4
 PY
 
 if [[ -n "${hardware_encoder}" ]]; then

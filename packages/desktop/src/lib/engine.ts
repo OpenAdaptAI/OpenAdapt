@@ -25,6 +25,8 @@ export const CMD = {
   GET_WORKFLOWS: "get_workflows",
   GET_CAPTURES: "get_captures",
   GET_STORAGE_USAGE: "get_storage_usage",
+  GET_PRESENTATION_EXPORT_STATUS: "get_presentation_export_status",
+  EXPORT_PRESENTATION_VIDEO: "export_presentation_video",
   // the loop: compile -> replay/run -> teach
   COMPILE_RECORDING: "compile_recording",
   REPLAY_WORKFLOW: "replay_workflow",
@@ -144,19 +146,13 @@ export async function setControlOverlayInteractive(
   await invoke("set_control_overlay_interactive", { interactive });
 }
 
-/**
- * Choose whether the overlay is deliberately visible in OS-level recordings.
- * The installed app defaults to capture exclusion; demo export is opt-in.
- */
-export async function setControlOverlayPresentation(
-  includeInRecordings: boolean,
-): Promise<void> {
+/** Enforce capture exclusion before the native overlay is shown. */
+export async function ensureControlOverlayCaptureExcluded(): Promise<void> {
   if (!inTauri()) return;
-  await invoke("set_control_overlay_presentation", {
-    includeInRecordings,
-  });
+  await invoke("ensure_control_overlay_capture_excluded");
 }
 
+/** Publish the post-composition preference; raw capture stays excluded. */
 const FFMPEG_BROWSER_FALLBACK: FfmpegRuntimeStatus = {
   phase: "ready",
   source: "managed",

@@ -13,7 +13,7 @@
 // so the engine (W1) and tray (W3) agents can align on the same wire.
 
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::sidecar::SidecarHandle;
 
@@ -88,28 +88,15 @@ pub fn set_control_overlay_interactive(app: AppHandle, interactive: bool) -> Res
     Ok(())
 }
 
-/// Deliberately include or exclude the overlay from OS-level screen capture.
-///
-/// Normal operation is content-protected. Presentation mode is an explicit
-/// operator choice used when exporting a product demonstration. Platform
-/// implementations that cannot enforce capture exclusion return an error so
-/// the UI never promises privacy it cannot provide. This command deliberately
-/// does not alter pointer or focus behavior.
+/// Enforce OS-level capture exclusion before the overlay becomes visible.
 #[tauri::command]
-pub fn set_control_overlay_presentation(
-    app: AppHandle,
-    include_in_recordings: bool,
-) -> Result<(), String> {
+pub fn ensure_control_overlay_capture_excluded(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("control-overlay")
         .ok_or_else(|| "control overlay window is unavailable".to_string())?;
     window
-        .set_content_protected(!include_in_recordings)
-        .map_err(|error| {
-            format!("this platform could not change overlay capture policy: {error}")
-        })?;
-    app.emit("overlay://presentation", include_in_recordings)
-        .map_err(|error| format!("could not notify the control overlay: {error}"))
+        .set_content_protected(true)
+        .map_err(|error| format!("this platform could not exclude the overlay: {error}"))
 }
 
 /// Open a URL in the user's default system browser.

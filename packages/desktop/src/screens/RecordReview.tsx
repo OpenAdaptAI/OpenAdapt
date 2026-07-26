@@ -7,7 +7,10 @@ import type {
   BrowserRuntimeStatus,
   EngineStatus,
   ExecutionTarget,
+  PresentationExportResult,
+  PresentationExportStatus,
 } from "../lib/types";
+import { overlayPresentationEnabled } from "../overlay/preferences";
 import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
 import { Button, Card, CardHead, Callout, Field, Pill } from "../ui/primitives";
 
@@ -36,6 +39,12 @@ export function RecordReview({
   const [target, setTarget] = useState<ExecutionTarget>({ backend: "web" });
   const [task, setTask] = useState("");
   const [runtime, setRuntime] = useState<BrowserRuntimeStatus | null>(null);
+  const [presentationStatus, setPresentationStatus] =
+    useState<PresentationExportStatus | null>(null);
+  const [presentationResult, setPresentationResult] =
+    useState<PresentationExportResult | null>(null);
+  const [presentationError, setPresentationError] = useState<string | null>(null);
+  const [exportingPresentation, setExportingPresentation] = useState(false);
   const fieldPrefix = useId();
 
   async function refresh() {
@@ -61,6 +70,20 @@ export function RecordReview({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setPresentationResult(null);
+    setPresentationError(null);
+    if (!lastCapture || !overlayPresentationEnabled()) {
+      setPresentationStatus(null);
+      return;
+    }
+    void engineTry<PresentationExportStatus>(
+      CMD.GET_PRESENTATION_EXPORT_STATUS,
+      { capture_id: lastCapture },
+      { ready: false, reason: "The local engine could not inspect this recording." },
+    ).then(setPresentationStatus);
+  }, [lastCapture]);
 
   async function start() {
     setBusy(true);
@@ -97,6 +120,23 @@ export function RecordReview({
       if (r?.workflow_id) onCompiled(r.workflow_id, target);
     } finally {
       setPhase("idle");
+    }
+  }
+
+  async function exportPresentation() {
+    if (!lastCapture || !presentationStatus?.ready) return;
+    setExportingPresentation(true);
+    setPresentationError(null);
+    try {
+      const result = await engineInvoke<PresentationExportResult>(
+        CMD.EXPORT_PRESENTATION_VIDEO,
+        { capture_id: lastCapture },
+      );
+      setPresentationResult(result);
+    } catch (error) {
+      setPresentationError(String(error));
+    } finally {
+      setExportingPresentation(false);
     }
   }
 
@@ -250,7 +290,35 @@ export function RecordReview({
             >
               Scrub &amp; inspect PHI
             </Button>
+            {presentationStatus?.ready && (
+              <Button
+                variant="ghost"
+                disabled={exportingPresentation}
+                onClick={exportPresentation}
+              >
+                {exportingPresentation
+                  ? "Exporting presentation…"
+                  : "Export presentation video"}
+              </Button>
+            )}
           </div>
+          {presentationStatus && !presentationStatus.ready && (
+            <p className="page-sub" style={{ marginTop: "var(--space-3)" }}>
+              Presentation export will appear when this recording retains an
+              exact OpenAdapt status timeline bound to its raw video.
+            </p>
+          )}
+          {presentationResult && (
+            <Callout tone="info" title="Presentation video exported">
+              A separate MP4 was created at {presentationResult.path}. The raw
+              recording and its SHA-256 were unchanged.
+            </Callout>
+          )}
+          {presentationError && (
+            <Callout tone="warn" title="Presentation export stopped safely">
+              {presentationError}
+            </Callout>
+          )}
         </Card>
       )}
     </div>

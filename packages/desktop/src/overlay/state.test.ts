@@ -2,6 +2,8 @@ import { expect, it } from "vitest";
 import type { ReplayProgress } from "../lib/types";
 import {
   EMPTY_OVERLAY_STATE,
+  overlayExpands,
+  overlaySecondaryItems,
   reduceControlOverlay,
 } from "./state";
 import {
@@ -52,6 +54,7 @@ it("preserves precise terminal outcomes and bounded step progress", () => {
   const active = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
     kind: "replay-progress",
     progress: running,
+    observedAtUnixMs: 1_000,
   });
   const halted = reduceControlOverlay(active, {
     kind: "replay-progress",
@@ -69,6 +72,8 @@ it("preserves precise terminal outcomes and bounded step progress", () => {
     mode: "governed",
     totalSteps: 7,
     currentStep: null,
+    surface: "citrix",
+    startedAtUnixMs: 1_000,
   });
   expect(halted).toMatchObject({
     phase: "halted",
@@ -76,6 +81,36 @@ it("preserves precise terminal outcomes and bounded step progress", () => {
     currentStep: 3,
     totalSteps: 7,
   });
+});
+
+it("keeps active execution compact and expands only safe boundaries", () => {
+  expect(overlayExpands("executing")).toBe(false);
+  expect(overlayExpands("verifying")).toBe(false);
+  expect(overlayExpands("paused")).toBe(true);
+  expect(overlayExpands("halted")).toBe(true);
+  expect(overlayExpands("verified")).toBe(true);
+});
+
+it("shows only authoritative compact execution details in plain language", () => {
+  const details = overlaySecondaryItems(
+    {
+      ...EMPTY_OVERLAY_STATE,
+      surface: "citrix",
+      startedAtUnixMs: 1_000,
+      evidenceClasses: ["identity", "effect_tier_2"],
+      modelCalls: 0,
+      externalNetworkCalls: "none",
+    },
+    66_000,
+  );
+
+  expect(details).toEqual([
+    "Citrix",
+    "1:05",
+    "Effect evidence: separate read-only session (Tier 2)",
+    "0 model calls",
+    "No external network calls",
+  ]);
 });
 
 it("keeps workflow identifiers and names out of shared overlay state", () => {
@@ -150,7 +185,7 @@ it("exports a deterministic presentation frame without the local workflow label"
     currentStep: 2,
     totalSteps: 5,
   };
-  const frame = buildControlOverlayFrame(local, true, {
+  const frame = buildControlOverlayFrame(local, {
     event_sequence: 4,
     observed_at_unix_ms: 1785000000123,
     observed_at_monotonic_ms: 1234.5,
@@ -159,7 +194,7 @@ it("exports a deterministic presentation frame without the local workflow label"
   expect(frame).toEqual({
     schema_version: CONTROL_OVERLAY_FRAME_VERSION,
     state_id:
-      "visible:executing:governed:regulated:2:5:no-pause:no-resume:no-stop",
+      "visible:executing:governed:regulated:2:5:no-pause:no-resume:no-stop:no-target",
     event_sequence: 4,
     observed_at_unix_ms: 1785000000123,
     observed_at_monotonic_ms: 1234.5,
@@ -171,6 +206,7 @@ it("exports a deterministic presentation frame without the local workflow label"
     step: { current: 2, total: 5 },
     controls: { pause: false, resume: false, stop: false },
     status: "Executing with verification gates",
+    target_tracking: null,
     presentation: true,
   });
   expect(JSON.stringify(frame)).not.toContain("Jane Doe");
