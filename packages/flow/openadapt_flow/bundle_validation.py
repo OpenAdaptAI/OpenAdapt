@@ -41,8 +41,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Iterator, Literal, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -55,6 +56,7 @@ from openadapt_flow.ir import (
     State,
     StateKind,
     Step,
+    StructuralLocator,
     Workflow,
 )
 from openadapt_flow.traversal import iter_workflow_steps
@@ -78,6 +80,103 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+@dataclass(frozen=True)
+class _SealedCanonicalOmission:
+    """One reviewed compatibility rule for a historical digest schema.
+
+    Exact model ownership is intentional: a same-named field on another model,
+    a mapping key, or a future subclass remains sealed unless it receives its
+    own explicit compatibility decision.
+    """
+
+    owner: type[BaseModel]
+    field_name: str
+    omitted_values: tuple[Any, ...]
+    reason: str
+
+
+# Canonical omission rules are part of the sealed-artifact protocol, not a
+# general Pydantic serialization policy. Schema v2 predates these semantically
+# empty additive defaults. Adding another field to a sealed model must either
+# change the digest or add a reviewed, version-scoped rule plus a historical
+# seal regression here. Rules never carry into a future schema implicitly.
+# In particular, never replace this registry with recursive key-name removal or
+# global ``exclude_defaults``: either would silently weaken unrelated fields.
+_SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
+    int, tuple[_SealedCanonicalOmission, ...]
+] = {
+    2: (
+        _SealedCanonicalOmission(
+            owner=Workflow,
+            field_name="interstitials",
+            omitted_values=([],),
+            reason="empty interstitial declarations predate their v2 field",
+        ),
+        _SealedCanonicalOmission(
+            owner=StructuralLocator,
+            field_name="frame_path",
+            omitted_values=(None, []),
+            reason="absent/empty paths both mean the pre-field top document",
+        ),
+    ),
+}
+
+for _schema_rules in _SEALED_CANONICAL_OMISSIONS_BY_VERSION.values():
+    for _rule in _schema_rules:
+        if _rule.field_name not in _rule.owner.model_fields:  # pragma: no cover
+            raise RuntimeError(
+                "sealed canonicalization rule names missing field "
+                f"{_rule.owner.__name__}.{_rule.field_name}"
+            )
+
+
+def _apply_sealed_canonical_omissions(
+    model: object,
+    rendered: object,
+    *,
+    schema_version: int,
+) -> None:
+    """Apply reviewed omissions to their exact owning model and version."""
+
+    # Deliberately do not inherit rules into a future schema version. A schema
+    # bump must explicitly choose its canonical representation instead of
+    # silently carrying forward every historical compatibility exception.
+    rules = _SEALED_CANONICAL_OMISSIONS_BY_VERSION.get(schema_version, ())
+    if isinstance(model, BaseModel) and isinstance(rendered, dict):
+        for rule in rules:
+            if (
+                type(model) is rule.owner
+                and rule.field_name in rendered
+                and any(
+                    getattr(model, rule.field_name) == value
+                    for value in rule.omitted_values
+                )
+            ):
+                rendered.pop(rule.field_name)
+        for field_name in type(model).model_fields:
+            if field_name in rendered:
+                _apply_sealed_canonical_omissions(
+                    getattr(model, field_name),
+                    rendered[field_name],
+                    schema_version=schema_version,
+                )
+    elif isinstance(model, dict) and isinstance(rendered, dict):
+        for key, value in model.items():
+            if key in rendered:
+                _apply_sealed_canonical_omissions(
+                    value,
+                    rendered[key],
+                    schema_version=schema_version,
+                )
+    elif isinstance(model, (list, tuple)) and isinstance(rendered, list):
+        for value, rendered_value in zip(model, rendered, strict=True):
+            _apply_sealed_canonical_omissions(
+                value,
+                rendered_value,
+                schema_version=schema_version,
+            )
 
 
 def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
@@ -174,14 +273,11 @@ def _workflow_content(workflow: "Workflow") -> dict:
     manifest, so it must be computed over everything else) so the digest is a
     pure function of the semantic bundle content."""
     content = workflow.model_dump(mode="json", exclude={"manifest"})
-    # ``interstitials`` was added additively while schema v2 bundles were
-    # already in circulation.  An empty list has no runtime semantics, so keep
-    # its canonical representation identical to the pre-field representation.
-    # This preserves every existing sealed v2 digest without weakening the
-    # seal: a non-empty declaration remains in the digest, and removing or
-    # changing one still fails integrity verification.
-    if not content.get("interstitials"):
-        content.pop("interstitials", None)
+    _apply_sealed_canonical_omissions(
+        workflow,
+        content,
+        schema_version=workflow.schema_version,
+    )
     return content
 
 

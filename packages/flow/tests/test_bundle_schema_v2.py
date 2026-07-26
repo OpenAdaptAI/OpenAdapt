@@ -7,13 +7,16 @@ Playwright, OCR, or model deps) and exercises save/load on ``tmp_path``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import pytest
 
 from openadapt_flow import bundle_validation as bv
+from openadapt_flow import crypto
 from openadapt_flow.ir import (
     SCHEMA_VERSION,
+    TEMPLATE_AAD,
     ActionKind,
     Anchor,
     LoopSpec,
@@ -23,6 +26,7 @@ from openadapt_flow.ir import (
     State,
     StateKind,
     Step,
+    StructuralLocator,
     Transition,
     Workflow,
 )
@@ -88,6 +92,130 @@ def _good_program_workflow() -> Workflow:
         terminal("done"),
     )
     return Workflow(name="good-prog", program=program)
+
+
+_FIXED_CREATED_AT = "2026-01-02T03:04:05+00:00"
+_SYNTHETIC_LEGACY_DIGESTS = {
+    # Fixed synthetic fixtures: these hashes are deliberately not derived from
+    # any customer or private bundle. They make the historical serialization
+    # contract visible and prevent the test from merely agreeing with itself.
+    "linear": "b7bdb51217f8f0366f95b0989286215b8784acbb3bc426ccc88069c734d4d44c",
+    "program": "4837509e253e859dbb8a654cb18a7d74bbf466307d155b2fa9e3915e175e7f23",
+    "program-encrypted": (
+        "3173669a4a0c649a6cb8922306f3a30886b35cd73061484d2384a10900899986"
+    ),
+}
+_SYNTHETIC_BUNDLE_KEY = "synthetic-sealed-v2-compatibility-key"
+
+
+def _structural_workflow(
+    shape: str,
+    *,
+    frame_path: list[str] | None = None,
+    encrypted: bool = False,
+) -> Workflow:
+    wf = (
+        Workflow(name="linear", steps=[click_step()])
+        if shape == "linear"
+        else _good_program_workflow()
+    )
+    wf.created_at = _FIXED_CREATED_AT
+    wf.encrypted = encrypted
+    step = wf.steps[0] if wf.steps else wf.program.states["s1"].step
+    assert step is not None and step.anchor is not None
+    step.anchor.structural = StructuralLocator(
+        selector="#save",
+        frame_path=frame_path,
+    )
+    return wf
+
+
+def _structural_payload(content: dict, shape: str) -> dict:
+    """Return the exact StructuralLocator JSON object in either IR shape."""
+
+    if shape == "linear":
+        return content["steps"][0]["anchor"]["structural"]
+    return content["program"]["states"]["s1"]["step"]["anchor"]["structural"]
+
+
+def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
+    """Render the digest content emitted immediately before frame_path existed.
+
+    This intentionally navigates to the exact owning StructuralLocator rather
+    than recursively stripping a key name. The latter would reproduce the
+    integrity bug this regression is meant to prevent.
+    """
+
+    content = wf.model_dump(mode="json", exclude={"manifest"})
+    content.pop("interstitials", None)  # pre-existing reviewed v2 omission
+    locator = _structural_payload(content, shape)
+    assert locator.pop("frame_path") in (None, [])
+    return content
+
+
+def _synthetic_legacy_digest(
+    wf: Workflow,
+    shape: str,
+    file_hashes: dict[str, str],
+) -> str:
+    payload = {
+        "workflow": _pre_frame_path_content(wf, shape),
+        "files": dict(sorted(file_hashes.items())),
+    }
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _write_synthetic_pre_field_bundle(
+    bundle,
+    wf: Workflow,
+    shape: str,
+    *,
+    encrypted: bool,
+) -> str:
+    """Persist an authentic pre-field plaintext or encrypted sealed bundle."""
+
+    file_hashes = bv.compute_file_hashes(wf, bundle)
+    legacy_digest = _synthetic_legacy_digest(wf, shape, file_hashes)
+    manifest = bv.build_manifest(wf, bundle)
+    assert manifest.content_digest == legacy_digest
+    manifest.content_digest = legacy_digest
+    manifest.encrypted = encrypted
+    wf.manifest = manifest
+
+    raw = wf.model_dump(mode="json")
+    # The historical workflow JSON itself did not contain the field either.
+    assert _structural_payload(raw, shape).pop("frame_path") in (None, [])
+    serialized = json.dumps(raw, sort_keys=True).encode("utf-8")
+
+    if encrypted:
+        (bundle / "workflow.json.enc").write_bytes(
+            crypto.encrypt_bytes(
+                serialized,
+                _SYNTHETIC_BUNDLE_KEY,
+                aad=crypto.BUNDLE_AAD,
+            )
+        )
+        for rel in file_hashes:
+            path = bundle / rel
+            (bundle / f"{rel}.enc").write_bytes(
+                crypto.encrypt_bytes(
+                    path.read_bytes(),
+                    _SYNTHETIC_BUNDLE_KEY,
+                    aad=TEMPLATE_AAD,
+                )
+            )
+            path.unlink()
+    else:
+        (bundle / "workflow.json").write_bytes(serialized)
+    (bundle / "manifest.json").write_text(manifest.model_dump_json(indent=2))
+    return legacy_digest
 
 
 # --------------------------------------------------------------------------
@@ -163,6 +291,75 @@ def test_v2_round_trips_with_stable_digest(tmp_path):
     loaded.save(b)
     reloaded = Workflow.load(b)
     assert reloaded.manifest.content_digest == dig
+
+
+@pytest.mark.parametrize("shape", ["linear", "program"])
+@pytest.mark.parametrize("frame_path", [None, []], ids=["absent", "empty"])
+def test_empty_frame_path_preserves_pre_field_sealed_v2_digest(
+    tmp_path, shape, frame_path
+):
+    """An additive top-level-frame default must not invalidate old v2 seals."""
+    b = _write_bundle_dir(tmp_path)
+    wf = _structural_workflow(shape, frame_path=frame_path)
+
+    file_hashes = bv.compute_file_hashes(wf, b)
+    legacy_digest = _synthetic_legacy_digest(wf, shape, file_hashes)
+    assert legacy_digest == _SYNTHETIC_LEGACY_DIGESTS[shape]
+    assert bv.compute_content_digest(wf, file_hashes) == legacy_digest
+    assert (
+        _write_synthetic_pre_field_bundle(b, wf, shape, encrypted=False)
+        == legacy_digest
+    )
+
+    loaded = Workflow.load(b)
+    assert loaded.manifest is not None
+    assert loaded.manifest.content_digest == legacy_digest
+
+    loaded_step = loaded.steps[0] if loaded.steps else loaded.program.states["s1"].step
+    loaded_anchor = loaded_step.anchor
+    assert loaded_anchor is not None
+    assert loaded_anchor.structural is not None
+    loaded_anchor.structural.frame_path = ["#shell"]
+    assert bv.compute_content_digest(loaded, file_hashes) != legacy_digest
+
+    unrelated = loaded.model_copy(deep=True)
+    unrelated.params["frame_path"] = ""
+    assert bv.compute_content_digest(unrelated, file_hashes) != legacy_digest
+
+
+def test_pre_field_encrypted_certified_bundle_loads_with_original_digest(tmp_path):
+    """Encryption and certification do not bypass historical seal verification."""
+
+    b = _write_bundle_dir(tmp_path)
+    wf = _structural_workflow("program", encrypted=True)
+    wf.stamp_certification("synthetic-regulated-policy", passed=True)
+    legacy_digest = _write_synthetic_pre_field_bundle(
+        b,
+        wf,
+        "program",
+        encrypted=True,
+    )
+    assert legacy_digest == _SYNTHETIC_LEGACY_DIGESTS["program-encrypted"]
+
+    loaded = Workflow.load(
+        b,
+        key=_SYNTHETIC_BUNDLE_KEY,
+        verify_integrity=True,
+    )
+    assert loaded.manifest is not None
+    assert loaded.manifest.content_digest == legacy_digest
+    assert loaded.manifest.provenance.certification_status == "certified"
+    assert loaded.decrypted_template("templates/btn.png") is not None
+
+
+def test_sealed_empty_defaults_do_not_implicitly_cross_schema_versions():
+    wf = _structural_workflow("linear")
+    rendered = wf.model_dump(mode="json", exclude={"manifest"})
+
+    bv._apply_sealed_canonical_omissions(wf, rendered, schema_version=3)
+
+    assert "interstitials" in rendered
+    assert "frame_path" in _structural_payload(rendered, "linear")
 
 
 def test_digest_changes_when_content_changes(tmp_path):
