@@ -1,7 +1,7 @@
 {
   "browser_request_count": 4,
   "case_id": "fault-missing-effect",
-  "duration_ms": 8968.485708115622,
+  "duration_ms": 9635.272833984345,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -35,7 +35,7 @@
   "off_box_or_third_party_egress_observed": false,
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "6681073b23ec99c973131cdb96ea38263dc56f45bf8e30ba3a98bcacb6245aac",
+  "report_sha256": "9888ec067b7f7c05d4e67e638a29493b6e5e2f764d6f2eab363a6c607488b0ff",
   "runtime_network_observation": "observed",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,

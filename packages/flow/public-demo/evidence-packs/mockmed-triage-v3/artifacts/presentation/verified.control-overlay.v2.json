@@ -1,6 +1,6 @@
 {
   "data_classification": "synthetic",
-  "duration_ms": 6065,
+  "duration_ms": 6551,
   "events": [
     {
       "at_ms": 0,
@@ -12,8 +12,8 @@
         },
         "event_sequence": 0,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276811327.522916,
-        "observed_at_unix_ms": 1785047599237,
+        "observed_at_monotonic_ms": 1278820448.244916,
+        "observed_at_unix_ms": 1785049608419,
         "phase": "observing",
         "presentation": true,
         "profile": "standard",
@@ -31,7 +31,7 @@
       "media_frame_index": 0
     },
     {
-      "at_ms": 225,
+      "at_ms": 301,
       "frame": {
         "controls": {
           "pause": false,
@@ -40,13 +40,13 @@
         },
         "event_sequence": 1,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276811552.942666,
-        "observed_at_unix_ms": 1785047599462,
+        "observed_at_monotonic_ms": 1278820749.485416,
+        "observed_at_unix_ms": 1785049608720,
         "phase": "executing",
         "presentation": true,
         "profile": "standard",
         "schema_version": "openadapt.control-overlay-frame/v2",
-        "state_id": "visible:executing:governed:standard:1:6:no-pause:no-resume:no-stop:target-095831e0af6a45dc",
+        "state_id": "visible:executing:governed:standard:1:6:no-pause:no-resume:no-stop:target-5752cfa3ff1e352a",
         "status": "Executing with verification gates",
         "step": {
           "current": 1,
@@ -57,7 +57,7 @@
           "binding": {
             "frame_index": 1,
             "kind": "media_frame",
-            "media_sha256": "aa1694582fd2a1cace1d705198a67ff4e170b8801aa87304df4292b4cc675dfb"
+            "media_sha256": "41b3d412220827678696d8c06a111c79118f201ebb3a48be459ae4126892d087"
           },
           "coordinate_space": "top_level_viewport_normalized",
           "rect": {
@@ -78,7 +78,7 @@
       "media_frame_index": 1
     },
     {
-      "at_ms": 453,
+      "at_ms": 544,
       "frame": {
         "controls": {
           "pause": false,
@@ -87,8 +87,8 @@
         },
         "event_sequence": 2,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276811780.516416,
-        "observed_at_unix_ms": 1785047599690,
+        "observed_at_monotonic_ms": 1278820992.708791,
+        "observed_at_unix_ms": 1785049608963,
         "phase": "verifying",
         "presentation": true,
         "profile": "standard",
@@ -106,7 +106,7 @@
       "media_frame_index": 2
     },
     {
-      "at_ms": 943,
+      "at_ms": 918,
       "frame": {
         "controls": {
           "pause": false,
@@ -115,8 +115,8 @@
         },
         "event_sequence": 3,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276812270.169125,
-        "observed_at_unix_ms": 1785047600180,
+        "observed_at_monotonic_ms": 1278821366.318333,
+        "observed_at_unix_ms": 1785049609337,
         "phase": "observing",
         "presentation": true,
         "profile": "standard",
@@ -134,7 +134,7 @@
       "media_frame_index": 3
     },
     {
-      "at_ms": 1151,
+      "at_ms": 1204,
       "frame": {
         "controls": {
           "pause": false,
@@ -143,13 +143,13 @@
         },
         "event_sequence": 4,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276812478.387791,
-        "observed_at_unix_ms": 1785047600388,
+        "observed_at_monotonic_ms": 1278821652.634416,
+        "observed_at_unix_ms": 1785049609623,
         "phase": "executing",
         "presentation": true,
         "profile": "standard",
         "schema_version": "openadapt.control-overlay-frame/v2",
-        "state_id": "visible:executing:governed:standard:2:6:no-pause:no-resume:no-stop:target-ecbbba3f96853b0f",
+        "state_id": "visible:executing:governed:standard:2:6:no-pause:no-resume:no-stop:target-07ee8243f8cd5eb2",
         "status": "Executing with verification gates",
         "step": {
           "current": 2,
@@ -160,7 +160,7 @@
           "binding": {
             "frame_index": 4,
             "kind": "media_frame",
-            "media_sha256": "aa1694582fd2a1cace1d705198a67ff4e170b8801aa87304df4292b4cc675dfb"
+            "media_sha256": "41b3d412220827678696d8c06a111c79118f201ebb3a48be459ae4126892d087"
           },
           "coordinate_space": "top_level_viewport_normalized",
           "rect": {
@@ -181,7 +181,7 @@
       "media_frame_index": 4
     },
     {
-      "at_ms": 1490,
+      "at_ms": 1577,
       "frame": {
         "controls": {
           "pause": false,
@@ -190,8 +190,8 @@
         },
         "event_sequence": 5,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276812817.763791,
-        "observed_at_unix_ms": 1785047600727,
+        "observed_at_monotonic_ms": 1278822025.608791,
+        "observed_at_unix_ms": 1785049609996,
         "phase": "verifying",
         "presentation": true,
         "profile": "standard",
@@ -209,7 +209,7 @@
       "media_frame_index": 5
     },
     {
-      "at_ms": 1792,
+      "at_ms": 2074,
       "frame": {
         "controls": {
           "pause": false,
@@ -218,8 +218,8 @@
         },
         "event_sequence": 6,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276813119.55175,
-        "observed_at_unix_ms": 1785047601029,
+        "observed_at_monotonic_ms": 1278822522.579875,
+        "observed_at_unix_ms": 1785049610493,
         "phase": "observing",
         "presentation": true,
         "profile": "standard",
@@ -237,7 +237,7 @@
       "media_frame_index": 6
     },
     {
-      "at_ms": 2016,
+      "at_ms": 2337,
       "frame": {
         "controls": {
           "pause": false,
@@ -246,13 +246,13 @@
         },
         "event_sequence": 7,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276813343.37375,
-        "observed_at_unix_ms": 1785047601253,
+        "observed_at_monotonic_ms": 1278822785.036375,
+        "observed_at_unix_ms": 1785049610756,
         "phase": "executing",
         "presentation": true,
         "profile": "standard",
         "schema_version": "openadapt.control-overlay-frame/v2",
-        "state_id": "visible:executing:governed:standard:3:6:no-pause:no-resume:no-stop:target-c286a6e99de6969f",
+        "state_id": "visible:executing:governed:standard:3:6:no-pause:no-resume:no-stop:target-95402457414f9392",
         "status": "Executing with verification gates",
         "step": {
           "current": 3,
@@ -263,7 +263,7 @@
           "binding": {
             "frame_index": 7,
             "kind": "media_frame",
-            "media_sha256": "aa1694582fd2a1cace1d705198a67ff4e170b8801aa87304df4292b4cc675dfb"
+            "media_sha256": "41b3d412220827678696d8c06a111c79118f201ebb3a48be459ae4126892d087"
           },
           "coordinate_space": "top_level_viewport_normalized",
           "rect": {
@@ -284,7 +284,7 @@
       "media_frame_index": 7
     },
     {
-      "at_ms": 2216,
+      "at_ms": 2566,
       "frame": {
         "controls": {
           "pause": false,
@@ -293,8 +293,8 @@
         },
         "event_sequence": 8,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276813543.149583,
-        "observed_at_unix_ms": 1785047601453,
+        "observed_at_monotonic_ms": 1278823013.956958,
+        "observed_at_unix_ms": 1785049610985,
         "phase": "verifying",
         "presentation": true,
         "profile": "standard",
@@ -312,7 +312,7 @@
       "media_frame_index": 8
     },
     {
-      "at_ms": 2250,
+      "at_ms": 2597,
       "frame": {
         "controls": {
           "pause": false,
@@ -321,8 +321,8 @@
         },
         "event_sequence": 9,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276813577.9015,
-        "observed_at_unix_ms": 1785047601487,
+        "observed_at_monotonic_ms": 1278823045.397,
+        "observed_at_unix_ms": 1785049611016,
         "phase": "observing",
         "presentation": true,
         "profile": "standard",
@@ -340,7 +340,7 @@
       "media_frame_index": 9
     },
     {
-      "at_ms": 2479,
+      "at_ms": 2853,
       "frame": {
         "controls": {
           "pause": false,
@@ -349,13 +349,13 @@
         },
         "event_sequence": 10,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276813807.009958,
-        "observed_at_unix_ms": 1785047601716,
+        "observed_at_monotonic_ms": 1278823300.825416,
+        "observed_at_unix_ms": 1785049611272,
         "phase": "executing",
         "presentation": true,
         "profile": "standard",
         "schema_version": "openadapt.control-overlay-frame/v2",
-        "state_id": "visible:executing:governed:standard:4:6:no-pause:no-resume:no-stop:target-56fc3693a47492ca",
+        "state_id": "visible:executing:governed:standard:4:6:no-pause:no-resume:no-stop:target-d33280c638d0af00",
         "status": "Executing with verification gates",
         "step": {
           "current": 4,
@@ -366,7 +366,7 @@
           "binding": {
             "frame_index": 10,
             "kind": "media_frame",
-            "media_sha256": "aa1694582fd2a1cace1d705198a67ff4e170b8801aa87304df4292b4cc675dfb"
+            "media_sha256": "41b3d412220827678696d8c06a111c79118f201ebb3a48be459ae4126892d087"
           },
           "coordinate_space": "top_level_viewport_normalized",
           "rect": {
@@ -387,7 +387,7 @@
       "media_frame_index": 10
     },
     {
-      "at_ms": 2674,
+      "at_ms": 3063,
       "frame": {
         "controls": {
           "pause": false,
@@ -396,8 +396,8 @@
         },
         "event_sequence": 11,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276814001.529375,
-        "observed_at_unix_ms": 1785047601911,
+        "observed_at_monotonic_ms": 1278823511.56175,
+        "observed_at_unix_ms": 1785049611482,
         "phase": "verifying",
         "presentation": true,
         "profile": "standard",
@@ -415,7 +415,7 @@
       "media_frame_index": 11
     },
     {
-      "at_ms": 2717,
+      "at_ms": 3105,
       "frame": {
         "controls": {
           "pause": false,
@@ -424,8 +424,8 @@
         },
         "event_sequence": 12,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276814044.969208,
-        "observed_at_unix_ms": 1785047601954,
+        "observed_at_monotonic_ms": 1278823553.213166,
+        "observed_at_unix_ms": 1785049611524,
         "phase": "observing",
         "presentation": true,
         "profile": "standard",
@@ -443,7 +443,7 @@
       "media_frame_index": 12
     },
     {
-      "at_ms": 2834,
+      "at_ms": 3217,
       "frame": {
         "controls": {
           "pause": false,
@@ -452,8 +452,8 @@
         },
         "event_sequence": 13,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276814161.283458,
-        "observed_at_unix_ms": 1785047602071,
+        "observed_at_monotonic_ms": 1278823664.748458,
+        "observed_at_unix_ms": 1785049611636,
         "phase": "executing",
         "presentation": true,
         "profile": "standard",
@@ -471,7 +471,7 @@
       "media_frame_index": 13
     },
     {
-      "at_ms": 3208,
+      "at_ms": 3623,
       "frame": {
         "controls": {
           "pause": false,
@@ -480,8 +480,8 @@
         },
         "event_sequence": 14,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276814535.611791,
-        "observed_at_unix_ms": 1785047602445,
+        "observed_at_monotonic_ms": 1278824070.903125,
+        "observed_at_unix_ms": 1785049612042,
         "phase": "verifying",
         "presentation": true,
         "profile": "standard",
@@ -499,7 +499,7 @@
       "media_frame_index": 14
     },
     {
-      "at_ms": 3233,
+      "at_ms": 3648,
       "frame": {
         "controls": {
           "pause": false,
@@ -508,8 +508,8 @@
         },
         "event_sequence": 15,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276814560.565208,
-        "observed_at_unix_ms": 1785047602470,
+        "observed_at_monotonic_ms": 1278824095.954416,
+        "observed_at_unix_ms": 1785049612067,
         "phase": "observing",
         "presentation": true,
         "profile": "standard",
@@ -527,7 +527,7 @@
       "media_frame_index": 15
     },
     {
-      "at_ms": 3548,
+      "at_ms": 4031,
       "frame": {
         "controls": {
           "pause": false,
@@ -536,13 +536,13 @@
         },
         "event_sequence": 16,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276814875.133208,
-        "observed_at_unix_ms": 1785047602784,
+        "observed_at_monotonic_ms": 1278824479.138208,
+        "observed_at_unix_ms": 1785049612450,
         "phase": "executing",
         "presentation": true,
         "profile": "standard",
         "schema_version": "openadapt.control-overlay-frame/v2",
-        "state_id": "visible:executing:governed:standard:6:6:no-pause:no-resume:no-stop:target-0afef15d55f93328",
+        "state_id": "visible:executing:governed:standard:6:6:no-pause:no-resume:no-stop:target-43b7cb331c451f85",
         "status": "Executing with verification gates",
         "step": {
           "current": 6,
@@ -553,7 +553,7 @@
           "binding": {
             "frame_index": 16,
             "kind": "media_frame",
-            "media_sha256": "aa1694582fd2a1cace1d705198a67ff4e170b8801aa87304df4292b4cc675dfb"
+            "media_sha256": "41b3d412220827678696d8c06a111c79118f201ebb3a48be459ae4126892d087"
           },
           "coordinate_space": "top_level_viewport_normalized",
           "rect": {
@@ -574,7 +574,7 @@
       "media_frame_index": 16
     },
     {
-      "at_ms": 3882,
+      "at_ms": 4372,
       "frame": {
         "controls": {
           "pause": false,
@@ -583,8 +583,8 @@
         },
         "event_sequence": 17,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276815209.029666,
-        "observed_at_unix_ms": 1785047603118,
+        "observed_at_monotonic_ms": 1278824820.023,
+        "observed_at_unix_ms": 1785049612791,
         "phase": "verifying",
         "presentation": true,
         "profile": "standard",
@@ -602,7 +602,7 @@
       "media_frame_index": 17
     },
     {
-      "at_ms": 4315,
+      "at_ms": 4801,
       "frame": {
         "controls": {
           "pause": false,
@@ -611,8 +611,8 @@
         },
         "event_sequence": 18,
         "mode": "governed",
-        "observed_at_monotonic_ms": 1276815642.19475,
-        "observed_at_unix_ms": 1785047603552,
+        "observed_at_monotonic_ms": 1278825249.558833,
+        "observed_at_unix_ms": 1785049613220,
         "phase": "verified",
         "presentation": true,
         "profile": "standard",
@@ -632,6 +632,6 @@
   ],
   "evidence_pack_id": "mockmed-triage-v3",
   "media_frame_count": 20,
-  "media_sha256": "aa1694582fd2a1cace1d705198a67ff4e170b8801aa87304df4292b4cc675dfb",
+  "media_sha256": "41b3d412220827678696d8c06a111c79118f201ebb3a48be459ae4126892d087",
   "schema_version": "openadapt.control-overlay-timeline/v2"
 }

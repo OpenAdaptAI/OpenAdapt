@@ -1,7 +1,7 @@
 {
   "browser_request_count": 3,
   "case_id": "fault-ambiguity",
-  "duration_ms": 144.7359169833362,
+  "duration_ms": 158.78204093314707,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -39,7 +39,7 @@
   "off_box_or_third_party_egress_observed": false,
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "eab84b483a442b2651023532518eb1e1785fd037f8d1108c52bcc196da5a4eb5",
+  "report_sha256": "0199fd3396cb1f38707f20bd1df878cccc6faaf73a362c95d022fca4cd9e504e",
   "runtime_network_observation": "observed",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,

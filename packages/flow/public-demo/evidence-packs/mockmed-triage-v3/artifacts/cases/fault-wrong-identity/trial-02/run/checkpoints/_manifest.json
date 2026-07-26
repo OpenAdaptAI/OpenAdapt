@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "run_id": "b21b94ee4e32451f8176262061018981",
+  "run_id": "f8b96b5d0754447ea494cd44b5681088",
   "workflow_name": "mockmed-triage",
-  "bundle_dir": "/private/tmp/openadapt-flow-pr253-fix/public-demo/evidence-packs/.mockmed-triage-v3.17789s50/artifacts/bundle",
+  "bundle_dir": "/private/tmp/openadapt-flow-pr253-source/public-demo/evidence-packs/.mockmed-triage-v3.6o0oosjc/artifacts/bundle",
   "params": {
     "note": "Synthetic follow-up in two weeks"
   },
   "worklists": {},
   "governed_authorization": {
-    "authorization_id": "b21b94ee4e32451f8176262061018981",
-    "created_at": "2026-07-26T06:33:39.706479+00:00",
-    "bundle_content_digest": "844165759cedefdcee22224735e34a57c331e4bd4d008f4a82655be83b6fb26a",
+    "authorization_id": "f8b96b5d0754447ea494cd44b5681088",
+    "created_at": "2026-07-26T07:07:11.135635+00:00",
+    "bundle_content_digest": "5ed622b5568dac64e4202dae379835277f954c0b24fb2ead8108f32e1c1ce68e",
     "runtime_inputs_digest": "342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1",
     "admitted_policy_name": "clinical-write",
     "execution_profile": "standard",
@@ -29,5 +29,5 @@
   "model_calls": 0,
   "external_network_calls": "observed",
   "save_healed_to": null,
-  "created_at": "2026-07-26T06:33:39.709426+00:00"
+  "created_at": "2026-07-26T07:07:11.139398+00:00"
 }

@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
   "name": "mockmed-triage",
-  "recording_id": "4485a098973742f1b45755121d15a1d8",
+  "recording_id": "3290705d23254d978c7a335776e407ad",
   "contains_phi": false,
   "phi_scrubbed": false,
   "encrypted": false,
-  "created_at": "2026-07-26T06:33:18.849883+00:00",
+  "created_at": "2026-07-26T07:06:47.886221+00:00",
   "viewport": [
     1280,
     800
@@ -53,12 +53,12 @@
         "structured_identity": null,
         "identity_template": {
           "schema_version": 1,
-          "salt": "b5a24f8f727ec563a56e7f9c1a38bad1",
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
           "band_len": 30,
           "tokens": [
             {
-              "c": "d7c1fadac44fbe5c",
-              "r": "d7c1fadac44fbe5c",
+              "c": "6ea091d5f9ee7cfe",
+              "r": "6ea091d5f9ee7cfe",
               "n": 10,
               "alpha": true,
               "name": true,
@@ -68,8 +68,8 @@
               "gen": false
             },
             {
-              "c": "c438468d4c12dbdc",
-              "r": "c438468d4c12dbdc",
+              "c": "2df90d28ac6dcd27",
+              "r": "2df90d28ac6dcd27",
               "n": 4,
               "alpha": true,
               "name": true,
@@ -79,8 +79,8 @@
               "gen": false
             },
             {
-              "c": "d69c3701fc1e87ea",
-              "r": "337155ea426f9f6d",
+              "c": "f2edf2308507962c",
+              "r": "29a63eedb29d1153",
               "n": 4,
               "alpha": true,
               "name": true,
@@ -90,8 +90,8 @@
               "gen": false
             },
             {
-              "c": "4a54f9146978c9d7",
-              "r": "4a54f9146978c9d7",
+              "c": "044b63bb729bddd4",
+              "r": "044b63bb729bddd4",
               "n": 8,
               "alpha": true,
               "name": true,
@@ -101,8 +101,8 @@
               "gen": false
             },
             {
-              "c": "6fdff6238855fca6",
-              "r": "a2d9bf541d4a427d",
+              "c": "3f52bc804134d00a",
+              "r": "aa748a391080ede9",
               "n": 4,
               "alpha": true,
               "name": true,
@@ -116,8 +116,8 @@
             {
               "i": 0,
               "size": 2,
-              "c": "dc74308e91bc1120",
-              "r": "dc74308e91bc1120",
+              "c": "c47b03ec0c8a0d7e",
+              "r": "c47b03ec0c8a0d7e",
               "digit": false,
               "name": true,
               "n": 14
@@ -125,8 +125,8 @@
             {
               "i": 0,
               "size": 3,
-              "c": "001b03ad7e24ed46",
-              "r": "c360e2fb1d45602d",
+              "c": "11f5d4c43f93d95e",
+              "r": "b00bf35d2690abd3",
               "digit": false,
               "name": true,
               "n": 18
@@ -134,8 +134,8 @@
             {
               "i": 0,
               "size": 4,
-              "c": "9855d9cb70025a46",
-              "r": "08468e727c1db0f8",
+              "c": "aa06789d3d05b361",
+              "r": "4d17e4c7cac5fbd3",
               "digit": false,
               "name": true,
               "n": 26
@@ -143,8 +143,8 @@
             {
               "i": 1,
               "size": 2,
-              "c": "4ac5b36bef455355",
-              "r": "b5b2292c2feb3b9e",
+              "c": "ca3513c757f4ced2",
+              "r": "834701f25ee7b09f",
               "digit": false,
               "name": true,
               "n": 8
@@ -152,8 +152,8 @@
             {
               "i": 1,
               "size": 3,
-              "c": "f51cad80fa1c19fe",
-              "r": "ba47a47868534f87",
+              "c": "35eb5657b10f3ba0",
+              "r": "ea7820d360bfd89f",
               "digit": false,
               "name": true,
               "n": 16
@@ -161,8 +161,8 @@
             {
               "i": 1,
               "size": 4,
-              "c": "0d3460538a53d342",
-              "r": "c63b253bf4c78c56",
+              "c": "9e5ff3eed4ca9fa4",
+              "r": "6ace3fdb6b3fb235",
               "digit": false,
               "name": true,
               "n": 20
@@ -170,8 +170,8 @@
             {
               "i": 2,
               "size": 2,
-              "c": "aa8dc2b86d85c792",
-              "r": "afd998769577b7c6",
+              "c": "879bca194b8f65b6",
+              "r": "a58edebd1fd7fe82",
               "digit": false,
               "name": true,
               "n": 12
@@ -179,8 +179,8 @@
             {
               "i": 2,
               "size": 3,
-              "c": "80e8dd4138d78260",
-              "r": "a36674de49586428",
+              "c": "30505790b18a521f",
+              "r": "50b8da0b181f02f9",
               "digit": false,
               "name": true,
               "n": 16
@@ -188,47 +188,47 @@
             {
               "i": 3,
               "size": 2,
-              "c": "84aa5b2bd64e556e",
-              "r": "a0736d9702bbeb4b",
+              "c": "60caa1d8baeeb22d",
+              "r": "fe5efbea8109e8ea",
               "digit": false,
               "name": true,
               "n": 12
             }
           ],
-          "structured": "35484d10d51c2c7c",
+          "structured": "dde9db65d2c7c866",
           "signal_hashes": {
-            "structured|exact|": "379f4cf182e026024b44c9c030887555f624f13ba847826503966f44dd87c38d",
-            "structured|normalized|unicode_nfkc": "379f4cf182e026024b44c9c030887555f624f13ba847826503966f44dd87c38d",
-            "structured|normalized|casefold": "35484d10d51c2c7c91a52a4bbe8c36f6145e50201ca29fad15018c08a52882d0",
-            "structured|normalized|collapse_whitespace": "379f4cf182e026024b44c9c030887555f624f13ba847826503966f44dd87c38d",
-            "structured|normalized|strip_punctuation": "379f4cf182e026024b44c9c030887555f624f13ba847826503966f44dd87c38d",
-            "structured|normalized|unicode_nfkc,casefold": "35484d10d51c2c7c91a52a4bbe8c36f6145e50201ca29fad15018c08a52882d0",
-            "structured|normalized|unicode_nfkc,collapse_whitespace": "379f4cf182e026024b44c9c030887555f624f13ba847826503966f44dd87c38d",
-            "structured|normalized|unicode_nfkc,strip_punctuation": "379f4cf182e026024b44c9c030887555f624f13ba847826503966f44dd87c38d",
-            "structured|normalized|casefold,collapse_whitespace": "35484d10d51c2c7c91a52a4bbe8c36f6145e50201ca29fad15018c08a52882d0",
-            "structured|normalized|casefold,strip_punctuation": "35484d10d51c2c7c91a52a4bbe8c36f6145e50201ca29fad15018c08a52882d0",
-            "structured|normalized|collapse_whitespace,strip_punctuation": "379f4cf182e026024b44c9c030887555f624f13ba847826503966f44dd87c38d",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "35484d10d51c2c7c91a52a4bbe8c36f6145e50201ca29fad15018c08a52882d0",
-            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "35484d10d51c2c7c91a52a4bbe8c36f6145e50201ca29fad15018c08a52882d0",
-            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "379f4cf182e026024b44c9c030887555f624f13ba847826503966f44dd87c38d",
-            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "35484d10d51c2c7c91a52a4bbe8c36f6145e50201ca29fad15018c08a52882d0",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "35484d10d51c2c7c91a52a4bbe8c36f6145e50201ca29fad15018c08a52882d0",
-            "captured_context|exact|": "1ffe900136ece77b11eef956a3b98a3935b936f4709948e22bad55fba9655211",
-            "captured_context|normalized|unicode_nfkc": "1ffe900136ece77b11eef956a3b98a3935b936f4709948e22bad55fba9655211",
-            "captured_context|normalized|casefold": "b09207f88bfeb93621ffcf89dc00158bc0034aea15db54b31ac7abeca9cba5fe",
-            "captured_context|normalized|collapse_whitespace": "1ffe900136ece77b11eef956a3b98a3935b936f4709948e22bad55fba9655211",
-            "captured_context|normalized|strip_punctuation": "1ffe900136ece77b11eef956a3b98a3935b936f4709948e22bad55fba9655211",
-            "captured_context|normalized|unicode_nfkc,casefold": "b09207f88bfeb93621ffcf89dc00158bc0034aea15db54b31ac7abeca9cba5fe",
-            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "1ffe900136ece77b11eef956a3b98a3935b936f4709948e22bad55fba9655211",
-            "captured_context|normalized|unicode_nfkc,strip_punctuation": "1ffe900136ece77b11eef956a3b98a3935b936f4709948e22bad55fba9655211",
-            "captured_context|normalized|casefold,collapse_whitespace": "b09207f88bfeb93621ffcf89dc00158bc0034aea15db54b31ac7abeca9cba5fe",
-            "captured_context|normalized|casefold,strip_punctuation": "b09207f88bfeb93621ffcf89dc00158bc0034aea15db54b31ac7abeca9cba5fe",
-            "captured_context|normalized|collapse_whitespace,strip_punctuation": "1ffe900136ece77b11eef956a3b98a3935b936f4709948e22bad55fba9655211",
-            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "b09207f88bfeb93621ffcf89dc00158bc0034aea15db54b31ac7abeca9cba5fe",
-            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "b09207f88bfeb93621ffcf89dc00158bc0034aea15db54b31ac7abeca9cba5fe",
-            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "1ffe900136ece77b11eef956a3b98a3935b936f4709948e22bad55fba9655211",
-            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "b09207f88bfeb93621ffcf89dc00158bc0034aea15db54b31ac7abeca9cba5fe",
-            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "b09207f88bfeb93621ffcf89dc00158bc0034aea15db54b31ac7abeca9cba5fe"
+            "structured|exact|": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|unicode_nfkc": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|casefold": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|collapse_whitespace": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|strip_punctuation": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|unicode_nfkc,casefold": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|casefold,collapse_whitespace": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|casefold,strip_punctuation": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "captured_context|exact|": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|unicode_nfkc": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|casefold": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|collapse_whitespace": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|strip_punctuation": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|unicode_nfkc,casefold": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|casefold,collapse_whitespace": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|casefold,strip_punctuation": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781"
           },
           "param_token_indices": {},
           "rests_on_confusable_identifier": false
@@ -323,28 +323,28 @@
         "structured_identity": null,
         "identity_template": {
           "schema_version": 1,
-          "salt": "b5a24f8f727ec563a56e7f9c1a38bad1",
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
           "band_len": 0,
           "tokens": [],
           "concats": [],
-          "structured": "924f892840f728d9",
+          "structured": "84fd8e01b2a61fc6",
           "signal_hashes": {
-            "structured|exact|": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|unicode_nfkc": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|casefold": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|collapse_whitespace": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|unicode_nfkc,casefold": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|unicode_nfkc,collapse_whitespace": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|unicode_nfkc,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|casefold,collapse_whitespace": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|casefold,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|collapse_whitespace,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a"
+            "structured|exact|": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960"
           },
           "param_token_indices": {},
           "rests_on_confusable_identifier": false
@@ -439,28 +439,28 @@
         "structured_identity": null,
         "identity_template": {
           "schema_version": 1,
-          "salt": "b5a24f8f727ec563a56e7f9c1a38bad1",
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
           "band_len": 0,
           "tokens": [],
           "concats": [],
-          "structured": "924f892840f728d9",
+          "structured": "84fd8e01b2a61fc6",
           "signal_hashes": {
-            "structured|exact|": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|unicode_nfkc": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|casefold": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|collapse_whitespace": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|unicode_nfkc,casefold": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|unicode_nfkc,collapse_whitespace": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|unicode_nfkc,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|casefold,collapse_whitespace": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|casefold,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|collapse_whitespace,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a"
+            "structured|exact|": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960"
           },
           "param_token_indices": {},
           "rests_on_confusable_identifier": false
@@ -546,28 +546,28 @@
         "structured_identity": null,
         "identity_template": {
           "schema_version": 1,
-          "salt": "b5a24f8f727ec563a56e7f9c1a38bad1",
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
           "band_len": 0,
           "tokens": [],
           "concats": [],
-          "structured": "924f892840f728d9",
+          "structured": "84fd8e01b2a61fc6",
           "signal_hashes": {
-            "structured|exact|": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|unicode_nfkc": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|casefold": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|collapse_whitespace": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|unicode_nfkc,casefold": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|unicode_nfkc,collapse_whitespace": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|unicode_nfkc,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|casefold,collapse_whitespace": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|casefold,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|collapse_whitespace,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a"
+            "structured|exact|": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960"
           },
           "param_token_indices": {},
           "rests_on_confusable_identifier": false
@@ -675,28 +675,28 @@
         "structured_identity": null,
         "identity_template": {
           "schema_version": 1,
-          "salt": "b5a24f8f727ec563a56e7f9c1a38bad1",
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
           "band_len": 0,
           "tokens": [],
           "concats": [],
-          "structured": "924f892840f728d9",
+          "structured": "84fd8e01b2a61fc6",
           "signal_hashes": {
-            "structured|exact|": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|unicode_nfkc": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|casefold": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|collapse_whitespace": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|unicode_nfkc,casefold": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|unicode_nfkc,collapse_whitespace": "f6cb8a4f7483228e59f32f9af79e9f6cdcd50f2d219b83e648292f3ae9b78420",
-            "structured|normalized|unicode_nfkc,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|casefold,collapse_whitespace": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|casefold,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|collapse_whitespace,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "924f892840f728d9dc49ce45e94c2128e0d8010d88bb6d021e44d4dd6b267174",
-            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "b111c50ce65314272ea38c721c601e5f15b53cf891ba226cc9a1fcc3a69728fc",
-            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a",
-            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "9457a2a890e084b0908808a33ee1488278ad49206d9980180b57b47cdeeb9e4a"
+            "structured|exact|": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960"
           },
           "param_token_indices": {},
           "rests_on_confusable_identifier": false
@@ -842,16 +842,16 @@
   "data_sources": {},
   "qualification": {
     "schema_version": "openadapt.qualification-project/v1",
-    "project_id": "229aef18-8411-475e-b8bc-e196a24fcf87",
+    "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
     "revision": 12,
-    "previous_revision_sha256": "a6e88b94259a7e46b6a3cffffdce1065fca9da3bbb7680eb2ff558d30d0ca98a",
-    "created_at": "2026-07-26T06:33:18.857258+00:00",
-    "updated_at": "2026-07-26T06:34:46.564612+00:00",
+    "previous_revision_sha256": "bb4f26895f8d03914294e4ca03db90b852214834b03078a5c380028798a5f392",
+    "created_at": "2026-07-26T07:06:47.897989+00:00",
+    "updated_at": "2026-07-26T07:08:22.716689+00:00",
     "environment": {
       "target_kind": "web",
       "application": "OpenAdapt MockMed synthetic reference",
-      "application_version": "sha256:55daa0cce6c23a74264e2a752287cf68d4d38213e8ed77a73124a689427fe917",
-      "environment_digest": "e1b4c3e1da9029be74aab7fa7e340a0556382c9bdd38a7aa151eb7cb3f49aff4",
+      "application_version": "sha256:1f4d59153fc6c797d626b27977fa6270ca8b2d9461b23171f9a2b2b571d2a0c1",
+      "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
       "runtime_version": "1.23.0",
       "required_capabilities": [
         "headless_chromium",
@@ -931,12 +931,12 @@
         "results": [
           {
             "case_id": "fault-ambiguity",
-            "project_id": "229aef18-8411-475e-b8bc-e196a24fcf87",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
             "project_revision": 12,
-            "project_contract_sha256": "d2eae36f894eadfd6ca38f2e3ef22de4317c21153e679196627c38bd7b9f8812",
-            "workflow_contract_sha256": "576eba564c76320bbd684d38c72332e9bda0ad2b68c2666098f65a371abeaa48",
-            "environment_contract_sha256": "fedbe5c75bdab592542adf14825bc39ff20deb6c92b3d2db37dce1b1eee16c2a",
-            "environment_digest": "e1b4c3e1da9029be74aab7fa7e340a0556382c9bdd38a7aa151eb7cb3f49aff4",
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
             "runtime_version": "1.23.0",
             "runner_id": "openadapt-flow/public-demo-headless",
             "runner_capabilities": [
@@ -949,17 +949,17 @@
             "evidence": [
               {
                 "kind": "run_report",
-                "sha256": "eab84b483a442b2651023532518eb1e1785fd037f8d1108c52bcc196da5a4eb5",
+                "sha256": "0199fd3396cb1f38707f20bd1df878cccc6faaf73a362c95d022fca4cd9e504e",
                 "relative_path": "artifacts/cases/fault-ambiguity/trial-01/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "88d373e2696aa86acbb26bc2bddcd9c8b68e4163f1442283d359d098aacbf31a",
+                "sha256": "a0b46dadd309c371099e0173c3e95e6c64783c6803c9236d29ad74670b6cc9fe",
                 "relative_path": "artifacts/cases/fault-ambiguity/trial-02/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "69c53cc9237237cf2ebcef0eaca446b416b9816b3dfd13a1b21e81064f2c8d45",
+                "sha256": "389d3890f2e06e6dab6479e6edd960fa3a7fbbcf475131e9eb804de9e2ff8ba5",
                 "relative_path": "artifacts/cases/fault-ambiguity/trial-03/run/report.json"
               },
               {
@@ -979,9 +979,9 @@
               }
             ],
             "detail_code": "fault-ambiguity.three-trial-contract",
-            "completed_at": "2026-07-26T06:33:38.163809+00:00",
+            "completed_at": "2026-07-26T07:07:09.351773+00:00",
             "attestation_key_id": "public-demo-headless-runner",
-            "attestation_signature": "rPIjiWrnXcOsT+fk2dJfC4r65Kd1tWdDJjqhYVE2Ny2B8orzx3ZcItnNWCnIB6HDeiJSFVc9SdzzHVSnTsZ8Ag=="
+            "attestation_signature": "3FxUdj1qDIf5M+v/u8dsoGhLqnAGTvlNwEKJtRNJAlbF0/nl7cG7/q4B+N8rdkbI+0UYyOMAJs1XBNze7QtJDA=="
           }
         ]
       },
@@ -995,12 +995,12 @@
         "results": [
           {
             "case_id": "fault-wrong-identity",
-            "project_id": "229aef18-8411-475e-b8bc-e196a24fcf87",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
             "project_revision": 12,
-            "project_contract_sha256": "d2eae36f894eadfd6ca38f2e3ef22de4317c21153e679196627c38bd7b9f8812",
-            "workflow_contract_sha256": "576eba564c76320bbd684d38c72332e9bda0ad2b68c2666098f65a371abeaa48",
-            "environment_contract_sha256": "fedbe5c75bdab592542adf14825bc39ff20deb6c92b3d2db37dce1b1eee16c2a",
-            "environment_digest": "e1b4c3e1da9029be74aab7fa7e340a0556382c9bdd38a7aa151eb7cb3f49aff4",
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
             "runtime_version": "1.23.0",
             "runner_id": "openadapt-flow/public-demo-headless",
             "runner_capabilities": [
@@ -1013,17 +1013,17 @@
             "evidence": [
               {
                 "kind": "run_report",
-                "sha256": "0617612df693fa3d3b88ecf9668b09a013727b1561f0e6b3e7a7f649f7b00ad1",
+                "sha256": "e1c742fac9cde46d9ae25d950005f40af0e2b5957d0fce13f4cb26bc20a7ff9e",
                 "relative_path": "artifacts/cases/fault-wrong-identity/trial-01/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "95b99deb7d1b8d1688ea84efda4df933505188e93d07a874ba1c54e38d6189f7",
+                "sha256": "7ae08bb375505df852fee3594884bc27326f1eeafcdc2b48824bc6cc7e5934cd",
                 "relative_path": "artifacts/cases/fault-wrong-identity/trial-02/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "7397e7e5668dad37cf5c1ee16c4e6bcda3fa2a5537280f67cbb6f6b6dbcd2bdc",
+                "sha256": "f9f73d20c1c98fa7d03fef19e70089a0231a49cb06bb1cf764cc66c10e01c238",
                 "relative_path": "artifacts/cases/fault-wrong-identity/trial-03/run/report.json"
               },
               {
@@ -1043,9 +1043,9 @@
               }
             ],
             "detail_code": "fault-wrong-identity.three-trial-contract",
-            "completed_at": "2026-07-26T06:33:41.848998+00:00",
+            "completed_at": "2026-07-26T07:07:13.536333+00:00",
             "attestation_key_id": "public-demo-headless-runner",
-            "attestation_signature": "/+2FF+46p9wn9QmeXbQ/1R+V7fKX2d1X5cNV7q5810aM/mIOXP4+g0j5xKOo6L1J1UQUO4p6fk9xsT3v1Lw7DQ=="
+            "attestation_signature": "8fGOaHpgsPsyJCCjB2DYjAGfOcMKq/JAq4bfC98fqqZ672iDXprpUxDaQbv+x5kGK/9AGTpX33oUN+viE815BA=="
           }
         ]
       },
@@ -1059,12 +1059,12 @@
         "results": [
           {
             "case_id": "fault-stale-identity",
-            "project_id": "229aef18-8411-475e-b8bc-e196a24fcf87",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
             "project_revision": 12,
-            "project_contract_sha256": "d2eae36f894eadfd6ca38f2e3ef22de4317c21153e679196627c38bd7b9f8812",
-            "workflow_contract_sha256": "576eba564c76320bbd684d38c72332e9bda0ad2b68c2666098f65a371abeaa48",
-            "environment_contract_sha256": "fedbe5c75bdab592542adf14825bc39ff20deb6c92b3d2db37dce1b1eee16c2a",
-            "environment_digest": "e1b4c3e1da9029be74aab7fa7e340a0556382c9bdd38a7aa151eb7cb3f49aff4",
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
             "runtime_version": "1.23.0",
             "runner_id": "openadapt-flow/public-demo-headless",
             "runner_capabilities": [
@@ -1077,17 +1077,17 @@
             "evidence": [
               {
                 "kind": "run_report",
-                "sha256": "a221646f81c3e47338396d1b0680863f6e48be9bb33686a0c21139b04a93ffcc",
+                "sha256": "dca15bf16fe0195f5c3dc68873365c16fa09f45f9ca8ebf1e60dab82c284530e",
                 "relative_path": "artifacts/cases/fault-stale-identity/trial-01/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "f4e8a225adacaa8b0ba8749b1f38ce0d9cd53fcfd8b4e62e5bf3a5f9cf0260f7",
+                "sha256": "ee7aae31e2484417c9c0a2f14825e03373676e12e62300b839acbe45f2f66047",
                 "relative_path": "artifacts/cases/fault-stale-identity/trial-02/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "068c97c47efa9c6d15636d38f448614a883e29c584a3a8a6f27be4c8129ae709",
+                "sha256": "631ff5e1da6d7e8378a57de74cefb99f1f69b355d1fd32bda2cbdc1c33b641a8",
                 "relative_path": "artifacts/cases/fault-stale-identity/trial-03/run/report.json"
               },
               {
@@ -1107,9 +1107,9 @@
               }
             ],
             "detail_code": "fault-stale-identity.three-trial-contract",
-            "completed_at": "2026-07-26T06:33:45.350846+00:00",
+            "completed_at": "2026-07-26T07:07:17.886852+00:00",
             "attestation_key_id": "public-demo-headless-runner",
-            "attestation_signature": "y+NwuefWTO2lUMLNvDjDrNUEo1mVFx6YabQ8Lm9hWU/rIGR4QHNNT/mZRj4m+shDNKkSRH/WgOiBR3ATO8F1BQ=="
+            "attestation_signature": "5PiFmo+xxxXZEmqc2pTfSqyJ3mN0cQ/RFZwJ+0eKcF0rZq4VrSlUbdYkZvsBvFg6hH618Tr8XN4UEJ81JNpCBA=="
           }
         ]
       },
@@ -1123,12 +1123,12 @@
         "results": [
           {
             "case_id": "fault-weak-effect",
-            "project_id": "229aef18-8411-475e-b8bc-e196a24fcf87",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
             "project_revision": 12,
-            "project_contract_sha256": "d2eae36f894eadfd6ca38f2e3ef22de4317c21153e679196627c38bd7b9f8812",
-            "workflow_contract_sha256": "576eba564c76320bbd684d38c72332e9bda0ad2b68c2666098f65a371abeaa48",
-            "environment_contract_sha256": "fedbe5c75bdab592542adf14825bc39ff20deb6c92b3d2db37dce1b1eee16c2a",
-            "environment_digest": "e1b4c3e1da9029be74aab7fa7e340a0556382c9bdd38a7aa151eb7cb3f49aff4",
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
             "runtime_version": "1.23.0",
             "runner_id": "openadapt-flow/public-demo-headless",
             "runner_capabilities": [
@@ -1141,17 +1141,17 @@
             "evidence": [
               {
                 "kind": "run_report",
-                "sha256": "990716ace802fe3a04edbb7a42bdbb5af56109596108026df995e053c7a81482",
+                "sha256": "b4d5b9c01abc0d902f7a57afd89b32cae6574d42851372f6a4f4cad6f7807afa",
                 "relative_path": "artifacts/cases/fault-weak-effect/trial-01/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "ceaa645bf23c5d227191f2ea45e45f19b251885575c11e48f72e81c240eb47b7",
+                "sha256": "8143ef2f20bd6b42a00a8cd63827bf18ca99940745b7c435878e512cb2c8bf3f",
                 "relative_path": "artifacts/cases/fault-weak-effect/trial-02/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "282b6495aa71a1b1f78425efcb1c8858b3652dcc141646f69b8ff4797cdf8ed0",
+                "sha256": "217acca2cdf139ff7e8b53cf8b69f7d704abe8da170e8d880adf6200b9c0d5ee",
                 "relative_path": "artifacts/cases/fault-weak-effect/trial-03/run/report.json"
               },
               {
@@ -1171,9 +1171,9 @@
               }
             ],
             "detail_code": "fault-weak-effect.three-trial-contract",
-            "completed_at": "2026-07-26T06:34:15.871556+00:00",
+            "completed_at": "2026-07-26T07:07:50.021545+00:00",
             "attestation_key_id": "public-demo-headless-runner",
-            "attestation_signature": "T8wZCJhMCF8MlIgmmoAQ/HNabilWccPKjObFQjfJDx4DpTGOARrVJbVXRFFve2J/WHDl3KMUo4Zoptf7IeHJDw=="
+            "attestation_signature": "9IcpvCPGR1iSQhJ4T/yd2b6ZkAixxK6Nh7FaHMJyGCE9hruAgKNA4oV+ipjqs/7Xi9EPwDARE93afyrOCjM7DQ=="
           }
         ]
       },
@@ -1187,12 +1187,12 @@
         "results": [
           {
             "case_id": "fault-missing-effect",
-            "project_id": "229aef18-8411-475e-b8bc-e196a24fcf87",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
             "project_revision": 12,
-            "project_contract_sha256": "d2eae36f894eadfd6ca38f2e3ef22de4317c21153e679196627c38bd7b9f8812",
-            "workflow_contract_sha256": "576eba564c76320bbd684d38c72332e9bda0ad2b68c2666098f65a371abeaa48",
-            "environment_contract_sha256": "fedbe5c75bdab592542adf14825bc39ff20deb6c92b3d2db37dce1b1eee16c2a",
-            "environment_digest": "e1b4c3e1da9029be74aab7fa7e340a0556382c9bdd38a7aa151eb7cb3f49aff4",
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
             "runtime_version": "1.23.0",
             "runner_id": "openadapt-flow/public-demo-headless",
             "runner_capabilities": [
@@ -1205,17 +1205,17 @@
             "evidence": [
               {
                 "kind": "run_report",
-                "sha256": "6681073b23ec99c973131cdb96ea38263dc56f45bf8e30ba3a98bcacb6245aac",
+                "sha256": "9888ec067b7f7c05d4e67e638a29493b6e5e2f764d6f2eab363a6c607488b0ff",
                 "relative_path": "artifacts/cases/fault-missing-effect/trial-01/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "a0a945fc5aec29e058ddbf1a40243829ffcd25c21ff699afbd52747e3d771d60",
+                "sha256": "eef8a4cb4c6efa841c5649d3328866f29265937aba3eab8306ab11d2e0b21626",
                 "relative_path": "artifacts/cases/fault-missing-effect/trial-02/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "cb2c639863cc11e0185e146d9830bc91f227bbdccf6532c68ddb627f244b6d3e",
+                "sha256": "2a550f53de9c8c2a24e492574705fecf0cc5183718ebebada1f9e6333876a325",
                 "relative_path": "artifacts/cases/fault-missing-effect/trial-03/run/report.json"
               },
               {
@@ -1235,9 +1235,9 @@
               }
             ],
             "detail_code": "fault-missing-effect.three-trial-contract",
-            "completed_at": "2026-07-26T06:34:46.549760+00:00",
+            "completed_at": "2026-07-26T07:08:22.706051+00:00",
             "attestation_key_id": "public-demo-headless-runner",
-            "attestation_signature": "2xCxpvZaUSg3DrAfnfMcSKT43mKez9CctD7wKhTYpPVF6SuXdo8qzqr9wqC8QAfXDFpzlveMiBbY0GsozMQyCA=="
+            "attestation_signature": "tXrlXALnWjNaOmiTvcXg+vYXhfAMYTwv61D9izyve9ou7rTNvXoDaNANxfziO+urVngZZHx+XDBO5dqSeTVqBQ=="
           }
         ]
       },
@@ -1251,12 +1251,12 @@
         "results": [
           {
             "case_id": "representative",
-            "project_id": "229aef18-8411-475e-b8bc-e196a24fcf87",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
             "project_revision": 12,
-            "project_contract_sha256": "d2eae36f894eadfd6ca38f2e3ef22de4317c21153e679196627c38bd7b9f8812",
-            "workflow_contract_sha256": "576eba564c76320bbd684d38c72332e9bda0ad2b68c2666098f65a371abeaa48",
-            "environment_contract_sha256": "fedbe5c75bdab592542adf14825bc39ff20deb6c92b3d2db37dce1b1eee16c2a",
-            "environment_digest": "e1b4c3e1da9029be74aab7fa7e340a0556382c9bdd38a7aa151eb7cb3f49aff4",
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
             "runtime_version": "1.23.0",
             "runner_id": "openadapt-flow/public-demo-headless",
             "runner_capabilities": [
@@ -1269,17 +1269,17 @@
             "evidence": [
               {
                 "kind": "run_report",
-                "sha256": "671f71918768a1cfb2dcd3147b2ed2983834aaa0b0ca6fef3a71857da34263f6",
+                "sha256": "10d7e85225617c5ee98a357f5b2b9098b451373f6f0e367d7f84185c46806fcf",
                 "relative_path": "artifacts/cases/representative/trial-01/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "06ad74363d7b0fdb44d9d6be95dde029a2fef56b62a0a746b70d912fa23bc6a1",
+                "sha256": "74571ea3f509a07e570a3628325501e503e684a452bd14713121dd77bd7da5b7",
                 "relative_path": "artifacts/cases/representative/trial-02/run/report.json"
               },
               {
                 "kind": "run_report",
-                "sha256": "0a9675be8e3dbf420113c21b1013469bc2437e797df1c3e0f31c59b88b28d524",
+                "sha256": "c2a3606345c3baffc881f4fcb5ff76d209278476787dbf65c6e92a2ff00bc68c",
                 "relative_path": "artifacts/cases/representative/trial-03/run/report.json"
               },
               {
@@ -1299,9 +1299,9 @@
               }
             ],
             "detail_code": "representative.three-trial-contract",
-            "completed_at": "2026-07-26T06:33:33.977332+00:00",
+            "completed_at": "2026-07-26T07:07:04.683125+00:00",
             "attestation_key_id": "public-demo-headless-runner",
-            "attestation_signature": "DI9kjS17Qz5Vm+LCALpnQCgKFAL9vXDPEcMbhGWZ+6BsYzrOCpkI6QUdUIYh/5doX5YQB0jZxARN4GUpWFSvAQ=="
+            "attestation_signature": "4soLZkZwxanR4v+IOFpB+j4BYrACmiRw65IytqbXfrP90ep4ckbpH0lyuqxd6W0eR7O//V8bWyob48ai7q6WCw=="
           }
         ]
       }
@@ -1309,22 +1309,22 @@
     "exclusions": [],
     "requalification_conditions": [],
     "trusted_runner_keys": {
-      "public-demo-headless-runner": "j89akrq7f+ZC3MHb7Jm7TIg1VXIoPUL+X9DZM2AJXpo="
+      "public-demo-headless-runner": "dmz7CT1Jv+6Gl7W3yJZs+65RzGz5ysq4bZ27Rr3DW58="
     },
     "last_certification": {
       "project_revision": 12,
-      "project_contract_sha256": "d2eae36f894eadfd6ca38f2e3ef22de4317c21153e679196627c38bd7b9f8812",
-      "workflow_contract_sha256": "576eba564c76320bbd684d38c72332e9bda0ad2b68c2666098f65a371abeaa48",
-      "environment_contract_sha256": "fedbe5c75bdab592542adf14825bc39ff20deb6c92b3d2db37dce1b1eee16c2a",
+      "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+      "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+      "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
       "policy_name": "clinical-write",
       "passed": true,
-      "report_sha256": "9a2830f051cde7e05dde91deb3d138b9ef9df71ef6326026ed270600966bdee6",
-      "certified_at": "2026-07-26T06:34:46.576462+00:00"
+      "report_sha256": "31b3f312109a6e9e8dd2cbffd318a4900433965434128ff6e869878b5eaf17f3",
+      "certified_at": "2026-07-26T07:08:22.726699+00:00"
     }
   },
   "manifest": {
     "schema_version": 2,
-    "content_digest": "df39b4cf364a48b87aaa1c9e9db5395122b7ac0deb7641f6be985b8bc8e5e23d",
+    "content_digest": "c3f3e82732db5dd186289f71ce9f24c13452fa07fddcdfbe8d5d61e4b5281542",
     "file_hashes": {
       "templates/step_000.png": "46a75b5d63ceaad4bee942ccf2a6ca3d2b4f6327509df7eff2cc7ddb2c9fd389",
       "templates/step_000_expect.png": "337e403fec476cc955bcf5f1d96902119d9c2fadc03e201c0c2fbc2475d03646",
@@ -1341,11 +1341,11 @@
       "compiler_version": "1.23.0",
       "source_recording_sha256": null,
       "compiler_config_sha256": "479f143ba6970af144553f82f66990463129ee6606852260478c9c2a79b7f91d",
-      "created_at": "2026-07-26T06:33:18.850095+00:00",
+      "created_at": "2026-07-26T07:06:47.886463+00:00",
       "policy_name": "clinical-write",
       "certified": true,
       "certification_status": "certified",
-      "certified_at": "2026-07-26T06:34:46.576470+00:00",
+      "certified_at": "2026-07-26T07:08:22.726707+00:00",
       "expires_at": null,
       "certification_invalidated_at": null,
       "certification_invalidation_reason": null

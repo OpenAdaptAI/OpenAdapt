@@ -14,7 +14,7 @@
   "effect_contract_hashes": [],
   "effect_evidence": [],
   "identity": null,
-  "governed_authorization_id": "ed5bdf21e7cc42328a54501de64ad55a",
+  "governed_authorization_id": "a4c1dd116c8e4f42910e667f06ad9214",
   "governed_approval_source": "public-demo-qualified-campaign",
   "postconditions_ok": true,
   "skipped": false,
@@ -23,5 +23,5 @@
   "resolution": null,
   "drift_oracle_calls": 0,
   "heal": null,
-  "created_at": "2026-07-26T06:34:19.321316+00:00"
+  "created_at": "2026-07-26T07:07:53.915502+00:00"
 }

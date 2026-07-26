@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "content_digest": "df39b4cf364a48b87aaa1c9e9db5395122b7ac0deb7641f6be985b8bc8e5e23d",
+  "content_digest": "c3f3e82732db5dd186289f71ce9f24c13452fa07fddcdfbe8d5d61e4b5281542",
   "file_hashes": {
     "templates/step_000.png": "46a75b5d63ceaad4bee942ccf2a6ca3d2b4f6327509df7eff2cc7ddb2c9fd389",
     "templates/step_000_expect.png": "337e403fec476cc955bcf5f1d96902119d9c2fadc03e201c0c2fbc2475d03646",
@@ -17,11 +17,11 @@
     "compiler_version": "1.23.0",
     "source_recording_sha256": null,
     "compiler_config_sha256": "479f143ba6970af144553f82f66990463129ee6606852260478c9c2a79b7f91d",
-    "created_at": "2026-07-26T06:33:18.850095+00:00",
+    "created_at": "2026-07-26T07:06:47.886463+00:00",
     "policy_name": "clinical-write",
     "certified": true,
     "certification_status": "certified",
-    "certified_at": "2026-07-26T06:34:46.576470+00:00",
+    "certified_at": "2026-07-26T07:08:22.726707+00:00",
     "expires_at": null,
     "certification_invalidated_at": null,
     "certification_invalidation_reason": null

@@ -1,7 +1,7 @@
 {
   "browser_request_count": 3,
   "case_id": "fault-stale-identity",
-  "duration_ms": 270.75737505219877,
+  "duration_ms": 299.26454089581966,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -38,7 +38,7 @@
   "off_box_or_third_party_egress_observed": false,
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "068c97c47efa9c6d15636d38f448614a883e29c584a3a8a6f27be4c8129ae709",
+  "report_sha256": "631ff5e1da6d7e8378a57de74cefb99f1f69b355d1fd32bda2cbdc1c33b641a8",
   "runtime_network_observation": "observed",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,

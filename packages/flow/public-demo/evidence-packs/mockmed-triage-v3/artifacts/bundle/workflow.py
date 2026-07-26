@@ -3,7 +3,7 @@ workflow 'mockmed-triage' — for code review only; the replayer
 executes workflow.json, not this file."""
 
 WORKFLOW_NAME = 'mockmed-triage'
-RECORDING_ID = '4485a098973742f1b45755121d15a1d8'
+RECORDING_ID = '3290705d23254d978c7a335776e407ad'
 PARAMS = {'note': 'Synthetic follow-up in two weeks'}  # param -> example/default value
 
 

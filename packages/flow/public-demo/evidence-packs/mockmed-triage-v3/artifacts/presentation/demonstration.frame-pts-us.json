@@ -1,15 +1,15 @@
 {
   "frame_count": 8,
-  "media_sha256": "fd601246d3b044a96a030049850af36d96aa8689b553f0ef27343a7be9bd6b23",
+  "media_sha256": "6a15175effc07fa737f3a1c020baa6a13e7548f382cf5f25d419e6ffb64b91bf",
   "presentation_times_us": [
     0,
-    266000,
-    476000,
-    683000,
-    909000,
-    1126000,
-    1724000,
-    3474000
+    287000,
+    520000,
+    743000,
+    978000,
+    1202000,
+    1695000,
+    3445000
   ],
   "schema_version": "openadapt.media-frame-presentation-times/v1"
 }

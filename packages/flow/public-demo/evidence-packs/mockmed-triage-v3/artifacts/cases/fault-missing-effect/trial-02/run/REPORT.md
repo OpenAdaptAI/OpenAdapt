@@ -1,6 +1,6 @@
 # ❌ mockmed-triage — HALTED
 
-- **Started:** 2026-07-26T06:34:26.343771+00:00
+- **Started:** 2026-07-26T07:08:01.374209+00:00
 - **Execution profile:** `standard` (not production-eligible)
 - **Required contracts passed:** authorization 1/1, identity 5/5, postcondition 8/8, effect 0/2
 - **Evidence classes:** `authorization`, `identity`, `postcondition`
@@ -9,7 +9,7 @@
 - **Steps:** 5/6 ok
 - **Heals:** 0
 - **Screenshot egress:** none observed (zero screenshots left the box)
-- **Governed authorization:** `959b009deb7047bbaf84607484e799d7` (public-demo-qualified-campaign)
+- **Governed authorization:** `4631f6f7a7a84189a4e926f94b4a995a` (public-demo-qualified-campaign)
 - **Admitted policy:** clinical-write; runtime inputs bound to `342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1`
 
 ## Parameters
@@ -30,12 +30,12 @@
 
 | # | Step | Intent | Rung | Confidence | Verified | ms | Healed | OK |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `step_000` | click 'Open' | structural | 1.00 | id ✓ | 841 |  | ✅ |
-| 2 | `step_001` | click 'New Encounter' | structural | 1.00 | id ✓ | 915 |  | ✅ |
-| 3 | `step_002` | click 'Triage' | structural | 1.00 | id ✓ | 509 |  | ✅ |
-| 4 | `step_003` | click at (480, 268) | structural | 1.00 | id ✓ | 474 |  | ✅ |
+| 1 | `step_000` | click 'Open' | structural | 1.00 | id ✓ | 950 |  | ✅ |
+| 2 | `step_001` | click 'New Encounter' | structural | 1.00 | id ✓ | 992 |  | ✅ |
+| 3 | `step_002` | click 'Triage' | structural | 1.00 | id ✓ | 548 |  | ✅ |
+| 4 | `step_003` | click at (480, 268) | structural | 1.00 | id ✓ | 598 |  | ✅ |
 | 5 | `step_004` | type <note> | &mdash; | &mdash; | input ✓ | 550 |  | ✅ |
-| 6 | `step_005` | click 'Save Encounter' | structural | 1.00 | id ✓, effect ✗ | 5945 |  | ❌ |
+| 6 | `step_005` | click 'Save Encounter' | structural | 1.00 | id ✓, effect ✗ | 6055 |  | ❌ |
 
 ## Per-step evidence
 
@@ -106,7 +106,7 @@ Every step below shows the frame **before** and **after** the action next to the
 
 | Metric | Value |
 | --- | --- |
-| Total time | 9242 ms |
+| Total time | 9711 ms |
 | Steps ok | 5/6 |
 | Heals | 0 |
 | model_calls | 0 |

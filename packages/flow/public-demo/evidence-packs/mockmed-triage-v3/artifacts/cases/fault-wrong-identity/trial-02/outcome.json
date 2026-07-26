@@ -1,7 +1,7 @@
 {
   "browser_request_count": 3,
   "case_id": "fault-wrong-identity",
-  "duration_ms": 221.76658385433257,
+  "duration_ms": 188.54504101909697,
   "execution_completed": false,
   "execution_profile": "standard",
   "expected_outcome": "HALTED",
@@ -40,7 +40,7 @@
   "off_box_or_third_party_egress_observed": false,
   "oracle_passed": true,
   "production_eligible": false,
-  "report_sha256": "95b99deb7d1b8d1688ea84efda4df933505188e93d07a874ba1c54e38d6189f7",
+  "report_sha256": "7ae08bb375505df852fee3594884bc27326f1eeafcdc2b48824bc6cc7e5934cd",
   "runtime_network_observation": "observed",
   "schema_version": "openadapt.public-demo-outcome/v1",
   "screenshots_may_leave_box": false,

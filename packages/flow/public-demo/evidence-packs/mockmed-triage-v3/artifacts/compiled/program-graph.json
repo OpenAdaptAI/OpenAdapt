@@ -3,7 +3,7 @@
     "action_count": 6,
     "api_binding_count": 0,
     "contains_phi": false,
-    "created_at": "2026-07-26T06:33:18.849883+00:00",
+    "created_at": "2026-07-26T07:06:47.886221+00:00",
     "effect_count": 2,
     "encrypted": false,
     "halt_point_count": 1,
@@ -27,7 +27,7 @@
       "certification_status": "certified",
       "certified": true,
       "compiler_version": "1.23.0",
-      "content_digest": "df39b4cf364a48b87aaa1c9e9db5395122b7ac0deb7641f6be985b8bc8e5e23d",
+      "content_digest": "c3f3e82732db5dd186289f71ce9f24c13452fa07fddcdfbe8d5d61e4b5281542",
       "expires_at": null,
       "policy_name": "clinical-write",
       "source_recording_sha256": null
