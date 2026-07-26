@@ -1313,6 +1313,16 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         print(f"Pending escalation at {run_dir} is already approved.")
         return 0
 
+    authorize_uncertain_retry = bool(getattr(args, "authorize_uncertain_retry", False))
+    if pending.delivery_uncertainty is not None and not authorize_uncertain_retry:
+        print(
+            "This step may already have actuated. A normal resume cannot repeat "
+            "it. Reconcile and independently verify the outcome through the "
+            "attended completion path. If reconciliation proves a retry is "
+            "necessary, rerun approve with --authorize-uncertain-retry."
+        )
+        return 1
+
     # The approver identity defaults to the invoking OS user (a resume with a
     # blank approver is refused by the durable library); --approver overrides.
     approver = args.approver or getpass.getuser()
@@ -1333,6 +1343,7 @@ def _cmd_approve(args: argparse.Namespace) -> int:
             bundle_version=bundle_ver,
             workflow_name=pending.workflow_name,
             run_dir=str(run_dir),
+            authorize_uncertain_retry=authorize_uncertain_retry,
         )
     )
     # Keep the pending status in sync for the audit trail.
@@ -3106,6 +3117,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "The chosen resolution (defaults to the pause's first proposed "
             "option) — recorded for the audit trail"
+        ),
+    )
+    p.add_argument(
+        "--authorize-uncertain-retry",
+        action="store_true",
+        help=(
+            "After reconciling an uncertain delivery, explicitly authorize one "
+            "retry of the possibly dispatched step (ordinary approval refuses)"
         ),
     )
     p.set_defaults(func=_cmd_approve)

@@ -27,6 +27,36 @@ class StructuralResolutionRefused(RuntimeError):
     """
 
 
+class ActionDeliveryUncertain(RuntimeError):
+    """An action API failed after delivery may already have begun.
+
+    This is deliberately distinct from both a pre-delivery safety refusal and
+    a successful delivery receipt.  The runtime must not retry the action.  It
+    may report success only after the configured postcondition and independent
+    effect contracts fully confirm the intended business outcome.
+
+    The exception retains only bounded, non-payload metadata.  Backend error
+    messages can contain page text, URLs, or identifiers and therefore are not
+    copied into the run report.
+    """
+
+    def __init__(
+        self,
+        *,
+        operation: str,
+        native: bool,
+        target_fingerprint: Optional[str] = None,
+        cause_type: str = "BackendError",
+    ) -> None:
+        super().__init__(
+            "action delivery may have occurred; independent verification required"
+        )
+        self.operation = operation
+        self.native = native
+        self.target_fingerprint = target_fingerprint
+        self.cause_type = cause_type
+
+
 @runtime_checkable
 class SystemOfRecordBackend(Protocol):
     """Optional system-of-record observation a backend MAY expose.

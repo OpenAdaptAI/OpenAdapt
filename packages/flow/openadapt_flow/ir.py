@@ -1759,6 +1759,31 @@ class ActionDeliveryReceipt(BaseModel):
     outcome_verified: Literal[False] = False
 
 
+class ActionDeliveryUncertainty(BaseModel):
+    """Evidence that an action may have landed but cannot be retried safely.
+
+    This record never proves delivery or business success.  It makes the
+    uncertainty explicit and records whether the runtime subsequently proved
+    the complete postcondition + independent-effect contract.
+    """
+
+    status: Literal["delivery_uncertain"] = "delivery_uncertain"
+    operation: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    native: bool
+    target_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    observed_at: str = Field(min_length=20, max_length=64)
+    cause_type: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_.]*$",
+    )
+    retried: Literal[False] = False
+    verification_attempted: bool = False
+    postconditions_confirmed: Optional[bool] = None
+    effects_confirmed: Optional[bool] = None
+    resolved_by_contract: bool = False
+
+
 class IdentitySignalEvidence(BaseModel):
     """PHI-free audit evidence for one qualified identity signal."""
 
@@ -1949,6 +1974,11 @@ class StepResult(BaseModel):
     # postcondition or system-of-record effect; those independent verdicts are
     # recorded in ``postconditions_ok`` / ``effect_verified``.
     delivery_receipt: Optional[ActionDeliveryReceipt] = None
+    # The action API raised after delivery may have begun.  This is neither a
+    # receipt nor an ordinary backend failure: the runtime never retries and
+    # can proceed only when the complete independent outcome contract proves
+    # what happened.
+    delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
     # Drift-oracle: postconditions that deterministically FAILED but were
     # confirmed by the optional on-prem VLM state-verifier under render drift
     # (recorded for audit; empty unless an appliance is configured).

@@ -37,6 +37,7 @@ from typing import Any, Optional
 from openadapt_flow.ir import ExecutionTargetKind, RunReport, Workflow
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
+    ApprovalRequired,
     BundleMismatch,
     StateDiverged,
     enforce_resume_authorization,
@@ -146,13 +147,38 @@ def resume(
     # A pending escalation means a human was asked to authorize the resume; no
     # valid approval => refuse (never a silent proceed). A run_dir with no
     # pending escalation is not a paused run -- nothing to authorize.
+    approved: Optional[ApprovalRecord] = None
     if pending is not None:
-        enforce_resume_authorization(
+        approved = enforce_resume_authorization(
             pending,
             approval if approval is not None else store.read_approval(),
             bundle_version=live_bundle_version,
             now=now,
         )
+        if pending.delivery_uncertainty is not None:
+            last_linear = store.last_checkpoint()
+            last_program = store.last_program_checkpoint()
+            reconciled_without_retry = (
+                not pending.program
+                and last_linear is not None
+                and last_linear.step_index == pending.step_index
+                and last_linear.next_step_index > pending.step_index
+                and last_linear.actuation in {"human_attended", "human_attended_skip"}
+            ) or (
+                pending.program
+                and last_program is not None
+                and last_program.verified_state_id
+                == (pending.state_id or pending.step_id)
+                and last_program.attended_transition is not None
+            )
+            if not reconciled_without_retry and not approved.authorize_uncertain_retry:
+                raise ApprovalRequired(
+                    "the paused step may already have actuated; ordinary resume "
+                    "cannot repeat it. Reconcile and independently verify the "
+                    "outcome through the attended completion path, or create a "
+                    "fresh approval that explicitly authorizes one "
+                    "uncertain-delivery retry"
+                )
 
     workflow = Workflow.load(resolved_bundle, key=key)
     if manifest is not None and manifest.governed_authorization is not None:

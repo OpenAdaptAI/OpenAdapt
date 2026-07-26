@@ -45,6 +45,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from openadapt_flow.ir import (
+    ActionDeliveryUncertainty,
     EffectVerificationEvidence,
     HealEvent,
     IdentityCheck,
@@ -150,6 +151,7 @@ class RunCheckpoint(BaseModel):
     postconditions_ok: Optional[bool] = None
     skipped: bool = False
     actuation: Optional[str] = None
+    delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
     #: Resolution/model/heal evidence is retained so a resumed report accounts
     #: for the whole logical run rather than only the final leg.
     resolution: Optional[Resolution] = None
@@ -180,9 +182,10 @@ class PendingEscalation(BaseModel):
     #: Coarse machine category (see :func:`classify_halt`): ``effect_refuted``,
     #: ``effect_indeterminate``, ``effect_escalated``, ``placeholder_effect``,
     #: ``effect_unverifiable``, ``unmet_guard``, ``disambiguation``,
-    #: ``identity``, ``postcondition``, ``resolution``, ``human_required``, or
-    #: ``halt``. ``human_required`` means CAPTCHA/MFA/re-authentication must be
-    #: completed by the present operator; no automation acts on the challenge.
+    #: ``identity``, ``postcondition``, ``resolution``, ``delivery_uncertain``,
+    #: ``human_required``, or ``halt``. ``human_required`` means CAPTCHA/MFA/
+    #: re-authentication must be completed by the present operator; no
+    #: automation acts on the challenge.
     category: str
     #: The verbatim halt reason (``result.error``) -- WHY it paused.
     reason: str = ""
@@ -214,6 +217,10 @@ class PendingEscalation(BaseModel):
     program_checkpoint_seq: int = Field(default=0, ge=0)
     #: Rolling visited-state digest captured at the halt, for audit continuity.
     program_history_hash: str = ""
+    #: Exact, PHI-free record that this step may already have actuated.  Resume
+    #: must not re-enter it automatically: a human-completed verification
+    #: checkpoint or a fresh explicit uncertain-retry authorization is needed.
+    delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
     created_at: str = Field(default_factory=_now)
 
 

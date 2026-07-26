@@ -92,6 +92,10 @@ class ApprovalRecord(BaseModel):
     workflow_name: str = ""
     #: The run directory this approval authorizes (audit).
     run_dir: str = ""
+    #: A normal resume approval must never repeat a step whose input may have
+    #: landed.  This separate, explicit authority is set only after an operator
+    #: reconciles the live/system-of-record state and decides one retry is safe.
+    authorize_uncertain_retry: bool = False
 
 
 def enforce_resume_authorization(

@@ -46,6 +46,7 @@ from typing import Any, Callable, Literal, Optional, cast
 from urllib.parse import urlsplit
 
 from openadapt_flow.backend import (
+    ActionDeliveryUncertain,
     Backend,
     FocusedElementActuationLeaseBackend,
     GuardedCoordinateActionBackend,
@@ -60,6 +61,7 @@ from openadapt_flow.identity_signals import (
     parameterize_identity_text,
 )
 from openadapt_flow.ir import (
+    ActionDeliveryUncertainty,
     ActionKind,
     Anchor,
     ApiBinding,
@@ -1747,6 +1749,7 @@ class Replayer:
                     identity=checkpoint.identity,
                     postconditions_ok=checkpoint.postconditions_ok,
                     actuation=checkpoint.actuation,
+                    delivery_uncertainty=checkpoint.delivery_uncertainty,
                     resolution=checkpoint.resolution,
                     drift_oracle_calls=checkpoint.drift_oracle_calls,
                     heal=checkpoint.heal,
@@ -1844,6 +1847,7 @@ class Replayer:
             postconditions_ok=result.postconditions_ok,
             skipped=result.skipped,
             actuation=result.actuation,
+            delivery_uncertainty=result.delivery_uncertainty,
             resolution=result.resolution,
             drift_oracle_calls=result.drift_oracle_calls,
             heal=result.heal,
@@ -2661,6 +2665,12 @@ class Replayer:
         # read-back verifier even with NO effect verifier configured (the
         # no-connector default); see the effect block below.
         active_verifier = self.effect_verifier
+        # A backend can fail after an actuation API has begun but before it can
+        # return a delivery receipt (for example, a click removes its iframe).
+        # Such an action is never retried.  The runtime continues through the
+        # configured postcondition and independent-effect contract, then
+        # reports VERIFIED only if that complete contract proves the outcome.
+        delivery_uncertain = False
 
         try:
             # Workflow-program IR, Phase 1: evaluate the step's guard
@@ -2864,77 +2874,138 @@ class Replayer:
                 # the workflow action as URL_CHANGED, TITLE_CHANGED, or
                 # NEW_TAB_OPENED.
                 start_state = self._structural_state()
-                error = self._act(
-                    step,
-                    resolution,
-                    params,
-                    workflow=workflow,
-                    step_index=step_index,
-                    bundle_dir=bundle_dir,
-                    before_png=before_png,
-                    result=result,
-                    graph_ctx=graph_ctx,
-                )
+                try:
+                    error = self._act(
+                        step,
+                        resolution,
+                        params,
+                        workflow=workflow,
+                        step_index=step_index,
+                        bundle_dir=bundle_dir,
+                        before_png=before_png,
+                        result=result,
+                        graph_ctx=graph_ctx,
+                    )
+                except ActionDeliveryUncertain as exc:
+                    delivery_uncertain = True
+                    result.delivery_uncertainty = ActionDeliveryUncertainty(
+                        operation=exc.operation,
+                        native=exc.native,
+                        target_fingerprint=exc.target_fingerprint,
+                        observed_at=datetime.now(timezone.utc).isoformat(),
+                        cause_type=exc.cause_type,
+                    )
+                    # Continue to settled-state, postcondition, and independent
+                    # effect verification.  This is not permission to assume
+                    # delivery; it is the exact opposite: success now requires
+                    # the full configured contract.
+                    error = None
                 if self._governed_asset_mutation is not None:
                     error = self._governed_asset_mutation
                     result.safety_halt = True
 
             if error is None:
-                after_png = self.vision.wait_settled(self.backend)
-                last_frame = after_png
-                postconditions_ok, last_frame, failed = self._check_postconditions(
-                    step, after_png, bundle_dir, start_state, result
-                )
-                if self._governed_asset_mutation is not None:
-                    postconditions_ok = False
-                    failed.append(self._governed_asset_mutation)
-                result.postconditions_ok = postconditions_ok
-                if result.postcondition_drift_rescues:
-                    # The rescue descriptions embed OCR'd on-screen text
-                    # (postcondition literals) — scrub PHI before it hits the
-                    # console log (see openadapt_flow.privacy).
-                    rescued = "; ".join(
-                        # Rescues are non-empty descriptions, so scrub_text returns
-                        # a str; ``or ""`` only satisfies its Optional[str] return.
-                        _scrub_phi(r) or ""
-                        for r in result.postcondition_drift_rescues
+                try:
+                    after_png = self.vision.wait_settled(self.backend)
+                    last_frame = after_png
+                    postconditions_ok, last_frame, failed = self._check_postconditions(
+                        step, after_png, bundle_dir, start_state, result
                     )
-                    print(
-                        f"  drift-oracle: {len(result.postcondition_drift_rescues)}"
-                        " postcondition(s) confirmed by VLM under render drift — "
-                        + rescued
-                    )
-                if not postconditions_ok:
-                    detail = "; ".join(failed) or "unknown postcondition"
+                    if self._governed_asset_mutation is not None:
+                        postconditions_ok = False
+                        failed.append(self._governed_asset_mutation)
+                    result.postconditions_ok = postconditions_ok
+                    if result.postcondition_drift_rescues:
+                        # The rescue descriptions embed OCR'd on-screen text
+                        # (postcondition literals) — scrub PHI before it hits the
+                        # console log (see openadapt_flow.privacy).
+                        rescued = "; ".join(
+                            # Rescues are non-empty descriptions, so scrub_text
+                            # returns a str; ``or ""`` only satisfies its
+                            # Optional[str] return.
+                            _scrub_phi(r) or ""
+                            for r in result.postcondition_drift_rescues
+                        )
+                        print(
+                            "  drift-oracle: "
+                            f"{len(result.postcondition_drift_rescues)}"
+                            " postcondition(s) confirmed by VLM under render "
+                            "drift — " + rescued
+                        )
+                    if not postconditions_ok:
+                        detail = "; ".join(failed) or "unknown postcondition"
+                        error = (
+                            f"Postconditions failed for step '{step.id}' "
+                            f"({step.intent}): expected screen state not reached "
+                            f"(semantic drift) — failed: {detail} — run aborted"
+                        )
+                        if self.governed_authorization is not None:
+                            result.safety_halt = True
+                except Exception as exc:
+                    if not delivery_uncertain:
+                        raise
+                    # A detached/navigated context can also make screen
+                    # observation fail.  That does not cancel independent
+                    # effect verification; record the bounded failure and keep
+                    # going without exposing a backend payload.
+                    result.postconditions_ok = False
                     error = (
-                        f"Postconditions failed for step '{step.id}' "
-                        f"({step.intent}): expected screen state not reached "
-                        f"(semantic drift) — failed: {detail} — run aborted"
+                        "Post-delivery observation could not confirm the "
+                        f"postcondition ({type(exc).__name__})"
                     )
-                    if self.governed_authorization is not None:
-                        result.safety_halt = True
 
             # Independent system-of-record verification, AFTER the screen
             # postconditions passed: the screen oracle cannot see a partial
             # save, a phantom optimistic-UI success, a duplicate write, or a
             # lost update -- the EffectVerifier reads the REAL record and HALTs
             # on any non-CONFIRMED verdict (docs/design/EFFECT_VERIFIER.md).
-            if error is None and effect_pre_state is not None:
-                error = self._verify_effects(
+            if (error is None or delivery_uncertain) and effect_pre_state is not None:
+                effect_error = self._verify_effects(
                     step,
                     effect_pre_state,
                     result,
                     effects=resolved_effects,
                     verifier=active_verifier,
                 )
-                if error is not None and self.governed_authorization is not None:
+                if effect_error is not None and error is None:
+                    error = effect_error
+                if effect_error is not None and self.governed_authorization is not None:
                     result.safety_halt = True
+
+            if delivery_uncertain:
+                uncertainty = result.delivery_uncertainty
+                assert uncertainty is not None
+                uncertainty.verification_attempted = True
+                uncertainty.postconditions_confirmed = result.postconditions_ok is True
+                uncertainty.effects_confirmed = result.effect_verified is True
+                complete_contract_confirmed = (
+                    uncertainty.postconditions_confirmed
+                    and uncertainty.effects_confirmed
+                    and error is None
+                )
+                uncertainty.resolved_by_contract = complete_contract_confirmed
+                if not complete_contract_confirmed:
+                    detail = (
+                        "Action delivery was uncertain and was not retried; "
+                        "the complete postcondition and independent effect "
+                        "contract did not confirm the intended outcome"
+                    )
+                    if error is not None:
+                        detail += f". Verification detail: {error}"
+                    error = detail
+                    result.safety_halt = True
+                    result.failure_category = (
+                        "governed_refusal"
+                        if self.governed_authorization is not None
+                        else "safety_halt"
+                    )
 
             result.ok = error is None
             result.error = error
 
             if (
                 result.ok
+                and result.delivery_uncertainty is None
                 and resolution is not None
                 and matched_region is not None
                 and resolution.rung not in ("template", "structural")

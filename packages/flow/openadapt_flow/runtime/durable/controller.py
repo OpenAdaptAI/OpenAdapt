@@ -112,6 +112,16 @@ def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[s
     )
     abort = "Abort the run and discard the pending escalation"
 
+    if result.delivery_uncertainty is not None:
+        return "delivery_uncertain", [
+            "Reconcile the live application and independently verify whether "
+            "the effect landed; the attended Continue path can checkpoint the "
+            "verified outcome without repeating the action",
+            "If reconciliation proves a retry is necessary, record a fresh "
+            "approval explicitly authorizing one uncertain-delivery retry",
+            abort,
+        ]
+
     # CAPTCHA, MFA, and re-authentication are human-presence requirements.
     # OpenAdapt only halts and leaves the live application to the operator.
     if looks_like_human_required(error):
@@ -329,6 +339,7 @@ class DurableRun:
                     postconditions_ok=result.postconditions_ok,
                     skipped=result.skipped,
                     actuation=result.actuation,
+                    delivery_uncertainty=result.delivery_uncertainty,
                     resolution=result.resolution,
                     drift_oracle_calls=result.drift_oracle_calls,
                     heal=result.heal,
@@ -353,6 +364,7 @@ class DurableRun:
             resume_from_index=resume_from,
             resume_from_step_id=(last.step_id if last is not None else None),
             params=dict(params),
+            delivery_uncertainty=result.delivery_uncertainty,
         )
         self.store.write_pending(pending)
         if workflow is not None:
@@ -421,6 +433,7 @@ class DurableRun:
             program_frames=list(program_frames or []),
             program_checkpoint_seq=program_checkpoint_seq,
             program_history_hash=program_history_hash,
+            delivery_uncertainty=result.delivery_uncertainty,
         )
         self.store.write_pending(pending)
         if workflow is not None:
@@ -487,6 +500,9 @@ def resumed_step_results(
                     checkpoint.postconditions_ok if checkpoint is not None else None
                 ),
                 actuation=checkpoint.actuation if checkpoint is not None else None,
+                delivery_uncertainty=(
+                    checkpoint.delivery_uncertainty if checkpoint is not None else None
+                ),
                 resolution=checkpoint.resolution if checkpoint is not None else None,
                 drift_oracle_calls=(
                     checkpoint.drift_oracle_calls if checkpoint is not None else 0

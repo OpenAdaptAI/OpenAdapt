@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
 
-from openadapt_flow.backend import StructuralResolutionRefused
+from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     StructuralHandle,
@@ -1261,10 +1261,47 @@ class PlaywrightBackend:
                 raise StructuralResolutionRefused(
                     "guarded DOM token is missing or ambiguous at delivery"
                 )
-            if double:
-                token_locator.dblclick(timeout=1000)
-            else:
-                token_locator.click(timeout=1000)
+            try:
+                # Separate Playwright's actionability trial from the real input
+                # attempt.  Trial failures are proven pre-dispatch refusals;
+                # only an exception from the subsequent real click is delivery
+                # uncertainty.
+                if double:
+                    token_locator.dblclick(timeout=1000, trial=True)
+                else:
+                    token_locator.click(timeout=1000, trial=True)
+            except Exception as exc:
+                raise StructuralResolutionRefused(
+                    "guarded DOM target was unactionable during its pre-dispatch trial"
+                ) from exc
+            if (
+                not self._context_guard_is_current(guard)
+                or loc.count() != 1
+                or not self._guard_is_current(loc, guard.token)
+            ):
+                raise StructuralResolutionRefused(
+                    "guarded DOM target or context changed after the "
+                    "pre-dispatch actionability trial"
+                )
+            try:
+                if double:
+                    token_locator.dblclick(timeout=1000)
+                else:
+                    token_locator.click(timeout=1000)
+            except Exception as exc:
+                # Every structural/context/identity check above happens before
+                # this call.  Once Playwright begins its action, an exception
+                # (notably frame detach/navigation) cannot prove that the
+                # browser emitted no input.  Surface a typed uncertainty so the
+                # runtime verifies the effect exactly once and never retries.
+                raise ActionDeliveryUncertain(
+                    operation="dom_double_click" if double else "dom_click",
+                    native=False,
+                    target_fingerprint=fingerprint,
+                    cause_type=type(exc).__name__,
+                ) from exc
+        except ActionDeliveryUncertain:
+            raise
         except StructuralResolutionRefused:
             raise
         except Exception as exc:

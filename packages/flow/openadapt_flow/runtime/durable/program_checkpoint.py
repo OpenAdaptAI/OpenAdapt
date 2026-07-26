@@ -27,6 +27,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.ir import (
+    ActionDeliveryUncertainty,
     EffectVerificationEvidence,
     HealEvent,
     IdentityCheck,
@@ -214,6 +215,7 @@ class ProgramCheckpoint(BaseModel):
     postconditions_ok: Optional[bool] = None
     skipped: bool = False
     actuation: Optional[str] = None
+    delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
     resolution: Optional[Resolution] = None
     drift_oracle_calls: int = Field(default=0, ge=0)
     heal: Optional[HealEvent] = None
