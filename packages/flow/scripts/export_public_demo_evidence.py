@@ -45,7 +45,6 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from jsonschema import Draft202012Validator
-from openadapt_types import ControlOverlayMode
 from PIL import Image
 
 from openadapt_flow import __version__ as FLOW_VERSION
@@ -257,7 +256,9 @@ class _PresentationCapture:
     never takes a browser screenshot between final revalidation and actuation.
     """
 
-    def __init__(self, *, mode: ControlOverlayMode | str) -> None:
+    def __init__(self, *, mode: str) -> None:
+        from openadapt_types import ControlOverlayMode
+
         from openadapt_flow.runtime.control_overlay import (
             RuntimeControlOverlayEmitter,
         )
