@@ -6,7 +6,11 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
+      # v4.0.1 currently sends an invalid content-length through Node 24 for
+      # this repository_dispatch payload. Keep the last proven v3 SHA until
+      # upstream ships a working v4 release; this job is push-only, so PR CI
+      # cannot exercise it.
+      - uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
         with:
           token: ${{ secrets.DOCS_DISPATCH_TOKEN }}
           repository: OpenAdaptAI/openadapt-maintenance
