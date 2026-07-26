@@ -132,6 +132,14 @@
       "sha256": "0a42afcda4853b7f9cc7e135e7c6a2a71373f0aa0ef39cb67a54c1eacdd5f8ad"
     },
     {
+      "path": "benchmark/citrix_ica_hdx/results.json",
+      "sha256": "8c394cbff9674b0048686f9438db26f3d1cfb5977c9aaa662b84e0ecc6c69ec7"
+    },
+    {
+      "path": "benchmark/citrix_ica_hdx/status_manifest.json",
+      "sha256": "196154bedfeccfdbd398424382ea7c486933a71da97dcdfdc3fa0e9b772076b2"
+    },
+    {
       "path": "benchmark/citrix_workspace/results.json",
       "sha256": "64d588f93bc4fcd5ade9962483aeb85d5facc6b764babddd0b90b750f59d4156"
     },
