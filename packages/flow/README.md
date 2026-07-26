@@ -90,8 +90,14 @@ scope of each substrate.
 clicks, typing, key presses, and scrolls, writing the same recording format
 `compile` consumes. Perform the workflow, then press Ctrl-C (or close the
 window) to finish. The `--backend` selector picks the substrate, and the same
-selector is available on `replay` and `run`. It defaults to `web`, which
-reproduces the historical browser behavior exactly.
+selector is available on `replay` and `run`. The browser is one surface among
+six, not a privileged default: under a production profile
+(`--profile standard` / `--profile regulated`) an explicit `--backend` (or a
+configured `backend.kind`) is required, and a compiled bundle is bound to the
+exact surface it was recorded on. Only the demo/permissive posture may default
+to the browser, and it prints a visible notice when it does. See
+[docs/SURFACES.md](docs/SURFACES.md) for the per-surface first-workflow paths
+and the two remote execution modes.
 
 ```bash
 # Browser (Playwright / Chromium): the app is a URL.

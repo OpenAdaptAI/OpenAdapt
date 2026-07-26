@@ -31,6 +31,8 @@ from openadapt_flow.ir import (
     BackendHints,
     BundleManifest,
     BundleProvenance,
+    ExecutionMode,
+    ExecutionTargetKind,
     Landmark,
     ParamKind,
     ParamSpec,
@@ -972,6 +974,44 @@ def _emit_identifier_crop(
     return crop_rel, region, None
 
 
+def _surface_binding_from_meta(
+    meta: dict, backend_hints: Optional[BackendHints]
+) -> tuple[Optional[ExecutionTargetKind], Optional[ExecutionMode]]:
+    """Resolve the recording's surface binding (roadmap Section 5).
+
+    The recorder stamps the exact surface the demonstration was captured on
+    (``meta.json`` ``surface``); the compiled bundle carries it, plus the
+    execution mode that surface implies, so a workflow qualified on one
+    surface refuses to run on another without an explicit, report-recorded
+    override. A legacy recording without the stamp compiles to an unbound
+    bundle (surface None), except that an rdp/citrix recording's
+    ``backend_hints`` already names its pixel surface exactly.
+
+    Raises:
+        ValueError: On an unknown surface token, or a ``surface`` that
+            contradicts ``backend_hints.backend`` (a recording captures
+            exactly one execution surface).
+    """
+    surface_raw = meta.get("surface")
+    if surface_raw is None and backend_hints is not None:
+        surface_raw = backend_hints.backend
+    if surface_raw is None:
+        return None, None
+    if surface_raw not in ("web", "windows", "macos", "linux", "rdp", "citrix"):
+        raise ValueError(
+            "meta.json surface must be one of web/windows/macos/linux/rdp/citrix"
+        )
+    surface = cast(ExecutionTargetKind, surface_raw)
+    if backend_hints is not None and backend_hints.backend != surface:
+        raise ValueError(
+            "meta.json surface contradicts backend_hints.backend; a "
+            "recording captures exactly one execution surface"
+        )
+    from openadapt_flow.surface_selection import execution_mode_for_surface
+
+    return surface, execution_mode_for_surface(surface)
+
+
 # Parameter names must be usable as ValueExpr(param=...) / ApiBinding threads
 # and environment-variable stems -- the same shape ir.ApiBinding enforces.
 _PARAM_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
@@ -1190,6 +1230,7 @@ def compile_recording(
                 "meta.json backend_hints does not match the closed "
                 "rdp/citrix execution-target schema"
             ) from exc
+    surface, execution_mode = _surface_binding_from_meta(meta, backend_hints)
     events = _load_events(recording)
     params: dict[str, str] = dict(meta.get("params") or {})
     secret_params: list[str] = list(meta.get("secret_params") or [])
@@ -1643,6 +1684,8 @@ def compile_recording(
         recording_id=meta.get("id"),
         viewport=tuple(viewport) if viewport else None,
         backend_hints=backend_hints,
+        surface=surface,
+        execution_mode=execution_mode,
         params=params,
         # Workflow-program IR, Phase 1: emit a TYPED spec for each recorded
         # parameter alongside the frozen ``params`` dict -- generalizing the

@@ -312,6 +312,13 @@ def _resolve_backend_config(args: argparse.Namespace, cfg, workflow=None):
     explicit_kind = getattr(args, "backend", None)
     configured_kind = backend.kind if "kind" in configured else None
     selected_kind = explicit_kind or configured_kind
+    # Surface binding (Section 5): a surface-bound workflow supplies its own
+    # target when neither a flag nor the config selects one. There is no
+    # implicit browser default for a bound bundle; the browser is chosen only
+    # when the workflow was actually recorded on it.
+    bound_surface = getattr(workflow, "surface", None)
+    if selected_kind is None and hints is None and bound_surface is not None:
+        backend = backend.model_copy(update={"kind": bound_surface})
     if hints is not None and (
         selected_kind is None or _report_backend_kind(selected_kind) == hints.backend
     ):
@@ -354,6 +361,110 @@ def _resolve_backend_config(args: argparse.Namespace, cfg, workflow=None):
             update={"rdp_readiness_text": args.rdp_readiness_text}
         )
     return backend
+
+
+def _surface_selection_gate(
+    args: argparse.Namespace, cfg, workflow, *, operation: str
+) -> Optional[int]:
+    """Enforce explicit surface selection (Section 5) before backend resolve.
+
+    Returns an exit code to refuse with, or None to proceed. Production
+    profiles (Standard/Regulated) require an explicit target: a ``--backend``
+    flag, a configured ``backend.kind``, or a surface-bound workflow. The
+    Demo/permissive posture may default to the browser (or the operator's
+    last-used Demo target from the CLI state file) but says so visibly.
+    Idempotent across the ``run`` -> ``_cmd_replay`` delegation.
+    """
+    if getattr(args, "_surface_selection_done", False):
+        return None
+    args._surface_selection_done = True
+    from openadapt_flow.surface_selection import (
+        demo_default_notice,
+        explicit_surface_refusal,
+        load_last_surface,
+        store_last_surface,
+    )
+
+    profile = getattr(args, "_execution_profile", None)
+    user_backend = getattr(args, "backend", None)
+    explicitly_selected = bool(
+        user_backend
+        or "kind" in set(getattr(cfg.backend, "model_fields_set", set()))
+        or getattr(workflow, "backend_hints", None) is not None
+        or getattr(workflow, "surface", None) is not None
+    )
+    if profile == "demo" and user_backend:
+        # The last-used target is a Demo-only CLI convenience, persisted in
+        # the per-user state file and NEVER written into a workflow bundle.
+        store_last_surface(_report_backend_kind(user_backend))
+    if explicitly_selected:
+        return None
+    if profile in ("standard", "regulated"):
+        print(explicit_surface_refusal(operation, profile))
+        return 2
+    last = load_last_surface() if profile == "demo" else None
+    if last is not None:
+        args.backend = last
+    print(demo_default_notice(last or "web", from_last_used=last is not None))
+    return None
+
+
+def _enforce_surface_binding(
+    args: argparse.Namespace, workflow, backend_cfg, *, operation: str
+) -> Optional[int]:
+    """Refuse a cross-surface run unless explicitly overridden (Section 5).
+
+    A workflow recorded/qualified on one surface must not silently run on
+    another. ``--allow-surface-override`` proceeds anyway and records itself
+    in the run report (``surface_override``) as compatibility evidence; the
+    executed override is threaded via ``args._surface_override``. Idempotent
+    across the ``run`` -> ``_cmd_replay`` delegation.
+    """
+    if getattr(args, "_surface_binding_done", False):
+        return None
+    args._surface_binding_done = True
+    recorded = getattr(workflow, "surface", None)
+    if recorded is None:
+        return None
+    requested = _report_backend_kind(backend_cfg.kind)
+    if requested == recorded:
+        return None
+    from openadapt_flow.surface_selection import (
+        surface_mismatch_refusal,
+        surface_override_notice,
+    )
+
+    if not getattr(args, "allow_surface_override", False):
+        print(
+            surface_mismatch_refusal(
+                operation,
+                recorded=recorded,
+                requested=requested,
+                execution_mode=getattr(workflow, "execution_mode", None),
+            )
+        )
+        return 2
+    args._surface_override = True
+    print(surface_override_notice(recorded, requested))
+    return None
+
+
+def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
+    """Stamp the recorded surface into ``meta.json`` (additive, Section 5).
+
+    The compiler binds the compiled bundle to this exact surface. Best-effort
+    by design: a recording written by an older converter without ``meta.json``
+    simply compiles to a legacy, surface-unbound bundle.
+    """
+    import json
+
+    meta_path = Path(recording_dir) / "meta.json"
+    try:
+        meta = json.loads(meta_path.read_text())
+    except (OSError, ValueError):
+        return
+    meta["surface"] = surface
+    meta_path.write_text(json.dumps(meta, indent=2))
 
 
 def _report_backend_kind(kind: object) -> "ExecutionTargetKind":
@@ -459,6 +570,7 @@ def _build_and_run_replayer(
     governed_authorization=None,
     runtime_config=None,
     execution_target_kind: Optional["ExecutionTargetKind"] = None,
+    surface_override: bool = False,
     execution_origin: Optional[str] = None,
     execution_entry_url: Optional[str] = None,
 ):
@@ -482,6 +594,7 @@ def _build_and_run_replayer(
         run_dir=run_dir,
         save_healed_to=save_healed_to,
         execution_target_kind=execution_target_kind,
+        surface_override=surface_override,
         execution_origin=execution_origin,
         execution_entry_url=execution_entry_url,
     )
@@ -570,6 +683,7 @@ def _replay_desktop(
             governed_authorization=governed_authorization,
             runtime_config=runtime_config,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            surface_override=bool(getattr(args, "_surface_override", False)),
         )
     finally:
         close = getattr(backend, "close", None)
@@ -586,7 +700,29 @@ def _cmd_record(args: argparse.Namespace) -> int:
     # the operator's native OS input over the win_agent contract; both emit the
     # SAME compile-ready recording format. Selection is fail-loud (a missing
     # target for the chosen backend raises rather than silently record web).
-    backend = getattr(args, "backend", None) or "web"
+    #
+    # Surface-selection neutrality (Section 5): a production posture
+    # (--profile standard/regulated) requires an explicit --backend; only the
+    # Demo/permissive posture may default to the browser, visibly. The
+    # last-used target is a Demo-only convenience from the CLI state file.
+    from openadapt_flow.surface_selection import (
+        demo_default_notice,
+        explicit_surface_refusal,
+        load_last_surface,
+        store_last_surface,
+    )
+
+    profile = getattr(args, "profile", None)
+    backend = getattr(args, "backend", None)
+    if backend is None:
+        if profile in ("standard", "regulated"):
+            print(explicit_surface_refusal("record", profile))
+            return 2
+        last = load_last_surface() if profile == "demo" else None
+        backend = last or "web"
+        print(demo_default_notice(backend, from_last_used=last is not None))
+    elif profile == "demo":
+        store_last_surface(_report_backend_kind(backend))
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
         return _cmd_record_desktop(args, backend)
 
@@ -622,6 +758,7 @@ def _cmd_record(args: argparse.Namespace) -> int:
         identifier_fields=tuple(getattr(args, "identifier", None) or ()),
         headless=args.headless,
     )
+    _stamp_recording_surface(out, "web")
     print(f"Recording written to {out}")
     secrets = sorted(args.secret or ())
     if secrets:
@@ -700,6 +837,7 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
         replay_window_title=getattr(args, "rdp_window_title", None),
         readiness_text=getattr(args, "rdp_readiness_text", None),
     )
+    _stamp_recording_surface(out, backend)
     print(f"Recording written to {out}")
     if window is not None:
         print(
@@ -946,8 +1084,19 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     # Backend selection (web/native/remote, overriding --config). A
     # non-web backend drives a native desktop / RDP / remote-display session with
-    # no browser: delegate to the desktop path. Default web is unchanged below.
+    # no browser: delegate to the desktop path.
+    #
+    # Section 5: production profiles refuse an implicit target; the permissive
+    # posture defaults visibly. A surface-bound workflow then supplies its own
+    # target and refuses to run cross-surface without a recorded override.
+    operation = "run" if getattr(args, "command", None) == "run" else "replay"
+    refused = _surface_selection_gate(args, cfg, workflow, operation=operation)
+    if refused is not None:
+        return refused
     backend_cfg = _resolve_backend_config(args, cfg, workflow)
+    refused = _enforce_surface_binding(args, workflow, backend_cfg, operation=operation)
+    if refused is not None:
+        return refused
     if _normalize_kind(backend_cfg.kind) != "web":
         return _replay_desktop(
             args,
@@ -1031,6 +1180,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                     ),
                     runtime_config=cfg.runtime,
                     execution_target_kind="web",
+                    surface_override=bool(getattr(args, "_surface_override", False)),
                     execution_origin=(
                         f"{urlsplit(page.url).scheme}://{urlsplit(page.url).netloc}"
                     ),
@@ -1127,7 +1277,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
             "boundary protects plaintext artifacts. Nothing was executed."
         )
         return 2
+    # Section 5: a production profile requires an explicit execution surface
+    # BEFORE authorization; the Demo posture may default visibly. A
+    # surface-bound bundle then refuses a cross-surface run without the
+    # report-recorded override.
+    refused = _surface_selection_gate(args, cfg, workflow, operation="run")
+    if refused is not None:
+        return refused
     backend_cfg = _resolve_backend_config(args, cfg, workflow)
+    refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="run")
+    if refused is not None:
+        return refused
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
     policy_source = args.policy or cfg.policy.policy
@@ -2560,6 +2720,17 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
             "backend.rdp_readiness_text."
         ),
     )
+    p.add_argument(
+        "--allow-surface-override",
+        action="store_true",
+        help=(
+            "Explicitly permit executing a workflow on a DIFFERENT surface "
+            "than the one it was recorded/qualified on (Workflow.surface). "
+            "Off by default: a cross-surface run is refused. The override is "
+            "recorded in the run report (surface_override) as compatibility "
+            "evidence; it is never silent."
+        ),
+    )
 
 
 def _add_deployment_flags(
@@ -2765,6 +2936,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--headless",
         action="store_true",
         help="Run the browser headless (scripted/CI recording)",
+    )
+    p.add_argument(
+        "--profile",
+        choices=["demo", "standard", "regulated"],
+        default=None,
+        help=(
+            "Recording posture (Section 5). standard/regulated REQUIRE an "
+            "explicit --backend (no implicit browser default in production). "
+            "demo may omit --backend: it defaults to the browser (or your "
+            "last-used demo target) and prints a visible notice. Omitted: "
+            "the permissive pre-profile default (browser, with notice)."
+        ),
     )
     _add_backend_flags(p)
     p.set_defaults(func=_cmd_record)

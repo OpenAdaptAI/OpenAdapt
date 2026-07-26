@@ -48,6 +48,13 @@ if TYPE_CHECKING:
 Region = tuple[int, int, int, int]
 Point = tuple[int, int]
 ExecutionTargetKind = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
+#: How a surface is driven. ``in_session`` runs inside the session it
+#: automates (accessibility/structured layers available when policy permits
+#: the install); ``external`` drives a LOCAL client window of a remote
+#: session via pixels/keyboard/mouse with zero install in the remote session.
+#: The mode is fixed by explicit capability negotiation at qualification and
+#: is never silently switched at run time (docs/SURFACES.md).
+ExecutionMode = Literal["in_session", "external"]
 
 #: Current bundle schema version. v2 adds the bundle manifest (per-asset
 #: hashes, a whole-bundle content digest, and compiler/certification
@@ -1396,6 +1403,16 @@ class Workflow(BaseModel):
     # or a hosted run summary. Empty for browser/native bundles, preserving
     # their serialized form through the compatibility serializer below.
     backend_hints: Optional[BackendHints] = None
+    # -- surface binding (roadmap Section 5) --------------------------------
+    # The exact execution surface this workflow was recorded/qualified on and
+    # the execution mode that surface implies. A bound workflow refuses to run
+    # on a different surface unless the operator passes an explicit override
+    # that records itself in the run report (``RunReport.surface_override``).
+    # None on every pre-Section-5 bundle (no binding, legacy behavior); both
+    # fields are omitted from serialized bytes when None so legacy bundles
+    # round-trip byte-for-byte.
+    surface: Optional[ExecutionTargetKind] = None
+    execution_mode: Optional[ExecutionMode] = None
     params: dict[str, str] = Field(
         default_factory=dict, description="param name -> example/default value"
     )
@@ -1464,6 +1481,10 @@ class Workflow(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
+        if self.surface is None:
+            data.pop("surface", None)
+        if self.execution_mode is None:
+            data.pop("execution_mode", None)
         if self.qualification is None:
             data.pop("qualification", None)
         return data
@@ -2328,6 +2349,24 @@ class RunReport(BaseModel):
             "Resolved backend/substrate that produced this report. The CLI "
             "sets this from the resolved backend configuration; runtime "
             "validation refuses a native/remote attestation without it."
+        ),
+    )
+    recorded_surface: Optional[ExecutionTargetKind] = Field(
+        default=None,
+        description=(
+            "Surface the executed workflow was recorded/qualified on "
+            "(``Workflow.surface``). None for a legacy, surface-unbound "
+            "bundle. Together with execution_target_kind this makes any "
+            "cross-surface execution visible in the evidence."
+        ),
+    )
+    surface_override: bool = Field(
+        default=False,
+        description=(
+            "True when the operator explicitly overrode the workflow's bound "
+            "surface (--allow-surface-override) and this run executed on a "
+            "surface other than recorded_surface. The compatibility-evidence "
+            "hook: a cross-surface run is never silent."
         ),
     )
     execution_origin: Optional[str] = Field(

@@ -547,6 +547,7 @@ class Replayer:
         run_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         execution_target_kind: Optional[ExecutionTargetKind] = None,
+        surface_override: bool = False,
         execution_origin: Optional[str] = None,
         execution_entry_url: Optional[str] = None,
         prior_screenshots_may_leave_box: bool = False,
@@ -610,6 +611,11 @@ class Replayer:
             execution_target_kind: Resolved backend token (web, windows, macos,
                 linux, rdp, or citrix). Runtime validation binds this report
                 field into the signed substrate-aware attestation.
+            surface_override: True when the caller explicitly overrode the
+                workflow's bound surface (``Workflow.surface``) and this run
+                executes on a different surface. Recorded in the report as
+                compatibility evidence; the CLI refuses a cross-surface run
+                without it.
             execution_origin: Actual browser origin loaded before replay. It is
                 evidence metadata only; hosted validation requires an exact
                 match to its signed target origin.
@@ -680,6 +686,8 @@ class Replayer:
                 else "demo"
             ),
             execution_target_kind=execution_target_kind,
+            recorded_surface=workflow.surface,
+            surface_override=surface_override,
             execution_origin=execution_origin,
             execution_entry_url=execution_entry_url,
             bundle_content_digest=(
