@@ -265,9 +265,7 @@ def build_effect_journal(
                 step is not None
                 and (
                     step.effects
-                    or (
-                        step.api_binding is not None and step.api_binding.effects
-                    )
+                    or (step.api_binding is not None and step.api_binding.effects)
                 )
             )
         )
@@ -300,7 +298,9 @@ def build_effect_journal(
     return journal
 
 
-def stamp_transaction_outcome(report: RunReport, workflow: Workflow) -> TransactionOutcome:
+def stamp_transaction_outcome(
+    report: RunReport, workflow: Workflow
+) -> TransactionOutcome:
     """Write the transaction outcome, billing metadata, and effect journal.
 
     Called after the coarse ``execution_outcome`` is stamped (see

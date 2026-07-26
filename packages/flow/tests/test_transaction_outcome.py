@@ -80,8 +80,7 @@ def test_halted_before_effect_requires_verifier_established_absence():
     )
     report = _report("HALTED", [result])
     assert (
-        classify_transaction_outcome(report)
-        is TransactionOutcome.HALTED_BEFORE_EFFECT
+        classify_transaction_outcome(report) is TransactionOutcome.HALTED_BEFORE_EFFECT
     )
 
 
@@ -185,8 +184,7 @@ def test_completed_unverified_maps_through():
         "COMPLETED_UNVERIFIED", [StepResult(step_id="s1", intent="x", ok=True)]
     )
     assert (
-        classify_transaction_outcome(report)
-        is TransactionOutcome.COMPLETED_UNVERIFIED
+        classify_transaction_outcome(report) is TransactionOutcome.COMPLETED_UNVERIFIED
     )
 
 
