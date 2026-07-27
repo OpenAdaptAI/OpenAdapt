@@ -1448,12 +1448,32 @@ def record_audio(
 ) -> None:
     """Record audio narration during the recording and store data in database.
 
+    Privacy posture, enforced here rather than documented elsewhere:
+
+    - The on-device transcription backend is resolved BEFORE the microphone is
+      opened. If none is installed this refuses immediately, so a session is
+      never captured that could not have been transcribed locally anyway.
+    - Transcription is on-device only; the waveform is never uploaded.
+    - The waveform is discarded after transcription unless
+      ``RECORD_AUDIO_RETAIN_WAVEFORM`` is explicitly enabled. Only transcript
+      text is retained by default.
+    - The transcript is never logged. Spoken narration may contain identifying
+      details and must not be copied into logs or terminal scrollback.
+
     Args:
         recording: The recording object.
         db_path: Path to the per-capture database file.
         terminate_processing: An event to signal the termination of the process.
         started_event: Event to set once started.
     """
+    from openadapt_capture.audio import require_local_transcription_backend
+
+    # Fail closed BEFORE anything else, and in particular before the microphone
+    # is opened. Previously the stream was opened, the whole session was
+    # captured, and only then did the missing backend surface -- recording the
+    # operator for nothing and failing the capture at the end.
+    backend = require_local_transcription_backend()
+
     utils.set_start_time(recording.timestamp)
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -1489,17 +1509,37 @@ def record_audio(
     audio_stream.stop()
     audio_stream.close()
 
+    sample_rate = int(audio_stream.samplerate)
+
+    if not audio_frames:
+        # No frames arrive when the microphone is unavailable or the OS denied
+        # permission. Record the empty result honestly instead of raising a
+        # bare ValueError from np.concatenate and failing the whole capture.
+        logger.warning(
+            "No audio frames were captured; the microphone may be unavailable "
+            "or permission may have been denied. Storing an empty transcript."
+        )
+        session = get_session_for_path(db_path)
+        crud.insert_audio_info(
+            session, b"", "", recording, start_timestamp, sample_rate, []
+        )
+        return
+
     # Concatenate into one Numpy array
     concatenated_audio = np.concatenate(audio_frames, axis=0)
     # convert concatenated_audio to format expected by whisper
     converted_audio = concatenated_audio.flatten().astype(np.float32)
 
-    # Convert audio to text using OpenAI's Whisper
-    logger.info("Transcribing audio...")
-    import whisper
-    model = whisper.load_model("base")
-    result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
-    logger.info(f"The narrated text is: {result_info['text']}")
+    # Transcribe on this machine. The waveform is never uploaded.
+    logger.info(f"Transcribing audio on-device with {backend}...")
+    result_info = _transcribe_on_device(converted_audio, backend)
+    # NOTE: the transcript is deliberately NOT logged. Narration can contain
+    # names, dates of birth, and diagnoses; logging it would copy that into
+    # terminal scrollback and any configured log sink.
+    logger.info("Transcription complete ({} characters).".format(
+        len(result_info.get("text") or "")
+    ))
+
     # empty word_list if the user didn't say anything
     word_list = []
     # segments could be empty
@@ -1508,28 +1548,25 @@ def record_audio(
         if "words" in result_info["segments"][0]:
             word_list = result_info["segments"][0]["words"]
 
-    # compress and convert to bytes to save to database
-    logger.info(
-        "Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes)
-    )
-    # Create an in-memory file-like object
-    file_obj = io.BytesIO()
-    # Write the audio data using lossless compression
-    soundfile.write(
-        file_obj, converted_audio, int(audio_stream.samplerate), format="FLAC"
-    )
-    # Get the compressed audio data as bytes
-    compressed_audio_bytes = file_obj.getvalue()
+    if config.RECORD_AUDIO_RETAIN_WAVEFORM:
+        # Explicitly opted in. The retained waveform is biometric identifying
+        # data and has no sanitized derivative; it must stay inside the
+        # capture's approved local boundary.
+        logger.warning(
+            "RECORD_AUDIO_RETAIN_WAVEFORM is enabled: the raw waveform is being "
+            "retained in the capture database and cannot be sanitized for egress."
+        )
+        file_obj = io.BytesIO()
+        soundfile.write(file_obj, converted_audio, sample_rate, format="FLAC")
+        compressed_audio_bytes = file_obj.getvalue()
+        file_obj.close()
+    else:
+        # Default: discard the waveform, keep only the transcript.
+        compressed_audio_bytes = b""
 
-    logger.info(
-        "Size of compressed audio data: {} bytes".format(len(compressed_audio_bytes))
-    )
-
-    file_obj.close()
-
-    # To decompress the audio and restore it to its original form:
-    # restored_audio, restored_samplerate = sf.read(
-    # io.BytesIO(compressed_audio_bytes))
+    # Drop in-memory references to the waveform now that it is no longer needed.
+    del converted_audio, concatenated_audio
+    audio_frames.clear()
 
     session = get_session_for_path(db_path)
     # Create AudioInfo entry
@@ -1539,9 +1576,29 @@ def record_audio(
         result_info["text"],
         recording,
         start_timestamp,
-        int(audio_stream.samplerate),
+        sample_rate,
         word_list,
     )
+
+
+def _transcribe_on_device(audio: "np.ndarray", backend: str) -> dict:
+    """Transcribe a waveform using a local backend. Never uploads audio.
+
+    Args:
+        audio: Mono float32 waveform.
+        backend: An on-device backend from ``LOCAL_TRANSCRIPTION_BACKENDS``.
+
+    Returns:
+        A dict with ``text`` and ``segments`` keys.
+    """
+    from openadapt_capture.audio import AudioRecorder
+
+    # Reuse the audio module's backend implementations without opening a second
+    # microphone stream.
+    recorder = AudioRecorder.__new__(AudioRecorder)
+    if backend == "faster-whisper":
+        return recorder._transcribe_faster_whisper(audio, "base", True)
+    return recorder._transcribe_openai_whisper(audio, "base", True)
 
 
 @logger.catch

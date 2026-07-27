@@ -1,7 +1,21 @@
-"""Audio capture and transcription.
+"""Audio capture and on-device transcription.
 
-This module provides audio recording with optional Whisper transcription,
-following OpenAdapt's proven implementation.
+Audio narration is the highest-risk observation this package can take. A
+waveform carries whatever the demonstrator said aloud -- names, dates of
+birth, diagnoses -- and the voice itself is biometric identifying data. Unlike
+a screen field there is no structure to scrub against, and unlike text there is
+no sanitized derivative of a recording: `openadapt-flow` therefore refuses
+audio artifacts outright (see its `docs/SANITIZED_ARTIFACTS.md`).
+
+Two boundaries are enforced structurally in this module rather than documented
+in a README:
+
+1. **Transcription is on-device only.** There is no remote/API backend. A
+   waveform must never be uploaded for recognition, because the upload cannot
+   be sanitized first and the transcript is not the only thing disclosed.
+2. **The absence of a local backend is an error, never a fallback.** Auto
+   backend selection resolves to a local engine or to ``None``; callers must
+   refuse rather than silently degrade to a network path.
 """
 
 from __future__ import annotations
@@ -74,11 +88,40 @@ def _import_faster_whisper() -> None:
             ) from e
 
 
-def _get_best_transcription_backend() -> str:
-    """Auto-detect best available transcription backend.
+# Transcription backends that run entirely on this machine. This tuple is the
+# allow-list: any backend name outside it is refused, so a network recognizer
+# cannot be reintroduced by passing a string through the CLI.
+LOCAL_TRANSCRIPTION_BACKENDS: tuple[str, ...] = ("faster-whisper", "openai-whisper")
+
+NO_LOCAL_BACKEND_MESSAGE = (
+    "No on-device transcription backend is installed. Audio is transcribed "
+    "locally and is never uploaded, so there is no remote fallback. Install "
+    "one with:\n"
+    '    pip install "openadapt-capture[transcribe-fast]"   # faster-whisper\n'
+    '    pip install "openadapt-capture[transcribe]"        # openai-whisper'
+)
+
+
+class NoLocalTranscriptionBackend(RuntimeError):
+    """Raised when on-device transcription is required but unavailable.
+
+    This is deliberately an error rather than a fallback: degrading to a
+    hosted recognizer would upload a raw waveform, which cannot be sanitized
+    beforehand and discloses the speaker's voice as well as their words.
+    """
+
+    def __init__(self, message: str = NO_LOCAL_BACKEND_MESSAGE) -> None:
+        """Initialize with the actionable install message."""
+        super().__init__(message)
+
+
+def _get_best_transcription_backend() -> str | None:
+    """Auto-detect the best available *on-device* transcription backend.
 
     Returns:
-        Backend name: "faster-whisper", "openai-whisper", or "api"
+        ``"faster-whisper"``, ``"openai-whisper"``, or ``None`` when no local
+        backend is installed. Never returns a network backend -- a missing
+        local engine is a refusal, not a reason to upload audio.
     """
     # Try faster-whisper first (recommended)
     try:
@@ -94,8 +137,50 @@ def _get_best_transcription_backend() -> str:
     except ImportError:
         pass
 
-    # No local backend available
-    return "api"
+    # No local backend available. Do NOT fall back to a hosted recognizer.
+    return None
+
+
+def require_local_transcription_backend() -> str:
+    """Return an available on-device backend or refuse.
+
+    Call this *before* opening a microphone stream so that a recording which
+    cannot be transcribed locally is never captured in the first place.
+
+    Returns:
+        The name of an available on-device backend.
+
+    Raises:
+        NoLocalTranscriptionBackend: If no local backend is installed.
+    """
+    backend = _get_best_transcription_backend()
+    if backend is None:
+        raise NoLocalTranscriptionBackend()
+    return backend
+
+
+def resolve_transcription_backend(backend: str = "auto") -> str:
+    """Validate a requested backend against the on-device allow-list.
+
+    Args:
+        backend: ``"auto"`` or a name from :data:`LOCAL_TRANSCRIPTION_BACKENDS`.
+
+    Returns:
+        A concrete on-device backend name.
+
+    Raises:
+        NoLocalTranscriptionBackend: If ``"auto"`` and none are installed.
+        ValueError: If a backend outside the on-device allow-list is requested.
+    """
+    if backend == "auto":
+        return require_local_transcription_backend()
+    if backend not in LOCAL_TRANSCRIPTION_BACKENDS:
+        raise ValueError(
+            f"Unknown or non-local transcription backend: {backend!r}. "
+            f"Transcription is on-device only; valid options are 'auto' or one "
+            f"of {', '.join(LOCAL_TRANSCRIPTION_BACKENDS)}."
+        )
+    return backend
 
 
 def _get_timestamp() -> float:
@@ -247,34 +332,28 @@ class AudioRecorder:
         Args:
             model_name: Whisper model to use (tiny, base, small, medium, large).
             word_timestamps: Whether to include word-level timestamps.
-            backend: Transcription backend to use:
+            backend: On-device transcription backend to use:
                 - "auto": Auto-detect best available (faster-whisper > openai-whisper)
                 - "faster-whisper": Use faster-whisper (4x faster, recommended)
                 - "openai-whisper": Use original openai-whisper
-                - "api": Use OpenAI API (requires API key, not implemented here)
+                There is no remote backend; audio never leaves this machine.
 
         Returns:
             Transcription result dict with 'text' and 'segments'.
+
+        Raises:
+            NoLocalTranscriptionBackend: If no on-device backend is installed.
+            ValueError: If a non-local backend is requested.
         """
         audio = self.get_audio()
         if len(audio) == 0:
             return {"text": "", "segments": []}
 
-        # Auto-detect backend if not specified
-        if backend == "auto":
-            backend = _get_best_transcription_backend()
+        backend = resolve_transcription_backend(backend)
 
         if backend == "faster-whisper":
             return self._transcribe_faster_whisper(audio, model_name, word_timestamps)
-        elif backend == "openai-whisper":
-            return self._transcribe_openai_whisper(audio, model_name, word_timestamps)
-        elif backend == "api":
-            raise NotImplementedError(
-                "API transcription not supported in AudioRecorder. "
-                "Use the CLI 'capture transcribe --backend api' command instead."
-            )
-        else:
-            raise ValueError(f"Unknown backend: {backend}")
+        return self._transcribe_openai_whisper(audio, model_name, word_timestamps)
 
     def _transcribe_openai_whisper(
         self,

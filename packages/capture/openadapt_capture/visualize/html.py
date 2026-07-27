@@ -22,7 +22,7 @@ def create_html(
     capture_or_path: "CaptureSession | str | Path",
     output: str | Path | None = None,
     max_events: int | None = 200,
-    include_audio: bool = True,
+    include_audio: bool = False,
     frame_scale: float = 1.0,
     frame_quality: int = 85,
 ) -> str:
@@ -32,7 +32,11 @@ def create_html(
         capture_or_path: CaptureSession object or path to capture directory.
         output: Output path for HTML file. If None, returns HTML string.
         max_events: Maximum events to include (None for all).
-        include_audio: Whether to include audio playback.
+        include_audio: Embed the raw waveform in the generated HTML (default:
+            False). The viewer is a single self-contained file that is easy to
+            forward, and an embedded waveform carries the demonstrator's voice
+            -- biometric identifying data with no sanitized derivative. Opt in
+            only when the HTML will stay inside the capture's local boundary.
         frame_scale: Scale factor for embedded frames.
         frame_quality: JPEG quality for embedded frames (1-100).
 

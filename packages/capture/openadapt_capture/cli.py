@@ -29,7 +29,10 @@ def record(
         description: Optional task description.
         video: Capture MP4 video (default: True). Requires an externally
             provisioned FFmpeg executable.
-        audio: Capture audio (default: False).
+        audio: Record microphone narration (default: False). Audio is
+            transcribed on this machine and the waveform is then discarded
+            unless RECORD_AUDIO_RETAIN_WAVEFORM is explicitly enabled.
+            Requires an on-device transcription backend to be installed.
         images: Also save screenshots as PNGs (default: False).
         browser_events: Capture browser DOM events via Chrome extension (default: False).
             Requires the openadapt-capture Chrome extension to be installed and
@@ -48,6 +51,36 @@ def record(
     window = None
     if window_owner or window_title:
         window = {"owner": window_owner, "title": window_title}
+
+    if audio:
+        # Refuse before the microphone is ever opened, and make the microphone
+        # visible in the operator's own terminal rather than relying solely on
+        # the OS recording indicator.
+        from openadapt_capture.audio import (
+            NoLocalTranscriptionBackend,
+            require_local_transcription_backend,
+        )
+        from openadapt_capture.config import settings
+
+        try:
+            audio_backend = require_local_transcription_backend()
+        except NoLocalTranscriptionBackend as exc:
+            print(str(exc))
+            raise SystemExit(1) from exc
+
+        retain = settings.RECORD_AUDIO_RETAIN_WAVEFORM
+        print("MICROPHONE ON: this recording captures spoken narration.")
+        print(f"  Transcribed on-device with {audio_backend}; audio is never uploaded.")
+        print(
+            "  Waveform retained in the capture database."
+            if retain
+            else "  Waveform discarded after transcription; only text is retained."
+        )
+        print(
+            "  Anything said aloud is retained as text. Do not speak names, "
+            "dates of birth, or other identifying details."
+        )
+        print()
 
     print(f"Recording to: {output_dir}")
     if window:
@@ -172,23 +205,26 @@ def info(capture_dir: str) -> None:
 def transcribe(
     capture_dir: str,
     model: str = "base",
-    api: bool = False,
     backend: str = "auto",
 ) -> None:
-    """Transcribe audio from a capture using Whisper.
+    """Transcribe a capture's audio using an on-device Whisper model.
+
+    Transcription runs entirely on this machine. There is no remote backend:
+    a raw waveform cannot be sanitized before upload and discloses the
+    speaker's voice as well as their words.
 
     Args:
         capture_dir: Path to capture directory.
-        model: Whisper model to use. Local: tiny, base, small, medium, large.
-               API: whisper-1 (default when --api is used).
-        api: Use OpenAI Whisper API instead of local model (faster, requires API key).
-             Deprecated: use --backend=api instead.
-        backend: Transcription backend to use:
+        model: Whisper model to use: tiny, base, small, medium, large.
+        backend: On-device transcription backend to use:
             - "auto": Auto-detect best available (faster-whisper > openai-whisper)
             - "faster-whisper": Use faster-whisper (4x faster, recommended)
             - "openai-whisper": Use original openai-whisper
-            - "api": Use OpenAI Whisper API (requires API key)
     """
+    from openadapt_capture.audio import (
+        NoLocalTranscriptionBackend,
+        resolve_transcription_backend,
+    )
 
     capture_dir = Path(capture_dir)
     audio_path = capture_dir / "audio.flac"
@@ -199,74 +235,18 @@ def transcribe(
         print(f"No audio file found at: {audio_path}")
         return
 
-    # Handle legacy --api flag
-    if api:
-        backend = "api"
-
-    # Auto-detect backend if not specified
-    if backend == "auto":
-        from openadapt_capture.audio import _get_best_transcription_backend
-        backend = _get_best_transcription_backend()
-        print(f"Auto-detected backend: {backend}")
-
-    if backend == "api":
-        _transcribe_api(audio_path, transcript_path, transcript_json_path)
-    elif backend == "faster-whisper":
-        _transcribe_faster_whisper(audio_path, transcript_path, transcript_json_path, model)
-    elif backend == "openai-whisper":
-        _transcribe_local(audio_path, transcript_path, transcript_json_path, model)
-    else:
-        print(f"Unknown backend: {backend}")
-        print("Valid options: auto, faster-whisper, openai-whisper, api")
-        return
-
-
-def _transcribe_api(
-    audio_path: Path,
-    transcript_path: Path,
-    transcript_json_path: Path,
-) -> None:
-    """Transcribe using OpenAI Whisper API."""
-
-    from openadapt_capture.config import settings
-
-    if not settings.openai_api_key:
-        print("OpenAI API key not found.")
-        print("Set OPENAI_API_KEY environment variable or add to .env file.")
-        return
-
     try:
-        from openai import OpenAI
-    except ImportError:
-        print("OpenAI package not installed. Install with: uv add openai")
-        return
+        backend = resolve_transcription_backend(backend)
+    except (NoLocalTranscriptionBackend, ValueError) as exc:
+        print(str(exc))
+        raise SystemExit(1) from exc
 
-    print("Transcribing audio with OpenAI Whisper API...")
+    print(f"Transcribing on-device with backend: {backend}")
 
-    client = OpenAI(api_key=settings.openai_api_key)
-
-    with open(audio_path, "rb") as audio_file:
-        # Get transcript with timestamps
-        result = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file,
-            response_format="verbose_json",
-            timestamp_granularities=["segment"],
-        )
-
-    transcript = result.text.strip()
-
-    # Extract segments with timestamps
-    segments = []
-    for segment in getattr(result, "segments", []) or []:
-        segments.append({
-            "start": segment.start,
-            "end": segment.end,
-            "text": segment.text.strip(),
-        })
-
-    # Save transcripts
-    _save_transcript(transcript, segments, transcript_path, transcript_json_path)
+    if backend == "faster-whisper":
+        _transcribe_faster_whisper(audio_path, transcript_path, transcript_json_path, model)
+    else:
+        _transcribe_local(audio_path, transcript_path, transcript_json_path, model)
 
 
 def _transcribe_local(

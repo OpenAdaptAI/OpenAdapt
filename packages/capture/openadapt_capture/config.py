@@ -28,9 +28,6 @@ class Settings(BaseSettings):
     Recording config values are copied from legacy OpenAdapt config.py.
     """
 
-    # API keys
-    openai_api_key: str | None = None
-
     # Record and replay (from legacy OpenAdapt config.defaults.json)
     RECORD_WINDOW_DATA: bool = False
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
@@ -38,7 +35,16 @@ class Settings(BaseSettings):
     # The platform factory is a no-op outside Windows.
     RECORD_STRUCTURAL_OBSERVATIONS: bool = True
     RECORD_VIDEO: bool = True
+    # Microphone narration. Off by default: speech is unstructured and cannot
+    # be scrubbed the way a screen field can, and a voice is itself biometric
+    # identifying data.
     RECORD_AUDIO: bool = False
+    # When RECORD_AUDIO is on, the waveform is transcribed on-device and then
+    # discarded; only the transcript text is retained. Retaining the waveform
+    # keeps biometric voice data in the capture and must be opted into
+    # explicitly. There is no sanitized derivative of a recording, so a
+    # retained waveform can never be cleared for egress.
+    RECORD_AUDIO_RETAIN_WAVEFORM: bool = False
     RECORD_BROWSER_EVENTS: bool = False
     # if false, only write video events corresponding to screenshots
     RECORD_FULL_VIDEO: bool = False

@@ -29,7 +29,6 @@ dependencies = [
     "soundfile>=0.13.1",
     # Note: openai-whisper moved to optional [transcribe] extra due to Python version conflicts
     "pydantic-settings>=2.12.0",
-    "openai>=2.11.0",
     "websockets>=12.0",
     # Recording-pipeline dependencies (carried forward from OpenAdapt record.py)
     "sqlalchemy>=2.0.0",

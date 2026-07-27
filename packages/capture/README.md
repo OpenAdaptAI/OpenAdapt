@@ -231,9 +231,39 @@ including credentials, personal data, or protected health information. Keep the
 entire capture directory inside its approved local boundary and apply an
 appropriate retention policy.
 
-Capture does not upload a session by default. The sharing command, remote
-transcription, and profiling transfer are explicit opt-in operations. Installing
-the `privacy` extra alone does not automatically scrub a recording.
+Capture does not upload a session. The sharing command and profiling transfer
+are the only transfers, and both are explicit opt-in operations. Installing the
+`privacy` extra alone does not automatically scrub a recording.
+
+### Audio narration
+
+Microphone narration (`capture record --audio`, or `RECORD_AUDIO`) is **off by
+default** and is the highest-risk observation this package takes. Speech has no
+structure to scrub against the way a screen field does, and a voice is itself
+biometric identifying data — Safe Harbor identifier #16. `openadapt-privacy`
+has no audio modality, and `openadapt-flow` refuses audio artifacts outright,
+so a waveform has **no sanitized derivative and can never be cleared for
+egress**.
+
+The following boundaries are enforced in code, not by convention:
+
+- **Transcription is on-device only.** There is no remote transcription
+  backend. If no local backend is installed, `--audio` and `capture transcribe`
+  refuse with an install hint rather than falling back to a network recognizer.
+- **`--audio` refuses before the microphone opens** when it could not
+  transcribe locally, so a session is never captured that must then be thrown
+  away.
+- **The waveform is discarded after transcription.** Only transcript text is
+  retained unless `RECORD_AUDIO_RETAIN_WAVEFORM` is explicitly enabled.
+- **The transcript is never logged**, because narration can contain names,
+  dates of birth, and diagnoses.
+- **The HTML viewer does not embed audio by default**, since that file is
+  self-contained and easy to forward.
+- **`--audio` prints an explicit microphone notice** before recording starts.
+
+Transcript text is unscrubbed free text. Treat it as at least as sensitive as
+the rest of the capture, and keep it inside the same approved local boundary.
+Nothing downstream consumes it today.
 
 Structural observations can also contain sensitive control names, window
 titles, and accessibility ancestry. They stay in the same local raw-capture
@@ -270,6 +300,14 @@ for the evidence behind current maturity labels.
 | `privacy` | `openadapt-privacy` dependency for explicit integrations; no automatic scrubbing |
 | `share` | Explicit Magic Wormhole transfer |
 | `all` | All optional dependencies |
+
+Both transcription extras are installed by the user into their own
+environment; neither is vendored into this MIT wheel. Note that
+`transcribe-fast` pulls `av` (PyAV), whose published wheels bundle GPL-licensed
+`libx264`/`libx265` binaries. That is acceptable for a user-side `pip install`,
+but such an artifact must not be frozen into a first-party installer, sidecar,
+or image. Packaging work that bundles a transcription backend should prefer an
+MIT backend with a clean dependency tree and must inspect the built archive.
 
 ## Development
 
