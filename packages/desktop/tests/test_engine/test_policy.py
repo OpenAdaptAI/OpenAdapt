@@ -188,6 +188,148 @@ class TestServerOmitsSafetyKeyIsFailClosed:
         assert set(result["safety"]) == set(policy_mod.SAFE_SAFETY_DEFAULTS)
 
 
+class TestBindingSafety:
+    """The gate a governed run passes before any action (fail-closed)."""
+
+    def test_authoritative_policy_binds(self) -> None:
+        safety = policy_mod.binding_safety(_full_policy(source="network"))
+        assert safety == policy_mod.SAFE_SAFETY_DEFAULTS
+
+    def test_cached_policy_binds(self) -> None:
+        # Offline-but-cached is a real, authoritative posture: the org's own
+        # last-known values still govern the run.
+        safety = policy_mod.binding_safety(_full_policy(source="cache"))
+        assert safety == policy_mod.SAFE_SAFETY_DEFAULTS
+
+    def test_unconfirmed_policy_refuses(self) -> None:
+        with pytest.raises(
+            policy_mod.PolicyEnforcementError, match="no authoritative safety policy"
+        ):
+            policy_mod.binding_safety(
+                _full_policy(source=policy_mod.UNCONFIRMED_POLICY_SOURCE)
+            )
+
+    def test_missing_safety_block_refuses(self) -> None:
+        body = _full_policy(source="network")
+        del body["safety"]
+        with pytest.raises(policy_mod.PolicyEnforcementError, match="no safety block"):
+            policy_mod.binding_safety(body)
+
+    def test_missing_key_refuses(self) -> None:
+        body = _full_policy(source="network")
+        del body["safety"]["unverified_write.allow"]
+        with pytest.raises(policy_mod.PolicyEnforcementError, match="is missing"):
+            policy_mod.binding_safety(body)
+
+    def test_unknown_enum_value_refuses(self) -> None:
+        # harden_safety deliberately preserves whatever the server said; the
+        # BINDING step is where an unknown posture must stop a run.
+        body = _full_policy(source="network")
+        body["safety"]["identity_gate.strictness"] = "medium"
+        with pytest.raises(policy_mod.PolicyEnforcementError, match="unknown value"):
+            policy_mod.binding_safety(body)
+
+    def test_non_boolean_truthy_value_refuses(self) -> None:
+        body = _full_policy(source="network")
+        body["safety"]["halt_on_ambiguous"] = 1
+        with pytest.raises(policy_mod.PolicyEnforcementError, match="unknown value"):
+            policy_mod.binding_safety(body)
+
+    def test_every_safe_default_is_inside_its_domain(self) -> None:
+        # The fail-closed defaults must themselves be bindable, or the offline
+        # path could never run at all.
+        assert set(policy_mod.SAFETY_VALUE_DOMAINS) == set(
+            policy_mod.SAFE_SAFETY_DEFAULTS
+        )
+        for key, value in policy_mod.SAFE_SAFETY_DEFAULTS.items():
+            assert policy_mod._in_domain(key, value)
+
+
+class TestApplySafetyPolicy:
+    """Projection onto the Flow deployment config: strengthen only, never relax."""
+
+    BASE = {"name": "d", "backend": {"kind": "web"}}
+
+    def _apply(self, deployment: dict, **overrides) -> dict:
+        safety = dict(policy_mod.SAFE_SAFETY_DEFAULTS)
+        safety.update(overrides)
+        return policy_mod.apply_safety_policy(deployment, safety)
+
+    def test_pixel_verify_required_arms_the_check(self) -> None:
+        bound = self._apply(
+            self.BASE, **{"pixel_verify.consequential_policy": "required"}
+        )
+        assert bound["runtime"]["pixel_verify_enabled"] is True
+
+    def test_pixel_verify_disabled_does_not_disarm_a_stricter_config(self) -> None:
+        # `disabled` is the platform BASELINE, not a prohibition: an operator
+        # who armed the check locally keeps it.
+        deployment = {**self.BASE, "runtime": {"pixel_verify_enabled": True}}
+        bound = self._apply(
+            deployment, **{"pixel_verify.consequential_policy": "disabled"}
+        )
+        assert bound["runtime"]["pixel_verify_enabled"] is True
+
+    def test_model_calls_prohibited_forces_local_grounding(self) -> None:
+        deployment = {**self.BASE, "runtime": {"allow_model_grounding": True}}
+        bound = self._apply(deployment)
+        assert bound["runtime"]["allow_model_grounding"] is False
+
+    def test_model_calls_permitted_is_not_an_instruction_to_enable(self) -> None:
+        bound = self._apply(
+            self.BASE, **{"model_calls.allowed_in_healthy_run": True}
+        )
+        assert "allow_model_grounding" not in bound["runtime"]
+
+    def test_demo_profile_escalates_to_standard(self) -> None:
+        bound = self._apply({**self.BASE, "runtime": {"profile": "demo"}})
+        assert bound["runtime"]["profile"] == "standard"
+
+    def test_regulated_profile_is_never_lowered(self) -> None:
+        bound = self._apply({**self.BASE, "runtime": {"profile": "regulated"}})
+        assert bound["runtime"]["profile"] == "regulated"
+
+    def test_absent_profile_is_left_absent(self) -> None:
+        bound = self._apply(self.BASE)
+        assert "profile" not in bound["runtime"]
+
+    def test_fully_permissive_policy_leaves_the_profile_alone(self) -> None:
+        bound = self._apply(
+            {**self.BASE, "runtime": {"profile": "demo"}},
+            **{
+                "effect_verification.required_for_consequential": False,
+                "unverified_write.allow": True,
+                "identity_gate.strictness": "standard",
+                "halt_on_ambiguous": False,
+            },
+        )
+        assert bound["runtime"]["profile"] == "demo"
+
+    def test_unrankable_profile_refuses(self) -> None:
+        with pytest.raises(
+            policy_mod.PolicyEnforcementError, match="unrankable execution profile"
+        ):
+            self._apply({**self.BASE, "runtime": {"profile": "yolo"}})
+
+    def test_non_object_runtime_refuses(self) -> None:
+        with pytest.raises(policy_mod.PolicyEnforcementError, match="must be an object"):
+            self._apply({**self.BASE, "runtime": "regulated"})
+
+    def test_null_runtime_is_treated_as_empty(self) -> None:
+        bound = self._apply({**self.BASE, "runtime": None})
+        assert isinstance(bound["runtime"], dict)
+
+    def test_backend_and_other_sections_survive(self) -> None:
+        bound = self._apply({**self.BASE, "effects": {"kind": "fhir"}})
+        assert bound["backend"] == {"kind": "web"}
+        assert bound["effects"] == {"kind": "fhir"}
+
+    def test_does_not_mutate_the_operator_config(self) -> None:
+        deployment = {**self.BASE, "runtime": {"profile": "demo"}}
+        self._apply(deployment)
+        assert deployment["runtime"] == {"profile": "demo"}
+
+
 class TestDispatcherCommand:
     def _dispatcher(self, tmp_path: Path) -> EngineDispatcher:
         config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")

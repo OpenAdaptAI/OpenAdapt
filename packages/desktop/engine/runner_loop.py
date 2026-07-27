@@ -26,6 +26,14 @@ Non-negotiables enforced here:
 * **PHI-free evidence.** Evidence events are built by whitelisting the exact
   spec fields and then re-checked by a fail-closed guard
   (:func:`assert_phi_free`) that refuses to serialize forbidden keys.
+* **The org's safety policy binds the run.** Immediately before executing (and
+  before any GUI action), the runner resolves the org's effective policy and
+  projects its Tier-3 ``safety`` block onto the deployment config Flow is given,
+  via :func:`engine.policy.binding_safety` +
+  :func:`engine.policy.apply_safety_policy`. A policy that cannot be resolved
+  authoritatively, carries an unknown value, or cannot be bound REFUSES the
+  dispatch (ack outcome ``refused``) -- the run never falls back to whatever the
+  local deployment config happened to say.
 
 The whole lane is experimental and OFF by default (``runner_enabled=false``);
 the cloud half is built in parallel -- this module codes to the spec's wire
@@ -48,8 +56,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 import httpx
+import yaml
 from loguru import logger
 
+from engine import policy as policy_mod
 from engine.auth.store import (
     auth_header,
     clear_runner_credential,
@@ -58,6 +68,7 @@ from engine.auth.store import (
 )
 from engine.config import EngineConfig
 from engine.flow_bridge import FlowBridge
+from engine.private_flow_config import PreparedPrivateYaml, stage_private_yaml
 
 # --- wire constants (spec section 2) --------------------------------------------------
 
@@ -523,6 +534,10 @@ class RunnerService:
         emit: Event sink (``emit(event, data)``) shared with the dispatcher.
         http_factory: Builds the ``httpx.AsyncClient`` (injected in tests).
         rng: Randomness source for backoff jitter (injected in tests).
+        policy_resolver: Resolves the org's effective policy immediately before
+            a run (injected in tests). Defaults to
+            :func:`engine.policy.resolve_effective_policy` against
+            ``config.hosted_host``.
     """
 
     def __init__(
@@ -533,12 +548,14 @@ class RunnerService:
         emit: Callable[[str, dict], None] | None = None,
         http_factory: Callable[[], httpx.AsyncClient] | None = None,
         rng: random.Random | None = None,
+        policy_resolver: Callable[[], dict] | None = None,
     ) -> None:
         self.config = config
         self.services = services
         self.emit = emit or (lambda event, data: None)
         self._http_factory = http_factory or self._default_http_factory
         self._rng = rng or random.Random()
+        self._policy_resolver = policy_resolver or self._default_policy_resolver
         self.journal = RunnerJournal(config.data_dir / "runner" / "jobs")
         self._state = "disabled" if not config.runner_enabled else "offline"
         self._last_error: str | None = None
@@ -617,6 +634,67 @@ class RunnerService:
         return httpx.AsyncClient(
             base_url=self.config.hosted_host, timeout=DEFAULT_WAIT_S + 35
         )
+
+    def _default_policy_resolver(self) -> dict:
+        """Resolve the org's effective policy from the configured control plane."""
+        return policy_mod.resolve_effective_policy(self.config.hosted_host)
+
+    # ---- safety policy binding ----
+
+    def bind_effective_policy(self) -> tuple[dict, dict]:
+        """Resolve the org's effective policy and bind it to this run's config.
+
+        Called immediately before every dispatched run (the sync contract's
+        "refresh before a run" rule), so an admin's change to a safety setting
+        takes effect on the next dispatch rather than on the next restart.
+
+        Blocking (network + disk); the caller runs it in a worker thread.
+
+        Returns:
+            ``(policy, deployment)`` -- the resolved policy (for provenance) and
+            the deployment config with the ``safety`` block projected onto it.
+
+        Raises:
+            Refusal: When the policy cannot be resolved authoritatively, carries
+                an unknown value, or cannot be bound to a deployment config.
+                Every path here refuses; none degrades to "run it anyway".
+        """
+        try:
+            policy = self._policy_resolver()
+        except Exception as exc:
+            # resolve_effective_policy is documented never to raise, so this is
+            # a defensive guard: an unexpected failure must still refuse.
+            raise Refusal(
+                f"effective safety policy could not be resolved ({type(exc).__name__})"
+            ) from None
+        if not isinstance(policy, dict):
+            raise Refusal("effective safety policy was not an object")
+
+        try:
+            safety = policy_mod.binding_safety(policy)
+        except policy_mod.PolicyEnforcementError as exc:
+            raise Refusal(f"safety policy not enforceable: {exc}") from None
+
+        config_path = self.config.data_dir / "deployment.json"
+        if not config_path.is_file():
+            raise Refusal(
+                "runner has no deployment config; the safety policy cannot be "
+                "bound to a run"
+            )
+        try:
+            raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        except (OSError, UnicodeError, yaml.YAMLError):
+            # Never echo the parse error: a deployment config can carry
+            # PHI-capable selectors and credentials.
+            raise Refusal("runner deployment config could not be read") from None
+        if not isinstance(raw, dict):
+            raise Refusal("runner deployment config must contain an object")
+
+        try:
+            deployment = policy_mod.apply_safety_policy(raw, safety)
+        except policy_mod.PolicyEnforcementError as exc:
+            raise Refusal(f"safety policy could not be bound: {exc}") from None
+        return policy, deployment
 
     # ---- registration ----
 
@@ -767,6 +845,9 @@ class RunnerService:
         try:
             bundle_dir = await self._stage_bundle(job)
             validate_dispatch(job, bundle_dir)
+            # The org's safety policy binds THIS run, resolved fresh and before
+            # any GUI action. An unenforceable policy refuses here.
+            policy, deployment = await asyncio.to_thread(self.bind_effective_policy)
         except Refusal as refusal:
             reason = str(refusal)
             logger.warning("dispatch {r} refused: {why}", r=run_id, why=reason)
@@ -774,7 +855,12 @@ class RunnerService:
             await client.ack(job_id, "refused", run_id=run_id, reason=reason)
             return
 
-        self.journal.record(run_id, "started")
+        self.journal.record(
+            run_id,
+            "started",
+            policy_source=policy.get("source"),
+            policy_version=policy.get("policy_version"),
+        )
         self._set_state("running")
         await self._evidence(
             client, run_id, authorization_id, seq, "state",
@@ -784,7 +870,11 @@ class RunnerService:
         extend_task = asyncio.ensure_future(self._extend_loop(client, job_id))
         try:
             result = await asyncio.to_thread(
-                self._execute, bundle_dir, run_dir, job.get("authorization") or {}
+                self._execute,
+                bundle_dir,
+                run_dir,
+                job.get("authorization") or {},
+                deployment,
             )
             exec_error: str | None = None
             exec_ok = bool(getattr(result, "ok", False))
@@ -862,23 +952,38 @@ class RunnerService:
             archive.unlink(missing_ok=True)
         return store_dir
 
-    def _execute(self, bundle_dir: Path, run_dir: Path, authorization: dict) -> Any:
+    def _execute(
+        self,
+        bundle_dir: Path,
+        run_dir: Path,
+        authorization: dict,
+        deployment: dict,
+    ) -> Any:
         """Execute via the existing flow bridge (blocking; runs in a thread).
 
         Persists the authorization JSON into the run dir (operator audit copy)
         and forwards it to ``openadapt-flow run --authorization-file`` when the
         installed flow CLI supports that flag (a PROPOSED flow follow-up).
+
+        ``deployment`` is the POLICY-BOUND config from
+        :meth:`bind_effective_policy`, not the operator's file: it is staged
+        privately (0600, removed when the run ends) for the duration of the
+        invocation, so Flow can only ever be handed a config the org's safety
+        policy has been applied to.
         """
         run_dir.mkdir(parents=True, exist_ok=True)
         auth_path = run_dir / "authorization.json"
         auth_path.write_text(json.dumps(authorization, indent=2))
         bridge = self.services.flow_bridge
-        config_path = self.config.data_dir / "deployment.json"
         kwargs: dict[str, Any] = {}
         probe = getattr(bridge, "run_supports_authorization", None)
         if callable(probe) and probe():
             kwargs["authorization_file"] = auth_path
-        return bridge.run(bundle_dir, config_path, out_dir=run_dir, **kwargs)
+        prepared = PreparedPrivateYaml(
+            payload=yaml.safe_dump(deployment, sort_keys=False), redactions=()
+        )
+        with stage_private_yaml(run_dir, prepared=prepared) as config_path:
+            return bridge.run(bundle_dir, config_path, out_dir=run_dir, **kwargs)
 
     def _record_local_run(self, run_id: str, run_dir: Path, job: dict,
                           halt: dict | None, status: str) -> None:

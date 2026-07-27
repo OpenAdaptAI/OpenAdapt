@@ -33,6 +33,26 @@ caller can decide whether to fall back to cache.
 The raw server body is cached to ``~/.openadapt/policy.json`` (same dir as
 ``config.toml``) with an atomic temp-file + :func:`os.replace` write so a
 half-written file can never be read back.
+
+BINDING THE POLICY TO A RUN
+---------------------------
+Resolving a policy is only half a governance control; the other half is making
+the resolved value change what a run actually does. :func:`binding_safety` and
+:func:`apply_safety_policy` are that half: they validate the resolved ``safety``
+block against its exact value domain and project it onto the Flow deployment
+config the runner hands to ``openadapt-flow run``.
+
+Two invariants govern the projection:
+
+    * **Strengthen only.** The policy may make a run stricter, never looser. A
+      deployment that already selects a stricter posture than the policy demands
+      keeps it. This is why ``pixel_verify.consequential_policy: disabled`` (the
+      *baseline*, not a prohibition) leaves the deployment's own value alone
+      while ``required`` forces the check on.
+    * **Refuse rather than guess.** A value outside its known domain, a
+      non-authoritative policy, or a deployment posture that cannot be ranked
+      raises :class:`PolicyEnforcementError`. The caller turns that into a
+      pre-action refusal; it never falls back to "run it anyway".
 """
 
 from __future__ import annotations
@@ -40,6 +60,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -73,12 +94,60 @@ SAFE_SAFETY_DEFAULTS: dict[str, Any] = {
     "model_calls.allowed_in_healthy_run": False,
 }
 
+# The EXACT value domain of every safety key, mirroring the canonical registry
+# (openadapt-cloud ``src/lib/settingsRegistry.ts``). A resolved value outside its
+# domain is MALFORMED: the engine cannot know which posture it implies, so a run
+# that would be governed by it refuses instead of guessing. Booleans are matched
+# by identity (``True``/``False``), never by ``==``, so ``1`` is not a boolean.
+SAFETY_VALUE_DOMAINS: dict[str, tuple[Any, ...]] = {
+    "effect_verification.required_for_consequential": (True, False),
+    "halt_on_ambiguous": (True, False),
+    "identity_gate.strictness": ("strict", "standard"),
+    "pixel_verify.consequential_policy": ("disabled", "required"),
+    "unverified_write.allow": (True, False),
+    "egress.artifact_policy": ("managed-strict", "customer-boundary"),
+    "model_calls.allowed_in_healthy_run": (True, False),
+}
+
+# Flow's named execution profiles, ranked weakest -> strictest
+# (``openadapt_flow.execution_profiles``). ``demo`` enforces no effect
+# contracts, no identity coverage, and permits blanket unverified-write
+# approval; ``standard``/``regulated`` are the production contracts.
+#
+# An ABSENT profile is deliberately NOT ranked here: Flow resolves an omitted
+# profile to ``regulated`` (its strictest default), so writing a profile into a
+# config that had none would WEAKEN the run. Absent stays absent.
+PROFILE_RANK: dict[str, int] = {"demo": 0, "standard": 1, "regulated": 2}
+
+# The weakest profile that still enforces effect contracts, identity coverage,
+# settled frames, and no blanket unverified-write approval.
+MINIMUM_PRODUCTION_PROFILE = "standard"
+
+# ``source`` value meaning "no authoritative policy was ever obtained" -- neither
+# the control plane nor a cached body. The safest values still populate the
+# block, but they are the engine's guess at the org's posture, not the org's
+# posture: an org that STRENGTHENED a key beyond baseline (e.g. required
+# pixel-identity verification) would be silently run without it. A governed run
+# refuses on this source rather than execute under an unconfirmed policy.
+UNCONFIRMED_POLICY_SOURCE = "fail-closed-default"
+
 
 class PolicyFetchError(Exception):
     """Raised when the effective-policy endpoint is unreachable or malformed.
 
     Only :func:`fetch_effective_policy` raises this; :func:`resolve_effective_policy`
     catches it and falls back to cache / the fail-closed default.
+    """
+
+
+class PolicyEnforcementError(Exception):
+    """Raised when a resolved policy cannot be BOUND to a run.
+
+    Distinct from :class:`PolicyFetchError`, which is about obtaining a policy.
+    This one means the engine holds a policy it cannot faithfully enforce --
+    it is not authoritative, a value is outside its known domain, or the
+    deployment posture cannot be ranked against it. The caller must refuse the
+    run; there is no permissive fallback.
     """
 
 
@@ -271,3 +340,148 @@ def resolve_effective_policy(
     hardened = harden_safety(policy)
     hardened["source"] = source
     return hardened
+
+
+# --------------------------------------------------------------------------
+# Binding a resolved policy to a run (the half that makes the control real).
+# --------------------------------------------------------------------------
+
+
+def _in_domain(key: str, value: Any) -> bool:
+    """Whether ``value`` is one of the exact allowed values for ``key``.
+
+    Identity comparison for booleans (so ``1`` is not ``True``) and exact
+    equality for the string enums.
+    """
+    domain = SAFETY_VALUE_DOMAINS[key]
+    for allowed in domain:
+        if isinstance(allowed, bool):
+            if value is allowed:
+                return True
+        elif isinstance(value, str) and value == allowed:
+            return True
+    return False
+
+
+def binding_safety(policy: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate a resolved policy and return the ``safety`` block it binds.
+
+    This is the gate a governed run passes before any action. It refuses --
+    rather than degrading -- in exactly the three cases where enforcement would
+    otherwise be a guess:
+
+        1. the policy is not authoritative (``source`` is
+           :data:`UNCONFIRMED_POLICY_SOURCE`, i.e. neither the control plane nor
+           a cached body was available), so an org-strengthened key would be
+           silently dropped;
+        2. the ``safety`` block is absent or is not an object; or
+        3. any safety key is missing or carries a value outside
+           :data:`SAFETY_VALUE_DOMAINS`.
+
+    Args:
+        policy: A policy as returned by :func:`resolve_effective_policy`.
+
+    Returns:
+        The validated ``safety`` block (a copy).
+
+    Raises:
+        PolicyEnforcementError: In any of the three cases above.
+    """
+    source = policy.get("source")
+    if source == UNCONFIRMED_POLICY_SOURCE:
+        raise PolicyEnforcementError(
+            "no authoritative safety policy is available (control plane "
+            "unreachable and no cached policy); refusing rather than running "
+            "on assumed defaults"
+        )
+    safety = policy.get("safety")
+    if not isinstance(safety, Mapping):
+        raise PolicyEnforcementError("resolved policy carries no safety block")
+
+    validated: dict[str, Any] = {}
+    for key in SAFE_SAFETY_DEFAULTS:
+        if key not in safety:
+            raise PolicyEnforcementError(f"safety key '{key}' is missing")
+        value = safety[key]
+        if not _in_domain(key, value):
+            allowed = ", ".join(repr(v) for v in SAFETY_VALUE_DOMAINS[key])
+            raise PolicyEnforcementError(
+                f"safety key '{key}' has an unknown value {value!r}; expected one of: {allowed}"
+            )
+        validated[key] = value
+    return validated
+
+
+def apply_safety_policy(
+    deployment: Mapping[str, Any], safety: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Project a validated ``safety`` block onto a Flow deployment config.
+
+    STRENGTHEN-ONLY. Every rule below either tightens the run or leaves the
+    deployment's own value untouched; none of them relaxes a posture the
+    operator already selected.
+
+    * ``pixel_verify.consequential_policy`` -- ``required`` arms
+      ``runtime.pixel_verify_enabled``. ``disabled`` is the platform BASELINE,
+      not a prohibition, so it leaves the deployment's own value alone.
+    * ``model_calls.allowed_in_healthy_run`` -- ``False`` forces
+      ``runtime.allow_model_grounding = False`` (fully local, zero outbound
+      calls). ``True`` is a permission, not a requirement: value left alone.
+    * ``effect_verification.required_for_consequential``,
+      ``unverified_write.allow``, ``identity_gate.strictness``, and
+      ``halt_on_ambiguous`` -- any of these at its strict value requires a
+      PRODUCTION execution profile, which is what enforces effect contracts,
+      identity coverage, settled frames, and no blanket unverified-write
+      approval. A ``demo`` profile is escalated to ``standard``; an ABSENT
+      profile is left absent, because Flow defaults an omitted profile to
+      ``regulated`` -- stricter than anything this projection would write.
+    * ``egress.artifact_policy`` -- validated but NOT projected here. Artifact
+      egress is governed by the upload path (``engine.upload_manager`` /
+      ``engine.hosted``), not by the replay runtime; saying so is more honest
+      than silently claiming an enforcement that does not happen.
+
+    Args:
+        deployment: The operator's deployment config as a mapping.
+        safety: A safety block already validated by :func:`binding_safety`.
+
+    Returns:
+        A new deployment mapping with the policy applied. The input is not mutated.
+
+    Raises:
+        PolicyEnforcementError: If ``runtime`` is not an object, or the config
+            declares an execution profile that cannot be ranked (so the engine
+            cannot prove it is not weakening it).
+    """
+    bound = dict(deployment)
+    raw_runtime = bound.get("runtime", {})
+    if raw_runtime is None:
+        raw_runtime = {}
+    if not isinstance(raw_runtime, Mapping):
+        raise PolicyEnforcementError("deployment config 'runtime' must be an object")
+    runtime = dict(raw_runtime)
+
+    if safety["pixel_verify.consequential_policy"] == "required":
+        runtime["pixel_verify_enabled"] = True
+
+    if safety["model_calls.allowed_in_healthy_run"] is False:
+        runtime["allow_model_grounding"] = False
+
+    requires_production_profile = (
+        safety["effect_verification.required_for_consequential"] is True
+        or safety["unverified_write.allow"] is False
+        or safety["identity_gate.strictness"] == "strict"
+        or safety["halt_on_ambiguous"] is True
+    )
+    if requires_production_profile:
+        profile = runtime.get("profile")
+        if profile is not None:
+            if not isinstance(profile, str) or profile not in PROFILE_RANK:
+                raise PolicyEnforcementError(
+                    f"deployment config declares an unrankable execution profile {profile!r}; "
+                    "the engine cannot prove the safety policy is enforced"
+                )
+            if PROFILE_RANK[profile] < PROFILE_RANK[MINIMUM_PRODUCTION_PROFILE]:
+                runtime["profile"] = MINIMUM_PRODUCTION_PROFILE
+
+    bound["runtime"] = runtime
+    return bound

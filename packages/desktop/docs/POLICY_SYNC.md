@@ -125,7 +125,62 @@ the server omitted a key.
    `source == "fail-closed-default"` the engine has no authoritative safety
    view; the safest values still gate the run, and a consumer that requires a
    confirmed policy (e.g. a consequential run) should treat that as a hard stop
-   rather than proceeding on defaults silently.
+   rather than proceeding on defaults silently. `binding_safety` implements
+   exactly that hard stop, and the outbound runner lane enforces it.
+
+---
+
+## Binding the policy to a run (the half that makes the control real)
+
+Resolving a policy is not enforcing one. `engine/runner_loop.py` binds the
+resolved `safety` block to every dispatched governed run, **after** the
+authorization/digest revalidation and **before** any GUI action:
+
+```
+poll → lease → stage bundle → validate_dispatch → bind_effective_policy → execute
+                                                   │
+                                                   ├─ resolve (network → cache)
+                                                   ├─ binding_safety(policy)      ── refuses
+                                                   └─ apply_safety_policy(config) ── refuses
+```
+
+`RunnerService.bind_effective_policy()` resolves the policy fresh for each run
+(the "refresh immediately before a run" rule above), validates it, projects it
+onto the operator's `~/.openadapt/deployment.json`, and hands Flow a
+**policy-bound** config staged privately (0600, removed when the run ends).
+Flow is never given the operator's file directly.
+
+### What each safety key does to a run
+
+Projection is **strengthen-only**: it can tighten a run, never relax one.
+
+| Safety key | Effect on the run |
+|---|---|
+| `pixel_verify.consequential_policy` | `required` → `runtime.pixel_verify_enabled = true`. `disabled` is the platform *baseline*, not a prohibition, so a locally-armed check stays armed. |
+| `model_calls.allowed_in_healthy_run` | `false` → `runtime.allow_model_grounding = false` (fully local). `true` is a permission, not an instruction to enable. |
+| `effect_verification.required_for_consequential`, `unverified_write.allow`, `identity_gate.strictness`, `halt_on_ambiguous` | Any at its strict value requires a **production execution profile** (effect contracts, identity coverage, settled frames, no blanket unverified-write approval). `demo` is escalated to `standard`; an **absent** profile is left absent, because Flow resolves an omitted profile to `regulated` — stricter than anything we would write. |
+| `egress.artifact_policy` | Validated, **not** projected onto the run: artifact egress is governed by the upload path (`engine/upload_manager.py`, `engine/hosted.py`), not the replay runtime. |
+
+The `grounding_model` projection is deliberately **not** bound to runs here: it
+is an egress *capability*, and auto-enabling a capability from a cached policy is
+the opposite of failing closed.
+
+### Refusal conditions (ack outcome `refused`, flow never invoked)
+
+1. `source == "fail-closed-default"` — no authoritative policy was ever
+   obtained. The safest values are populated, but they are the engine's guess at
+   the org's posture, not the org's posture: an org that *strengthened* a key
+   (e.g. required pixel-identity verification) would be silently run without it.
+2. The `safety` block is absent, is not an object, or is missing a key.
+3. Any value falls outside `SAFETY_VALUE_DOMAINS` (the exact domains in the
+   cloud registry). `harden_safety` deliberately preserves whatever the server
+   said; binding is where an unknown posture stops a run.
+4. There is no readable deployment config to bind the policy to, or it declares
+   an execution profile that cannot be ranked (so the engine cannot prove it is
+   not weakening it).
+
+Refusal reasons stay PHI-free: they name keys, classes, and domains — never
+config contents, paths, or exception text.
 
 ---
 
@@ -138,6 +193,10 @@ the server omitted a key.
 | `engine/policy.py :: load_cached_policy()` | Read `~/.openadapt/policy.json`; `None` on any error (degrade-not-raise) |
 | `engine/policy.py :: harden_safety(policy)` | Fill missing/`None` safety keys with safe defaults (fail-closed) |
 | `engine/policy.py :: resolve_effective_policy(host)` | network → cache → fail-closed, always hardened, adds `source` |
+| `engine/policy.py :: SAFETY_VALUE_DOMAINS` | Exact allowed values per safety key (mirrors the cloud registry) |
+| `engine/policy.py :: binding_safety(policy)` | The pre-run gate: refuses a non-authoritative/malformed policy (`PolicyEnforcementError`) |
+| `engine/policy.py :: apply_safety_policy(deployment, safety)` | Strengthen-only projection onto a Flow deployment config |
+| `engine/runner_loop.py :: RunnerService.bind_effective_policy()` | Resolves + binds the policy before every dispatched run; refuses on any failure |
 | `engine/dispatch.py :: get_effective_policy` | Dispatcher command; never raises; returns the fail-closed default on error |
 | `engine/dispatch.py :: refresh_policy` | Dispatcher command; forces a network fetch, then falls back like `get_effective_policy` |
 

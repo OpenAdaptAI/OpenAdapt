@@ -4,7 +4,10 @@ Covers, against a FAKE cloud (httpx.MockTransport -- no network):
   * register -> poll -> lease -> execute -> evidence -> ack semantics;
   * refusal on ANY digest/authorization mismatch (before the flow engine runs);
   * uncertain-on-restart (never silently re-execute a started run);
-  * PHI-free evidence conformance (forbidden fields never serialize, fail-closed).
+  * PHI-free evidence conformance (forbidden fields never serialize, fail-closed);
+  * the org's Tier-3 safety policy BINDING the run -- an admin's setting must
+    change the config Flow is actually given, and an unenforceable policy must
+    refuse before the flow engine is invoked.
 """
 
 from __future__ import annotations
@@ -16,7 +19,9 @@ from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 
+from engine import policy as policy_mod
 from engine.auth import store as auth_store
 from engine.config import EngineConfig
 from engine.db import IndexDB
@@ -105,7 +110,12 @@ class FlowResultStub:
 
 
 class FakeFlowBridge:
-    """Fake openadapt-flow bridge writing a canned report.json."""
+    """Fake openadapt-flow bridge writing a canned report.json.
+
+    Captures the deployment config CONTENT Flow was handed, because "what the
+    engine executed under" is the only thing that proves a policy actually
+    bound.
+    """
 
     def __init__(self, report: dict | None = None, ok: bool = True) -> None:
         self.report = report if report is not None else TRAPPED_REPORT
@@ -114,11 +124,66 @@ class FakeFlowBridge:
 
     def run(self, bundle_dir: Path, config: Path, out_dir: Path | None = None,
             **kwargs: object) -> FlowResultStub:
-        self.calls.append({"bundle_dir": bundle_dir, "out_dir": out_dir, **kwargs})
+        self.calls.append({
+            "bundle_dir": bundle_dir,
+            "out_dir": out_dir,
+            "config": Path(config),
+            "deployment": yaml.safe_load(Path(config).read_text()),
+            **kwargs,
+        })
         if out_dir is not None:
             Path(out_dir).mkdir(parents=True, exist_ok=True)
             (Path(out_dir) / "report.json").write_text(json.dumps(self.report))
         return FlowResultStub(self.ok)
+
+    @property
+    def runtimes(self) -> list[dict]:
+        """The ``runtime`` section of every deployment config Flow received."""
+        return [call["deployment"].get("runtime") or {} for call in self.calls]
+
+
+# The operator's deployment config on the runner box. Deliberately PERMISSIVE
+# where a Tier-3 setting can strengthen it, so a bound policy is visible.
+BASE_DEPLOYMENT = {
+    "name": "runner",
+    "backend": {"kind": "web", "url": "https://records.test"},
+}
+
+
+def make_policy(source: str = "network", **safety_overrides: object) -> dict:
+    """A resolved effective policy at the safe baseline, plus any overrides."""
+    safety = dict(policy_mod.SAFE_SAFETY_DEFAULTS)
+    safety.update(safety_overrides)
+    return {
+        "policy_version": 7,
+        "baseline_version": "2026.07",
+        "org_id": "org_1",
+        "role": "admin",
+        "is_admin": True,
+        "user": {},
+        "org": {},
+        "safety": safety,
+        "source": source,
+    }
+
+
+class FakePolicyResolver:
+    """Stands in for the control plane's ``/api/policy/effective``.
+
+    Mutable so a test can change the org's policy between two dispatches, which
+    is exactly what an admin toggling a setting does.
+    """
+
+    def __init__(self) -> None:
+        self.policy: dict = make_policy()
+        self.error: Exception | None = None
+        self.calls = 0
+
+    def __call__(self) -> dict:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.policy
 
 
 class FakeCloud:
@@ -213,12 +278,19 @@ def login(host: str = HOST) -> None:
 
 @pytest.fixture
 def rig(tmp_path: Path):
-    """Config + real IndexDB + fake flow bridge + fake cloud + RunnerService."""
+    """Config + real IndexDB + fake flow bridge + fake cloud + RunnerService.
+
+    A runner that can execute at all has a deployment config on disk and can
+    reach (or has cached) its org policy; the fixture provides both, and tests
+    remove or corrupt them to exercise the refusal paths. The resolver is
+    reachable as ``svc._policy_resolver``.
+    """
     config = EngineConfig(
         data_dir=tmp_path / ".openadapt", hosted_host=HOST, runner_enabled=True,
         log_level="WARNING",
     )
     config.data_dir.mkdir(parents=True, exist_ok=True)
+    (config.data_dir / "deployment.json").write_text(json.dumps(BASE_DEPLOYMENT))
     db = IndexDB(tmp_path / "index.db")
     db.initialize()
     cloud = FakeCloud()
@@ -231,6 +303,7 @@ def rig(tmp_path: Path):
         emit=lambda e, d: events.append((e, d)),
         http_factory=lambda: httpx.AsyncClient(base_url=HOST, transport=transport),
         rng=random.Random(0),
+        policy_resolver=FakePolicyResolver(),
     )
     yield svc, cloud, flow, config, db, events
     db.close()
@@ -430,6 +503,271 @@ class TestRefusal:
             validate_dispatch(
                 {"job_kind": "governed_run", "run_id": "r"}, tmp_path
             )
+
+
+# ------------------------------------------------------------------ safety policy
+
+
+class TestSafetyPolicyBinding:
+    """The governed safety policy must BIND a run, not merely resolve.
+
+    These are effect tests, not resolver tests: each one asserts on the
+    deployment config the flow engine was actually handed (or on the refusal
+    that stopped it), because a control that renders and reports success while
+    changing nothing about execution is the exact failure mode being guarded.
+    """
+
+    @pytest.mark.asyncio
+    async def test_admin_toggle_changes_what_the_run_executes(self, rig) -> None:
+        # THE regression test. Same bundle, same dispatch, same runner: the only
+        # difference between the two runs is the org's Tier-3 setting.
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        _bundle, digest = make_bundle(config)
+
+        # 1) baseline policy: pixel-identity verification is not required.
+        cloud.jobs.append(make_job(digest, run_id="run_before"))
+        await run_loop(svc, ticks=1)
+        assert flow.runtimes[0].get("pixel_verify_enabled") is not True
+
+        # 2) an admin turns the safety control on in the dashboard.
+        svc._policy_resolver.policy = make_policy(
+            **{"pixel_verify.consequential_policy": "required"}
+        )
+
+        cloud.jobs.append(make_job(digest, run_id="run_after"))
+        await run_loop(svc, ticks=1)
+
+        assert len(flow.calls) == 2
+        assert flow.runtimes[1]["pixel_verify_enabled"] is True
+        assert cloud.acks[-1]["outcome"] == "confirmed"
+
+    @pytest.mark.asyncio
+    async def test_model_call_prohibition_overrides_a_permissive_config(
+        self, rig
+    ) -> None:
+        # The local config opts into model grounding; the platform policy says
+        # a healthy run makes no model calls. The policy wins.
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        (config.data_dir / "deployment.json").write_text(
+            json.dumps({**BASE_DEPLOYMENT, "runtime": {"allow_model_grounding": True}})
+        )
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.runtimes[0]["allow_model_grounding"] is False
+
+    @pytest.mark.asyncio
+    async def test_demo_profile_is_escalated_never_lowered(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        (config.data_dir / "deployment.json").write_text(
+            json.dumps({**BASE_DEPLOYMENT, "runtime": {"profile": "demo"}})
+        )
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        # demo enforces no effect contracts and no identity coverage; the
+        # baseline policy requires both, so the run is escalated.
+        assert flow.runtimes[0]["profile"] == "standard"
+
+    @pytest.mark.asyncio
+    async def test_regulated_profile_is_left_alone(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        (config.data_dir / "deployment.json").write_text(
+            json.dumps({**BASE_DEPLOYMENT, "runtime": {"profile": "regulated"}})
+        )
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.runtimes[0]["profile"] == "regulated"
+
+    @pytest.mark.asyncio
+    async def test_absent_profile_stays_absent(self, rig) -> None:
+        # Flow resolves an omitted profile to `regulated`. Writing `standard`
+        # in would WEAKEN the run, so the binding must not invent one.
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert "profile" not in flow.runtimes[0]
+
+    @pytest.mark.asyncio
+    async def test_policy_is_resolved_before_every_run(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest, run_id="run_a"))
+        cloud.jobs.append(make_job(digest, run_id="run_b"))
+
+        await run_loop(svc, ticks=2)
+
+        assert len(flow.calls) == 2
+        assert svc._policy_resolver.calls == 2
+
+    @pytest.mark.asyncio
+    async def test_bound_config_does_not_outlive_the_run(self, rig) -> None:
+        # The policy-bound config is staged privately for the invocation only;
+        # a PHI-capable deployment snapshot must not be left on disk.
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert not flow.calls[0]["config"].exists()
+
+    @pytest.mark.asyncio
+    async def test_journal_records_the_policy_the_run_bound(self, rig) -> None:
+        svc, cloud, _flow, config, _db, _events = rig
+        login()
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        entry = svc.journal.get("run_1")
+        assert entry["policy_source"] == "network"
+        assert entry["policy_version"] == 7
+
+
+class TestSafetyPolicyFailsClosed:
+    """Every way the policy can be unavailable or unusable must REFUSE."""
+
+    @pytest.mark.asyncio
+    async def test_refuses_when_no_authoritative_policy_exists(self, rig) -> None:
+        # No control plane and no cache. The safest values are populated, but
+        # they are the engine's guess -- an org that STRENGTHENED a setting
+        # would be silently run without it. Refuse instead.
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        svc._policy_resolver.policy = make_policy(source="fail-closed-default")
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.calls == []  # flow engine NEVER invoked
+        assert cloud.evidence == []
+        assert cloud.acks[-1]["outcome"] == "refused"
+        assert "no authoritative safety policy" in cloud.acks[-1]["reason"]
+        entry = svc.journal.get("run_1")
+        assert entry["phase"] == "finished" and entry["outcome"] == "refused"
+
+    @pytest.mark.asyncio
+    async def test_refuses_on_a_safety_value_outside_its_domain(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        svc._policy_resolver.policy = make_policy(
+            **{"identity_gate.strictness": "medium"}
+        )
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.calls == []
+        assert cloud.acks[-1]["outcome"] == "refused"
+        assert "identity_gate.strictness" in cloud.acks[-1]["reason"]
+
+    @pytest.mark.asyncio
+    async def test_refuses_on_a_missing_safety_key(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        policy = make_policy()
+        del policy["safety"]["halt_on_ambiguous"]
+        svc._policy_resolver.policy = policy
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.calls == []
+        assert cloud.acks[-1]["outcome"] == "refused"
+
+    @pytest.mark.asyncio
+    async def test_refuses_when_resolution_raises(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        svc._policy_resolver.error = RuntimeError("keychain exploded")
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.calls == []
+        assert cloud.acks[-1]["outcome"] == "refused"
+        # the reason names the failure class, never its (possibly sensitive) text
+        assert "keychain exploded" not in cloud.acks[-1]["reason"]
+
+    @pytest.mark.asyncio
+    async def test_refuses_when_the_deployment_config_is_missing(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        (config.data_dir / "deployment.json").unlink()
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.calls == []
+        assert cloud.acks[-1]["outcome"] == "refused"
+
+    @pytest.mark.asyncio
+    async def test_refuses_on_an_unreadable_deployment_config(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        (config.data_dir / "deployment.json").write_text("{ not: [valid")
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.calls == []
+        assert cloud.acks[-1]["outcome"] == "refused"
+        # the refusal reason must not echo config contents
+        assert "not: [valid" not in cloud.acks[-1]["reason"]
+
+    @pytest.mark.asyncio
+    async def test_refuses_on_an_unrankable_execution_profile(self, rig) -> None:
+        svc, cloud, flow, config, _db, _events = rig
+        login()
+        (config.data_dir / "deployment.json").write_text(
+            json.dumps({**BASE_DEPLOYMENT, "runtime": {"profile": "yolo"}})
+        )
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        assert flow.calls == []
+        assert cloud.acks[-1]["outcome"] == "refused"
+
+    @pytest.mark.asyncio
+    async def test_refusal_reasons_stay_phi_free(self, rig) -> None:
+        svc, cloud, _flow, config, _db, _events = rig
+        login()
+        svc._policy_resolver.policy = make_policy(source="fail-closed-default")
+        _bundle, digest = make_bundle(config)
+        cloud.jobs.append(make_job(digest))
+
+        await run_loop(svc, ticks=1)
+
+        wire = all_wire_payloads(cloud)
+        assert "records.test" not in wire
+        assert str(config.data_dir) not in wire
 
 
 # ------------------------------------------------------------------ idempotency
