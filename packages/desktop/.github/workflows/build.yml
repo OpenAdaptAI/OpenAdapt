@@ -58,13 +58,17 @@ jobs:
           name: python-distribution
           path: dist/openadapt_desktop-*
           if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
   python-sidecar:
     name: Python sidecar (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14, windows-latest]
+        # PRs prove the frozen-engine contract once on Linux. The exact main
+        # commit rebuilds it on every supported OS before release, avoiding
+        # two expensive duplicate platform builds on every review push.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -95,9 +99,15 @@ jobs:
           name: python-sidecar-${{ runner.os }}-${{ runner.arch }}
           path: dist/openadapt-engine*
           if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
   native-installers:
     name: Native installer (${{ matrix.label }})
+    # Installer packaging, installation, launch, uninstall, and checksums are
+    # exact-main/release evidence. PRs already exercise the frontend, Python
+    # distribution, and representative frozen sidecar without paying for four
+    # complete installer builds on each incremental push.
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -276,3 +286,4 @@ jobs:
           name: native-${{ matrix.platform }}-${{ matrix.architecture }}
           path: dist/native/*
           if-no-files-found: error
+          retention-days: 14

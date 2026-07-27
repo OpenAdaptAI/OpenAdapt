@@ -18,7 +18,10 @@ jobs:
     name: Python Engine Tests
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        # PRs exercise both supported Python versions on the canonical Linux
+        # lane. Exact main repeats the same contract on macOS and Windows, so
+        # releases still require the complete cross-platform matrix.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
         python-version: ["3.11", "3.12"]
     runs-on: ${{ matrix.os }}
 

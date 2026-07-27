@@ -2,6 +2,11 @@ name: Notify docs
 on:
   push:
     branches: [main]
+    paths:
+      - README.md
+      - CHANGELOG.md
+  release:
+    types: [published]
 jobs:
   notify:
     runs-on: ubuntu-latest
