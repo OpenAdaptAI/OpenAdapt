@@ -56,6 +56,10 @@ build = [
     # engine sidecar.  Keep it exact: Desktop and Flow can release
     # independently, while each installer remains reproducible and rollbackable.
     "openadapt-flow==1.23.0",
+    # Desktop deliberately embeds the optional browser driver so selecting a
+    # web workflow is one click. It does NOT bundle Chromium: that larger
+    # runtime is fetched only after the operator chooses the browser surface.
+    "playwright>=1.44",
     # ONNX Runtime 1.27 dropped macOS Intel wheels. Flow's RapidOCR dependency
     # accepts this universal2 release, which retains Python 3.12 Intel support.
     "onnxruntime==1.20.1; sys_platform == 'darwin' and platform_machine == 'x86_64'",

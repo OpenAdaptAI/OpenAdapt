@@ -4,9 +4,9 @@ Every execution surface Desktop offers (``web`` / ``windows`` / ``macos`` /
 ``linux`` / ``rdp`` / ``citrix``) is probed against what ``openadapt-flow``
 actually requires to drive it, per ``openadapt_flow/backends/factory.py``:
 
-* ``web``      -- Playwright (a core Flow dependency) plus a Chromium build in
-                  the ms-playwright cache (``python -m playwright install
-                  chromium``; Flow also auto-provisions it on first launch).
+* ``web``      -- the Playwright driver embedded in the Desktop sidecar plus a
+                  Chromium build in the ms-playwright cache (provisioned only
+                  after the operator selects a browser workflow).
 * ``windows``  -- driven through the in-guest WAA agent over HTTP.  The local
                   client needs ``requests`` (``pip install
                   'openadapt-flow[windows]'``); on a Windows host the in-guest
@@ -234,9 +234,10 @@ def _check_web() -> SurfaceCapability:
         return SurfaceCapability(
             surface="web",
             state="driver_required",
-            detail="Playwright (a core openadapt-flow dependency) is not importable.",
+            detail="The Desktop browser driver is not importable.",
             remediation=(
-                "Run: pip install openadapt-flow, then: python -m playwright install chromium."
+                "Reinstall OpenAdapt Desktop. Source/development installs can run: "
+                "pip install 'openadapt-flow[browser]'."
             ),
             requirement="the Playwright browser driver",
             driver_name="playwright",

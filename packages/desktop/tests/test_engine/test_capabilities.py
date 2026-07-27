@@ -47,7 +47,7 @@ class TestWebSurface:
         _specs(monkeypatch, set())
         cap = capabilities._check_web()
         assert cap.state == "driver_required"
-        assert "playwright install chromium" in (cap.remediation or "")
+        assert "openadapt-flow[browser]" in (cap.remediation or "")
         assert cap.blocking is True
 
     def test_missing_chromium_is_driver_required_but_non_blocking(self, monkeypatch) -> None:

@@ -13,9 +13,11 @@ The canonical compiler and governed runtime remain in `openadapt-flow`. Each
 native installer freezes the exact `openadapt-flow==1.23.0` runtime and its
 `playwright==1.61.0` browser automation dependency into the Desktop sidecar.
 Compile, replay, run, and teach therefore work without a separate Python,
-`openadapt-flow`, or `playwright` installation on `PATH`. The first browser
-workflow downloads the Chromium revision pinned by the bundled Playwright
-runtime unless an approved browser cache is pre-provisioned.
+`openadapt-flow`, or `playwright` installation on `PATH`. Desktop starts with no
+browser download. The first browser workflow downloads the Chromium revision
+pinned by the bundled Playwright runtime unless an approved browser cache is
+pre-provisioned; native desktop, RDP, and Citrix workflows never enter that
+setup path.
 
 Desktop keeps separately licensed media and vision components outside its MIT
 installer. On first use, it downloads the exact release-reviewed component for

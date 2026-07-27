@@ -1445,6 +1445,7 @@ build = [
     { name = "onnxruntime", version = "1.20.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
     { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
     { name = "openadapt-flow" },
+    { name = "playwright" },
     { name = "pyinstaller" },
 ]
 dev = [
@@ -1475,6 +1476,7 @@ requires-dist = [
     { name = "openadapt-flow", marker = "extra == 'build'", specifier = "==1.23.0" },
     { name = "openadapt-privacy", specifier = ">=1.0.0" },
     { name = "openadapt-types", specifier = "==0.5.0" },
+    { name = "playwright", marker = "extra == 'build'", specifier = ">=1.44" },
     { name = "psutil" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },

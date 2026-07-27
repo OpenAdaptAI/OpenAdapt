@@ -205,11 +205,13 @@ compiler or runtime. Those remain in `openadapt-flow`.
 
 ## Known gaps
 
-- The first browser workflow downloads the Chromium revision pinned by the
+- Desktop starts without downloading a browser. The first browser workflow
+  downloads the Chromium revision pinned by the
   bundled Playwright runtime into `~/.openadapt/browser-runtime`. The app shows
   setup progress and a retryable failure; no workflow action starts until the
   browser is ready. Air-gapped packages set `PLAYWRIGHT_BROWSERS_PATH` to a
-  version-matched prebundle.
+  version-matched prebundle. Native desktop, RDP, and Citrix workflows never
+  invoke that setup path.
 - CI proves the frozen binary's browser record -> compile -> replay loop on
   Windows, macOS, and Linux. UI event contracts are automated, while broader
   real-application qualification remains workflow-specific.
