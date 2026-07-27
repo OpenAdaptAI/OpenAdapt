@@ -35,7 +35,7 @@ All mutations require an exact capability digest, a stable idempotency key, acti
 - [docs/DESIGN.md](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/docs/DESIGN.md): architecture, security model, what v2 deliberately does not do.
 - [docs/DISTRIBUTION.md](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/docs/DISTRIBUTION.md): registry artifacts, the public-vs-private-server distinction, and the submission plan.
 - [server.json](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/server.json): official MCP registry manifest.
-- [smithery.yaml](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/smithery.yaml): Smithery launch config.
+- [manifest.json](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/manifest.json): portable MCPB launch config for Smithery and desktop clients.
 
 ## Related
 

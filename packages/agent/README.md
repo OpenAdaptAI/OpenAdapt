@@ -268,7 +268,7 @@ distinction and the publish/submission plan.
 Machine-readable launch manifests live at the repo root:
 
 - [`server.json`](server.json) — official [MCP registry](https://github.com/modelcontextprotocol/registry) manifest (PyPI package, `uvx` runtime hint, stdio transport).
-- [`smithery.yaml`](smithery.yaml) — [Smithery](https://smithery.ai) launch config for bundle/run paths, governed execution, and attended-action opt-ins.
+- [`manifest.json`](manifest.json) — portable MCPB configuration used to build the one-click local bundle accepted by [Smithery](https://smithery.ai) and MCPB-compatible desktop clients.
 - [`llms.txt`](llms.txt) — a concise, link-first summary for AI assistants.
 
 Registry-launched installs start **read-only by default**; execution
@@ -293,6 +293,8 @@ pytest -q
 python -m build
 python scripts/check_release_artifacts.py dist
 python scripts/check_dist.py dist/*
+npx -y @anthropic-ai/mcpb@2.1.2 validate manifest.json
+npx -y @anthropic-ai/mcpb@2.1.2 pack . openadapt-agent.mcpb
 ```
 
 ## License

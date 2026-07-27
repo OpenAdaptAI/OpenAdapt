@@ -27,17 +27,17 @@ workspace license/PHI rules); it is the operator's artifact and stays
 inside their trust boundary. The registry listing advertises the
 *capability*, not any workflow.
 
-**Read-only by default when registry-launched.** The `server.json` and
-`smithery.yaml` launch the server WITHOUT `--allow-run`, so a one-click
-install from a directory yields PHI-safe inspection and Needs Attention
-tools only (`list_workflows`, `get_workflow`, `get_run_report`,
-`list_needs_attention`, and `get_attention_item`). Executing a workflow
-(`run_workflow_<opaque-id>`) is a deliberate operator act: they add
-`--allow-run` (and typically `--policy`/`--config`). Teach and Escalate
-require `--allow-attended-actions`; Continue and Skip additionally require
-a qualified deployment `--config`. Clients without MCP form elicitation use
-Flow's attended console/CLI, where all four capabilities remain available.
-This matches the security model in [`DESIGN.md`](DESIGN.md).
+**Read-only by default when registry-launched.** The official `server.json`
+omits `--allow-run`, and the MCPB `manifest.json` leaves both execution and
+attended actions off until the operator enables them in the install form. A
+default install yields PHI-safe inspection and Needs Attention tools only
+(`list_workflows`, `get_workflow`, `get_run_report`,
+`list_needs_attention`, and `get_attention_item`). Enabling workflow runs
+adds the dynamic `run_workflow_<opaque-id>` tools; enabling attended actions
+adds Teach and Escalate, while a qualified deployment config also makes
+Continue and Skip available. Clients without MCP form elicitation use Flow's
+attended console/CLI, where all four capabilities remain available. This
+matches the security model in [`DESIGN.md`](DESIGN.md).
 
 > There is intentionally **no** hosted, multi-tenant "official OpenAdapt
 > workflow server" that exposes OpenAdapt-operated workflows to the
@@ -50,12 +50,12 @@ This matches the security model in [`DESIGN.md`](DESIGN.md).
 Every directory (official registry, Smithery, mcp.so, Glama, PulseMCP)
 indexes the same core fields. Keep this block as the single source of
 truth; the machine-readable copies are [`../server.json`](../server.json)
-and [`../smithery.yaml`](../smithery.yaml).
+and [`../manifest.json`](../manifest.json).
 
 - **Name (reverse-DNS, official registry):** `io.github.OpenAdaptAI/openadapt-agent`
 - **Display name:** OpenAdapt Agent (openadapt-flow bridge)
 - **PyPI package:** `openadapt-agent`
-- **Version:** `2.0.1` (Beta)
+- **Version:** `2.0.2` (Beta)
 - **Description:** Local Beta bridge for governed openadapt-flow workflows and attended actions.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
@@ -85,14 +85,15 @@ except on a deliberate version tag / GitHub Release.
 
 | Trigger | Jobs that run | Publishes? |
 | --- | --- | --- |
-| Pull request touching release files, or `workflow_dispatch`, or any tag/release | `validate` (build, license/boundary check on the built archives, `twine check`, `server.json` schema validation) | **No** — dry run |
+| Pull request touching release files, or `workflow_dispatch`, or any tag/release | `validate` (Python build, MCPB build, archive boundary checks, `twine check`, registry schema validation) | **No** — dry run |
 | Push a `vX.Y.Z` tag, or publish a GitHub Release | `validate` -> `pypi-publish` -> `mcp-registry-publish` | **Yes** |
 
-- **`validate`** builds the sdist+wheel, runs
+- **`validate`** builds the sdist+wheel and local MCPB, runs
   [`scripts/check_release_artifacts.py`](../scripts/check_release_artifacts.py)
   (fails if a wheel/sdist carries a bundle, `.enc`, run outputs, keys, or
-  any non-code payload — the license/boundary gate), runs `twine check`,
-  validates `server.json` against its live schema, and runs the
+  any non-code payload — the license/boundary gate), checks the MCPB for
+  workflow/evidence payloads, runs `twine check`, validates `server.json`
+  against its live schema, and runs the
   version-consistency guard (`tests/test_distribution.py`). It runs on PRs
   and manual dispatch so the pipeline is testable **without** publishing.
 - **`pypi-publish`** (tag/release only) asserts the tag matches the
@@ -105,7 +106,7 @@ except on a deliberate version tag / GitHub Release.
   because the repo lives under the `OpenAdaptAI` org that owns the
   `io.github.OpenAdaptAI` namespace.
 
-To cut a release: bump the three version fields (see §3.1), merge, then
+To cut a release: bump the synchronized version fields (see §3.1), merge, then
 `git tag vX.Y.Z && git push origin vX.Y.Z` (or publish a Release with that
 tag). The first tag you push IS the first real publish — do it
 deliberately.
@@ -115,8 +116,8 @@ deliberately.
 **In the OIDC path (recommended) there are ZERO repo secrets.** You must
 do this one-time setup before the first tag:
 
-1. **PyPI Trusted Publishing** — on https://pypi.org, register a pending
-   publisher for the (not-yet-existent) project `openadapt-agent`:
+1. **PyPI Trusted Publishing** — on https://pypi.org, keep the publisher for
+   project `openadapt-agent` configured as:
    owner `OpenAdaptAI`, repo `openadapt-agent`, workflow `release.yml`,
    environment `pypi`. (PyPI account with 2FA required; the project is
    created on first OIDC upload.)
@@ -139,12 +140,12 @@ No secret is ever committed; these live only in repo Settings -> Secrets.
 
 ### 3.1 Decide the release version
 
-The first public release is `2.0.0`. Future releases must keep the package,
-module, and registry metadata versions synchronized.
+The MCPB distribution release is `2.0.2`. Future releases must keep the package,
+module, registry, and MCPB metadata versions synchronized.
 
-Set every future version in **three places that a CI test pins together**:
+Set every future version in **four files that a CI test pins together**:
 `pyproject.toml` `version`, `src/openadapt_agent/__init__.py` `__version__`,
-and both `version` fields in `server.json`. The
+both `version` fields in `server.json`, and `manifest.json` `version`. The
 `tests/test_distribution.py` guard fails if they drift.
 
 ### 3.2 Publish to PyPI — AUTOMATED (`pypi-publish` job)
@@ -177,22 +178,41 @@ mcp-publisher publish               # reads ./server.json
 If the registry asks you to prove the PyPI package belongs to this server,
 add the ownership marker it names to the package metadata and re-run.
 
-### 3.4 List on Smithery — MANUAL (one-time claim)
+### 3.4 List on Smithery — MCPB upload after namespace claim
 
-`smithery.yaml` is already at the repo root.
-- Sign in at https://smithery.ai with the GitHub org account.
-- "Add Server" -> point at `github.com/OpenAdaptAI/openadapt-agent`.
-- Smithery reads `smithery.yaml` (stdio `startCommand`, `configSchema`,
-  `commandFunction`). Confirm the generated config form shows
-  `bundlesDir` (required), `runsDir`, `allowRun` (default off),
-  `allowAttendedActions` (default off), optional `deploymentConfig`,
-  `headed`, and `bundleKey` (secret).
-- Publish. Smithery hosts the connection config; it does not host bundles.
+Smithery's current URL form accepts public **Streamable HTTP** servers. This
+repository is intentionally a local stdio server, so do not paste the GitHub
+URL into the MCP Server URL field and do not add an unauthenticated HTTP shim.
+Smithery's supported local path is an MCPB bundle.
 
-> **Why manual:** Smithery has no public "create listing" API keyed to an
-> external repo; the initial claim is an authenticated GitHub-org action.
-> Once claimed, Smithery re-reads `smithery.yaml` from the repo on each
-> push, so subsequent config changes ARE automatic.
+Build and inspect the bundle from the exact release source:
+
+```bash
+npx -y @anthropic-ai/mcpb@2.1.2 validate manifest.json
+mkdir -p mcpb-dist
+npx -y @anthropic-ai/mcpb@2.1.2 pack . mcpb-dist/openadapt-agent-2.0.2.mcpb
+npx -y @anthropic-ai/mcpb@2.1.2 info mcpb-dist/openadapt-agent-2.0.2.mcpb
+```
+
+The release workflow performs the same validation and creates an `mcpb`
+artifact. The bundle contains the public server code and configuration only;
+the operator chooses their own bundle and evidence directories during local
+installation. It never contains a compiled workflow or run evidence.
+
+One-time publication then uses Smithery's local/MCPB flow:
+
+```bash
+smithery auth login
+smithery namespace use <claimed-namespace>
+smithery mcp publish mcpb-dist/openadapt-agent-2.0.2.mcpb \
+  -n <claimed-namespace>/openadapt-agent
+```
+
+Confirm the generated install form shows workflow bundles (required), run
+evidence, governed execution (off by default), attended actions (off by
+default), optional deployment config, headed mode, and the masked bundle key.
+The initial namespace claim and outward-facing publication remain founder
+actions; the MCPB build itself is reproducible and automated.
 
 ### 3.5 mcp.so — MANUAL (one-time submission)
 
@@ -228,9 +248,15 @@ For discoverability of the *capability*:
   recorded values). Publishing one is the user's decision, per the PHI /
   artifact-egress rules.
 
+The generic repository is therefore ready for Smithery's **MCP server**
+catalog through MCPB, not for Smithery's GitHub-backed **Skill** catalog.
+Creating a separate bundle-free product skill could be considered later, but
+it would be a new public surface rather than a substitute for this server.
+
 ## 4. Post-publish consistency checklist
 
 - [ ] `uvx openadapt-agent serve --bundles <dir>` starts read-only for a fresh installer.
+- [ ] The exact release source validates and packs with `@anthropic-ai/mcpb@2.1.2`.
 - [ ] `server.json` version == PyPI version == `__version__` (CI-pinned).
 - [ ] Registry descriptions match the canonical metadata block (§2).
 - [ ] README badges point at the real PyPI project once published.

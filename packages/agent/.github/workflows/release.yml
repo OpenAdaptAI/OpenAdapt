@@ -22,7 +22,10 @@ on:
     paths:
       - "pyproject.toml"
       - "server.json"
-      - "smithery.yaml"
+      - "manifest.json"
+      - ".mcpbignore"
+      - "src/openadapt_agent/mcpb_entry.py"
+      - "scripts/check_mcpb.py"
       - "scripts/check_release_artifacts.py"
       - "scripts/check_dist.py"
       - ".github/workflows/release.yml"
@@ -43,12 +46,15 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
       - name: Install tooling
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade build "twine>=6.1" "packaging>=24.2" jsonschema
           python -m pip install -e ".[dev]"
-      - name: Version-consistency guard (server.json / pyproject / __version__)
+      - name: Version-consistency guard (registry / MCPB / package / runtime)
         run: python -m pytest tests/test_distribution.py -q
       - name: Build sdist + wheel
         run: python -m build
@@ -58,6 +64,15 @@ jobs:
           python scripts/check_dist.py dist/*
       - name: twine check
         run: twine check dist/*
+      - name: Validate and pack the local MCPB
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(grep -m1 -E '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')"
+          mkdir -p mcpb-dist
+          npx -y @anthropic-ai/mcpb@2.1.2 validate manifest.json
+          npx -y @anthropic-ai/mcpb@2.1.2 pack . "mcpb-dist/openadapt-agent-${version}.mcpb"
+          python scripts/check_mcpb.py mcpb-dist/*.mcpb
       - name: Validate server.json against the MCP registry schema
         run: |
           python - <<'PY'
@@ -80,6 +95,12 @@ jobs:
         with:
           name: dist
           path: dist/
+          if-no-files-found: error
+      - name: Upload local MCPB
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcpb
+          path: mcpb-dist/
           if-no-files-found: error
 
   pypi-publish:

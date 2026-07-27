@@ -1,4 +1,4 @@
-"""Guard the distribution artifacts (server.json / smithery.yaml / llms.txt).
+"""Guard the distribution artifacts (server.json / manifest.json / llms.txt).
 
 These files are how the package is listed in MCP registries. The tests
 pin them to the package's real identity so a version bump or a rename
@@ -14,13 +14,11 @@ import json
 import re
 from pathlib import Path
 
-import yaml
-
 from openadapt_agent import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER_JSON = REPO_ROOT / "server.json"
-SMITHERY_YAML = REPO_ROOT / "smithery.yaml"
+MCPB_MANIFEST = REPO_ROOT / "manifest.json"
 LLMS_TXT = REPO_ROOT / "llms.txt"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 README = REPO_ROOT / "README.md"
@@ -41,6 +39,10 @@ def _server_json() -> dict:
     return json.loads(SERVER_JSON.read_text(encoding="utf-8"))
 
 
+def _mcpb_manifest() -> dict:
+    return json.loads(MCPB_MANIFEST.read_text(encoding="utf-8"))
+
+
 def test_server_json_is_valid_and_well_formed() -> None:
     doc = _server_json()
     assert doc["$schema"].startswith("https://static.modelcontextprotocol.io/")
@@ -57,10 +59,11 @@ def test_server_json_is_valid_and_well_formed() -> None:
 
 
 def test_version_is_consistent_everywhere() -> None:
-    """server.json (twice), pyproject, and __version__ must not drift."""
+    """Registry, MCPB, package, and runtime versions must not drift."""
     doc = _server_json()
     assert doc["version"] == __version__
     assert doc["packages"][0]["version"] == __version__
+    assert _mcpb_manifest()["version"] == __version__
     assert _pyproject_version() == __version__
 
 
@@ -93,21 +96,14 @@ def test_registry_launch_is_read_only_by_default() -> None:
     """A one-click registry install must NOT auto-enable execution.
 
     --allow-run is deliberately absent from server.json defaults and false in
-    Smithery. Attended decisions have their own false-by-default switch.
+    the MCPB. Attended decisions have their own false-by-default switch.
     """
     args = _server_json()["packages"][0]["packageArguments"]
-    assert not any(
-        a.get("name") == "--allow-run" or a.get("value") == "--allow-run"
-        for a in args
-    )
-    smithery = yaml.safe_load(SMITHERY_YAML.read_text(encoding="utf-8"))
-    props = smithery["startCommand"]["configSchema"]["properties"]
-    assert props["allowRun"]["default"] is False
-    assert props["allowAttendedActions"]["default"] is False
-    # --allow-run is not forced into the required config.
-    assert "allowRun" not in smithery["startCommand"]["configSchema"].get(
-        "required", []
-    )
+    assert not any(a.get("name") == "--allow-run" or a.get("value") == "--allow-run" for a in args)
+    config = _mcpb_manifest()["user_config"]
+    assert config["allow_run"]["default"] is False
+    assert config["allow_attended_actions"]["default"] is False
+    assert config["bundles_dir"]["required"] is True
 
 
 def test_bundle_key_is_marked_secret_not_leaked() -> None:
@@ -117,20 +113,23 @@ def test_bundle_key_is_marked_secret_not_leaked() -> None:
     assert key.get("isRequired", False) is False
 
 
-def test_smithery_stdio_command_wires_bundles_and_allow_run() -> None:
-    smithery = yaml.safe_load(SMITHERY_YAML.read_text(encoding="utf-8"))
-    start = smithery["startCommand"]
-    assert start["type"] == "stdio"
-    assert "bundlesDir" in start["configSchema"]["required"]
-    command_fn = start["commandFunction"]
-    assert "openadapt-agent" in command_fn
-    assert "--bundles" in command_fn
-    assert "--allow-run" in command_fn
-    assert "--allow-attended-actions" in command_fn
-    assert "--runs-dir" in command_fn
-    assert "--config" in command_fn
-    assert "--headed" in command_fn
-    assert "OPENADAPT_BUNDLE_KEY" in command_fn
+def test_mcpb_is_local_uv_and_wires_all_operator_choices() -> None:
+    manifest = _mcpb_manifest()
+    assert manifest["manifest_version"] == "0.4"
+    assert manifest["server"]["type"] == "uv"
+    assert manifest["server"]["entry_point"] == "src/openadapt_agent/mcpb_entry.py"
+    env = manifest["server"]["mcp_config"]["env"]
+    for key in (
+        "OPENADAPT_AGENT_BUNDLES_DIR",
+        "OPENADAPT_AGENT_RUNS_DIR",
+        "OPENADAPT_AGENT_ALLOW_RUN",
+        "OPENADAPT_AGENT_ALLOW_ATTENDED_ACTIONS",
+        "OPENADAPT_AGENT_DEPLOYMENT_CONFIG",
+        "OPENADAPT_AGENT_HEADED",
+        "OPENADAPT_AGENT_BUNDLE_KEY",
+    ):
+        assert key in env
+    assert manifest["tools_generated"] is True
 
 
 def test_llms_txt_lists_the_tool_surface() -> None:
