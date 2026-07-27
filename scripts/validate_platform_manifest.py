@@ -13,12 +13,20 @@ What it validates TODAY:
   "unsigned (signing infrastructure pending)". A non-null signature value
   FAILS validation, because no verification infrastructure exists yet and a
   claimed-but-unverifiable signature is worse than an honest null.
-* Repo agreement (offline): the launcher version and the openadapt-*
-  compatibility ranges in the manifest match this checkout's pyproject.toml.
+* Repo agreement (offline): the openadapt-* compatibility ranges in the
+  manifest match this checkout's pyproject.toml, and the manifest's launcher
+  version is not AHEAD of pyproject.toml's. A pyproject version ahead of the
+  manifest is the normal in-flight-release state and only warns; the PyPI
+  comparison below is what authoritatively detects staleness.
 * Published-artifact agreement (network): for every component, the manifest
   version equals the latest version on PyPI, and every artifact filename,
-  URL, and sha256 digest matches what PyPI reports. Run with --offline to
-  skip only this class of check (for example in an airgapped environment).
+  URL, and sha256 digest matches what PyPI reports. A manifest version that
+  is BEHIND PyPI's latest is drift and fails; one that is AHEAD but already
+  published is PyPI index propagation lag and warns (its digests are still
+  verified); one PyPI never published fails. An unreachable PyPI warns rather
+  than fails -- it is not evidence of drift, and a flaky guard gets ignored --
+  unless --require-network is passed. Run with --offline to skip only this
+  class of check (for example in an airgapped environment).
 * Status-document agreement (network): version skew against
   https://openadapt.ai/status.json is reported as a WARNING by default,
   because status.json is regenerated on its own cadence in openadapt-web.
@@ -141,17 +149,58 @@ def check_signature_honesty(manifest: dict, report: Report) -> None:
         )
 
 
+def compare_launcher_to_pyproject(
+    manifest_version: str | None, pyproject_version: str | None, report: Report
+) -> None:
+    """Compare the manifest's launcher version to this checkout's pyproject.
+
+    The manifest records the PUBLISHED launcher, while ``pyproject.toml``
+    records the version this checkout would publish next. Those legitimately
+    disagree for the ~90 seconds between python-semantic-release pushing its
+    version-bump commit and the release workflow's reconcile job regenerating
+    the manifest, so:
+
+    * equal -> silent.
+    * pyproject AHEAD of the manifest -> WARNING. A release is in flight or
+      the bump has not been published yet. Treating this as an error made the
+      guard fail on main after every single release, which is precisely how
+      a real drift failure became invisible. Staleness against the real world
+      is detected by ``compare_component_to_pypi``, which is authoritative.
+    * pyproject BEHIND the manifest, or either version unparseable -> ERROR.
+      The manifest claims a launcher this repository never produced.
+    """
+    if manifest_version == pyproject_version:
+        return
+
+    manifest_release = _release_tuple(str(manifest_version))
+    pyproject_release = _release_tuple(str(pyproject_version))
+    if (
+        manifest_release is not None
+        and pyproject_release is not None
+        and pyproject_release > manifest_release
+    ):
+        report.warning(
+            f"launcher: pyproject.toml has {pyproject_version!r} but the "
+            f"manifest records the published {manifest_version!r}. A release "
+            "is in flight or unpublished; the manifest deliberately records "
+            "only published versions. PyPI comparison remains authoritative."
+        )
+        return
+
+    report.error(
+        f"launcher version drift: manifest has {manifest_version!r} "
+        f"but pyproject.toml has {pyproject_version!r}. The manifest names a "
+        "launcher this repository does not produce. Regenerate with "
+        "scripts/generate_platform_manifest.py."
+    )
+
+
 def check_against_pyproject(manifest: dict, report: Report) -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     project = pyproject["project"]
 
     launcher = manifest.get("components", {}).get("launcher", {})
-    if launcher.get("version") != project["version"]:
-        report.error(
-            f"launcher version drift: manifest has {launcher.get('version')!r} "
-            f"but pyproject.toml has {project['version']!r}. Regenerate with "
-            "scripts/generate_platform_manifest.py after releasing."
-        )
+    compare_launcher_to_pyproject(launcher.get("version"), project["version"], report)
 
     compatibility = manifest.get("compatibility", {})
     if compatibility.get("python") != project["requires-python"]:
@@ -192,45 +241,142 @@ def check_against_pyproject(manifest: dict, report: Report) -> None:
         )
 
 
-def check_against_pypi(manifest: dict, report: Report) -> None:
+def _release_tuple(version: str) -> tuple[int, ...] | None:
+    """Return the numeric release segment of a version, or None if unparseable.
+
+    Only the release segment is compared. Any pre/post/dev suffix makes the
+    version unparseable here, which callers treat conservatively (as drift)
+    rather than guessing an ordering.
+    """
+    parts = version.split(".")
+    if not parts or not all(part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
+
+
+def _files_for_version(doc: dict, version: str) -> list[dict] | None:
+    """Return PyPI's file records for ``version``, or None if it has none.
+
+    ``info.version`` lags behind an upload on some PyPI CDN edges, so
+    ``urls`` (which describes ``info.version``) is not always the right list.
+    ``releases`` is keyed by version and is authoritative for a named one.
+    """
+    releases = doc.get("releases")
+    if isinstance(releases, dict):
+        files = releases.get(version)
+        if files:
+            return list(files)
+        if version in releases:
+            return []
+        return None
+    # Older/partial payloads without a `releases` map: fall back to `urls`,
+    # which only ever describes `info.version`.
+    if doc.get("info", {}).get("version") == version:
+        return list(doc.get("urls", []))
+    return None
+
+
+def compare_component_to_pypi(
+    role: str, component: dict, doc: dict, report: Report
+) -> None:
+    """Compare one manifest component against PyPI's published state.
+
+    Pure (no I/O) so the drift guard can be tested against simulated future
+    releases and tampered digests. Classification:
+
+    * manifest version OLDER than PyPI's latest -> ERROR. This is staleness:
+      the manifest advertises a superseded release and its digests, so anyone
+      verifying today's artifact against it fails. This is the exact bug this
+      guard exists to catch.
+    * manifest version NEWER than PyPI's latest but already present in
+      ``releases`` -> WARNING. PyPI's ``info.version`` lags an upload by up to
+      a few minutes on some CDN edges, and a release-time false red trains
+      people to ignore this check. Digests are still verified against the
+      named version, so a wrong digest still fails.
+    * manifest version absent from ``releases`` entirely -> ERROR. The
+      manifest names a release that was never published.
+    * any filename/URL/digest mismatch -> ERROR, always.
+    """
+    package = component.get("package")
+    manifest_version = component.get("version")
+    latest_version = doc.get("info", {}).get("version")
+
+    files = _files_for_version(doc, manifest_version)
+    if not files:
+        report.error(
+            f"{role} version drift: manifest has {manifest_version!r} but "
+            f"PyPI publishes no files for {package}=={manifest_version} "
+            f"(PyPI's latest is {latest_version!r}). The manifest names a "
+            "release that does not exist. Regenerate the manifest."
+        )
+        return
+
+    if manifest_version != latest_version:
+        manifest_release = _release_tuple(str(manifest_version))
+        latest_release = _release_tuple(str(latest_version))
+        ahead = (
+            manifest_release is not None
+            and latest_release is not None
+            and manifest_release > latest_release
+        )
+        if ahead:
+            report.warning(
+                f"{role}: manifest has {manifest_version!r} but PyPI's "
+                f"latest {package} still reads {latest_version!r}. The "
+                "manifest version is published, so this is PyPI index "
+                "propagation lag, not drift; digests are verified against "
+                f"{manifest_version!r}."
+            )
+        else:
+            report.error(
+                f"{role} version drift: manifest has {manifest_version!r} "
+                f"but PyPI's latest {package} is {latest_version!r}. The "
+                "manifest advertises a superseded release and its digests. "
+                "Regenerate it with scripts/generate_platform_manifest.py."
+            )
+            return
+
+    published = {
+        entry["filename"]: (entry["url"], entry["digests"]["sha256"]) for entry in files
+    }
+    for artifact in component.get("artifacts", []):
+        filename = artifact.get("filename")
+        if filename not in published:
+            report.error(
+                f"{role} artifact {filename} is not among PyPI's files "
+                f"for {package}=={manifest_version}"
+            )
+            continue
+        url, sha256 = published[filename]
+        if artifact.get("url") != url:
+            report.error(
+                f"{role} artifact {filename} URL drift: manifest has "
+                f"{artifact.get('url')} but PyPI has {url}"
+            )
+        if artifact.get("sha256") != sha256:
+            report.error(
+                f"{role} artifact {filename} sha256 drift: manifest has "
+                f"{artifact.get('sha256')} but PyPI has {sha256}. A consumer "
+                "verifying the published artifact against this manifest "
+                "would fail."
+            )
+
+
+def check_against_pypi(manifest: dict, report: Report, require_network: bool) -> None:
     for role, component in manifest.get("components", {}).items():
         package = component.get("package")
         try:
             doc = _fetch_json(PYPI_URL_TEMPLATE.format(package=package))
         except (urllib.error.URLError, TimeoutError) as exc:
-            report.error(f"could not fetch PyPI metadata for {package}: {exc}")
+            # An unreachable index is not evidence of drift. Failing here
+            # makes the guard flaky, and a flaky guard gets ignored -- which
+            # is how the stale manifest survived. Release gates pass
+            # --require-network so the comparison cannot be silently skipped
+            # where it is load-bearing.
+            emit = report.error if require_network else report.warning
+            emit(f"could not fetch PyPI metadata for {package}: {exc}")
             continue
-        published_version = doc["info"]["version"]
-        if component.get("version") != published_version:
-            report.error(
-                f"{role} version drift: manifest has "
-                f"{component.get('version')!r} but PyPI's latest {package} is "
-                f"{published_version!r}. Regenerate the manifest."
-            )
-            continue
-        published = {
-            entry["filename"]: (entry["url"], entry["digests"]["sha256"])
-            for entry in doc.get("urls", [])
-        }
-        for artifact in component.get("artifacts", []):
-            filename = artifact.get("filename")
-            if filename not in published:
-                report.error(
-                    f"{role} artifact {filename} is not among PyPI's files "
-                    f"for {package}=={published_version}"
-                )
-                continue
-            url, sha256 = published[filename]
-            if artifact.get("url") != url:
-                report.error(
-                    f"{role} artifact {filename} URL drift: manifest has "
-                    f"{artifact.get('url')} but PyPI has {url}"
-                )
-            if artifact.get("sha256") != sha256:
-                report.error(
-                    f"{role} artifact {filename} sha256 drift: manifest has "
-                    f"{artifact.get('sha256')} but PyPI has {sha256}"
-                )
+        compare_component_to_pypi(role, component, doc, report)
 
 
 def check_against_status(manifest: dict, report: Report, strict: bool) -> None:
@@ -276,6 +422,15 @@ def main() -> int:
         action="store_true",
         help="Treat status.json skew as a failure instead of a warning.",
     )
+    parser.add_argument(
+        "--require-network",
+        action="store_true",
+        help=(
+            "Treat an unreachable PyPI as a failure instead of a warning. Use "
+            "at release gates, where skipping the comparison is not "
+            "acceptable."
+        ),
+    )
     args = parser.parse_args()
 
     if not args.manifest.exists():
@@ -292,7 +447,7 @@ def main() -> int:
     check_signature_honesty(manifest, report)
     check_against_pyproject(manifest, report)
     if not args.offline:
-        check_against_pypi(manifest, report)
+        check_against_pypi(manifest, report, require_network=args.require_network)
         check_against_status(manifest, report, strict=args.strict_status)
 
     for warning in report.warnings:

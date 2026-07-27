@@ -192,7 +192,10 @@ jobs:
             echo "Published artifacts are not visible yet; retrying in 15 seconds."
             sleep 15
           done
-          python scripts/validate_platform_manifest.py
+          # --require-network: at the release gate an unreachable PyPI must
+          # fail. Elsewhere it only warns, because an index outage is not
+          # evidence of drift and a flaky guard stops being read.
+          python scripts/validate_platform_manifest.py --require-network
           python scripts/validate_platform_manifest.py --offline
 
       - name: Commit the reconciled manifest

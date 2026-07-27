@@ -12,10 +12,25 @@ on:
     branches:
       - main
   schedule:
-    # Weekly drift check: a component release without a manifest regeneration
-    # should fail here, loudly, even if no PR touches this repo.
-    - cron: '17 6 * * 1'
+    # DAILY drift check. The manifest goes stale because openadapt-flow,
+    # -capture, or -desktop released in ANOTHER repository, so no commit
+    # lands here and only the schedule can notice. This was weekly, which
+    # meant up to seven days of serving wrong sha256 digests from
+    # raw.githubusercontent; flow 1.24.0 published on 2026-07-27 and the
+    # manifest still advertised 1.23.0's digests. One small stdlib-only job
+    # costs seconds a day.
+    - cron: '17 6 * * *'
   workflow_dispatch:
+  # Receiver for a component repository to announce its release immediately
+  # rather than waiting for the daily sweep. The sending side is a one-step
+  # `gh api repos/OpenAdaptAI/OpenAdapt/dispatches -f event_type=component-released`
+  # in openadapt-flow/-capture/-desktop's release workflow.
+  repository_dispatch:
+    types: [component-released]
+
+concurrency:
+  group: platform-manifest-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -32,8 +47,56 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Cheapest decisive check first: structure, signature honesty, and
+      # repo agreement need no network and cannot be flaky.
+      - name: Validate platform manifest structure (offline)
+        run: python scripts/validate_platform_manifest.py --offline
+
+      # Standard library only: no dependency install, no lockfile, no cache.
       - name: Validate platform manifest against published artifacts
         run: python scripts/validate_platform_manifest.py
+
+      - name: Prove the drift guard fails when it should
+        # The daily/dispatched production check is intentionally stdlib-only.
+        # This characterization suite belongs on source changes, not every
+        # remote drift probe, so scheduled checks stay fast and network-light.
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: |
+          python -m pip install --quiet 'pytest>=8.0.0'
+          python -m pytest tests/test_platform_manifest_drift.py -q
+
+  report-manifest-drift:
+    # A red scheduled run in a repository nobody has open is not a signal.
+    # The 2026-07-27 drift DID turn the cron red and still shipped, because
+    # main was already red from the previous night's release. File an issue
+    # so drift has an owner and a paper trail instead of a stale red dot.
+    needs: validate-platform-manifest
+    if: >-
+      ${{ always() && needs.validate-platform-manifest.result == 'failure' &&
+          (github.event_name == 'schedule' ||
+           github.event_name == 'workflow_dispatch' ||
+           github.event_name == 'repository_dispatch') }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: File or update the manifest drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="platform-manifest.json has drifted from the published releases"
+          BODY="The scheduled platform manifest check failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          \`platform-manifest.json\` is served publicly from raw.githubusercontent and is OpenAdapt's only cryptographic claim about the current release. While it is stale, anyone verifying a downloaded wheel or sdist against it fails.
+
+          Fix: \`python scripts/generate_platform_manifest.py && python scripts/validate_platform_manifest.py\`, then open a PR."
+          EXISTING=$(gh issue list --repo "${{ github.repository }}" --state open \
+            --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "${{ github.repository }}" --body "$BODY"
+          else
+            gh issue create --repo "${{ github.repository }}" --title "$TITLE" --body "$BODY"
+          fi
 
   check-source-boundary:
     runs-on: ubuntu-latest
