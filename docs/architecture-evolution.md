@@ -1130,7 +1130,8 @@ flowchart TB
 ## Appendix B: Related Documents
 
 - [Architecture Overview](./architecture.md) - Package structure and data flow
-- [Roadmap Priorities](./roadmap-priorities.md) - Current development priorities
+- [Current product documentation](https://docs.openadapt.ai) - Supported
+  installation, qualification, deployment, and reference material
 - [Package Documentation](./packages/index.md) - Individual package guides
 - [Legacy Freeze](./legacy/freeze.md) - Migration from monolith
 

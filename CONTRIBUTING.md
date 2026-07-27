@@ -2,20 +2,15 @@
 
 Thank you for your interest in contributing to OpenAdapt!
 
-## Current Product Boundary
+## Product boundary
 
 `OpenAdaptAI/OpenAdapt` is the Beta launcher/meta-package and compatibility
 surface. The canonical compiler and governed runtime live in
 [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). New engine,
 replay, repair, policy, and backend work belongs there.
 
-| Lifecycle | Repositories | Contribution scope |
-|-----------|--------------|--------------------|
-| **Beta product** | `OpenAdapt`, `openadapt-flow` | Launcher here; engine in `openadapt-flow` |
-| **Experimental support** | `openadapt-capture`, `openadapt-privacy`, `openadapt-desktop` | Native capture, scrubbing, and authoring surfaces |
-| **Agent integration** | `openadapt-agent` | MCP and Agent Skills bridge over governed Flow bundles |
-| **Research** | `openadapt-ml`, `openadapt-evals`, `openadapt-grounding`, `openadapt-retrieval` | GUI-agent research and evaluation, not the product runtime |
-| **Deprecated/history** | `legacy/`, pre-v2 `openadapt-agent` | Migration fixes only; no new features |
+This repository's lifecycle is **Beta**. Each sibling repository publishes its
+own lifecycle status; do not infer that status from package availability here.
 
 ## Where to Contribute
 
@@ -27,21 +22,34 @@ replay, repair, policy, and backend work belongs there.
 - **Other repositories**: open issues only when their stated lifecycle and
   contribution guide match the proposed work.
 
-## Getting Started
+## Getting started
 
-1. Fork the repository
-2. Clone your fork
-3. Install in development mode: `pip install -e ".[dev]"`
-4. Create a branch for your changes
-5. Make your changes and test locally
-6. Submit a pull request
+1. Fork and clone the repository.
+2. Create a focused branch from current `origin/main`.
+3. Install the launcher in development mode:
+
+   ```bash
+   python -m pip install -e '.[dev]'
+   ```
+
+4. Run the focused test suite and formatting checks:
+
+   ```bash
+   pytest
+   ruff check openadapt tests
+   ```
+
+5. Open a pull request. The pull-request template lists the required release
+   and source-boundary checks.
 
 ## Guidelines
 
-- Follow existing code style
-- Add tests for new functionality
-- Update documentation as needed
-- Keep PRs focused and small
+- Follow the existing code style.
+- Test durable behavior and package contracts rather than ordinary copy.
+- Keep changes focused and update the canonical documentation when behavior
+  changes.
+- Never place customer-derived data, deployment recipes, or secrets in a public
+  fixture or package artifact.
 
 ## Licensing and the open-core boundary
 
