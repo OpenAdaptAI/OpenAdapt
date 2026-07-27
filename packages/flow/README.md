@@ -58,9 +58,10 @@ application itself never calls, so the screen cannot influence it. It ends
 `receipt.json` beside the run.
 
 That receipt is generated from a closed allow-list — outcomes, counts, digests,
-versions — so it can carry no screenshot, OCR text, typed value, parameter,
-URL, hostname, coordinate, or free-form halt reason. It carries the bundle
-digest, so anyone can run the same public tutorial and compare.
+and validated package versions — so it can carry no screenshot, OCR text,
+typed value, parameter, URL, hostname, coordinate, operator text, or free-form
+halt reason. It carries the bundle digest, so anyone can run the same public
+tutorial and compare.
 
 To drive the same stages by hand:
 
@@ -191,7 +192,7 @@ See [execution profiles](docs/EXECUTION_PROFILES.md).
 ### Share a result without sharing the record
 
 ```bash
-openadapt-flow report-run <run-dir> --receipt share/ --label "My first run"
+openadapt-flow report-run <run-dir> --receipt share/ --production
 ```
 
 Writes `share/receipt.png`, `receipt.json`, and `receipt.md` locally and
@@ -202,18 +203,22 @@ The receipt is **generated from a closed allow-list, never redacted from the
 run report**. Subtractive redaction of a run report is unwinnable: burned-in
 pixels, OCR text captured precisely because it identifies a record, and
 free-form halt reasons all leak, and one missed field is a breach. So the
-receipt declares its complete field set — outcome and transaction class (closed
-enums), step/heal/model-call/effect/identity counts, the over-halt counter,
-duration, the resolution-rung histogram, evidence classes, substrate, versions,
-the bundle and receipt digests, provenance, and an hour-truncated timestamp,
-plus one optional title you type — and refuses any key outside it. There is no
+receipt declares its complete field set — outcome, profile, and transaction
+class (closed enums), exact authorization/identity/postcondition/effect
+coverage, step/heal/model-call counts, the zero over-halt counter, duration,
+the resolution-rung histogram, evidence classes, substrate, a validated package
+version, the bundle and receipt digests, explicit provenance, and an
+hour-truncated timestamp — and refuses any key outside it. There is no
 screenshot, OCR text, typed value, parameter, URL, hostname, coordinate,
-workflow name, or free text.
+workflow name, operator label, or free text.
 
 `receipt.json` is every byte that would leave the machine, so you can read it
-before you post it. A receipt from the bundled tutorial is marked
-`synthetic-tutorial` and contains no real data by construction; mark a real run
-`--production` and route it through
+before you post it. A receipt emitted directly by the bundled tutorial is
+marked `synthetic-tutorial` and contains no real data by construction. A
+separate `report-run --receipt` invocation refuses to guess provenance: pass
+`--production` for a saved run. The `tutorial` command emits its bundled
+reference receipt directly; a deserialized report cannot prove that provenance.
+Route a production receipt through
 `sanitize` / `review-sanitized` / `approve-sanitized` before it crosses a trust
 boundary.
 

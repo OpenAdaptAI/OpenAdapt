@@ -302,8 +302,6 @@ def run_tutorial(
     headed: bool = False,
     name: str = TUTORIAL_WORKFLOW_NAME,
     emit_receipt: bool = True,
-    label: Optional[str] = None,
-    launcher_version: Optional[str] = None,
     echo: Optional[Callable[[str], None]] = None,
 ) -> TutorialResult:
     """Run the complete free path and return its evidence.
@@ -408,14 +406,9 @@ def run_tutorial(
                 "evidence is in REPORT.md."
             )
         else:
-            from openadapt_flow.receipt import build_receipt, write_receipt
+            from openadapt_flow.receipt import _build_tutorial_receipt, write_receipt
 
             say("[5/5] Emit the local run receipt")
-            receipt = build_receipt(
-                report,
-                provenance="synthetic-tutorial",
-                label=label,
-                launcher_version=launcher_version,
-            )
+            receipt = _build_tutorial_receipt(report)
             result.receipt_paths = write_receipt(receipt, run_dir)
     return result

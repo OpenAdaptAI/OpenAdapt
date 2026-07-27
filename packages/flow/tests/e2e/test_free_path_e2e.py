@@ -163,8 +163,7 @@ def test_report_run_emits_the_receipt_locally_for_a_verified_run(
                 str(free_path.run_dir),
                 "--receipt",
                 str(out),
-                "--label",
-                "Tutorial run",
+                "--production",
             ]
         )
         == 0
@@ -174,8 +173,18 @@ def test_report_run_emits_the_receipt_locally_for_a_verified_run(
     assert (out / "receipt.json").is_file()
     assert (out / "receipt.png").is_file()
     payload = json.loads((out / "receipt.json").read_text(encoding="utf-8"))
-    assert payload["label"] == "Tutorial run"
     assert payload["outcome"] == "VERIFIED"
+    assert payload["transaction_outcome"] == "VERIFIED"
+    assert payload["provenance"] == "production"
+
+
+def test_report_run_refuses_to_guess_receipt_provenance(
+    free_path: TutorialResult, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "ambiguous-provenance"
+    assert cli_main(["report-run", str(free_path.run_dir), "--receipt", str(out)]) == 2
+    assert "--production is required" in capsys.readouterr().out
+    assert not out.exists()
 
 
 def test_demo_replay_still_cannot_reach_verified(
