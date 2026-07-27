@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: capture-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -47,6 +51,9 @@ jobs:
   # run those on an interactive Windows desktop. These tests skip everywhere
   # except Windows, so this job is the org's live-recording CI proof.
   test-windows:
+    # Cross-platform recorder qualification runs on the exact main commit.
+    # PRs retain the required Python 3.10-3.12 Linux matrix and lint gate.
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -87,6 +94,7 @@ jobs:
   # multiprocessing 'spawn' writer path is not yet validated on macOS (see
   # tests/test_performance.py).
   test-macos:
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
