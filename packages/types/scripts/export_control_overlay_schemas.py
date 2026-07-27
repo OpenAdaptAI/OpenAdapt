@@ -10,6 +10,7 @@ from openadapt_types import (
     ControlOverlayFrameV2,
     ControlOverlayTimelineV1,
     ControlOverlayTimelineV2,
+    HumanDecisionReceiptV1,
     HumanDecisionTaskV1,
 )
 
@@ -21,6 +22,7 @@ SCHEMAS = {
     "control-overlay-frame-v2.json": ControlOverlayFrameV2,
     "control-overlay-timeline-v2.json": ControlOverlayTimelineV2,
     "human-decision-task-v1.json": HumanDecisionTaskV1,
+    "human-decision-receipt-v1.json": HumanDecisionReceiptV1,
 }
 
 

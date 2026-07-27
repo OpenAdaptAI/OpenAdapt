@@ -1,0 +1,160 @@
+{
+  "$defs": {
+    "HumanDecisionAction": {
+      "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.",
+      "enum": [
+        "verify_and_resume",
+        "skip",
+        "teach",
+        "escalate"
+      ],
+      "title": "HumanDecisionAction",
+      "type": "string"
+    },
+    "HumanDecisionReceiptReason": {
+      "description": "Closed cause for a terminal state; the consumer renders copy from it.\n\nThis is the field that would otherwise be a free-text ``message``. It is a\nclosed enum, never an arbitrary string, so a runtime cannot relay operator\nprose, an exception message, an observed value, or a record identifier\nthrough the receipt's explanation.",
+      "enum": [
+        "pending_runner",
+        "verified_and_resumed",
+        "skipped_and_resumed",
+        "continuation_halted",
+        "revalidation_refused",
+        "expired",
+        "delivery_uncertain",
+        "demonstration_requested",
+        "escalation_recorded"
+      ],
+      "title": "HumanDecisionReceiptReason",
+      "type": "string"
+    },
+    "HumanDecisionReceiptState": {
+      "description": "Terminal outcome of one attended decision, as the runtime reports it.\n\n``ACCEPTED_PENDING_RUNNER`` and ``DELIVERY_UNCERTAIN`` are the two\nnon-success outcomes a phone must be able to show. ``DELIVERY_UNCERTAIN``\nis the \"may have been sent\" state: it exists so that losing the network\nafter a tap can be reported honestly instead of collapsing into either a\nsuccess or a refusal.\n\n``DEMONSTRATION_REQUESTED`` and ``ESCALATED`` are separate terminal states\nrather than variants of ``ACCEPTED_PENDING_RUNNER``: a ``teach`` or\n``escalate`` decision is durably recorded and returns immediately without\nany runner continuation pending, so folding them into \"accepted, pending\"\nwould tell an operator to wait for something that is never coming.",
+      "enum": [
+        "accepted_pending_runner",
+        "completed",
+        "refused",
+        "halted",
+        "expired",
+        "delivery_uncertain",
+        "demonstration_requested",
+        "escalated"
+      ],
+      "title": "HumanDecisionReceiptState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The closed, PHI-free terminal outcome of one attended decision.\n\nThis is the only decision result that may cross to a phone, a tray, or an\nauthenticated remote relay. It is a rebuilt value, not a filtered copy of\na runtime's audit record: there is no free-text field, no operator\nidentity, no workflow or step label, no parameter, no path, no observed\nvalue, and no evidence. Protected content is structurally unrepresentable\nrather than stripped on send, so a later field addition on the producer\nside cannot reopen a hole here.\n\n``action`` reuses :class:`HumanDecisionAction`, the same portable\nvocabulary the task advertises in ``allowed_actions``, so a consumer\ncompares the receipt against the task it answered without translating an\nengine-internal name.\n\nThe digests are one-way commitments, not content: they let a consumer bind\nthis receipt to the exact capability, request, decision record, and\ntransition receipt it came from without ever receiving those payloads.\n\n``signature`` is optional because a runtime that returns a receipt over an\nauthenticated loopback connection is already inside its own trust boundary\nand does not sign. A receipt that arrives over a network must be signed,\nand its consumer must verify it: see :meth:`verify_hmac`.",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/HumanDecisionAction"
+    },
+    "capability_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Capability Digest",
+      "type": "string"
+    },
+    "decided_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Decided At",
+      "type": "string"
+    },
+    "decision_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Decision Digest",
+      "type": "string"
+    },
+    "pause_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Pause Id",
+      "type": "string"
+    },
+    "reason_code": {
+      "$ref": "#/$defs/HumanDecisionReceiptReason"
+    },
+    "report_success": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Report Success"
+    },
+    "request_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Request Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.human-decision-receipt/v1",
+      "default": "openadapt.human-decision-receipt/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "anyOf": [
+        {
+          "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Signature"
+    },
+    "signature_algorithm": {
+      "const": "hmac-sha256",
+      "default": "hmac-sha256",
+      "title": "Signature Algorithm",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/HumanDecisionReceiptState"
+    },
+    "task_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Task Revision",
+      "type": "integer"
+    },
+    "transition_receipt_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transition Receipt Digest"
+    }
+  },
+  "required": [
+    "task_id",
+    "pause_id",
+    "capability_digest",
+    "request_digest",
+    "decision_digest",
+    "action",
+    "state",
+    "reason_code",
+    "decided_at"
+  ],
+  "title": "HumanDecisionReceiptV1",
+  "type": "object"
+}
