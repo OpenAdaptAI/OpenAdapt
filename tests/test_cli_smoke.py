@@ -209,6 +209,7 @@ def test_launcher_flow_and_substrate_extras_metadata():
 
     assert metadata["dependencies"].count("openadapt-flow[hosted]>=1.20.1,<2.0.0") == 1
     assert extras["flow"] == ["openadapt-flow>=1.20.1,<2.0.0"]
+    assert extras["browser"] == ["playwright>=1.44"]
     assert extras["privacy"] == ["openadapt-flow[privacy]>=1.20.1,<2.0.0"]
     assert extras["capture"] == [
         "openadapt-capture>=1.0.4,<2.0.0",
@@ -223,10 +224,18 @@ def test_launcher_flow_and_substrate_extras_metadata():
     ]
     assert extras["rdp"] == ["openadapt-flow[rdp]>=1.20.1,<2.0.0"]
     assert extras["all"] == [
-        "openadapt[core,grounding,retrieval,privacy,flow,windows,rdp]",
+        "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp]",
         "openadapt[macos]; sys_platform == 'darwin'",
         "openadapt[linux]; sys_platform == 'linux'",
     ]
+
+
+def test_doctor_does_not_require_browser_for_citrix(monkeypatch):
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: None)
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", "citrix"])
+    assert result.exit_code == 0, result.output
+    assert "browser support is not required" in result.output
+    assert "no Playwright or Chromium setup will run" in result.output
 
 
 def test_top_level_help_leads_with_flow():

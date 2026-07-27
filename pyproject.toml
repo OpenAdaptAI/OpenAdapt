@@ -32,6 +32,11 @@ dependencies = [
 
 [project.optional-dependencies]
 # Individual packages
+browser = [
+    # Web recording/replay only. The base launcher stays lightweight for
+    # native desktop, RDP, and Citrix users; Chromium remains lazy on first use.
+    "playwright>=1.44",
+]
 # Local human desktop recording. Flow owns the supported capture adapter
 # contract; the direct floor prevents an already-installed pre-1.0 Capture
 # from satisfying the launcher's public recording path. FFmpeg remains a
@@ -87,7 +92,7 @@ all = [
     # Cross-platform clients are always safe to resolve. Native bindings remain
     # conditional so `openadapt[all]` never pulls PyObjC onto Linux/Windows or
     # PyGObject onto macOS/Windows.
-    "openadapt[core,grounding,retrieval,privacy,flow,windows,rdp]",
+    "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp]",
     "openadapt[macos]; sys_platform == 'darwin'",
     "openadapt[linux]; sys_platform == 'linux'",
 ]

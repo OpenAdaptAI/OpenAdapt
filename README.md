@@ -34,11 +34,11 @@ unavoidable and the outcome needs proof.
 
 ## Try it locally
 
-OpenAdapt requires Python 3.10–3.12. The base package includes the compiler and
-runtime:
+OpenAdapt requires Python 3.10–3.12. Install the browser capability for the
+bundled tutorial:
 
 ```bash
-python -m pip install --upgrade openadapt
+python -m pip install --upgrade 'openadapt[browser]'
 ```
 
 Run the complete bundled tutorial with one command. It needs no account,
@@ -68,13 +68,17 @@ effect verifiers, fault cases, and deployment policy. Continue with the
 
 ## Record your workflow
 
-The browser path is available in the base installation:
+The browser path is an explicit capability, so native and remote-only installs
+do not carry the Playwright driver:
 
 ```bash
 openadapt flow record --backend web --url https://your-app.example --out rec
 openadapt flow compile rec --out bundle --name my-workflow
 openadapt flow replay bundle --url https://your-app.example --run-dir run
 ```
+
+The first browser action downloads its matching Chromium build once. A native
+desktop, RDP, or Citrix workflow never downloads or imports it.
 
 Install only the capabilities needed for native or remote work:
 

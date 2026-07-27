@@ -861,7 +861,13 @@ def version():
 
 
 @main.command()
-def doctor():
+@click.option(
+    "--backend",
+    type=click.Choice(["web", "windows", "macos", "linux", "rdp", "citrix"]),
+    default=None,
+    help="Explain setup for one execution surface.",
+)
+def doctor(backend: str | None):
     """Check system requirements and dependencies."""
     click.echo("OpenAdapt System Check")
     click.echo("=" * 40)
@@ -873,6 +879,37 @@ def doctor():
     click.echo(f"Platform: {platform.system()} {platform.release()}")
 
     from importlib.util import find_spec
+
+    click.echo("\nSelected execution surface:")
+    if backend and backend != "web":
+        click.echo(
+            f"  [OK] {backend}: browser support is not required; "
+            "no Playwright or Chromium setup will run. The selected "
+            "native or remote driver is checked when that surface opens."
+        )
+    else:
+        playwright = find_spec("playwright") is not None
+        if not playwright:
+            prefix = "[SETUP]" if backend == "web" else "[--]"
+            click.echo(
+                f"  {prefix} Browser: optional and not installed. Run "
+                "`python -m pip install 'openadapt[browser]'` before a web "
+                "recording or replay."
+            )
+        else:
+            try:
+                from openadapt_flow._browser_setup import _chromium_present
+
+                chromium = _chromium_present()
+            except Exception:
+                chromium = False
+            if chromium:
+                click.echo("  [OK] Browser: Playwright and Chromium are ready.")
+            else:
+                click.echo(
+                    "  [READY] Browser: Playwright is installed; the matching "
+                    "Chromium downloads automatically on the first web action."
+                )
 
     # Core packages: installed by the base `pip install openadapt`. Only
     # these are treated as required; a missing one is a real problem.
@@ -897,6 +934,7 @@ def doctor():
     # install it rather than flagging it. Maps import name -> extra name.
     click.echo("\nOptional packages (install with `pip install openadapt[...]`):")
     optional = [
+        ("playwright", "browser"),
         ("openadapt_capture", "capture"),
         ("openadapt_ml", "ml"),
         ("openadapt_evals", "evals"),
