@@ -1,9 +1,13 @@
-"""Pin the reference result -- the regression anchor for the whole benchmark.
+"""Pin the reference fixture's expected values -- the regression anchor.
 
 If a change to the schema, classifier, judge, or metrics moves these numbers,
-this test fails. The numbers match the published headline and the OpenAdapt
-engine's in-tree re-expression: screen-only SWER 50/90 (wrong-write 40, phantom
-10), effect-verified 0/90, 5 of 7 transactional faults silently mishandled.
+this test fails. The numbers are a deterministic synthetic fixture's invariant
+(NOT a measured or published result) and match the OpenAdapt engine's in-tree
+re-expression: screen-only SWER 50/90 (wrong-write 40, phantom 10),
+effect-verified 0/90, 5 of 7 transactional faults silently mishandled.
+
+The MEASURED end-to-end silent-wrong-effect result lives in
+``benchmark/effect_e2e/`` -- see :mod:`effectbench.reference`.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from effectbench.tasks.mockmed import TRANSACTIONAL_MODES
 RESULTS = Path(__file__).resolve().parent.parent / "results" / "reference.json"
 
 
-def test_screen_only_swer_is_the_published_headline() -> None:
+def test_screen_only_swer_matches_pinned_fixture_value() -> None:
     episodes = evaluate(ScreenOnlySUT(), trials=10)
     s = summarize(episodes, arm="screen_only")
     assert s.swer.numerator == 50

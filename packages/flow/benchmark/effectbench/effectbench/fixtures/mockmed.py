@@ -224,7 +224,7 @@ class MockMedEnv:
         """The agent's OWN independent verifier, or ``None`` if unavailable.
 
         REFERENCE CONVENIENCE: this synthetic fixture hands the SUT a working
-        verifier so the reference result is reproducible. On a real system of
+        verifier so the fixture's pinned values reproduce. On a real system of
         record, authoring this verifier is the SUT's own cost -- an external
         :class:`~effectbench.provider.BenchmarkProvider` that does not supply one
         leaves ``_verifier_factory`` unset, so this returns ``None`` and

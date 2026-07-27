@@ -4,9 +4,12 @@ Nine authored tasks over the synthetic :mod:`effectbench.fixtures.mockmed`
 system of record, one per fault mode the fault-model study catalogs. Each is
 designed so the green screen (task-success) diverges from the correct business
 effect, and each is scored by the INDEPENDENT MockMed oracle -- never the
-banner. This is the CI-fast, no-Docker anchor that reproduces the published
-headline (screen-only SWER 55.6% -> effect-verified 0.0% over 90 runs; 5 of 7
-transactional faults silently mishandled by screen-only verification).
+banner. This is the CI-fast, no-Docker anchor that reproduces the fixture's
+pinned expected values (screen-only SWER 55.6% -> effect-verified 0.0% over 90
+runs; 5 of 7 transactional faults silently mishandled by screen-only
+verification) -- a regression anchor over a deterministic synthetic fixture, not
+a measured result. The measured end-to-end number is ``benchmark/effect_e2e/``;
+see :mod:`effectbench.reference`.
 
 Category coverage of this public sample: C1 partial-save, C2 duplicate, C3
 optimistic/reject (optimistic, timeout, session), C4 stale-overwrite, C5

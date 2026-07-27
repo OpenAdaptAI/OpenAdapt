@@ -19,7 +19,7 @@ entry (a system reaches SWER 0 by halting on everything). See `SPEC.md` §1.
 ```bash
 pip install effectbench
 
-# The shipped baselines (a template + the reference result):
+# The shipped baselines (a template + the pinned reference fixture):
 python -m effectbench submission --baseline screen_only     --trials 10 > screen_only.json
 python -m effectbench submission --baseline effect_verified --trials 10 > effect_verified.json
 ```
@@ -107,20 +107,46 @@ The `reproducibility` block pins everything needed to re-run:
   `i`; the default seed set is `range(trials)`.
 - `python`, `platform`, `dependencies` — the environment.
 
-## The reference results
+## The reference fixture's pinned expected values
 
-**Honest status.** Every row below is **OpenAdapt's own arm** on **OpenAdapt's
-own synthetic fixture** (MockMed). **No independent third-party system of record
-has been scored yet.** The `BenchmarkProvider` interface exists so a third party
-*can* bring a real system of record + its own independent oracle; authoring that
-oracle is the real-world cost the benchmark abstracts away on the reference
-fixture only.
+**These are not measured results.** Every row below is a **pinned expected value
+of a deterministic synthetic fixture** (MockMed), produced by **OpenAdapt's own
+arm** on **OpenAdapt's own fixture**. They exist as a regression anchor: the
+fixture is hand-authored and deterministic, so these counts reproduce exactly on
+every run, and `tests/test_reference.py` fails if a schema, classifier, judge, or
+metrics change moves them. Do not cite them as an empirical finding or a
+published headline. **No independent third-party system of record has been scored
+yet.** The `BenchmarkProvider` interface exists so a third party *can* bring a
+real system of record + its own independent oracle; authoring that oracle is the
+real-world cost the benchmark abstracts away on the reference fixture only.
 
-| system | file | SWER | over-halt | notes |
+| system | file | SWER (pinned) | over-halt | notes |
 |---|---|---|---|---|
 | `screen_only` baseline | `results/reference.json` | **50/90 (55.6%)** | 0/90 | trusts the banner — the arm the benchmark indicts |
 | `effect_verified` baseline | `results/reference.json` | **0/90 (0.0%)** | 0/90 | gates success on an independent record readback |
 | **OpenAdapt compiler** (end-to-end) | `results/openadapt_reference.json` | *pending* | *pending* | the reference governed runtime, scored end-to-end by the sibling measurement (see below) |
+
+### Where the measured end-to-end result lives
+
+OpenAdapt's measured silent-wrong-effect result is
+[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effect_e2e/EFFECT_E2E.md)
+in the engine repository, where every write goes through the real governed
+replay path to an on-disk SQLite system of record, the verifier reads back over a
+different HTTP verb/endpoint/connection, and the ground truth is a direct
+read-only SQLite connection that bypasses the service and audits every table it
+finds in `sqlite_master`. Its measured ladder, 90 runs per arm:
+
+| arm | silent-wrong-effect rate |
+|---|---|
+| screen-verify (success banner) | **60.0%** (54/90) |
+| effect-verify, one out-of-band REST record oracle | **10.0%** (9/90) |
+| effect-verify, complete SQL read path | **0.0%** (0/90) |
+
+The middle rung is the number a real deployment ships — one out-of-band record
+oracle cuts undetected wrong effects from 75.0% to 12.5%. All nine residual
+misses are the single `collateral_unaudited` class: a collateral write to a
+surface the oracle's read path does not cover. The `0/90` arm reaches zero only
+by widening the read path to every mutable surface.
 
 ### The OpenAdapt reference (sibling-agent artifact)
 

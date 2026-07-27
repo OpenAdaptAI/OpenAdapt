@@ -15,8 +15,10 @@ reject, a lost update, or a wrong-record write all satisfy.
 - **Versioned:** the contract is `SPEC.md` + `VERSION`; the submission format is
   `LEADERBOARD.md`.
 
-This is the standalone, independently runnable packaging of the SWER result. The
-full specification is in [`SPEC.md`](SPEC.md).
+This is the standalone, independently runnable packaging of the SWER metric and
+its synthetic reference fixture. The full specification is in
+[`SPEC.md`](SPEC.md). For OpenAdapt's own **measured** end-to-end number, see
+[Where the measured result lives](#where-the-measured-result-lives).
 
 ## Install
 
@@ -37,9 +39,40 @@ effect_verified SWER :  0/90 =  0.0%
 transactional silently mishandled by screen-only: 5/7
 ```
 
-The two shipped baselines — `screen_only` (trusts the banner) and
-`effect_verified` (gates success on an independent record readback) — reproduce
-the published result and are a template for your own integration.
+These are the reference fixture's **pinned expected values** — a regression
+anchor, not a measured result and not a published headline. MockMed is a
+deterministic, hand-authored fixture: the two shipped baselines (`screen_only`,
+which trusts the banner, and `effect_verified`, which gates success on an
+independent record readback) reproduce these exact counts on every run, which is
+precisely what makes them useful. `tests/test_reference.py` pins them so that a
+change to the schema, classifier, judge, or metrics fails loudly. Read them as a
+fixture invariant and a template for your own integration — never as evidence
+about a real system of record.
+
+## Where the measured result lives
+
+The measured, end-to-end silent-wrong-effect result is
+[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effect_e2e/EFFECT_E2E.md)
+in the OpenAdapt engine repository. Every write there goes through the real
+governed replay path (`Replayer` → `ApiActuator` → a real HTTP write to an
+on-disk SQLite system of record); the verifier reads back over a different HTTP
+verb, endpoint, and connection; and the ground truth is a direct read-only SQLite
+connection that bypasses the service entirely and audits every table it
+discovers from `sqlite_master`. Its measured ladder, 90 runs per arm:
+
+| arm | silent-wrong-effect rate |
+|---|---|
+| screen-verify (success banner) | **60.0%** (54/90) |
+| effect-verify, one out-of-band REST record oracle | **10.0%** (9/90) |
+| effect-verify, complete SQL read path | **0.0%** (0/90) |
+
+The **middle rung is the number a real deployment ships**: one out-of-band
+record oracle cuts undetected wrong effects from 75.0% to 12.5%. All nine
+residual misses are the single `collateral_unaudited` class — a collateral write
+to a surface the oracle's read path does not cover. The `0/90` arm closes that
+gap only by widening the read path to every mutable surface, so it is the
+best case under complete in-database instrumentation, not the expected field
+result.
 
 ## Run it against YOUR system
 
@@ -159,7 +192,7 @@ reproducibility manifest.
 | `effectbench.fixtures.mockmed` | the public **synthetic**, **reference-only** MockMed system of record |
 | `effectbench.tasks.mockmed` | the public synthetic task pack (the anchor suite) |
 | `effectbench.runner` | `evaluate(sut, trials=…)` and `evaluate_provider(sut, provider, …)` → episode rows |
-| `effectbench.reference` | the reference result (regression anchor) |
+| `effectbench.reference` | the reference fixture's pinned expected values (regression anchor) |
 | `effectbench.leaderboard` | submission build + reproducibility manifest + verifier |
 
 ## Source-availability boundary

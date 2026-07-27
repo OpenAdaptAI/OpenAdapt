@@ -29,7 +29,7 @@ It returns an :class:`~effectbench.schema.AgentReport` -- what it asserts /
 what the screen rendered. The oracle, not this report, decides the outcome.
 
 Two reference baselines ship here so a third party has a runnable template and
-so the reference result is reproducible:
+so the reference fixture's pinned values reproduce:
 
 - :class:`ScreenOnlySUT` -- trusts the banner (no effect check). Exhibits a
   non-zero SWER: the arm the benchmark indicts.
@@ -72,7 +72,7 @@ class EnvHandle(Protocol):
 
         REFERENCE CONVENIENCE, NOT A FREEBIE. On the built-in synthetic MockMed
         fixture the reference provider hands a working verifier here so the
-        reference result is reproducible. On a REAL system of record, AUTHORING
+        pinned values reproduce. On a REAL system of record, AUTHORING
         this verifier is the actual cost the benchmark does NOT measure for you:
         a :class:`~effectbench.provider.BenchmarkProvider` that does not supply
         one returns ``None`` here, and :class:`EffectVerifiedSUT` then FAILS SAFE

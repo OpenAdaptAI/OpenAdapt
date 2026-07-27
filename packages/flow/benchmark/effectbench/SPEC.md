@@ -98,7 +98,8 @@ they anchor the false-abort / safe-halt outcomes.
 
 The public synthetic sample (`effectbench.tasks.mockmed`, the MockMed anchor)
 covers **C1–C5 + controls on the `web` substrate** and reproduces the reference
-result. C6, C7, and the desktop / remote-display substrates are DEFINED here and
+fixture's pinned values (Section 6). C6, C7, and the desktop / remote-display
+substrates are DEFINED here and
 are exercised by the container-gated real-system-of-record packs and the private
 hardened corpus, which stay outside this MIT synthetic sample by the
 source-availability boundary (Section 7). A submission may target any subset of
@@ -206,8 +207,8 @@ optional:
 
 - **The oracle is not a freebie off-fixture.** On the built-in synthetic MockMed
   fixture the provider hands the system under test a working record-readback
-  verifier (`EnvHandle.product_effect_verifier()`) so the reference result
-  reproduces. Authoring a cheap, correct, independent oracle for a **real** legacy
+  verifier (`EnvHandle.product_effect_verifier()`) so the fixture's pinned
+  values reproduce. Authoring a cheap, correct, independent oracle for a **real** legacy
   system of record is the actual cost this benchmark does NOT measure for you. A
   provider that does not author one returns `None` there, and the
   `effect_verified` baseline then **fails safe** (halts / over-halts) rather than
@@ -236,10 +237,10 @@ payload from the public manifest so a leaderboard cannot overfit it.
 
 ---
 
-## 6. The reference result (regression anchor)
+## 6. The reference fixture's pinned expected values (regression anchor)
 
 The shipped synthetic MockMed anchor, run over its two reference baselines,
-reproduces the published headline (`results/reference.json`, pinned by
+reproduces these **pinned expected values** (`results/reference.json`, pinned by
 `tests/test_reference.py`):
 
 ```
@@ -254,7 +255,21 @@ reaches SWER 0. The same numbers are produced by the OpenAdapt engine's in-tree
 re-expression, so this standalone port is verifiable against the reference
 implementation.
 
-**Honest scope of this result.** The two baselines are **OpenAdapt's own arms**,
+**These are fixture invariants, not a measured or published result.** MockMed is
+deterministic and hand-authored, so these counts reproduce exactly on every run;
+that reproducibility is the whole point of a regression anchor and it is also
+exactly why the numbers carry no empirical weight. Do not cite them as a finding.
+OpenAdapt's **measured** end-to-end silent-wrong-effect result is
+[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effect_e2e/EFFECT_E2E.md)
+in the engine repository — real replayer, real HTTP write to an on-disk SQLite
+system of record, ground truth read directly from storage over every table
+discovered from `sqlite_master`. Its measured ladder over 90 runs per arm is
+screen-verify **60.0% (54/90)** → effect-verify with one out-of-band REST record
+oracle **10.0% (9/90)** → effect-verify with the complete SQL read path **0.0%
+(0/90)**. The middle rung is what a real deployment ships; all nine residual
+misses are the single `collateral_unaudited` class.
+
+**Honest scope of this fixture.** The two baselines are **OpenAdapt's own arms**,
 run on **OpenAdapt's own synthetic fixture** (MockMed). This is a REFERENCE
 result about that one fixture, not a general result about any real system of
 record, and **no independent third-party system of record has been scored yet**.

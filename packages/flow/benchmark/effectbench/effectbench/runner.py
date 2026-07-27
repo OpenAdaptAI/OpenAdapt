@@ -62,8 +62,9 @@ class MockMedProvider:
     REFERENCE-ONLY. This provider ships a correct, independent record-readback
     oracle for its OWN synthetic fixture as a freebie -- the very cost a real
     deployment must pay itself (see :mod:`effectbench.provider`). It exists to
-    reproduce the published reference result and to give a third party a runnable
-    template; it is NOT a general result about any real system of record.
+    reproduce the reference fixture's pinned expected values and to give a third
+    party a runnable template; those values are a regression anchor, NOT a
+    measured result about any real system of record.
 
     It also hands the system under test a working product verifier through
     :meth:`~effectbench.fixtures.mockmed.MockMedEnv.product_effect_verifier`,

@@ -1,13 +1,30 @@
 """Reference re-expression: the ``fault_model`` study through EffectBench.
 
-This proves the new schema + oracle harness reproduce the KNOWN result of the
-original ``benchmark/fault_model`` study — *5 of the 7 transactional fault
-classes are silently mishandled by screen-only verification, and 0 by the
-independent effect oracle* — and the ``benchmark/silent_wrong_action`` proto-SWER
-rate (**55.6% -> 0.0%** over 90 runs). It is the regression anchor for the
-whole benchmark contract: if a change to the schema, the classifier, or the
-metrics moves these numbers, this study (and its pinned test
+This proves the new schema + oracle harness reproduce the pinned expected values
+of the original ``benchmark/fault_model`` fixture — *5 of the 7 transactional
+fault classes are silently mishandled by screen-only verification, and 0 by the
+independent effect oracle* — and the ``benchmark/silent_wrong_action``
+proto-SWER counts (**55.6% -> 0.0%** over 90 runs). It is the regression anchor
+for the whole benchmark contract: if a change to the schema, the classifier, or
+the metrics moves these numbers, this study (and its pinned test
 ``tests/test_effectbench_reference.py``) fails.
+
+**These counts are a fixture invariant, not a measured or published result.**
+Both fixtures are deterministic and hand-authored, and in
+``benchmark/silent_wrong_action`` the effect verifier and the ground truth read
+the SAME in-process object while the effect contract restates the ground-truth
+definition — so its ``0/90`` is circular by construction and is useful only as a
+regression anchor. OpenAdapt's MEASURED end-to-end silent-wrong-effect result is
+``benchmark/effect_e2e/``: writes go through the real ``Replayer`` ->
+``ApiActuator`` -> a real HTTP write to an on-disk SQLite system of record, the
+verifier reads back over a different HTTP verb/endpoint/connection, and the
+ground truth is a direct read-only SQLite connection that bypasses the service
+and audits every table it discovers from ``sqlite_master``. Its measured ladder,
+90 runs per arm, is screen-verify ``54/90 = 60.0%`` -> effect-verify with one
+out-of-band REST record oracle ``9/90 = 10.0%`` -> effect-verify with the
+complete SQL read path ``0/90 = 0.0%``. The middle rung is the number a real
+deployment ships; all nine residual misses are the single
+``collateral_unaudited`` class. See ``benchmark/effect_e2e/EFFECT_E2E.md``.
 
 How it re-expresses the study, faithfully and without hardcoding verdicts:
 
