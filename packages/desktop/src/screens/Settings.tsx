@@ -31,9 +31,11 @@ interface Cfg {
 
 export function Settings({
   auth,
+  onConnectCloud,
   onSignedOut,
 }: {
   auth: AuthStatus;
+  onConnectCloud: () => void;
   onSignedOut: () => void;
 }) {
   const [cfg, setCfg] = useState<Cfg>({
@@ -202,15 +204,21 @@ export function Settings({
           >
             Open cloud dashboard
           </Button>
-          <Button
-            variant="danger"
-            onClick={async () => {
-              await engineInvoke(CMD.LOGOUT, {}).catch(() => {});
-              onSignedOut();
-            }}
-          >
-            Sign out
-          </Button>
+          {auth.authenticated ? (
+            <Button
+              variant="danger"
+              onClick={async () => {
+                await engineInvoke(CMD.LOGOUT, {}).catch(() => {});
+                onSignedOut();
+              }}
+            >
+              Sign out
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={onConnectCloud}>
+              Connect Cloud
+            </Button>
+          )}
         </div>
       </Card>
 

@@ -54,11 +54,12 @@ Developer ID/notarization and Windows Authenticode remain credential-gated.
 
 ### The cockpit
 
-Once you sign in, the shell renders a left-rail cockpit over the live engine:
+Continue locally without an account, or connect an optional Cloud workspace.
+The shell then renders a left-rail cockpit over the live engine:
 
 | Screen | What it does |
 | --- | --- |
-| Login | Sign in with a system-browser PKCE flow or by pasting an ingest token minted in the cloud dashboard; one credential is stored in the OS keychain |
+| Start | Enter the complete local cockpit without an account, or connect Cloud with system-browser PKCE or a one-time token stored in the OS keychain |
 | Onboarding | First-run guidance until a workflow exists locally |
 | Workflows | The workflow library: recorded and compiled workflows, with their status |
 | Record & review | Start/stop a capture and step through the local review gate before anything leaves the machine |

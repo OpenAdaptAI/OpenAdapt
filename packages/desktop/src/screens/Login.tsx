@@ -1,7 +1,5 @@
-// Login screen — offers BOTH sign-in paths behind one screen (spec §3a):
-//   • "Click Login"  -> engine BrowserPkceProvider (system browser + loopback PKCE)
-//   • "Paste a token" -> engine PasteTokenProvider (mint in cloud Settings, paste)
-// Both run in the engine (engine.auth) and store one Credential in the keychain.
+// Start screen: the full local cockpit needs no account. Cloud connection stays
+// optional through browser PKCE or a one-time token stored in the OS keychain.
 import { useState } from "react";
 import { CMD, engineInvoke, openExternal } from "../lib/engine";
 import type { AuthStatus } from "../lib/types";
@@ -10,7 +8,13 @@ import { Button, Card, CardHead, Field, Callout } from "../ui/primitives";
 const DEFAULT_HOST = "https://app.openadapt.ai";
 const INGEST_SETTINGS_URL = `${DEFAULT_HOST}/dashboard/settings/ingest`;
 
-export function Login({ onAuthed }: { onAuthed: (s: AuthStatus) => void }) {
+export function Login({
+  onAuthed,
+  onLocal,
+}: {
+  onAuthed: (s: AuthStatus) => void;
+  onLocal: () => void;
+}) {
   const [busy, setBusy] = useState<"browser" | "paste" | null>(null);
   const [token, setToken] = useState("");
   const [host, setHost] = useState(DEFAULT_HOST);
@@ -55,10 +59,16 @@ export function Login({ onAuthed }: { onAuthed: (s: AuthStatus) => void }) {
     <div className="center-stage">
       <Card className="auth-card">
         <CardHead
-          eyebrow="Connect to OpenAdapt"
-          title="Sign in"
-          sub="Link this machine to your OpenAdapt organization."
+          eyebrow="OpenAdapt Desktop"
+          title="Start locally for free"
+          sub="Record, compile, qualify, and run on this computer without a Cloud account. Connect a workspace whenever you want hosted coordination."
         />
+
+        <Button variant="primary" block disabled={busy !== null} onClick={onLocal}>
+          Continue locally
+        </Button>
+
+        <div className="divider">or connect OpenAdapt Cloud</div>
 
         <Field label="Host">
           <input
@@ -75,13 +85,13 @@ export function Login({ onAuthed }: { onAuthed: (s: AuthStatus) => void }) {
           disabled={busy !== null}
           onClick={loginBrowser}
         >
-          {busy === "browser" ? "Waiting for browser…" : "Click Login"}
+          {busy === "browser" ? "Waiting for browser…" : "Sign in with browser"}
         </Button>
         <p className="hint" style={{ marginTop: "var(--space-2)" }}>
           Opens your system browser — Google and magic-link sign-in just work.
         </p>
 
-        <div className="divider">or paste a token</div>
+        <div className="divider">or paste a Cloud token</div>
 
         <Field
           label="Ingest token"

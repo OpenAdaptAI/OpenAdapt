@@ -26,6 +26,11 @@ import { Teach } from "./screens/Teach";
 import { Runner } from "./screens/Runner";
 import { Settings } from "./screens/Settings";
 import { Qualification } from "./screens/Qualification";
+import {
+  clearLocalSession,
+  localSessionEnabled,
+  rememberLocalSession,
+} from "./localSession";
 
 type Route =
   | { name: "library" }
@@ -51,6 +56,7 @@ const NAV: { route: Route["name"]; label: string; glyph: string }[] = [
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [checkedAuth, setCheckedAuth] = useState(false);
+  const [localSession, setLocalSession] = useState(localSessionEnabled);
   const [onboarded, setOnboarded] = useState(false);
   const [route, setRoute] = useState<Route>({ name: "library" });
 
@@ -148,11 +154,15 @@ export default function App() {
     );
   }
 
-  if (!auth?.authenticated) {
+  if (!auth?.authenticated && !localSession) {
     return (
       <>
         {pairingNotice}
         <Login
+          onLocal={() => {
+            rememberLocalSession();
+            setLocalSession(true);
+          }}
           onAuthed={(s) => {
             setAuth(s);
           }}
@@ -271,7 +281,11 @@ export default function App() {
         {route.name === "runner" && <Runner />}
         {route.name === "settings" && (
           <Settings
-            auth={auth}
+            auth={auth ?? { authenticated: false }}
+            onConnectCloud={() => {
+              clearLocalSession();
+              setLocalSession(false);
+            }}
             onSignedOut={() => setAuth({ authenticated: false })}
           />
         )}
