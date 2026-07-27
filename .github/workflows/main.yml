@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - '**'
+  push:
+    branches:
+      - main
 
 concurrency:
   group: python-ci-${{ github.ref }}
@@ -18,11 +21,13 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        # Pull requests use the three Linux versions plus one representative
+        # macOS lane. Exact main retains the complete two-OS matrix.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
         python-version: ['3.10', '3.11', '3.12']
         include:
-          # One macOS lane catches platform-specific launcher/import behavior;
-          # the Python-version compatibility matrix is platform-neutral.
+          # On pull requests, add the one representative macOS lane. On main
+          # this matches an existing full-matrix entry rather than adding one.
           - os: macos-latest
             python-version: '3.12'
 
