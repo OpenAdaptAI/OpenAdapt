@@ -56,3 +56,7 @@ performance/
 *.pem
 .env.backup
 deploy/.env
+
+# Never-publish workspace material (strategy, prospect research, counsel packs,
+# personal contact details). Created ad hoc; must never reach a remote.
+.private/
