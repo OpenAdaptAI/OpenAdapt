@@ -117,23 +117,92 @@ the dispatcher, and again in the shell before the plugin is called.
 
 ## Current wiring status
 
-The portal works today against a development install of Flow with its console
-extra:
+### Packaging: done
 
-```bash
-uv sync --extra dev
-pip install 'openadapt-flow[console]>=1.24.0'
-```
+The frozen sidecar now carries the console. `pyproject.toml` pins
+`openadapt-flow[browser,console]==1.25.0`, `scripts/build_frozen_engine.py`
+collects uvicorn's run-time string imports and `openadapt_flow.console`, and
+the executable is built unbuffered so the console's one-time capability banner
+survives the pipe the portal reads it from. `scripts/smoke_test_frozen_flow.py`
+proves this behaviourally against the built artifact on every sidecar build: it
+starts the frozen attended console, parses the banner with the portal's own
+parser, and drives `/api/session`, `/api/attention`,
+`/api/attention/{run_id}`, and an unauthenticated probe through
+`engine.portal.flow_client`.
 
-Two prerequisites are **not** met by the packaged Desktop installer yet, and
-both are packaging changes deliberately kept out of this feature:
+### Runtime: wired
 
-1. `pyproject.toml` pins `openadapt-flow==1.23.0` in the `build` extra, which
-   predates `openadapt_flow/console/human_decisions.py` (added in 1.24.0).
-2. That pin does not request the `console` extra, so `fastapi` and `uvicorn`
-   are absent from the frozen sidecar and `openadapt-flow console` exits with
-   an install hint. Freezing `uvicorn` also needs PyInstaller collection flags
-   in `scripts/build_frozen_engine.py`.
+Both remaining portal-side gaps are closed, and both still fail closed.
+
+1. **The console is bound to the operator's deployment target.**
+   `PortalService` spawns `console --attend --allow-actions --config <staged>`.
+   Flow deliberately refuses attended mutations with no target (`requires an
+   explicit --config or --backend target`), and that refusal is still asserted
+   against the frozen binary. Desktop supplies the same governed config its runs
+   use, `data_dir/deployment.json`, staged privately through
+   `engine.private_flow_config`. A missing or unparseable config refuses on
+   Desktop's side of the wire, before anything is spawned, so the operator is
+   told which file to write instead of seeing "the console did not start".
+2. **Readiness is a bounded wait, not a sleep.** Flow prints the banner
+   *before* `uvicorn.run()` binds, so the first `flow.request("session")` can
+   legitimately hit a closed port. `PortalService._await_console_session` polls
+   until the console answers, bounded by `CONSOLE_READY_TIMEOUT_S`, and gives up
+   immediately if the console process exited rather than burning the deadline.
+
+### How long the staged deployment config lives, and why
+
+The staged file is **not** session-lived. `data_dir/deployment.json` carries
+reusable credentials — `rdp_password`, `rdp_username`, `rdp_domain`,
+`agent_token`, `agent_tls_pin` — alongside PHI-capable window/URL selectors;
+`private_flow_config` already treats every `password`/`token`/`secret` key as
+sensitive when it derives log redactions. A file like that is not eligible to
+sit on disk for the hours a portal session can last.
+
+Re-staging it per run would also be theatre. In the pinned
+`openadapt-flow==1.25.0`, `_attended_service_from_args` resolves `--config`
+eagerly through `load_deployment` **before** it yields, and
+`AttendedActionService` is built from the parsed `DeploymentConfig` object and
+never sees the path again. Rewriting the file later changes nothing about what
+the console executes with; it only writes the same secret to disk more times.
+
+So the lifetime is set to the only thing it can usefully bound: **the console's
+startup**. The config is staged 0600, the console is spawned, and the file is
+removed the instant the capability banner arrives. `serve()` prints that banner
+strictly downstream of the config load, in the same `with` statement, so the
+banner is a happens-after proof rather than a timing guess. What this actually
+protects against is a same-user backup, file-sync client, crash reporter, or
+support bundle sweeping the staged copy — duration is the whole exposure there,
+and it drops from hours to about five seconds. It does not protect against an
+attacker with same-user code execution, who already has the operator's own
+`deployment.json` and the console's in-memory copy; no file lifetime changes
+that, and this one does not pretend to.
+
+Removal is guaranteed by the `finally` in
+`private_flow_config.stage_private_yaml`, which covers normal exit, a console
+that never announces itself, an unparseable config, and any raised exception.
+The one thing a `finally` cannot survive is `SIGKILL`, so portal start also
+sweeps `.deployment-*.yaml` files older than `STALE_STAGING_AGE_S` from its
+staging directory. The age bound is deliberate: a config belonging to a console
+that is still starting is younger than the start timeout, so a concurrent start
+can never have its own file deleted out from under it.
+
+`scripts/smoke_test_frozen_flow.py` proves this against the built artifact
+rather than asserting it from a code reading. It stages a config through the
+same `private_flow_config` call the portal uses, starts the frozen console with
+`--allow-actions --config`, **deletes the staged file the moment the banner is
+parsed**, and only then drives every portal route. A future Flow that began
+re-reading the path would fail that smoke.
+
+Whether an attended session can attach is classified from **Flow's own
+refusal**, not from a hardcoded platform list. Flow implements a window-scoped
+replay client on macOS (Quartz) and Windows (Win32) and refuses elsewhere by
+design, so on Linux the smoke records `console_attended_session:
+"no-host-window-client"`. Any *other* startup failure still fails the smoke —
+a genuinely broken frozen build cannot be mistaken for an unsupported host.
+
+Every platform, including Linux, still proves the frozen binary **read** the
+staged file: the smoke stages a config whose `backend.kind` marker exists
+nowhere in Flow, and Flow echoes it back verbatim.
 
 One upstream seam is worth closing: the attended console generates its bearer
 capability inside `serve()` and only prints it on stdout, so

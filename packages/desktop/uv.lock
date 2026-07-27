@@ -32,6 +32,15 @@ wheels = [
 ]
 
 [[package]]
+name = "annotated-doc"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz", hash = "sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4", size = 7288, upload-time = "2025-11-10T22:07:42.062Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl", hash = "sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320", size = 5303, upload-time = "2025-11-10T22:07:40.673Z" },
+]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -493,6 +502,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6a/ab/88d67f02024700b48cd8232579ad1316aa9df2272c63049c27cc094229d6/dotty_dict-1.3.1.tar.gz", hash = "sha256:4b016e03b8ae265539757a53eba24b9bfda506fb94fbce0bee843c6f05541a15", size = 7699, upload-time = "2022-07-09T18:50:57.727Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/91/e0d457ee03ec33d79ee2cd8d212debb1bc21dfb99728ae35efdb5832dc22/dotty_dict-1.3.1-py3-none-any.whl", hash = "sha256:5022d234d9922f13aa711b4950372a06a6d64cb6d6db9ba43d0ba133ebfce31f", size = 7014, upload-time = "2022-07-09T18:50:55.058Z" },
+]
+
+[[package]]
+name = "fastapi"
+version = "0.140.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "pydantic" },
+    { name = "starlette" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e1/33/e0dfa29ccce4eb8c9a073f9e557b0d6bacbb3aa32e7ad595f678de4d036a/fastapi-0.140.7.tar.gz", hash = "sha256:09a640af2d29006345e1f28e4f031fa60f89b1a75d29f26070f3afa677d66cce", size = 422051, upload-time = "2026-07-27T17:34:45.908Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/0e/00cddd6b8668884e9c7588ab0eeb73becbd1efa3eaead34397f2e9a8de49/fastapi-0.140.7-py3-none-any.whl", hash = "sha256:960bb9696d8fd19dff488aa4f67f276364542cfcce9f7e68a82fe49dce126626", size = 131085, upload-time = "2026-07-27T17:34:47.036Z" },
 ]
 
 [[package]]
@@ -1445,7 +1470,7 @@ dependencies = [
 build = [
     { name = "onnxruntime", version = "1.20.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
     { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "openadapt-flow" },
+    { name = "openadapt-flow", extra = ["browser", "console"] },
     { name = "playwright" },
     { name = "pyinstaller" },
 ]
@@ -1474,9 +1499,9 @@ requires-dist = [
     { name = "onnxruntime", marker = "(platform_machine != 'x86_64' and extra == 'build') or (sys_platform != 'darwin' and extra == 'build')", specifier = "==1.27.0" },
     { name = "openadapt-capture", specifier = ">=1.1.0" },
     { name = "openadapt-desktop", extras = ["enterprise"], marker = "extra == 'full'" },
-    { name = "openadapt-flow", marker = "extra == 'build'", specifier = "==1.23.0" },
+    { name = "openadapt-flow", extras = ["browser", "console"], marker = "extra == 'build'", specifier = "==1.25.0" },
     { name = "openadapt-privacy", specifier = ">=1.0.0" },
-    { name = "openadapt-types", specifier = "==0.5.0" },
+    { name = "openadapt-types", specifier = "==0.6.1" },
     { name = "playwright", marker = "extra == 'build'", specifier = ">=1.44" },
     { name = "psutil" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -1494,7 +1519,7 @@ provides-extras = ["enterprise", "full", "build", "dev"]
 
 [[package]]
 name = "openadapt-flow"
-version = "1.23.0"
+version = "1.25.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography", version = "48.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
@@ -1504,14 +1529,23 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python-headless" },
     { name = "pillow" },
-    { name = "playwright" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f6/e5/8957790965a0fc5cde4e8f8dc8664c3db682d1b09881abf05f013fd3f495/openadapt_flow-1.23.0.tar.gz", hash = "sha256:b16e181ac1f8b84f825b418ca9c6608cd408bde9ccd94d0a7e62db515d2145be", size = 18978377, upload-time = "2026-07-25T17:33:17.979Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/d8/d67b7837a0c00692d46e3ed7f5a86833cb4aeeb866b2693961cd6eb10bcb/openadapt_flow-1.25.0.tar.gz", hash = "sha256:2695c0214b0e3f34e73dccca7a847283b6543718e5fb7f144ea8f09047a8d807", size = 19378921, upload-time = "2026-07-27T19:29:54.333Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/f7/632b13c60ba805cfd22614dc4c73285c06c2b7d698c124d9c45104623c18/openadapt_flow-1.23.0-py3-none-any.whl", hash = "sha256:b5d10dfc294479866d6dddd4c1a6afc9164414f0634703173b7e440dc0133bec", size = 1261802, upload-time = "2026-07-25T17:33:15.95Z" },
+    { url = "https://files.pythonhosted.org/packages/44/ad/de59848a05a8814c46e97e4d76360bfdb6b5be43ce74fbb71bb337461902/openadapt_flow-1.25.0-py3-none-any.whl", hash = "sha256:0bc81d1850a80b1ea644aa7a899d1fd51a061836040ab796adc79857d9d49591", size = 1449801, upload-time = "2026-07-27T19:29:52.4Z" },
+]
+
+[package.optional-dependencies]
+browser = [
+    { name = "playwright" },
+]
+console = [
+    { name = "fastapi" },
+    { name = "openadapt-types" },
+    { name = "uvicorn" },
 ]
 
 [[package]]
@@ -1530,14 +1564,14 @@ wheels = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.5.0"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/55/b8/e3764cb9f6c0e9acbc6efdbd2f83f2883739c4e2cbf345f80512e30e155b/openadapt_types-0.5.0.tar.gz", hash = "sha256:89dd3d7240b6a61785934738a39fc7a4177fefc6d28f995a3876a6a1263adf65", size = 74240, upload-time = "2026-07-25T22:58:26.662Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/13/1263e2c71fb0d5db15a86005d5b5bc09e76372de53d268b22569ccc87b91/openadapt_types-0.6.1.tar.gz", hash = "sha256:ec8b900c1eab6f2c4b3431120224aa7f9a0ccbb1ec0a64d35977c29507f7f8dc", size = 84378, upload-time = "2026-07-27T19:28:47.88Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/bc/84e180a74811b92c8545136bb097aa6488709027f08614b78f9ed9cb193e/openadapt_types-0.5.0-py3-none-any.whl", hash = "sha256:d4740e0c7e29f258469bccd1ce5450c4b4d79b6e3107ac687e66a412b9a6341b", size = 42742, upload-time = "2026-07-25T22:58:25.191Z" },
+    { url = "https://files.pythonhosted.org/packages/09/86/ed13c790ce2db8540bc901c4498ddc9088faf51f61b3bab31e54fd64e45a/openadapt_types-0.6.1-py3-none-any.whl", hash = "sha256:7f769e35c3778319ed252fcd5fa7d4474b7d2d974459c11e1596f93e42857bf6", size = 49912, upload-time = "2026-07-27T19:28:46.468Z" },
 ]
 
 [[package]]
@@ -2626,6 +2660,19 @@ wheels = [
 ]
 
 [[package]]
+name = "starlette"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/eb/e3/7c1dc7381d9f8ab7d854328ebfa884e62cb3f3d8549ddfd37c7814f42afa/starlette-1.3.1.tar.gz", hash = "sha256:05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0", size = 2703240, upload-time = "2026-06-12T09:23:11.602Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/bb/2799cc2ede3ed41131f8975621e7213dfc7ef4acbbaadfa440f32500c370/starlette-1.3.1-py3-none-any.whl", hash = "sha256:c7372aae11c3c3f26a42df7bd626cec2f47d03483d261d369516a615a53714c6", size = 73632, upload-time = "2026-06-12T09:23:10.017Z" },
+]
+
+[[package]]
 name = "sympy"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2695,6 +2742,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
+]
+
+[[package]]
+name = "uvicorn"
+version = "0.51.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "h11" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a2/65/b7c6c443ccc58678c91e1e973bbe2a878591538655d6e1d47f24ba1c51f3/uvicorn-0.51.0.tar.gz", hash = "sha256:f6f4b69b657c312f516dd2d268ab9ae6f254b11e4bac504f37b2ab58b24dd0b0", size = 94412, upload-time = "2026-07-08T10:59:05.962Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/ec/dbb7e5a6b91f86bfb9eb7d2988a2730907b6a729875b949c7f022e8b88fa/uvicorn-0.51.0-py3-none-any.whl", hash = "sha256:5d38af6cd620f2ae3849fb44fd4879e0890aa1febe8d47eb355fb45d93fe6a5b", size = 73219, upload-time = "2026-07-08T10:59:04.44Z" },
 ]
 
 [[package]]

@@ -47,6 +47,43 @@ EXCLUDED_MODULES = (
     "openadapt_flow.validation.identity_roc",
 )
 
+# The mobile decision portal supervises ``openadapt-flow console --attend`` in
+# a second process image of this same executable, so the attended console must
+# survive freezing.  PyInstaller's static analysis is not sufficient here for
+# two independent reasons, both verified against the built archive rather than
+# assumed:
+#
+# * Uvicorn resolves its event loop, HTTP protocol, websocket protocol, and
+#   lifespan implementations by *string* import at run time
+#   (``uvicorn.loops.auto`` -> ``uvicorn.loops.asyncio`` and friends), so those
+#   submodules are unreachable from any import statement.  ``--collect-all``
+#   brings the submodules, their data, and their distribution metadata.
+# * FastAPI and Starlette read their own installed metadata, and Flow's console
+#   only reaches ``openadapt_flow.console.*`` through a lazily imported command
+#   handler, so the console package is named explicitly.
+CONSOLE_COLLECTION: tuple[str, ...] = (
+    "--collect-all",
+    "uvicorn",
+    "--collect-submodules",
+    "openadapt_flow.console",
+    "--hidden-import",
+    "openadapt_flow.console.server",
+    "--hidden-import",
+    "openadapt_flow.console.app",
+    "--hidden-import",
+    "openadapt_flow.console.human_decisions",
+    "--hidden-import",
+    "fastapi",
+    "--hidden-import",
+    "starlette",
+    "--copy-metadata",
+    "fastapi",
+    "--copy-metadata",
+    "starlette",
+    "--copy-metadata",
+    "uvicorn",
+)
+
 RAPIDOCR_NOTICE_DIR = ROOT / "third_party" / "rapidocr"
 LINUX_RUNNER_RUNTIME_EXCLUDE = r"libgcc_s\.so(\..*)?"
 MACOS_X86_CRYPTOGRAPHY_VERSION = "48.0.0"
@@ -165,6 +202,16 @@ def build_command(
         str(Path(workpath)),
         "--specpath",
         str(Path(specpath)),
+        # Run every process image of this executable unbuffered.  Desktop reads
+        # its sidecar over pipes -- the Tauri IPC wire, and the decision
+        # portal's supervised console, whose one-time capability banner is a
+        # plain ``print`` in Flow's ``serve()``.  Block-buffered stdout holds
+        # that banner until the process exits, so a frozen console that is
+        # genuinely serving still looks dead to its supervisor.  Verified: the
+        # banner never arrives without this, and ``PYTHONUNBUFFERED`` does not
+        # reach a PyInstaller-frozen interpreter.
+        "--python-option",
+        "u",
         "--hidden-import",
         "openadapt_flow.__main__",
         "--collect-data",
@@ -184,6 +231,7 @@ def build_command(
         "--copy-metadata",
         "openadapt-flow",
     ]
+    command.extend(CONSOLE_COLLECTION)
     for source, destination in notice_data(onnxruntime_dir):
         command.extend(("--add-data", f"{source}:{destination}"))
     notice_bundle = notice_bundle or (ROOT / ".build-frozen-notices")

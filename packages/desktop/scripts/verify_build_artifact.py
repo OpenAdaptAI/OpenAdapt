@@ -10,7 +10,6 @@ import re
 import subprocess
 import sys
 import tarfile
-import tomllib
 import zipfile
 from pathlib import Path
 
@@ -27,6 +26,7 @@ try:
         PYINSTALLER_NOTICE_SHA256,
         PYINSTALLER_VERSION,
         REQUIRED_NOTICE_TOKENS,
+        bundled_flow_pin,
         has_unapproved_copyleft_evidence,
     )
 except ModuleNotFoundError:  # pragma: no cover - direct ``python scripts/...`` use
@@ -42,6 +42,7 @@ except ModuleNotFoundError:  # pragma: no cover - direct ``python scripts/...`` 
         PYINSTALLER_NOTICE_SHA256,
         PYINSTALLER_VERSION,
         REQUIRED_NOTICE_TOKENS,
+        bundled_flow_pin,
         has_unapproved_copyleft_evidence,
     )
 
@@ -71,18 +72,16 @@ NOTICE_INVENTORY_MEMBER = f"{NOTICE_BUNDLE_MEMBER}/{NOTICE_INVENTORY_NAME}"
 
 
 def bundled_flow_banner(root: Path = ROOT) -> str:
-    """Return the CLI version banner for the exact configured Flow build pin."""
+    """Return the CLI version banner for the exact configured Flow build pin.
 
-    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    dependencies = pyproject["project"]["optional-dependencies"]["build"]
-    pins = [
-        dependency.removeprefix("openadapt-flow==")
-        for dependency in dependencies
-        if dependency.startswith("openadapt-flow==")
-    ]
-    if len(pins) != 1 or not re.fullmatch(r"\d+\.\d+\.\d+", pins[0]):
-        raise ValueError(f"expected one exact openadapt-flow build pin, found: {pins}")
-    return f"openadapt-flow {pins[0]}"
+    Parsing lives in ``scripts.frozen_notices`` so this gate, the installer
+    smoke test, and the frozen-notice closure all read the same pin -- and all
+    of them refuse a pin that drops the ``console`` extra the mobile decision
+    portal needs.
+    """
+
+    version, _extras = bundled_flow_pin(root)
+    return f"openadapt-flow {version}"
 
 
 def normalized_inventory(value: str) -> str:

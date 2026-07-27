@@ -10,8 +10,11 @@ only the fixed `openadapt://connect` action and forwards it to the sidecar's
 strict, transactional pairing flow.
 
 The canonical compiler and governed runtime remain in `openadapt-flow`. Each
-native installer freezes the exact `openadapt-flow==1.23.0` runtime and its
-`playwright==1.61.0` browser automation dependency into the Desktop sidecar.
+native installer freezes the exact `openadapt-flow[browser,console]==1.25.0`
+runtime and its `playwright==1.61.0` browser automation dependency into the
+Desktop sidecar. The `console` extra is what lets an installed application
+serve the attended decision console the mobile decision portal relays; the
+`browser` extra carries the frozen Playwright driver.
 Compile, replay, run, and teach therefore work without a separate Python,
 `openadapt-flow`, or `playwright` installation on `PATH`. Desktop starts with no
 browser download. The first browser workflow downloads the Chromium revision

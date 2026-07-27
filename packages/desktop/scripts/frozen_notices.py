@@ -12,17 +12,80 @@ import hashlib
 import json
 import re
 import shutil
+import tomllib
 from collections import deque
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 from typing import Callable, Iterable
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 ROOT_DISTRIBUTION = "openadapt-desktop"
-FROZEN_RUNTIME_ROOTS = ("openadapt-desktop", "openadapt-flow")
+# Roots whose *installed* closure executes inside the frozen sidecar, written
+# as requirement strings so the extras are part of the audited record. The
+# ``console`` extra on Flow is what puts fastapi/uvicorn/starlette in the
+# artifact; without it the mobile decision portal cannot start its console.
+# ``browser`` carries Playwright, which Flow moved out of its core dependencies
+# in 1.25.0 and which Desktop still freezes on purpose.
+FROZEN_RUNTIME_ROOTS = ("openadapt-desktop", "openadapt-flow[browser,console]")
 BUILD_EXTRA = frozenset({"build"})
 NOTICE_BUNDLE_MEMBER = "third_party/python"
 NOTICE_INVENTORY_NAME = "NOTICE-INVENTORY.json"
-REVIEWED_NOTICE_ROOT = Path(__file__).resolve().parents[1] / "third_party"
+REVIEWED_NOTICE_ROOT = REPOSITORY_ROOT / "third_party"
+
+# The single exact ``openadapt-flow`` pin in the ``build`` extra, with the
+# extras the installer depends on. Parsed in one place so the frozen-notice
+# closure, the artifact verifier, and the installer smoke test can never
+# disagree about which runtime the installer actually ships.
+FLOW_DISTRIBUTION = "openadapt-flow"
+FLOW_REQUIRED_EXTRAS = ("browser", "console")
+_ROOT_REQUIREMENT_RE = re.compile(
+    r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
+    r"(?:\[(?P<extras>[A-Za-z0-9,._-]+)\])?"
+    r"(?:==(?P<version>\d+\.\d+\.\d+))?$"
+)
+
+
+def parse_root_requirement(value: str) -> tuple[str, tuple[str, ...], str | None]:
+    """Split ``name[extra,extra]==version`` without importing packaging."""
+
+    match = _ROOT_REQUIREMENT_RE.fullmatch(value.strip())
+    if match is None:
+        raise ValueError(f"unsupported frozen runtime requirement: {value!r}")
+    raw_extras = match.group("extras") or ""
+    extras = tuple(sorted({extra.strip() for extra in raw_extras.split(",") if extra.strip()}))
+    return match.group("name"), extras, match.group("version")
+
+
+def bundled_flow_pin(root: Path = REPOSITORY_ROOT) -> tuple[str, tuple[str, ...]]:
+    """Return the exact ``(version, extras)`` frozen into native installers.
+
+    Raises:
+        ValueError: If the ``build`` extra does not carry exactly one exact
+            ``openadapt-flow`` pin, or that pin omits a required extra. Both
+            failures previously shipped a portal that could not start.
+    """
+
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    dependencies = pyproject["project"]["optional-dependencies"]["build"]
+    pins: list[tuple[str, tuple[str, ...], str | None]] = []
+    for dependency in dependencies:
+        try:
+            name, extras, version = parse_root_requirement(dependency)
+        except ValueError:
+            continue
+        if _canonicalize_name(name) == FLOW_DISTRIBUTION:
+            pins.append((name, extras, version))
+    if len(pins) != 1 or pins[0][2] is None:
+        raise ValueError(f"expected one exact openadapt-flow build pin, found: {pins}")
+    _, extras, version = pins[0]
+    missing = [extra for extra in FLOW_REQUIRED_EXTRAS if extra not in extras]
+    if missing:
+        raise ValueError(
+            "the frozen openadapt-flow pin must request "
+            f"{', '.join(FLOW_REQUIRED_EXTRAS)}; missing: {', '.join(missing)}"
+        )
+    return str(version), extras
+
 
 # PyInstaller itself is a build tool and must not be classified as an ordinary
 # frozen runtime package. Its compiled bootloader and loader files are,
@@ -159,6 +222,12 @@ REQUIRED_NOTICE_TOKENS: dict[str, tuple[str, ...]] = {
     "openadapt-capture": ("license",),
     "openadapt-privacy": ("license",),
     "openadapt-flow": ("license",),
+    # The attended console the mobile decision portal supervises. These are
+    # redistributed inside the sidecar, so their notices are mandatory rather
+    # than incidental.
+    "fastapi": ("license",),
+    "starlette": ("license",),
+    "uvicorn": ("license",),
     "alembic": ("license",),
     "mako": ("license",),
     "pympler": ("license", "notice"),
@@ -262,15 +331,17 @@ def frozen_runtime_closure(
 
     Flow is a deliberately frozen payload selected from Desktop's ``build``
     extra, but PyInstaller and its packaging dependencies are not. Resolve the
-    two actual runtime roots without extras instead of treating every member of
+    two actual runtime roots -- with exactly the extras named in
+    :data:`FROZEN_RUNTIME_ROOTS` -- instead of treating every member of
     ``Desktop[build]`` as redistributed Python runtime code.
     """
 
     resolved: dict[str, object] = {}
-    for root_name in FROZEN_RUNTIME_ROOTS:
+    for requirement in FROZEN_RUNTIME_ROOTS:
+        root_name, root_extras, _ = parse_root_requirement(requirement)
         closure = dependency_closure(
             root_name=root_name,
-            root_extras=(),
+            root_extras=root_extras,
             distribution_getter=distribution_getter,
         )
         for name, dist in closure.items():

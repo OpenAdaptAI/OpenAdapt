@@ -1,8 +1,9 @@
 """Deterministic presentation-video derivatives for exact overlay timelines.
 
-Raw recordings remain immutable. This module validates the canonical Types 0.5
-timeline, binds it to the exact source-media hash, composites in memory over a
-rawvideo pipe, and atomically publishes a separate MP4 derivative.
+Raw recordings remain immutable. This module validates the canonical Types
+control-overlay timeline v2, binds it to the exact source-media hash,
+composites in memory over a rawvideo pipe, and atomically publishes a separate
+MP4 derivative.
 """
 
 from __future__ import annotations

@@ -222,15 +222,17 @@ def test_beta_release_notes_describe_the_bundled_flow_runtime() -> None:
     assert native_release.count("--notes-file docs/BETA_NATIVE_INSTALLERS.md") == 2
     assert "EXPERIMENTAL_NATIVE_INSTALLERS" not in native_release
     flow_dependencies = [
-        dependency for dependency in build_dependencies if dependency.startswith("openadapt-flow==")
+        dependency
+        for dependency in build_dependencies
+        if dependency.startswith("openadapt-flow")
     ]
-    assert flow_dependencies == ["openadapt-flow==1.23.0"]
+    assert flow_dependencies == ["openadapt-flow[browser,console]==1.25.0"]
     assert "openadapt-capture>=1.1.0" in dependencies
     assert "openadapt-privacy>=1.0.0" in dependencies
     assert "Development Status :: 4 - Beta" in classifiers
     assert "Development Status :: 2 - Pre-Alpha" not in classifiers
-    assert bundled_flow_version() == "1.23.0"
-    assert bundled_flow_banner() == "openadapt-flow 1.23.0"
+    assert bundled_flow_version() == "1.25.0"
+    assert bundled_flow_banner() == "openadapt-flow 1.25.0"
     assert 'name = "playwright"\nversion = "1.61.0"' in lock
     assert flow_dependencies[0] in notes
     assert "playwright==1.61.0" in notes

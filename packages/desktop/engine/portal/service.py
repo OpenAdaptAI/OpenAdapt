@@ -21,6 +21,40 @@ injection point today, so :func:`_parse_console_banner` reads the exact banner
 line.  A narrow ``--capability-file`` option in Flow would replace this with a
 supported interface; until then the parser is strict and fails loud rather than
 guessing.
+
+Deployment-config lifetime, decided on the pinned Flow's actual read ordering
+-----------------------------------------------------------------------------
+
+Flow refuses ``console --attend --allow-actions`` without a deployment target,
+so the portal must hand it one.  That config is the operator's own
+``data_dir/deployment.json``, whose schema carries **reusable credentials** --
+``rdp_password``, ``rdp_username``, ``rdp_domain``, ``agent_token``,
+``agent_tls_pin`` -- alongside PHI-capable selectors.  ``private_flow_config``
+already treats every ``password``/``token``/``secret`` key as sensitive when it
+builds log redactions.  So this file is *not* "a backend and a URL", and it is
+not eligible to sit on disk for a whole portal session.
+
+It is also pointless to re-stage it per run.  In ``openadapt-flow==1.25.0``
+(the exact pin this installer ships) ``__main__._attended_service_from_args``
+resolves ``--config`` **eagerly**, through ``load_deployment``, before it
+yields; ``AttendedActionService`` is constructed from the parsed
+``DeploymentConfig`` object and never sees the path again.  Re-writing the file
+later would not change one byte of what the console executes with -- it would
+only put the same secret back on disk more times.
+
+The exposure this can actually bound is therefore neither of those.  It is the
+window in which a same-user backup, file-sync client, crash reporter, or
+support bundle can sweep the staged copy.  So the file lives for exactly as
+long as Flow needs to read it: it is staged, the console is spawned, and it is
+removed the instant the capability banner proves the read already happened.
+``serve()`` -- which prints that banner -- runs strictly downstream of the
+config load inside the same ``with`` statement, so the banner is a
+happens-after proof, not a timing guess.  Measured window: about five seconds.
+
+``scripts/smoke_test_frozen_flow.py`` proves this against the frozen binary by
+deleting the staged config after the banner and *then* driving every portal
+route, so the ordering is an artifact-level fact rather than a code reading,
+and a future Flow that started re-reading the path would fail that smoke.
 """
 
 from __future__ import annotations
@@ -46,6 +80,11 @@ from engine.portal.notifications import (
 )
 from engine.portal.pairing import DevicePairingStore, PairingRefused
 from engine.portal.server import PortalApp, PortalServer
+from engine.private_flow_config import (
+    PrivateFlowConfigError,
+    prepare_flow_config,
+    stage_private_yaml,
+)
 
 #: The exact banner ``openadapt_flow.console.server.serve`` prints.
 _CONSOLE_BANNER = re.compile(
@@ -55,6 +94,20 @@ _CONSOLE_BANNER = re.compile(
 
 #: How long to wait for the console to announce itself before failing loud.
 CONSOLE_START_TIMEOUT_S = 60.0
+
+#: How long uvicorn may take to bind *after* the banner is printed.  Flow
+#: prints the capability immediately before ``uvicorn.run()``, so the first
+#: request can legitimately arrive at a closed port.
+CONSOLE_READY_TIMEOUT_S = 30.0
+
+#: Interval between readiness probes while uvicorn finishes binding.
+CONSOLE_READY_POLL_S = 0.25
+
+#: A staged config older than this cannot belong to a console that is still
+#: starting, so it is a leftover from a Desktop process that was killed before
+#: its removal could run.  ``stage_private_yaml`` unlinks in a ``finally``,
+#: which covers every ordinary and exceptional exit but cannot survive SIGKILL.
+STALE_STAGING_AGE_S = CONSOLE_START_TIMEOUT_S * 2
 
 
 class PortalError(RuntimeError):
@@ -118,6 +171,28 @@ def _parse_console_banner(line: str) -> tuple[int, str] | None:
     if match is None:
         return None
     return int(match.group("port")), match.group("token")
+
+
+def _sweep_stale_stagings(directory: Path, *, now: float) -> None:
+    """Remove staged configs a killed predecessor could not clean up.
+
+    Only files older than :data:`STALE_STAGING_AGE_S` are removed.  A config
+    belonging to a console that is still starting is younger than the start
+    timeout by definition, so a concurrent start can never have its own file
+    deleted out from under it.  Best-effort: a portal that cannot tidy an old
+    file must still be able to start.
+    """
+    try:
+        candidates = list(directory.glob(".deployment-*.yaml"))
+    except OSError:  # pragma: no cover - unreadable staging directory
+        return
+    for candidate in candidates:
+        try:
+            if now - candidate.stat().st_mtime <= STALE_STAGING_AGE_S:
+                continue
+            candidate.unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - raced with another sweep
+            continue
 
 
 @dataclass
@@ -217,7 +292,7 @@ class PortalService:
                 port=console.port, access_token=console.access_token
             )
             try:
-                session = flow.request("session")
+                session = self._await_console_session(console, flow)
                 if isinstance(session.json, dict):
                     flow.csrf_token = str(session.json.get("csrf_token") or "")
             except FlowConsoleUnavailable as exc:
@@ -271,6 +346,23 @@ class PortalService:
             )
             return self._status_locked()
 
+    def _deployment_source(self) -> Path:
+        """The operator's deployment config, or a loud refusal.
+
+        Flow refuses attended mutations that are not bound to a deployment
+        target.  Failing here keeps that refusal on Desktop's side of the wire,
+        where the message can name the file the operator has to write, instead
+        of surfacing as an opaque "the console did not start".
+        """
+        source = Path(self.config.data_dir) / "deployment.json"
+        if not source.is_file():
+            raise PortalError(
+                "The decision portal approves real actions, so it needs a "
+                "deployment configuration naming the target to act on. Expected "
+                f"it at {source}."
+            )
+        return source
+
     def _start_console(self) -> ConsoleProcess:
         prefix = _flow_command(FLOW_BIN)
         if prefix is None:
@@ -278,11 +370,32 @@ class PortalService:
                 "OpenAdapt Flow is not available, so there is nothing to decide "
                 "about. Install openadapt-flow with its console extra."
             )
+        source = self._deployment_source()
+        try:
+            prepared = prepare_flow_config(source, None)
+        except PrivateFlowConfigError as exc:
+            raise PortalError(
+                f"The deployment configuration could not be prepared: {exc}"
+            ) from exc
+        if prepared is None:  # pragma: no cover - a file source is never None
+            raise PortalError("The deployment configuration resolved to nothing.")
+
+        staging_dir = Path(self.config.data_dir) / "portal"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        _sweep_stale_stagings(staging_dir, now=time.time())
+        # The staged secret-bearing config lives only until the banner proves
+        # Flow has read it; leaving this ``with`` block removes the file.
+        with stage_private_yaml(staging_dir, prepared=prepared) as config_path:
+            return self._spawn_console(prefix, config_path)
+
+    def _spawn_console(self, prefix: list[str], config_path: Path) -> ConsoleProcess:
         command = [
             *prefix,
             "console",
             "--attend",
             "--allow-actions",
+            "--config",
+            str(config_path),
             "--bundles",
             str(Path(self.config.data_dir) / "bundles"),
             "--runs",
@@ -317,8 +430,35 @@ class PortalService:
         raise PortalError(
             "The local decision service did not start. It requires "
             "openadapt-flow with the 'console' extra (fastapi and uvicorn) and a "
-            "qualified deployment configuration."
+            "deployment configuration Flow accepts as a qualified target."
         )
+
+    def _await_console_session(
+        self, console: ConsoleProcess, flow: FlowConsoleClient
+    ) -> Any:
+        """Wait for uvicorn to bind, bounded by a real deadline.
+
+        Flow prints the capability banner *before* ``uvicorn.run()`` binds, so
+        the first request legitimately races the listener.  This is not a sleep:
+        it returns the moment the console answers, gives up immediately if the
+        console exited rather than waiting out the deadline, and re-raises the
+        transport failure once the deadline passes.
+        """
+        # Deliberately the real monotonic clock, not ``self._clock``: that one is
+        # the pairing store's logical clock, which tests move to expire pairings.
+        # A network readiness deadline must not be coupled to it.
+        deadline = time.monotonic() + CONSOLE_READY_TIMEOUT_S
+        while True:
+            if not console.alive():
+                raise FlowConsoleUnavailable(
+                    "The local decision service exited before it served a session"
+                )
+            try:
+                return flow.request("session")
+            except FlowConsoleUnavailable:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(CONSOLE_READY_POLL_S)
 
     def stop(self) -> dict[str, Any]:
         """Stop the portal and the attended console it supervises."""

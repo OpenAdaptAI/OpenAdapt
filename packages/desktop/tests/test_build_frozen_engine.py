@@ -237,6 +237,9 @@ def test_frozen_notice_inventory_binds_concrete_archive_bytes(
         "third_party/python/openadapt-capture/001-LICENSE": b"capture MIT\n",
         "third_party/python/openadapt-privacy/001-LICENSE": b"privacy MIT\n",
         "third_party/python/openadapt-flow/001-LICENSE": b"flow MIT\n",
+        "third_party/python/fastapi/001-LICENSE": b"fastapi MIT\n",
+        "third_party/python/starlette/001-LICENSE.md": b"starlette BSD\n",
+        "third_party/python/uvicorn/001-LICENSE.md": b"uvicorn BSD\n",
         "third_party/python/alembic/001-LICENSE": b"alembic MIT\n",
         "third_party/python/mako/001-LICENSE": b"mako MIT\n",
         "third_party/python/pympler/001-LICENSE": b"Apache\n",
@@ -385,3 +388,79 @@ def test_frozen_notice_inventory_rejects_metadata_only_package() -> None:
             members=set(),
             extract_member=lambda member: b"",
         )
+
+
+def test_frozen_flow_pin_must_request_the_console_and_browser_extras(tmp_path: Path) -> None:
+    """The defect this guards shipped a portal that could not start at all.
+
+    ``openadapt-flow==<version>`` resolves without fastapi/uvicorn, so the
+    frozen sidecar could not run the attended console the mobile decision
+    portal supervises, and without Playwright the browser driver silently
+    became build-only.
+    """
+
+    from scripts import frozen_notices
+
+    def _pyproject(pin: str) -> Path:
+        root = tmp_path / pin.replace("/", "-")
+        root.mkdir()
+        (root / "pyproject.toml").write_text(
+            "[project]\nname = 'x'\n\n"
+            "[project.optional-dependencies]\n"
+            f"build = ['pyinstaller>=6.16,<7', '{pin}']\n",
+            encoding="utf-8",
+        )
+        return root
+
+    version, extras = frozen_notices.bundled_flow_pin(build.ROOT)
+    assert version == "1.25.0"
+    assert set(frozen_notices.FLOW_REQUIRED_EXTRAS) <= set(extras)
+
+    with pytest.raises(ValueError, match="console"):
+        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow==1.25.0"))
+    with pytest.raises(ValueError, match="browser"):
+        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow[console]==1.25.0"))
+    with pytest.raises(ValueError, match="exact openadapt-flow build pin"):
+        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow[browser,console]>=1.25.0"))
+
+
+def test_frozen_runtime_roots_carry_the_pinned_flow_extras() -> None:
+    """The notice closure must resolve the same extras the installer freezes."""
+
+    from scripts import frozen_notices
+
+    roots = {
+        name: extras
+        for name, extras, _ in map(
+            frozen_notices.parse_root_requirement, frozen_notices.FROZEN_RUNTIME_ROOTS
+        )
+    }
+    _version, pinned_extras = frozen_notices.bundled_flow_pin(build.ROOT)
+    assert roots["openadapt-flow"] == pinned_extras
+    # fastapi/uvicorn/starlette are redistributed inside the sidecar, so their
+    # notices are mandatory rather than incidental.
+    for package in ("fastapi", "starlette", "uvicorn"):
+        assert package in frozen_notices.REQUIRED_NOTICE_TOKENS
+
+
+def test_attended_console_survives_freezing(tmp_path: Path) -> None:
+    """Static analysis alone does not reach uvicorn's runtime string imports."""
+
+    command = _build_command("", tmp_path)
+
+    assert ["--collect-all", "uvicorn"] == command[
+        command.index("uvicorn") - 1 : command.index("uvicorn") + 1
+    ]
+    assert ["--collect-submodules", "openadapt_flow.console"] == command[
+        command.index("openadapt_flow.console") - 1 : command.index("openadapt_flow.console") + 1
+    ]
+    for module in ("openadapt_flow.console.human_decisions", "fastapi", "starlette"):
+        assert ["--hidden-import", module] == command[
+            command.index(module) - 1 : command.index(module) + 1
+        ]
+    # Flow prints the console's one-time capability banner with a plain
+    # ``print``; block-buffered stdout hides it from the portal supervisor for
+    # the entire life of the process.
+    assert ["--python-option", "u"] == command[
+        command.index("--python-option") : command.index("--python-option") + 2
+    ]
