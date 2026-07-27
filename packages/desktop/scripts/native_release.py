@@ -20,6 +20,8 @@ NATIVE_TAG_PREFIX = "desktop-v"
 VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 SUPERSEDED_MARKER_PREFIX = "<!-- openadapt-superseded-by: "
 SUPERSEDED_SEPARATOR = "\n---\n\n"
+INSTALLER_POINTER_START = "<!-- openadapt-installer-pointer:start -->"
+INSTALLER_POINTER_END = "<!-- openadapt-installer-pointer:end -->"
 
 ARTIFACT_RULES = {
     "macos": (("dmg", "*.dmg", ".dmg"),),
@@ -158,6 +160,65 @@ def superseded_notes(body: str, newer_tag: str, repo: str) -> str | None:
         f"{SUPERSEDED_SEPARATOR}"
     )
     return header + normalized
+
+
+def installer_pointer_notes(body: str, native_tag: str, repo: str) -> str | None:
+    """Return engine-release notes carrying a pointer to ``native_tag``.
+
+    GitHub's ``/releases/latest`` excludes prereleases by definition, so the
+    engine release is what a human lands on -- and it carries only the wheel
+    and sdist. Without this block that visitor sees no installer at all.
+
+    The block is delimited by stable markers and is rewritten in place, so
+    republishing or re-running is idempotent and never accumulates pointers.
+    Returns ``None`` when the body already carries an identical block.
+
+    This deliberately points at the installers rather than mirroring them.
+    Copying ~750 MB of ad-hoc-signed and unsigned binaries onto the release
+    GitHub labels "Latest" would make them the default download from the
+    canonical release -- the exact maturity overstatement the two-lane split
+    in RELEASES.md exists to prevent -- and would break the documented
+    machine-readable selection rule that identifies installers by the
+    ``desktop-v`` tag prefix. See RELEASES.md; mirroring is the post-signing
+    convergence step, not a workaround for a missing link.
+    """
+    # Format-only validation. Unlike `validate_tag`, this must not compare
+    # against the checked-out sources: the pointer names a release object, and
+    # the notes it edits belong to a different tag.
+    native_tag_tuple(native_tag)
+    version = native_tag[len(NATIVE_TAG_PREFIX) :]
+    base = f"https://github.com/{repo}/releases"
+    block = (
+        f"{INSTALLER_POINTER_START}\n"
+        "> [!IMPORTANT]\n"
+        "> **Looking for the desktop app? This release has no installer.**\n"
+        f"> Download the Beta installers for macOS, Windows, and Linux from\n"
+        f"> [`{native_tag}`]({base}/tag/{native_tag}) — DMG, MSI, NSIS `.exe`,\n"
+        "> `.deb`, `.AppImage`, and `SHA256SUMS`.\n"
+        ">\n"
+        f"> This `v{version}` release carries the Python engine package only\n"
+        "> (wheel and sdist; `pip install openadapt-desktop`). The native\n"
+        "> installers ship from a separate prerelease tag because they are\n"
+        "> ad-hoc-signed or unsigned pending signing credentials, so they must\n"
+        "> not be published as this repository's \"Latest\" release. See\n"
+        f"> [RELEASES.md](https://github.com/{repo}/blob/main/RELEASES.md).\n"
+        f"{INSTALLER_POINTER_END}\n\n"
+    )
+
+    normalized = body.replace("\r\n", "\n")
+    start = normalized.find(INSTALLER_POINTER_START)
+    if start >= 0:
+        end = normalized.find(INSTALLER_POINTER_END, start)
+        if end < 0:
+            raise ValueError("existing installer pointer is missing its end marker")
+        end += len(INSTALLER_POINTER_END)
+        remainder = normalized[end:].lstrip("\n")
+        normalized = normalized[:start] + remainder
+
+    updated = block + normalized
+    if updated == body.replace("\r\n", "\n"):
+        return None
+    return updated
 
 
 def _single_match(directory: Path, pattern: str, label: str) -> Path:
@@ -377,6 +438,12 @@ def _parser() -> argparse.ArgumentParser:
     supersede_parser.add_argument("--output", type=Path, required=True)
     supersede_parser.add_argument("--repo", default="OpenAdaptAI/openadapt-desktop")
 
+    pointer_parser = subparsers.add_parser("installer-pointer-notes")
+    pointer_parser.add_argument("--native-tag", required=True)
+    pointer_parser.add_argument("--notes-file", type=Path, required=True)
+    pointer_parser.add_argument("--output", type=Path, required=True)
+    pointer_parser.add_argument("--repo", default="OpenAdaptAI/openadapt-desktop")
+
     stage_parser = subparsers.add_parser("stage")
     stage_parser.add_argument("--bundle-root", type=Path, required=True)
     stage_parser.add_argument("--output", type=Path, required=True)
@@ -426,6 +493,15 @@ def main() -> int:
                 else:
                     args.output.write_text(notes, encoding="utf-8")
                     print("update")
+        elif args.command == "installer-pointer-notes":
+            notes = installer_pointer_notes(
+                args.notes_file.read_text(encoding="utf-8"), args.native_tag, args.repo
+            )
+            if notes is None:
+                print("skip")
+            else:
+                args.output.write_text(notes, encoding="utf-8")
+                print("update")
         elif args.command == "stage":
             staged = stage_artifacts(
                 bundle_root=args.bundle_root,

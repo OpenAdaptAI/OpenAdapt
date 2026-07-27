@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from scripts.native_release import (
+    installer_pointer_notes,
     native_tag_tuple,
     native_version,
     set_native_version,
@@ -401,6 +402,70 @@ def test_superseded_notes_is_idempotent_and_upgrades_to_newer_pointer() -> None:
     assert upgraded.count("openadapt-superseded-by") == 1
     assert "desktop-v0.6.0" in upgraded
     assert upgraded.endswith(body)
+
+
+def test_installer_pointer_prepends_block_and_preserves_engine_notes() -> None:
+    body = "## v0.5.0 (2026-07-26)\n\n### Bug Fixes\n\n- Something.\n"
+
+    updated = installer_pointer_notes(
+        body, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop"
+    )
+
+    assert updated is not None
+    assert updated.startswith("<!-- openadapt-installer-pointer:start -->\n")
+    assert "<!-- openadapt-installer-pointer:end -->" in updated
+    # Names the destination, the formats, and why the split exists.
+    assert "releases/tag/desktop-v0.5.0" in updated
+    assert "SHA256SUMS" in updated
+    assert "ad-hoc-signed or unsigned" in updated
+    assert "RELEASES.md" in updated
+    # The original engine notes survive verbatim.
+    assert updated.endswith(body)
+
+
+def test_installer_pointer_is_idempotent_and_retargets_a_newer_native_tag() -> None:
+    body = "## v0.5.0\n\nNotes.\n"
+    once = installer_pointer_notes(body, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop")
+    assert once is not None
+
+    # Re-running the same publish must not append a second block.
+    assert installer_pointer_notes(once, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop") is None
+
+    retargeted = installer_pointer_notes(
+        once, "desktop-v0.6.0", "OpenAdaptAI/openadapt-desktop"
+    )
+    assert retargeted is not None
+    assert retargeted.count("openadapt-installer-pointer:start") == 1
+    assert retargeted.count("openadapt-installer-pointer:end") == 1
+    assert "desktop-v0.5.0" not in retargeted
+    assert retargeted.endswith(body)
+
+
+def test_installer_pointer_refuses_a_malformed_or_truncated_block() -> None:
+    with pytest.raises(ValueError):
+        installer_pointer_notes("x", "v0.5.0", "OpenAdaptAI/openadapt-desktop")
+
+    truncated = "<!-- openadapt-installer-pointer:start -->\nhalf a block\n"
+    with pytest.raises(ValueError):
+        installer_pointer_notes(
+            truncated, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop"
+        )
+
+
+def test_native_release_workflow_points_latest_at_the_published_installers() -> None:
+    workflow = (ROOT / ".github/workflows/native-release.yml").read_text(encoding="utf-8")
+
+    # The build/publish lane stays on the tag push; the pointer job runs only
+    # once the native prerelease is publicly visible, so it never advertises a
+    # draft tag URL that 404s.
+    assert "point-engine-release:" in workflow
+    assert "installer-pointer-notes" in workflow
+    assert "types: [published]" in workflow
+    assert "github.event.release.draft" in workflow
+
+    # It must link, never mirror: no installer bytes are uploaded to vX.Y.Z.
+    assert "gh release upload \"${engine_tag}\"" not in workflow
+    assert re.search(r"gh release edit \"\$\{engine_tag\}\" --notes-file", workflow)
 
 
 @pytest.mark.parametrize(

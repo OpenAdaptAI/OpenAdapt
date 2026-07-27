@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "desktop-v*"
+  # `point-engine-release` below needs the native prerelease to be publicly
+  # visible before it advertises its URL, so it runs on publish rather than on
+  # the tag push. Every build/publish job stays gated to the push event.
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -15,6 +20,10 @@ concurrency:
 jobs:
   validate:
     name: Validate immutable native tag
+    # Gating this one job gates the whole build lane: build-*, attest, and
+    # publish-draft all reach it through `needs`, and a skipped dependency
+    # skips its dependents.
+    if: github.event_name == 'push'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -586,3 +595,75 @@ jobs:
               --notes-file docs/BETA_NATIVE_INSTALLERS.md
           fi
           gh release upload "${GITHUB_REF_NAME}" release-assets/* --clobber
+
+  point-engine-release:
+    name: Point the engine release at these installers
+    # GitHub's /releases/latest excludes prereleases by definition, so the engine
+    # release vX.Y.Z is what a human landing on "Latest" sees -- and it carries
+    # only the wheel and sdist. Without this the canonical download path shows no
+    # installer at all, which is the link cited in launch material.
+    #
+    # This runs on `release: published`, not next to the upload above, for the
+    # same reason the supersession notice does: `publish-draft` creates a DRAFT,
+    # whose tag page 404s for the public. A pointer written then would advertise
+    # a URL nobody can open until a maintainer un-drafts it. Publishing can only
+    # follow a successful upload, so this is still strictly after the installers
+    # exist.
+    #
+    # It links rather than mirrors. Copying ~750 MB of ad-hoc-signed and unsigned
+    # installers onto the release GitHub labels "Latest" would make them its
+    # default download -- the maturity overstatement the two-lane split exists to
+    # prevent -- and would break the documented machine-readable selection rule
+    # that identifies installers by the `desktop-v` tag prefix. Mirroring is the
+    # post-signing convergence step in RELEASES.md, not a workaround for a
+    # missing link.
+    if: >-
+      github.event_name == 'release' &&
+      startsWith(github.event.release.tag_name, 'desktop-v') &&
+      github.event.release.prerelease &&
+      !github.event.release.draft
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NATIVE_TAG: ${{ github.event.release.tag_name }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Prepend an idempotent installer pointer to the engine release
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine_tag="v${NATIVE_TAG#desktop-v}"
+
+          # native-freshness.yml only pushes desktop-vX.Y.Z after verifying that
+          # refs/tags/vX.Y.Z exists and is an ancestor of main, so a missing
+          # engine release here means that invariant broke. Fail loudly rather
+          # than silently leaving "Latest" without an installer link.
+          if ! gh release view "${engine_tag}" >/dev/null 2>&1; then
+            echo "error: engine release ${engine_tag} does not exist." >&2
+            echo "native-freshness.yml pushes ${NATIVE_TAG} only after verifying" >&2
+            echo "refs/tags/${engine_tag}; investigate before retrying." >&2
+            exit 1
+          fi
+
+          gh release view "${engine_tag}" --json body -q .body > engine-notes.md
+          result="$(
+            python scripts/native_release.py installer-pointer-notes \
+              --native-tag "${NATIVE_TAG}" \
+              --notes-file engine-notes.md \
+              --output engine-notes.updated.md \
+              --repo "${REPO}"
+          )"
+          if [ "${result}" = "skip" ]; then
+            echo "${engine_tag} already points at ${NATIVE_TAG}."
+          else
+            gh release edit "${engine_tag}" --notes-file engine-notes.updated.md
+            echo "${engine_tag} now points at ${NATIVE_TAG}."
+          fi

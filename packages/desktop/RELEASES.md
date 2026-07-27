@@ -27,6 +27,38 @@ for the verification scope and signing states.
   prerelease whose notes do not carry a "Superseded" notice. Verify assets with
   `sha256sum -c SHA256SUMS` and `gh attestation verify`.
 
+### The "Latest" installer pointer
+
+GitHub's `/releases/latest` excludes prereleases by definition, so it always
+resolves to an engine release — which carries no installers. A human following
+that link (it is the one cited in launch material) would otherwise find only a
+wheel and an sdist.
+
+Every engine release therefore carries a marker-delimited pointer block at the
+top of its notes naming the matching `desktop-vX.Y.Z` prerelease:
+
+```
+<!-- openadapt-installer-pointer:start -->
+...
+<!-- openadapt-installer-pointer:end -->
+```
+
+The `point-engine-release` job in `.github/workflows/native-release.yml` writes
+it. It runs on `release: published` for a non-draft `desktop-v*` prerelease, not
+on the tag push, for the same reason the supersession notice does: `publish-draft`
+creates a **draft**, whose tag page 404s publicly, and a pointer must never
+advertise a URL nobody can open. The block is rewritten in place, so republishing
+is idempotent and pointers never accumulate. If the matching engine release is
+missing the job fails loudly rather than leaving "Latest" without a link.
+
+The installers are **linked, not mirrored**. Copying ~750 MB of ad-hoc-signed and
+unsigned binaries onto the release GitHub labels "Latest" would make them its
+default download — the maturity overstatement this two-lane split exists to
+prevent — and would contradict the machine-readable selection rule below, which
+identifies installer releases by the `desktop-v` tag prefix and labels plain
+`v*` releases "CLI/engine only". Attaching installers to `vX.Y.Z` is step 1 of
+the post-signing convergence plan, not a fix for a missing link.
+
 ## Freshness automation
 
 The native lane previously lagged the engine lane because `desktop-v*` tags
