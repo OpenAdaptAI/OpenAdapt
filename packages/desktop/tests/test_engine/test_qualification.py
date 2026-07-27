@@ -29,7 +29,14 @@ from engine.qualification import (
     set_action_risk,
     set_project_minimum_effect_tier,
 )
-from engine.qualification_lifecycle import retain_run_evidence
+from engine.qualification_capabilities import (
+    collect_qualification_capabilities,
+    sign_qualification_capability_observation,
+)
+from engine.qualification_lifecycle import (
+    retain_capability_observation,
+    retain_run_evidence,
+)
 
 pytest.importorskip("openadapt_flow.qualification")
 
@@ -42,7 +49,7 @@ from openadapt_flow.ir import (  # noqa: E402
     StructuralLocator,
     Workflow,
 )
-from openadapt_flow.qualification import IdentitySignalPolicy  # noqa: E402
+from openadapt_flow.qualification import IdentitySignalPolicy, sign_case_result  # noqa: E402
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind  # noqa: E402
 from openadapt_flow.traversal import iter_workflow_steps  # noqa: E402
 
@@ -51,9 +58,7 @@ def _bundle(path: Path, *steps: Step, params: dict[str, str] | None = None) -> P
     workflow = Workflow(
         name="qualification-test",
         params=params or {},
-        param_specs={
-            name: ParamSpec(name=name) for name in (params or {})
-        },
+        param_specs={name: ParamSpec(name=name) for name in (params or {})},
         steps=list(steps),
     )
     workflow.save(path)
@@ -94,9 +99,10 @@ def test_existing_bundle_initializes_canonical_project_and_invalidates_legacy_ce
     assert result["report"]["schema_version"] == "openadapt.qualification-report/v1"
     assert result["migration_required"] is False
     assert result["project"]["environment"]["target_kind"] == "citrix"
-    assert result["project"]["environment"]["environment_digest"] == hashlib.sha256(
-        b"reference-test-environment"
-    ).hexdigest()
+    assert (
+        result["project"]["environment"]["environment_digest"]
+        == hashlib.sha256(b"reference-test-environment").hexdigest()
+    )
     assert persisted.qualification is not None
     assert persisted.manifest.provenance.certified is False
     assert persisted.manifest.provenance.policy_name is None
@@ -132,7 +138,21 @@ def test_local_case_run_is_signed_and_bound_to_exact_retained_evidence(
 ) -> None:
     bundle = _bundle(
         tmp_path / "bundle",
-        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+        Step(
+            id="submit",
+            intent="Submit",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="submit.png",
+                region=(0, 0, 20, 20),
+                click_point=(10, 10),
+                structural=StructuralLocator(
+                    automation_id="submit",
+                    role="button",
+                    name="Submit",
+                ),
+            ),
+        ),
     )
     _initialize(bundle)
     added = add_qualification_case(
@@ -159,39 +179,144 @@ def test_local_case_run_is_signed_and_bound_to_exact_retained_evidence(
     )
     prepared = prepare_local_qualification_runner(bundle, workflow_id="wf-1")
     revision = prepared["project"]["revision"]
-    evidence_path = (
-        bundle
-        / "qualification-evidence"
-        / "representative-local"
-        / "run-1"
-        / "report.json"
+    run_dir = tmp_path / "run-1"
+    run_dir.mkdir()
+    raw_report = {
+        "workflow_name": "qualification-test",
+        "started_at": "2026-07-27T12:00:00+00:00",
+        "execution_target_kind": "web",
+        "execution_profile": "standard",
+        "execution_outcome": "VERIFIED",
+        "production_eligible": True,
+        "execution_completed": True,
+        "success": True,
+        "external_network_calls": "none",
+        "outcome_envelope": {
+            "outcome": "VERIFIED",
+            "profile": "standard",
+            "production_eligible": True,
+            "execution_completed": True,
+            "required_contracts": {
+                "authorization": 1,
+                "identity": 0,
+                "postcondition": 0,
+                "effect": 0,
+            },
+            "passed_contracts": {
+                "authorization": 1,
+                "identity": 0,
+                "postcondition": 0,
+                "effect": 0,
+            },
+            "evidence_classes": ["authorization"],
+            "model_calls": 0,
+            "external_network_calls": "none",
+            "compensation_actions": 0,
+        },
+        "results": [
+            {
+                "step_id": "submit",
+                "intent": "Submit",
+                "ok": True,
+                "resolution": {
+                    "rung": "structural",
+                    "point": [10, 10],
+                    "confidence": 1.0,
+                    "elapsed_ms": 1.0,
+                },
+                "delivery_receipt": {
+                    "receipt_id": "receipt-1",
+                    "operation": "dom_click",
+                    "native": True,
+                    "delivered_at": "2026-07-27T12:00:01+00:00",
+                },
+            }
+        ],
+    }
+    report_path = run_dir / "report.json"
+    report_path.write_text(json.dumps(raw_report), encoding="utf-8")
+    evidence = retain_run_evidence(
+        bundle,
+        case_id="representative-local",
+        run_id="run-1",
+        run_dir=run_dir,
     )
-    evidence_path.parent.mkdir(parents=True)
-    evidence_path.write_text('{"execution_outcome":"VERIFIED"}', encoding="utf-8")
+    workflow = Workflow.load(bundle)
+    assert workflow.qualification is not None
+    from openadapt_flow.qualification import workflow_contract_sha256
+
+    observation = collect_qualification_capabilities(
+        raw_report,
+        expected_target_kind="web",
+        runtime_version=workflow.qualification.environment.runtime_version,
+        report_sha256=hashlib.sha256(report_path.read_bytes()).hexdigest(),
+        action_kinds={"submit": "click"},
+    )
+    signed_observation = sign_qualification_capability_observation(
+        observation,
+        project_id=workflow.qualification.project_id,
+        project_revision=workflow.qualification.revision,
+        project_contract_sha256=workflow.qualification.contract_sha256(),
+        workflow_contract_sha256=workflow_contract_sha256(workflow),
+        environment_contract_sha256=workflow.qualification.environment.contract_sha256(),
+        environment_digest=workflow.qualification.environment.environment_digest,
+        case_id="representative-local",
+        run_id="run-1",
+        attestation_key_id="openadapt-desktop-local-v1",
+        private_key=private_raw,
+    )
+    evidence.append(
+        retain_capability_observation(
+            bundle,
+            case_id="representative-local",
+            run_id="run-1",
+            observation=signed_observation.model_dump(mode="json"),
+        )
+    )
     result = record_local_qualification_result(
         bundle,
         workflow_id="wf-1",
         case_id="representative-local",
         observed_outcome="verified",
-        evidence=[
-            {
-                "kind": "run_report",
-                "sha256": hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
-                "relative_path": "representative-local/run-1/report.json",
-            }
-        ],
-        runner_capabilities=["structural_observation", "actuation"],
+        evidence=evidence,
+        capability_observation=signed_observation,
     )
-    case = next(
-        item
-        for item in result["project"]["cases"]
-        if item["id"] == "representative-local"
-    )
+    case = next(item for item in result["project"]["cases"] if item["id"] == "representative-local")
 
     assert added["project"]["cases"][-1]["input_ref"].startswith("desktop-input://")
     assert result["project"]["revision"] == revision
     assert case["results"][0]["status"] == "passed"
     assert case["results"][0]["attestation_signature"]
+
+    persisted = Workflow.load(bundle)
+    assert persisted.qualification is not None
+    persisted_case = next(
+        item
+        for item in persisted.qualification.cases
+        if item.id == "representative-local"
+    )
+    linked_result = persisted_case.results[-1]
+    later_unlinked = sign_case_result(
+        linked_result.model_copy(
+            update={
+                "evidence": [
+                    item for item in linked_result.evidence if item.kind == "run_report"
+                ],
+                "attestation_signature": "",
+            }
+        ),
+        private_key=private_raw,
+    )
+    persisted_case.results.append(later_unlinked)
+    persisted.save(bundle)
+
+    coverage = inspect_bundle(bundle, workflow_id="wf-1")["capability_coverage"]
+    case_coverage = next(
+        item for item in coverage["cases"] if item["case_id"] == "representative-local"
+    )
+    assert case_coverage["has_current_receipt"] is True
+    assert case_coverage["has_current_result"] is False
+    assert coverage["satisfied"] is False
 
 
 def test_retained_case_receipt_binds_report_without_copying_sensitive_body(
@@ -259,8 +384,7 @@ def test_inspection_exposes_durable_target_evidence_without_flattening_to_coordi
     node = inspect_bundle(bundle, workflow_id="wf-1")["graph"]["nodes"][0]
     assert node["resolution"]["top_rung"] == "structural"
     evidence = {
-        rung["name"]: (rung["present"], rung["detail"])
-        for rung in node["resolution"]["rungs"]
+        rung["name"]: (rung["present"], rung["detail"]) for rung in node["resolution"]["rungs"]
     }
     assert evidence["structural"] == (True, "submit-claim")
     assert evidence["template"] == (True, "submit.png")
@@ -301,9 +425,10 @@ def test_encrypted_bundle_inspect_mutate_and_reseal_stays_ciphertext_only(
     persisted = Workflow.load(bundle, key=key)
     assert persisted.encrypted is True
     assert persisted.manifest.encrypted is True
-    assert persisted.qualification.action_classifications[
-        "save"
-    ].classification.value == "consequential"
+    assert (
+        persisted.qualification.action_classifications["save"].classification.value
+        == "consequential"
+    )
 
 
 def test_encrypted_bundle_without_configured_key_refuses_without_disk_change(
@@ -319,9 +444,7 @@ def test_encrypted_bundle_without_configured_key_refuses_without_disk_change(
     workflow.save(bundle, encrypt=True, key=key)
     monkeypatch.delenv("OPENADAPT_BUNDLE_KEY", raising=False)
     before = {
-        path.relative_to(bundle): path.read_bytes()
-        for path in bundle.rglob("*")
-        if path.is_file()
+        path.relative_to(bundle): path.read_bytes() for path in bundle.rglob("*") if path.is_file()
     }
 
     with pytest.raises(QualificationError, match="Cannot open the sealed workflow"):
@@ -335,9 +458,7 @@ def test_encrypted_bundle_without_configured_key_refuses_without_disk_change(
         )
 
     after = {
-        path.relative_to(bundle): path.read_bytes()
-        for path in bundle.rglob("*")
-        if path.is_file()
+        path.relative_to(bundle): path.read_bytes() for path in bundle.rglob("*") if path.is_file()
     }
     assert after == before
     assert not (bundle / "workflow.json").exists()
@@ -475,9 +596,10 @@ def test_identity_control_arms_runtime_and_canonical_policy_together(
     assert action.identity_armed is True
     assert action.identity_unarmed_reason is None
     assert policy.enforcement.value == "canonical_ladder"
-    assert result["controls"]["actions"]["save"]["identity"]["policy"][
-        "enforcement"
-    ] == "canonical_ladder"
+    assert (
+        result["controls"]["actions"]["save"]["identity"]["policy"]["enforcement"]
+        == "canonical_ladder"
+    )
 
 
 def test_identity_control_refuses_missing_evidence_without_mutation(
@@ -562,12 +684,12 @@ def test_identity_editor_round_trips_exact_normalized_region_and_quorum(
     assert policy.enforcement.value == "signal_quorum"
     assert policy.quorum == 2
     signal_keys = [
-        getattr(signal, "key", getattr(signal, "field", None))
-        for signal in policy.signals
+        getattr(signal, "key", getattr(signal, "field", None)) for signal in policy.signals
     ]
-    assert [
-        value.value if hasattr(value, "value") else value for value in signal_keys
-    ] == ["record_id", "secondary_identifier"]
+    assert [value.value if hasattr(value, "value") else value for value in signal_keys] == [
+        "record_id",
+        "secondary_identifier",
+    ]
     assert policy.signals[0].match.value == "exact"
     assert policy.signals[0].normalizers == []
     assert policy.signals[1].match.value == "normalized"
@@ -585,9 +707,7 @@ def test_identity_editor_round_trips_exact_normalized_region_and_quorum(
         120,
         24,
     ]
-    refusal_codes = {
-        refusal["code"] for refusal in result["report"]["refusals"]
-    }
+    refusal_codes = {refusal["code"] for refusal in result["report"]["refusals"]}
     if "key" in IdentitySignalPolicy.model_fields:
         assert "identity_policy_unenforced" not in refusal_codes
     else:
@@ -732,12 +852,11 @@ def test_effect_control_writes_executable_contract_and_canonical_tier(
     assert binding.effect_index == 0
     assert int(binding.tier) == 2
     assert binding.effect_contract_hash == action.effects[0].contract_hash()
-    assert result["controls"]["actions"]["save"]["effects"][0][
-        "verification_tier"
-    ] == 2
-    assert persisted.qualification.action_classifications[
-        "save"
-    ].classification.value == "state_changing"
+    assert result["controls"]["actions"]["save"]["effects"][0]["verification_tier"] == 2
+    assert (
+        persisted.qualification.action_classifications["save"].classification.value
+        == "state_changing"
+    )
 
 
 def test_effect_control_refuses_unknown_parameter_without_mutation(
@@ -842,12 +961,204 @@ def test_certification_uses_canonical_refusals_instead_of_policy_only_success(
 
     assert result["certification_attempt"]["passed"] is False
     assert result["certification_current"] is False
-    assert {
-        refusal["code"] for refusal in result["certification_attempt"]["refusals"]
-    } >= {"representative_case_missing", "case_not_passed"}
+    assert {refusal["code"] for refusal in result["certification_attempt"]["refusals"]} >= {
+        "representative_case_missing",
+        "case_not_passed",
+    }
     assert persisted.qualification.last_certification is not None
     assert persisted.qualification.last_certification.passed is False
     assert persisted.manifest.provenance.certified is False
+
+
+@pytest.mark.parametrize("require_unobserved_session", [False, True])
+def test_dispatcher_signs_observed_capabilities_instead_of_requirements(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    require_unobserved_session: bool,
+) -> None:
+    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+    bundle = _bundle(
+        config.data_dir / "bundles" / "wf-1",
+        Step(
+            id="submit",
+            intent="Submit",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="submit.png",
+                region=(0, 0, 20, 20),
+                click_point=(10, 10),
+                structural=StructuralLocator(
+                    automation_id="submit",
+                    role="button",
+                    name="Submit",
+                ),
+            ),
+        ),
+    )
+    initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind="web",
+        application="Reference app",
+        application_version="1",
+        environment_label="reference-web",
+        required_capabilities=[
+            "structural_observation",
+            "actuation",
+            *(["session_continuity"] if require_unobserved_session else []),
+        ],
+        minimum_effect_tier=3,
+    )
+    add_qualification_case(
+        bundle,
+        workflow_id="wf-1",
+        case_id="representative",
+        kind="representative",
+    )
+
+    private = Ed25519PrivateKey.generate()
+    private_raw = private.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_raw = private.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    monkeypatch.setattr(
+        "engine.qualification_keys.qualification_signer",
+        lambda: (private_raw, b64encode(public_raw).decode("ascii")),
+    )
+    monkeypatch.setattr(
+        "engine.flow_bridge.FlowBridge.read_report",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("qualification must parse the exact retained report bytes")
+        ),
+    )
+
+    run_dir = config.data_dir / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "report.json").write_text(
+        json.dumps(
+            {
+                "workflow_name": "qualification-test",
+                "started_at": "2026-07-27T12:00:00+00:00",
+                "execution_target_kind": "web",
+                "execution_profile": "standard",
+                "execution_outcome": "VERIFIED",
+                "production_eligible": True,
+                "execution_completed": True,
+                "success": True,
+                "model_calls": 0,
+                "outcome_envelope": {
+                    "version": "openadapt.execution-outcome/v1",
+                    "outcome": "VERIFIED",
+                    "profile": "standard",
+                    "production_eligible": True,
+                    "execution_completed": True,
+                    "required_contracts": {
+                        "authorization": 1,
+                        "identity": 0,
+                        "postcondition": 0,
+                        "effect": 0,
+                    },
+                    "passed_contracts": {
+                        "authorization": 1,
+                        "identity": 0,
+                        "postcondition": 0,
+                        "effect": 0,
+                    },
+                    "evidence_classes": ["authorization"],
+                    "model_calls": 0,
+                    "external_network_calls": "none",
+                    "compensation_actions": 0,
+                },
+                "results": [
+                    {
+                        "step_id": "submit",
+                        "intent": "Submit",
+                        "ok": True,
+                        "resolution": {
+                            "rung": "structural",
+                            "point": [10, 10],
+                            "confidence": 1.0,
+                            "elapsed_ms": 1.0,
+                        },
+                        "delivery_receipt": {
+                            "receipt_id": "receipt-1",
+                            "operation": "dom_click",
+                            "native": True,
+                            "delivered_at": "2026-07-27T12:00:01+00:00",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    db = IndexDB(tmp_path / "index.db")
+    db.initialize()
+    db.insert_bundle("wf-1", str(bundle))
+    db.insert_run("run-1", str(run_dir), bundle_id="wf-1")
+    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
+    monkeypatch.setattr(
+        dispatcher,
+        "_replay_or_run",
+        lambda _params, *, run: {"outcome": "VERIFIED", "run_id": "run-1"},
+    )
+    try:
+        result = dispatcher.run_qualification_case(
+            workflow_id="wf-1",
+            case_id="representative",
+            target={"backend": "web"},
+        )
+    finally:
+        db.close()
+
+    representative = next(
+        item for item in result["project"]["cases"] if item["id"] == "representative"
+    )
+    case_coverage = next(
+        item
+        for item in result["capability_coverage"]["cases"]
+        if item["case_id"] == "representative"
+    )
+    expected_observed = [
+        "actuation",
+        "governed_authorization",
+        "playwright_dom",
+        "settled_state_detection",
+        "structural_observation",
+    ]
+    assert case_coverage["has_current_receipt"] is True
+    assert case_coverage["observed"] == expected_observed
+    assert case_coverage["runtime_version"] == result["project"]["environment"]["runtime_version"]
+    receipt_path = (
+        bundle
+        / "qualification-evidence"
+        / "representative"
+        / "run-1"
+        / "capability-observation.json"
+    )
+    assert json.loads(receipt_path.read_text())["attestation_signature"]
+
+    if require_unobserved_session:
+        assert result["ok"] is False
+        assert result["missing_capabilities"] == ["session_continuity"]
+        assert case_coverage["missing"] == ["session_continuity"]
+        assert case_coverage["has_current_result"] is False
+        assert representative["results"] == []
+    else:
+        assert result["ok"] is True
+        assert case_coverage["missing"] == []
+        assert case_coverage["has_current_result"] is True
+        case_result = representative["results"][0]
+        assert case_result["runner_capabilities"] == expected_observed
+        assert {item["kind"] for item in case_result["evidence"]} == {
+            "run_report",
+            "other",
+        }
 
 
 def test_dispatcher_initialization_persists_bundle_status_and_contract(
@@ -982,9 +1293,7 @@ def test_dispatcher_versions_exact_bundle_without_mutating_source(tmp_path: Path
     db.update_bundle("wf-1", workflow_name="Versioned workflow", version=1, steps=1)
     dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
     try:
-        result = dispatcher.dispatch(
-            "version_qualification_workflow", {"workflow_id": "wf-1"}
-        )
+        result = dispatcher.dispatch("version_qualification_workflow", {"workflow_id": "wf-1"})
         version = db.get_bundle(result["workflow_id"])
     finally:
         db.close()

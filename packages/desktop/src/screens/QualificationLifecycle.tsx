@@ -53,6 +53,16 @@ export function QualificationLifecycle({
     () => cases.find((item) => item.id === selectedCaseId) || cases[0],
     [cases, selectedCaseId],
   );
+  const capabilityCoverageByCase = useMemo(
+    () =>
+      new Map(
+        (project.capability_coverage?.cases || []).map((item) => [
+          item.case_id,
+          item,
+        ]),
+      ),
+    [project.capability_coverage?.cases],
+  );
 
   useEffect(() => {
     if (!selectedCaseId && cases[0]) setSelectedCaseId(cases[0].id);
@@ -225,6 +235,28 @@ export function QualificationLifecycle({
           </div>
         </div>
 
+        {(project.capability_coverage?.required.length || 0) > 0 && (
+          <div style={{ marginBottom: "var(--space-5)" }}>
+            <h3>Required versus observed runner capabilities</h3>
+            <p className="page-sub">
+              A capability counts only when the current run reports it and Desktop
+              signs that exact observation. Requirements entered during setup never
+              count as observations.
+            </p>
+            <div className="row" data-testid="qualification-capability-coverage">
+              {project.capability_coverage.required.map((capability) => {
+                const observed =
+                  project.capability_coverage.observed.includes(capability);
+                return (
+                  <Pill key={capability} tone={observed ? "ok" : "warn"}>
+                    {capability.replaceAll("_", " ")} · {observed ? "observed" : "missing"}
+                  </Pill>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <table>
           <thead>
             <tr>
@@ -235,8 +267,10 @@ export function QualificationLifecycle({
             </tr>
           </thead>
           <tbody>
-            {cases.map((item) => (
-              <tr key={item.id}>
+            {cases.map((item) => {
+              const capabilityCoverage = capabilityCoverageByCase.get(item.id);
+              return (
+                <tr key={item.id}>
                 <td>
                   <strong>{item.kind.replaceAll("_", " ")}</strong>
                   <div className="page-sub mono">{item.id}</div>
@@ -251,6 +285,14 @@ export function QualificationLifecycle({
                       ? `${item.results.length} signed`
                       : "run required"}
                   </Pill>
+                  {capabilityCoverage?.has_current_receipt && (
+                    <div className="page-sub">
+                      Observed: {capabilityCoverage.observed.join(", ") || "none"}
+                      {capabilityCoverage.missing.length > 0 && (
+                        <> · Missing: {capabilityCoverage.missing.join(", ")}</>
+                      )}
+                    </div>
+                  )}
                 </td>
                 <td className="num">
                   <Button
@@ -260,8 +302,9 @@ export function QualificationLifecycle({
                     {selectedCase?.id === item.id ? "Selected" : "Select"}
                   </Button>
                 </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 

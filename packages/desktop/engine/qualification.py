@@ -249,9 +249,7 @@ def _identity_sources(step) -> list[dict[str, Any]]:
                 "match": "Canonical Flow identity ladder",
             }
         )
-    available_sources = {
-        member.value for member in _flow_api()["IdentityEvidenceSource"]
-    }
+    available_sources = {member.value for member in _flow_api()["IdentityEvidenceSource"]}
     if "application" in available_sources:
         sources.append(
             {
@@ -342,10 +340,7 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
 
     project = workflow.qualification
     effect_policies = (
-        {
-            (item.step_id, item.effect_index): item
-            for item in project.effect_policies
-        }
+        {(item.step_id, item.effect_index): item for item in project.effect_policies}
         if project is not None
         else {}
     )
@@ -361,14 +356,10 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
         classification = (
             project.action_classifications.get(step.id) if project is not None else None
         )
-        identity_policy = (
-            project.identity_policies.get(step.id) if project is not None else None
-        )
+        identity_policy = project.identity_policies.get(step.id) if project is not None else None
         actions[node["id"]] = {
             "step_id": step.id,
-            "classification": (
-                classification.model_dump(mode="json") if classification else None
-            ),
+            "classification": (classification.model_dump(mode="json") if classification else None),
             "identity": {
                 "can_arm": bool(sources),
                 "armed": bool(step.identity_armed),
@@ -385,6 +376,93 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
             ],
         }
     return {"parameters": parameters, "actions": actions}
+
+
+def _capability_coverage(
+    bundle_dir: Path,
+    *,
+    workflow_contract_sha256: str,
+    project,
+) -> dict[str, Any]:
+    """Compare requirements with current signed runtime observations."""
+
+    if project is None:
+        return {
+            "required": [],
+            "observed": [],
+            "missing": [],
+            "satisfied": False,
+            "cases": [],
+        }
+    from engine.qualification_capabilities import (
+        current_signed_capability_observations,
+    )
+
+    required = set(project.environment.required_capabilities)
+    receipts = current_signed_capability_observations(
+        bundle_dir,
+        workflow_contract_sha256=workflow_contract_sha256,
+        project=project,
+    )
+    case_views: list[dict[str, Any]] = []
+    observed_by_all: set[str] | None = None
+    for case in (item for item in project.cases if item.required):
+        receipt = receipts.get(case.id)
+        observed = set(receipt.observed_capabilities) if receipt is not None else set()
+        receipt_relative_path = (
+            f"{case.id}/{receipt.run_id}/capability-observation.json"
+            if receipt is not None
+            else None
+        )
+        receipt_sha256 = None
+        if receipt_relative_path is not None:
+            receipt_path = bundle_dir / "qualification-evidence" / receipt_relative_path
+            if receipt_path.is_file() and not receipt_path.is_symlink():
+                receipt_sha256 = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        current_results = [
+            item for item in case.results if item.project_revision == project.revision
+        ]
+        latest_result = current_results[-1] if current_results else None
+        latest = (
+            latest_result
+            if latest_result is not None
+            and receipt_relative_path is not None
+            and receipt_sha256 is not None
+            and set(latest_result.runner_capabilities) == observed
+            and any(
+                evidence.relative_path == receipt_relative_path
+                and evidence.sha256 == receipt_sha256
+                for evidence in latest_result.evidence
+            )
+            else None
+        )
+        observed_by_all = (
+            set(observed) if observed_by_all is None else observed_by_all.intersection(observed)
+        )
+        case_views.append(
+            {
+                "case_id": case.id,
+                "has_current_receipt": receipt is not None,
+                "has_current_result": latest is not None,
+                "status": latest.status if latest is not None else None,
+                "observed": sorted(observed),
+                "missing": sorted(required - observed),
+                "runtime_version": receipt.runtime_version if receipt is not None else None,
+                "target_kind": (receipt.observed_target_kind if receipt is not None else None),
+            }
+        )
+    observed = observed_by_all or set()
+    missing = required - observed
+    has_required_case_results = bool(case_views) and all(
+        item["has_current_result"] for item in case_views
+    )
+    return {
+        "required": sorted(required),
+        "observed": sorted(observed),
+        "missing": sorted(missing),
+        "satisfied": (not required) or (has_required_case_results and not missing),
+        "cases": case_views,
+    }
 
 
 def _save(workflow, bundle_dir: Path, *, key: str | None = None) -> None:
@@ -408,10 +486,8 @@ def _certification_is_current(workflow, report, *, policy_name: str) -> bool:
         certification.passed
         and certification.project_revision == project.revision
         and certification.project_contract_sha256 == project.contract_sha256()
-        and certification.workflow_contract_sha256
-        == api["workflow_contract_sha256"](workflow)
-        and certification.environment_contract_sha256
-        == project.environment.contract_sha256()
+        and certification.workflow_contract_sha256 == api["workflow_contract_sha256"](workflow)
+        and certification.environment_contract_sha256 == project.environment.contract_sha256()
         and certification.policy_name == policy_name
         and certification.report_sha256 == report.report_sha256()
         and provenance is not None
@@ -443,6 +519,12 @@ def inspect_bundle(
     )
     provenance = workflow.manifest.provenance if workflow.manifest else None
     project = workflow.qualification
+    workflow_contract = api["workflow_contract_sha256"](workflow)
+    capability_coverage = _capability_coverage(
+        bundle_dir,
+        workflow_contract_sha256=workflow_contract,
+        project=project,
+    )
     return {
         "ok": True,
         "workflow_id": workflow_id,
@@ -451,11 +533,11 @@ def inspect_bundle(
             project.schema_version if project is not None else "openadapt.qualification-project/v1"
         ),
         "project": project.model_dump(mode="json") if project is not None else None,
+        "capability_coverage": capability_coverage,
         "migration_required": project is None,
-        "certification_current": _certification_is_current(
-            workflow,
-            report,
-            policy_name=policy.name,
+        "certification_current": (
+            capability_coverage["satisfied"]
+            and _certification_is_current(workflow, report, policy_name=policy.name)
         ),
         "report": report.model_dump(mode="json"),
         "graph": graph_payload,
@@ -501,9 +583,7 @@ def initialize_qualification(
         raise QualificationError("application and application_version are required")
     if environment_digest is None:
         if environment_label is None:
-            raise QualificationError(
-                "environment_label or an exact environment_digest is required"
-            )
+            raise QualificationError("environment_label or an exact environment_digest is required")
         environment_digest = environment_digest_from_identifier(environment_label)
     elif len(environment_digest) != 64:
         raise QualificationError("environment_digest must be a SHA-256 hex digest")
@@ -626,15 +706,11 @@ def set_action_identity_policy(
     """Arm retained evidence and persist Flow's canonical identity policy."""
 
     if enforcement not in {"canonical_ladder", "signal_quorum"}:
-        raise QualificationError(
-            "enforcement must be canonical_ladder or signal_quorum"
-        )
+        raise QualificationError("enforcement must be canonical_ladder or signal_quorum")
     api = _flow_api()
     workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is None:
-        raise QualificationError(
-            "Initialize the qualification boundary before setting identity."
-        )
+        raise QualificationError("Initialize the qualification boundary before setting identity.")
     step = _resolve_action(workflow, step_id)
     available_sources = _identity_sources(step)
     if not available_sources:
@@ -668,9 +744,7 @@ def set_action_identity_policy(
                 region = tuple(explicit_region)
             kwargs: dict[str, Any] = {
                 "source": api["IdentityEvidenceSource"](source_name),
-                "match": api["IdentityMatchMode"](
-                    str(signal.get("match") or "exact")
-                ),
+                "match": api["IdentityMatchMode"](str(signal.get("match") or "exact")),
                 "normalizers": [
                     api["IdentityNormalizer"](str(item))
                     for item in (signal.get("normalizers") or [])
@@ -706,9 +780,7 @@ def set_action_identity_policy(
                     }
                 )
             else:
-                kwargs["field"] = str(
-                    signal.get("key") or signal.get("field") or ""
-                )
+                kwargs["field"] = str(signal.get("key") or signal.get("field") or "")
             canonical_signals.append(api["IdentitySignalPolicy"](**kwargs))
         identity_policy = api["IdentityPolicy"](
             step_id=step.id,
@@ -841,17 +913,11 @@ def bind_action_effect(
     workflow = _load(bundle_dir, key=bundle_key)
     project = workflow.qualification
     if project is None:
-        raise QualificationError(
-            "Initialize the qualification boundary before binding an effect."
-        )
+        raise QualificationError("Initialize the qualification boundary before binding an effect.")
     step = _resolve_action(workflow, step_id)
     secrets = set(workflow.secret_params)
     parameters = set(workflow.params) | set(workflow.param_specs) | secrets
-    requested = {
-        name
-        for name in (match_param, value_param, idempotency_param)
-        if name is not None
-    }
+    requested = {name for name in (match_param, value_param, idempotency_param) if name is not None}
     unknown = sorted(requested - parameters)
     if unknown:
         raise QualificationError(
@@ -876,9 +942,7 @@ def bind_action_effect(
         field=field.strip() if field else None,
         value=ValueExpr(param=value_param) if value_param else None,
         expected_count=expected_count,
-        idempotency_key=(
-            ValueExpr(param=idempotency_param) if idempotency_param else None
-        ),
+        idempotency_key=(ValueExpr(param=idempotency_param) if idempotency_param else None),
         key_field=key_field.strip(),
         count_new_only=count_new_only,
         risk=step.risk,
@@ -955,9 +1019,7 @@ def add_qualification_case(
     api = _flow_api()
     workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is None:
-        raise QualificationError(
-            "Initialize the qualification boundary before adding cases."
-        )
+        raise QualificationError("Initialize the qualification boundary before adding cases.")
     try:
         case_kind = api["QualificationCaseKind"](kind)
         expected = "verified" if case_kind.value == "representative" else "halted"
@@ -996,9 +1058,7 @@ def prepare_local_qualification_runner(
     api = _flow_api()
     workflow = _load(bundle_dir, key=bundle_key)
     if workflow.qualification is None:
-        raise QualificationError(
-            "Initialize the qualification boundary before running cases."
-        )
+        raise QualificationError("Initialize the qualification boundary before running cases.")
     _private_key, public_key = qualification_signer()
     try:
         api["set_trusted_runner_key"](
@@ -1024,13 +1084,17 @@ def record_local_qualification_result(
     case_id: str,
     observed_outcome: str,
     evidence: list[dict[str, str]],
-    runner_capabilities: list[str],
+    capability_observation: Any,
     detail_code: str | None = None,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
     bundle_key: str | None = None,
 ) -> dict:
     """Sign and retain one exact local run result for the current revision."""
 
+    from engine.qualification_capabilities import (
+        SignedQualificationCapabilityObservation,
+        current_signed_capability_observations,
+    )
     from engine.qualification_keys import KEY_ID, RUNNER_ID, qualification_signer
 
     api = _flow_api()
@@ -1043,6 +1107,29 @@ def record_local_qualification_result(
     case = next((candidate for candidate in project.cases if candidate.id == case_id), None)
     if case is None:
         raise QualificationError(f"Unknown qualification case {case_id!r}")
+    observation = SignedQualificationCapabilityObservation.model_validate(capability_observation)
+    workflow_contract = api["workflow_contract_sha256"](workflow)
+    current_observations = current_signed_capability_observations(
+        bundle_dir,
+        workflow_contract_sha256=workflow_contract,
+        project=project,
+    )
+    if current_observations.get(case_id) != observation:
+        raise QualificationError(
+            "The capability observation is not the current signed receipt for this case"
+        )
+    capability_relative_path = f"{case_id}/{observation.run_id}/capability-observation.json"
+    capability_path = bundle_dir / "qualification-evidence" / capability_relative_path
+    capability_sha256 = hashlib.sha256(capability_path.read_bytes()).hexdigest()
+    if not any(
+        item.get("kind") == "other"
+        and item.get("relative_path") == capability_relative_path
+        and item.get("sha256") == capability_sha256
+        for item in evidence
+    ):
+        raise QualificationError(
+            "The signed case evidence does not hash-bind its capability receipt"
+        )
     private_key, _public_key = qualification_signer()
     observed = api["QualificationOutcome"](observed_outcome)
     status = "passed" if observed_outcome == case.expected_outcome.value and evidence else "failed"
@@ -1052,12 +1139,12 @@ def record_local_qualification_result(
             project_id=project.project_id,
             project_revision=project.revision,
             project_contract_sha256=project.contract_sha256(),
-            workflow_contract_sha256=api["workflow_contract_sha256"](workflow),
+            workflow_contract_sha256=workflow_contract,
             environment_contract_sha256=project.environment.contract_sha256(),
             environment_digest=project.environment.environment_digest,
-            runtime_version=project.environment.runtime_version,
+            runtime_version=observation.runtime_version,
             runner_id=RUNNER_ID,
-            runner_capabilities=runner_capabilities,
+            runner_capabilities=observation.observed_capabilities,
             status=status,
             observed_outcome=observed,
             evidence=evidence,
@@ -1188,6 +1275,32 @@ def certify_bundle(
             "Initialize the qualification boundary before running certification."
         )
     policy = _policy(policy_source)
+    workflow_contract = api["workflow_contract_sha256"](workflow)
+    capability_coverage = _capability_coverage(
+        bundle_dir,
+        workflow_contract_sha256=workflow_contract,
+        project=workflow.qualification,
+    )
+    candidate_report = api["evaluate_qualification"](
+        workflow,
+        policy=policy,
+        evidence_root=bundle_dir / "qualification-evidence",
+    )
+    if (
+        candidate_report.passed
+        and capability_coverage["required"]
+        and not capability_coverage["satisfied"]
+    ):
+        details = []
+        for case in capability_coverage["cases"]:
+            if case["missing"]:
+                details.append(f"{case['case_id']}: {', '.join(case['missing'])}")
+            elif not case["has_current_result"]:
+                details.append(f"{case['case_id']}: signed case result missing")
+        raise QualificationError(
+            "Certification requires current signed observed-capability evidence for "
+            "every required case" + (f" ({'; '.join(details)})" if details else "")
+        )
     try:
         report = api["certify_project"](
             workflow,

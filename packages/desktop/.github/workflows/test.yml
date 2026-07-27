@@ -59,4 +59,8 @@ jobs:
         run: uv sync --locked --extra dev --extra build
 
       - name: Exercise qualification safety contracts
-        run: uv run pytest tests/test_engine/test_qualification.py -v
+        run: >-
+          uv run pytest
+          tests/test_engine/test_qualification.py
+          tests/test_engine/test_qualification_capabilities.py
+          -v

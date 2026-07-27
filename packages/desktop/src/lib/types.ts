@@ -281,7 +281,17 @@ export interface QualificationProject {
       input_ref?: string | null;
       expected_outcome: string;
       required: boolean;
-      results: unknown[];
+      results: {
+        project_revision: number;
+        runner_capabilities: string[];
+        status: "passed" | "failed" | "blocked";
+        observed_outcome: string;
+        evidence: {
+          kind: string;
+          sha256: string;
+          relative_path: string;
+        }[];
+      }[];
     }[];
     last_certification?: {
       passed: boolean;
@@ -290,6 +300,22 @@ export interface QualificationProject {
       certified_at: string;
     } | null;
   } | null;
+  capability_coverage: {
+    required: string[];
+    observed: string[];
+    missing: string[];
+    satisfied: boolean;
+    cases: {
+      case_id: string;
+      has_current_receipt: boolean;
+      has_current_result: boolean;
+      status: "passed" | "failed" | "blocked" | null;
+      observed: string[];
+      missing: string[];
+      runtime_version: string | null;
+      target_kind: QualificationTargetKind | null;
+    }[];
+  };
   report: {
     schema_version: "openadapt.qualification-report/v1";
     passed: boolean;

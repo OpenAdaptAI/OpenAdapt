@@ -28,6 +28,7 @@ use, so constructing a dispatcher is cheap and side-effect-free.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import time
@@ -790,9 +791,7 @@ class EngineDispatcher:
                             run_kwargs["params_file"] = params_file
                         if bundle_env:
                             run_kwargs["env_overrides"] = bundle_env
-                        result = self.services.flow_bridge.run(
-                            bundle, config_path, **run_kwargs
-                        )
+                        result = self.services.flow_bridge.run(bundle, config_path, **run_kwargs)
                     else:
                         replay_kwargs: dict[str, Any] = {
                             "out_dir": run_dir,
@@ -1535,6 +1534,7 @@ class EngineDispatcher:
             record_local_qualification_result,
         )
         from engine.qualification_lifecycle import (
+            retain_capability_observation,
             retain_run_evidence,
             store_case_parameters,
         )
@@ -1571,7 +1571,7 @@ class EngineDispatcher:
                     parameters_json=str(parameters_json),
                     forbidden_keys=secret_params,
                 )
-            prepared = prepare_local_qualification_runner(
+            prepare_local_qualification_runner(
                 bundle,
                 workflow_id=workflow_id,
                 policy_source=policy,
@@ -1597,11 +1597,85 @@ class EngineDispatcher:
             run = self.services.db.get_run(run_id)
             if not run or not run.get("run_path"):
                 raise ValueError("Qualification run did not retain a local evidence directory")
+            raw_report_path = Path(str(run["run_path"])) / "report.json"
+            if not raw_report_path.is_file() or raw_report_path.is_symlink():
+                raise ValueError("Qualification run did not retain a valid report")
+            raw_report_bytes = raw_report_path.read_bytes()
+            try:
+                raw_report = json.loads(raw_report_bytes)
+            except json.JSONDecodeError as exc:
+                raise ValueError("Qualification run report is not valid JSON") from exc
+            if not isinstance(raw_report, dict):
+                raise ValueError("Qualification run report must be a JSON object")
             evidence = retain_run_evidence(
                 bundle,
                 case_id=case_id,
                 run_id=run_id,
                 run_dir=Path(str(run["run_path"])),
+                report_bytes=raw_report_bytes,
+            )
+            from openadapt_flow.traversal import iter_workflow_steps
+
+            from engine.flow_bridge import FlowBridge
+            from engine.qualification import _flow_api, _load, _runtime_version
+            from engine.qualification_capabilities import (
+                collect_qualification_capabilities,
+                sign_qualification_capability_observation,
+            )
+            from engine.qualification_keys import KEY_ID, qualification_signer
+
+            precise_outcome = str(execution.get("outcome") or "unknown")
+            if (
+                precise_outcome
+                not in {
+                    "VERIFIED",
+                    "COMPLETED_UNVERIFIED",
+                    "HALTED",
+                    "FAILED",
+                    "ROLLED_BACK",
+                }
+                or FlowBridge.classify_outcome(0, raw_report) != precise_outcome
+            ):
+                raise ValueError(
+                    "Qualification requires a complete, internally consistent "
+                    "Flow execution-outcome report"
+                )
+            workflow = _load(
+                bundle,
+                key=self._qualification_bundle_key(workflow_id),
+            )
+            project = workflow.qualification
+            if project is None:  # pragma: no cover - guarded before execution
+                raise ValueError("Qualification project disappeared during case execution")
+            actual_runtime_version = _runtime_version()
+            capability_observation = collect_qualification_capabilities(
+                raw_report,
+                expected_target_kind=project.environment.target_kind,
+                runtime_version=actual_runtime_version,
+                report_sha256=hashlib.sha256(raw_report_bytes).hexdigest(),
+                action_kinds={step.id: step.action.value for step in iter_workflow_steps(workflow)},
+            )
+            private_key, _public_key = qualification_signer()
+            signed_capability_observation = sign_qualification_capability_observation(
+                capability_observation,
+                project_id=project.project_id,
+                project_revision=project.revision,
+                project_contract_sha256=project.contract_sha256(),
+                workflow_contract_sha256=_flow_api()["workflow_contract_sha256"](workflow),
+                environment_contract_sha256=project.environment.contract_sha256(),
+                environment_digest=project.environment.environment_digest,
+                case_id=case_id,
+                run_id=run_id,
+                attestation_key_id=KEY_ID,
+                private_key=private_key,
+            )
+            evidence.append(
+                retain_capability_observation(
+                    bundle,
+                    case_id=case_id,
+                    run_id=run_id,
+                    observation=signed_capability_observation.model_dump(mode="json"),
+                )
             )
             outcome_map = {
                 "VERIFIED": "verified",
@@ -1613,20 +1687,42 @@ class EngineDispatcher:
                 "success": "completed_unverified",
                 "unknown": "failed",
             }
-            raw_outcome = str(execution.get("outcome") or "unknown")
+            raw_outcome = precise_outcome
             observed_outcome = outcome_map.get(raw_outcome, "failed")
-            capabilities = (
-                prepared.get("project", {})
-                .get("environment", {})
-                .get("required_capabilities", [])
+            missing_capabilities = sorted(
+                set(project.environment.required_capabilities)
+                - set(signed_capability_observation.observed_capabilities)
             )
+            if missing_capabilities:
+                result = inspect_bundle(
+                    bundle,
+                    workflow_id=workflow_id,
+                    policy_source=policy,
+                    bundle_key=self._qualification_bundle_key(workflow_id),
+                )
+                result.update(
+                    {
+                        "ok": False,
+                        "error": (
+                            "This exact run did not observe required runner capabilities: "
+                            + ", ".join(missing_capabilities)
+                        ),
+                        "missing_capabilities": missing_capabilities,
+                        "case_run": execution,
+                    }
+                )
+                self.services.db.update_bundle(
+                    workflow_id,
+                    status="qualification_pending",
+                )
+                return result
             result = record_local_qualification_result(
                 bundle,
                 workflow_id=workflow_id,
                 case_id=case_id,
                 observed_outcome=observed_outcome,
                 evidence=evidence,
-                runner_capabilities=[str(value) for value in capabilities],
+                capability_observation=signed_capability_observation,
                 detail_code=(
                     None if raw_outcome in {"VERIFIED", "HALTED"} else raw_outcome.lower()
                 ),
@@ -1816,6 +1912,11 @@ class EngineDispatcher:
                 workflow_id=workflow_id,
                 bundle_key=self._qualification_bundle_key(workflow_id),
             )
+            if not qualified.get("capability_coverage", {}).get("satisfied"):
+                raise ValueError(
+                    "Every required runner capability must be observed in signed "
+                    "current-revision case evidence before export"
+                )
             if not qualified.get("certification_current"):
                 raise ValueError("Certify this exact workflow version before export")
             if not qualified["graph"]["bundle"]["encrypted"]:
@@ -1861,6 +1962,11 @@ class EngineDispatcher:
                 workflow_id=workflow_id,
                 bundle_key=self._qualification_bundle_key(workflow_id),
             )
+            if not qualified.get("capability_coverage", {}).get("satisfied"):
+                raise ValueError(
+                    "Every required runner capability must be observed in signed "
+                    "current-revision case evidence before deployment"
+                )
             if not qualified.get("certification_current"):
                 raise ValueError("Certify this exact workflow version before deployment")
             if not qualified["graph"]["bundle"]["encrypted"]:
