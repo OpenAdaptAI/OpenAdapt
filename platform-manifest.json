@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.0.0",
-  "generated_at": "2026-07-26T23:59:24+00:00",
+  "generated_at": "2026-07-27T14:10:57+00:00",
   "release_channel": "beta",
   "components": {
     "launcher": {
@@ -26,21 +26,21 @@
     },
     "flow": {
       "package": "openadapt-flow",
-      "version": "1.23.0",
+      "version": "1.24.0",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_flow-1.23.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/54/f7/632b13c60ba805cfd22614dc4c73285c06c2b7d698c124d9c45104623c18/openadapt_flow-1.23.0-py3-none-any.whl",
-          "sha256": "b5d10dfc294479866d6dddd4c1a6afc9164414f0634703173b7e440dc0133bec"
+          "filename": "openadapt_flow-1.24.0-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/12/fb/86a58376c9bb7e587c45f3d1a149486053efb0ae86069b46d7581696983a/openadapt_flow-1.24.0-py3-none-any.whl",
+          "sha256": "170fdac154794292c99dc6eea6486e7a2c3fdf321bcd87976d924bccd3db4aef"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_flow-1.23.0.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/f6/e5/8957790965a0fc5cde4e8f8dc8664c3db682d1b09881abf05f013fd3f495/openadapt_flow-1.23.0.tar.gz",
-          "sha256": "b16e181ac1f8b84f825b418ca9c6608cd408bde9ccd94d0a7e62db515d2145be"
+          "filename": "openadapt_flow-1.24.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/4c/db/5b570f6511bcaed68134be094e9fc2b745f4f77c3cadf13a5d7518ac883f/openadapt_flow-1.24.0.tar.gz",
+          "sha256": "2d4702e5ccbdfed0f78063ca510dc82894a2833edbed71d77edffbd0ffebd67d"
         }
       ]
     },

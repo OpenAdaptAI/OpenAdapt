@@ -44,7 +44,7 @@ If publication or reconciliation fails, `main` remains red and the release
 workflow opens or updates a failure issue rather than weakening validation.
 
 Regenerate and commit the manifest manually after other component releases;
-the scheduled validator catches component or public-status drift.
+the daily scheduled validator catches component or public-status drift.
 
 ## How it is validated
 
@@ -52,9 +52,39 @@ the scheduled validator catches component or public-status drift.
 python scripts/validate_platform_manifest.py
 ```
 
-CI runs this on every pull request and on a schedule
+CI runs this on every pull request, on pushes to `main`, and DAILY
 (`.github/workflows/platform-manifest.yml`), so drift between the committed
-manifest and the actually published artifacts fails loudly.
+manifest and the actually published artifacts fails loudly. A component
+repository can also trigger the check immediately via a
+`component-released` `repository_dispatch`.
+
+### Why the schedule is daily and why false reds are not tolerated
+
+This manifest went stale once, and both causes are worth stating because they
+are properties of the check rather than of the manifest:
+
+1. **The staleness originates in another repository.** `openadapt-flow`
+   released 1.24.0 on 2026-07-27; nothing was committed here, so only the
+   schedule could notice. It was weekly, so the public raw.githubusercontent
+   copy could advertise superseded sha256 digests for up to seven days.
+   The schedule is now daily and the job is stdlib-only (no install, no cache),
+   costing seconds a day.
+2. **The check failed benignly after every release, so a real failure was
+   invisible.** Two conditions were classified as errors when they are normal:
+   the semantic-release version commit leaves `pyproject.toml` ahead of the
+   not-yet-reconciled manifest, and PyPI's `info.version` lags an upload by
+   minutes. Both now warn, while every digest, URL, and filename comparison
+   stays fatal. A guard that cries wolf at every release gets ignored, and
+   that is exactly what happened.
+
+A failed scheduled or dispatched run also files (or comments on) a
+`platform-manifest.json has drifted` issue, so drift has an owner rather than
+a stale red dot on a repository nobody has open.
+
+`tests/test_platform_manifest_drift.py` proves the guard FAILS on a simulated
+future release, a tampered digest, a tampered URL, and a version PyPI never
+published — and that it does NOT fail on the two transient release-time
+conditions above.
 
 Validated today:
 
@@ -63,10 +93,17 @@ Validated today:
 - Signature honesty: while `signature.value` is null, `signature.status` must
   read `unsigned (signing infrastructure pending)`. A non-null signature
   value fails validation because no verification path exists yet.
-- Repo agreement: launcher version and openadapt-* compatibility ranges match
-  `pyproject.toml`.
+- Repo agreement: openadapt-* compatibility ranges match `pyproject.toml`, and
+  the manifest's launcher version is not ahead of `pyproject.toml`'s. A
+  `pyproject.toml` ahead of the manifest is the normal in-flight-release state
+  and only warns.
 - Published-artifact agreement: component versions, artifact filenames, URLs,
-  and sha256 digests match PyPI exactly (`--offline` skips this class).
+  and sha256 digests match PyPI exactly (`--offline` skips this class). A
+  manifest version behind PyPI's latest, or naming a release PyPI never
+  published, fails; one ahead of `info.version` but already present in
+  `releases` is index propagation lag and warns, with digests still verified.
+  An unreachable PyPI warns rather than fails — it is not evidence of drift —
+  unless `--require-network` is passed.
 - Status skew: disagreement with `status.json` versions is a warning by
   default (status.json regenerates on its own cadence in `openadapt-web`);
   `--strict-status` escalates it to a failure.
