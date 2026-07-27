@@ -42,6 +42,10 @@ dependencies = [
     "cryptography>=48,<50; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     "loguru",
     "psutil",
+    # Pure-Python, dependency-free, BSD-licensed QR encoder. The mobile
+    # decision portal renders its one-use pairing link locally; nothing about
+    # a pairing ever leaves this machine to be encoded elsewhere.
+    "segno>=1.6",
     "tqdm",
 ]
 

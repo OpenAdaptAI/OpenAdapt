@@ -1,0 +1,11 @@
+{
+  "name": "OpenAdapt decisions",
+  "short_name": "OpenAdapt",
+  "description": "Answer an OpenAdapt decision from your phone.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101418",
+  "theme_color": "#101418"
+}

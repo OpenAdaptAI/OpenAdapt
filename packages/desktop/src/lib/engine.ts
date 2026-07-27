@@ -83,6 +83,18 @@ export const CMD = {
   RUNNER_STATUS: "runner_status",
   RUNNER_ENABLE: "runner_enable",
   RUNNER_DISABLE: "runner_disable",
+  // mobile attended-decision portal (engine/portal). Desktop owns lifecycle,
+  // ingress posture, QR pairing, and generic notifications — never a decision.
+  PORTAL_STATUS: "portal_status",
+  PORTAL_START: "portal_start",
+  PORTAL_STOP: "portal_stop",
+  PORTAL_CREATE_PAIRING: "portal_create_pairing",
+  PORTAL_PAIRING_STATUS: "portal_pairing_status",
+  PORTAL_APPROVE_PAIRING: "portal_approve_pairing",
+  PORTAL_CANCEL_PAIRING: "portal_cancel_pairing",
+  PORTAL_DEVICES: "portal_devices",
+  PORTAL_REVOKE_DEVICE: "portal_revoke_device",
+  PORTAL_NOTIFICATION: "portal_notification",
 } as const;
 
 /** Events the engine emits (delivered as Tauri events `engine://<name>`). */
@@ -100,6 +112,9 @@ export const EVT = {
   SIDECAR_STATE: "sidecar_state",
   PAIRING_STATE: "pairing_state",
   RUNNER_STATE: "runner_state",
+  PORTAL_STATE: "portal_state",
+  // Carries only {title, body, open_count, route}; see attentionNotification.ts.
+  ATTENTION_NOTIFICATION: "attention_notification",
 } as const;
 
 export type EngineEvent = (typeof EVT)[keyof typeof EVT];

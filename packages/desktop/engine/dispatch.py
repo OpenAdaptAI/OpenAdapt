@@ -83,6 +83,7 @@ class EngineServices:
         controller: Any = None,
         flow_bridge: Any = None,
         runner: Any = None,
+        portal: Any = None,
     ) -> None:
         self.config = config
         self._db = db
@@ -94,6 +95,9 @@ class EngineServices:
         # but it needs the dispatcher's emit callback, so the dispatcher builds
         # it lazily (tests inject a fake here).
         self.runner = runner
+        # The mobile decision portal is likewise built on first use so the
+        # engine never binds a socket or spawns a console it was not asked for.
+        self.portal = portal
 
     @property
     def db(self) -> Any:
@@ -260,6 +264,18 @@ class EngineDispatcher:
             "runner_status": self.runner_status,
             "runner_enable": self.runner_enable,
             "runner_disable": self.runner_disable,
+            # mobile attended-decision portal (Desktop owns lifecycle, ingress,
+            # QR pairing, and generic notifications -- never a decision)
+            "portal_status": self.portal_status,
+            "portal_start": self.portal_start,
+            "portal_stop": self.portal_stop,
+            "portal_create_pairing": self.portal_create_pairing,
+            "portal_pairing_status": self.portal_pairing_status,
+            "portal_approve_pairing": self.portal_approve_pairing,
+            "portal_cancel_pairing": self.portal_cancel_pairing,
+            "portal_devices": self.portal_devices,
+            "portal_revoke_device": self.portal_revoke_device,
+            "portal_notification": self.portal_notification,
         }
 
     @property
@@ -2360,6 +2376,80 @@ class EngineDispatcher:
         status = self._runner_service().disable()
         self._persist_config_key("runner_enabled", False)
         return status
+
+    # ------------------------------------------- mobile decision portal
+
+    def _portal_service(self) -> Any:
+        """Lazily build the runner-local decision portal service."""
+        if self.services.portal is None:
+            from engine.portal.service import PortalService
+
+            self.services.portal = PortalService(self.config)
+        return self.services.portal
+
+    def portal_status(self, **params: Any) -> dict:
+        """Portal lifecycle state, ingress posture, and paired devices."""
+        return self._portal_service().status()
+
+    def portal_start(self, **params: Any) -> dict:
+        """Start the portal, or fail closed with the exact misconfiguration."""
+        from engine.portal.service import PortalError
+
+        try:
+            status = self._portal_service().start()
+        except PortalError as exc:
+            # Fail loud and stay stopped. The portal never falls back to a
+            # broader bind address to make itself reachable.
+            raise ValueError(str(exc)) from None
+        self.emit("portal_state", status)
+        return status
+
+    def portal_stop(self, **params: Any) -> dict:
+        """Stop the portal and the attended console it supervises."""
+        status = self._portal_service().stop()
+        self.emit("portal_state", status)
+        return status
+
+    def portal_create_pairing(self, **params: Any) -> dict:
+        """Mint one single-use, five-minute QR pairing for a phone."""
+        return self._portal_service().create_pairing()
+
+    def portal_pairing_status(self, **params: Any) -> dict:
+        """Poll one pairing so Desktop can show the scanned device's code."""
+        return self._portal_service().pairing_status(params.get("pairing_id", ""))
+
+    def portal_approve_pairing(self, **params: Any) -> dict:
+        """Approve a scanned phone using the code that phone is displaying."""
+        return self._portal_service().approve_pairing(
+            params.get("pairing_id", ""), params.get("confirm_code", "")
+        )
+
+    def portal_cancel_pairing(self, **params: Any) -> dict:
+        """Cancel a pairing and revoke any session it minted."""
+        return self._portal_service().cancel_pairing(params.get("pairing_id", ""))
+
+    def portal_devices(self, **params: Any) -> dict:
+        """List live paired phones (never a token or its digest)."""
+        return {"devices": self._portal_service().devices()}
+
+    def portal_revoke_device(self, **params: Any) -> dict:
+        """Revoke one paired phone immediately."""
+        return self._portal_service().revoke_device(params.get("session_id", ""))
+
+    def portal_notification(self, **params: Any) -> dict:
+        """Emit the generic operating-system notification payload.
+
+        The payload is asserted generic before it is emitted, so a regression
+        that widened it would fail here rather than on a lock screen.
+        """
+        from engine.portal.notifications import assert_generic_notification
+
+        # Asserted here as well as in the portal service: this is the last
+        # point before the payload crosses into the shell's notification
+        # plugin, so a regression fails loudly instead of on a lock screen.
+        payload = assert_generic_notification(self._portal_service().notification())
+        self.emit("attention_notification", payload)
+        return payload
 
     # ------------------------------------------------------- tray UI nav
 

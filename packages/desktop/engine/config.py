@@ -207,6 +207,51 @@ class EngineConfig(BaseSettings):
         ),
     )
 
+    # --- Mobile attended-decision portal (engine/portal) ---
+    # The portal is loopback-only by default. Publishing it to a phone requires
+    # BOTH an explicit ingress mode and an explicit acknowledgement, and any
+    # incomplete combination fails closed rather than widening the bind address.
+    portal_ingress_mode: str = Field(
+        default="loopback",
+        description=(
+            "Where the decision portal is published: 'loopback' (default -- this "
+            "computer only) or 'customer_ingress' (your organization's HTTPS/VPN "
+            "hostname forwards to it)."
+        ),
+    )
+    portal_public_origin: str = Field(
+        default="",
+        description=(
+            "The exact https origin your reverse proxy or VPN publishes for this "
+            "runner, e.g. https://openadapt.clinic.example. Required for "
+            "'customer_ingress'; must not be set for 'loopback'."
+        ),
+    )
+    portal_bind_host: str = Field(
+        default="",
+        description=(
+            "Optional literal IP address the portal binds when your ingress is "
+            "not on this host. Wildcard addresses are always refused; leave "
+            "empty to keep the portal on 127.0.0.1 behind a same-host proxy."
+        ),
+    )
+    portal_ingress_acknowledged: bool = Field(
+        default=False,
+        description=(
+            "Explicit record that your organization operates the trusted "
+            "HTTPS/VPN ingress in front of this runner and has reviewed showing "
+            "protected evidence on phones. Required for 'customer_ingress'."
+        ),
+    )
+    portal_port: int = Field(
+        default=0,
+        description="Portal TCP port; 0 selects an ephemeral loopback port.",
+    )
+    portal_console_port: int = Field(
+        default=7863,
+        description="Loopback port for the supervised openadapt-flow attended console.",
+    )
+
     # --- Audit ---
     network_audit_log: bool = Field(
         default=True,

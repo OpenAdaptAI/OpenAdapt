@@ -817,3 +817,48 @@ select.input:focus {
   font: inherit;
   font-size: 20px;
 }
+
+/* decision portal — pairing panel and paired-device list */
+.pairing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.pairing-qr {
+  background: #fff;
+  padding: var(--space-3);
+  border-radius: 10px;
+  width: 196px;
+  height: 196px;
+  image-rendering: pixelated;
+}
+.pairing-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  width: 8ch;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg, #10151a);
+  color: inherit;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}

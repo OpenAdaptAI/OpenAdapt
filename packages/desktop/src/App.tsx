@@ -25,6 +25,8 @@ import { WatchRun } from "./screens/WatchRun";
 import { Teach } from "./screens/Teach";
 import { Runner } from "./screens/Runner";
 import { Settings } from "./screens/Settings";
+import { DecisionPortal } from "./screens/DecisionPortal";
+import { deliverAttentionNotification } from "./lib/attentionNotification";
 import { Qualification } from "./screens/Qualification";
 import {
   clearLocalSession,
@@ -39,6 +41,7 @@ type Route =
   | { name: "watch"; id: string; target?: ExecutionTarget }
   | { name: "teach"; id: string }
   | { name: "runner" }
+  | { name: "portal" }
   | { name: "settings" };
 
 type PairingState = {
@@ -50,6 +53,7 @@ const NAV: { route: Route["name"]; label: string; glyph: string }[] = [
   { route: "library", label: "Workflows", glyph: "▤" },
   { route: "record", label: "Record", glyph: "●" },
   { route: "runner", label: "Runner", glyph: "⇅" },
+  { route: "portal", label: "Phone", glyph: "▯" },
   { route: "settings", label: "Settings", glyph: "⚙" },
 ];
 
@@ -102,6 +106,11 @@ export default function App() {
       onEngineEvent(EVT.BREAK_COUNT, (d: { count: number }) =>
         setBreaks(d?.count ?? 0),
       ),
+      // Generic only: the payload is re-derived from the count before any
+      // operating-system notification is shown (see attentionNotification.ts).
+      onEngineEvent(EVT.ATTENTION_NOTIFICATION, (payload: unknown) => {
+        void deliverAttentionNotification(payload);
+      }),
       onEngineEvent(EVT.PAIRING_STATE, (state: PairingState) => {
         setPairing(state);
         if (state.status === "connected") {
@@ -279,6 +288,7 @@ export default function App() {
           />
         )}
         {route.name === "runner" && <Runner />}
+        {route.name === "portal" && <DecisionPortal />}
         {route.name === "settings" && (
           <Settings
             auth={auth ?? { authenticated: false }}
