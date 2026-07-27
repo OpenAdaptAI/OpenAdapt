@@ -21,7 +21,8 @@
       "unreleased_grace_hours": 4,
       "tag_without_release_grace_hours": 1,
       "pypi_lag_grace_minutes": 30,
-      "remediation": "gh workflow run release.yml --repo OpenAdaptAI/openadapt-flow --ref main -f operation=semantic-release"
+      "unreleased_remediation": "gh workflow run release.yml --repo OpenAdaptAI/openadapt-flow --ref main -f operation=semantic-release",
+      "pypi_remediation": "gh workflow run release.yml --repo OpenAdaptAI/openadapt-flow --ref main -f operation=publish-existing-ref -f ref={tag}"
     }
   ]
 }

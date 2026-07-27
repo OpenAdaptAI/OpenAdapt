@@ -81,7 +81,7 @@
     },
     {
       "path": ".github/release-health.json",
-      "sha256": "890cf7eb9449cef31cb52cf74346e48618697e6831ccb7f82ccedfb9bb73d7df"
+      "sha256": "f8d5d90650c26a5e5d44051639eff6fae32878170ba76259c5d5447ede8302ac"
     },
     {
       "path": ".github/workflows/canvas-nodom-ladder.yml",
@@ -109,7 +109,7 @@
     },
     {
       "path": ".github/workflows/release-health.yml",
-      "sha256": "67c301d999f17407717ac56f629d567f4eed524f74a51f6b0865905686a646ea"
+      "sha256": "36bbd52aeafa67f83512de6af5d0a608f20885d0c7826abe4e6fe3b772eb2b39"
     },
     {
       "path": ".github/workflows/release.yml",
