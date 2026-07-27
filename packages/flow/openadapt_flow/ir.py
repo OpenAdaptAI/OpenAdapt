@@ -247,8 +247,9 @@ class IdentityTemplate(BaseModel):
     signal_hashes: dict[str, str] = Field(
         default_factory=dict,
         description=(
-            "Salted hashes of strict exact/explicitly-normalized full-source "
-            "identity evidence. Keys are produced by identity_signals."
+            "Salted hashes of strict exact/explicitly-normalized identity "
+            "evidence, including operator-selected extracted fields. Keys are "
+            "produced by identity_signals."
         ),
     )
     context_params: list[str] = Field(

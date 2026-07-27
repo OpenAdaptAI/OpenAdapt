@@ -26,6 +26,7 @@ from openadapt_flow.qualification import (
     EnvironmentBoundary,
     IdentityPolicy,
     IdentitySignalPolicy,
+    QualificationError,
     QualificationRefusalCode,
     evaluate_qualification,
     init_project,
@@ -651,6 +652,157 @@ def test_phi_free_parameterized_signal_keeps_exact_case_semantics() -> None:
         )
         is True
     )
+
+
+def test_qualification_binds_extracted_signal_without_retaining_plaintext() -> None:
+    recorded_name = "Alice Example"
+    recorded_dob = "1970-02-03"
+    template = build_identity_template(
+        None,
+        structured_identity=(
+            '{"patient_identity":"Alice Example|1970-02-03","surface":"openemr"}'
+        ),
+        param_examples={"name": recorded_name, "dob": recorded_dob},
+        salt_hex="ef" * 16,
+    )
+    assert template is not None
+    step = _step()
+    assert step.anchor is not None
+    step.anchor.structured_identity = None
+    step.anchor.identity_template = template
+    workflow = Workflow(
+        name="phi-free-extracted-signal",
+        params={"name": recorded_name, "dob": recorded_dob},
+        steps=[step],
+    )
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="OpenEMR",
+            application_version="8.0.0.3",
+            environment_digest="b" * 64,
+            runtime_version="1.22.0",
+        ),
+    )
+    signal = IdentitySignalPolicy(
+        key="subject_name",
+        source="structured",
+        extract_pattern=r'"patient_identity":"(?P<value>[^"]+)"',
+        match="exact",
+        params=["name", "dob"],
+    )
+    policy = IdentityPolicy(step_id=step.id, signals=[signal], quorum=1)
+
+    with pytest.raises(QualificationError, match="requested executable comparison"):
+        set_identity_policy(workflow, policy)
+
+    set_identity_policy(
+        workflow,
+        policy,
+        recorded_signal_values={
+            "subject_name": f"{recorded_name}|{recorded_dob}",
+        },
+    )
+    serialized = template.model_dump_json()
+    assert recorded_name not in serialized
+    assert recorded_dob not in serialized
+
+    replayer = _replayer(None)
+    run_params = {"name": "Bob Example", "dob": "1985-06-07"}
+    live = '{"patient_identity":"Bob Example|1985-06-07","surface":"openemr"}'
+    assert (
+        replayer._compare_qualified_signal_text(
+            signal=signal,
+            anchor=step.anchor,
+            live=live,
+            params=run_params,
+            workflow=workflow,
+        )
+        == "verified"
+    )
+    assert (
+        replayer._compare_qualified_signal_text(
+            signal=signal,
+            anchor=step.anchor,
+            live=live.replace("Bob Example", "Mallory Example"),
+            params=run_params,
+            workflow=workflow,
+        )
+        == "conflict"
+    )
+
+    changed_extractor = signal.model_copy(
+        update={"extract_pattern": r'"patient_identity"\s*:\s*"(?P<value>[^"]+)"'}
+    )
+    assert (
+        verify_signal_template(
+            template,
+            source="structured",
+            match="exact",
+            normalizers=[],
+            live=live,
+            params=run_params,
+            param_examples=workflow.params,
+            parameter_names=["name", "dob"],
+            extract_pattern=changed_extractor.extract_pattern,
+        )
+        is None
+    )
+
+
+def test_failed_extracted_signal_binding_is_transactional() -> None:
+    template = build_identity_template(
+        None,
+        structured_identity="Alice Example|1970-02-03",
+        param_examples={"name": "Alice Example", "dob": "1970-02-03"},
+        salt_hex="12" * 16,
+    )
+    assert template is not None
+    step = _step()
+    assert step.anchor is not None
+    step.anchor.structured_identity = None
+    step.anchor.identity_template = template
+    workflow = Workflow(
+        name="transactional-binding",
+        params={"name": "Alice Example", "dob": "1970-02-03"},
+        steps=[step],
+    )
+    project = init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="OpenEMR",
+            application_version="8.0.0.3",
+            environment_digest="d" * 64,
+            runtime_version="1.22.0",
+        ),
+    )
+    policy = IdentityPolicy(
+        step_id=step.id,
+        signals=[
+            IdentitySignalPolicy(
+                key="subject_name",
+                source="structured",
+                extract_pattern=r"(?P<value>.+)",
+                params=["name", "dob"],
+            )
+        ],
+        quorum=1,
+    )
+    revision = project.revision
+    hashes = dict(template.signal_hashes)
+
+    with pytest.raises(QualificationError, match="operator-selected recorded value"):
+        set_identity_policy(
+            workflow,
+            policy,
+            recorded_signal_values={"subject_name": "Alice Example"},
+        )
+
+    assert project.revision == revision
+    assert project.identity_policies == {}
+    assert template.signal_hashes == hashes
 
 
 def test_signal_report_and_halt_message_do_not_contain_identity_values(

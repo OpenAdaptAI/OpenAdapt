@@ -47,7 +47,7 @@ import hmac
 import os
 import re
 from collections import Counter
-from typing import Optional
+from typing import Iterable, Optional
 
 from openadapt_flow.identity_signals import (
     normalize_signal_text,
@@ -173,6 +173,42 @@ def _add_signal_hashes(
             normalize_signal_text(parameterized, normalizers),
         )
     return used
+
+
+def qualified_signal_hash(
+    tmpl: IdentityTemplate,
+    *,
+    source: str,
+    match: str,
+    normalizers: Iterable[object],
+    extract_pattern: str,
+    recorded_value: str,
+    param_examples: dict[str, str],
+    parameter_names: list[str],
+) -> tuple[str, str, list[str]]:
+    """Build one PHI-free hash for an operator-selected identity field.
+
+    ``recorded_value`` exists only in the caller's local qualification process.
+    The returned key and HMAC contain neither that value nor the extractor
+    itself; callers persist only those two strings after verifying every named
+    workflow parameter was bound.
+    """
+
+    parameterized, used = _parameterize_structured(
+        recorded_value,
+        param_examples,
+        names=parameter_names,
+    )
+    if match == "normalized":
+        parameterized = normalize_signal_text(parameterized, normalizers)
+    key = signal_hash_key(
+        source,
+        match,
+        normalizers,
+        extract_pattern=extract_pattern,
+        parameter_names=parameter_names,
+    )
+    return key, _signal_hash(_salt_bytes(tmpl.salt), parameterized), used
 
 
 def build_identity_template(
@@ -741,13 +777,14 @@ def verify_signal_template(
     *,
     source: str,
     match: str,
-    normalizers: list[object],
+    normalizers: Iterable[object],
     live: Optional[str],
     params: Optional[dict[str, str]] = None,
     param_examples: Optional[dict[str, str]] = None,
     parameter_names: Optional[list[str]] = None,
+    extract_pattern: Optional[str] = None,
 ) -> Optional[bool]:
-    """Verify one strict full-source signal hash without exposing its value.
+    """Verify one strict signal hash without exposing its value.
 
     ``None`` means the bundle predates the requested signal hash or the live
     source was not observed. ``False`` is a definitive comparison conflict.
@@ -755,13 +792,25 @@ def verify_signal_template(
 
     if tmpl is None or live is None:
         return None
-    key = signal_hash_key(source, match, normalizers)
+    key = signal_hash_key(
+        source,
+        match,
+        normalizers,
+        extract_pattern=extract_pattern,
+        parameter_names=parameter_names or (),
+    )
     expected = tmpl.signal_hashes.get(key)
     if expected is None:
         return None
-    names = tmpl.structured_params if source == "structured" else tmpl.context_params
-    if parameter_names is not None and set(parameter_names) != set(names):
-        return None
+    source_names = (
+        tmpl.structured_params if source == "structured" else tmpl.context_params
+    )
+    if extract_pattern is not None:
+        names = parameter_names or []
+    else:
+        names = source_names
+        if parameter_names is not None and set(parameter_names) != set(names):
+            return None
     live_form = live
     if names:
         values = {**(param_examples or {}), **(params or {})}

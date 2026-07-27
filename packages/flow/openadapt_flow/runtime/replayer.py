@@ -5860,12 +5860,15 @@ class Replayer:
             # original characters so the configured match mode, not the
             # extractor, decides whether values compare equal.
             compiled = re.compile(extract_pattern, re.IGNORECASE)
-            recorded_match = compiled.search(recorded or "")
             live_match = compiled.search(live)
-            if recorded_match is None or live_match is None:
+            if live_match is None:
                 return "unverifiable"
-            recorded = recorded_match.group("value")
             live = live_match.group("value")
+            if recorded is not None:
+                recorded_match = compiled.search(recorded)
+                if recorded_match is None:
+                    return "unverifiable"
+                recorded = recorded_match.group("value")
         if recorded is not None:
             expected_form, parameter_names = parameterize_identity_text(
                 recorded,
@@ -5913,6 +5916,7 @@ class Replayer:
             params=params,
             param_examples=workflow.params,
             parameter_names=signal.params,
+            extract_pattern=extract_pattern,
         )
         if result is None:
             return "unverifiable"

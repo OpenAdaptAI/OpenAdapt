@@ -8,6 +8,7 @@ There is no fuzzy matching or OCR-confusion folding on this path.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from itertools import combinations
@@ -69,14 +70,28 @@ def signal_hash_key(
     source: object,
     match: object,
     normalizers: Iterable[object] = (),
+    *,
+    extract_pattern: str | None = None,
+    parameter_names: Iterable[str] = (),
 ) -> str:
-    """Stable key for one retained-source comparison contract."""
+    """Stable key for one retained-source comparison contract.
+
+    An extracted semantic field must never reuse the full-source hash slot.
+    Only the extractor's digest is retained, not captured identity content.
+    """
 
     source_name = source.value if hasattr(source, "value") else str(source)
     match_name = match.value if hasattr(match, "value") else str(match)
     normalized = canonical_normalizers(normalizers)
     suffix = ",".join(normalized)
-    return f"{source_name}|{match_name}|{suffix}"
+    key = f"{source_name}|{match_name}|{suffix}"
+    if extract_pattern is not None:
+        digest = hashlib.sha256(extract_pattern.encode("utf-8")).hexdigest()
+        key += f"|extract-sha256:{digest}"
+        params = ",".join(sorted(parameter_names))
+        params_digest = hashlib.sha256(params.encode("utf-8")).hexdigest()
+        key += f"|params-sha256:{params_digest}"
+    return key
 
 
 def supported_normalizer_sets() -> tuple[tuple[str, ...], ...]:

@@ -40,7 +40,7 @@ from openadapt_flow.identity_signals import (
 from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:  # pragma: no cover
-    from openadapt_flow.ir import Step, Workflow
+    from openadapt_flow.ir import IdentityTemplate, Step, Workflow
     from openadapt_flow.policy import Policy
 
 
@@ -920,8 +920,13 @@ def identity_signal_runtime_available(
         template = anchor.identity_template
         return bool(
             template
-            and set(signal.params) == set(template.structured_params)
-            and signal_hash_key(signal.source, signal.match, signal.normalizers)
+            and signal_hash_key(
+                signal.source,
+                signal.match,
+                signal.normalizers,
+                extract_pattern=signal.extract_pattern,
+                parameter_names=signal.params,
+            )
             in template.signal_hashes
         )
     if signal.source is IdentityEvidenceSource.CAPTURED_CONTEXT:
@@ -930,8 +935,13 @@ def identity_signal_runtime_available(
         template = anchor.identity_template
         return bool(
             template
-            and set(signal.params) == set(template.context_params)
-            and signal_hash_key(signal.source, signal.match, signal.normalizers)
+            and signal_hash_key(
+                signal.source,
+                signal.match,
+                signal.normalizers,
+                extract_pattern=signal.extract_pattern,
+                parameter_names=signal.params,
+            )
             in template.signal_hashes
         )
     if signal.source in {
@@ -1014,8 +1024,16 @@ def set_minimum_effect_tier(
 def set_identity_policy(
     workflow: "Workflow",
     policy: IdentityPolicy,
+    *,
+    recorded_signal_values: Optional[dict[str, str]] = None,
 ) -> QualificationProject:
-    """Set review policy for a step's existing executable identity ladder."""
+    """Set review policy for a step's existing executable identity ladder.
+
+    ``recorded_signal_values`` supplies operator-selected values only when the
+    corresponding plaintext source has already been removed from the bundle.
+    Qualification converts each value directly into an extractor-scoped HMAC;
+    neither this mapping nor its values are retained in the workflow.
+    """
 
     project = workflow.qualification
     if project is None:
@@ -1024,7 +1042,12 @@ def set_identity_policy(
     if step is None:
         raise QualificationError(f"unknown step id {policy.step_id!r}")
     available = available_identity_sources(step)
+    pending_hashes: list[tuple["IdentityTemplate", str, str]] = []
     if policy.enforcement is IdentityEnforcement.CANONICAL_LADDER:
+        if recorded_signal_values:
+            raise QualificationError(
+                "recorded identity values apply only to signal-quorum policies"
+            )
         from openadapt_flow.policy import is_identity_armed
 
         if not is_identity_armed(step) or not available:
@@ -1047,20 +1070,9 @@ def set_identity_policy(
                 "identity policy references unavailable evidence: "
                 + ", ".join(source.value for source in unavailable)
             )
-        runtime_unavailable = [
-            signal
-            for signal in policy.signals
-            if not identity_signal_runtime_available(step, signal)
-        ]
-        if runtime_unavailable:
-            raise QualificationError(
-                "identity policy references retained evidence without the "
-                "requested executable comparison: "
-                + ", ".join(
-                    f"{signal.key.value} ({signal.source.value})"
-                    for signal in runtime_unavailable
-                )
-            )
+        supplied_values = recorded_signal_values or {}
+        pending_keys: set[tuple[int, str]] = set()
+        accepted_value_keys: set[str] = set()
         for signal in policy.signals:
             unknown_params = sorted(set(signal.params).difference(workflow.params))
             if unknown_params:
@@ -1089,6 +1101,45 @@ def set_identity_policy(
                         "does not match the retained source"
                     )
                 recorded = extracted.group("value")
+            if (
+                recorded is None
+                and signal.source
+                in {
+                    IdentityEvidenceSource.STRUCTURED,
+                    IdentityEvidenceSource.CAPTURED_CONTEXT,
+                }
+                and signal.key.value in supplied_values
+            ):
+                template = anchor.identity_template
+                if template is None or signal.extract_pattern is None:
+                    raise QualificationError(
+                        f"identity signal {signal.key.value!r} has no PHI-free "
+                        "identity template to bind"
+                    )
+                from openadapt_flow.runtime.identity_template import (
+                    qualified_signal_hash,
+                )
+
+                hash_key, digest, used = qualified_signal_hash(
+                    template,
+                    source=signal.source.value,
+                    match=signal.match.value,
+                    normalizers=signal.normalizers,
+                    extract_pattern=signal.extract_pattern,
+                    recorded_value=supplied_values[signal.key.value],
+                    param_examples=workflow.params,
+                    parameter_names=signal.params,
+                )
+                missing = sorted(set(signal.params).difference(used))
+                if missing:
+                    raise QualificationError(
+                        f"identity signal {signal.key.value!r} parameter binding "
+                        "does not occupy a complete value boundary in the "
+                        "operator-selected recorded value: " + ", ".join(missing)
+                    )
+                pending_hashes.append((template, hash_key, digest))
+                pending_keys.add((id(template), hash_key))
+                accepted_value_keys.add(signal.key.value)
             if recorded is not None and signal.params:
                 _parameterized, used = parameterize_identity_text(
                     recorded,
@@ -1104,9 +1155,47 @@ def set_identity_policy(
                         "does not occupy a complete value boundary in the retained "
                         "source: " + ", ".join(missing)
                     )
-    if project.identity_policies.get(policy.step_id) == policy:
+        unused_value_keys = sorted(set(supplied_values).difference(accepted_value_keys))
+        if unused_value_keys:
+            raise QualificationError(
+                "recorded identity values were supplied for signals that do not "
+                "need a PHI-free binding: " + ", ".join(unused_value_keys)
+            )
+        runtime_unavailable = []
+        for signal in policy.signals:
+            if identity_signal_runtime_available(step, signal):
+                continue
+            anchor = step.anchor
+            assert anchor is not None
+            template = anchor.identity_template
+            pending_key = signal_hash_key(
+                signal.source,
+                signal.match,
+                signal.normalizers,
+                extract_pattern=signal.extract_pattern,
+                parameter_names=signal.params,
+            )
+            if template is not None and (id(template), pending_key) in pending_keys:
+                continue
+            runtime_unavailable.append(signal)
+        if runtime_unavailable:
+            raise QualificationError(
+                "identity policy references retained evidence without the "
+                "requested executable comparison: "
+                + ", ".join(
+                    f"{signal.key.value} ({signal.source.value})"
+                    for signal in runtime_unavailable
+                )
+            )
+    hashes_changed = any(
+        template.signal_hashes.get(key) != digest
+        for template, key, digest in pending_hashes
+    )
+    if project.identity_policies.get(policy.step_id) == policy and not hashes_changed:
         return project
     previous = project.revision_digest()
+    for template, key, digest in pending_hashes:
+        template.signal_hashes[key] = digest
     project.identity_policies[policy.step_id] = policy
     _touch(project, previous)
     _invalidate_certification(workflow)
