@@ -255,6 +255,10 @@ def _steps(arm: str, billing_base: str) -> dict[str, Step]:
                 },
                 timeout_s=5.0,
                 identity=order_identity,
+                effects=[
+                    effect.model_copy(deep=True)
+                    for effect in effects("enter_adjustment")
+                ],
             ),
         ),
         "mark_reconciled": Step(
@@ -274,6 +278,10 @@ def _steps(arm: str, billing_base: str) -> dict[str, Step]:
                 },
                 timeout_s=5.0,
                 identity=[_identity("order_id", "order_id")] if governed else [],
+                effects=[
+                    effect.model_copy(deep=True)
+                    for effect in effects("mark_reconciled")
+                ],
             ),
         ),
         "writeback_row": Step(
@@ -296,6 +304,9 @@ def _steps(arm: str, billing_base: str) -> dict[str, Step]:
                 },
                 timeout_s=5.0,
                 identity=[_identity("order_id", "order_id")] if governed else [],
+                effects=[
+                    effect.model_copy(deep=True) for effect in effects("writeback_row")
+                ],
             ),
         ),
         "writeback_summary": Step(
@@ -317,6 +328,10 @@ def _steps(arm: str, billing_base: str) -> dict[str, Step]:
                 },
                 timeout_s=5.0,
                 identity=([_identity("summary_id", "order_id")] if governed else []),
+                effects=[
+                    effect.model_copy(deep=True)
+                    for effect in effects("writeback_summary")
+                ],
             ),
         ),
     }

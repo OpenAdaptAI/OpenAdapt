@@ -119,7 +119,7 @@ class _ReadyVision(FakeVision):
         min_ratio=0.8,
         raise_on_ambiguity=False,
     ):
-        if text == "Submit target":
+        if text in {"Submit target", "Profile write completed"}:
             return SimpleNamespace(
                 point=(5, 5),
                 region=(0, 0, 10, 10),
@@ -140,7 +140,7 @@ class _ReadyVision(FakeVision):
                 text="Synthetic record",
                 region=(20, 0, 100, 10),
                 confidence=0.99,
-            )
+            ),
         ]
 
     def wait_settled_result(self, backend, **kwargs):
@@ -171,7 +171,7 @@ def _key_workflow(
     name: str,
     *,
     with_effect: bool,
-    with_postcondition: bool = False,
+    with_postcondition: bool = True,
     with_identity: bool = True,
 ) -> Workflow:
     return Workflow(
@@ -199,7 +199,7 @@ def _key_workflow(
                     [
                         Postcondition(
                             kind=PostconditionKind.TEXT_PRESENT,
-                            text="Saved",
+                            text="Profile write completed",
                         )
                     ]
                     if with_postcondition
@@ -974,7 +974,7 @@ def test_standard_verified_run_records_tiered_effect_evidence(tmp_path):
     assert report.outcome_envelope.required_contracts.model_dump() == {
         "authorization": 1,
         "identity": 1,
-        "postcondition": 0,
+        "postcondition": 1,
         "effect": 1,
     }
     assert (
@@ -985,6 +985,7 @@ def test_standard_verified_run_records_tiered_effect_evidence(tmp_path):
         "authorization",
         "effect_tier_1",
         "identity",
+        "postcondition",
     ]
     assert report.outcome_envelope.model_calls == 0
 
@@ -1540,7 +1541,7 @@ def test_demo_declared_write_requires_approval_and_stays_non_production(tmp_path
     )
     authorization = build_runtime_authorization(workflow, admitted)
     vision = FakeVision()
-    vision.text_results["Saved"] = object()
+    vision.text_results["Profile write completed"] = object()
     report = Replayer(
         FakeBackend(),
         vision=vision,

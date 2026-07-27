@@ -237,7 +237,7 @@ def test_headless_bundle_is_encrypted_and_admitted_before_any_replay(
     oracle_root = tmp_path / "oracle"
     oracle_root.mkdir()
 
-    governed, save_step_id, _verifier, report = qualification._seal_and_admit_workflow(
+    governed, save_step_id, verifier, report = qualification._seal_and_admit_workflow(
         workflow, bundle, oracle_root
     )
 
@@ -261,6 +261,43 @@ def test_headless_bundle_is_encrypted_and_admitted_before_any_replay(
         "step_001",
         "step_003",
     ]
+    project = governed.qualification
+    assert project is not None and project.last_certification is None
+    focus_classification = project.action_classifications["step_001"]
+    assert focus_classification.classification.value == "read_only"
+    assert focus_classification.operator_confirmed is True
+
+    from openadapt_flow.deployment import (
+        DeploymentConfig,
+        EffectsConfig,
+        PolicySection,
+    )
+    from openadapt_flow.execution_profiles import (
+        ExecutionProfile,
+        execution_profile_contract,
+    )
+    from openadapt_flow.run_gate import GATE_CERTIFICATION, evaluate_run_gate
+
+    production = evaluate_run_gate(
+        governed,
+        bundle_dir=bundle,
+        deployment=DeploymentConfig(
+            effects=EffectsConfig(
+                kind="document-hash",
+                root=str(oracle_root),
+                glob=qualification.ORACLE_FILENAME,
+            ),
+            policy=PolicySection(policy=str(qualification.POLICY_PATH)),
+        ),
+        effect_verifier=verifier,
+        policy_source=str(qualification.POLICY_PATH),
+        profile_contract=execution_profile_contract(ExecutionProfile.STANDARD),
+        effective_durable=True,
+        effective_require_settled=True,
+        strict_templates=True,
+        require_encryption=True,
+    )
+    assert production.gate(GATE_CERTIFICATION).passed is False
     assert not (bundle / "workflow.json").exists()
     assert (bundle / "workflow.json.enc").is_file()
     assert all(not path.is_file() for path in templates.rglob("*.png"))

@@ -23,16 +23,6 @@ The theses these pin (RFC ``docs/design/WORKFLOW_PROGRAM_IR.md`` section 4, the
 from __future__ import annotations
 
 import requests
-from openadapt_flow.runtime.actuators import ActuationStatus, ApiActuator
-from openadapt_flow.runtime.effects import (
-    Effect,
-    EffectKind,
-    RestRecordVerifier,
-)
-
-# Reuse the scripted fakes from the main replayer unit tests (pytest's prepend
-# import mode puts tests/ on sys.path).
-from tests.test_replayer import FakeBackend, FakeVision, Match
 
 from openadapt_flow.ir import (
     ActionKind,
@@ -43,7 +33,17 @@ from openadapt_flow.ir import (
     Workflow,
 )
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
+from openadapt_flow.runtime.actuators import ActuationStatus, ApiActuator
+from openadapt_flow.runtime.effects import (
+    Effect,
+    EffectKind,
+    RestRecordVerifier,
+)
 from openadapt_flow.runtime.replayer import Replayer
+
+# Reuse the scripted fakes from the main replayer unit tests (pytest's prepend
+# import mode puts tests/ on sys.path).
+from tests.test_replayer import FakeBackend, FakeVision, Match
 
 TARGET = {"patient_id": "p1", "type": "Triage"}
 
@@ -77,18 +77,18 @@ def _fault_server():
 
 
 def _api_save_workflow(
-    *, url_template="/api/encounter", effects, risk="reversible", effects_on="step"
+    *, url_template="/api/encounter", effects, risk="reversible", effects_on="both"
 ):
     """A one-step workflow: press Enter (the GUI action), but carrying an
     ApiBinding so the API tier performs the write instead. The screen
     postcondition PASSES -- the point is that the API tier bypasses it.
 
-    ``effects_on`` places the effect contract on the ``"step"`` (the canonical
-    location, verified on BOTH the API tier and a GUI fall-through) or on the
-    ``"binding"`` (the self-contained-binding case, used by the API tier when
-    the step declares none)."""
-    step_effects = effects if effects_on == "step" else []
-    binding_effects = effects if effects_on == "binding" else []
+    ``effects_on`` may place contracts on the GUI ``"step"``, API
+    ``"binding"``, or ``"both"`` paths. Production qualification requires
+    both executable paths to carry their own contracts; path-specific tests
+    use the single-path variants to prove they are never substituted."""
+    step_effects = effects if effects_on in {"step", "both"} else []
+    binding_effects = effects if effects_on in {"binding", "both"} else []
     return Workflow(
         name="api-save",
         steps=[
@@ -238,9 +238,13 @@ def test_api_write_refuted_by_record_halts(tmp_path):
         # -> HALT, even though the API returned 2xx.
         backend = GuiWritingBackend(url)
         vision = _vision_that_confirms_saved()
-        workflow = _api_save_workflow(
-            effects=[_record_written(match={"patient_id": "p2", "type": "Triage"})]
-        )
+        workflow = _api_save_workflow(effects=[_record_written()])
+        # The GUI fallback would confirm TARGET, while the API path declares a
+        # different record. API actuation must verify api_binding.effects and
+        # may never substitute the passing GUI contract.
+        workflow.steps[0].api_binding.effects = [
+            _record_written(match={"patient_id": "p2", "type": "Triage"})
+        ]
         bundle, run_dir = _dirs(tmp_path)
         replayer = Replayer(
             backend,
@@ -311,10 +315,10 @@ def test_api_binding_without_effects_is_config_error_halt(tmp_path):
     try:
         backend = GuiWritingBackend(url)
         vision = _vision_that_confirms_saved()
-        # An ApiBinding with NO effects (neither on the step nor the binding):
-        # the write could not be confirmed, so it must be refused BEFORE any
-        # request is sent.
-        workflow = _api_save_workflow(effects=[])
+        # A GUI effect must never be substituted for a missing API-path
+        # effect.  The API write could not be confirmed, so it must be refused
+        # BEFORE any request is sent even though the GUI path is verifiable.
+        workflow = _api_save_workflow(effects=[_record_written()], effects_on="step")
         bundle, run_dir = _dirs(tmp_path)
         replayer = Replayer(
             backend,

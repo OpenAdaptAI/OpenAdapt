@@ -483,12 +483,20 @@ def _accepted_contract(healthy: list[dict], drift: list[dict]) -> bool:
 
 def _seal_and_admit_workflow(workflow, bundle_dir: Path, oracle_root: Path):
     """Bind the qualification policy/effect and return a governed bundle."""
+    from openadapt_flow import __version__
     from openadapt_flow.deployment import DeploymentConfig, EffectsConfig, PolicySection
     from openadapt_flow.ir import (
         ActionKind,
         Postcondition,
         PostconditionKind,
         Workflow,
+    )
+    from openadapt_flow.qualification import (
+        ActionRiskClass,
+        ActionRiskClassification,
+        EnvironmentBoundary,
+        init_project,
+        set_action_classification,
     )
     from openadapt_flow.run_gate import evaluate_run_gate
     from openadapt_flow.runtime.effects import (
@@ -541,6 +549,45 @@ def _seal_and_admit_workflow(workflow, bundle_dir: Path, oracle_root: Path):
             key_field="name",
         )
     ]
+
+    # The note-field click changes only local focus. Bind that explicit
+    # operator decision through the real qualification project API before the
+    # policy gate certifies and seals this exact workflow. A prose marker alone
+    # has no authority.
+    environment_payload = json.dumps(
+        {
+            "application": "rdp-ladder-tk-kiosk",
+            "policy_sha256": hashlib.sha256(POLICY_PATH.read_bytes()).hexdigest(),
+            "surface": "freerdp3-roundtrip",
+            "viewport": VIEWPORT,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="rdp",
+            application="RDP ladder Tk kiosk",
+            application_version=RESULT_SCHEMA,
+            environment_digest=hashlib.sha256(environment_payload).hexdigest(),
+            runtime_version=__version__,
+            required_capabilities=[
+                "document-hash-effect",
+                "pixel-identity",
+                "vision-only-resolution",
+            ],
+        ),
+    )
+    set_action_classification(
+        workflow,
+        ActionRiskClassification(
+            step_id="step_001",
+            classification=ActionRiskClass.READ_ONLY,
+            explanation="Click focuses the fixture note field without a business write",
+            operator_confirmed=True,
+        ),
+    )
 
     # A governed run must bind policy/identity/effect decisions to an encrypted,
     # integrity-sealed bundle. The random key protects this ephemeral synthetic
@@ -621,11 +668,6 @@ def run_qualification(
         rec_dir,
         bundle_dir,
         name="rdp-vision-ladder",
-        # The second pointer event only focuses the known note field.  Its
-        # blank visual label is conservatively classified as consequential by
-        # default; qualification explicitly records the fixture-specific
-        # override instead of weakening that fail-safe classifier.
-        risk_overrides={"step_001": "reversible"},
     )
     workflow, save_step_id, verifier, gate_report = _seal_and_admit_workflow(
         workflow, bundle_dir, oracle_root

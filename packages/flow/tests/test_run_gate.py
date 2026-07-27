@@ -33,6 +33,15 @@ from openadapt_flow.ir import (
     StructuralLocator,
     Workflow,
 )
+from openadapt_flow.policy import load_policy, policy_contract_sha256
+from openadapt_flow.qualification import (
+    ActionRiskClassification,
+    EnvironmentBoundary,
+    QualificationCertification,
+    init_project,
+    set_action_classification,
+    workflow_contract_sha256,
+)
 from openadapt_flow.run_gate import (
     GATE_APPROVAL,
     GATE_CERTIFICATION,
@@ -43,11 +52,67 @@ from openadapt_flow.run_gate import (
     GATE_MANIFEST,
     build_runtime_authorization,
     evaluate_run_gate,
+    is_consequential,
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind
 
 _KEY = "correct horse battery staple"
 _PC = [Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Saved OK")]
+
+
+def test_risk_override_requires_current_hash_bound_qualification():
+    step = _click(
+        "continue",
+        "Continue to the review screen",
+        ocr="Continue",
+        risk="reversible",
+    )
+    workflow = Workflow(name="reviewed-navigation", steps=[step])
+
+    # A matching prose marker alone has no authority.
+    step.risk_explanation = "operator-qualified override: reversible"
+    step.risk_review_required = False
+    assert is_consequential(step, workflow) is True
+
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="Reference",
+            application_version="1",
+            environment_digest="a" * 64,
+            runtime_version="1.24.0",
+        ),
+    )
+    set_action_classification(
+        workflow,
+        ActionRiskClassification(
+            step_id=step.id,
+            classification="read_only",
+            explanation="Only opens the review screen",
+            operator_confirmed=True,
+        ),
+    )
+    project = workflow.qualification
+    assert project is not None
+    assert is_consequential(step, workflow) is True  # not certified yet
+
+    # A caller cannot make the downgrade authoritative by forging a matching
+    # ``passed`` bit and plausible-looking digests.  The exact policy and
+    # qualification report must independently reproduce.
+    project.last_certification = QualificationCertification(
+        project_revision=project.revision,
+        project_contract_sha256=project.contract_sha256(),
+        workflow_contract_sha256=workflow_contract_sha256(workflow),
+        environment_contract_sha256=project.environment.contract_sha256(),
+        policy_name="clinical-write",
+        passed=True,
+        report_sha256="b" * 64,
+    )
+    assert is_consequential(step, workflow) is True
+
+    project.revision += 1
+    assert is_consequential(step, workflow) is True
 
 
 def _click(
@@ -161,6 +226,13 @@ def test_fully_covered_bundle_is_admitted(tmp_path):
     assert report.refusals == []
     # Every gate individually passed.
     assert all(g.passed for g in report.gates)
+    assert report.policy_contract_sha256 == policy_contract_sha256(
+        load_policy("clinical-write")
+    )
+    authorization = build_runtime_authorization(wf, report)
+    assert authorization.admitted_policy_contract_sha256 == (
+        report.policy_contract_sha256
+    )
 
 
 def _runtime_interstitial(name: str = "survey") -> Interstitial:
@@ -434,6 +506,49 @@ def test_direct_api_write_cannot_use_unverified_approval(tmp_path):
     gate = report.gate(GATE_APPROVAL)
     assert gate is not None and not gate.passed
     assert "direct API write" in gate.detail
+
+
+def test_api_only_effect_never_creates_gui_unverified_write_approval(tmp_path):
+    wf = _good_workflow("api_only_approval")
+    write = wf.steps[1]
+    write.api_binding = ApiBinding(
+        url_template="/api/encounter",
+        effects=list(write.effects),
+    )
+    write.effects = []
+    wf, bundle = _seal(wf, tmp_path)
+    refused = _run(wf, bundle, verifier=False, approval_available=True)
+
+    # Even if a caller presents a structurally valid all-passing report with
+    # the approval bit set, an API-only effect cannot mint the GUI capability.
+    admitted = refused.model_copy(
+        update={
+            "gates": [
+                gate.model_copy(update={"passed": True}) for gate in refused.gates
+            ],
+            "unverified_write_approval_granted": True,
+        }
+    )
+    authorization = build_runtime_authorization(wf, admitted)
+
+    assert authorization.unverified_write_approvals == ()
+
+
+def test_binding_only_effect_cannot_cover_gui_fallback_at_admission(tmp_path):
+    wf = _good_workflow("api_binding_only")
+    write = wf.steps[1]
+    write.api_binding = ApiBinding(
+        url_template="/api/encounter",
+        effects=list(write.effects),
+    )
+    write.effects = []
+    wf, bundle = _seal(wf, tmp_path)
+
+    report = _run(wf, bundle, verifier=True)
+
+    gate = report.gate(GATE_EFFECT)
+    assert gate is not None and not gate.passed
+    assert "GUI" in gate.detail
 
 
 # ---------------------------------------------------------------------------

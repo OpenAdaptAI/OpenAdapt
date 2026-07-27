@@ -373,6 +373,8 @@ def _steps(arm: str, mailer_base: str, adjacent_invoice: str) -> dict[str, Step]
         intent: str,
         binding: ApiBinding,
     ) -> Step:
+        path_effects = effects(step_id)
+        binding.effects = [effect.model_copy(deep=True) for effect in path_effects]
         return Step(
             id=step_id,
             intent=intent,
@@ -380,7 +382,7 @@ def _steps(arm: str, mailer_base: str, adjacent_invoice: str) -> dict[str, Step]
             key="Enter",
             risk="irreversible",
             identity_armed=governed,
-            effects=effects(step_id),
+            effects=path_effects,
             api_binding=binding,
         )
 

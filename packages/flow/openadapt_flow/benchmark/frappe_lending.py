@@ -218,6 +218,9 @@ def loan_application_api_binding(
         },
         expected_status=[200],
         timeout_s=30.0,
+        effects=[
+            effect.model_copy(deep=True) for effect in loan_application_effects(spec)
+        ],
     )
 
 

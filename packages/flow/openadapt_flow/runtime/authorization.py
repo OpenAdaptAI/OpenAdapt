@@ -119,6 +119,9 @@ class GovernedRunAuthorization(BaseModel):
     bundle_content_digest: str = Field(pattern="^[a-f0-9]{64}$")
     runtime_inputs_digest: str = Field(pattern="^[a-f0-9]{64}$")
     admitted_policy_name: str
+    admitted_policy_contract_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
     execution_profile: Literal["demo", "standard", "regulated"] | None = None
     minimum_effect_tier: int | None = Field(default=None, ge=1, le=4)
     required_identity_step_ids: tuple[str, ...] = Field(default_factory=tuple)
@@ -157,6 +160,25 @@ class GovernedRunAuthorization(BaseModel):
                 "governed run authorization no longer matches the current "
                 "in-memory workflow semantics"
             )
+
+        production_qualification = (
+            self.execution_profile in {"standard", "regulated"}
+            and workflow.qualification is not None
+        )
+        if production_qualification and self.admitted_policy_contract_sha256 is None:
+            return "production qualification authorization has no exact policy digest"
+        if production_qualification:
+            assert self.admitted_policy_contract_sha256 is not None
+            from openadapt_flow.qualification import current_certification_matches
+
+            if not current_certification_matches(
+                workflow,
+                policy_contract_digest=self.admitted_policy_contract_sha256,
+            ):
+                return (
+                    "governed run authorization policy digest does not match the "
+                    "current qualification certification"
+                )
 
         steps = {step.id: step for step in iter_workflow_steps(workflow)}
         missing_identity = sorted(

@@ -10,6 +10,7 @@ import pytest
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    ApiBinding,
     Postcondition,
     PostconditionKind,
     Step,
@@ -26,6 +27,7 @@ from openadapt_flow.policy import (
     load_policy,
     step_confidence,
 )
+from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
 
 _PC = [Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Saved OK")]
 
@@ -268,6 +270,54 @@ class TestPolicyLoading:
         # Integration: the shipped strict policy refuses a gappy bundle.
         report = evaluate_policy(_gappy_workflow(), load_policy("clinical-write"))
         assert not report.passed
+
+    def test_string_marker_cannot_suppress_inferred_write(self):
+        step = _click(
+            "continue",
+            "Click Continue",
+            ocr="Continue",
+            risk="reversible",
+        )
+        step.risk_explanation = "operator-qualified override: reversible"
+        step.risk_review_required = False
+
+        report = evaluate_policy(
+            Workflow(name="forged-override", steps=[step]),
+            load_policy("clinical-write"),
+        )
+
+        assert any(
+            violation.rule == "require_reviewed_action_risk"
+            for violation in report.violations
+        )
+
+    def test_each_declared_actuation_path_needs_its_own_idempotency_key(self):
+        step = _click(
+            "step_000",
+            "click 'Save'",
+            ocr="Save",
+            risk="irreversible",
+        )
+        step.effects = [
+            Effect(
+                kind=EffectKind.RECORD_WRITTEN,
+                idempotency_key=ValueExpr(param="record_id"),
+            )
+        ]
+        step.api_binding = ApiBinding(
+            url_template="/api/records",
+            effects=[Effect(kind=EffectKind.RECORD_WRITTEN)],
+        )
+
+        report = evaluate_policy(
+            Workflow(name="alternative-paths", steps=[step]),
+            load_policy("clinical-write"),
+        )
+
+        assert any(
+            violation.rule == "require_idempotency_key_for"
+            for violation in report.violations
+        )
 
     def test_permissive_passes_clean_and_flags_unverified_write(self):
         assert evaluate_policy(_clean_workflow(), load_policy("permissive")).passed

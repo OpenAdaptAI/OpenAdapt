@@ -21,6 +21,7 @@ from __future__ import annotations
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    ApiBinding,
     Postcondition,
     PostconditionKind,
     ProgramGraph,
@@ -37,6 +38,7 @@ from openadapt_flow.policy import (
     load_policy,
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind
+from openadapt_flow.runtime_validation import workflow_risk_class
 from openadapt_flow.traversal import iter_workflow_steps
 
 _PC = [Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Saved OK")]
@@ -159,6 +161,30 @@ class TestProgramTraversal:
         codes = {f.code for f in report.findings}
         assert "unarmed_click" in codes
         assert "vacuous_postcondition" in codes
+
+    def test_program_api_and_gui_paths_are_audited_independently(self):
+        step = _write_click("w0", effects=[_effect()])
+        step.api_binding = ApiBinding(url_template="/api/record", effects=[])
+        wf = _program(step)
+
+        lint = lint_workflow(wf)
+        assert lint.effect_coverage == 0.0
+        missing = [
+            finding
+            for finding in lint.findings
+            if finding.code == "missing_effect_contract"
+        ]
+        assert len(missing) == 1 and "api" in missing[0].message
+
+        certification = evaluate_policy(wf, load_policy("clinical-write"))
+        assert "require_system_effects_for" in {
+            violation.rule for violation in certification.violations
+        }
+
+    def test_hosted_risk_class_traverses_program_actions(self):
+        wf = _program(_write_click("w0", effects=[_effect()]))
+        assert wf.steps == []
+        assert workflow_risk_class(wf) == "consequential"
 
     def test_certifier_reports_true_action_count(self):
         # The bug surface: with steps empty the naive loop saw nothing.

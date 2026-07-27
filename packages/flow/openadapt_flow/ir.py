@@ -2444,6 +2444,9 @@ class RunReport(BaseModel):
     governed_approval_source: Optional[str] = None
     governed_authorization_created_at: Optional[str] = None
     governed_policy_name: Optional[str] = None
+    governed_policy_contract_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
     governed_minimum_effect_tier: Optional[int] = Field(default=None, ge=1, le=4)
     governed_runtime_inputs_digest: Optional[str] = Field(
         default=None, pattern="^[a-f0-9]{64}$"

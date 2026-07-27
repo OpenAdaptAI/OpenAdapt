@@ -250,7 +250,9 @@ def build_effect_journal(
 
     steps_by_id = {step.id: step for step in iter_workflow_steps(workflow)}
     consequential_ids = {
-        step.id for step in iter_workflow_steps(workflow) if is_consequential(step)
+        step.id
+        for step in iter_workflow_steps(workflow)
+        if is_consequential(step, workflow)
     }
 
     journal: list[EffectJournalEntry] = []

@@ -282,13 +282,32 @@ def verify_dispatch(
             f"pins {trusted.policy!r} for this bundle",
         )
 
-    from openadapt_flow.policy import has_system_effect
-    from openadapt_flow.run_gate import is_consequential
+    from openadapt_flow.policy import project_step_safety
     from openadapt_flow.traversal import iter_workflow_steps
 
     steps = list(iter_workflow_steps(workflow))
-    consequential = [step for step in steps if is_consequential(step)]
-    effect_covered = [step for step in consequential if has_system_effect(step)]
+    projections = [
+        (
+            step,
+            project_step_safety(
+                step,
+                workflow,
+                require_current_certification=True,
+                certifying_policy_sha256=(
+                    payload.authorization.admitted_policy_contract_sha256
+                ),
+            ),
+        )
+        for step in steps
+    ]
+    consequential = [
+        step for step, projection in projections if projection.consequential
+    ]
+    effect_covered = [
+        step
+        for step, projection in projections
+        if projection.consequential and not projection.missing_effect_paths
+    ]
 
     return VerifiedDispatch(
         payload=payload,

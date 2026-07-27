@@ -199,7 +199,13 @@ def classify_execution_outcome(
     from openadapt_flow.traversal import iter_workflow_steps
 
     consequential = {
-        step.id for step in iter_workflow_steps(workflow) if is_consequential(step)
+        step.id
+        for step in iter_workflow_steps(workflow)
+        if is_consequential(
+            step,
+            workflow,
+            certifying_policy_sha256=report.governed_policy_contract_sha256,
+        )
     }
     steps_by_id = {step.id: step for step in iter_workflow_steps(workflow)}
     if workflow.program is None:
@@ -238,9 +244,9 @@ def classify_execution_outcome(
             continue
         if result.effect_approved_unverified or result.effect_verified is not True:
             return ExecutionOutcome.COMPLETED_UNVERIFIED
-        effects = step.effects or (
-            step.api_binding.effects if step.api_binding is not None else []
-        )
+        from openadapt_flow.policy import effects_for_actuation
+
+        effects = effects_for_actuation(step, result.actuation)
         if len(result.effect_contract_hashes) != len(effects):
             return ExecutionOutcome.COMPLETED_UNVERIFIED
         evidence_hashes = Counter(
@@ -376,9 +382,9 @@ def build_outcome_envelope(report: RunReport, workflow: Workflow):
             required_postconditions += postcondition_count
             if result.postconditions_ok is True:
                 passed_postconditions += postcondition_count
-            effects = step.effects or (
-                step.api_binding.effects if step.api_binding is not None else []
-            )
+            from openadapt_flow.policy import effects_for_actuation
+
+            effects = effects_for_actuation(step, result.actuation)
             required_effects += len(effects)
         if result.effect_verified is True:
             sufficient_evidence = Counter(

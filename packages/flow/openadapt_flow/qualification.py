@@ -324,11 +324,12 @@ class IdentityPolicy(BaseModel):
 
 
 class EffectVerificationPolicy(BaseModel):
-    """Evidence strength assigned to an existing ``Step.effects[index]``."""
+    """Evidence strength assigned to one exact actuation-path effect."""
 
     model_config = ConfigDict(extra="forbid")
 
     step_id: str
+    actuation_path: Literal["gui", "api"] = "gui"
     effect_index: int = Field(ge=0)
     effect_contract_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
     tier: VerificationTier
@@ -523,6 +524,10 @@ class QualificationCertification(BaseModel):
     workflow_contract_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     environment_contract_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     policy_name: str
+    policy_contract_sha256: Optional[str] = Field(
+        default=None, pattern=r"^[a-f0-9]{64}$"
+    )
+    policy_contract: Optional[dict[str, Any]] = None
     passed: bool
     report_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     certified_at: str = Field(default_factory=_now)
@@ -603,7 +608,8 @@ class QualificationProject(BaseModel):
         if len(case_ids) != len(set(case_ids)):
             raise ValueError("qualification case ids must be unique")
         effect_refs = [
-            (binding.step_id, binding.effect_index) for binding in self.effect_policies
+            (binding.step_id, binding.actuation_path, binding.effect_index)
+            for binding in self.effect_policies
         ]
         if len(effect_refs) != len(set(effect_refs)):
             raise ValueError("effect verification references must be unique")
@@ -767,10 +773,14 @@ def _steps_by_id(workflow: "Workflow") -> dict[str, "Step"]:
 def _inferred_action_classification(step: "Step") -> ActionRiskClassification:
     from openadapt_flow.ir import ActionKind
 
-    if step.risk == "irreversible":
+    effects = _declared_effects(step)
+    if step.risk_review_required:
+        classification = ActionRiskClass.UNKNOWN
+        explanation = step.risk_explanation or "compiled Flow risk requires review"
+    elif step.risk == "irreversible":
         classification = ActionRiskClass.IRREVERSIBLE
-        explanation = "compiled Flow risk is irreversible"
-    elif step.effects:
+        explanation = step.risk_explanation or "compiled Flow risk is irreversible"
+    elif effects:
         classification = ActionRiskClass.STATE_CHANGING
         explanation = "step declares a business-effect contract"
     elif step.action in {ActionKind.WAIT, ActionKind.SCROLL}:
@@ -787,16 +797,39 @@ def _inferred_action_classification(step: "Step") -> ActionRiskClassification:
     )
 
 
+def _declared_effects(step: "Step") -> list[Any]:
+    """Return effects across every declared alternative actuation path.
+
+    Runtime path selection may give a native API binding precedence over GUI
+    actuation; qualification examines the union only to establish a
+    conservative risk floor.  It does not imply that both paths execute or
+    that one path's evidence can satisfy the other's production contract.
+    """
+
+    effects = list(step.effects)
+    if step.api_binding is not None:
+        effects.extend(step.api_binding.effects)
+    return effects
+
+
+def _effect_risk_floor(step: "Step") -> Optional[ActionRiskClass]:
+    """Return the hard floor independently proved by declared effects."""
+
+    effects = _declared_effects(step)
+    if any(effect.risk.strip().lower() == "irreversible" for effect in effects):
+        return ActionRiskClass.IRREVERSIBLE
+    if effects:
+        return ActionRiskClass.STATE_CHANGING
+    return None
+
+
 def _executable_risk_floor(step: "Step") -> Optional[ActionRiskClass]:
     """Return the least-permissive class required by executable contracts."""
 
-    if step.risk == "irreversible" or any(
-        effect.risk.strip().lower() == "irreversible" for effect in step.effects
-    ):
+    effect_floor = _effect_risk_floor(step)
+    if step.risk == "irreversible" or effect_floor is ActionRiskClass.IRREVERSIBLE:
         return ActionRiskClass.IRREVERSIBLE
-    if step.effects:
-        return ActionRiskClass.STATE_CHANGING
-    return None
+    return effect_floor
 
 
 def available_identity_sources(step: "Step") -> set[IdentityEvidenceSource]:
@@ -1094,20 +1127,40 @@ def set_action_classification(
         raise QualificationError(f"unknown step id {classification.step_id!r}")
     if not classification.operator_confirmed:
         raise QualificationError("an operator classification must be confirmed")
+    effect_floor = _effect_risk_floor(step)
     if (
-        _executable_risk_floor(step) is ActionRiskClass.IRREVERSIBLE
+        effect_floor is ActionRiskClass.IRREVERSIBLE
         and classification.classification is not ActionRiskClass.IRREVERSIBLE
     ):
         raise QualificationError(
-            "an executable irreversible action cannot be down-classified"
+            "an action with an irreversible effect contract cannot be down-classified"
         )
-    if step.effects and classification.classification is ActionRiskClass.READ_ONLY:
+    if (
+        effect_floor is ActionRiskClass.STATE_CHANGING
+        and classification.classification is ActionRiskClass.READ_ONLY
+    ):
         raise QualificationError(
             "an action with a declared business effect cannot be read-only"
         )
-    if project.action_classifications.get(classification.step_id) == classification:
+    runtime_risk: Literal["reversible", "irreversible"] = (
+        "irreversible"
+        if classification.classification
+        in {ActionRiskClass.CONSEQUENTIAL, ActionRiskClass.IRREVERSIBLE}
+        else "reversible"
+    )
+    runtime_explanation = f"operator-qualified override: {runtime_risk}"
+    unchanged = (
+        project.action_classifications.get(classification.step_id) == classification
+        and step.risk == runtime_risk
+        and step.risk_explanation == runtime_explanation
+        and not step.risk_review_required
+    )
+    if unchanged:
         return project
     previous = project.revision_digest()
+    step.risk = runtime_risk
+    step.risk_explanation = runtime_explanation
+    step.risk_review_required = False
     project.action_classifications[classification.step_id] = classification
     _touch(project, previous)
     _invalidate_certification(workflow)
@@ -1148,6 +1201,7 @@ def set_effect_policy(
     step_id: str,
     effect_index: int,
     tier: VerificationTier,
+    actuation_path: Literal["gui", "api"] = "gui",
 ) -> QualificationProject:
     """Assign verification strength to an existing effect contract."""
 
@@ -1157,21 +1211,35 @@ def set_effect_policy(
     step = _steps_by_id(workflow).get(step_id)
     if step is None:
         raise QualificationError(f"unknown step id {step_id!r}")
-    if effect_index < 0 or effect_index >= len(step.effects):
+    effects = (
+        step.effects
+        if actuation_path == "gui"
+        else (step.api_binding.effects if step.api_binding is not None else [])
+    )
+    if actuation_path == "api" and step.api_binding is None:
+        raise QualificationError(f"step {step_id!r} has no API actuation path")
+    if effect_index < 0 or effect_index >= len(effects):
         raise QualificationError(
-            f"effect index {effect_index} is outside step {step_id!r}"
+            f"effect index {effect_index} is outside {actuation_path} path "
+            f"for step {step_id!r}"
         )
     binding = EffectVerificationPolicy(
         step_id=step_id,
+        actuation_path=actuation_path,
         effect_index=effect_index,
-        effect_contract_hash=step.effects[effect_index].contract_hash(),
+        effect_contract_hash=effects[effect_index].contract_hash(),
         tier=tier,
     )
     current = next(
         (
             existing
             for existing in project.effect_policies
-            if (existing.step_id, existing.effect_index) == (step_id, effect_index)
+            if (
+                existing.step_id,
+                existing.actuation_path,
+                existing.effect_index,
+            )
+            == (step_id, actuation_path, effect_index)
         ),
         None,
     )
@@ -1181,10 +1249,17 @@ def set_effect_policy(
     project.effect_policies = [
         existing
         for existing in project.effect_policies
-        if (existing.step_id, existing.effect_index) != (step_id, effect_index)
+        if (
+            existing.step_id,
+            existing.actuation_path,
+            existing.effect_index,
+        )
+        != (step_id, actuation_path, effect_index)
     ]
     project.effect_policies.append(binding)
-    project.effect_policies.sort(key=lambda item: (item.step_id, item.effect_index))
+    project.effect_policies.sort(
+        key=lambda item: (item.step_id, item.actuation_path, item.effect_index)
+    )
     _touch(project, previous)
     _invalidate_certification(workflow)
     return project
@@ -1304,11 +1379,13 @@ def _case_result_integrity_error(
             QualificationRefusalCode.CASE_ATTESTATION_INVALID,
             "case result signature is invalid",
         )
+    # The runner signature binds every evidence digest and relative path.  A
+    # certification operation supplies ``evidence_root`` and verifies the
+    # actual bytes.  Later admission can independently recompute the exact
+    # qualification decision from the signed, hash-bound references without
+    # copying sensitive evidence into the portable bundle.
     if evidence_root is None:
-        return (
-            QualificationRefusalCode.CASE_EVIDENCE_UNVERIFIED,
-            "an evidence root is required to verify qualification evidence",
-        )
+        return None
     root = evidence_root.resolve()
     for evidence in result.evidence:
         candidate = root.joinpath(*PurePosixPath(evidence.relative_path).parts)
@@ -1558,7 +1635,7 @@ def evaluate_qualification(
     identity_covered = 0
     effect_covered = 0
     effect_bindings = {
-        (binding.step_id, binding.effect_index): binding
+        (binding.step_id, binding.actuation_path, binding.effect_index): binding
         for binding in project.effect_policies
     }
 
@@ -1645,75 +1722,91 @@ def evaluate_qualification(
     effect_required_steps = state_changing_steps + consequential_steps
     consequential_ids = {step.id for step in consequential_steps}
     for step in effect_required_steps:
-        if not step.effects:
-            refusals.append(
-                QualificationRefusal(
-                    code=QualificationRefusalCode.EFFECT_CONTRACT_MISSING,
-                    path=f"steps.{step.id}.effects",
-                    step_id=step.id,
-                    message="state-changing action declares no effect contract",
-                )
-            )
-            continue
-
         step_effects_covered = True
-        for index, effect in enumerate(step.effects):
-            binding = effect_bindings.get((step.id, index))
-            path = f"qualification.effect_policies.{step.id}.{index}"
-            if binding is None:
+        from openadapt_flow.policy import iter_effect_paths
+
+        for actuation_path, path_effects in iter_effect_paths(step):
+            if not path_effects:
                 step_effects_covered = False
                 refusals.append(
                     QualificationRefusal(
-                        code=QualificationRefusalCode.EFFECT_POLICY_MISSING,
-                        path=path,
+                        code=QualificationRefusalCode.EFFECT_CONTRACT_MISSING,
+                        path=f"steps.{step.id}.{actuation_path}.effects",
                         step_id=step.id,
-                        message=f"effect {index} has no verification-strength policy",
+                        message=(
+                            f"state-changing {actuation_path} path declares no "
+                            "effect contract; one path cannot cover another"
+                        ),
                     )
                 )
                 continue
-            if binding.effect_contract_hash != effect.contract_hash():
-                step_effects_covered = False
-                refusals.append(
-                    QualificationRefusal(
-                        code=QualificationRefusalCode.EFFECT_CONTRACT_CHANGED,
-                        path=f"{path}.effect_contract_hash",
-                        step_id=step.id,
-                        message=f"effect {index} changed after its tier was assigned",
-                    )
+            for index, effect in enumerate(path_effects):
+                binding = effect_bindings.get((step.id, actuation_path, index))
+                path = (
+                    f"qualification.effect_policies.{step.id}.{actuation_path}.{index}"
                 )
-            if not binding.tier.satisfies(project.minimum_effect_tier):
-                step_effects_covered = False
-                refusals.append(
-                    QualificationRefusal(
-                        code=QualificationRefusalCode.EFFECT_TIER_INSUFFICIENT,
-                        path=f"{path}.tier",
-                        step_id=step.id,
-                        message=(
-                            f"effect {index} tier {int(binding.tier)} is weaker than "
-                            f"required tier {int(project.minimum_effect_tier)}"
-                        ),
-                        details={
-                            "actual_tier": int(binding.tier),
-                            "minimum_tier": int(project.minimum_effect_tier),
-                        },
+                if binding is None:
+                    step_effects_covered = False
+                    refusals.append(
+                        QualificationRefusal(
+                            code=QualificationRefusalCode.EFFECT_POLICY_MISSING,
+                            path=path,
+                            step_id=step.id,
+                            message=(
+                                f"{actuation_path} effect {index} has no "
+                                "verification-strength policy"
+                            ),
+                        )
                     )
-                )
-            if (
-                step.id in consequential_ids
-                and binding.tier is VerificationTier.IMMEDIATE_SCREEN
-            ):
-                step_effects_covered = False
-                refusals.append(
-                    QualificationRefusal(
-                        code=QualificationRefusalCode.HIGH_RISK_SCREEN_ONLY,
-                        path=f"{path}.tier",
-                        step_id=step.id,
-                        message=(
-                            f"consequential effect {index} cannot qualify with "
-                            "immediate screen confirmation alone"
-                        ),
+                    continue
+                if binding.effect_contract_hash != effect.contract_hash():
+                    step_effects_covered = False
+                    refusals.append(
+                        QualificationRefusal(
+                            code=QualificationRefusalCode.EFFECT_CONTRACT_CHANGED,
+                            path=f"{path}.effect_contract_hash",
+                            step_id=step.id,
+                            message=(
+                                f"{actuation_path} effect {index} changed after "
+                                "its tier was assigned"
+                            ),
+                        )
                     )
-                )
+                if not binding.tier.satisfies(project.minimum_effect_tier):
+                    step_effects_covered = False
+                    refusals.append(
+                        QualificationRefusal(
+                            code=QualificationRefusalCode.EFFECT_TIER_INSUFFICIENT,
+                            path=f"{path}.tier",
+                            step_id=step.id,
+                            message=(
+                                f"{actuation_path} effect {index} tier "
+                                f"{int(binding.tier)} is weaker than required tier "
+                                f"{int(project.minimum_effect_tier)}"
+                            ),
+                            details={
+                                "actual_tier": int(binding.tier),
+                                "minimum_tier": int(project.minimum_effect_tier),
+                            },
+                        )
+                    )
+                if (
+                    step.id in consequential_ids
+                    and binding.tier is VerificationTier.IMMEDIATE_SCREEN
+                ):
+                    step_effects_covered = False
+                    refusals.append(
+                        QualificationRefusal(
+                            code=QualificationRefusalCode.HIGH_RISK_SCREEN_ONLY,
+                            path=f"{path}.tier",
+                            step_id=step.id,
+                            message=(
+                                f"consequential {actuation_path} effect {index} "
+                                "cannot qualify with immediate screen confirmation "
+                                "alone"
+                            ),
+                        )
+                    )
         if step_effects_covered:
             effect_covered += 1
 
@@ -1856,12 +1949,16 @@ def certify_project(
         evidence_root=evidence_root,
     )
     if project is not None:
+        from openadapt_flow.policy import policy_contract_sha256
+
         project.last_certification = QualificationCertification(
             project_revision=project.revision,
             project_contract_sha256=project.contract_sha256(),
             workflow_contract_sha256=report.workflow_contract_sha256,
             environment_contract_sha256=project.environment.contract_sha256(),
             policy_name=policy.name,
+            policy_contract_sha256=policy_contract_sha256(policy),
+            policy_contract=policy.model_dump(mode="json"),
             passed=report.passed,
             report_sha256=report.report_sha256(),
         )
@@ -1871,6 +1968,71 @@ def certify_project(
         status="certified" if report.passed else "failed",
     )
     return report
+
+
+def current_certification_matches(
+    workflow: "Workflow",
+    *,
+    policy: Optional["Policy"] = None,
+    policy_contract_digest: Optional[str] = None,
+) -> bool:
+    """Independently recompute the persisted production qualification.
+
+    The persisted ``passed`` bit is never authority.  The exact policy,
+    workflow, environment, project, signed case attestations, and resulting
+    qualification-report digest must all reproduce from current bundle state.
+    """
+
+    project = workflow.qualification
+    if project is None or project.last_certification is None:
+        return False
+    certification = project.last_certification
+    if not certification.passed:
+        return False
+
+    from openadapt_flow.policy import Policy, policy_contract_sha256
+
+    try:
+        embedded_policy = (
+            Policy.model_validate(certification.policy_contract)
+            if certification.policy_contract is not None
+            else None
+        )
+    except ValueError:
+        return False
+    if embedded_policy is None:
+        return False
+    embedded_digest = policy_contract_sha256(embedded_policy)
+    if policy is not None:
+        effective_policy = policy
+        digest = policy_contract_sha256(policy)
+        if policy_contract_digest is not None and policy_contract_digest != digest:
+            return False
+    elif policy_contract_digest is not None:
+        effective_policy = embedded_policy
+        digest = policy_contract_digest
+    else:
+        # The bundle-local copy is evidence of what was evaluated, not an
+        # authority that can bootstrap its own production policy decision.
+        return False
+    if (
+        certification.policy_name != effective_policy.name
+        or certification.policy_name != embedded_policy.name
+        or certification.policy_contract_sha256 != digest
+        or embedded_digest != digest
+    ):
+        return False
+
+    report = evaluate_qualification(workflow, policy=effective_policy)
+    return bool(
+        report.passed
+        and certification.project_revision == project.revision
+        and certification.project_contract_sha256 == project.contract_sha256()
+        and certification.workflow_contract_sha256 == report.workflow_contract_sha256
+        and certification.environment_contract_sha256
+        == project.environment.contract_sha256()
+        and certification.report_sha256 == report.report_sha256()
+    )
 
 
 def save_qualified_workflow(
@@ -1896,6 +2058,21 @@ def save_qualified_workflow(
             raise QualificationError(
                 "workflow, environment, or project changed after certification"
             )
+        if certification.passed:
+            from openadapt_flow.policy import Policy
+
+            try:
+                embedded_policy = Policy.model_validate(certification.policy_contract)
+            except ValueError:
+                _invalidate_certification(workflow)
+                raise QualificationError(
+                    "persisted certification policy contract is invalid"
+                ) from None
+            if not current_certification_matches(workflow, policy=embedded_policy):
+                _invalidate_certification(workflow)
+                raise QualificationError(
+                    "persisted certification cannot be independently reproduced"
+                )
     if workflow.encrypted:
         path = workflow.save(bundle_dir, encrypt=True, key=key)
     else:

@@ -39,7 +39,7 @@ def _step(step_id: str, *, risk: str = "reversible", effects=None) -> Step:
             template=f"{step_id}.png",
             region=(0, 0, 10, 10),
             click_point=(5, 5),
-            ocr_text="Save",
+            ocr_text="Save" if "save" in step_id else "Open",
             context_text="Row 42 Jane Doe",
         ),
         identity_armed=True,

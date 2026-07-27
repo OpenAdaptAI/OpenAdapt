@@ -779,6 +779,9 @@ class Replayer:
             report.governed_policy_name = (
                 self.governed_authorization.admitted_policy_name
             )
+            report.governed_policy_contract_sha256 = (
+                self.governed_authorization.admitted_policy_contract_sha256
+            )
             report.governed_minimum_effect_tier = (
                 self.governed_authorization.minimum_effect_tier
             )
@@ -1196,7 +1199,7 @@ class Replayer:
             anchorless_submission = step.action in (
                 ActionKind.KEY,
                 ActionKind.HOTKEY,
-            ) and is_consequential(step)
+            ) and is_consequential(step, workflow)
             if step.anchor is None and not anchorless_submission:
                 continue
             report.identity_applicable_steps += 1
@@ -1923,29 +1926,45 @@ class Replayer:
         ):
             return False
         step = state.step
-        effects = (
-            step.effects
-            or (step.api_binding.effects if step.api_binding is not None else [])
-            if step is not None
-            else []
+        if step is None:
+            return False
+        from openadapt_flow.policy import iter_effect_paths
+
+        path_keys: list[list[str]] = []
+        for _path, effects in iter_effect_paths(step):
+            if not effects:
+                continue
+            try:
+                resolved = self._resolve_effects(effects, params)
+            except Exception:
+                return False
+            path_keys.append([effect.contract_hash() for effect in resolved])
+        if not path_keys:
+            return False
+        confirmed_keys = next(
+            (
+                keys
+                for keys in path_keys
+                if all(key in self._completed_effect_keys for key in keys)
+            ),
+            None,
         )
-        if step is None or not effects:
-            return False
-        try:
-            resolved = self._resolve_effects(effects, params)
-            keys = [e.contract_hash() for e in resolved]
-        except Exception:
-            return False
-        if not keys:
-            return False
-        confirmed = all(k in self._completed_effect_keys for k in keys)
-        performed_unverified = all(
-            k in self._completed_effect_keys
-            or k in self._completed_unverified_effect_keys
-            for k in keys
+        performed_keys = next(
+            (
+                keys
+                for keys in path_keys
+                if all(
+                    key in self._completed_effect_keys
+                    or key in self._completed_unverified_effect_keys
+                    for key in keys
+                )
+            ),
+            None,
         )
-        if not confirmed and not performed_unverified:
+        if confirmed_keys is None and performed_keys is None:
             return False
+        confirmed = confirmed_keys is not None
+        keys = confirmed_keys or performed_keys or []
         result = StepResult(
             step_id=step.id,
             intent=step.intent,
@@ -2061,11 +2080,10 @@ class Replayer:
             if result.effect_approved_unverified
             else []
         )
+        from openadapt_flow.policy import effects_for_actuation
+
         declared_effects = (
-            step.effects
-            or (step.api_binding.effects if step.api_binding is not None else [])
-            if step is not None
-            else []
+            effects_for_actuation(step, result.actuation) if step is not None else []
         )
         resolved_effects = (
             [
@@ -3616,15 +3634,15 @@ class Replayer:
         assert binding is not None  # guaranteed by the caller
         assert self.api_actuator is not None  # guaranteed by the caller (line ~1140)
 
-        # An API write MUST be confirmable against the system of record --
-        # exactly as a GUI write that declares effects must be. The binding may
-        # carry its own effect contract; the step's own effects take precedence.
-        effects = step.effects or binding.effects
+        # An API write MUST be confirmable against its own exact effect
+        # contract.  ``step.effects`` belongs exclusively to the GUI fallback;
+        # substituting it here could confirm a different record or operation.
+        effects = binding.effects
         if not effects:
             result.effect_verified = False
             result.effect_results.append(
-                "API binding declares no effect to confirm the write (neither "
-                "step.effects nor api_binding.effects) -- refusing an "
+                "API binding declares no api_binding.effects contract to "
+                "confirm its write -- refusing an "
                 "unverifiable API write (fail-safe HALT)"
             )
             result.ok = False
@@ -3846,9 +3864,7 @@ class Replayer:
             before: The pre-action snapshot of the system of record.
             result: The step result to record verdicts on.
             effects: The effects to verify; defaults to ``step.effects`` (the
-                GUI path). The API tier passes ``step.effects or
-                api_binding.effects`` so a self-contained binding carries its
-                own confirmation contract.
+                GUI path). The API tier passes ``api_binding.effects`` only.
 
         Returns an error string (HALT) or None (all effects confirmed or
         reconciled).
@@ -4103,9 +4119,9 @@ class Replayer:
             result.safety_halt = True
         return error
 
-    def _step_is_consequential(self, step: Step) -> bool:
+    def _step_is_consequential(self, step: Step, workflow: Workflow) -> bool:
         authorization = self.governed_authorization
-        return is_consequential(step) or (
+        return is_consequential(step, workflow) or (
             authorization is not None
             and authorization.requires_verified_identity(step.id)
         )
@@ -4137,7 +4153,7 @@ class Replayer:
         consequential action. Browser/native surfaces use the same pre-delivery
         refresh when identity is part of the action contract.
         """
-        return self._step_is_consequential(step) and (
+        return self._step_is_consequential(step, workflow) and (
             isinstance(self.backend, RemoteActuationBackend)
             or self._step_has_identity_contract(step, workflow)
         )
@@ -4160,7 +4176,7 @@ class Replayer:
                 ActionKind.DRAG,
                 ActionKind.TYPE,
             )
-            and self._step_is_consequential(step)
+            and self._step_is_consequential(step, workflow)
             and self._step_has_identity_contract(step, workflow)
         )
 
@@ -4171,7 +4187,7 @@ class Replayer:
 
         return (
             step.action in (ActionKind.KEY, ActionKind.HOTKEY, ActionKind.TYPE)
-            and self._step_is_consequential(step)
+            and self._step_is_consequential(step, workflow)
             and self._step_has_identity_contract(step, workflow)
         )
 
@@ -4327,7 +4343,7 @@ class Replayer:
         )
         focused_element_backend = (
             arm_keyboard
-            and self._step_is_consequential(step)
+            and self._step_is_consequential(step, workflow)
             and isinstance(self.backend, RemoteActuationBackend)
             and isinstance(self.backend, FocusedElementActuationLeaseBackend)
         )

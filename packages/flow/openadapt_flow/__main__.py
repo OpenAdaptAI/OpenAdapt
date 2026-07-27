@@ -2022,6 +2022,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
             step_id=args.step,
             effect_index=args.effect_index,
             tier=VerificationTier(args.tier),
+            actuation_path=args.path,
         )
         save_qualified_workflow(workflow, args.bundle)
         print(workflow.qualification.model_dump_json(indent=2))
@@ -3654,6 +3655,12 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--step", required=True)
     q.add_argument("--effect-index", type=int, required=True)
+    q.add_argument(
+        "--path",
+        choices=("gui", "api"),
+        default="gui",
+        help="Actuation path whose effect is being qualified (default: gui)",
+    )
     q.add_argument("--tier", type=int, choices=(1, 2, 3, 4), required=True)
     q.set_defaults(func=_cmd_qualify)
 

@@ -40,12 +40,19 @@ from openadapt_flow.hosted import (
     resolve_token,
 )
 from openadapt_flow.ir import RunReport, Workflow
-from openadapt_flow.policy import evaluate_policy, lint_workflow, load_policy
+from openadapt_flow.policy import (
+    Policy,
+    evaluate_policy,
+    lint_workflow,
+    load_policy,
+    project_step_safety,
+)
 from openadapt_flow.sanitized_artifact import (
     SanitizationError,
     load_and_verify_derivative,
     load_valid_approval,
 )
+from openadapt_flow.traversal import iter_workflow_steps
 
 SCHEMA = "openadapt.runtime-validation/v2"
 LEGACY_SCHEMA = "openadapt.runtime-validation/v1"
@@ -71,11 +78,24 @@ class RuntimeValidationError(RuntimeError):
     """A runtime attestation could not be created or verified."""
 
 
-def workflow_risk_class(workflow: Workflow) -> str:
-    """Return the v1 hosted risk class derived from compiled step semantics."""
+def workflow_risk_class(
+    workflow: Workflow,
+    *,
+    certifying_policy: Optional[Policy] = None,
+) -> str:
+    """Return hosted risk from every executable program/subflow action."""
+
     return (
         "consequential"
-        if any(step.risk == "irreversible" for step in workflow.steps)
+        if any(
+            project_step_safety(
+                step,
+                workflow,
+                require_current_certification=True,
+                certifying_policy=certifying_policy,
+            ).consequential
+            for step in iter_workflow_steps(workflow)
+        )
         else "low"
     )
 
@@ -403,7 +423,14 @@ def create_runtime_validation_attestation(
         )
 
     workflow = Workflow.load(bundle_derivative)
-    derived_risk_class = workflow_risk_class(workflow)
+    try:
+        policy = load_policy(policy_source)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RuntimeValidationError(str(exc)) from exc
+    derived_risk_class = workflow_risk_class(
+        workflow,
+        certifying_policy=policy,
+    )
     if risk_class != derived_risk_class:
         raise RuntimeValidationError(
             f"Risk class {risk_class!r} does not match compiled workflow risk "
@@ -430,7 +457,11 @@ def create_runtime_validation_attestation(
             raise RuntimeValidationError(
                 "Compiler config does not match the bundle provenance"
             )
-    lint_report = lint_workflow(workflow)
+    lint_report = lint_workflow(
+        workflow,
+        require_current_risk_certification=True,
+        certifying_policy=policy,
+    )
     if lint_report.findings:
         counts = lint_report.counts()
         raise RuntimeValidationError(
@@ -438,11 +469,11 @@ def create_runtime_validation_attestation(
             f"{counts['error']} error, {counts['warn']} warn, {counts['info']} info"
         )
 
-    try:
-        policy = load_policy(policy_source)
-    except (FileNotFoundError, ValueError) as exc:
-        raise RuntimeValidationError(str(exc)) from exc
-    certification = evaluate_policy(workflow, policy)
+    certification = evaluate_policy(
+        workflow,
+        policy,
+        require_current_risk_certification=True,
+    )
     if not certification.passed:
         raise RuntimeValidationError(
             f"Certification failed under policy {certification.policy_name!r}"

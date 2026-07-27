@@ -310,6 +310,7 @@ def _workflow(arm: str, fault: str) -> Workflow:
                         "type": TARGET_TYPE,
                         "note": "{note}",
                     },
+                    effects=[effect.model_copy(deep=True) for effect in effects],
                     timeout_s=ACTUATOR_TIMEOUT_S,
                 ),
             )

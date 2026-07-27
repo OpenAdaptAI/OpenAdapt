@@ -176,6 +176,7 @@ def patient_api_binding() -> ApiBinding:
         },
         expected_status=[201],
         timeout_s=30.0,
+        effects=[effect.model_copy(deep=True) for effect in patient_effects(spec)],
     )
 
 
