@@ -131,6 +131,48 @@ def test_the_shell_is_a_responsive_pwa_and_not_a_native_project() -> None:
     assert "env(safe-area-inset-bottom)" in (SHELL / "styles.css").read_text(encoding="utf-8")
 
 
+def test_the_action_bar_is_actually_hidden_and_reserves_its_real_height() -> None:
+    """The two defects seen on a phone were both stylesheet-level.
+
+    ``hidden`` sets an attribute the user-agent stylesheet honours with
+    ``display: none``, but ANY author ``display`` outranks it -- so
+    ``.actions { display: grid }`` kept a bar on screen after a terminal
+    receipt even though ``actionBar.hidden = true`` had run. And the space the
+    page reserved for that fixed bar was a constant, which a taller action set
+    outgrew, hiding the outcome line underneath it.
+    """
+    styles = (SHELL / "styles.css").read_text(encoding="utf-8")
+    assert re.search(r"\.actions\[hidden\]\s*\{\s*display:\s*none", styles)
+    assert "var(--action-bar-height)" in styles
+    # The reserve is measured, never guessed.
+    assert not re.search(r"padding-bottom:\s*calc\([^)]*\+\s*\d+px\)", styles)
+    assert "--action-bar-height" in APP
+
+
+def test_the_shell_maps_every_receipt_outcome_and_never_defaults_to_refused() -> None:
+    """A closed receipt has no message, so the shell owns the copy.
+
+    Behaviour is covered in ``src/portalShell.test.ts``; this pins the contract
+    surface itself: every state Flow's ``HumanDecisionReceiptState`` can carry
+    must have copy here, or a real terminal outcome reaches an operator as some
+    other outcome.
+    """
+    for state in (
+        "accepted_pending_runner",
+        "completed",
+        "refused",
+        "halted",
+        "expired",
+        "delivery_uncertain",
+        "demonstration_requested",
+        "escalated",
+    ):
+        assert f'"{state}/' in APP, state
+    # The refusal copy is reachable only from an actual refusal, never as the
+    # fallback for an unrecognised reply.
+    assert "no wording for" in APP
+
+
 def test_no_native_mobile_project_was_added() -> None:
     root = Path(__file__).resolve().parents[2]
     for forbidden in ("ios", "android", "Podfile", "build.gradle"):

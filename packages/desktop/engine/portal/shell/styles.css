@@ -8,6 +8,10 @@
   --text: #eef2f6;
   --muted: #9fadbc;
   --accent: #4c9aff;
+  /* Measured from the real action bar by app.js. A constant was wrong once the
+     bar carried three two-line buttons, and the outcome line -- the last thing
+     in the card -- ended up underneath it. */
+  --action-bar-height: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -37,8 +41,10 @@ html, body {
 
 .main {
   padding: 16px;
-  /* Leave room for the fixed action bar plus the home indicator. */
-  padding-bottom: calc(env(safe-area-inset-bottom) + 200px);
+  /* Leave room for the fixed action bar plus the home indicator. The bar's own
+     height is measured at render time, so a taller or shorter action set can
+     never cover the outcome text. */
+  padding-bottom: calc(env(safe-area-inset-bottom) + var(--action-bar-height) + 32px);
   max-width: 640px;
   margin: 0 auto;
 }
@@ -137,6 +143,12 @@ html, body {
   margin: 0 auto;
 }
 
+/* `hidden` is an attribute the user-agent stylesheet honours with
+   `display: none`, but ANY author `display` beats it. Without this rule the
+   bar above stays on screen after `actionBar.hidden = true`, which is exactly
+   what was observed after a terminal receipt. */
+.actions[hidden] { display: none; }
+
 .actions button {
   min-height: 52px;
   border-radius: 12px;
@@ -145,10 +157,49 @@ html, body {
   color: var(--text);
   font: 600 16px/1.2 inherit;
   cursor: pointer;
+  display: grid;
+  gap: 3px;
+  padding: 9px 14px;
+  text-align: left;
 }
+
+.actions button .label { font-weight: 600; }
+.actions button .brief { font-weight: 400; font-size: 13px; opacity: 0.78; }
 
 .actions button.primary { background: var(--accent); border-color: var(--accent); color: #06121f; }
 .actions button[disabled] { opacity: 0.55; }
+
+.lede { font-size: 17px; margin: 0 0 10px; }
+
+.tried { margin: 14px 0; }
+.tried summary { cursor: pointer; padding: 8px 0; color: var(--accent); }
+.ladder { list-style: none; margin: 4px 0 0; padding: 0; }
+.ladder li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.ladder .verdict { color: var(--muted); text-align: right; }
+
+.recheck { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.recheck h2, .consequences h2 { font-size: 15px; margin: 0 0 8px; }
+.recheck ul { margin: 8px 0; padding-left: 20px; font-size: 14px; }
+.recheck li { margin: 4px 0; }
+
+.consequences {
+  margin: 14px 0 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+.consequences ul { list-style: none; margin: 0; padding: 0; }
+.consequences li { padding: 10px 0; border-top: 1px solid var(--line); }
+.consequences li:first-child { border-top: 0; padding-top: 0; }
+.consequences strong { display: block; font-size: 15px; margin-bottom: 3px; }
 
 @media (prefers-reduced-motion: no-preference) {
   .row:active, .actions button:active { transform: scale(0.995); }

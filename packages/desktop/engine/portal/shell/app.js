@@ -6,12 +6,50 @@
 // ACTION_WIRE below is a name mapping between the portable task vocabulary and
 // the engine's own action names -- Flow owns both, and this table mirrors its
 // `_ACTION_MAP`. It never adds, removes, or reorders an allowed action.
+//
+// The operator copy in this file is the shell's own job. Flow deliberately
+// sends closed enums and counts and no prose, because a free-text explanation
+// field is how protected content escapes a closed contract. Turning those
+// enums into sentences therefore happens here, on the phone, from values that
+// cannot carry a patient's name.
 
 const ACTION_WIRE = {
-  verify_and_resume: { wire: "continue", label: "I fixed it — verify & continue" },
-  skip: { wire: "skip", label: "Skip this step" },
-  teach: { wire: "teach", label: "Teach the correction" },
-  escalate: { wire: "escalate", label: "Needs more help" },
+  verify_and_resume: {
+    wire: "continue",
+    label: "I fixed it — check and continue",
+    // What actually changes. This is the distinction an operator could not
+    // make from three similar-looking buttons.
+    brief: "This run only",
+    consequence:
+      "OpenAdapt re-reads the live screen right now and continues only if its " +
+      "checks pass. The saved workflow is not changed, so the same drift will " +
+      "stop the next run too.",
+  },
+  skip: {
+    wire: "skip",
+    label: "Skip this step",
+    brief: "Leaves this step undone",
+    consequence:
+      "The workflow continues without this step. Offered only when the " +
+      "workflow itself declares the step skippable.",
+  },
+  teach: {
+    wire: "teach",
+    label: "Teach the correction",
+    brief: "Changes future runs",
+    consequence:
+      "Records that this drift needs a corrective demonstration. Once someone " +
+      "records it, future runs handle this on their own. Nothing continues " +
+      "right now, and the run stays paused.",
+  },
+  escalate: {
+    wire: "escalate",
+    label: "Needs more help",
+    brief: "Hands this to someone else",
+    consequence:
+      "Passes the decision on. The run stays paused exactly where it is and " +
+      "nothing in the application is touched.",
+  },
 };
 
 const DISPOSITION = {
@@ -19,6 +57,181 @@ const DISPOSITION = {
   skip: "not_applicable",
   teach: "teach_requested",
   escalate: "needs_assistance",
+};
+
+// -------------------------------------------------- the terminal receipt shape
+//
+// Flow returns a closed `HumanDecisionReceiptV1`: a `state` and a `reason_code`
+// from fixed enums, and deliberately NO message -- prose from the runner could
+// carry an operator name, an exception string, or an observed value. The phone
+// therefore owns the wording, and this is the only place it is decided.
+//
+// Every (state, reason_code) pair Flow can emit needs an entry. A pair with no
+// entry falls through to an explicitly unknown outcome rather than to a
+// refusal: rendering a real `halted` as "that decision was refused" is exactly
+// the defect this table exists to prevent.
+
+const RECEIPT_COPY = {
+  "completed/verified_and_resumed": {
+    text:
+      "Checked and continued. OpenAdapt re-read the live screen, its checks " +
+      "passed, and the workflow moved on.",
+    terminal: true,
+  },
+  "completed/skipped_and_resumed": {
+    text: "Step skipped. The workflow continued from the next step.",
+    terminal: true,
+  },
+  "halted/continuation_halted": {
+    text:
+      "OpenAdapt continued and then stopped again further on. Nothing was " +
+      "guessed. Open this run on the computer to see where it stopped.",
+    terminal: true,
+  },
+  "refused/revalidation_refused": {
+    text:
+      "OpenAdapt re-read the live screen and it is still not in the state this " +
+      "step needs, so it did nothing. Fix it in the application, then answer " +
+      "again.",
+    terminal: false,
+  },
+  "expired/expired": {
+    text:
+      "This decision expired before it reached the computer. Reload for a " +
+      "fresh one.",
+    terminal: true,
+  },
+  "delivery_uncertain/delivery_uncertain": {
+    text:
+      "This may already have been sent. Do not answer again — reconcile it on " +
+      "the computer running OpenAdapt.",
+    terminal: true,
+  },
+  "accepted_pending_runner/pending_runner": {
+    text: "Submitted. Waiting for this computer to check the live screen…",
+    terminal: false,
+    pending: true,
+  },
+  "demonstration_requested/demonstration_requested": {
+    text:
+      "Saved as a correction to teach. The run stays paused until someone " +
+      "records the new way on the computer.",
+    terminal: true,
+  },
+  "escalated/escalation_recorded": {
+    text:
+      "Escalated. The run stays paused exactly where it is until someone picks " +
+      "it up.",
+    terminal: true,
+  },
+};
+
+// Flow's own `_RECEIPT_STATE`: engine decision status -> receipt state. Kept so
+// this shell renders a runner that has not yet adopted the closed receipt
+// exactly as it renders one that has, instead of treating the older reply as a
+// refusal.
+const LEGACY_RECEIPT_STATE = {
+  prepared: ["accepted_pending_runner", "pending_runner"],
+  delivery_started: ["delivery_uncertain", "delivery_uncertain"],
+  delivery_uncertain: ["delivery_uncertain", "delivery_uncertain"],
+  completed: ["completed", "verified_and_resumed"],
+  refused: ["refused", "revalidation_refused"],
+  halted: ["halted", "continuation_halted"],
+  needs_demonstration: ["demonstration_requested", "demonstration_requested"],
+  escalated: ["escalated", "escalation_recorded"],
+};
+
+// ------------------------------------------------- describing the halted step
+//
+// Flow sends `presentation.halt`: a typed category, the step's ordinal, its
+// action kind, the target's role, and the target's label ONLY when the engine
+// proved that label is static control chrome rather than record content. When
+// it is withheld, these nouns still name the SHAPE, so "the field where you
+// typed <value>" becomes "the text field" instead of leaking.
+
+const ROLE_NOUN = {
+  button: "button",
+  checkbox: "checkbox",
+  combobox: "dropdown",
+  edit: "text field",
+  hyperlink: "link",
+  link: "link",
+  listbox: "list",
+  menubutton: "menu button",
+  menuitem: "menu item",
+  menuitemcheckbox: "menu item",
+  menuitemradio: "menu item",
+  radio: "option",
+  radiobutton: "option",
+  searchbox: "search box",
+  slider: "slider",
+  spinbutton: "number field",
+  splitbutton: "button",
+  switch: "switch",
+  tab: "tab",
+  tabitem: "tab",
+  textbox: "text field",
+  togglebutton: "switch",
+  article: "panel",
+  cell: "table cell",
+  columnheader: "column heading",
+  dataitem: "row",
+  document: "page",
+  grid: "table",
+  gridcell: "table cell",
+  group: "section",
+  heading: "heading",
+  image: "image",
+  img: "image",
+  list: "list",
+  listitem: "list item",
+  menu: "menu",
+  option: "list option",
+  region: "section",
+  row: "row",
+  rowheader: "row heading",
+  table: "table",
+  text: "text",
+  tree: "tree",
+  treeitem: "tree item",
+};
+
+const ACTION_VERB = {
+  click: "click",
+  double_click: "double-click",
+  right_click: "right-click",
+  drag: "drag",
+  type: "type into",
+  key: "press a key in",
+  hotkey: "press a shortcut in",
+  scroll: "scroll",
+  wait: "wait for",
+};
+
+const RUNG_NOUN = {
+  structural: "the page's own element identity",
+  template: "the recorded picture of the target",
+  template_global: "that picture anywhere on the screen",
+  ocr: "the target's text label",
+  geometry: "its position next to nearby text",
+  grounder: "the configured fallback locator",
+};
+
+const RUNG_VERDICT = {
+  resolved: "found it",
+  failed: "did not find it",
+  not_attempted: "nothing recorded to try",
+  not_reached: "not needed",
+  unavailable: "not available on this screen",
+  unknown: "no result recorded",
+};
+
+const RECHECK_NOUN = {
+  target_resolution: "find the target again on the live screen",
+  record_identity: "confirm the record on screen is the intended one",
+  postconditions: "confirm the screen reaches the expected state",
+  system_of_record_effects: "confirm the result in the system of record",
+  delivery_reconciliation: "reconcile an action that may already have been sent",
 };
 
 const main = document.getElementById("main");
@@ -48,13 +261,20 @@ async function api(path, options = {}) {
     headers["Content-Type"] = "application/json";
     if (csrf) headers["X-OpenAdapt-Portal-CSRF"] = csrf;
   }
-  const response = await fetch(path, {
-    ...options,
-    headers,
-    cache: "no-store",
-    credentials: "omit",
-    redirect: "error",
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      ...options,
+      headers,
+      cache: "no-store",
+      credentials: "omit",
+      redirect: "error",
+    });
+  } catch (error) {
+    // The request left the phone and the answer did not come back. That is
+    // status 0: uncertain, never failed and never retried on its own.
+    return { status: 0, body: null };
+  }
   let body = null;
   try {
     body = await response.json();
@@ -122,9 +342,35 @@ async function awaitApproval() {
 
 function render(html) {
   main.innerHTML = html;
+  hideActions();
+}
+
+// The action bar is `position: fixed`, so the page must reserve exactly its
+// height or the last line of the card -- which is the outcome the operator just
+// asked for -- sits underneath it. A constant guess was too small once the bar
+// carried three two-line buttons, so measure the real element instead.
+function syncActionBarSpace() {
+  const height = actionBar.hidden ? 0 : actionBar.getBoundingClientRect().height;
+  document.documentElement.style.setProperty(
+    "--action-bar-height",
+    `${Math.ceil(height)}px`,
+  );
+}
+
+// `hidden` alone does not hide `.actions`: the stylesheet gives it a `display`,
+// which beats the user-agent `[hidden] { display: none }` rule. The stylesheet
+// now carries an explicit `.actions[hidden]`, and every hide goes through here
+// so the reserved space is released at the same moment.
+function hideActions() {
   actionBar.hidden = true;
   actionBar.innerHTML = "";
+  syncActionBarSpace();
 }
+
+if (typeof ResizeObserver === "function") {
+  new ResizeObserver(syncActionBarSpace).observe(actionBar);
+}
+window.addEventListener("resize", syncActionBarSpace);
 
 function unavailable(body) {
   render(
@@ -177,6 +423,96 @@ function evidenceRows(task) {
   return rendered ? `<dl class="pairs">${rendered}</dl>` : "";
 }
 
+function describeTarget(halt) {
+  const noun = ROLE_NOUN[halt.target_role] || "target";
+  // A label is present only when Flow proved it is the control's own static
+  // label. Otherwise the noun alone is the whole description, on purpose.
+  return halt.target_label ? `the ${noun} labelled “${halt.target_label}”` : `the ${noun}`;
+}
+
+function describeStop(halt) {
+  if (!halt) return "";
+  const where =
+    halt.step_ordinal && halt.step_count
+      ? `Step ${halt.step_ordinal} of ${halt.step_count}`
+      : "This step";
+  const target = describeTarget(halt);
+  const verb = ACTION_VERB[halt.action_kind] || "act on";
+  switch (halt.category) {
+    case "resolution":
+      return `${where} could not start: OpenAdapt could not find ${target} on the screen, so it did not ${verb} anything.`;
+    case "disambiguation":
+      return `${where} found more than one thing that looked like ${target}, so it refused to pick one.`;
+    case "identity":
+      return `${where} could not confirm that the record on screen is the intended one, so it did not ${verb} ${target}.`;
+    case "human_required":
+      return `${where} needs a person: complete the sign-in, challenge, or verification in the live application yourself.`;
+    case "unmet_guard":
+    case "postcondition":
+      return `${where} did not leave the application in the state the workflow expects after it tried to ${verb} ${target}.`;
+    case "effect_refuted":
+    case "effect_indeterminate":
+    case "effect_escalated":
+    case "effect_unverifiable":
+    case "placeholder_effect":
+      return `${where} acted, but the result could not be confirmed in the system of record.`;
+    default:
+      return `${where} stopped instead of guessing.`;
+  }
+}
+
+function ladderRows(halt) {
+  const rows = (halt && halt.resolution_ladder) || [];
+  const tried = rows.filter((row) => row.verdict !== "not_attempted");
+  if (tried.length === 0) return "";
+  const items = tried
+    .map(
+      (row) =>
+        `<li><span>${esc(RUNG_NOUN[row.rung] || row.rung)}</span>
+         <span class="verdict">${esc(RUNG_VERDICT[row.verdict] || row.verdict)}</span></li>`,
+    )
+    .join("");
+  return `<details class="tried"><summary>What OpenAdapt tried</summary>
+    <ul class="ladder">${items}</ul></details>`;
+}
+
+function recheckBlock(halt) {
+  const checks = (halt && halt.will_recheck) || [];
+  if (checks.length === 0) return "";
+  const items = checks
+    .map((row) => {
+      const noun = RECHECK_NOUN[row.check];
+      if (!noun) return "";
+      const count = typeof row.count === "number" ? ` (${row.count})` : "";
+      return `<li>${esc(noun)}${esc(count)}</li>`;
+    })
+    .filter(Boolean)
+    .join("");
+  if (!items) return "";
+  return `<section class="recheck">
+      <h2>If you answer “I fixed it”</h2>
+      <p class="muted">OpenAdapt will not repeat the step blindly. It re-reads the
+      live screen and must still:</p>
+      <ul>${items}</ul>
+      <p class="muted">If any of those fail it stops again and changes nothing.</p>
+    </section>`;
+}
+
+function consequenceBlock(task) {
+  const actions = (task && task.allowed_actions) || [];
+  const items = actions
+    .filter((action) => ACTION_WIRE[action])
+    .map(
+      (action) =>
+        `<li><strong>${esc(ACTION_WIRE[action].label)}</strong>
+         <span class="muted">${esc(ACTION_WIRE[action].consequence)}</span></li>`,
+    )
+    .join("");
+  if (!items) return "";
+  return `<section class="consequences"><h2>What each answer does</h2>
+    <ul>${items}</ul></section>`;
+}
+
 async function showTask(runId) {
   const { status, body } = await api(`/api/portal/tasks/${encodeURIComponent(runId)}`);
   if (status === 401 || status === 202) return startPairing();
@@ -190,12 +526,17 @@ async function showTask(runId) {
     unknown: "May have been sent",
   }[delivery];
   const frameId = presentation.after_artifact_id || presentation.before_artifact_id;
+  const halt = presentation.halt;
+  const stopped = describeStop(halt);
   render(`
     <button class="back" id="back">← All decisions</button>
     <section class="card">
       ${deliveryText ? `<p class="chip">${esc(deliveryText)}</p>` : ""}
       <h1>${esc(presentation.question || "OpenAdapt needs a decision")}</h1>
-      ${presentation.explanation ? `<p>${esc(presentation.explanation)}</p>` : ""}
+      ${stopped ? `<p class="lede">${esc(stopped)}</p>` : ""}
+      ${presentation.explanation ? `<p class="muted">${esc(presentation.explanation)}</p>` : ""}
+      ${ladderRows(halt)}
+      ${recheckBlock(halt)}
       ${evidenceRows(task)}
       ${
         frameId
@@ -215,6 +556,7 @@ async function showTask(runId) {
       )}</p>
       <p class="outcome" id="outcome"></p>
     </section>
+    ${consequenceBlock(task)}
   `);
   document.getElementById("back").addEventListener("click", showList);
   const frame = document.getElementById("frame");
@@ -254,15 +596,69 @@ function renderActions(runId, detail) {
     .filter((action) => ACTION_WIRE[action])
     .map(
       (action, index) =>
-        `<button class="${index === 0 ? "primary" : ""}" data-action="${esc(action)}">${esc(
-          ACTION_WIRE[action].label,
-        )}</button>`,
+        // Each button carries its consequence, because "verify & continue",
+        // "teach" and "needs more help" are indistinguishable from their names
+        // alone -- and they differ in whether the saved workflow changes.
+        `<button class="${index === 0 ? "primary" : ""}" data-action="${esc(action)}">
+           <span class="label">${esc(ACTION_WIRE[action].label)}</span>
+           <span class="brief">${esc(ACTION_WIRE[action].brief)}</span>
+         </button>`,
     )
     .join("");
   actionBar.hidden = actionBar.innerHTML === "";
+  syncActionBarSpace();
   actionBar.querySelectorAll("[data-action]").forEach((node) => {
     node.addEventListener("click", () => decide(runId, detail, node.dataset.action));
   });
+}
+
+// Translate one reply into operator copy. Returns `terminal` (the decision is
+// over -- take the buttons away) and `retry` (the runner refused without acting,
+// so answering again after fixing the application is legitimate).
+function interpretReply(status, body, portableAction) {
+  if (status === 0 || status >= 500) {
+    return {
+      text:
+        "The result is uncertain. Do not answer again — check this decision on " +
+        "the computer running OpenAdapt.",
+      terminal: true,
+    };
+  }
+  let state = body && body.state;
+  let reason = body && body.reason_code;
+  if (!state && body && body.status) {
+    // A runner that still returns its own decision record rather than the
+    // closed receipt. Map it through Flow's own status -> state table.
+    const mapped = LEGACY_RECEIPT_STATE[body.status];
+    if (mapped) {
+      state = mapped[0];
+      reason = mapped[1];
+      if (state === "completed" && portableAction === "skip") {
+        reason = "skipped_and_resumed";
+      }
+    }
+  }
+  if (state && reason) {
+    const copy = RECEIPT_COPY[`${state}/${reason}`];
+    if (copy) return { text: copy.text, terminal: copy.terminal, pending: copy.pending };
+    // A state this build has no wording for is reported as exactly that. It is
+    // NOT a refusal: showing a real terminal outcome as "refused" is the defect
+    // this branch exists to prevent.
+    return {
+      text:
+        `OpenAdapt returned an outcome this phone has no wording for (${state}). ` +
+        "Check this decision on the computer running OpenAdapt.",
+      terminal: true,
+    };
+  }
+  // No receipt at all: a pre-admission refusal (expired task, wrong binding,
+  // action not allowed, another operator already answered).
+  return {
+    text:
+      (body && body.detail) ||
+      "That decision was not accepted. Reload and review the live state.",
+    terminal: false,
+  };
 }
 
 async function decide(runId, detail, portableAction) {
@@ -283,25 +679,20 @@ async function decide(runId, detail, portableAction) {
     `/api/portal/tasks/${encodeURIComponent(runId)}/actions/${encodeURIComponent(wire)}`,
     { method: "POST", body: JSON.stringify(payload) },
   );
-  if (status === 200 && body && body.status) {
-    // Never translate an accepted tap into success: show exactly what the
-    // runner returned.
-    outcome.textContent = body.message || body.status;
-    if (body.status === "completed" || body.status === "halted") {
-      actionBar.hidden = true;
-      return;
-    }
-  } else if (status === 0 || status >= 500) {
-    outcome.textContent =
-      "The result is uncertain. Do not answer again — check this decision on the computer running OpenAdapt.";
-    return;
-  } else {
-    outcome.textContent =
-      (body && body.message) ||
-      (body && body.detail) ||
-      "That decision was refused. Reload and review the live state.";
+  // Never translate an accepted tap into success: the runner's own terminal
+  // state decides what this says.
+  const reply = interpretReply(status, body, portableAction);
+  outcome.textContent = reply.text;
+  if (reply.terminal) {
+    hideActions();
+  } else if (!reply.pending) {
+    buttons.forEach((button) => (button.disabled = false));
   }
-  buttons.forEach((button) => (button.disabled = false));
+  // With the bar gone or resized, put the answer the operator is waiting for
+  // back in view rather than leaving it below the fold.
+  if (typeof outcome.scrollIntoView === "function") {
+    outcome.scrollIntoView({ block: "nearest" });
+  }
 }
 
 // ------------------------------------------------------------------- routing

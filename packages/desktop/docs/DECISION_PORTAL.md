@@ -106,6 +106,43 @@ passed through intact because they are operator-actionable.
 The phone never receives Flow's console bearer capability. It authenticates
 with a portal session token bound to the runner and the approved pairing.
 
+## What the phone says
+
+Flow sends closed enums and counts; the shell owns every sentence. That split
+is deliberate: a free-text explanation field on the wire is how protected
+content escapes a closed contract, so the runner never sends prose and the
+phone never renders a runner string.
+
+**What broke.** `presentation.halt` carries the engine's typed halt category,
+the step's ordinal, its action kind, the target's role, and the target's label
+*only when Flow proved that label is static control chrome rather than record
+content*. The shell composes "Step 1 of 6 could not start: OpenAdapt could not
+find the button labelled “Open” on the screen, so it did not click anything."
+When the label is withheld the role noun stands alone, so a TYPE step degrades
+to "could not find the text field" — never to the typed value.
+
+**What was tried, and what continuing costs.** The resolution ladder is shown
+per rung with its verdict, and rungs with no recorded evidence are reported as
+never attempted rather than as failures. `will_recheck` becomes the list the
+engine re-proves after a continue, so "I fixed it" is visibly not a
+repeat-the-step button.
+
+**What each answer does.** The three actions differ in whether the saved
+workflow changes, and that is what an operator cannot infer from their names.
+Each button carries its consequence, and the card states it in full: *check and
+continue* is this run only and the same drift stops the next run; *teach the
+correction* changes future runs and continues nothing now; *needs more help*
+leaves the run paused and untouched.
+
+**What came back.** Flow returns `HumanDecisionReceiptV1`: a `state` and a
+`reason_code` from fixed enums, and no message. The shell maps every
+`(state, reason_code)` pair to its own copy in `RECEIPT_COPY`. A pair it does
+not recognise is reported as an unknown outcome, never as a refusal — showing a
+real `halted` as "that decision was refused" is the exact defect that mapping
+prevents. A runner still returning the older decision record is mapped through
+Flow's own status table so it renders identically. `src/portalShell.test.ts`
+drives the shipped `app.js` in a DOM and pins each of those outcomes.
+
 ## Notifications
 
 Operating-system notifications are generic by construction. Desktop reads a
