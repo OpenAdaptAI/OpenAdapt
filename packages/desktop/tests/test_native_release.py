@@ -414,11 +414,17 @@ def test_installer_pointer_prepends_block_and_preserves_engine_notes() -> None:
     assert updated is not None
     assert updated.startswith("<!-- openadapt-installer-pointer:start -->\n")
     assert "<!-- openadapt-installer-pointer:end -->" in updated
-    # Names the destination, the formats, and why the split exists.
+    # Names the canonical native tag, the formats, and the verification path.
     assert "releases/tag/desktop-v0.5.0" in updated
     assert "SHA256SUMS" in updated
-    assert "ad-hoc-signed or unsigned" in updated
+    assert "gh attestation verify" in updated
     assert "RELEASES.md" in updated
+    # The installers are now mirrored here, so the block must not claim the
+    # engine release has none -- and it must still lead with the signing state
+    # so the copy on "Latest" cannot read as a maturity promotion.
+    assert "this release has no installer" not in updated.lower()
+    assert "attached" in updated.lower()
+    assert "ad-hoc-signed (macOS) or\n> unsigned (Windows, Linux)" in updated
     # The original engine notes survive verbatim.
     assert updated.endswith(body)
 
@@ -462,10 +468,42 @@ def test_native_release_workflow_points_latest_at_the_published_installers() -> 
     assert "installer-pointer-notes" in workflow
     assert "types: [published]" in workflow
     assert "github.event.release.draft" in workflow
-
-    # It must link, never mirror: no installer bytes are uploaded to vX.Y.Z.
-    assert "gh release upload \"${engine_tag}\"" not in workflow
     assert re.search(r"gh release edit \"\$\{engine_tag\}\" --notes-file", workflow)
+
+
+def test_native_release_workflow_mirrors_installers_onto_the_engine_release() -> None:
+    """/releases/latest must carry installer BYTES, not only a link.
+
+    A notes-only pointer still shows a visitor a wheel and an sdist. This job
+    copies the attested set onto vX.Y.Z. Three invariants make that safe, and
+    all three are asserted here because losing any one of them silently turns a
+    convenience copy into a maturity overstatement.
+    """
+    workflow = (ROOT / ".github/workflows/native-release.yml").read_text(encoding="utf-8")
+
+    assert "mirror-installers-to-engine-release:" in workflow
+    assert 'gh release download "${NATIVE_TAG}"' in workflow
+    assert 'gh release upload "${engine_tag}" mirror/* --clobber' in workflow
+
+    # 1. Never mirror unattested bytes: the downloaded set is re-verified
+    #    against the manifest that was attested at build time.
+    # Comments explain these invariants; assert against executable lines only,
+    # so a comment mentioning a marker cannot satisfy or break the check.
+    mirror_job = "\n".join(
+        line
+        for line in workflow.split("mirror-installers-to-engine-release:", 1)[1].splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    assert "verify-checksums" in mirror_job
+    assert "--manifest mirror/SHA256SUMS" in mirror_job
+
+    # 2. The engine release must never receive the installer-release marker, or
+    #    download pages would start resolving v* instead of desktop-v*.
+    assert "<!-- installer-release -->" not in mirror_job
+
+    # 3. The native lane stays a prerelease; nothing here promotes it.
+    assert "--prerelease" not in mirror_job
+    assert "gh release edit" not in mirror_job
 
 
 @pytest.mark.parametrize(

@@ -610,13 +610,10 @@ jobs:
     # follow a successful upload, so this is still strictly after the installers
     # exist.
     #
-    # It links rather than mirrors. Copying ~750 MB of ad-hoc-signed and unsigned
-    # installers onto the release GitHub labels "Latest" would make them its
-    # default download -- the maturity overstatement the two-lane split exists to
-    # prevent -- and would break the documented machine-readable selection rule
-    # that identifies installers by the `desktop-v` tag prefix. Mirroring is the
-    # post-signing convergence step in RELEASES.md, not a workaround for a
-    # missing link.
+    # It writes the notes block; `mirror-installers-to-engine-release` below
+    # copies the actual bytes. The pointer still names desktop-vX.Y.Z because
+    # that tag stays the canonical provenance home and the one download pages
+    # select from.
     if: >-
       github.event_name == 'release' &&
       startsWith(github.event.release.tag_name, 'desktop-v') &&
@@ -667,3 +664,76 @@ jobs:
             gh release edit "${engine_tag}" --notes-file engine-notes.updated.md
             echo "${engine_tag} now points at ${NATIVE_TAG}."
           fi
+
+  mirror-installers-to-engine-release:
+    name: Mirror the attested installers onto the engine release
+    # A notes-only pointer still leaves /releases/latest with no downloadable
+    # installer -- a visitor has to read a paragraph and click through. This job
+    # copies the exact attested asset set onto the engine release vX.Y.Z so
+    # "Latest" carries both the wheel and a working installer.
+    #
+    # Why this does not overstate maturity, which was the original objection to
+    # mirroring: every filename encodes its signing state
+    # (`...-macos-arm64-adhoc.dmg`, `...-windows-x86_64-unsigned.msi`), the
+    # pointer block prepended by `point-engine-release` leads with "Beta ...
+    # ad-hoc-signed or unsigned" and the verification commands, and
+    # `desktop-vX.Y.Z` stays a prerelease. Nothing here flips the native lane to
+    # non-prerelease.
+    #
+    # Why this does not break the machine-readable selection rule in RELEASES.md:
+    # that rule selects releases carrying the `<!-- installer-release -->` marker
+    # under a `desktop-v` tag prefix. This job copies ASSETS only and never
+    # writes that marker to the engine release, so consumers (the openadapt.ai
+    # download page via utils/desktopRelease.js) keep resolving desktop-v*
+    # unchanged.
+    #
+    # Cost: ~757 MB duplicated per release. GitHub release storage and bandwidth
+    # are not billed for public repositories, so the recurring cost is the
+    # download+upload minutes in this one job, not storage spend.
+    needs: point-engine-release
+    if: >-
+      github.event_name == 'release' &&
+      startsWith(github.event.release.tag_name, 'desktop-v') &&
+      github.event.release.prerelease &&
+      !github.event.release.draft
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NATIVE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Mirror the exact attested asset set onto the engine release
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine_tag="v${NATIVE_TAG#desktop-v}"
+
+          # point-engine-release already failed loudly if this is missing, but
+          # this job must not upload into a tag that does not exist either.
+          if ! gh release view "${engine_tag}" >/dev/null 2>&1; then
+            echo "error: engine release ${engine_tag} does not exist." >&2
+            exit 1
+          fi
+
+          mkdir -p mirror
+          gh release download "${NATIVE_TAG}" --dir mirror --pattern '*' --clobber
+
+          # Re-verify the downloaded bytes against the manifest that was
+          # attested at build time. Mirroring unverified bytes onto the release
+          # GitHub labels "Latest" is exactly the failure this guards.
+          python scripts/native_release.py verify-checksums \
+            --directory mirror \
+            --manifest mirror/SHA256SUMS
+
+          # Assets only. The `<!-- installer-release -->` marker deliberately
+          # stays off the engine release so the documented selection rule keeps
+          # resolving desktop-v* (see RELEASES.md).
+          gh release upload "${engine_tag}" mirror/* --clobber
+          echo "${engine_tag} now carries the ${NATIVE_TAG} installer set."

@@ -173,14 +173,13 @@ def installer_pointer_notes(body: str, native_tag: str, repo: str) -> str | None
     republishing or re-running is idempotent and never accumulates pointers.
     Returns ``None`` when the body already carries an identical block.
 
-    This deliberately points at the installers rather than mirroring them.
-    Copying ~750 MB of ad-hoc-signed and unsigned binaries onto the release
-    GitHub labels "Latest" would make them the default download from the
-    canonical release -- the exact maturity overstatement the two-lane split
-    in RELEASES.md exists to prevent -- and would break the documented
-    machine-readable selection rule that identifies installers by the
-    ``desktop-v`` tag prefix. See RELEASES.md; mirroring is the post-signing
-    convergence step, not a workaround for a missing link.
+    As of the ``mirror-installers-to-engine-release`` job the engine release
+    also carries a byte-identical copy of the attested installer set, so this
+    block no longer says "this release has no installer". It still names
+    ``desktop-vX.Y.Z`` because that tag remains the canonical provenance home
+    (attestations and the supersession marker are bound to it), and it still
+    states the signing state up front so the copy on "Latest" cannot be read
+    as a maturity promotion. See RELEASES.md.
     """
     # Format-only validation. Unlike `validate_tag`, this must not compare
     # against the checked-out sources: the pointer names a release object, and
@@ -191,16 +190,24 @@ def installer_pointer_notes(body: str, native_tag: str, repo: str) -> str | None
     block = (
         f"{INSTALLER_POINTER_START}\n"
         "> [!IMPORTANT]\n"
-        "> **Looking for the desktop app? This release has no installer.**\n"
-        f"> Download the Beta installers for macOS, Windows, and Linux from\n"
-        f"> [`{native_tag}`]({base}/tag/{native_tag}) — DMG, MSI, NSIS `.exe`,\n"
-        "> `.deb`, `.AppImage`, and `SHA256SUMS`.\n"
+        "> **Looking for the desktop app? The Beta installers are attached\n"
+        "> below.**\n"
+        "> macOS DMG (arm64 and x86_64), Windows MSI and NSIS `.exe`, Linux\n"
+        "> `.deb` and `.AppImage`, plus `SHA256SUMS` — the same attested bytes\n"
+        f"> published at [`{native_tag}`]({base}/tag/{native_tag}), mirrored\n"
+        "> here so GitHub's \"Latest\" always carries an installer.\n"
         ">\n"
-        f"> This `v{version}` release carries the Python engine package only\n"
-        "> (wheel and sdist; `pip install openadapt-desktop`). The native\n"
-        "> installers ship from a separate prerelease tag because they are\n"
-        "> ad-hoc-signed or unsigned pending signing credentials, so they must\n"
-        "> not be published as this repository's \"Latest\" release. See\n"
+        "> **These installers are Beta and are ad-hoc-signed (macOS) or\n"
+        "> unsigned (Windows, Linux)** pending signing credentials; the signing\n"
+        "> state is in every filename. Your OS will warn. Verify before\n"
+        "> overriding that warning:\n"
+        "> `sha256sum -c SHA256SUMS` and `gh attestation verify`.\n"
+        ">\n"
+        f"> This `v{version}` release is also the Python engine package\n"
+        f"> (wheel and sdist; `pip install openadapt-desktop`). `{native_tag}`\n"
+        "> remains the canonical installer release: build provenance,\n"
+        "> attestations, and supersession notices are bound to that tag, and\n"
+        "> download pages select from it. See\n"
         f"> [RELEASES.md](https://github.com/{repo}/blob/main/RELEASES.md).\n"
         f"{INSTALLER_POINTER_END}\n\n"
     )

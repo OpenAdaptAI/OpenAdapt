@@ -8,7 +8,7 @@ download, and how the lanes converge.
 
 | Lane | Tag | Trigger | Marked as | Assets |
 | --- | --- | --- | --- | --- |
-| Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from green protected `main` | Regular release ("Latest") | Wheel, sdist, and PyPI publish attestations |
+| Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from green protected `main` | Regular release ("Latest") | Wheel, sdist, PyPI publish attestations, **and a mirrored copy of the matching `desktop-vX.Y.Z` installer set** |
 | Native installers | `desktop-vX.Y.Z` | `desktop-v*` tag push (automated, see below) | Draft, then published **prerelease** | Beta DMG (macOS arm64/x86_64), MSI + NSIS (Windows x86_64), DEB + AppImage (Linux x86_64), per-platform metadata JSON, and one `SHA256SUMS` manifest with GitHub artifact attestations |
 
 The engine lane stays non-prerelease so GitHub's "Latest" pointer always names
@@ -21,21 +21,28 @@ for the verification scope and signing states.
 ## Which release should I download?
 
 - **Python package / CLI**: install from PyPI (`pip install openadapt-desktop`)
-  or take the wheel from the newest `vX.Y.Z` release. Engine releases carry no
-  installers.
-- **Native installers (Beta)**: use the newest published `desktop-vX.Y.Z`
-  prerelease whose notes do not carry a "Superseded" notice. Verify assets with
-  `sha256sum -c SHA256SUMS` and `gh attestation verify`.
+  or take the wheel from the newest `vX.Y.Z` release.
+- **Native installers (Beta)**: either the newest `vX.Y.Z` release (the one
+  `/releases/latest` resolves to) or, equivalently, the newest published
+  `desktop-vX.Y.Z` prerelease whose notes do not carry a "Superseded" notice.
+  The bytes are identical. Verify with `sha256sum -c SHA256SUMS` and
+  `gh attestation verify`.
 
-### The "Latest" installer pointer
+### The "Latest" installer path
 
 GitHub's `/releases/latest` excludes prereleases by definition, so it always
-resolves to an engine release — which carries no installers. A human following
-that link (it is the one cited in launch material) would otherwise find only a
-wheel and an sdist.
+resolves to an engine release. That link is the one cited in launch material, so
+it must not dead-end.
 
-Every engine release therefore carries a marker-delimited pointer block at the
-top of its notes naming the matching `desktop-vX.Y.Z` prerelease:
+Two mechanisms keep it working, both driven from `native-release.yml`:
+
+1. **`mirror-installers-to-engine-release`** copies the exact attested asset set
+   (six installers, four per-platform metadata JSONs, the CycloneDX SBOM, and
+   `SHA256SUMS`) from `desktop-vX.Y.Z` onto `vX.Y.Z`, re-verifying every byte
+   against the attested manifest before upload. `/releases/latest` therefore
+   carries a working installer, not just a link.
+2. **`point-engine-release`** prepends a marker-delimited pointer block at the
+   top of the engine release notes:
 
 ```
 <!-- openadapt-installer-pointer:start -->
@@ -43,21 +50,40 @@ top of its notes naming the matching `desktop-vX.Y.Z` prerelease:
 <!-- openadapt-installer-pointer:end -->
 ```
 
-The `point-engine-release` job in `.github/workflows/native-release.yml` writes
-it. It runs on `release: published` for a non-draft `desktop-v*` prerelease, not
-on the tag push, for the same reason the supersession notice does: `publish-draft`
-creates a **draft**, whose tag page 404s publicly, and a pointer must never
-advertise a URL nobody can open. The block is rewritten in place, so republishing
-is idempotent and pointers never accumulate. If the matching engine release is
-missing the job fails loudly rather than leaving "Latest" without a link.
+Both jobs run on `release: published` for a non-draft `desktop-v*` prerelease,
+not on the tag push, for the same reason the supersession notice does:
+`publish-draft` creates a **draft**, whose tag page 404s publicly, and neither a
+pointer nor a mirror may advertise a URL nobody can open. The pointer block is
+rewritten in place, so republishing is idempotent and pointers never accumulate.
+If the matching engine release is missing, both jobs fail loudly rather than
+leaving "Latest" without an installer.
 
-The installers are **linked, not mirrored**. Copying ~750 MB of ad-hoc-signed and
-unsigned binaries onto the release GitHub labels "Latest" would make them its
-default download — the maturity overstatement this two-lane split exists to
-prevent — and would contradict the machine-readable selection rule below, which
-identifies installer releases by the `desktop-v` tag prefix and labels plain
-`v*` releases "CLI/engine only". Attaching installers to `vX.Y.Z` is step 1 of
-the post-signing convergence plan, not a fix for a missing link.
+#### Why mirroring does not promote unsigned binaries
+
+The earlier policy here was "linked, not mirrored", on the reasoning that
+putting ~757 MB of ad-hoc-signed and unsigned binaries on the release GitHub
+labels "Latest" would overstate their maturity. A notes-only link was not
+enough: `/releases/latest` still showed a visitor nothing but a wheel and an
+sdist, and that link is what launch material points at. The maturity concern is
+addressed directly instead of by withholding the artifact:
+
+- `desktop-vX.Y.Z` **stays a prerelease**. Flipping it to non-prerelease would
+  make the native lane GitHub's "Latest" outright, and that remains forbidden.
+- Every filename encodes its signing state — `…-macos-arm64-adhoc.dmg`,
+  `…-windows-x86_64-unsigned.msi`, `…-linux-x86_64-unsigned.AppImage`.
+- The pointer block leads with "Beta … ad-hoc-signed (macOS) or unsigned
+  (Windows, Linux)", says the OS will warn, and gives the `sha256sum -c` and
+  `gh attestation verify` commands before anything else.
+- The mirror job re-verifies every downloaded byte against the attested
+  `SHA256SUMS` before upload, so an engine release can never carry an installer
+  that was not attested on the native tag.
+- The engine release gets **assets only**. It never receives the
+  `<!-- installer-release -->` marker, so the machine-readable selection rule
+  below is unchanged and download-page consumers keep resolving `desktop-v*`.
+
+`desktop-vX.Y.Z` therefore remains the canonical installer release — build
+provenance, attestations, and supersession notices are bound to it — and
+`vX.Y.Z` carries a byte-identical convenience copy.
 
 ## Freshness automation
 
@@ -112,8 +138,12 @@ alone:
   include the platform installers.
 - Recommended rule: offer downloads from the newest non-draft `desktop-v*`
   prerelease whose body contains `<!-- installer-release -->` and does **not**
-  contain `<!-- openadapt-superseded-by:`. Label plain `v*` releases
-  "CLI/engine only".
+  contain `<!-- openadapt-superseded-by:`.
+- Plain `v*` engine releases also carry a mirrored copy of the matching
+  installer set, but they deliberately do **not** carry the
+  `<!-- installer-release -->` marker. Selection logic must keep matching on
+  the marker plus the `desktop-v` prefix, so the mirror is invisible to it. The
+  mirror exists for humans who land on `/releases/latest`.
 
 ## Convergence plan (post-signing)
 
@@ -124,12 +154,14 @@ Authenticode credentials are configured (the workflows already fail closed on
 partial configuration) and installers build signed:
 
 1. The native build workflow attaches its attested installer assets to the
-   canonical `vX.Y.Z` engine release instead of creating a separate
-   `desktop-v*` prerelease.
+   canonical `vX.Y.Z` engine release *instead of* also creating a separate
+   `desktop-v*` prerelease. (Step 1 is already half-done: `vX.Y.Z` carries the
+   assets today via `mirror-installers-to-engine-release`. What remains is
+   retiring the second upload target, not adding the first.)
 2. The `desktop-v*` prerelease lane retires; existing `desktop-v*` prereleases
    remain as historical, superseded records.
-3. The `<!-- installer-release -->` marker moves with the assets, so download
-   pages keep working without a selection-rule change.
+3. The `<!-- installer-release -->` marker moves to `vX.Y.Z` with the assets,
+   and the pointer/mirror jobs retire with the lane.
 
 Until then, the freshness automation above keeps the two lanes at the same
 version.
