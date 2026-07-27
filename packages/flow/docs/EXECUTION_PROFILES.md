@@ -46,6 +46,39 @@ Standard or Regulated contract. In particular:
 - A successful Demo remains `COMPLETED_UNVERIFIED`, even when every tutorial
   step completed.
 
+### The bundled tutorial reaches VERIFIED by carrying evidence, not by exemption
+
+`openadapt-flow replay` runs Demo, so it can only ever report
+`COMPLETED_UNVERIFIED` — that is the contract, and it is not negotiable.
+`openadapt-flow tutorial` reaches `VERIFIED` on the same bundled application by
+supplying the three things Demo does not have, and then running Standard:
+
+1. **A real system of record.** MockMed is served through its transactional
+   persistence boundary (`openadapt_flow.mockmed.fault_server`) with
+   `?fault=ok`, so a save reaches a backend store rather than only mutating an
+   in-page object. `GET /api/db` reads that store and is never called by the
+   application, so the screen cannot influence the verifier.
+2. **A real effect contract.** The demonstration is recorded with a
+   `system_of_record_reader`, so each event retains the observed before/after
+   record delta, and `openadapt_flow.compiler.effect_mining` derives the effect
+   contract from it. A placeholder (unbound) effect is refused, never trusted.
+3. **A real admission.** The unmodified `evaluate_run_gate` admits the run under
+   the Standard profile against the shipped `clinical-write` policy, with a
+   `RestRecordVerifier` supplying `INDEPENDENT_SYSTEM` (tier 1) evidence —
+   stronger than the tier 3 the profile requires.
+
+The tutorial also omits the login screen: typing a credential into a recording
+produces an artifact whose plaintext value is a secret carrier for no
+evidentiary gain, and the demonstration proves exactly as much without it.
+
+The result is checkable rather than asserted: run the same bundle against an
+injected backend fault and it does not verify. With `?fault=optimistic` (the
+screen says Saved, the server rejected the write) the run is
+`HALTED` / `HALTED_BEFORE_EFFECT` with nothing persisted; with `?fault=partial`
+(the row lands with the note dropped) it is `HALTED` / `RECONCILIATION_REQUIRED`,
+because something landed and absence may not be claimed. Both are pinned in
+`tests/e2e/test_free_path_e2e.py`.
+
 Reports retain the legacy `success` field for compatibility and add
 `execution_profile`, `execution_outcome`, and `production_eligible`. Production
 callers must use `execution_outcome`; Standard and Regulated treat

@@ -127,6 +127,8 @@ def _inspect_artifacts(artifacts: Path) -> dict[str, object]:
         if not (healed_bundle / required).is_file():
             raise AssertionError(f"healed bundle is missing {required}")
 
+    tutorial = _inspect_tutorial(artifacts / "tutorial")
+
     return {
         "baseline_success": True,
         "baseline_model_calls": 0,
@@ -135,7 +137,85 @@ def _inspect_artifacts(artifacts: Path) -> dict[str, object]:
         "drift_model_calls": 0,
         "drift_heals": heal_count,
         "repair_patches": len(patches),
-        "reports_inspected": 2,
+        "reports_inspected": 3,
+        **tutorial,
+    }
+
+
+def _inspect_tutorial(tutorial_dir: Path) -> dict[str, object]:
+    """Assert the composed free path VERIFIED and emitted its receipt.
+
+    The per-command checks above all passed while this composition was broken:
+    ``replay`` runs the Demo profile, which can only report
+    ``COMPLETED_UNVERIFIED``, and the shareable artifact requires ``VERIFIED``.
+    Nothing observed the loop, so nothing caught it.  This does.
+    """
+    run_dir = tutorial_dir / "run"
+    report = _load_report(run_dir / "report.json")
+
+    if report.get("execution_outcome") != "VERIFIED":
+        raise AssertionError(
+            f"tutorial did not verify: {report.get('execution_outcome')!r}"
+        )
+    if report.get("execution_profile") != "standard":
+        raise AssertionError(
+            f"tutorial did not run a production profile: "
+            f"{report.get('execution_profile')!r}"
+        )
+    if report.get("transaction_outcome") != "VERIFIED":
+        raise AssertionError(
+            f"tutorial transaction outcome is "
+            f"{report.get('transaction_outcome')!r}, expected VERIFIED"
+        )
+    if report.get("transaction_billable") is not True:
+        raise AssertionError("a VERIFIED production run must be billable")
+    if report.get("model_calls") != 0:
+        raise AssertionError("tutorial made a model call")
+
+    envelope = report.get("outcome_envelope") or {}
+    required = int((envelope.get("required_contracts") or {}).get("effect") or 0)
+    passed = int((envelope.get("passed_contracts") or {}).get("effect") or 0)
+    if required < 1 or passed != required:
+        raise AssertionError(
+            f"tutorial effect evidence is incomplete: {passed}/{required}"
+        )
+
+    confirmed_tiers = [
+        evidence.get("verification_tier")
+        for result in report.get("results") or []
+        for evidence in result.get("effect_evidence") or []
+        if evidence.get("final_verdict") == "confirmed"
+    ]
+    if not confirmed_tiers or min(confirmed_tiers) > 3:
+        raise AssertionError(
+            "tutorial has no confirmed effect evidence at or above the "
+            f"required tier: {confirmed_tiers}"
+        )
+
+    receipt_path = run_dir / "receipt.json"
+    if not receipt_path.is_file():
+        raise AssertionError(f"tutorial emitted no shareable receipt: {receipt_path}")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if receipt.get("outcome") != "VERIFIED":
+        raise AssertionError(f"receipt outcome is {receipt.get('outcome')!r}")
+    if receipt.get("provenance") != "synthetic-tutorial":
+        raise AssertionError(
+            f"receipt provenance is {receipt.get('provenance')!r}, expected "
+            "synthetic-tutorial"
+        )
+    if not receipt.get("bundle_digest") or not receipt.get("receipt_digest"):
+        raise AssertionError("receipt is not digest-bound and cannot be checked")
+    for path in (run_dir / "receipt.png", run_dir / "receipt.md"):
+        if not path.is_file():
+            raise AssertionError(f"missing receipt artifact: {path}")
+
+    return {
+        "tutorial_outcome": "VERIFIED",
+        "tutorial_profile": "standard",
+        "tutorial_model_calls": 0,
+        "tutorial_effects_confirmed": passed,
+        "tutorial_effect_tier": min(confirmed_tiers),
+        "tutorial_receipt_emitted": True,
     }
 
 
@@ -280,6 +360,14 @@ def run_lifecycle(
             env=env,
             log=logs / "10-replay-drift.log",
         )
+        # The COMPOSED free path. Every command above passed while this loop
+        # was broken; only running it end to end catches that.
+        _run(
+            [*cli, "tutorial", "--out", str(artifacts / "tutorial")],
+            cwd=artifacts,
+            env=env,
+            log=logs / "11-tutorial-verified.log",
+        )
         summary.update(_inspect_artifacts(artifacts))
     finally:
         if installed:
@@ -287,7 +375,7 @@ def run_lifecycle(
                 [str(python), "-m", "pip", "uninstall", "-y", "openadapt-flow"],
                 cwd=artifacts,
                 env=env,
-                log=logs / "11-uninstall.log",
+                log=logs / "12-uninstall.log",
             )
             probe = _run(
                 [
@@ -300,7 +388,7 @@ def run_lifecycle(
                 ],
                 cwd=artifacts,
                 env=env,
-                log=logs / "12-uninstall-probe.log",
+                log=logs / "13-uninstall-probe.log",
             )
             summary["uninstall_verified"] = probe.returncode == 0
         (work_dir / "summary.json").write_text(

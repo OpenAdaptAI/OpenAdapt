@@ -20,6 +20,46 @@ def _module():
     return module
 
 
+def _write_tutorial(artifacts: Path, **report_overrides) -> Path:
+    """A minimal VERIFIED tutorial run with its receipt, for the inspector."""
+    run = artifacts / "tutorial" / "run"
+    run.mkdir(parents=True, exist_ok=True)
+    report = {
+        "execution_outcome": "VERIFIED",
+        "execution_profile": "standard",
+        "transaction_outcome": "VERIFIED",
+        "transaction_billable": True,
+        "model_calls": 0,
+        "outcome_envelope": {
+            "required_contracts": {"effect": 2},
+            "passed_contracts": {"effect": 2},
+        },
+        "results": [
+            {
+                "effect_evidence": [
+                    {"final_verdict": "confirmed", "verification_tier": 1}
+                ]
+            }
+        ],
+    }
+    report.update(report_overrides)
+    (run / "report.json").write_text(json.dumps(report), encoding="utf-8")
+    (run / "receipt.json").write_text(
+        json.dumps(
+            {
+                "outcome": "VERIFIED",
+                "provenance": "synthetic-tutorial",
+                "bundle_digest": "a" * 64,
+                "receipt_digest": "b" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run / "receipt.png").write_bytes(b"png")
+    (run / "receipt.md").write_text("# VERIFIED\n", encoding="utf-8")
+    return run
+
+
 def test_resolve_wheel_requires_exactly_one_match(tmp_path):
     lifecycle = _module()
     with pytest.raises(ValueError, match="exactly one"):
@@ -78,11 +118,14 @@ def test_inspect_artifacts_requires_reports_repairs_and_healed_bundle(tmp_path):
     healed.mkdir()
     (healed / "workflow.json").write_text("{}", encoding="utf-8")
     (healed / "manifest.json").write_text("{}", encoding="utf-8")
+    _write_tutorial(artifacts)
 
     summary = lifecycle._inspect_artifacts(artifacts)
 
     assert summary["drift_heals"] == 1
     assert summary["repair_patches"] == 1
+    assert summary["tutorial_outcome"] == "VERIFIED"
+    assert summary["tutorial_receipt_emitted"] is True
 
 
 def test_inspect_artifacts_rejects_missing_patch(tmp_path):
@@ -105,6 +148,39 @@ def test_inspect_artifacts_rejects_missing_patch(tmp_path):
     healed.mkdir()
     (healed / "workflow.json").write_text("{}", encoding="utf-8")
     (healed / "manifest.json").write_text("{}", encoding="utf-8")
+    _write_tutorial(artifacts)
 
     with pytest.raises(AssertionError, match="heal evidence is incomplete"):
         lifecycle._inspect_artifacts(artifacts)
+
+
+def test_inspect_tutorial_refuses_an_unverified_free_path(tmp_path):
+    """The regression this whole gate exists for."""
+    lifecycle = _module()
+    artifacts = tmp_path / "artifacts"
+    _write_tutorial(
+        artifacts,
+        execution_outcome="COMPLETED_UNVERIFIED",
+        execution_profile="demo",
+        transaction_outcome="COMPLETED_UNVERIFIED",
+        transaction_billable=False,
+    )
+    with pytest.raises(AssertionError, match="did not verify"):
+        lifecycle._inspect_tutorial(artifacts / "tutorial")
+
+
+def test_inspect_tutorial_refuses_a_verified_claim_without_effect_evidence(tmp_path):
+    lifecycle = _module()
+    artifacts = tmp_path / "artifacts"
+    _write_tutorial(artifacts, results=[])
+    with pytest.raises(AssertionError, match="no confirmed effect evidence"):
+        lifecycle._inspect_tutorial(artifacts / "tutorial")
+
+
+def test_inspect_tutorial_refuses_a_missing_receipt(tmp_path):
+    lifecycle = _module()
+    artifacts = tmp_path / "artifacts"
+    run = _write_tutorial(artifacts)
+    (run / "receipt.json").unlink()
+    with pytest.raises(AssertionError, match="no shareable receipt"):
+        lifecycle._inspect_tutorial(artifacts / "tutorial")

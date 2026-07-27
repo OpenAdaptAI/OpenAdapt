@@ -44,6 +44,27 @@ rounds against the wrong-target check.
 ```bash
 pip install 'openadapt-flow[browser]'
 
+openadapt-flow tutorial                                  # the whole loop, VERIFIED
+```
+
+`tutorial` runs the complete free path against the bundled MockMed application
+served through its real transactional backend: it records a demonstration while
+observing the system of record, mines the effect contract from the record delta
+it observed, certifies the bundle against the shipped `clinical-write` policy,
+admits the run through the fail-closed gate under the **Standard** profile, and
+verifies the write by reading the system of record out of band — a path the
+application itself never calls, so the screen cannot influence it. It ends
+`VERIFIED` with zero model calls, and writes a shareable `receipt.png` /
+`receipt.json` beside the run.
+
+That receipt is generated from a closed allow-list — outcomes, counts, digests,
+versions — so it can carry no screenshot, OCR text, typed value, parameter,
+URL, hostname, coordinate, or free-form halt reason. It carries the bundle
+digest, so anyone can run the same public tutorial and compare.
+
+To drive the same stages by hand:
+
+```bash
 openadapt-flow demo-record --out rec                     # record a demonstration
 openadapt-flow compile rec --out bundle --name my-task   # compile it
 openadapt-flow lint bundle                               # expected: finds demo gaps
@@ -68,11 +89,18 @@ canonical `pip install 'openadapt[browser]'` launcher path for normal use. In ai
 or CI environments that pre-provision the browser, set
 `OPENADAPT_FLOW_NO_AUTO_INSTALL=1` to disable the auto-download.
 
-The bundled MockMed tutorial is intentionally **runnable but not certified for
-clinical writes**. `lint` exits nonzero because its irreversible final click is
-unarmed, and `clinical-write` refuses additional identity, system-effect, and
-idempotency gaps. That is the safety boundary working, not a setup failure. The
-permissive policy is only a smoke gate. Replay serves MockMed and writes
+The hand-driven `demo-record` bundle above is intentionally **runnable but not
+certified for clinical writes**. `lint` exits nonzero because its irreversible
+final click is unarmed, and `clinical-write` refuses additional identity,
+system-effect, and idempotency gaps. That is the safety boundary working, not a
+setup failure. The permissive policy is only a smoke gate, and `replay` runs the
+**Demo** profile, whose contract asks for no effect evidence — so a Demo
+completion is `COMPLETED_UNVERIFIED` and is never billable and never a success.
+`tutorial` differs precisely by supplying that missing evidence: a real
+persistence boundary, a mined effect contract, and an independent verifier.
+Nothing in the Demo profile was relaxed to get there.
+
+Replay serves MockMed and writes
 `report.json`, an illustrated `REPORT.md`, and reviewable repair patches under
 `heals/`. A healed bundle written by `--save-healed-to` is a repair
 *candidate*, never an implicitly active bundle: promoting it goes through the
@@ -159,6 +187,35 @@ configured minimum evidence tier. Every run also carries a first-class
 `CANCELED`, `REJECTED_POLICY`, `COMPLETED_UNVERIFIED`) plus a per-step effect
 journal.
 See [execution profiles](docs/EXECUTION_PROFILES.md).
+
+### Share a result without sharing the record
+
+```bash
+openadapt-flow report-run <run-dir> --receipt share/ --label "My first run"
+```
+
+Writes `share/receipt.png`, `receipt.json`, and `receipt.md` locally and
+contacts nothing. Only a `VERIFIED` run may use the success rail, so an
+unverified run still emits nothing.
+
+The receipt is **generated from a closed allow-list, never redacted from the
+run report**. Subtractive redaction of a run report is unwinnable: burned-in
+pixels, OCR text captured precisely because it identifies a record, and
+free-form halt reasons all leak, and one missed field is a breach. So the
+receipt declares its complete field set — outcome and transaction class (closed
+enums), step/heal/model-call/effect/identity counts, the over-halt counter,
+duration, the resolution-rung histogram, evidence classes, substrate, versions,
+the bundle and receipt digests, provenance, and an hour-truncated timestamp,
+plus one optional title you type — and refuses any key outside it. There is no
+screenshot, OCR text, typed value, parameter, URL, hostname, coordinate,
+workflow name, or free text.
+
+`receipt.json` is every byte that would leave the machine, so you can read it
+before you post it. A receipt from the bundled tutorial is marked
+`synthetic-tutorial` and contains no real data by construction; mark a real run
+`--production` and route it through
+`sanitize` / `review-sanitized` / `approve-sanitized` before it crosses a trust
+boundary.
 
 **Secrets never get recorded.** An `input[type=password]` field (or any field
 named with `--secret <name>`) is a secret parameter: its value is never written

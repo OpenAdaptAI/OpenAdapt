@@ -880,6 +880,65 @@ def _cmd_demo_record(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_tutorial(args: argparse.Namespace) -> int:
+    """Run the bundled tutorial end to end and emit its local receipt.
+
+    The free path, composed: record -> compile -> certify -> governed run under
+    the Standard profile with independent effect verification -> receipt.
+    Unlike ``replay`` (Demo profile, which can only ever report
+    ``COMPLETED_UNVERIFIED``), this path carries the evidence the Standard
+    profile requires, so the run terminates ``VERIFIED`` because the write was
+    confirmed in a system of record -- never because a gate was relaxed.
+    """
+    from datetime import datetime, timezone
+
+    from openadapt_flow.tutorial import (
+        TUTORIAL_WORKFLOW_NAME,
+        TutorialError,
+        run_tutorial,
+    )
+
+    out = (
+        Path(args.out)
+        if args.out
+        else Path("tutorials")
+        / ("tutorial-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"))
+    )
+    try:
+        result = run_tutorial(
+            out,
+            headed=args.headed,
+            name=args.name or TUTORIAL_WORKFLOW_NAME,
+            emit_receipt=not args.no_receipt,
+            label=args.label,
+            launcher_version=args.launcher_version,
+            echo=print,
+        )
+    except TutorialError as e:
+        print(f"\nTutorial REFUSED: {e}")
+        return 2
+
+    print(f"\n{result.execution_outcome}: {result.run_dir / 'REPORT.md'}")
+    print(
+        f"  transaction     {result.transaction_outcome} "
+        f"(billable: {'yes' if result.transaction_billable else 'no'})"
+    )
+    print(f"  profile         {result.execution_profile}")
+    print(f"  model calls     {result.model_calls}")
+    print(
+        f"  effects         {result.effects_confirmed}/{result.effects_required} "
+        f"confirmed at evidence tier {result.effect_tier} "
+        "(independent system of record)"
+    )
+    print(f"  bundle digest   {result.bundle_digest}")
+    if result.receipt_paths:
+        print(f"\nShareable receipt: {result.receipt_paths['png']}")
+        print(f"                   {result.receipt_paths['json']}")
+    if result.execution_outcome != "VERIFIED":
+        return 1
+    return 0
+
+
 def _cmd_compile(args: argparse.Namespace) -> int:
     import json
 
@@ -2437,6 +2496,9 @@ def _cmd_report_run(args: argparse.Namespace) -> int:
     control plane can show locally reported runs. The recording never leaves
     the machine, and self-reported rows are not a billing meter.
     """
+    if getattr(args, "receipt", None) is not None:
+        return _emit_local_receipt(args)
+
     from openadapt_flow.hosted import HostedError, report_run
 
     try:
@@ -2465,6 +2527,72 @@ def _cmd_report_run(args: argparse.Namespace) -> int:
         f"Run summary reported (run_id={result.get('run_id')}, "
         f"status={result.get('status')}){duplicate}."
     )
+    return 0
+
+
+def _emit_local_receipt(args: argparse.Namespace) -> int:
+    """Write a LOCAL, allow-listed run receipt. No network, ever.
+
+    The success rail's evidence contract is unchanged: only a VERIFIED run
+    (or a legacy unclassified success) may claim the success rail, so a
+    ``COMPLETED_UNVERIFIED`` run still emits nothing. What changed is that the
+    free tutorial can now REACH VERIFIED with real effect evidence, so the
+    artifact this gate protects is finally producible without a hosted account.
+
+    The receipt is built additively from the closed allow-list in
+    ``openadapt_flow.receipt``; the rich local ``REPORT.md`` -- screenshots,
+    typed values, OCR identity text, parameters -- is never the source.
+    """
+    from openadapt_flow.ir import RunReport
+    from openadapt_flow.receipt import ReceiptError, build_receipt, write_receipt
+
+    run_dir = Path(args.run_dir)
+    report_path = run_dir / "report.json"
+    if not report_path.is_file():
+        print(f"report-run failed: no report.json in {run_dir} — nothing to report.")
+        return 1
+    try:
+        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        print("report-run failed: report.json is unreadable or invalid")
+        return 1
+
+    success_rail_eligible = report.success and report.execution_outcome in (
+        None,
+        "VERIFIED",
+    )
+    if not success_rail_eligible:
+        print(
+            "Nothing emitted: run is not VERIFIED; only VERIFIED (or legacy "
+            "unclassified) successes may use the success rail"
+        )
+        return 0
+
+    provenance = "production" if args.production else "synthetic-tutorial"
+    try:
+        receipt = build_receipt(
+            report,
+            provenance=provenance,
+            label=args.label,
+            launcher_version=args.launcher_version,
+        )
+    except ReceiptError as e:
+        print(f"report-run failed: {e}")
+        return 1
+    paths = write_receipt(receipt, Path(args.receipt))
+    print("Receipt written (LOCAL ONLY, nothing was uploaded):")
+    for path in (paths["png"], paths["json"], paths["markdown"]):
+        print(f"  {path}")
+    print(
+        "\nEvery byte that would leave this machine is in receipt.json. "
+        "Publishing is a separate, explicit step."
+    )
+    if provenance == "production":
+        print(
+            "This receipt is marked `production`. Review it, then use the "
+            "sanitize / review-sanitized / approve-sanitized flow before it "
+            "leaves your trust boundary."
+        )
     return 0
 
 
@@ -2976,6 +3104,49 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.set_defaults(func=_cmd_demo_record)
+
+    p = sub.add_parser(
+        "tutorial",
+        help=(
+            "Run the bundled tutorial end to end against a real local system "
+            "of record: record, compile, certify, govern, and VERIFY the write "
+            "out of band, then write a shareable local receipt"
+        ),
+    )
+    p.add_argument(
+        "--out",
+        default=None,
+        help=(
+            "Directory for the tutorial's recording, bundle, and run "
+            "(default: tutorials/tutorial-<UTC timestamp> under the current "
+            "directory)"
+        ),
+    )
+    p.add_argument(
+        "--name",
+        default=None,
+        help="Workflow name for the compiled bundle (default: local-quickstart)",
+    )
+    p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.add_argument(
+        "--label",
+        default=None,
+        help=(
+            "Optional title you type for the receipt. Never derived from the "
+            "recording, and never required"
+        ),
+    )
+    p.add_argument(
+        "--launcher-version",
+        default=None,
+        help="Launcher version to record on the receipt, when a launcher drove this run",
+    )
+    p.add_argument(
+        "--no-receipt",
+        action="store_true",
+        help="Skip writing the local receipt (the run and its report are unchanged)",
+    )
+    p.set_defaults(func=_cmd_tutorial)
 
     p = sub.add_parser("compile", help="Compile a recording into a workflow bundle")
     p.add_argument("recording", help="Recording directory")
@@ -4481,6 +4652,40 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ingest token (default: OPENADAPT_INGEST_TOKEN env, OS keychain, "
             "then an existing config migration token)"
+        ),
+    )
+    p.add_argument(
+        "--receipt",
+        default=None,
+        metavar="DIR",
+        help=(
+            "LOCAL ONLY: write a shareable run receipt (receipt.png / .json / "
+            ".md) into DIR instead of contacting any host. The receipt is "
+            "generated from a closed allow-list -- closed enums, counts, "
+            "digests, versions -- and can carry no screenshot, OCR text, typed "
+            "value, parameter, URL, hostname, coordinate, or free-form text"
+        ),
+    )
+    p.add_argument(
+        "--label",
+        default=None,
+        help=(
+            "--receipt only: an optional title YOU type. Never derived from "
+            "the recording"
+        ),
+    )
+    p.add_argument(
+        "--launcher-version",
+        default=None,
+        help="--receipt only: launcher version to record on the receipt",
+    )
+    p.add_argument(
+        "--production",
+        action="store_true",
+        help=(
+            "--receipt only: mark the receipt's provenance as `production` "
+            "rather than `synthetic-tutorial`. A production receipt must go "
+            "through sanitize/approve before it leaves your trust boundary"
         ),
     )
     p.set_defaults(func=_cmd_report_run)
