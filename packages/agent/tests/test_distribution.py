@@ -23,6 +23,10 @@ LLMS_TXT = REPO_ROOT / "llms.txt"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 README = REPO_ROOT / "README.md"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+
+# `uses: owner/repo@<revision>` with the trailing ` # vX.Y.Z` comment stripped.
+USES_REVISION = re.compile(r"(?m)^\s*(?:-\s+)?uses:\s+(\S+)@([^\s#]+)")
 
 REVERSE_DNS_NAME = "io.github.OpenAdaptAI/openadapt-agent"
 PYPI_NAME = "openadapt-agent"
@@ -80,6 +84,45 @@ def test_release_workflow_runs_the_complete_archive_boundary() -> None:
     assert '- "scripts/check_dist.py"' in workflow
     assert "python scripts/check_release_artifacts.py dist" in workflow
     assert "python scripts/check_dist.py dist/*" in workflow
+
+
+def test_release_actions_are_pinned_to_commits() -> None:
+    """Every action on the publish path must be a full 40-char commit SHA.
+
+    A floating ref (``@v7``, or worse ``@release/v1``, which is a *branch*)
+    means whoever controls that ref decides what runs with this repo's PyPI
+    Trusted Publishing OIDC identity, at a moment nobody is watching. Ported
+    from openadapt-tray's test of the same name.
+    """
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    revisions = [m.group(2) for m in USES_REVISION.finditer(workflow)]
+    assert revisions
+    unpinned = [rev for rev in revisions if not re.fullmatch(r"[0-9a-f]{40}", rev)]
+    assert not unpinned, f"release.yml uses unpinned action revisions: {unpinned}"
+
+
+def test_every_workflow_action_is_pinned_to_a_commit() -> None:
+    """The same rule for the rest of the repo, so release.yml stays the norm.
+
+    Each pin also carries a trailing ``# vX.Y.Z`` comment so the human-readable
+    version is never lost to the SHA.
+    """
+    unpinned: list[str] = []
+    uncommented: list[str] = []
+    for workflow_file in sorted(WORKFLOWS_DIR.glob("*.yml")):
+        text = workflow_file.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            match = USES_REVISION.match(line)
+            if not match:
+                continue
+            action, revision = match.group(1), match.group(2)
+            where = f"{workflow_file.name}: {action}@{revision}"
+            if not re.fullmatch(r"[0-9a-f]{40}", revision):
+                unpinned.append(where)
+            elif not re.search(r"#\s*\S", line.split(revision, 1)[1]):
+                uncommented.append(where)
+    assert not unpinned, f"unpinned action revisions: {unpinned}"
+    assert not uncommented, f"pinned actions missing a version comment: {uncommented}"
 
 
 def test_serve_is_the_subcommand_and_bundles_is_required() -> None:
