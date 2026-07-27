@@ -10,6 +10,16 @@ from pathlib import Path
 
 FORBIDDEN_DEPENDENCIES = ("oa-atomacos", "pynput")
 FORBIDDEN_SOURCE_TOKENS = ("oa_atomacos", "pynput")
+FORBIDDEN_ARCHIVE_PATHS = (
+    ".env.example",
+    ".github/",
+    "CLAUDE.md",
+    "chrome_extension/",
+    "docs/images/demo.gif",
+    "docs/whisper-integration-plan.md",
+    "scripts/",
+    "tests/",
+)
 
 
 def _archive_files(path: Path) -> dict[str, bytes]:
@@ -31,11 +41,36 @@ def _archive_files(path: Path) -> dict[str, bytes]:
     raise ValueError(f"Unsupported distribution archive: {path}")
 
 
+def _relative_archive_name(name: str) -> str:
+    """Remove the versioned root directory used by source distributions."""
+    parts = Path(name).parts
+    if len(parts) > 1 and parts[0].startswith("openadapt_capture-"):
+        return Path(*parts[1:]).as_posix()
+    return Path(name).as_posix()
+
+
 def verify_distribution(path: Path) -> None:
     files = _archive_files(path)
+    relative_names = {_relative_archive_name(name) for name in files}
     assert any(Path(name).name == "LICENSE" for name in files), (
         f"{path}: MIT LICENSE file is missing"
     )
+
+    for name in relative_names:
+        assert not any(
+            name == forbidden.rstrip("/") or name.startswith(forbidden)
+            for forbidden in FORBIDDEN_ARCHIVE_PATHS
+        ), f"{path}: repository-only path is in the release archive: {name}"
+
+    if path.name.endswith(".tar.gz"):
+        required_source_files = {
+            "LICENSE",
+            "README.md",
+            "pyproject.toml",
+            "openadapt_capture/__init__.py",
+        }
+        missing = required_source_files - relative_names
+        assert not missing, f"{path}: required source files are missing: {sorted(missing)}"
 
     metadata_files = [
         content.decode("utf-8")

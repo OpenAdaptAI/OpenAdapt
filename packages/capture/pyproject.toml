@@ -99,6 +99,19 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt_capture"]
 
+[tool.hatch.build.targets.sdist]
+ignore-vcs = true
+only-include = [
+    "openadapt_capture",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "docs",
+]
+exclude = [
+    "/docs/images/demo.gif",
+    "/docs/whisper-integration-plan.md",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
