@@ -45,6 +45,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: citrix-workspace-standin-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   citrix-workspace-standin:
     runs-on: ubuntu-24.04

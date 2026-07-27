@@ -8,13 +8,17 @@ name: canvas-nodom-ladder
 # stand-in for the Citrix Workspace-WEB canvas class -- it is NOT Citrix ICA/HDX
 # (see benchmark/canvas_ladder/README.md).
 #
-# NIGHTLY + manual only (not a per-PR required gate): the harness drives a real
+# WEEKLY + manual only (not a per-PR required gate): the harness drives a real
 # browser over a VNC round-trip, so a run is minutes, not seconds. The fixture
 # image is amd64+arm64; GitHub's ubuntu runners are amd64.
 on:
   schedule:
-    - cron: "30 8 * * *"   # nightly 08:30 UTC (offset from docker-rdp-vision-ladder)
+    - cron: "30 8 * * 3"   # Wednesdays 08:30 UTC
   workflow_dispatch: {}
+
+concurrency:
+  group: canvas-nodom-ladder-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   canvas-nodom-ladder:

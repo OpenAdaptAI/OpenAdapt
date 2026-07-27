@@ -39,6 +39,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: docker-rdp-vision-ladder-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   docker-rdp-vision-ladder:
     runs-on: ubuntu-24.04

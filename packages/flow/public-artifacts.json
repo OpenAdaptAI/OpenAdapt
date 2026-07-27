@@ -81,19 +81,19 @@
     },
     {
       "path": ".github/workflows/canvas-nodom-ladder.yml",
-      "sha256": "3fe1fe1277df4bcd85a4ba00ffbb75f34395c31b26fd3038b7d0b6f7b31cc27c"
+      "sha256": "728951764fddc27702f5adc03244d050a984fdab2fdd52c02e0df34640a4b974"
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "f6a7904879a06f1fb55e34a8c5aa5f66a7d4ed34609a20e8bb0244ed0897926c"
+      "sha256": "1595e748c2d3109c1963aa89f243d07d2d7b8da27ef69a3d9488c62ed7e677dd"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
-      "sha256": "7ffdf4e530dd85d13f101ae43ca210034a6f6fae8aaf6e86664d4db867f0d67b"
+      "sha256": "0182320bfda16d62b36f2a71642f11fcaa7747d16b2a6be87db714c0669de253"
     },
     {
       "path": ".github/workflows/docker-rdp-vision-ladder.yml",
-      "sha256": "2e3cb3bf866e710312e3e4470a76fbc781d3387ad7b41533d1d55f43c143c664"
+      "sha256": "4c58e3b53592ce17f58175f985f68d08aee7a76ac061f8cbc2aab6b549a04d55"
     },
     {
       "path": ".github/workflows/paper.yml",
@@ -101,7 +101,7 @@
     },
     {
       "path": ".github/workflows/quickstart-lifecycle.yml",
-      "sha256": "3e96eb838d5bedfbbdcee8b6724f68791bfc120082ee1642e364410b44f1ed80"
+      "sha256": "01c504f7038b156cd2747fd8f5de385492633a42f61a62923406903ec7758dda"
     },
     {
       "path": ".github/workflows/release.yml",

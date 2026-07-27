@@ -2,7 +2,9 @@ name: Clean-machine quickstart lifecycle
 
 on:
   schedule:
-    - cron: "30 7 * * *" # nightly, after the main CI schedule
+    # Weekly clean-machine drift detection is sufficient during development;
+    # release candidates can dispatch the same three-OS matrix on demand.
+    - cron: "30 7 * * 2" # Tuesdays 07:30 UTC
   workflow_dispatch:
 
 concurrency:

@@ -19,7 +19,8 @@ name: CI
 #   - push to main: re-run the same required safety, unit, browser, packaging,
 #     and platform-contract gates against the exact merge commit.
 #   - schedule: run those gates plus the complete Python 3.10-3.12 / macOS
-#     matrix nightly, so interpreter and environment drift are caught daily.
+#     matrix weekly. Release candidates can dispatch the same matrix on demand;
+#     routine PRs and exact-main pushes already exercise the required gates.
 #   - workflow_dispatch: run the same complete matrix on an exact ref as the
 #     explicit release-qualification lane.
 # There is intentionally NO bare `push:` -- a bare push trigger fires a SECOND
@@ -47,7 +48,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "0 7 * * *" # 07:00 UTC nightly full matrix
+    - cron: "0 7 * * 0" # Sundays 07:00 UTC: full compatibility matrix
   workflow_dispatch:
 
 # Cancel any superseded in-flight run for the same ref (e.g. a force-push or a
@@ -484,9 +485,9 @@ jobs:
           path: runs/linux-atspi/results.json
           if-no-files-found: error
 
-  # --- Nightly / release qualification: full Python + macOS matrix ----------
+  # --- Weekly / release qualification: full Python + macOS matrix -----------
   # NOT a required merge check and NOT run on PRs or routine main pushes.
-  # Scheduled runs exercise it nightly; maintainers dispatch it on the exact
+  # Scheduled runs exercise it weekly; maintainers dispatch it on the exact
   # release candidate ref. It runs the COMPLETE suite including the slow
   # tests/e2e browser/OCR leg across Python 3.10-3.12 on Linux. The macOS leg
   # preserves every OS-specific test while omitting one platform-neutral
