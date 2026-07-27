@@ -2144,7 +2144,6 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python-headless" },
     { name = "pillow" },
-    { name = "playwright" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime" },
@@ -2152,6 +2151,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+browser = [
+    { name = "playwright" },
+]
 capture = [
     { name = "openadapt-capture" },
 ]
@@ -2168,6 +2170,7 @@ dev = [
     { name = "matplotlib" },
     { name = "mypy" },
     { name = "openadapt-types" },
+    { name = "playwright" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-timeout" },
@@ -2245,7 +2248,8 @@ requires-dist = [
     { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.6.0,<0.7.0" },
     { name = "opencv-python-headless", specifier = ">=4.9" },
     { name = "pillow", specifier = ">=10.0" },
-    { name = "playwright", specifier = ">=1.44" },
+    { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
+    { name = "playwright", marker = "extra == 'dev'", specifier = ">=1.44" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pygobject", marker = "sys_platform == 'linux' and extra == 'linux'", specifier = ">=3.46" },
     { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=10.3" },

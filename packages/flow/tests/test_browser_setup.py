@@ -15,10 +15,24 @@ from __future__ import annotations
 
 import importlib
 import subprocess
+from pathlib import Path
 
 import pytest
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
+    import tomli as tomllib
+
 import openadapt_flow._browser_setup as bs
+
+
+def test_playwright_is_browser_extra_not_base_dependency():
+    project = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())[
+        "project"
+    ]
+    assert not any(item.startswith("playwright") for item in project["dependencies"])
+    assert project["optional-dependencies"]["browser"] == ["playwright>=1.44"]
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +52,20 @@ def test_noop_when_browser_present(monkeypatch):
 
     bs.ensure_chromium_installed()
 
+    assert calls == []
+
+
+def test_missing_browser_extra_refuses_before_network_or_subprocess(monkeypatch):
+    """A non-browser base install gets one exact install action, not an import trace."""
+    monkeypatch.setattr(bs, "browser_support_installed", lambda: False)
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: calls.append((a, k)))
+
+    with pytest.raises(bs.BrowserSupportMissing) as exc:
+        bs.ensure_chromium_installed()
+
+    assert "openadapt[browser]" in str(exc.value)
+    assert "RDP" in str(exc.value)
     assert calls == []
 
 

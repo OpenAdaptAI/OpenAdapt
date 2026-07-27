@@ -380,6 +380,9 @@ def run(out_dir: Path) -> dict:
     stable_s: dict[str, Rendered] = {}
     drift_t: dict[tuple[str, str], Rendered] = {}
     drift_s: dict[tuple[str, str], Rendered] = {}
+    from openadapt_flow._browser_setup import ensure_chromium_installed
+
+    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:

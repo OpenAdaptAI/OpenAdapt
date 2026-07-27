@@ -285,11 +285,11 @@ def _deployment_executor(
                 "attended web actions require deployment.backend.headed: true"
             )
 
-        from playwright.sync_api import sync_playwright
-
         from openadapt_flow._browser_setup import ensure_chromium_installed
 
         ensure_chromium_installed()
+        from playwright.sync_api import sync_playwright
+
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=False)
             try:

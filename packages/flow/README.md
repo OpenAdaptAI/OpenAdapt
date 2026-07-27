@@ -42,7 +42,7 @@ rounds against the wrong-target check.
 ## Try it
 
 ```bash
-pip install openadapt-flow
+pip install 'openadapt-flow[browser]'
 
 openadapt-flow demo-record --out rec                     # record a demonstration
 openadapt-flow compile rec --out bundle --name my-task   # compile it
@@ -60,10 +60,11 @@ The command is `openadapt-flow`. If you installed the
 `openadapt flow <args>` is equivalent and forwards every flag, including
 `--backend`, to this engine.
 
-On the first command that needs a browser, openadapt-flow downloads the
-Chromium build Playwright needs (a one-time ~150MB fetch), so there is no
-separate `playwright install chromium` step. Prefer the fast, isolated installs
-`uvx openadapt-flow …` or `uv tool install openadapt-flow`. In air-gapped
+The base `openadapt-flow` package stays lightweight for native desktop, RDP,
+and Citrix runners. The `browser` extra adds Playwright only for web workflows;
+the first browser command then downloads its matching Chromium build once
+(about 150 MB), with no separate `playwright install chromium` step. Prefer the
+canonical `pip install 'openadapt[browser]'` launcher path for normal use. In air-gapped
 or CI environments that pre-provision the browser, set
 `OPENADAPT_FLOW_NO_AUTO_INSTALL=1` to disable the auto-download.
 

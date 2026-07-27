@@ -286,6 +286,9 @@ def render_value_crops(
     Reuses ``render_table_html`` for the actual pixels; the only additions are
     the runtime dark/zoom style overrides (cosmetic drift) and the per-cell
     crop extraction (which the fixture's ``render_frame`` does not expose)."""
+    from openadapt_flow._browser_setup import ensure_chromium_installed
+
+    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
 
     table, index = _values_table(values)
@@ -699,6 +702,9 @@ def run_font_floor(fonts: list[str]) -> list[dict]:
     """For each font, render O/0 and l/1 as isolated glyphs and report whether
     the two render pixel-identical (max abs diff == 0) -- the true floor no
     vision method can cross."""
+    from openadapt_flow._browser_setup import ensure_chromium_installed
+
+    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
 
     rows: list[dict] = []

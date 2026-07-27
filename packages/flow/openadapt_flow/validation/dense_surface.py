@@ -481,6 +481,9 @@ def render_frame(
     Screen pixels = CSS pixels * device_scale_factor, which is exactly the
     coordinate space of the screenshot the OCR and the identity band operate
     on."""
+    from openadapt_flow._browser_setup import ensure_chromium_installed
+
+    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
 
     html = render_table_html(

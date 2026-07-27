@@ -118,6 +118,9 @@ def render_crop(text: str, cond: RenderCond) -> bytes:
     Screen pixels = CSS pixels * device_scale_factor -- exactly the coordinate
     space the OCR and the identity band operate on in the real pipeline.
     """
+    from openadapt_flow._browser_setup import ensure_chromium_installed
+
+    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
 
     html = _render_html(text, cond)

@@ -1060,8 +1060,6 @@ def _default_run_dir() -> Path:
 
 
 def _cmd_replay(args: argparse.Namespace) -> int:
-    from playwright.sync_api import sync_playwright
-
     from openadapt_flow.backends.factory import _normalize_kind, build_backend
     from openadapt_flow.ir import Workflow
 
@@ -1136,6 +1134,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow._browser_setup import ensure_chromium_installed
 
     ensure_chromium_installed()
+    from playwright.sync_api import sync_playwright
+
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=not headed)
@@ -1438,8 +1438,6 @@ def _cmd_resume(args: argparse.Namespace) -> int:
 
     try:
         if _normalize_kind(backend_cfg.kind) == "web":
-            from playwright.sync_api import sync_playwright
-
             from openadapt_flow._browser_setup import ensure_chromium_installed
 
             url = args.url or cfg.backend.url
@@ -1450,6 +1448,8 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 )
             headed = args.headed or cfg.backend.headed
             ensure_chromium_installed()
+            from playwright.sync_api import sync_playwright
+
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=not headed)
                 page = browser.new_page(viewport=_VIEWPORT)
@@ -1576,14 +1576,14 @@ def _cmd_bench(args: argparse.Namespace) -> int:
 
     @contextmanager
     def backend_factory():
-        from playwright.sync_api import sync_playwright
-
         from openadapt_flow._browser_setup import ensure_chromium_installed
         from openadapt_flow.backends.playwright_backend import (
             PlaywrightBackend,
         )
 
         ensure_chromium_installed()
+        from playwright.sync_api import sync_playwright
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
@@ -4815,8 +4815,15 @@ def _cmd_connector(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
+    from openadapt_flow._browser_setup import BrowserSupportMissing
+
     args = build_parser().parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except BrowserSupportMissing as exc:
+        # Missing optional browser support is a setup decision, not a crash.
+        print(f"Browser setup required:\n{exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

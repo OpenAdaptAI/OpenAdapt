@@ -415,11 +415,11 @@ class InteractiveRecorder:
     def start(self) -> None:
         """Launch the browser, install the in-page listeners, capture the
         initial settled frame."""
-        from playwright.sync_api import sync_playwright
-
         from openadapt_flow._browser_setup import ensure_chromium_installed
 
         ensure_chromium_installed()
+        from playwright.sync_api import sync_playwright
+
         self._pw = sync_playwright().start()
         try:
             self._browser = self._pw.chromium.launch(headless=self._headless)

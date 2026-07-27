@@ -1,13 +1,10 @@
 """Lazy, on-first-use provisioning of the Chromium browser Playwright needs.
 
-`pip install openadapt-flow` pulls in the Playwright *Python package* but NOT
-the actual Chromium browser binary, which is a separate ~150MB download
-normally provisioned with ``playwright install chromium``. Post-install hooks
-are unreliable for wheels (they don't run for ``pip``/``uv`` wheel installs and
-can't prompt), so instead of a separate manual step we provision the browser
-*lazily, on first real use*: the first time the code is about to launch
-Chromium and the binary is missing, :func:`ensure_chromium_installed` downloads
-it once, prints a one-time friendly notice, and then the launch proceeds.
+The base runtime deliberately has no browser dependency. Native desktop, RDP,
+and Citrix users therefore install neither Playwright's ~34-47 MB platform
+wheel nor its separate Chromium runtime. Browser users select the ``browser``
+extra once; the matching Chromium build is then provisioned lazily on the first
+real browser launch.
 
 Design constraints:
 
@@ -27,6 +24,7 @@ Design constraints:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -37,6 +35,30 @@ import threading
 NO_AUTO_INSTALL_ENV = "OPENADAPT_FLOW_NO_AUTO_INSTALL"
 
 _NOTICE = "Downloading the Chromium browser OpenAdapt needs (first run only)…"
+
+
+class BrowserSupportMissing(RuntimeError):
+    """The optional Playwright driver is absent for a browser operation."""
+
+
+def browser_support_installed() -> bool:
+    """Return whether the optional driver is importable, without importing it."""
+    try:
+        return importlib.util.find_spec("playwright.sync_api") is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+
+
+def require_browser_support() -> None:
+    """Refuse a web operation with the canonical one-command install path."""
+    if not browser_support_installed():
+        raise BrowserSupportMissing(
+            "Browser recording and replay are an optional capability. Install "
+            "them once with:\n\n"
+            "    python -m pip install 'openadapt[browser]'\n\n"
+            "Native desktop, RDP, and Citrix workflows do not need this extra."
+        )
+
 
 # Guards so the probe runs at most once per process even under concurrent
 # first-launch attempts from multiple threads.
@@ -58,6 +80,7 @@ def _chromium_present() -> bool:
     launch error. Any failure to determine the path is treated as "not present"
     so the (idempotent) install is attempted rather than wrongly skipped.
     """
+    require_browser_support()
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -72,6 +95,7 @@ def _install_chromium() -> None:
         RuntimeError: if the install subprocess fails (e.g. offline), with an
             actionable message pointing at the manual command and the opt-out.
     """
+    require_browser_support()
     print(_NOTICE, file=sys.stderr, flush=True)
     try:
         subprocess.run(
@@ -103,6 +127,7 @@ def ensure_chromium_installed() -> None:
     "browser not installed" error to surface at launch.
     """
     global _ensured
+    require_browser_support()
     if _ensured:
         return
     with _lock:

@@ -50,6 +50,8 @@ def {func_name}(url: str{param_sig}) -> dict:
     Returns:
         Dict with success flag, run directory, heal count, and total ms.
     """
+    from openadapt_flow._browser_setup import ensure_chromium_installed
+    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
 
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend

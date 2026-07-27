@@ -2208,11 +2208,11 @@ class PlaywrightBackend:
             ``(backend, close)`` where ``close()`` shuts down the browser and
             the Playwright driver (flushing the video first, when recording).
         """
-        from playwright.sync_api import sync_playwright
-
         from openadapt_flow._browser_setup import ensure_chromium_installed
 
         ensure_chromium_installed()
+        from playwright.sync_api import sync_playwright
+
         pw = sync_playwright().start()
         try:
             browser = pw.chromium.launch(headless=headless)
