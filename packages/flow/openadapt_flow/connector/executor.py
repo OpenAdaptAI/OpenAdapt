@@ -46,6 +46,8 @@ from typing import Any, Callable, Optional
 from openadapt_flow.connector.config import ConnectorSettings
 from openadapt_flow.connector.protocol import ByocGovernanceError, ByocJob
 from openadapt_flow.connector.storage import CustomerStorage, extract_bundle_archive
+from openadapt_flow.failure_signals import automation_failure_signal
+from openadapt_flow.ir import RunReport
 
 #: A run-gate refusal (fail-closed admission denied) exits 2 before the replay
 #: creates report.json.
@@ -73,6 +75,8 @@ class ExecutionResult:
     report_ref: Optional[str]
     error: Optional[str] = None
     verified_bundle_sha256: Optional[str] = None
+    failure_signal: Optional[dict[str, Any]] = None
+    outcome: Optional[dict[str, Any]] = None
 
 
 def _grounding_env_available(job: ByocJob) -> bool:
@@ -156,10 +160,10 @@ def status_from_report(returncode: int, report: dict[str, Any]) -> str:
     """
     outcome = report.get("execution_outcome")
     if outcome is not None:
-        if outcome == "HALTED":
-            return "halt"
         if outcome == "VERIFIED" and returncode == 0 and report.get("success") is True:
             return "success"
+        if outcome in {"HALTED", "COMPLETED_UNVERIFIED", "ROLLED_BACK"}:
+            return "halt"
         return "failed"
     if report and (
         report.get("terminal_outcome") == "halt"
@@ -173,6 +177,16 @@ def status_from_report(returncode: int, report: dict[str, Any]) -> str:
     ):
         return "success"
     return "failed"
+
+
+def precise_outcome_from_report(report: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Project a valid local report onto its closed PHI-free outcome envelope."""
+
+    try:
+        envelope = RunReport.model_validate(report).outcome_envelope
+    except (TypeError, ValueError):
+        return None
+    return envelope.model_dump(mode="json") if envelope is not None else None
 
 
 def metrics_from_report(report: dict[str, Any]) -> dict[str, Any]:
@@ -365,4 +379,6 @@ def execute_job(
             report_ref=report_ref,
             error=outcome_error,
             verified_bundle_sha256=observed_sha256,
+            failure_signal=automation_failure_signal(report, status, job.target_kind),
+            outcome=precise_outcome_from_report(report),
         )

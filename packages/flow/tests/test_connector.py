@@ -40,9 +40,10 @@ from openadapt_flow.connector import (
     save_enrollment,
     status_from_report,
 )
-from openadapt_flow.connector.executor import RunOutcome
+from openadapt_flow.connector.executor import RunOutcome, precise_outcome_from_report
 from openadapt_flow.connector.protocol import ByocGovernanceError
 from openadapt_flow.connector.storage import LocalCustomerStorage
+from openadapt_flow.failure_signals import automation_failure_signal
 
 
 def _bundle_archive_bytes() -> bytes:
@@ -181,6 +182,91 @@ def test_callback_body_is_phi_free():
     assert set(body["metrics"]).issubset(
         {"steps", "steps_ok", "halts", "heals", "model_calls", "cost_usd"}
     )
+
+
+def test_customer_controlled_failure_signal_is_closed_and_optional(monkeypatch):
+    job = parse_job(_payload(target_kind="citrix"), lease_job_id="bjob_1")
+    report = {
+        "execution_target_kind": "citrix",
+        "execution_profile": "regulated",
+        "execution_outcome": "HALTED",
+        "external_network_calls": "none",
+        "model_calls": 0,
+        "results": [
+            {
+                "step_id": "patient-Jane-Doe",
+                "ok": False,
+                "error": "ambiguous patient Jane Doe MRN 12345",
+                "resolution": {"rung": "ocr", "point": {"x": 1, "y": 2}},
+            }
+        ],
+    }
+    signal = automation_failure_signal(report, "halt", "citrix")
+    body = phi_free_callback_body(
+        job,
+        ExecutionResult(
+            "halt", {}, {"reason": "Jane Doe"}, job.report_ref(), failure_signal=signal
+        ),
+    )
+    serialized = json.dumps(body)
+    assert body["failure_signal"]["failure_kind"] == "resolution_ambiguous"
+    assert body["failure_signal"]["substrate"] == "citrix"
+    assert "Jane Doe" not in serialized
+    assert "12345" not in serialized
+    assert "results" not in serialized
+
+    monkeypatch.setenv("DO_NOT_TRACK", "1")
+    body = phi_free_callback_body(
+        job,
+        ExecutionResult("halt", {}, None, job.report_ref(), failure_signal=signal),
+    )
+    assert "failure_signal" not in body
+
+
+def test_customer_controlled_callback_carries_exact_outcome_envelope():
+    report = {
+        "workflow_name": "wf",
+        "started_at": "2026-07-26T19:00:00Z",
+        "execution_profile": "standard",
+        "execution_outcome": "HALTED",
+        "execution_completed": False,
+        "production_eligible": False,
+        "model_calls": 0,
+        "external_network_calls": "none",
+        "outcome_envelope": {
+            "version": "openadapt.execution-outcome/v1",
+            "outcome": "HALTED",
+            "profile": "standard",
+            "production_eligible": False,
+            "execution_completed": False,
+            "required_contracts": {
+                "authorization": 1,
+                "identity": 1,
+                "postcondition": 1,
+                "effect": 1,
+            },
+            "passed_contracts": {
+                "authorization": 1,
+                "identity": 0,
+                "postcondition": 0,
+                "effect": 0,
+            },
+            "evidence_classes": ["authorization"],
+            "model_calls": 0,
+            "external_network_calls": "none",
+            "compensation_actions": 0,
+        },
+    }
+    assert status_from_report(2, report) == "halt"
+    job = parse_job(_payload(), lease_job_id="bjob_1")
+    result = ExecutionResult(
+        "halt",
+        {},
+        None,
+        job.report_ref(),
+        outcome=precise_outcome_from_report(report),
+    )
+    assert phi_free_callback_body(job, result)["outcome"]["outcome"] == "HALTED"
 
 
 def test_halt_maps_to_halt_status_and_present_flag():

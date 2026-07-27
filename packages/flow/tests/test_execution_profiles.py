@@ -1573,7 +1573,10 @@ def test_production_unverified_completion_is_not_legacy_success_or_suppressed(
     assert report.outcome_envelope.outcome == "COMPLETED_UNVERIFIED"
     assert report.outcome_envelope.passed_contracts.effect == 0
     assert report.outcome_envelope.required_contracts.effect == 1
-    assert status_from_report(0, report.model_dump(mode="json")) == "failed"
+    # The connector's three-state transport maps a completed-but-unverified
+    # business outcome to operator attention (halt), not infrastructure failure.
+    # The attached outcome envelope preserves the exact distinction.
+    assert status_from_report(0, report.model_dump(mode="json")) == "halt"
     assert summary_status(report) == "failed"
     assert attention_item(tmp_path, run_dir) is not None
 

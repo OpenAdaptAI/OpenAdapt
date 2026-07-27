@@ -22,6 +22,10 @@ from openadapt_flow.connector.config import ConnectorSettings
 from openadapt_flow.connector.executor import ExecutionResult, Runner, execute_job
 from openadapt_flow.connector.protocol import ByocJob, parse_job
 from openadapt_flow.connector.storage import CustomerStorage, build_storage
+from openadapt_flow.failure_signals import (
+    automation_failure_signal,
+    failure_signal_sharing_enabled,
+)
 
 #: storage_factory(job) -> CustomerStorage. Injected in tests; the default builds
 #: from settings + the job's backend hint.
@@ -57,6 +61,12 @@ def phi_free_callback_body(job: ByocJob, result: ExecutionResult) -> dict[str, A
     if result.halt is not None:
         # run-callback reads only halt.present; the structured block is additive.
         body["halt"] = {"present": True}
+    if result.outcome is not None:
+        body["outcome"] = result.outcome
+    if result.status != "success" and failure_signal_sharing_enabled():
+        body["failure_signal"] = result.failure_signal or automation_failure_signal(
+            None, result.status, job.target_kind
+        )
     return body
 
 
