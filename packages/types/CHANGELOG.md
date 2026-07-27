@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v0.6.2 (2026-07-27)
+
+### Bug Fixes
+
+- Close the attended terminal-outcome contract gap with HumanDecisionReceiptV1
+  ([#13](https://github.com/OpenAdaptAI/openadapt-types/pull/13),
+  [`4eb190f`](https://github.com/OpenAdaptAI/openadapt-types/commit/4eb190f7f49cacf0f689d4ef6fc2c1506d2da316))
+
+The signed human-decision *task* contract shipped in 0.6.0/0.6.1, but the *receipt* that closes the
+  round trip did not. `openadapt-flow` already returns a terminal receipt from its console decision
+  route and had to define its own half locally, so no consumer outside Flow can validate the shape
+  Flow actually produces. Cloud cannot check the one payload that reports whether an operator's
+  decision resumed, halted, or may have been delivered.
+
+`HumanDecisionReceiptV1` closes that gap. It is a closed type in which protected content is
+  structurally unrepresentable rather than stripped on send: no free-text field, `reason_code` a
+  closed enum, every string closed by a pattern/const/enum, unknown fields rejected, RFC 3339
+  timestamps, and uncertainty a first-class terminal state.
+
+Claude-Session: https://claude.ai/code/session_01NyCHrzA1psrKMFfroYbzaM
+
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+
+
 ## v0.6.1 (2026-07-27)
 
 ### Bug Fixes
