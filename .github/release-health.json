@@ -1,0 +1,33 @@
+{
+  "$comment": [
+    "Input to scripts/check_release_health.py. One entry per RELEASE LANE:",
+    "a tag namespace plus the workflow that is supposed to publish it.",
+    "This repository's release-and-publish.yml runs on every push to main under",
+    "concurrency group 'release' with cancel-in-progress: false, so GitHub",
+    "cancels the PENDING run whenever a third push arrives. Runs 30275153205",
+    "and 30276970325 are exactly that, and both were harmless because a later",
+    "run released the same commits. The detector is state-based for this",
+    "reason: it asks whether anything is still unpublished, not whether a run",
+    "was cancelled."
+  ],
+  "repository": "OpenAdaptAI/OpenAdapt",
+  "branch": "main",
+  "ci_workflows": ["main.yml"],
+  "lanes": [
+    {
+      "id": "launcher",
+      "name": "PyPI package",
+      "tag_pattern": "^v(\\d+\\.\\d+\\.\\d+)$",
+      "release_workflows": ["release-and-publish.yml"],
+      "pypi_package": "openadapt",
+      "tracks_main": true,
+      "acknowledged_tags": {
+        "v0.36.1": "2024-07-06 legacy monorepo tag. No release object was ever created and 0.36.1 was never published to PyPI (the index jumps 0.35.x -> 0.39.1). Permanently historical: acknowledged here rather than left to alert forever, because a guard that is always red is a guard nobody reads."
+      },
+      "unreleased_grace_hours": 4,
+      "tag_without_release_grace_hours": 1,
+      "pypi_lag_grace_minutes": 30,
+      "remediation": "# release-and-publish.yml runs on push to main; re-run the newest run on main.\ngh run rerun --repo OpenAdaptAI/OpenAdapt \"$(gh run list --repo OpenAdaptAI/OpenAdapt --workflow=release-and-publish.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')\""
+    }
+  ]
+}
