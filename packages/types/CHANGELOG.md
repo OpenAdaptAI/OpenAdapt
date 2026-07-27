@@ -1,6 +1,43 @@
 # CHANGELOG
 
 
+## v0.6.1 (2026-07-27)
+
+### Bug Fixes
+
+- Close free text in human decision timestamps and pin canonicalization
+  ([#12](https://github.com/OpenAdaptAI/openadapt-types/pull/12),
+  [`b6a6aa5`](https://github.com/OpenAdaptAI/openadapt-types/commit/b6a6aa5e7bd58664f72410f484d266cf8a83e4f1))
+
+The signed human-decision task contract shipped in 0.6.0 is already strict, closed, and Cloud-safe
+  in Python. Two narrow gaps remained against the mobile attended-decision design, both about
+  consumers that are not Python.
+
+`created_at` and `expires_at` were the only declared strings with no pattern. Python rejected
+  non-timestamps through the model validator, but the packaged `human-decision-task-v1.json` -- the
+  artifact a TypeScript or other-language consumer validates against -- constrained them only by
+  length, so it accepted up to 40 characters of arbitrary text in two fields. Free text is how PHI
+  escapes, so the RFC 3339 shape now lives in the field pattern and therefore in the exported
+  schema.
+
+Canonicalization was correct but undocumented and unpinned: a reimplementer had to infer the rules
+  from `json.dumps` keyword arguments. The rules are now normative in the module docstring, and a
+  frozen vector pins the exact canonical bytes, digest, and signature hex so a cross-language
+  implementation can self-check and a future change fails loudly instead of silently re-signing.
+
+Tests now enumerate each forbidden evidence category -- screenshots, OCR, expected/observed values,
+  free text, identifiers, unknown fields -- against the task and both nested models, and a
+  structural guard walks the exported schema to fail on any string not closed by a pattern, const,
+  or enum. That guard is what stops a later field addition from quietly reopening the hole.
+
+No signed byte changes: the pinned vector was computed before this change and still matches. Every
+  timestamp format Flow's `_iso()` emits still validates.
+
+Claude-Session: https://claude.ai/code/session_01NyCHrzA1psrKMFfroYbzaM
+
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+
+
 ## v0.6.0 (2026-07-27)
 
 ### Features
