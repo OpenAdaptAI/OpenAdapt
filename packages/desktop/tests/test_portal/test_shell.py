@@ -15,9 +15,9 @@ from pathlib import Path
 from engine.portal.server import PROTECTED_PREFIX, SHELL_ASSETS
 
 SHELL = Path(__file__).resolve().parents[2] / "engine" / "portal" / "shell"
-SW = (SHELL / "sw.js").read_text()
-APP = (SHELL / "app.js").read_text()
-INDEX = (SHELL / "index.html").read_text()
+SW = (SHELL / "sw.js").read_text(encoding="utf-8")
+APP = (SHELL / "app.js").read_text(encoding="utf-8")
+INDEX = (SHELL / "index.html").read_text(encoding="utf-8")
 
 
 def _precached_paths() -> list[str]:
@@ -124,11 +124,11 @@ def test_an_accepted_tap_is_never_rendered_as_success() -> None:
 def test_the_shell_is_a_responsive_pwa_and_not_a_native_project() -> None:
     assert 'name="viewport"' in INDEX and "viewport-fit=cover" in INDEX
     assert 'rel="manifest"' in INDEX
-    manifest = json.loads((SHELL / "manifest.webmanifest").read_text())
+    manifest = json.loads((SHELL / "manifest.webmanifest").read_text(encoding="utf-8"))
     assert manifest["display"] == "standalone"
     assert manifest["scope"] == "/"
     # Safe-area insets keep the action bar above the browser chrome on a phone.
-    assert "env(safe-area-inset-bottom)" in (SHELL / "styles.css").read_text()
+    assert "env(safe-area-inset-bottom)" in (SHELL / "styles.css").read_text(encoding="utf-8")
 
 
 def test_no_native_mobile_project_was_added() -> None:
