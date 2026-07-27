@@ -45,7 +45,7 @@
 |---|---|---|---|---|
 | `tests/e2e/test_record_compile_replay.py` | test | ci (post-merge/nightly full suite) | supported | Baseline replay x3 resolves every step on the `template` rung with 0 heals and 0 model calls; healed bundles replay clean afterward. |
 | `tests/test_replayer.py` | test | ci (required PR gate (test)) | supported | The replayer is a deterministic resolution ladder; the VLM rung is a fallback, not on the default path — the core runtime is model-free. |
-| `benchmark/BENCHMARK.md` | benchmark | artifact (doc/benchmark) | roadmap | CI-reproducible MockMed run artifact: 100/100 compiled replays at 4.9s p50 with zero model calls (field/artifact reference). |
+| `benchmark/BENCHMARK.md` | benchmark | artifact (doc/benchmark) | roadmap | CI-reproducible MockMed run artifact: 100/100 compiled replays at 4.9s p50 with zero model calls, measured 2026-07-08 on Flow 0.1.0 (pre-v0.2.0 source build); field/artifact reference. |
 
 **Caveats (honest limits):**
 
@@ -142,7 +142,7 @@
 
 ### `mockmed-benchmark-ci-reproducible` — supported — CI-proven today
 
-> The MockMed benchmark is CI-reproducible: compiled replay finishes ~4.9s p50 with zero model calls versus ~37.5s p50 (~$0.27/run) for the agent.
+> The MockMed benchmark is CI-reproducible: compiled replay finishes ~4.9s p50 with zero model calls versus ~37.5s p50 (~$0.27/run) for the agent. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build; not re-measured on a later release.
 
 - Surfaces: README.md, docs
 - Strongest evidence strength: **supported** (tier is `supported`)
@@ -155,7 +155,7 @@
 
 **Caveats (honest limits):**
 
-- The published latency/cost figures come from a dated run artifact; the app is intentionally simple, so success rate (100/100 vs 20/20) is not the story — the standing cost/latency delta is. Agent cost is a list-price estimate.
+- The published latency/cost figures come from a dated run artifact measured on Flow 0.1.0 (pre-v0.2.0 source checkout; exact runtime HEAD not retained) on 2026-07-08; the app is intentionally simple, so success rate (100/100 vs 20/20) is not the story — the standing cost/latency delta is. Agent cost is a list-price estimate.
 
 ### `windows-desktop-validating` — validating — opt-in / infra-gated or field test
 
@@ -309,7 +309,7 @@
 
 ### `openemr-field-benchmark` — validating — opt-in / infra-gated or field test
 
-> On the real third-party OpenEMR public demo, compiled replay went 20/20 versus 10/10 for a computer-use agent, faster and with zero model calls.
+> On the real third-party OpenEMR public demo, compiled replay went 20/20 versus 10/10 for a computer-use agent, faster and with zero model calls. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build.
 
 - Reproducibility: **field**
 - Surfaces: README.md, docs, website

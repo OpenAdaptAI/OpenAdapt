@@ -5,6 +5,18 @@
     "total": 8.0
   },
   "generated_at": "2026-07-08T22:46:39.730720+00:00",
+  "flow": {
+    "flow_version": "0.1.0",
+    "flow_version_qualifier": "pre-v0.2.0 development source checkout",
+    "exact_runtime_commit": null,
+    "exact_runtime_commit_recorded": false,
+    "flow_version_note": "Measured from a source checkout declaring version = \"0.1.0\", not a published wheel. The exact runtime HEAD was not retained. Refreshing these numbers means re-running the benchmark, not editing this field."
+  },
+  "artifact_provenance": {
+    "first_committed_in": "e98975640428fdc8037430cdca81bcb68db54220",
+    "parent_before_artifact_commit": "099eac0759440a86eceef38530797e8d5b765a15",
+    "note": "These SHAs identify when the retained rows entered repository history; neither is attributed as the exact runtime HEAD."
+  },
   "task": "OpenEMR public demo: log in, search the demo patient, open the chart, scroll the dashboard to the Messages card, open Patient Messages, add a parameterized note, save",
   "target": "https://demo.openemr.io/openemr/index.php",
   "workflow_steps": 18,

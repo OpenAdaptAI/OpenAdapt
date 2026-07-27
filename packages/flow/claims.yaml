@@ -93,7 +93,8 @@ claims:
         kind: benchmark
         proves: >-
           CI-reproducible MockMed run artifact: 100/100 compiled replays at
-          4.9s p50 with zero model calls (field/artifact reference).
+          4.9s p50 with zero model calls, measured 2026-07-08 on Flow 0.1.0
+          (pre-v0.2.0 source build); field/artifact reference.
     caveats:
       - >-
         A VLM rung exists as the lowest fallback of the ladder; it is not
@@ -283,6 +284,8 @@ claims:
     claim: >-
       The MockMed benchmark is CI-reproducible: compiled replay finishes ~4.9s
       p50 with zero model calls versus ~37.5s p50 (~$0.27/run) for the agent.
+      Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build; not
+      re-measured on a later release.
     surfaces: [README.md, docs]
     tier: supported
     evidence:
@@ -300,10 +303,11 @@ claims:
           MockMed comparison (dated run artifact).
     caveats:
       - >-
-        The published latency/cost figures come from a dated run artifact; the
-        app is intentionally simple, so success rate (100/100 vs 20/20) is not
-        the story — the standing cost/latency delta is. Agent cost is a
-        list-price estimate.
+        The published latency/cost figures come from a dated run artifact
+        measured on Flow 0.1.0 (pre-v0.2.0 source checkout; exact runtime HEAD
+        not retained) on 2026-07-08; the app is intentionally simple, so success rate (100/100
+        vs 20/20) is not the story — the standing cost/latency delta is. Agent
+        cost is a list-price estimate.
 
   # ------------------------------ Windows desktop (validating, opt-in gated)
   - id: windows-desktop-validating
@@ -628,6 +632,7 @@ claims:
     claim: >-
       On the real third-party OpenEMR public demo, compiled replay went 20/20
       versus 10/10 for a computer-use agent, faster and with zero model calls.
+      Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build.
     surfaces: [README.md, docs, website]
     tier: validating
     reproducibility: field

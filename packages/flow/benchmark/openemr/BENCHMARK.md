@@ -1,6 +1,7 @@
 # Benchmark: compiled replay vs. computer-use agent — OpenEMR (real app)
 
-Date: 2026-07-08. Same head-to-head as the [MockMed benchmark](../BENCHMARK.md),
+Date: 2026-07-08. Engine: a pre-`v0.2.0` source checkout declaring
+openadapt-flow 0.1.0. Same head-to-head as the [MockMed benchmark](../BENCHMARK.md),
 run against a real third-party application: the official OpenEMR public
 demo (`https://demo.openemr.io/openemr/index.php`, fake patients only, instance resets daily).
 One task, two ways to automate it, one success check.
@@ -23,6 +24,12 @@ BOTH arms), save.
 | total model cost | $0 | $5.52 |
 | tokens (uncached in / out, total) | 0 / 0 | 496 / 27,272 |
 | cache tokens (write/read, total) | 0 / 0 | 1,317,803 / 563,928 |
+
+**Measured on Flow 0.1.0, 2026-07-08.** The measurement used a pre-`v0.2.0`
+development source checkout; its exact runtime HEAD was not retained. The rows
+were first committed in `e9897564` after parent `099eac07`; those two SHAs
+describe artifact history, not the runtime used for the measurement. Not
+re-measured on a later release.
 
 Failed runs, reported honestly:
 

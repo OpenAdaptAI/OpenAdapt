@@ -485,7 +485,9 @@ demo (fake patients only, resets daily). We ran an 18-step add-patient-note
 workflow both ways (log in, find a patient, scroll a dense dashboard, add
 a note) with a distinct note value each run and the same OCR success
 check on both arms: 20 compiled replays against 10 runs of a
-claude-sonnet-5 computer-use agent. Compiled went 20/20 at 39.2s (p50)
+claude-sonnet-5 computer-use agent, measured on 2026-07-08 from a
+pre-v0.2.0 source checkout declaring openadapt-flow 0.1.0. Compiled went
+20/20 at 39.2s (p50)
 with zero model calls; the agent went 10/10 at 70.4s (p50), about $0.55
 per run at list price ($5.52 total for the 10 runs, with prompt caching
 and hard cost caps enforced in the harness). It is a shared public demo
@@ -497,7 +499,8 @@ Full numbers, methodology, and caveats:
 [benchmark/openemr/BENCHMARK.md](benchmark/openemr/BENCHMARK.md).
 
 For a controlled, CI-reproducible comparison (the methodology anchor) we
-ran the bundled MockMed task both ways on 2026-07-08 with the same OCR
+ran the bundled MockMed task both ways on 2026-07-08, on the same
+openadapt-flow 0.1.0 pre-v0.2.0 source build, with the same OCR
 success check: 100 compiled replays against 20 runs of the same agent.
 Both arms went 100 for 100 and 20 for 20, so on an app this simple the
 story isn't success rate. It's that a compiled replay finishes in 4.9s
@@ -512,9 +515,11 @@ The stack also ships a pinned, containerized lending reference environment,
 [`benchmark/frappe_lending/`](benchmark/frappe_lending/README.md), with pinned
 containers, a lockfile, and independent REST, SQL, and exact table-delta
 verification of every write. In the model-free engineering matrix (compiled
-and direct-API arms, baseline plus cosmetic drift), it delivered **12/12
+and direct-API arms, baseline plus cosmetic drift, measured 2026-07-16 on
+openadapt-flow 1.9.0), it delivered **12/12
 correct rows with zero silent wrong writes, zero over-halts, and $0 model
-cost**. A separate paid-agent run completed 6/6 correct writes (5/6 clean;
+cost**. A separate paid-agent run on 2026-07-21 on openadapt-flow 1.19.0 completed
+6/6 correct writes (5/6 clean;
 one post-write cost-cap over-halt) with zero silent incorrect successes. That
 small-N run used a separately provisioned baseline, so it is engineering
 evidence rather than a matched comparison or publication result. See the

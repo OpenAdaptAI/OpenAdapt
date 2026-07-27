@@ -101,7 +101,7 @@
           "node": null,
           "node_found": null,
           "junit_status": null,
-          "proves": "CI-reproducible MockMed run artifact: 100/100 compiled replays at 4.9s p50 with zero model calls (field/artifact reference)."
+          "proves": "CI-reproducible MockMed run artifact: 100/100 compiled replays at 4.9s p50 with zero model calls, measured 2026-07-08 on Flow 0.1.0 (pre-v0.2.0 source build); field/artifact reference."
         }
       ],
       "errors": []
@@ -390,7 +390,7 @@
     },
     {
       "id": "mockmed-benchmark-ci-reproducible",
-      "claim": "The MockMed benchmark is CI-reproducible: compiled replay finishes ~4.9s p50 with zero model calls versus ~37.5s p50 (~$0.27/run) for the agent.",
+      "claim": "The MockMed benchmark is CI-reproducible: compiled replay finishes ~4.9s p50 with zero model calls versus ~37.5s p50 (~$0.27/run) for the agent. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build; not re-measured on a later release.",
       "tier": "supported",
       "reproducibility": null,
       "surfaces": [
@@ -399,7 +399,7 @@
       ],
       "strongest_evidence": "supported",
       "caveats": [
-        "The published latency/cost figures come from a dated run artifact; the app is intentionally simple, so success rate (100/100 vs 20/20) is not the story \u2014 the standing cost/latency delta is. Agent cost is a list-price estimate."
+        "The published latency/cost figures come from a dated run artifact measured on Flow 0.1.0 (pre-v0.2.0 source checkout; exact runtime HEAD not retained) on 2026-07-08; the app is intentionally simple, so success rate (100/100 vs 20/20) is not the story \u2014 the standing cost/latency delta is. Agent cost is a list-price estimate."
       ],
       "evidence": [
         {
@@ -927,7 +927,7 @@
     },
     {
       "id": "openemr-field-benchmark",
-      "claim": "On the real third-party OpenEMR public demo, compiled replay went 20/20 versus 10/10 for a computer-use agent, faster and with zero model calls.",
+      "claim": "On the real third-party OpenEMR public demo, compiled replay went 20/20 versus 10/10 for a computer-use agent, faster and with zero model calls. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build.",
       "tier": "validating",
       "reproducibility": "field",
       "surfaces": [

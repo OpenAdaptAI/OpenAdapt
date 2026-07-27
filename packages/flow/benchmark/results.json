@@ -1,5 +1,17 @@
 {
   "generated_at": "2026-07-08T15:46:40.963053+00:00",
+  "flow": {
+    "flow_version": "0.1.0",
+    "flow_version_qualifier": "pre-v0.2.0 development source checkout",
+    "exact_runtime_commit": null,
+    "exact_runtime_commit_recorded": false,
+    "flow_version_note": "Measured from a source checkout declaring version = \"0.1.0\", not a published wheel. The exact runtime HEAD was not retained. Refreshing these numbers means re-running the benchmark, not editing this field."
+  },
+  "artifact_provenance": {
+    "first_committed_in": "b2eec0be7ddee1930bd45d447cee3afced8d1fd8",
+    "parent_before_artifact_commit": "45f5ba8a141d361420d903c0700aac7403a37d97",
+    "note": "These SHAs identify when the retained rows entered repository history; neither is attributed as the exact runtime HEAD."
+  },
   "task": "MockMed triage: login, open first referral, create a Triage encounter, enter the note, save",
   "note_text": "Follow-up in 2 weeks; BP recheck.",
   "model": "claude-sonnet-5",
