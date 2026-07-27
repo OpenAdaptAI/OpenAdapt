@@ -16,6 +16,12 @@
 \usepackage{booktabs}
 \usepackage{amssymb}
 \usepackage{microtype}
+\setlength{\emergencystretch}{2em}
+% Ragged-right bibliography: `plain` + long DOI/URL fields otherwise produce
+% underfull lines with distracting inter-word gaps. Content is unchanged.
+% Done without a package so the arXiv/CI TeX install needs nothing extra.
+\let\oldthebibliography\thebibliography
+\renewcommand{\thebibliography}[1]{\oldthebibliography{#1}\raggedright}
 \usepackage{hyperref}
 \usepackage{xcolor}
 \usepackage{tikz}
@@ -36,7 +42,10 @@
   citecolor=blue,
   urlcolor=blue,
   pdftitle={A Green Screen Is Not a Saved Record},
-  pdfsubject={Workshop condensation of the OpenAdapt technical report}
+  pdfauthor={Richard Abrich},
+  pdfsubject={Workshop condensation of the OpenAdapt technical report},
+  pdfkeywords={GUI agents, effect verification, silent incorrect success,
+    over-halt, test oracle}
 }
 \newcommand{\system}{OpenAdapt}
 \newcommand{\fullreport}{\href{https://github.com/OpenAdaptAI/openadapt-flow}{full technical report}}
@@ -57,7 +66,8 @@ because a rendered success is not a persisted effect. The same green ``Saved''
 banner can follow a partial write, a duplicate submission, a stale overwrite, or
 a silently rejected transaction. We call the resulting error a \emph{silent
 incorrect success} and show it is common and measurable. Driving ten persistence
-scenarios end to end through a live replayer against an on-disk system of record
+scenarios through a live replayer's governed actuation and verification path
+against an on-disk system of record
 and judging every run by an independent ground truth, screen-only verification
 silently accepted a wrong persisted effect on 54 of 90 runs; an out-of-band
 effect check cut that to 9 of 90, and a complete system-of-record read path to 0
@@ -249,31 +259,43 @@ prevailing oracle is a screenshot.
 \section{Result: screen-only verification silently accepts wrong effects}
 \label{sec:faults}
 
-\paragraph{Design.} We inject seven persistence faults, plus two controls, at a
-real HTTP persistence boundary behind a browser triage workflow, with ten repeats
-per class. The oracle is database state, not the UI report. Each class is
-evaluated twice through the live replayer: once with screen-only verification,
-and once with a declared typed effect and a system-of-record verifier configured.
-We report silent incorrect success (the runtime reports success while the
-external oracle disagrees) and false abort (the effect occurred but the runtime
-reports failure).
+\paragraph{Design.} We report two complementary studies at the same persistence
+boundary. The first drives ten persistence scenarios through the live replayer's
+governed actuation and verification path---nine runs per scenario per arm, every
+write issued by the replayer's actuator to an on-disk SQLite system of record---
+under three verification policies, and judges every run with a ground truth that
+opens the database directly on its own read-only connection and never sees the
+write's success flag. Its observation backend and vision stack are null stubs,
+so it measures verification and refusal rather than GUI perception. The second
+keeps perception real---a live browser, screenshots, and OCR---and injects seven
+persistence faults plus two controls with ten repeats per class, but carries
+only a screen-only arm. We report silent incorrect success (the runtime reports
+success while the external oracle disagrees) and false abort (the effect
+occurred but the runtime reports failure). No released study covers real
+perception and effect verification on the same runs, and we do not present one
+as though it did.
 
 \paragraph{Finding.} Under screen-only verification, silent wrong effects are the
-common case, not a corner case, and we measure it end to end through the live
-replayer against an on-disk system of record, judged by an independent ground
-truth. Screen-only verification silently accepted a wrong persisted effect on 54
+common case, not a corner case. Screen-only verification silently accepted a
+wrong persisted effect on 54
 of 90 runs. An out-of-band effect check that reads the record back cut that to 9
 of 90, and a complete system-of-record read path to 0 of 90
 (Figure~\ref{fig:silentbar}). The residual 9 of 90 are one collateral-write class
 outside the out-of-band oracle's read coverage, the honest limit of an
 out-of-band oracle: it catches exactly what its read path can read. False aborts
 are a constant 9 in all three arms, a safe halt on a commit whose outcome is
-unknown to the client. Broken out by class in a companion study, screen-only
+unknown to the client. Six of the ten scenarios differentiate the screen from an
+out-of-band oracle; exactly one, the collateral write, differentiates a
+single-surface oracle from a complete read path; three halt in every arm and
+carry no oracle signal. Read this as a coverage matrix over hand-authored,
+deterministic fault classes, not as an incidence rate.
+
+In the perception-real companion study, screen-only
 verification silently mishandled five of seven injected fault classes: partial
 save, duplicate submission, optimistic UI followed by rejection, stale overwrite,
-and double delivery. There were 10 consistent repeats per class. When the step
-declared the expected effect and a system-of-record verifier was configured,
-those five classes refuted and halted.
+and double delivery. There were 10 consistent repeats per class. That study has
+no effect-verified arm, so it establishes the screen-oracle failure under real
+perception and nothing about the fix (Table~\ref{tab:faults}).
 
 \begin{figure}[t]
 \centering
@@ -301,8 +323,10 @@ those five classes refuted and halted.
 \legend{silent wrong effect, false abort}
 \end{axis}
 \end{tikzpicture}
-\caption{Same 90 injected-fault runs, three verification policies, measured end to
-end through the live replayer and judged by an independent ground truth.
+\caption{Same 90 injected-fault runs, three verification policies, measured
+through the live replayer's governed actuation and verification path (with a
+null observation backend and vision stack) and judged by an independent ground
+truth.
 Screen-only verification, the signal task-success oracles read, silently
 accepted 54 wrong persisted effects; an out-of-band effect oracle cut that to 9
 (one uncovered collateral-write class); a complete system-of-record read path
@@ -313,23 +337,27 @@ commit.}
 
 \begin{table}[t]
 \centering
-\caption{Per-class outcomes for the seven injected faults (ten repeats each),
-under screen-only verification and under a system-of-record effect verifier.
-\emph{Silent} marks a run the screen reported as success while the database
-disagreed. Two idempotent/clean controls (not shown) succeed under both.}
+\caption{Two studies, two columns, deliberately not merged. The middle column is
+the perception-real browser-and-OCR study (seven injected faults, ten repeats
+each): \emph{silent success} marks a run the screen reported as success while
+the database disagreed. The right column is the stubbed-perception end-to-end
+study under a single out-of-band record oracle, whose scenario set differs, so
+the two columns are aligned by fault class, not by run. Neither study covers
+both perception and effect verification.}
 \label{tab:faults}
 \small
 \begin{tabular}{lll}
 \toprule
-Injected fault & Screen-only outcome & Effect verdict \\
+Injected fault & Screen-only, perception real & Out-of-band oracle \\
 \midrule
-Partial save            & \textcolor{oared}{silent success} & refuted (halt) \\
-Duplicate submission    & \textcolor{oared}{silent success} & refuted (halt) \\
-Optimistic then reject  & \textcolor{oared}{silent success} & refuted (halt) \\
-Stale overwrite         & \textcolor{oared}{silent success} & refuted (halt) \\
-Double delivery         & \textcolor{oared}{silent success} & refuted (halt) \\
-Timeout after commit    & false abort                        & confirmed \\
-Session loss            & safe halt                          & refuted (halt) \\
+Partial save            & \textcolor{oared}{silent success} & halted \\
+Duplicate submission    & \textcolor{oared}{silent success} & halted \\
+Optimistic then reject  & \textcolor{oared}{silent success} & halted \\
+Stale overwrite         & \textcolor{oared}{silent success} & halted \\
+Double delivery         & \textcolor{oared}{silent success} & not in scenario set \\
+Timeout after commit    & false abort                        & halted (false abort) \\
+Session loss            & safe halt                          & halted \\
+Collateral write        & not in scenario set                & \textcolor{oared}{silent success} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -369,12 +397,17 @@ never silently acts on a target it cannot verify.
 \section{Scope and what this does not show}
 \label{sec:scope}
 
-These are bounded studies. The fault model is a deterministic mechanism study at
+These are bounded studies, and the boundary is not subtle: no external
+organization has deployed this system, so there is no field evidence of any
+kind. The fault model is a deterministic mechanism study at
 one persistence boundary, not a population estimate over enterprise applications;
+the end-to-end arm stubs the observation and vision stack, so it measures
+verification and refusal rather than GUI perception;
 the identity study uses synthetic adversarial homonyms; effect verifiers require
 per-deployment authoring. We make no claim here about long-term reliability,
 maintenance cost, or clinical-production safety, and no measured result covers
-Citrix ICA/HDX. The full report adds a repeated-workflow latency and cost
+real Citrix ICA/HDX. The full report adds branching multi-application workflows
+across two systems of record, a repeated-workflow latency and cost
 comparison against a computer-use agent, a public-web breadth corpus, a
 drift-repair study, and scoped qualifications of native Windows UIA, macOS, and
 real-network RDP substrates, each with an independent effect oracle. The authors

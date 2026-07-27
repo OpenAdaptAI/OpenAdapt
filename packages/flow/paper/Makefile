@@ -1,7 +1,7 @@
 SHELL := /bin/sh
 BUILD_DIR := build
 
-.PHONY: all check workshop clean
+.PHONY: all check workshop arxiv arxiv-workshop clean
 
 # `all` gate-checks every headline constant against the benchmark artifacts,
 # then builds BOTH the full technical report (main.tex) and the workshop
@@ -24,7 +24,17 @@ workshop:
 check:
 	python3 check_artifacts.py
 
+# arXiv submission tarballs. The script gate-checks constants, does a clean
+# build to produce the .bbl (arXiv does not run bibtex), stages only the files
+# the document \inputs, re-compiles the staged tree standalone, and refuses to
+# emit a tarball with any undefined citation or reference.
+arxiv:
+	sh make_arxiv_tarball.sh main
+
+arxiv-workshop:
+	sh make_arxiv_tarball.sh workshop
+
 clean:
 	latexmk -C -output-directory=$(BUILD_DIR) main.tex 2>/dev/null || true
 	cd workshop && latexmk -C -output-directory=$(BUILD_DIR) main.tex 2>/dev/null || true
-	rm -rf $(BUILD_DIR) workshop/$(BUILD_DIR)
+	rm -rf $(BUILD_DIR) workshop/$(BUILD_DIR) dist

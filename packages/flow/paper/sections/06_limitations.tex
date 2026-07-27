@@ -1,14 +1,36 @@
 \section{Limitations and Threats to Validity}
 \label{sec:limits}
 
+The single largest limitation is stated first and without hedging: \emph{no
+external organization has deployed this system}. Every result in this paper was
+produced by its authors, on synthetic fixtures or a shared public demonstration
+instance, in a controlled environment. There are zero external pilots, zero
+production workloads, and therefore zero field-reliability evidence of any kind.
+Nothing in this paper should be read as a claim about how the system behaves in
+someone else's hands.
+
 The evidence does not establish long-term reliability, maintenance effort,
 total cost of ownership, multi-tenant scale, or safety in clinical production.
 OpenEMR uses a shared public demonstration site and a small sample. MockMed is a
 fixture, and the second-domain lending study is likewise a bounded mechanism
 study (twelve tasks, three trials each) on a purpose-built MockLoan ledger, not a
-production lending system. The breadth corpus has one trial per application and
-selection bias toward public no-auth browser apps. No published study covers
-weeks of natural drift or a representative distribution of customer workflows.
+production lending system. The two multi-application benchmarks add branching
+and cross-system effects but are equally synthetic, localhost-only, and
+hand-authored, with three runs per cell. The breadth corpus has one trial per
+application and selection bias toward public no-auth browser apps. No published
+study covers weeks of natural drift or a representative distribution of customer
+workflows.
+
+Two evaluation paths are measured separately and neither covers the other. The
+end-to-end effect study, the lending study, and the two multi-application
+benchmarks all actuate through the replayer's API tier with a null observation
+backend and a null vision stack, so they measure governed decision, verification,
+refusal, and transaction classification---not GUI perception, and not document
+understanding. The browser-and-OCR fault study and the public-web breadth corpus
+exercise perception, but the fault study carries only a screen-only arm. A study
+that exercises real perception \emph{and} effect verification on the same runs
+does not yet exist, and no number in this paper should be read as though one
+did.
 
 Identity is only checked on armed steps. Risk classification uses keywords and
 can miss an icon-only or indirect write. Visual postconditions do not verify a
@@ -17,16 +39,39 @@ work. Optional model rescue can false-rescue an ambiguous state, and measured
 grounding is weak on dense lists. Human review can catch contextual sanitation
 errors but is not proof of de-identification.
 
+Several mechanisms described in Section~\ref{sec:governance} are presented as
+mechanisms and are not the subject of a reported measurement. The
+transaction-outcome taxonomy is exercised by the multi-application benchmarks,
+where it distinguishes \textsc{verified}, \textsc{halted-before-effect}, and
+\textsc{reconciliation-required} on hand-authored exception paths, and the
+idempotency ledger is exercised by the duplicate-attempt checks in those runs;
+but the verifier plugin seam, the governed repair promotion lifecycle, and
+explicit surface selection are described from their implementations and their
+unit-level contracts, with no benchmark that quantifies, for example, how often
+a contract-invariant check correctly refuses a real drifted bundle or how much
+operator time promotion costs. Describing a governance mechanism is not
+evidence that it holds up under an adversarial operator or at fleet scale.
+
 The substrate qualifications cover one Windows UIA workflow and VM snapshot,
 one macOS host and TextEdit task, and one RDP task and snapshot. They establish
 working observation, actuation, refusal, and effect-oracle mechanisms in those
 environments, not reliability across application families or deployment fleets.
 Remote display introduces compression, scaling, latency, coordinate,
 lock-screen, credential, input-acceptance, and identity-availability variables.
-No measured result covers Citrix ICA/HDX, so RDP evidence does not transfer to a
-Citrix deployment. Citrix is a pixel-only remote-display environment in the same
+No measured result covers real Citrix ICA/HDX, so RDP evidence does not transfer
+to a Citrix deployment. The Citrix campaign reported in
+Section~\ref{sec:results} is a \emph{deterministic synthetic stand-in}: the
+shipping backend is real and unmodified, but its window-client seam is replaced
+by in-process synthetic frames, so no HDX codec, ICA compression, or
+Workspace-client transport is exercised and the effect oracle is an in-process
+store. Its degradation conditions are image transforms, not a Thinwire
+bitstream. It is evidence about the backend's gating logic under adverse
+remote-display conditions and about nothing else; the released artifact and its
+status manifest say so in machine-readable form. Citrix is a pixel-only
+remote-display environment in the same
 class as the measured RDP backend, and the resolution ladder and identity gate
-are substrate-independent by construction, but the paper reports no ICA/HDX
+are substrate-independent by construction, but the paper reports no
+real-protocol ICA/HDX
 measurement. A concrete validation would record and compile a workflow inside a
 real Citrix Workspace session, replay it through the vision-only rungs of the
 ladder over the ICA/HDX channel, and confirm the identity gate refuses ambiguous

@@ -58,9 +58,35 @@ when available. Declared secret fields are replaced with runtime parameters.
 The compiler emits a bundle containing a workflow program, target crops,
 locators, landmarks, postconditions, parameter declarations, and a manifest.
 The linear trace is the simplest program; the intermediate representation also
-supports states, guarded transitions, branches, loops, and subflows. Induction
-that cannot determine a branch condition quarantines the result rather than
-inventing one.
+supports states, guarded transitions, branches, loops, and subflows. Given
+several demonstrations of the same task, a deterministic multi-trace induction
+pass promotes a value that varies at an aligned position to a typed parameter, a
+consecutive repeated sub-sequence whose repetition count varies to a loop over an
+inferred relation, and a divergence under a detectable condition to a guarded
+branch; it makes no model call. Its reach is deliberately narrow and we state
+the limit rather than the aspiration: only consecutive repeated bodies are
+recognized, so a navigate-away-and-return loop, a paginated loop, and a
+per-row-conditional body are not. Where induction cannot certify the shape---an
+ambiguous loop around an irreversible action, an undetermined branch condition,
+an unhandled zero-result case---it emits an uncertainty and quarantines the
+result rather than inventing one, and the compiled workflow stays uncertified
+until an operator answers a concrete, grounded question about the specific
+divergence.
+
+Parameterization is where a compiler is most tempted to guess, because the
+difference between a constant and a parameter is the difference between
+replaying a demonstration and running a new case. \system{} therefore infers
+parameter \emph{candidates} deterministically---a value typed into a field
+carries the field's own label, taken from the recorder's structural capture or,
+failing that, from the nearest OCR line left of or above the field rectangle---
+and then refuses to apply them. Each candidate is written to a sidecar with the
+example value masked, and one batch operator pass confirms, renames, marks
+secret, or keeps each as a constant. The default on an unanswered prompt is
+\emph{keep constant}: an unconfirmed inference changes nothing, and the bundle
+replays exactly as demonstrated. This is deliberate rather than conservative
+for its own sake---the parameter name is the identifier an effect contract binds
+to and that secrets are keyed by, so naming is confirmed by a human, never
+inferred behind the operator's back. The inference makes no model call.
 
 \subsection{Resolution ladder}
 For an action target, replay tries evidence in descending order of fidelity:
@@ -114,12 +140,30 @@ postconditions, effects, model calls, elapsed time, repair, and halt reason.
 Postconditions are necessary but not sufficient: a success banner is evidence
 about the screen, not independent evidence about a database write.
 
-\subsection{Backends}
+\subsection{Backends and explicit surface selection}
 The browser backend is the reference implementation and supplies published
 end-to-end evidence against a real third-party application. Windows UI
 Automation adds structured candidate enumeration and native actions behind a
 typed, authenticated in-session contract. Native macOS binds capture and input
-to a unique application window. The RDP backend exposes the same runtime
-contract over a pixel-only network session. Section~4 reports scoped task and
-effect qualifications for all three mechanisms. Citrix/ICA/HDX remains a
-separate deployment environment and does not inherit RDP qualification.
+to a unique application window. The RDP and Citrix Workspace backends expose the
+same runtime contract over a pixel-only network session. Section~4 reports
+scoped task and effect qualifications for the Windows, macOS, and RDP
+mechanisms, and a deterministic synthetic stand-in campaign for the Citrix
+Workspace backend. A real Citrix ICA/HDX environment is a separate deployment
+and inherits neither the RDP qualification nor the stand-in campaign.
+
+The browser is one execution surface among six---\texttt{web},
+\texttt{windows}, \texttt{macos}, \texttt{linux}, \texttt{rdp}, and
+\texttt{citrix}---and not a privileged default. Each surface fixes an execution
+\emph{mode}: \texttt{rdp} and \texttt{citrix} are \emph{external}, driving a
+local client window of a remote session through pixels, keyboard, and mouse with
+nothing installed inside that session; the others are \emph{in-session}. The
+mode is fixed by capability negotiation at qualification and is never silently
+switched at run time. Two consequences are enforced at the command line rather
+than documented as advice. First, under the production execution profiles a
+record or run command that does not name a surface is \emph{refused}, because an
+implicit browser default silently decides the substrate a workflow will be
+qualified on. Second, a compiled bundle carries the surface it was recorded on,
+and running it on a different surface is refused unless the operator passes an
+explicit override, which is then recorded in the run report as compatibility
+evidence. A cross-surface run is never silent.

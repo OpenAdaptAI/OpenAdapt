@@ -19,11 +19,50 @@ deterministic programs while exposing ambiguity in the inferred intent
 Rousillon compile direct manipulation into a reusable program
 \cite{chasins2018rousillon}. A GUI trace similarly under-specifies intent:
 coordinates do not identify the semantic target, and one trajectory does not
-determine every branch or loop. \system{} therefore retains redundant target
-evidence, represents control flow explicitly, and quarantines underdetermined
-induction instead of filling gaps with an unverified guess. It also departs from
-this line in two ways: it repairs targets at runtime under drift, and it verifies
-downstream effects rather than only reproducing input actions.
+determine every branch or loop.
+
+We name this line explicitly because \system{} performs inductive program
+synthesis whether or not it calls itself that. A demonstration is evidence, not
+a specification, so the compiler faces the classical problem of a hypothesis
+\emph{space} consistent with the examples---the setting version-space algebra
+formalized for demonstration \cite{lau2003vsa} and that inductive-synthesis
+frameworks such as PROSE/FlashMeta generalized with witness functions
+\cite{polozov2015flashmeta}. \system{}'s multi-trace induction is the same move:
+a value that varies across aligned traces becomes a typed parameter, a repeated
+sub-sequence whose repetition count varies becomes a loop, and a divergence
+under a detectable condition becomes a guarded branch. Where the space does not
+collapse to one program, it does not sample from it. Underdetermined induction
+on a consequential step is \emph{quarantined}: an ambiguous loop around an
+irreversible action, or an unhandled zero-result branch, is emitted as an
+uncertainty and the workflow is left uncertified until the operator answers a
+concrete grounded question---the interactive-disambiguation posture of SUGILITE
+and DiLogics \cite{li2017sugilite,pu2023dilogics} rather than the
+maximum-likelihood completion. Runtime target repair supplies the other half of
+the generate-and-check loop familiar from counterexample-guided inductive
+synthesis and syntax-guided synthesis \cite{solarlezama2006sketching,alur2013sygus},
+and qualification campaigns supply the counterexamples: a repair candidate is
+replayed against a perturbation battery and a fault battery before it may be
+promoted (Section~\ref{sec:governance}).
+
+The closest comparable system is WebRobot \cite{dong2022webrobot}, which
+synthesizes web RPA programs from an interactive demonstration by speculating
+rewrites and then validating them against the \emph{retained} action and DOM
+traces rather than executing candidates against the live site, precisely because
+a candidate program may have unintended side effects. We arrived at the same
+constraint from the safety direction rather than the synthesis direction, and
+we treat this as convergent design, not inheritance: our induction validates
+against retained traces and quarantines what it cannot certify, and our runtime
+additionally refuses \emph{at execution time} when the effect it intended cannot
+be verified. Long-horizon demonstration synthesis for robot tasks
+\cite{patton2024prolex} and model-proposes/symbolic-decides architectures such as
+HYSYNTH \cite{barke2024hysynth} draw the same boundary we do between a model
+that may propose and a deterministic component that decides; in \system{} that
+boundary is enforced by construction, since a model actor is rejected on every
+transition of the repair promotion lifecycle.
+
+\system{} departs from this line in two ways: it repairs targets at runtime under
+drift, and it verifies downstream effects rather than only reproducing input
+actions.
 
 \paragraph{Computer-use agents and benchmarks.}
 A rapidly growing line of computer-use agents observes the screen and chooses
@@ -50,15 +89,27 @@ between related executions \cite{chen2018metamorphic}, and regression and
 differential oracles compare against a trusted prior or a reference
 implementation. Our silent-wrong-effect rate is in this family: it is a partial,
 state-based oracle that reads the system of record out of band rather than
-deriving a full specification of correctness. The faults \system{} targets---
+deriving a full specification of correctness.
+
+Asserting against the backend rather than the interface is, importantly, not
+new: mature end-to-end test suites routinely check a database row or an API
+response after driving a UI, precisely because UI-level assertions are brittle
+and flaky \cite{leotta2013capture,luo2014flaky}, and commercial RPA platforms
+expose database and API activities that a workflow author can use the same way.
+We claim no novelty for the idea of reading the backend. Our contributions are
+that this check is (i) made a \emph{first-class runtime gate} rather than an
+optional test assertion---an unverifiable effect halts production execution---
+(ii) turned into a reported \emph{metric} for automation reliability, and (iii)
+measured against an oracle that is operationally independent of both the write
+path and the automation's own verifier. The faults \system{} targets---
 duplicate submission, double delivery, stale overwrite---are the same
 exactly-once and idempotency hazards studied in transactional systems
 \cite{gray1981transaction}. These
 principles motivate \system{}'s separation between screen postconditions and
 system-of-record effects: a rendered success banner cannot independently
-establish that a transaction was persisted correctly. Unlike a general
-formal-verification claim, the guarantees here remain scoped to armed steps,
-declared effects, configured verifiers, and named policies.
+establish that a transaction was persisted correctly. We claim nothing like a
+general formal-verification result; Section~\ref{sec:governance} states exactly
+what the guarantee is scoped to.
 
 \begin{table}[t]
 \centering

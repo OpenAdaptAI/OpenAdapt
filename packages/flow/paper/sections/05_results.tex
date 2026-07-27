@@ -3,12 +3,14 @@
 
 \paragraph{Headline: an independent effect check catches silent wrong actions
 that the screen misses, and only as far as it can read.} The paper's central
-claim is a safety one, and we measure it end to end through the live replayer.
+claim is a safety one, and we measure it through the live replayer's governed
+actuation and verification path, with the observation backend and vision stack
+stubbed (Section~\ref{sec:method}).
 Ten persistence scenarios, seven fault classes plus an accepted-write control and
 two delivery controls, are each driven nine times per arm through the real
 governed path: the replayer's actuator writes over HTTP, the system-under-test
 verifier reads through REST, and the benchmark judge reads SQLite directly with
-separate classifier code (Section~\ref{sec:method}). Judged by the \emph{screen},
+separate classifier code. Judged by the \emph{screen},
 the same signal an agent
 or a script trusts, replay silently accepted a wrong persisted effect on 54 of 90
 fault runs (60\%). An out-of-band effect verifier that reads the record back over
@@ -28,14 +30,59 @@ and ground-truth paths. These paths do not make the shared business
 specification independent; Section~\ref{sec:limits} bounds that closed-world
 assumption.
 
-\paragraph{Per class, the screen misses five of seven fault types.} In a
-companion transactional study at the same persistence boundary, screen-only
+\paragraph{Per scenario, the gap is driven by six differentiating classes and
+closed by one read-path extension.} Table~\ref{tab:e2eclasses} decomposes the
+same 90 runs per arm. Six of the ten scenarios differentiate the screen from an
+out-of-band record oracle; exactly one, the collateral write, differentiates the
+single-surface oracle from a complete read path. Three scenarios---optimistic
+rendering followed by rejection, session loss, and a timeout after a successful
+commit---halt in every arm, so they carry no oracle signal at all; the last of
+these is the constant false abort. Read the table as a coverage matrix over
+hand-authored classes, not as a distribution: the headline is a property of
+which classes were authored.
+
+\begin{table}[t]
+\centering
+\caption{End-to-end fault study, per scenario, nine runs per cell. ``Slip''
+means the arm reported success while the independent ground truth found a wrong
+persisted effect; ``halt'' means the arm refused. The screen arm slips on six
+classes, the single out-of-band oracle on one, and the complete read path on
+none. Rows marked ``halt'' in all three arms carry no oracle signal.}
+\label{tab:e2eclasses}
+\small
+\begin{tabular}{llccc}
+\toprule
+Scenario & Ground-truth effect & Screen & Out-of-band & Complete read \\
+\midrule
+Clean write (control)    & correct          & pass & pass & pass \\
+No persistence           & absent           & slip & halt & halt \\
+Partial save             & partial          & slip & halt & halt \\
+Duplicate submission     & duplicate        & slip & halt & halt \\
+Wrong record             & wrong record     & slip & halt & halt \\
+Stale overwrite          & collateral loss  & slip & halt & halt \\
+Collateral write         & collateral write & slip & slip & halt \\
+Optimistic then reject   & absent           & halt & halt & halt \\
+Session loss             & absent           & halt & halt & halt \\
+Timeout after commit     & correct          & halt & halt & halt \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{With real perception, the screen misses five of seven fault types.}
+The study above stubs the vision stack. A separate transactional study at the
+same persistence boundary keeps perception real---a live browser, real
+screenshots, and OCR through the resolution ladder---and injects the same class
+of faults. There, screen-only
 verification silently mishandled five of seven injected fault classes: partial
 save, duplicate submission, optimistic UI followed by rejection, stale overwrite,
-and double delivery. There were 10 consistent repeats per class. When the step
-declared the expected effect and a system-of-record verifier was configured,
-those five classes refuted and halted. This improvement has two non-optional
-preconditions: the effect must be authored and the verifier deployed.
+and double delivery. There were 10 consistent repeats per class. That study
+carries no effect-verified arm, so it establishes the screen-oracle failure
+under real perception and nothing about the fix; the fix is measured only in the
+stubbed-perception study above. We report the pair rather than a single number
+because no released study covers both perception and effect verification at
+once. The improvement itself has two non-optional
+preconditions in either case: the effect must be authored and the verifier
+deployed.
 
 \paragraph{Generalization: the same silent-wrong ladder on a second,
 non-healthcare domain.} The effect-verification result is not specific to
@@ -86,8 +133,10 @@ transfers to a hostile production system.
 \legend{silent wrong effect, false abort}
 \end{axis}
 \end{tikzpicture}
-\caption{Same 90 injected-fault runs, three verification policies, measured end
-to end through the live replayer and judged by an independent ground truth.
+\caption{Same 90 injected-fault runs, three verification policies, measured
+through the live replayer's governed actuation and verification path (with a
+null observation backend and vision stack) and judged by an independent ground
+truth.
 Screen-only verification silently accepted 54 wrong persisted effects; an
 out-of-band effect oracle that reads the record back cut that to 9 (one
 uncovered collateral-write class); a complete system-of-record read path drove it
@@ -96,6 +145,58 @@ This is the failure mode general computer-use agents and selector RPA do not
 measure.}
 \label{fig:silentbar}
 \end{figure}
+
+\paragraph{Complexity: the same result holds on branching, multi-application
+workflows.} A fair objection to everything above is that the workflows are
+short, linear, single-application form fills. Two multi-application benchmarks
+answer it directly (Section~\ref{sec:method}). Across both, 30 governed runs
+produced zero silent incorrect successes and zero healthy-path over-halts, while
+the same 30 runs under the naive banner oracle produced 6 silent incorrect
+successes. Every healthy governed run classified \textsc{verified} under the
+transaction taxonomy; no naive run did, because the naive arm never obtains
+independent effect evidence and therefore terminates
+\textsc{completed-unverified} even when it is right. Zero model calls throughout.
+
+Table~\ref{tab:multiapp} shows why the taxonomy matters more than a success
+rate. In the AP-invoice collateral-approval scenario the naive arm reports
+success three times over while an adjacent record is overwritten; the governed
+arm reports \textsc{reconciliation-required} and catches it on all three. In the
+payment-confirmation outage both arms fail to confirm, but only the governed arm
+says so, and in both arms the duplicate-attempt check confirms that a retry
+under the same idempotency key is refused rather than re-actuated. In the O2C
+phantom write-back the results spreadsheet returns HTTP 200 with a banner and
+persists nothing; re-reading the file catches it three times out of three. These
+are deterministic synthetic fixtures with hand-authored exception paths, three
+runs per cell, and API-tier actuation, so they are a coverage matrix over
+workflow shapes---not an incidence rate and not evidence about perception.
+
+\begin{table}[t]
+\centering
+\caption{Multi-application workflows, three runs per scenario per arm
+(30 governed and 30 naive runs total). Cells give the transaction outcome, which
+was invariant across the three repeats. V = \textsc{verified},
+CU = \textsc{completed-unverified}, H = \textsc{halted-before-effect},
+R = \textsc{reconciliation-required}. Starred cells are the ones the naive
+banner oracle silently accepts.}
+\label{tab:multiapp}
+\small
+\begin{tabular}{lllcc}
+\toprule
+Benchmark & Scenario & Fault & Naive & Governed \\
+\midrule
+AP invoice & healthy               & ---                  & CU  & V \\
+AP invoice & missing PO            & precondition absent  & H   & H \\
+AP invoice & duplicate invoice     & ambiguous duplicate  & H   & H \\
+AP invoice & collateral approve    & adjacent overwrite   & CU* & R \\
+AP invoice & payment outage        & uncertain delivery   & CU  & R \\
+O2C recon  & healthy               & ---                  & CU  & V \\
+O2C recon  & missing in ledger     & precondition absent  & H   & H \\
+O2C recon  & ambiguous duplicate   & ambiguous target     & H   & H \\
+O2C recon  & stale snapshot        & optimistic concurrency & H & H \\
+O2C recon  & phantom write-back    & 200 without persist  & CU* & H \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \paragraph{Compiled replay removes per-run reasoning on demonstrated tasks.}
 Table~\ref{tab:comparison} shows that, on these two already-demonstrated tasks,
@@ -150,10 +251,12 @@ confusable cases: zero false accepts at 100\% over-halt. This is the intended
 safety/availability disclosure, not evidence that pixel-only identity is ready
 for dense clinical lists.
 
-\paragraph{Substrate reach: the same governed semantics across four backends.}
-The governed contract is not browser-specific. Table~\ref{tab:substrates}
-qualifies three additional substrates on named tasks, each with an independent
-effect oracle and refusal controls.
+\paragraph{Substrate reach: one named task per substrate, not a support claim.}
+The governed contract is not browser-specific, but the evidence for that is
+three named tasks, not three platforms. Table~\ref{tab:substrates}
+qualifies three additional substrates on one named task and environment each,
+with an independent effect oracle and refusal controls. Nothing here licenses a
+claim about arbitrary applications on those platforms.
 
 \begin{table}[t]
 \centering
@@ -189,3 +292,23 @@ tasks with exact guest-tools readback. Trial latencies were 51.845, 10.467, and
 over-halts, and zero model calls. Snapshot cleanup restored the pre-run inventory
 and suspended base state. Together these studies qualify the named substrate
 mechanisms; they do not transfer to other applications, environments, or Citrix.
+
+\paragraph{Citrix: the backend passes a deterministic stand-in, which is not
+Citrix.} We report one result about Citrix and it is deliberately a negative
+claim wrapped around a positive one. The shipping Citrix Workspace backend,
+unmodified, was exercised over 16 ICA/HDX-class conditions in 29 trials against
+a deterministic synthetic stand-in, with only its window-client seam replaced.
+All 29 trials met their expectation, with zero silent incorrect successes, zero
+silent writes, zero healthy-path over-halts, and zero model calls; the two
+banner-bearing trials are the informative ones, since one confirms a persisted
+effect only through the out-of-band oracle and the other refuses a green banner
+that no independent record supports. This is evidence that the backend's
+fresh-frame, focus, DPI, identity, readiness, one-shot-actuation, and
+effect-verification gates behave correctly under adverse remote-display
+conditions. It is \emph{not} evidence about Citrix. No HDX codec, ICA
+compression, or Workspace-client transport was exercised; the frames are
+synthetic and the oracle is in-process. The released artifact records
+\texttt{is\_real\_ica\_hdx: false} and \texttt{ica\_hdx\_accepted: false}, and
+its status manifest reports real-protocol environment evidence as
+\texttt{pending}. Any statement that \system{} ``runs on Citrix'' would be
+unsupported by this paper.

@@ -7,10 +7,33 @@ inspectable programs, and bounded repair. The critical distinction is not
 whether a task completed, but whether identity and external effects were
 verified and whether the system can refuse when evidence is insufficient.
 
-The results establish the compiler/runtime thesis on bounded browser workflows
-and show that the same governed semantics can drive named Windows UIA, native
+One consequence deserves stating plainly, because it points outward rather than
+inward. Inductive program synthesis is bottlenecked on the availability of a
+sound checker. Where a cheap, trustworthy oracle exists---input/output examples
+over pure functions, a type system, a reference implementation---generate-and-check
+is tractable and the field has made rapid progress; where the program's
+correctness is defined by an effect on the world, no such checker has generally
+been available, which is much of why demonstration-driven automation has had to
+settle for reproducing observed inputs. The out-of-band effect verifier is
+exactly that missing checker for one important class of programs: consequential
+writes to a system of record through a graphical interface. It is sound in the
+direction that matters---it never upgrades ``I could not read the record'' into
+a pass---and it is independent of the path that carried the write. We therefore
+offer it not only as an engineering safeguard but as a synthesis contribution:
+it makes generate-and-check tractable in a domain where the checker, not the
+search, was the binding constraint.
+
+The results establish the compiler/runtime thesis on bounded browser workflows,
+extend it to branching multi-application work across two systems of record, and
+show that the same governed semantics can drive named Windows UIA, native
 macOS, and network RDP tasks with independently checked effects and explicit
-refusal. The next evidence target is longitudinal, repeated operation of one
-consequential customer workflow with authoring time, intervention rate, silent
+refusal. They establish it nowhere outside the authors' own environments. The
+next evidence target follows directly: longitudinal, repeated operation of one
+consequential customer workflow, in someone else's deployment, with authoring
+time, intervention rate, silent
 incorrect success, over-halt, recovery time, and system-of-record outcomes
-measured across natural interface change.
+measured across natural interface change. A second, independent direction
+follows from the paragraph above: with a sound effect checker in hand, the
+induction loop can afford to propose more aggressively than it does today,
+because a wrong proposal is caught rather than executed. We report no result on
+that here and make no claim about it.

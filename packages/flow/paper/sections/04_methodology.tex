@@ -68,18 +68,29 @@ descriptive: one run per application does not meet the repeated-trial standard
 for a capability claim, and the selection excludes SSO-walled and desktop
 targets.
 
-\paragraph{Transactional fault model.}
+\paragraph{Transactional fault model (perception included, screen arm only).}
 Seven persistence faults and controls are injected at a real HTTP persistence
 boundary behind the MockMed UI, with 10 repeats per class. Database state, not
-the UI report, is the oracle. This per-class study measures what screen-only
-verification silently mishandles; it is separate from the end-to-end study below.
+the UI report, is the oracle. This study is the one that exercises the full
+perception path---a real browser, real screenshots, and real OCR through the
+resolution ladder---but it measures only the screen-only arm; it carries no
+effect-verified arm and contributes no effect-verified number to this paper. It
+is complementary to, and separate from, the end-to-end study below.
 
-\paragraph{End-to-end effect verification.}
+\paragraph{End-to-end effect verification (governed path, perception stubbed).}
 The headline safety result is measured through the actual governed replay path,
 not an in-process stub. Ten persistence scenarios, seven fault classes plus an
 accepted-write control and two delivery controls, are each run nine times per
 arm. Every write is issued by the replayer's actuator as an HTTP POST to an
-on-disk SQLite system of record. Each trial contains three operationally
+on-disk SQLite system of record. We state the boundary of ``end to end''
+precisely, because it is the obvious thing to overclaim: what is real here is
+the governed decision path---the replayer, its actuation tier, its effect
+verifier, the policy gates, and the transaction-outcome classification---while
+the observation backend and vision stack are null stubs, so this study measures
+\emph{verification and refusal}, not GUI perception. Perception is covered by
+the browser-and-OCR fault-model study above, whose arm is screen-only. No single
+released study covers both at once, and we do not report one as though it did.
+Each trial contains three operationally
 distinct paths: the actuator writes over HTTP; the system-under-test effect
 verifier reads through a separate REST endpoint and connection; and the
 benchmark ground truth opens the SQLite file read-only over every table,
@@ -109,6 +120,49 @@ than the runtime effect classifier. One task funds a decoy loan; post-action,
 identity-sensitive readback locates the trial-unique persisted row by memo and
 product, then verifies its loan identifier against the intended loan. Zero model
 calls.
+
+\paragraph{Multi-application workflows.}
+The studies above are single-application, linear, worklist-driven form fills of
+roughly five to fifteen recorded steps, which is a fair criticism of the suite's
+complexity. Two benchmarks were added to close that gap. \emph{AP invoice} is an
+accounts-payable intake spanning a maildir inbox, a PDF document, an ERP
+three-way match, a payments API, an exception queue, and an outbound mail
+gateway: two applications, five modalities, 32 executed action steps over a
+five-row worklist, with branching on match route and discount eligibility.
+\emph{O2C reconciliation} is an order-to-cash billing reconciliation spanning an
+exported CSV worklist, a comparison pass, ledger adjustments through a UI-only
+gateway with no adjustment API, reconcile marks over REST, and a results
+spreadsheet written back and re-read from disk across two separate SQLite
+systems of record: 26 executed action steps over a ten-row worklist. Each
+benchmark runs five scenarios---one healthy and four exception paths---three
+times in each of two arms. The \emph{naive} arm runs the demonstration profile
+and trusts the application's own banner; the \emph{governed} arm runs the
+production profile under a named policy that requires system effects for every
+write and prohibits unconfirmed effect bindings. A benchmark-local ground truth
+reads both databases directly and audits per-table deltas. Both fixtures are
+synthetic and localhost-only, every consequential action is actuated through the
+replayer's API tier, and no model is called; as with the end-to-end study,
+these measure governed workflow semantics and cross-system effects, not GUI
+perception and not document understanding.
+
+\paragraph{Citrix ICA/HDX: a deterministic stand-in, not Citrix.}
+No real Citrix ICA/HDX result is reported in this paper. What is reported is a
+qualification of the shipping Citrix Workspace backend---unmodified---against a
+deterministic synthetic stand-in in which only the backend's window-client seam
+is replaced by an in-process source of synthetic frames that the real backend
+decodes, hashes, and DPI-maps. Sixteen ICA/HDX-class conditions (session launch
+and readiness, lock and unlock, reconnect and roaming, minimize, occlusion, move
+and resize, single and multi-monitor geometry, DPI and scaling, compression and
+codec artifacts, latency and delayed frames, keyboard layout and IME, clipboard
+restriction, focus theft, unexpected dialogs, uncertain submission, and
+out-of-band persisted-state readback) are exercised over 29 trials, with an
+out-of-band in-process oracle and never the on-screen banner. This exercises no
+HDX codec, no ICA compression, and no Workspace-client transport; the released
+artifact records \texttt{is\_real\_ica\_hdx: false} and
+\texttt{ica\_hdx\_accepted: false}, and its status manifest reports
+real-protocol environment evidence as \texttt{pending}. We treat it as evidence
+about the backend's gating logic under adverse remote-display conditions, and as
+nothing else.
 
 \paragraph{Released benchmark.}
 The metric and fault taxonomy are packaged as EffectBench, a standalone,

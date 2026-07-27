@@ -4,8 +4,16 @@
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{booktabs}
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \usepackage{amssymb}
 \usepackage{microtype}
+\setlength{\emergencystretch}{2em}
+% Ragged-right bibliography: `plain` + long DOI/URL fields otherwise produce
+% underfull lines with distracting inter-word gaps. Content is unchanged.
+% Done without a package so the arXiv/CI TeX install needs nothing extra.
+\let\oldthebibliography\thebibliography
+\renewcommand{\thebibliography}[1]{\oldthebibliography{#1}\raggedright}
 \usepackage{hyperref}
 \usepackage{xcolor}
 \usepackage{tikz}
@@ -27,7 +35,10 @@
   citecolor=blue,
   urlcolor=blue,
   pdftitle={Compile Once, Govern Every Repair: Deterministic Replay for Repeated GUI Work},
-  pdfsubject={A reproducible technical-report draft for OpenAdapt}
+  pdfauthor={Richard Abrich},
+  pdfsubject={A reproducible technical-report draft for OpenAdapt},
+  pdfkeywords={GUI automation, computer-use agents, effect verification,
+    silent incorrect success, test oracle, robotic process automation}
 }
 \newcommand{\system}{OpenAdapt}
 \newcommand{\artifacturl}{\url{https://github.com/OpenAdaptAI/openadapt-flow}}
@@ -51,8 +62,13 @@ re-resolves the target and records the change as a reviewable \emph{repair}; and
 the runtime \emph{refuses} to continue when configured identity, postcondition,
 effect, or policy checks cannot verify an action. The central safety mechanism is
 system-of-record effect verification: a consequential step declares a typed
-effect and checks it against the application's own state, not the screen.
-Measured end to end through the live replayer and judged by an independent
+effect and checks it against the application's own state, not the screen. Every
+run ends in exactly one \emph{transaction outcome}, of which only one is a
+production success, and a run whose delivery or persistence is uncertain is
+never blindly retried.
+Measured through the live replayer's governed actuation and verification path,
+with the observation backend and vision stack stubbed so the study isolates
+verification rather than perception, and judged by an independent
 system-of-record ground truth, screen-only verification silently accepted 54 of
 90 injected-fault runs; an out-of-band effect check cut that to 9 of 90 and a
 complete system-of-record read path to 0 of 90, the residual nine being one
@@ -60,15 +76,27 @@ collateral-write class outside the out-of-band oracle's read coverage. The
 finding replicates on a second, non-healthcare lending domain with the same
 three-arm ladder: 24 of 36 silent wrong effects under screen-only verification,
 3 of 36 under a single out-of-band oracle (the same collateral residual), and
-0 of 36 under a complete read path.
+0 of 36 under a complete read path. It also holds on two multi-application
+workflows that span email, spreadsheets, documents, a UI-only gateway, and two
+systems of record: across 30 governed runs, zero silent incorrect successes and
+zero healthy-path over-halts, against six under the same runs' banner oracle.
 Bounded experiments span a public OpenEMR
 workflow, a CI-reproducible fixture, a 29-application public-web corpus,
 transactional fault injection, adversarial identity tests, and scoped
 qualifications of native Windows UIA, macOS, and real-network RDP mechanisms.
-Across these tasks compiled replay reduced latency and per-run inference while
-preserving independently checked effects and ambiguity refusal. Every headline
+On the two demonstrated tasks measured here, compiled replay completed every run
+with lower median latency and no model calls than a single-attempt,
+un-scaffolded computer-use agent on the same backend, while preserving
+independently checked effects and ambiguity refusal; these are bounded,
+unequal samples and not a reliability comparison.
+Every headline
 number in this paper is bound by a released machine-check to either a reviewed
-raw artifact or a bounded aggregate summary. The release publishes the engine,
+raw artifact or a bounded aggregate summary. Every system of record evaluated
+here is synthetic or a public demonstration instance, no external organization
+has yet deployed the system, and no result covers real Citrix ICA/HDX: the
+Citrix evidence reported here is a deterministic synthetic stand-in that
+reproduces ICA/HDX \emph{conditions} without the real protocol. The release
+publishes the engine,
 the machine-check, permitted benchmark files, and the failure taxonomy; grown
 identity and reliability corpora, deployment-derived tuning, per-target recipes,
 and raw private evaluation rows are not part of the public release.

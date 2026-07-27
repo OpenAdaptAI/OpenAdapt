@@ -35,12 +35,14 @@ system of record, and the runtime refuses rather than guessing when it cannot
 verify. The distinction the paper foregrounds is not whether a task
 \emph{completed} but whether identity and external effects were \emph{verified},
 and whether the system can \emph{refuse} when evidence is insufficient. In an
-injected-fault study this distinction is decisive, and we measure it end to end
-through the live replayer and judge it by an independent system-of-record ground
+injected-fault study this distinction is decisive, and we measure it through the
+live replayer's governed actuation and verification path and judge it by an
+independent system-of-record ground
 truth: screen-only verification silently accepted 54 of 90 fault runs, an
 out-of-band effect check cut that to 9 of 90, and a complete system-of-record
 read path to 0 of 90 (Section~\ref{sec:results}). The same gap replicates on a
-second, non-healthcare lending domain.
+second, non-healthcare lending domain and on two multi-application workflows
+spanning email, spreadsheets, documents, and two systems of record.
 
 This paper makes five contributions:
 \begin{enumerate}
@@ -53,11 +55,24 @@ This paper makes five contributions:
         gap between a rendered success and a persisted effect.
   \item Governance mechanisms that distinguish runnable from certified, verify
         identity and system effects where configured, and refuse rather than
-        silently degrade.
+        silently degrade. Three are load-bearing for the thesis and are
+        described in Section~\ref{sec:governance}: an explicit \emph{transaction
+        outcome} taxonomy backed by a privacy-safe effect journal and an
+        at-most-once idempotency ledger, so an uncertain write is reconciled
+        rather than retried; a \emph{governed repair promotion lifecycle} in
+        which a runtime repair is only ever a candidate until human review,
+        contract-invariant enforcement, replay and fault campaigns, a
+        digest-bound approval, and a bounded auto-rollback canary have all
+        passed; and \emph{explicit surface selection}, which refuses an implicit
+        browser default in production and refuses to run a workflow qualified on
+        one execution surface on another.
   \item An evaluation protocol that reports task success \emph{together with}
         silent incorrect success and over-halt, with a failure taxonomy and
         \emph{machine-checked paper constants} that bind every headline number
-        to a released raw artifact or bounded aggregate summary. Raw grown
+        to a released raw artifact or bounded aggregate summary. The protocol is
+        instantiated as EffectBench, a standalone versioned benchmark, and is
+        exercised in a second non-healthcare domain and on two multi-application
+        workflows so that the metric is not tied to one fixture. Raw grown
         corpora, deployment-derived tuning, and target-specific recipes remain
         outside the public release. The machine-check establishes transcription
         fidelity---that the prose faithfully cites the released evidence---not
@@ -69,11 +84,20 @@ The evaluation deliberately separates a broad product architecture from the
 scope of each measured result. Browser workflows supply the comparative and
 breadth studies. Additional task-bound qualifications cover Windows UIA,
 native macOS, and real-network RDP with independent effect oracles and ambiguity
-or stale-target refusals. These results establish working substrate mechanisms
+or stale-target refusals. Two multi-application benchmarks add branching,
+exception paths, and cross-system effects. These results establish working
+substrate and workflow mechanisms
 for the named environments; they are not a population estimate for arbitrary
-enterprise applications. Citrix ICA/HDX is a pixel-only remote-display
-environment in the same class as the measured RDP backend, but no Citrix result
-is reported here: the qualification covers RDP over Aardwolf into a Parallels
-Windows guest, not an ICA/HDX session, and RDP evidence does not transfer to
-Citrix. The limitations section states this scope precisely and names the
+enterprise applications. No external organization has deployed the system, so
+nothing here is field-reliability evidence.
+Citrix ICA/HDX is a pixel-only remote-display
+environment in the same class as the measured RDP backend, and we report a
+qualification of the shipping Citrix Workspace backend against a
+\emph{deterministic synthetic stand-in} that reproduces ICA/HDX conditions in
+process. That stand-in is not Citrix: it exercises no HDX codec, no ICA
+compression, and no Workspace-client transport, and its released artifact
+records \texttt{is\_real\_ica\_hdx: false}. The measured remote-display result
+in this paper is RDP over Aardwolf into a Parallels Windows guest, and RDP
+evidence does not transfer to Citrix either.
+The limitations section states this scope precisely and names the
 specific validation it would take.

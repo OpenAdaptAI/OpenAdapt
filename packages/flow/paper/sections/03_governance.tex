@@ -45,7 +45,114 @@ problem}
 application's own state is the strong oracle (Figure~\ref{fig:oracle}). Many of
 the faults it catches---duplicate submission, double delivery, stale
 overwrite---are exactly-once and idempotency hazards long studied in
-transactional systems \cite{gray1981transaction}.
+transactional systems \cite{gray1981transaction}. Unlike a general
+formal-verification claim, the guarantees here remain scoped to armed steps,
+declared effects, configured verifiers, and named policies.
+
+\subsection{The verifier as a pluggable adapter, and its confidence tier}
+Because the oracle must be authored per deployment, the interface to it is a
+first-class extension point rather than a fixed set of connectors. A verifier
+adapter declares a substrate and a confidence tier and implements four
+operations: a read-only connection probe, a before-state capture, an
+after-state capture, and a verdict. Secrets arrive as environment or
+secret-manager \emph{references}, never literals. Shipped adapters cover REST,
+GraphQL, FHIR, statement-checked read-only SQL, file and SFTP arrival, maildir
+email delivery, document arrival, and document hashing; a third party
+registers its own for a proprietary system of record either programmatically or
+by publishing a packaging entry point named for the effect kind it serves. A
+plugin that fails to import is a hard error rather than an unknown kind, and a
+plugin can never shadow a built-in kind.
+
+Three properties of that interface are load-bearing. First, the adapter result
+is deliberately six-valued---confirmed, refuted, unavailable, stale,
+conflicting, indeterminate---and only \emph{confirmed} lets a step proceed;
+the other five map to a halt, and four of them to an explicit reconciliation
+requirement, because ``the record says no'' and ``I could not read the record''
+are different facts and must not be collapsed. Second, freshness can only
+weaken evidence: a confirmed verdict whose matched record carries a missing,
+unparseable, or out-of-window timestamp is demoted to indeterminate, and no
+freshness rule can rescue a failure into a pass. Third, each adapter declares
+its confidence tier, and a same-screen read-back is explicitly the lowest
+tier---a consistency check, never independent system-of-record proof---so a
+deployment cannot quietly satisfy an effect requirement with the weak oracle
+the mechanism exists to replace. Evidence redaction, likewise, can only
+minimize what is retained; it cannot soften a failure into a success.
+
+\subsection{Transaction outcomes, effect journal, and idempotency}
+A run's terminal state is not a boolean. \system{} classifies every run into
+exactly one \emph{transaction outcome} describing what is known about the
+business effect: \textsc{verified}, \textsc{halted-before-effect},
+\textsc{reconciliation-required}, \textsc{failed-platform}, \textsc{canceled},
+\textsc{rejected-policy}, \textsc{completed-unverified}, and
+\textsc{rolled-back}. Only \textsc{verified} is a production success and only
+\textsc{verified} is billable; a demonstration-profile completion is
+\textsc{completed-unverified} and can never be mistaken for one.
+\textsc{halted-before-effect} is reserved for the case where a verifier
+affirmatively established that no effect occurred---an unread record is not an
+absent record. \textsc{reconciliation-required} therefore dominates every other
+non-success bucket: any unresolved delivery uncertainty, any indeterminate
+effect verdict, and any refutation that did \emph{not} establish absence lands
+there. This is what makes the classification operationally meaningful rather
+than cosmetic, because \textsc{reconciliation-required} forbids a blind retry of
+the consequential write.
+
+Two records support it. The \emph{effect journal} is a per-step ledger over the
+executed consequential steps, recording for each one the digests of the effect
+contracts it intended to apply, whether it was actuated and whether delivery was
+uncertain, whether the effect was observed present, absent, conflicting, or
+unknown, whether independent verification actually ran this run, and how many
+reconciliation actions were performed. It is deliberately privacy-safe by
+construction: hashes, closed enums, counts, and timestamps only, with no record
+values, parameters, or free text, so it can leave the trusted boundary that the
+underlying observations cannot. The \emph{idempotency ledger} is an
+append-only at-most-once store keyed by a caller-supplied key. A run reserves
+its key \emph{before any actuation}, so a crash after the write leaves a
+reservation behind; a later run under the same key is refused and recorded
+rather than re-actuated. A corrupt ledger fails loud instead of treating keys as
+unseen, and the suppressed replay never overwrites the original run's outcome.
+
+\subsection{Governed repair promotion}
+Section~\ref{sec:results} reports that the resolution ladder repairs drifted
+targets without a model. A repair that could silently become the deployed
+program would, however, convert a runtime convenience into an unreviewed change
+to a consequential automation. \system{} therefore treats a repair as a
+\emph{candidate} and nothing more. A healed or taught bundle is registered as a
+candidate record---binding values as digests, failure evidence as hashed
+references---and registration failure fails closed by absence: without the
+record the healed bundle cannot enter the lifecycle at all.
+
+Promotion runs through an explicit state machine---candidate, reviewed,
+replay-passed, fault-passed, approved, staged, canary, active, with rejection
+and rollback as terminal states---in which no state may be skipped and no
+candidate advances as a side effect of being written to disk. Five gates guard
+it. (1) \emph{Contract invariants}: the proposed bundle is diffed against the
+prior one across identity, effect, risk, environment, and policy, and any
+weakening---a lost identity evidence tier, a lowered quorum, a dropped effect
+declaration, a weakened effect tier, a downgraded risk classification, a changed
+target application or environment digest, a removed qualification---is refused
+unless the bundle carries an explicit new qualification revision. An
+incomparable contract is itself a refusal. (2) A \emph{replay campaign} over a
+deterministic perturbation battery, which passes only if the binding both
+locates the target and verifies its identity in every case. (3) A \emph{fault
+campaign} over ambiguity, wrong-entity, stale-target, unexpected-dialog, and
+verifier-failure injections, whose pass criterion is inverted: a case passes
+only when the binding \emph{refuses}, and an unarmed binding cannot pass at all.
+(4) A \emph{human approval} bound to the exact content digests of both bundles,
+re-verified against the bundles reloaded from disk, so a later byte change
+invalidates it. (5) A \emph{bounded canary} over the first $N$ runs that halts
+and reverts the active pointer automatically on the first unverified or silently
+incorrect run.
+
+Actors are typed, and the typing is the point: a model may be recorded as the
+\emph{source} of a candidate but may not perform any lifecycle transition
+whatsoever---every transition rejects a model actor outright---and automation
+may run the mechanical campaign and canary steps but may never review or
+approve. Only
+a human actor can move a candidate through review and approval. Rollback is a
+single command, restoring a digest-verified copy of the prior bundle that was
+staged alongside the proposed one for exactly this purpose. This is why the
+runtime can heal aggressively without the healed program becoming the deployed
+program: the two are separated by a gate a model cannot open.
 
 \begin{figure}[t]
 \centering
@@ -85,8 +192,10 @@ transactional systems \cite{gray1981transaction}.
 \caption{Effect verification separates the weak screen oracle from the strong
 system-of-record oracle. A rendered success is evidence about pixels, not about
 a persisted write; only an independent before/after snapshot of the application's
-state can refute a silent wrong action. In the fault study this reduced silent
-acceptance from 50 of 90 runs to 0 of 90.}
+state can refute a silent wrong action. In the end-to-end fault study this
+reduced silent acceptance from 54 of 90 runs to 9 of 90 under a single
+out-of-band record oracle, and to 0 of 90 only once the read path covered every
+mutable surface the action could touch.}
 \label{fig:oracle}
 \end{figure}
 

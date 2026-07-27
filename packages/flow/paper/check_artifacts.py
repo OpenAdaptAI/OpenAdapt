@@ -143,6 +143,13 @@ def main() -> None:
             f"{mode} silently mishandled",
         )
 
+    # RETIRED, PROSE-FORBIDDEN ARTIFACT. benchmark/silent_wrong_action is the
+    # original in-process study whose effect verifier and ground truth read the
+    # SAME object, so its 0/90 is circular by construction (the harness README
+    # says so). It is superseded by benchmark/effect_e2e and MUST NOT appear in
+    # any paper prose. We keep pinning its constants so the retired artifact
+    # cannot be silently edited, and separately assert below that no paper file
+    # cites it.
     silent = load("benchmark/silent_wrong_action/results.json")
     metrics = silent["metrics"]
     require_equal(metrics["n_runs"], 90, "silent-wrong runs")
@@ -216,6 +223,33 @@ def main() -> None:
         0,
         "effect-e2e complete-read-path silent wrong",
     )
+    # The per-scenario decomposition table (tab:e2eclasses) and the prose
+    # sentence "six of the ten scenarios differentiate..." are a coverage matrix
+    # claim, not an aggregate. Bind the slip SETS, not just the counts, so a
+    # future edit cannot reassign which class slips in which arm.
+    require_equal(
+        sorted(e2e["screen"]["silent_wrong_scenarios"]),
+        [
+            "collateral_unaudited",
+            "duplicate",
+            "no_persist",
+            "partial",
+            "stale",
+            "wrong_record",
+        ],
+        "effect-e2e screen slip classes",
+    )
+    require_equal(
+        e2e["effect_full"]["silent_wrong_scenarios"],
+        [],
+        "effect-e2e complete-read-path slip classes",
+    )
+    e2e_screen_slip_classes = len(e2e["screen"]["silent_wrong_scenarios"])
+    require_equal(len(effect_e2e["scenarios"]), 10, "effect-e2e scenario count")
+    for arm in ("screen", "effect_rest", "effect_full"):
+        require_equal(
+            e2e[arm]["false_abort_count"], 9, f"effect-e2e {arm} false aborts"
+        )
     e2e_screen = e2e["screen"]["silent_wrong_count"]
     e2e_rest = e2e["effect_rest"]["silent_wrong_count"]
     e2e_full = e2e["effect_full"]["silent_wrong_count"]
@@ -256,6 +290,171 @@ def main() -> None:
     # cites so the two cannot drift.
     effectbench_version = load_text("benchmark/effectbench/VERSION").strip()
     require_equal(effectbench_version, "1.0.0", "EffectBench spec version")
+
+    # Multi-application workflow benchmarks (email + document + spreadsheet +
+    # API + UI-only gateway across two systems of record). These answer the
+    # "short, linear, single-app form fill" complexity objection. Both are
+    # synthetic, localhost-only, API-tier actuated, and zero-model-call; the
+    # paper must say so. Bind the aggregate the results section reports.
+    multiapp = {
+        name: load(f"benchmark/{name}/results.json")
+        for name in ("ap_invoice", "o2c_recon")
+    }
+    multiapp_governed_runs = 0
+    multiapp_naive_runs = 0
+    multiapp_governed_silent = 0
+    multiapp_naive_silent = 0
+    multiapp_governed_over_halt = 0
+    multiapp_healthy_governed = 0
+    multiapp_model_calls = 0
+    for name, artifact in multiapp.items():
+        require_equal(artifact["n_per_scenario"], 3, f"{name} runs per cell")
+        require_equal(artifact["arms"], ["naive", "governed"], f"{name} arms")
+        require_equal(
+            artifact["headline"]["model_calls_total"], 0, f"{name} model calls"
+        )
+        per_arm = artifact["metrics"]["per_arm"]
+        multiapp_governed_runs += per_arm["governed"]["n_runs"]
+        multiapp_naive_runs += per_arm["naive"]["n_runs"]
+        multiapp_governed_silent += per_arm["governed"]["silent_wrong"]
+        multiapp_naive_silent += per_arm["naive"]["silent_wrong"]
+        multiapp_governed_over_halt += per_arm["governed"]["over_halts"]
+        multiapp_model_calls += per_arm["governed"]["model_calls"]
+        multiapp_model_calls += per_arm["naive"]["model_calls"]
+        # The healthy path is the only scenario that may terminate VERIFIED, and
+        # only under the governed arm. The naive arm never obtains independent
+        # effect evidence, so it can only reach COMPLETED_UNVERIFIED.
+        require_equal(
+            per_arm["governed"]["per_scenario"]["healthy"]["transaction_outcomes"],
+            ["VERIFIED"],
+            f"{name} governed healthy transaction outcome",
+        )
+        require_equal(
+            per_arm["naive"]["per_scenario"]["healthy"]["transaction_outcomes"],
+            ["COMPLETED_UNVERIFIED"],
+            f"{name} naive healthy transaction outcome",
+        )
+        multiapp_healthy_governed += per_arm["governed"]["per_scenario"]["healthy"]["n"]
+    require_equal(multiapp_governed_runs, 30, "multi-app governed runs")
+    require_equal(multiapp_naive_runs, 30, "multi-app naive runs")
+    require_equal(multiapp_governed_silent, 0, "multi-app governed silent wrong")
+    require_equal(multiapp_naive_silent, 6, "multi-app naive silent wrong")
+    require_equal(multiapp_governed_over_halt, 0, "multi-app governed over-halts")
+    require_equal(multiapp_healthy_governed, 6, "multi-app healthy governed runs")
+    require_equal(multiapp_model_calls, 0, "multi-app model calls")
+    require_equal(
+        multiapp["ap_invoice"]["workflow_shape"]["healthy_executed_action_steps"],
+        32,
+        "AP invoice executed action steps",
+    )
+    require_equal(
+        multiapp["o2c_recon"]["workflow_shape"]["healthy_executed_action_steps"],
+        26,
+        "O2C recon executed action steps",
+    )
+    # The taxonomy cells the results table reports, per benchmark and scenario.
+    expected_multiapp_outcomes = {
+        ("ap_invoice", "healthy"): ("COMPLETED_UNVERIFIED", "VERIFIED"),
+        ("ap_invoice", "missing_po"): (
+            "HALTED_BEFORE_EFFECT",
+            "HALTED_BEFORE_EFFECT",
+        ),
+        ("ap_invoice", "duplicate_invoice"): (
+            "HALTED_BEFORE_EFFECT",
+            "HALTED_BEFORE_EFFECT",
+        ),
+        ("ap_invoice", "collateral_approve"): (
+            "COMPLETED_UNVERIFIED",
+            "RECONCILIATION_REQUIRED",
+        ),
+        ("ap_invoice", "payment_confirm_outage"): (
+            "COMPLETED_UNVERIFIED",
+            "RECONCILIATION_REQUIRED",
+        ),
+        ("o2c_recon", "healthy"): ("COMPLETED_UNVERIFIED", "VERIFIED"),
+        ("o2c_recon", "missing_in_ledger"): (
+            "HALTED_BEFORE_EFFECT",
+            "HALTED_BEFORE_EFFECT",
+        ),
+        ("o2c_recon", "ambiguous_duplicate"): (
+            "HALTED_BEFORE_EFFECT",
+            "HALTED_BEFORE_EFFECT",
+        ),
+        ("o2c_recon", "stale_snapshot"): (
+            "HALTED_BEFORE_EFFECT",
+            "HALTED_BEFORE_EFFECT",
+        ),
+        ("o2c_recon", "phantom_writeback"): (
+            "COMPLETED_UNVERIFIED",
+            "HALTED_BEFORE_EFFECT",
+        ),
+    }
+    for (name, scenario), (
+        naive_outcome,
+        governed_outcome,
+    ) in expected_multiapp_outcomes.items():
+        per_arm = multiapp[name]["metrics"]["per_arm"]
+        require_equal(
+            per_arm["naive"]["per_scenario"][scenario]["transaction_outcomes"],
+            [naive_outcome],
+            f"{name} {scenario} naive outcome",
+        )
+        require_equal(
+            per_arm["governed"]["per_scenario"][scenario]["transaction_outcomes"],
+            [governed_outcome],
+            f"{name} {scenario} governed outcome",
+        )
+    # The two cells the naive banner oracle silently accepts.
+    require_equal(
+        multiapp["ap_invoice"]["metrics"]["per_arm"]["naive"]["per_scenario"][
+            "collateral_approve"
+        ]["silent_wrong"],
+        3,
+        "AP invoice naive collateral silent wrong",
+    )
+    require_equal(
+        multiapp["o2c_recon"]["metrics"]["per_arm"]["naive"]["per_scenario"][
+            "phantom_writeback"
+        ]["silent_wrong"],
+        3,
+        "O2C recon naive phantom write-back silent wrong",
+    )
+    require_equal(
+        multiapp["ap_invoice"]["headline"]["governed_suppressed_retries"],
+        3,
+        "AP invoice governed suppressed duplicate retries",
+    )
+
+    # Citrix: the ONLY Citrix evidence in this paper is a deterministic synthetic
+    # stand-in. Bind the artifact's own negative claims so no future paper edit
+    # can promote it into a real ICA/HDX result.
+    citrix = load("benchmark/citrix_ica_hdx/results.json")
+    citrix_status = load("benchmark/citrix_ica_hdx/status_manifest.json")
+    require_equal(
+        citrix["is_real_ica_hdx"], False, "Citrix stand-in is not real ICA/HDX"
+    )
+    require_equal(citrix["ica_hdx_accepted"], False, "Citrix ICA/HDX not accepted")
+    require_equal(
+        citrix["evidence_scope"],
+        "deterministic_synthetic_ica_hdx_standin",
+        "Citrix evidence scope",
+    )
+    require_equal(citrix["condition_count"], 16, "Citrix stand-in conditions")
+    require_equal(citrix["trial_count"], 29, "Citrix stand-in trials")
+    require_equal(citrix["scenarios_passed"], 29, "Citrix stand-in trials passed")
+    require_equal(citrix["model_calls"], 0, "Citrix stand-in model calls")
+    require_equal(
+        citrix["silent_incorrect_successes"], 0, "Citrix stand-in silent successes"
+    )
+    require_equal(citrix["silent_writes"], 0, "Citrix stand-in silent writes")
+    require_equal(citrix["healthy_over_halts"], 0, "Citrix stand-in over-halts")
+    require_equal(
+        citrix_status["status_dimensions"]["real_protocol_environment_evidence"][
+            "status"
+        ],
+        "pending",
+        "Citrix real-protocol evidence pending",
+    )
 
     identity = load("benchmark/identity_ladder/identity_ladder.json")
     expected_identity = {
@@ -337,6 +536,20 @@ def main() -> None:
     reproducibility_tex = load_text("paper/sections/07_reproducibility.tex")
     paper_readme = load_text("paper/README.md")
 
+    number_words = {
+        0: "zero",
+        1: "one",
+        2: "two",
+        3: "three",
+        4: "four",
+        5: "five",
+        6: "six",
+        7: "seven",
+        8: "eight",
+        9: "nine",
+        10: "ten",
+    }
+
     # The public/private evaluation boundary is part of the evidence contract.
     # Prevent future paper edits from claiming that every raw row or target
     # recipe is released merely because each headline constant is checked.
@@ -412,6 +625,38 @@ def main() -> None:
         results_tex,
         f"The residual {e2e_rest} of 90 is the honest mechanism",
         "results e2e residual honesty",
+    )
+    # Bind the coverage-matrix sentence in both the report and the workshop to
+    # the artifact's own slip sets, so "six of the ten" cannot drift.
+    for label, text in (
+        ("results", results_tex),
+        ("workshop", load_text("paper/workshop/main.tex")),
+    ):
+        require_contains(
+            text,
+            (
+                f"{number_words[e2e_screen_slip_classes].capitalize()} of the "
+                f"{number_words[len(effect_e2e['scenarios'])]} scenarios "
+                "differentiate the screen from an"
+            ),
+            f"{label} e2e differentiating-class count",
+        )
+    # The fig:oracle caption in Governance is the exact place the retired
+    # circular 50/0 framing survived a previous reconciliation. Bind all three
+    # rungs of the caption positively, so it cannot silently regress again.
+    governance_tex = load_text("paper/sections/03_governance.tex")
+    require_contains(
+        governance_tex,
+        (
+            f"reduced silent acceptance from {e2e_screen} of 90 runs to "
+            f"{e2e_rest} of 90 under a single"
+        ),
+        "governance fig:oracle caption screen and out-of-band rungs",
+    )
+    require_contains(
+        governance_tex,
+        f"and to {e2e_full} of 90 only once the read path covered every",
+        "governance fig:oracle caption complete-read rung",
     )
 
     # Second-domain lending generalization prose bound to swer_results.json. The
@@ -490,6 +735,153 @@ def main() -> None:
         "methodology EffectBench version",
     )
 
+    # Multi-application workflow prose bound to ap_invoice + o2c_recon.
+    require_contains(
+        results_tex,
+        (
+            f"Across both, {multiapp_governed_runs} governed runs\n"
+            f"produced zero silent incorrect successes and zero healthy-path "
+            f"over-halts, while\nthe same {multiapp_naive_runs} runs under the "
+            f"naive banner oracle produced {multiapp_naive_silent} silent "
+            f"incorrect\nsuccesses."
+        ),
+        "multi-application aggregate",
+    )
+    require_contains(
+        results_tex,
+        (
+            f"({multiapp_governed_runs} governed and {multiapp_naive_runs} "
+            f"naive runs total)"
+        ),
+        "multi-application table run counts",
+    )
+    require_contains(
+        methodology_tex,
+        (
+            f"{multiapp['ap_invoice']['workflow_shape']['healthy_executed_action_steps']}"
+            " executed action steps"
+        ),
+        "AP invoice methodology step count",
+    )
+    require_contains(
+        methodology_tex,
+        (
+            f"{multiapp['o2c_recon']['workflow_shape']['healthy_executed_action_steps']}"
+            " executed action steps"
+        ),
+        "O2C recon methodology step count",
+    )
+
+    # Citrix stand-in prose. Bind the numbers AND the negative claims: the
+    # paper's Citrix statement is deliberately a scoped refusal to claim Citrix.
+    require_contains(
+        results_tex,
+        (
+            f"over {citrix['condition_count']} ICA/HDX-class conditions in "
+            f"{citrix['trial_count']} trials against\na deterministic synthetic "
+            f"stand-in"
+        ),
+        "Citrix stand-in results scope",
+    )
+    require_contains(
+        results_tex,
+        r"\texttt{is\_real\_ica\_hdx: false}",
+        "Citrix results negative claim",
+    )
+    require_contains(
+        methodology_tex,
+        r"\texttt{is\_real\_ica\_hdx: false}",
+        "Citrix methodology negative claim",
+    )
+    require_contains(
+        limitations_tex,
+        "deterministic synthetic stand-in",
+        "Citrix limitations disclosure",
+    )
+    # Affirmative Citrix claims that no released artifact supports. These are
+    # phrased so they cannot appear inside a negation the paper legitimately
+    # makes (the paper says things like: any statement that OpenAdapt "runs on
+    # Citrix" would be unsupported).
+    forbidden_citrix_claims = (
+        "validated on Citrix",
+        "Citrix-validated",
+        "qualified on Citrix",
+        "Citrix ICA/HDX qualification passed",
+        "real ICA/HDX environment confirmed",
+        "supports Citrix in production",
+    )
+    citrix_prose = "\n".join(
+        (main_tex, intro_tex, methodology_tex, results_tex, limitations_tex)
+    )
+    for forbidden in forbidden_citrix_claims:
+        if forbidden in " ".join(citrix_prose.split()):
+            raise AssertionError(
+                f"paper asserts an unsupported Citrix claim: {forbidden!r}"
+            )
+
+    # N=0 external deployments must stay stated, not elided.
+    require_contains(
+        limitations_tex,
+        "no external organization has deployed this system",
+        "limitations N=0 external deployments",
+    )
+    require_contains(
+        main_tex,
+        "no external organization\nhas yet deployed the system",
+        "abstract N=0 external deployments",
+    )
+    # The end-to-end harness stubs perception. Every surface that reports its
+    # headline must say so, so "end to end" can never be read as "including the
+    # vision stack".
+    for label, text in (
+        ("methodology", methodology_tex),
+        ("results", results_tex),
+        ("limitations", limitations_tex),
+        ("workshop", load_text("paper/workshop/main.tex")),
+    ):
+        normalized = " ".join(text.split())
+        if not any(
+            marker in normalized
+            for marker in (
+                "null observation backend",
+                "vision stack are null stubs",
+                "vision stack stubbed",
+                "observation backend and vision stack",
+                "stubs the vision stack",
+            )
+        ):
+            raise AssertionError(
+                f"{label} does not disclose that the end-to-end harness stubs "
+                "perception"
+            )
+
+    # The retired in-process silent_wrong_action study is circular by
+    # construction. It must never reappear in prose. Guard every paper surface
+    # against its distinctive constants and against the retired framing.
+    retired_phrases = (
+        "50 of 90",
+        "50/90",
+        "silently accepted 50",
+        "silent_wrong_action",
+    )
+    for label, text in (
+        ("main.tex", main_tex),
+        ("introduction", intro_tex),
+        ("governance", load_text("paper/sections/03_governance.tex")),
+        ("methodology", methodology_tex),
+        ("results", results_tex),
+        ("limitations", limitations_tex),
+        ("reproducibility", reproducibility_tex),
+        ("workshop", load_text("paper/workshop/main.tex")),
+    ):
+        normalized = " ".join(text.split())
+        for phrase in retired_phrases:
+            if phrase in normalized:
+                raise AssertionError(
+                    f"{label} cites the RETIRED circular silent_wrong_action "
+                    f"study ({phrase!r}); cite benchmark/effect_e2e instead"
+                )
+
     openemr_source = source_results["OpenEMR"]
     mockmed_source = source_results["MockMed"]
     for field in ("model", "computer_tool", "beta_header", "platform"):
@@ -560,19 +952,6 @@ def main() -> None:
     silently_mishandled = sum(
         result["silently_mishandled_count"] > 0 for result in injected_faults
     )
-    number_words = {
-        0: "zero",
-        1: "one",
-        2: "two",
-        3: "three",
-        4: "four",
-        5: "five",
-        6: "six",
-        7: "seven",
-        8: "eight",
-        9: "nine",
-        10: "ten",
-    }
     require_contains(
         results_tex,
         (

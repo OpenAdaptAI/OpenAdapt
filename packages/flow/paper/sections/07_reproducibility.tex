@@ -24,10 +24,60 @@ Evidence carries one of four labels:
         repeated trials needed for comparative inference.
 \end{itemize}
 
+Table~\ref{tab:evidence} is the index: every reported study, the released
+artifact the machine-check reads, its evidence label, its run count, and the
+oracle that decided each run. A claim that does not appear in this table is a
+mechanism description, not a measurement.
+
+\begin{table}[t]
+\centering
+\caption{Evidence index. Paths are relative to the repository root; the
+machine-check reads each one. ``$n$'' is runs per arm or per cell as reported in
+the corresponding section.}
+\label{tab:evidence}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{27mm}L{42mm}L{18mm}L{13mm}L{40mm}}
+\toprule
+Study & Artifact under \texttt{benchmark/} & Label & $n$ & Oracle \\
+\midrule
+End-to-end effect & \texttt{effect\_e2e/} \texttt{results.json} & Fixture & 9/cell & direct read-only SQLite, every table \\
+Fault model (perception) & \texttt{fault\_model/} \texttt{results.json} & Fixture & 10/class & database state \\
+Lending (2nd domain) & \texttt{lending\_fault\_model/} \texttt{swer\_results.json} & Fixture & 3/task & separate read-only ledger \\
+AP invoice & \texttt{ap\_invoice/} \texttt{results.json} & Fixture & 3/cell & two-database delta audit \\
+O2C reconciliation & \texttt{o2c\_recon/} \texttt{results.json} & Fixture & 3/cell & two-database delta audit \\
+OpenEMR comparison & \texttt{openemr/} \texttt{results.json} & Field & 20 / 10 & task-level success check \\
+MockMed comparison & \texttt{results.json} & CI-repro. & 100 / 20 & task-level success check \\
+Public-web breadth & \texttt{reliability/} \texttt{summary.json} & Descriptive & 1/app & external goal oracle \\
+Identity ladder & \texttt{identity\_ladder/} \texttt{identity\_ladder.json} & Fixture & 14--42 & intended-entity ground truth \\
+Windows UIA & \texttt{windows\_uia/} \texttt{results.json} & Field & 3 & independent SQLite query \\
+Native macOS & \texttt{macos\_native/} \texttt{*.adjudication.json} & Field & 3 & exact file bytes \\
+Network RDP & \texttt{rdp/} \texttt{*.sanitized.json} & Field & 3 & guest-tools file readback \\
+Citrix stand-in & \texttt{citrix\_ica\_hdx/} \texttt{results.json} & Fixture & 29 trials & in-process out-of-band store \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Reproducibility is uneven across these labels, and the unevenness is
+structural rather than incidental. The fault-injection, end-to-end effect,
+lending, and multi-application studies are localhost-only, deterministic, and
+make no model calls, so they re-run from a clean checkout and reproduce exactly.
+The comparative study does not: it depends on a hosted model identified by an
+exact name, tool version, and dated beta header, none of which the authors
+control or can guarantee will remain available or unchanged, so its latency and
+cost figures are pinned to a date rather than reproducible on demand. The
+OpenEMR arm additionally runs against a shared, mutable, public demonstration
+instance and is not reproducible by design. The desktop and remote-substrate
+qualifications depend on specific virtual machines, snapshots, and hosts. We
+report these as field or descriptive evidence rather than presenting the whole
+suite as uniformly re-runnable.
+
 Before submission, the release candidate must re-run promoted experiments,
 archive its exact commit and environment, record task-level oracles, and check
 that no application artifact contains sensitive or prohibited data. The
-repository's \texttt{paper/ARTIFACT\_CHECKLIST.md} is the submission gate.
+repository's \texttt{paper/ARTIFACT\_CHECKLIST.md} is the submission gate, and
+records the exact commit, release tag, and published artifact digests that this
+version of the paper describes.
 
 \paragraph{Data availability and ethics.}
 Every released system-of-record fixture is synthetic: the MockMed and MockLoan
