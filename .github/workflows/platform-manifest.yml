@@ -57,6 +57,10 @@ jobs:
         run: python scripts/validate_platform_manifest.py
 
       - name: Prove the drift guard fails when it should
+        # The daily/dispatched production check is intentionally stdlib-only.
+        # This characterization suite belongs on source changes, not every
+        # remote drift probe, so scheduled checks stay fast and network-light.
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: |
           python -m pip install --quiet 'pytest>=8.0.0'
           python -m pytest tests/test_platform_manifest_drift.py -q
