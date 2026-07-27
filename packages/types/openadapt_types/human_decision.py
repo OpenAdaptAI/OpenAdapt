@@ -5,6 +5,53 @@ execution capability: a consumer must still present the runtime's separately
 issued capability, satisfy its authentication policy, and pass fresh
 revalidation before actuation. Free-form text, screenshots, identifiers, and
 observed values deliberately do not belong in this contract.
+
+Cloud-safe by construction
+--------------------------
+There is exactly one task model and it is the Cloud-safe one; there is no
+"local extension" variant that a producer could accidentally relay. Every
+string-typed field is a ``Literal``, an ``Enum`` member, or carries an explicit
+``pattern``, and every model forbids unknown fields. Raw values, OCR text,
+screenshots, and operator prose therefore have no field to travel in, and a new
+field cannot quietly open one: ``tests/test_human_decision.py`` walks the
+exported JSON Schema and fails on any string that is not closed by a pattern,
+``const``, or ``enum``.
+
+Signature canonicalization (normative)
+--------------------------------------
+An HMAC over this task must be reproducible byte-for-byte in any language, so
+the encoding is fixed rather than left to a JSON library's defaults:
+
+1. Start from ``unsigned_payload()``: the model serialized in JSON mode with
+   ``signature`` removed. Every other field is always present, including those
+   whose value is ``null``; optional fields are never omitted.
+2. Serialize with keys sorted ascending by Unicode code point, at every nesting
+   level. All keys in this contract are ASCII by construction, so code-point
+   order and UTF-16 code-unit order agree and a JavaScript implementation may
+   use ``Object.keys().sort()``.
+3. Use no insignificant whitespace: ``,`` between items and ``:`` between a key
+   and its value, with no spaces.
+4. Escape all non-ASCII characters as ``\\uXXXX`` (Python's
+   ``ensure_ascii=True``). The canonical form is therefore pure ASCII, and a
+   consumer never has to agree on a Unicode normalization form.
+5. Encode the result as UTF-8.
+6. Prepend the domain separator ``b"openadapt.human-decision-task/v1\\x00"``
+   before computing the HMAC, so a signature over this contract can never be
+   replayed as a signature over a different OpenAdapt payload. The digest in
+   :attr:`HumanDecisionTaskV1.digest` is taken over the canonical bytes
+   *without* the domain separator.
+
+Only integers and booleans appear as non-string scalars, and every integer is
+range-bounded. No float, decimal, or timestamp object is ever serialized, which
+removes the usual cross-language number-formatting hazard. Timestamps travel as
+pattern-checked RFC 3339 strings and are compared, never reformatted: a signer
+must not normalize ``Z`` to ``+00:00`` or vice versa, because that would change
+the signed bytes.
+
+``tests/test_human_decision.py`` pins the exact canonical bytes and the exact
+signature hex of a fixed task. Any change to field names, field order handling,
+escaping, or the domain separator will fail that vector, which is the intended
+signal to cut a new schema version rather than to silently re-sign.
 """
 
 from __future__ import annotations
@@ -31,6 +78,13 @@ _SIGNING_DOMAIN = b"openadapt.human-decision-task/v1\x00"
 _OPAQUE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
 _SHA256_PATTERN = r"^sha256:[0-9a-f]{64}$"
 _SIGNATURE_PATTERN = r"^hmac-sha256:[0-9a-f]{64}$"
+#: RFC 3339 instant with a required offset, permitting both ``Z`` and a numeric
+#: offset because producers differ. Bounding the shape here, not only in the
+#: Python validator, is what keeps a non-Python consumer that validates against
+#: the exported JSON Schema from accepting free text in a timestamp field.
+_TIMESTAMP_PATTERN = (
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$"
+)
 
 
 class _StrictContract(BaseModel):
@@ -163,6 +217,16 @@ def _parse_timestamp(value: str, field_name: str) -> datetime:
 
 
 def _canonical_json(payload: Mapping[str, Any]) -> bytes:
+    """Encode one payload under the normative rules in the module docstring.
+
+    Each argument is load-bearing and none may be relaxed: ``sort_keys`` fixes
+    key order at every level, ``separators`` removes insignificant whitespace,
+    and ``ensure_ascii`` makes the output pure ASCII so no consumer has to agree
+    on a Unicode normalization form. Callers that need the signed form must go
+    through :meth:`HumanDecisionTaskV1.unsigned_payload` rather than dumping the
+    model themselves, so that ``signature`` exclusion stays part of the rule.
+    """
+
     return json.dumps(
         payload,
         ensure_ascii=True,
@@ -193,8 +257,12 @@ class HumanDecisionTaskV1(_StrictContract):
     evidence: HumanDecisionEvidenceSummaryV1
     allowed_actions: tuple[HumanDecisionAction, ...] = Field(min_length=1, max_length=4)
     required_authn: HumanDecisionRequiredAuthn
-    created_at: StrictStr = Field(min_length=20, max_length=40)
-    expires_at: StrictStr = Field(min_length=20, max_length=40)
+    created_at: StrictStr = Field(
+        min_length=20, max_length=40, pattern=_TIMESTAMP_PATTERN
+    )
+    expires_at: StrictStr = Field(
+        min_length=20, max_length=40, pattern=_TIMESTAMP_PATTERN
+    )
     nonce: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
     issuer_key_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
     signature_algorithm: Literal["hmac-sha256"] = "hmac-sha256"

@@ -273,6 +273,7 @@
     "created_at": {
       "maxLength": 40,
       "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
       "title": "Created At",
       "type": "string"
     },
@@ -285,6 +286,7 @@
     "expires_at": {
       "maxLength": 40,
       "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
       "title": "Expires At",
       "type": "string"
     },
