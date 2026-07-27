@@ -679,6 +679,9 @@ def test_e2e_weakening_heal_is_blocked_and_run_halts(tmp_path):
         [OcrLine("Unrelated footer", region=(5, 5, 90, 12), confidence=0.95)]
     )
     step = armed_step()
+    # Make the click transaction-consequential so the terminal classifier must
+    # distinguish a pre-delivery refusal from this post-action heal refusal.
+    step.risk = "irreversible"
     step.anchor.structured_identity = structured
     workflow = Workflow(name="wf", viewport=VIEWPORT, steps=[step])
     recorded_anchor = step.anchor.model_copy(deep=True)
@@ -697,6 +700,9 @@ def test_e2e_weakening_heal_is_blocked_and_run_halts(tmp_path):
     assert report.results[0].ok is False
     assert "quarantined" in report.results[0].error
     assert "context band" in report.results[0].error
+    assert backend.actions == [("click", 150, 150, False)]
+    assert report.results[0].delivery_attempted is True
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
     assert report.results[0].heal is None
     assert report.heal_count == 0
     # The in-memory anchor was NOT weakened (OCR identity band intact).

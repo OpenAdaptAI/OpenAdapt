@@ -49,8 +49,8 @@ plus 4 designed exception scenarios.
 |---|---|---|
 | `healthy` | completes; `COMPLETED_UNVERIFIED` (never billable) | **`VERIFIED`** (billable) |
 | `missing_in_ledger` | processes the prior order, then halts at the explicit terminal | same; `HALTED_BEFORE_EFFECT`; no ledger entry auto-created |
-| `ambiguous_duplicate` | safe halt (UI gateway refuses the 2-entry order) | safe halt; `HALTED_BEFORE_EFFECT`; both entries untouched |
-| `stale_snapshot` | safe halt (optimistic-concurrency 409) | safe halt; `HALTED_BEFORE_EFFECT`; amount unchanged |
+| `ambiguous_duplicate` | safe halt (UI gateway refuses the 2-entry order) | safe halt; `RECONCILIATION_REQUIRED` (the request was sent and no verifier read the ledger, so absence is unproven); both entries untouched per ground truth |
+| `stale_snapshot` | safe halt (optimistic-concurrency 409) | safe halt; `RECONCILIATION_REQUIRED` (the request was sent and no verifier read the ledger, so absence is unproven); amount unchanged per ground truth |
 | `phantom_writeback` | **SILENT WRONG** (row acknowledged, never written to the sheet) | **caught** by re-reading the file; halts |
 
 Headline (30 base runs: 15 per arm): governed silent-incorrect-success

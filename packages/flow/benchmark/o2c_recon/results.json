@@ -1,7 +1,7 @@
 {
   "benchmark": "o2c_recon",
   "instrument": "order-to-cash billing reconciliation across two systems: exported spreadsheet -> compare -> ledger adjustments (UI-only gateway) -> reconcile marks (API) -> results spreadsheet write-back, end-to-end through the real replayer's api tier",
-  "generated_at": "2026-07-26T22:18:11.781318+00:00",
+  "generated_at": "2026-07-27T14:32:59.581428+00:00",
   "platform": "macOS-15.7.3-arm64-arm-64bit",
   "n_per_scenario": 3,
   "arms": [
@@ -83,7 +83,7 @@
             "n": 3,
             "reported_success": 0,
             "transaction_outcomes": [
-              "HALTED_BEFORE_EFFECT"
+              "RECONCILIATION_REQUIRED"
             ],
             "silent_wrong": 0,
             "caught": 0,
@@ -93,7 +93,7 @@
             "n": 3,
             "reported_success": 0,
             "transaction_outcomes": [
-              "HALTED_BEFORE_EFFECT"
+              "RECONCILIATION_REQUIRED"
             ],
             "silent_wrong": 0,
             "caught": 0,
@@ -146,7 +146,7 @@
             "n": 3,
             "reported_success": 0,
             "transaction_outcomes": [
-              "HALTED_BEFORE_EFFECT"
+              "RECONCILIATION_REQUIRED"
             ],
             "silent_wrong": 0,
             "caught": 0,
@@ -156,7 +156,7 @@
             "n": 3,
             "reported_success": 0,
             "transaction_outcomes": [
-              "HALTED_BEFORE_EFFECT"
+              "RECONCILIATION_REQUIRED"
             ],
             "silent_wrong": 0,
             "caught": 0,
@@ -384,7 +384,7 @@
       "governed_policy_name": null,
       "governed_approval_source": null,
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -416,7 +416,7 @@
       "governed_policy_name": null,
       "governed_approval_source": null,
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -448,7 +448,7 @@
       "governed_policy_name": null,
       "governed_approval_source": null,
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -480,7 +480,7 @@
       "governed_policy_name": null,
       "governed_approval_source": null,
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -512,7 +512,7 @@
       "governed_policy_name": null,
       "governed_approval_source": null,
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -544,7 +544,7 @@
       "governed_policy_name": null,
       "governed_approval_source": null,
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -873,7 +873,7 @@
       "governed_policy_name": "multiapp-standard.yaml",
       "governed_approval_source": "benchmark-standard-run-gate",
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -905,7 +905,7 @@
       "governed_policy_name": "multiapp-standard.yaml",
       "governed_approval_source": "benchmark-standard-run-gate",
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -937,7 +937,7 @@
       "governed_policy_name": "multiapp-standard.yaml",
       "governed_approval_source": "benchmark-standard-run-gate",
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -969,7 +969,7 @@
       "governed_policy_name": "multiapp-standard.yaml",
       "governed_approval_source": "benchmark-standard-run-gate",
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -1001,7 +1001,7 @@
       "governed_policy_name": "multiapp-standard.yaml",
       "governed_approval_source": "benchmark-standard-run-gate",
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,
@@ -1033,7 +1033,7 @@
       "governed_policy_name": "multiapp-standard.yaml",
       "governed_approval_source": "benchmark-standard-run-gate",
       "execution_outcome": "HALTED",
-      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
       "transaction_billable": false,
       "terminal_outcome": "halt",
       "model_calls": 0,

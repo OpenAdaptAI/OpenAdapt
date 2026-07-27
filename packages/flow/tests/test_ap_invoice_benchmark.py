@@ -83,12 +83,20 @@ def test_naive_healthy_run_is_never_a_production_success(results):
 
 
 @pytest.mark.parametrize("scenario", ["missing_po", "duplicate_invoice"])
-def test_entry_exceptions_halt_safely_with_no_effect(results, scenario):
+def test_entry_exceptions_halt_and_route_to_reconciliation(results, scenario):
+    # Nothing consequential persisted -- the direct state oracle confirms zero
+    # deltas. But the RUNTIME cannot prove that: the API request WAS sent
+    # (``ActuationStatus.HALT`` is documented as "the write may have landed")
+    # and no verifier read the system of record afterwards. Claiming a proven
+    # absence here would tell an operator to reconcile nothing on evidence that
+    # does not exist, so the unverified actuation routes to
+    # RECONCILIATION_REQUIRED instead.
     for arm in ARMS:
         row = _rows(results, arm, scenario)[0]
         assert row["halted"] is True
         assert row["gt_correct"] is True, row["gt_violations"]
-        assert row["transaction_outcome"] == "HALTED_BEFORE_EFFECT"
+        assert row["transaction_outcome"] == "RECONCILIATION_REQUIRED"
+        assert row["transaction_outcome"] != "HALTED_BEFORE_EFFECT"
         # Nothing consequential persisted anywhere (echo banner excluded).
         assert all(delta == 0 for delta in row["table_deltas"].values()), row
 
@@ -167,7 +175,11 @@ def test_committed_n3_evidence_shape_and_headline():
         "governed_verified": 3,
         "governed_silent_wrong": 0,
         "governed_over_halts": 0,
-        "governed_reconciliation_required": 6,
+        # 12, not 6: `missing_po` and `duplicate_invoice` (3 runs each) route
+        # here now. The API gateway refuses the write and the state oracle
+        # confirms zero deltas, but the request WAS sent and no verifier read
+        # the ledger, so the runtime cannot claim a proven absence.
+        "governed_reconciliation_required": 12,
         "governed_suppressed_retries": 3,
         "naive_silent_wrong": 3,
         "model_calls_total": 0,

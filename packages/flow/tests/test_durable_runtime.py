@@ -16,10 +16,6 @@ network, no model call. The theses these pin:
 
 from __future__ import annotations
 
-# Reuse the scripted fakes from the main replayer unit tests (pytest's prepend
-# import mode puts tests/ on sys.path).
-from tests.test_replayer import FakeBackend, FakeVision, Match
-
 from openadapt_flow.ir import (
     ActionKind,
     Postcondition,
@@ -42,6 +38,10 @@ from openadapt_flow.runtime.effects import (
     Verdict,
 )
 from openadapt_flow.runtime.replayer import Replayer
+
+# Reuse the scripted fakes from the main replayer unit tests (pytest's prepend
+# import mode puts tests/ on sys.path).
+from tests.test_replayer import FakeBackend, FakeVision, Match
 
 # -- fakes -------------------------------------------------------------------
 
@@ -140,7 +140,14 @@ def _three_step_workflow(*, with_effects: bool) -> Workflow:
     steps = []
     for step_id, key in (("s0", "A"), ("s1", "B"), ("s2", "C")):
         effect = _effect(step_id) if with_effects else None
-        steps.append(_key_step(step_id, key, effect=effect))
+        steps.append(
+            _key_step(
+                step_id,
+                key,
+                effect=effect,
+                risk="irreversible" if with_effects else "reversible",
+            )
+        )
     return Workflow(name="durable-demo", steps=steps)
 
 
@@ -289,6 +296,7 @@ def test_resume_does_not_reverify_confirmed_steps(tmp_path):
     # And the resumed report still accounts for the whole workflow.
     assert [r.step_id for r in resumed.results] == ["s0", "s1", "s2"]
     assert all(r.ok for r in resumed.results)
+    assert [r.risk for r in resumed.results[:2]] == ["irreversible", "irreversible"]
 
 
 # -- halt on the FIRST step resumes from zero -------------------------------

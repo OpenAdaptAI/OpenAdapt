@@ -85,12 +85,19 @@ def test_missing_ledger_entry_halts_at_the_explicit_terminal(results):
 
 
 @pytest.mark.parametrize("scenario", ["ambiguous_duplicate", "stale_snapshot"])
-def test_conflicts_are_refused_before_any_write(results, scenario):
+def test_conflicts_halt_and_route_to_reconciliation(results, scenario):
+    # The UI gateway refuses the write, so nothing is persisted -- the direct
+    # state oracle confirms zero deltas. But the RUNTIME cannot prove that: the
+    # request WAS sent (``ActuationStatus.HALT`` is documented as "the write may
+    # have landed") and no verifier read the system of record afterwards. The
+    # taxonomy must therefore not claim a proven absence; an unverified
+    # actuation routes to RECONCILIATION_REQUIRED.
     for arm in ARMS:
         row = _rows(results, arm, scenario)[0]
         assert row["halted"] is True
         assert row["gt_correct"] is True, row["gt_violations"]
-        assert row["transaction_outcome"] == "HALTED_BEFORE_EFFECT"
+        assert row["transaction_outcome"] == "RECONCILIATION_REQUIRED"
+        assert row["transaction_outcome"] != "HALTED_BEFORE_EFFECT"
         assert all(delta == 0 for delta in row["table_deltas"].values()), row
 
 

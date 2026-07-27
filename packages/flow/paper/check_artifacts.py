@@ -353,15 +353,25 @@ def main() -> None:
         "O2C recon executed action steps",
     )
     # The taxonomy cells the results table reports, per benchmark and scenario.
+    #
+    # A cell may only read HALTED_BEFORE_EFFECT where absence was positively
+    # established. Where the request reached the gateway and was refused or
+    # timed out, the write MAY have landed -- ``ActuationStatus.HALT`` is
+    # documented in-tree as "the request WAS sent but its outcome is unknown or
+    # a rejection" -- so the honest terminal outcome is RECONCILIATION_REQUIRED.
+    # The two cells that keep HALTED_BEFORE_EFFECT are the ones that earn it:
+    # ``missing_in_ledger`` never actuates, and ``phantom_writeback``'s verifier
+    # reads the record and finds it absent. That split is the discrimination the
+    # taxonomy exists to make, and it is why these constants moved.
     expected_multiapp_outcomes = {
         ("ap_invoice", "healthy"): ("COMPLETED_UNVERIFIED", "VERIFIED"),
         ("ap_invoice", "missing_po"): (
-            "HALTED_BEFORE_EFFECT",
-            "HALTED_BEFORE_EFFECT",
+            "RECONCILIATION_REQUIRED",
+            "RECONCILIATION_REQUIRED",
         ),
         ("ap_invoice", "duplicate_invoice"): (
-            "HALTED_BEFORE_EFFECT",
-            "HALTED_BEFORE_EFFECT",
+            "RECONCILIATION_REQUIRED",
+            "RECONCILIATION_REQUIRED",
         ),
         ("ap_invoice", "collateral_approve"): (
             "COMPLETED_UNVERIFIED",
@@ -377,12 +387,12 @@ def main() -> None:
             "HALTED_BEFORE_EFFECT",
         ),
         ("o2c_recon", "ambiguous_duplicate"): (
-            "HALTED_BEFORE_EFFECT",
-            "HALTED_BEFORE_EFFECT",
+            "RECONCILIATION_REQUIRED",
+            "RECONCILIATION_REQUIRED",
         ),
         ("o2c_recon", "stale_snapshot"): (
-            "HALTED_BEFORE_EFFECT",
-            "HALTED_BEFORE_EFFECT",
+            "RECONCILIATION_REQUIRED",
+            "RECONCILIATION_REQUIRED",
         ),
         ("o2c_recon", "phantom_writeback"): (
             "COMPLETED_UNVERIFIED",

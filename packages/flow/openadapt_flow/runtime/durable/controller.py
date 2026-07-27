@@ -478,6 +478,9 @@ def resumed_step_results(
                 step_id=step.id,
                 intent=step.intent,
                 ok=True,
+                risk=step.risk,
+                risk_explanation=step.risk_explanation,
+                risk_review_required=step.risk_review_required,
                 skipped=checkpoint.skipped if checkpoint is not None else False,
                 effect_verified=(
                     checkpoint.effect_verified if checkpoint is not None else None

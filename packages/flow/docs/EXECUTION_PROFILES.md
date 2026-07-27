@@ -96,7 +96,7 @@ evidence (see `openadapt_flow.transaction`).
 | `transaction_outcome` | Meaning | Billable | Production success |
 | --- | --- | --- | --- |
 | `VERIFIED` | Every declared effect (and collateral-effect check) passed at/above the required tier. | yes | yes |
-| `HALTED_BEFORE_EFFECT` | The run stopped AND the verifier established that no business effect occurred. | no | no |
+| `HALTED_BEFORE_EFFECT` | The run stopped AND absence was positively established for **every** consequential step: each was either observed `absent` by the effect verifier, or recorded as having stopped before delivery was attempted. A consequential step that reached actuation and was never verified does **not** qualify. | no | no |
 | `RECONCILIATION_REQUIRED` | Delivery/persistence is uncertain, conflicting, or temporarily unverifiable. The runtime does NOT blind-retry; resuming must reconcile current state first. | no | no |
 | `FAILED_PLATFORM` | An OpenAdapt/platform failure before any possible effect. | no (`transaction_platform_fault=true`) | no |
 | `CANCELED` | Canceled before any business effect. | no | no |
@@ -110,6 +110,28 @@ refusal or identity refusal), `HALTED_BEFORE_EFFECT` (verifier-established
 absence), or `RECONCILIATION_REQUIRED` (any uncertain/conflicting delivery or
 persistence, which always dominates); a coarse `FAILED` maps to `CANCELED` (when
 the run was canceled) or `FAILED_PLATFORM`.
+
+**Absence requires positive evidence.** `HALTED_BEFORE_EFFECT`,
+`REJECTED_POLICY`, `CANCELED`, and `FAILED_PLATFORM` all assert that no business
+effect occurred, and a customer who receives one reconciles nothing. So none of
+them may be returned while a consequential step's effect is unaccounted for. For
+each consequential step the runtime requires one of:
+
+- the effect verifier read the system of record and observed **every** declared
+  effect `absent`; or
+- the step is recorded as `not_actuated` — it was skipped, it is a
+  pre-execution gate pseudo-step, or it stopped at a typed pre-delivery refusal
+  (policy/authorization gate, unverified pre-click identity check, or a
+  `safety_halt` / `governed_refusal` such as an OCR or structural resolution
+  refusal).
+
+An empty `effect_evidence` list is **not** evidence of absence — it means
+verification never ran. A consequential step that reached actuation with no
+verification performed is `delivery_uncertain`, and the run is
+`RECONCILIATION_REQUIRED`. This holds even when the backend committed the write
+and then hung past the client deadline: the client sees an error, the store
+holds the row, and the run must report that the write needs reconciling rather
+than claim a clean bill of health.
 
 Each run also persists an **effect journal** (`effect_journal`): one PHI-free
 entry per consequential step recording the intended effect (by contract hash),

@@ -24,10 +24,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-# Reuse the scripted fakes + the scripted system-of-record verifier.
-from tests.test_durable_runtime import FakeSoRVerifier, _approval, _vision_ok
-from tests.test_replayer import FakeBackend, FakeVision
-
 from openadapt_flow.ir import (
     ActionKind,
     LoopSpec,
@@ -53,6 +49,10 @@ from openadapt_flow.runtime.durable import (
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
 from openadapt_flow.runtime.replayer import Replayer
+
+# Reuse the scripted fakes + the scripted system-of-record verifier.
+from tests.test_durable_runtime import FakeSoRVerifier, _approval, _vision_ok
+from tests.test_replayer import FakeBackend, FakeVision
 
 # -- builders ----------------------------------------------------------------
 
@@ -82,6 +82,7 @@ def _branch_loop_workflow(patients: list[str]) -> Workflow:
                     intent="type patient",
                     action=ActionKind.TYPE,
                     param="patient",
+                    risk="irreversible",
                     effects=[_patient_effect()],
                 ),
                 transitions=[Transition(target="b_end")],
@@ -198,6 +199,7 @@ def test_program_resume_restores_interpreter_and_completes(tmp_path):
 
     assert resumed.success is True
     assert resumed.terminal_outcome == "success"
+    assert resumed.results[0].risk == "irreversible"
     # RESTORED from interpreter state: the already-confirmed row (Alice) was NOT
     # re-typed; the paused row onward (Bob, Cara) was -- in order.
     assert resume_backend.actions == [("type", "Bob"), ("type", "Cara")]

@@ -49,9 +49,12 @@ class TransactionOutcome(str, Enum):
     #: Every declared effect (and collateral-effect check) passed at/above the
     #: required tier under a production profile.  The only production success.
     VERIFIED = "VERIFIED"
-    #: The run stopped AND the verifier established that NO business effect
-    #: occurred (every consequential effect was observed absent, or the run
-    #: halted before any consequential action ran).
+    #: The run stopped before any consequential effect: every consequential
+    #: step was either proven absent by exact effect-verifier coverage or
+    #: explicitly recorded as having stopped BEFORE delivery was attempted. A
+    #: confirmed earlier write is partial completion, not a before-effect halt,
+    #: and is therefore ``RECONCILIATION_REQUIRED`` until a dedicated
+    #: partial-completion outcome exists.
     HALTED_BEFORE_EFFECT = "HALTED_BEFORE_EFFECT"
     #: Delivery or persistence is uncertain, conflicting, or temporarily
     #: unverifiable.  The runtime must NOT blind-retry the consequential write;
@@ -117,6 +120,12 @@ def _has_unresolved_uncertainty(report: RunReport) -> bool:
     consequential write MAY have landed (an uncertain delivery the complete
     contract did not resolve, a duplicate/partial write, or an unreadable system
     of record) the run can neither claim "no effect" nor be blind-retried.
+
+    This reads CONFLICTING evidence only.  It deliberately says nothing about a
+    step with NO evidence: an empty ``effect_evidence`` means verification never
+    ran, which is UNKNOWN rather than settled.  Never read a ``False`` here as
+    "no effect occurred" -- that case is caught by
+    :func:`_lacks_effect_absence_proof`.
     """
 
     for result in report.results:
@@ -136,14 +145,153 @@ def _has_unresolved_uncertainty(report: RunReport) -> bool:
     return False
 
 
+def _is_consequential_result(result: StepResult) -> bool:
+    """Whether this step could have left a BUSINESS effect behind.
+
+    The report-side, fail-closed mirror of
+    :func:`openadapt_flow.run_gate.is_consequential`.  ``classify_transaction_outcome``
+    deliberately takes only a ``RunReport`` (it is a leaf and its signature is
+    public), so consequentiality is derived from typed fields the runtime
+    already stamped on the result: the compiled ``risk`` label, an unresolved
+    risk-review requirement (the action may be consequential until reviewed),
+    plus any declared, approved, or attempted system-of-record effect. A
+    reviewed reversible step that declared no effect cannot leave an
+    unreconciled write, so it never blocks an absence claim.
+    """
+
+    return (
+        result.risk == "irreversible"
+        or result.risk_review_required
+        or bool(result.effect_contract_hashes)
+        or bool(result.effect_evidence)
+        or result.effect_verified is not None
+        or result.effect_approved_unverified
+        or result.delivery_uncertainty is not None
+    )
+
+
+def _effect_evidence_has_exact_coverage(result: StepResult) -> bool:
+    """Whether retained evidence accounts for every declared effect exactly once."""
+
+    if not result.effect_evidence:
+        return False
+    from collections import Counter
+
+    declared = Counter(result.effect_contract_hashes)
+    observed = Counter(
+        evidence.effect_contract_hash for evidence in result.effect_evidence
+    )
+    return bool(declared) and declared == observed
+
+
+def _effect_absence_proven(result: StepResult) -> bool:
+    """True only when this step is positively proven to have caused no effect.
+
+    Exactly two things account for an effect, and both are POSITIVE claims:
+
+    1. the runtime recorded that the step stopped BEFORE delivery was attempted
+       (:func:`_attempt_state` -> ``not_actuated``, itself fail-closed); or
+    2. a verifier read the system of record and established ``absent`` for
+       EVERY declared effect, with an exact one-to-one hash match between the
+       declared contracts and retained evidence.
+
+    An EMPTY ``effect_evidence`` list is neither.  A consequential step that
+    reached actuation and was never verified is UNKNOWN, not absent: the system
+    of record may hold the write.  That covers the commit-then-client-timeout
+    case, any premature abort that stops the run before verification runs, and
+    an API actuation whose ``ActuationStatus.HALT`` the runtime itself
+    documents as "the request WAS sent ... the write may have landed".
+
+    An approved-but-unverified GUI write is also unaccounted for: accepting the
+    risk of proceeding without a verifier is not the same as establishing what
+    happened, and it can never license an absence claim.
+    """
+
+    if result.effect_evidence:
+        # Exact MULTISET coverage matters: a single evidence record must not
+        # settle two declared contracts, and duplicate evidence must not hide a
+        # missing contract. Any retained known-present/conflicting reading
+        # dominates a contradictory non-delivery flag.
+        if not _effect_evidence_has_exact_coverage(result):
+            return False
+        return all(
+            evidence.final_verdict == "refuted" and evidence.observed_effect == "absent"
+            for evidence in result.effect_evidence
+        )
+    return _attempt_state(result) == "not_actuated"
+
+
+def _effect_state_fully_accounted(result: StepResult) -> bool:
+    """Whether a stopped step has exact, settled effect-state evidence.
+
+    This is broader than absence: a completed compensation may leave the
+    intended effect present while removing only a duplicate/collateral write.
+    ``ROLLED_BACK`` is therefore valid with exact CONFIRMED evidence, but never
+    when one declared effect is missing from the retained evidence multiset.
+    """
+
+    if _effect_absence_proven(result):
+        return True
+    if not _effect_evidence_has_exact_coverage(result):
+        return False
+    return all(
+        evidence.final_verdict == "confirmed"
+        or (
+            evidence.final_verdict == "refuted" and evidence.observed_effect == "absent"
+        )
+        for evidence in result.effect_evidence
+    )
+
+
+def _rolled_back_effects_fully_accounted(report: RunReport) -> bool:
+    """Require exact settled coverage before accepting a rollback projection."""
+
+    has_completed_compensation = any(
+        evidence.reconciliation_completed and evidence.reconciliation_actions > 0
+        for result in report.results
+        for evidence in result.effect_evidence
+    )
+    if not has_completed_compensation:
+        # Preserve read compatibility for legacy reports whose coarse outcome
+        # predates structured compensation evidence. They carry no contradictory
+        # typed state to overrule; new reports always retain the evidence.
+        return not any(_is_consequential_result(result) for result in report.results)
+    return all(
+        not _is_consequential_result(result) or _effect_state_fully_accounted(result)
+        for result in report.results
+    )
+
+
+def _lacks_effect_absence_proof(report: RunReport) -> bool:
+    """True when any consequential step is not positively proven effect-free.
+
+    Guards every terminal outcome that asserts an absence
+    (``HALTED_BEFORE_EFFECT``, ``REJECTED_POLICY``, ``CANCELED``,
+    ``FAILED_PLATFORM``). A single consequential step without absence proof is
+    enough: the customer
+    would otherwise be told to reconcile nothing despite a confirmed, possible,
+    or incompletely covered mutation in their system of record.
+
+    A confirmed earlier write is also not absence. Until the public taxonomy
+    gains a dedicated partial-completion state, such a run is conservatively a
+    reconciliation task rather than an absence-asserting terminal outcome.
+    """
+
+    return any(
+        _is_consequential_result(result) and not _effect_absence_proven(result)
+        for result in report.results
+    )
+
+
 def _policy_rejected(report: RunReport) -> bool:
     """True when authorization/identity/qualification/environment refused.
 
     A governed refusal at a pre-execution gate, or a pre-click identity check
     that did not verify, stopped the run BEFORE any business effect.  (The
     uncertain-delivery path also carries ``failure_category='governed_refusal'``
-    but is handled earlier by :func:`_has_unresolved_uncertainty`, so reaching
-    here means no write may have landed.)
+    but is handled earlier by :func:`_has_unresolved_uncertainty` and
+    :func:`_lacks_effect_absence_proof`, so reaching here means every
+    consequential step is positively proven effect-free.)
     """
 
     for result in report.results:
@@ -164,15 +312,14 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     Reads only ``report.execution_outcome`` (already stamped) plus typed step
     evidence.  Precedence is deliberate: a settled success/rollback first, then
     any unresolved uncertainty (never claim "no effect", never blind-retry),
-    then a completed-but-unverified Demo, then the reason a run stopped before
-    any effect (policy rejection, cancellation, governed halt, platform fault).
+    then a completed-but-unverified Demo, then -- only once every
+    consequential step is POSITIVELY proven effect-free -- the reason the run
+    stopped (policy rejection, cancellation, governed halt, platform fault).
     """
 
     coarse = report.execution_outcome
     if coarse == "VERIFIED":
         return TransactionOutcome.VERIFIED
-    if coarse == "ROLLED_BACK":
-        return TransactionOutcome.ROLLED_BACK
 
     # Uncertain / conflicting delivery or persistence dominates every remaining
     # coarse bucket. This is where #250's no-blind-retry behavior surfaces as a
@@ -180,38 +327,104 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     if _has_unresolved_uncertainty(report):
         return TransactionOutcome.RECONCILIATION_REQUIRED
 
+    if coarse == "ROLLED_BACK":
+        return (
+            TransactionOutcome.ROLLED_BACK
+            if _rolled_back_effects_fully_accounted(report)
+            else TransactionOutcome.RECONCILIATION_REQUIRED
+        )
+
     if coarse == "COMPLETED_UNVERIFIED":
         return TransactionOutcome.COMPLETED_UNVERIFIED
 
-    # Remaining: the run did not complete and nothing may have landed.
+    # Every remaining outcome ASSERTS that no business effect occurred, and a
+    # customer who receives one reconciles nothing.  That assertion needs
+    # POSITIVE evidence: a consequential step that reached actuation without a
+    # verifier settling what happened may have left a write in the system of
+    # record.  Absence of evidence is not evidence of absence -- fail toward
+    # RECONCILIATION_REQUIRED, never toward a false clean bill of health.
+    if _lacks_effect_absence_proof(report):
+        return TransactionOutcome.RECONCILIATION_REQUIRED
+
+    # Remaining: every consequential step is positively proven effect-free.
     if _policy_rejected(report):
         return TransactionOutcome.REJECTED_POLICY
     if report.canceled:
         return TransactionOutcome.CANCELED
     if coarse == "HALTED":
-        # A governed halt with the verifier having established no effect.
+        # A governed halt where every consequential step either never reached
+        # delivery or exact verifier coverage established absence.
         return TransactionOutcome.HALTED_BEFORE_EFFECT
     # coarse == "FAILED": a platform failure before any possible effect.
     return TransactionOutcome.FAILED_PLATFORM
 
 
+def _reached_delivery(result: StepResult) -> bool:
+    """True when some typed field proves the action was actually dispatched.
+
+    Any of these can only exist AFTER the backend was asked to deliver the
+    action: a delivery receipt, a recorded actuation tier, a successful action
+    phase, a post-action input/postcondition verdict, or a bound effect
+    contract / verifier reading.  A failed postcondition counts -- a
+    postcondition is checked after the click, so an over-halt that aborts the
+    run on one is proof the write was already delivered, not proof it was not.
+    """
+
+    return (
+        result.delivery_receipt is not None
+        or result.actuation is not None
+        or result.ok
+        or result.postconditions_ok is not None
+        or result.input_verified is not None
+        or bool(result.effect_contract_hashes)
+        or bool(result.effect_evidence)
+    )
+
+
 def _attempt_state(
     result: StepResult,
 ) -> Literal["not_actuated", "delivered", "actuated_api", "delivery_uncertain"]:
-    """Derive the PHI-free actuation attempt state for one step."""
+    """Derive the PHI-free actuation attempt state for one step.
 
+    Fail-closed.  ``not_actuated`` is itself an absence claim, so it is returned
+    only where the runtime POSITIVELY recorded that delivery could not have
+    happened: the step never executed, it is a pre-execution gate pseudo-step,
+    or it stopped at a typed pre-delivery refusal.  A step whose delivery was
+    never recorded either way is ``delivery_uncertain``, NOT ``not_actuated``.
+    """
+
+    # Structural proof the step could not have actuated: a skipped step never
+    # ran, and a gate pseudo-step exists only because the runtime refused first.
+    if result.skipped or result.step_id in _POLICY_GATE_STEP_IDS:
+        return "not_actuated"
+    # The live replayer owns this state transition. A failure category is not
+    # proof: safety_halt can be stamped after a click when governed healing
+    # rejects a repair. Legacy/synthesized None remains unknown, fail-closed.
+    if result.delivery_attempted is False:
+        return "not_actuated"
     if result.delivery_uncertainty is not None:
         return "delivery_uncertain"
     if result.actuation == "api":
         return "actuated_api"
-    if result.delivery_receipt is not None:
+    if _reached_delivery(result):
+        # Includes a write actuated through the GUI ladder, which carries no
+        # native delivery receipt.
         return "delivered"
-    if result.effect_contract_hashes or result.effect_evidence:
-        # A consequential step whose write was actuated through the GUI ladder
-        # (no native delivery receipt) still reached actuation if it produced an
-        # effect contract or a verdict.
-        return "delivered"
-    return "not_actuated"
+    if result.delivery_attempted is True:
+        # The boundary was crossed but no receipt/post-action evidence was
+        # retained. Never convert that absence of a receipt into non-delivery.
+        return "delivery_uncertain"
+    if (
+        not result.ok
+        and result.identity is not None
+        and result.identity.status != "verified"
+    ):
+        # Backward-compatible typed proof for legacy reports: identity checks
+        # occur at the pre-delivery gate by contract. New live reports also
+        # carry ``delivery_attempted=False`` above.
+        return "not_actuated"
+    # Nothing recorded either way: unknown, so fail toward reconciliation.
+    return "delivery_uncertain"
 
 
 def _worst_observed_effect(
@@ -271,7 +484,15 @@ def build_effect_journal(
                 )
             )
         )
-        is_conseq = result.step_id in consequential_ids or declared_effects
+        # A result whose step is missing from the workflow (a runtime-expanded
+        # or pseudo step) must not be read as "not consequential" -- an absent
+        # lookup is unknown, not a negative. The report-side mirror keeps such a
+        # step in the journal whenever its own typed fields say it could write.
+        is_conseq = (
+            result.step_id in consequential_ids
+            or declared_effects
+            or _is_consequential_result(result)
+        )
         if not is_conseq:
             continue
         collateral = sum(

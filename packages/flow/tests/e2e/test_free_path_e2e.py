@@ -226,9 +226,11 @@ def fault_fixture(
 @pytest.mark.parametrize(
     ("fault", "expected_transaction"),
     [
-        # The server rejects a write the UI already painted as saved. Nothing
-        # persisted, and the verifier establishes that absence.
-        ("optimistic", "HALTED_BEFORE_EFFECT"),
+        # The server rejects a write the UI already painted as saved. The
+        # retained verifier establishes absence for only one of two declared
+        # effects, so the report must reconcile rather than infer full absence
+        # from the test fixture's out-of-band database snapshot.
+        ("optimistic", "RECONCILIATION_REQUIRED"),
         # The row persists but the note field is dropped. Something landed, so
         # absence may NOT be claimed: this needs reconciliation.
         ("partial", "RECONCILIATION_REQUIRED"),

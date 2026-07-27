@@ -2068,6 +2068,13 @@ class StepResult(BaseModel):
     # postcondition or system-of-record effect; those independent verdicts are
     # recorded in ``postconditions_ok`` / ``effect_verified``.
     delivery_receipt: Optional[ActionDeliveryReceipt] = None
+    # Explicit state-machine proof of whether this workflow step crossed an
+    # action-delivery boundary. ``False`` is written when a live step begins,
+    # then changed to ``True`` immediately before the backend/API is invoked.
+    # ``None`` means a legacy or synthesized result did not retain this fact;
+    # callers must treat that as unknown rather than infer non-delivery from a
+    # failure category or error string.
+    delivery_attempted: Optional[bool] = None
     # The action API raised after delivery may have begun.  This is neither a
     # receipt nor an ordinary backend failure: the runtime never retries and
     # can proceed only when the complete independent outcome contract proves

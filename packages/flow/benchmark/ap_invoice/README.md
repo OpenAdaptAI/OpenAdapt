@@ -50,8 +50,8 @@ scenarios.
 | scenario | naive (banner oracle) | governed |
 |---|---|---|
 | `healthy` | completes; `COMPLETED_UNVERIFIED` (never billable) | **`VERIFIED`** (all effects confirmed through separate persisted-state reads; billable) |
-| `missing_po` | safe halt at entry | safe halt; `HALTED_BEFORE_EFFECT`; nothing persisted |
-| `duplicate_invoice` | safe halt at entry | safe halt; `HALTED_BEFORE_EFFECT`; still exactly one invoice |
+| `missing_po` | safe halt at entry | safe halt; `RECONCILIATION_REQUIRED` (the request was sent and no verifier read the ledger, so absence is unproven); nothing persisted per ground truth |
+| `duplicate_invoice` | safe halt at entry | safe halt; `RECONCILIATION_REQUIRED` (the request was sent and no verifier read the ledger, so absence is unproven); still exactly one invoice per ground truth |
 | `collateral_approve` | **SILENT WRONG** (adjacent invoice corrupted, banner says success) | **caught**: collateral guard refutes; `RECONCILIATION_REQUIRED` |
 | `payment_confirm_outage` | completes (cannot know the write landed) | `RECONCILIATION_REQUIRED`; retry under the same idempotency key SUPPRESSED (`REJECTED_POLICY`); ground truth: exactly one payment |
 
