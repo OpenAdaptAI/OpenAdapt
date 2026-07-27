@@ -996,6 +996,193 @@ class TestParameterHygiene:
             compile_recording(recording, tmp_path / "bundle", name="leak")
 
 
+class TestParamRegionHygiene:
+    """A parameter's demonstrated value must not become a PIXEL invariant.
+
+    ``lint_param_leakage`` (above) screens TEXT postconditions, and
+    ``include_region_stable=False`` screens the parameterized TYPE step whose
+    own diff is the typed glyphs. Neither covers a LATER step whose changed
+    region happens to RENDER that value.
+
+    That is the exact shape of the MockMed ``step_010 Save Encounter``
+    over-halt: once the bundled fixture app gained a patient banner on the New
+    Encounter form, the save click's previously-mined top band became identical
+    before and after the click, so ``_largest_changed_region`` moved down onto
+    the saved-encounter row -- which echoes the run's ``note`` parameter. The
+    template and pHash rungs were then decided by the trial-unique note's
+    glyphs. Dropping the region is the fail-safe outcome: an unverified step
+    costs one missing check, a parameter-contaminated one false-halts every run
+    whose value differs.
+    """
+
+    def _frames(self) -> tuple[np.ndarray, np.ndarray]:
+        """Before/after frames whose ONLY large diff renders the note value."""
+        form = blank()
+        draw_text(form, 120, 84, "New Encounter")
+        draw_button(form, 120, 620, 220, 48, "Save Encounter")
+        typed = form.copy()
+        draw_text(typed, 120, 320, NOTE_VALUE)
+        saved = typed.copy()
+        # The header is unchanged across the click (as in the real fixture);
+        # the saved row echoing the note is the largest changed region.
+        draw_text(saved, 120, 460, f"Triage {NOTE_VALUE}")
+        return typed, saved
+
+    @staticmethod
+    def _png(img: np.ndarray) -> bytes:
+        ok, buf = cv2.imencode(".png", img)
+        assert ok
+        return bytes(buf.tobytes())
+
+    def test_region_rendering_a_param_value_is_not_asserted(self) -> None:
+        from openadapt_flow.compiler import compile as compile_mod
+
+        before, after = self._frames()
+        expect = compile_mod._postconditions(
+            self._png(before),
+            self._png(after),
+            exclude_texts=(NOTE_VALUE,),
+        )
+        # Without the screen the changed region IS the note's pixels.
+        assert all(pc.kind is not PostconditionKind.REGION_STABLE for pc in expect)
+        # ...and the note text is excluded from TEXT_PRESENT as it always was.
+        assert all(pc.kind is not PostconditionKind.TEXT_PRESENT for pc in expect)
+
+    def test_the_drop_is_reported_not_silent(self) -> None:
+        from openadapt_flow.compiler import compile as compile_mod
+
+        before, after = self._frames()
+        drops: list[tuple[tuple[int, int, int, int], str]] = []
+        compile_mod._postconditions(
+            self._png(before),
+            self._png(after),
+            exclude_texts=(NOTE_VALUE,),
+            dropped_param_regions=drops,
+        )
+        assert len(drops) == 1
+        region, matched = drops[0]
+        # The reported region is the one that would have been frozen, and the
+        # reported evidence is the on-screen text that disqualified it.
+        assert region[1] < 460 < region[1] + region[3]
+        assert compile_mod._contains_excluded(matched, (NOTE_VALUE,))
+
+    def test_contaminated_region_is_narrowed_before_it_is_dropped(self) -> None:
+        """Dropping the region also drops the step's only screen-state gate.
+
+        When the mined region holds BOTH the parameter's row and real
+        destination-screen chrome, the parameter's row is carved out and the
+        rest is kept — the postcondition stays armed without freezing a
+        per-run value.
+        """
+        from openadapt_flow.compiler import compile as compile_mod
+
+        before = blank()
+        draw_text(before, 120, 84, "New Encounter")
+        draw_text(before, 120, 320, NOTE_VALUE)
+        after = before.copy()
+        # Close enough that the diff dilates into ONE region covering both.
+        draw_text(after, 120, 420, "Encounters")
+        draw_text(after, 120, 452, f"Triage {NOTE_VALUE}")
+
+        expect = compile_mod._postconditions(
+            self._png(before),
+            self._png(after),
+            exclude_texts=(NOTE_VALUE,),
+        )
+        stable = [pc for pc in expect if pc.kind is PostconditionKind.REGION_STABLE]
+        assert stable, "the param-free chrome must keep the step verifiable"
+        _, y, _, h = stable[0].region
+        # The kept band holds the heading (baseline 420) and stops above the
+        # note's row (baseline 452, glyph tops around y=430).
+        assert y < 420 <= y + h < 432
+
+    def test_app_literal_inside_a_longer_param_value_keeps_its_region(self) -> None:
+        """No over-suppression: an app's own word is often a SUBSTRING of a
+        longer demonstrated value (MockMed's ``Triage`` inside the note ``E2E
+        triage booking three months``). A region showing only that word does
+        not render the value and must stay asserted."""
+        from openadapt_flow.compiler import compile as compile_mod
+
+        param_value = "triage follow up in three months"
+        before = blank()
+        draw_text(before, 120, 84, "New Encounter")
+        after = before.copy()
+        draw_text(after, 120, 460, "Triage")
+
+        expect = compile_mod._postconditions(
+            self._png(before),
+            self._png(after),
+            exclude_texts=(param_value,),
+        )
+        assert any(pc.kind is PostconditionKind.REGION_STABLE for pc in expect)
+
+    def test_param_free_region_is_still_asserted(self) -> None:
+        """The screen must not disarm ordinary regions (no over-suppression)."""
+        from openadapt_flow.compiler import compile as compile_mod
+
+        before, _ = self._frames()
+        after = before.copy()
+        draw_text(after, 120, 460, "Encounter saved successfully")
+        expect = compile_mod._postconditions(
+            self._png(before),
+            self._png(after),
+            exclude_texts=(NOTE_VALUE,),
+        )
+        assert any(pc.kind is PostconditionKind.REGION_STABLE for pc in expect)
+
+    def test_compiled_bundle_records_the_dropped_postcondition(
+        self, tmp_path: Path
+    ) -> None:
+        """A bundle that quietly lost a postcondition is undiagnosable: the
+        compile must leave a masked, machine-readable record of the drop."""
+        form = blank()
+        draw_text(form, 120, 84, "New Encounter")
+        draw_button(form, 120, 620, 220, 48, "Save Encounter")
+        typed = form.copy()
+        draw_text(typed, 120, 320, NOTE_VALUE)
+        saved = typed.copy()
+        draw_text(saved, 120, 460, f"Triage {NOTE_VALUE}")
+        events = [
+            {"i": 0, "kind": "type", "text": NOTE_VALUE, "param": "note", "t": 1.0},
+            {"i": 1, "kind": "click", "x": 230, "y": 644, "t": 2.0},
+        ]
+        recording = tmp_path / "rec"
+        _write_recording(
+            recording,
+            events,
+            {0: (form, typed), 1: (typed, saved)},
+            params={"note": NOTE_VALUE},
+        )
+        bundle = tmp_path / "bundle"
+        wf = compile_recording(recording, bundle, name="paramregion")
+
+        save_step = wf.steps[-1]
+        assert save_step.action is ActionKind.CLICK
+        assert all(
+            pc.kind is not PostconditionKind.REGION_STABLE for pc in save_step.expect
+        )
+
+        report = json.loads((bundle / "param_hygiene.json").read_text())
+        dropped = report["dropped_region_stable"]
+        assert [d["step_id"] for d in dropped] == [save_step.id]
+        # The record must not reprint the value it exists to protect.
+        assert NOTE_VALUE not in (bundle / "param_hygiene.json").read_text()
+
+    def test_sidecar_absent_when_nothing_was_dropped(self, tmp_path: Path) -> None:
+        base = blank()
+        draw_button(base, 560, 400, 160, 48, "Open")
+        after = base.copy()
+        draw_text(after, 120, 244, "Encounter saved successfully")
+        events = [{"i": 0, "kind": "click", "x": 640, "y": 424, "t": 1.0}]
+        recording = tmp_path / "rec"
+        _write_recording(
+            recording, events, {0: (base, after)}, params={"note": NOTE_VALUE}
+        )
+        bundle = tmp_path / "bundle"
+        compile_recording(recording, bundle, name="clean")
+        assert not (bundle / "param_hygiene.json").exists()
+
+
 class TestStructuralPostconditions:
     def _navigation_recording(self, tmp_path: Path, extra: dict) -> tuple[Path, Path]:
         """A click whose before/after frames are IDENTICAL (the visual

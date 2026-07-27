@@ -204,10 +204,28 @@ class GraphQLRecordVerifier(VerifierAdapterBase):
     # -- transport ----------------------------------------------------------
 
     def _get_session(self) -> Any:
-        if self._session is None:
-            import requests  # lazy: keep module import light
+        """Return the read client, preferring an injected one.
 
-            self._session = requests.Session()
+        ``requests`` is used when present (unchanged for every deployment that
+        already has it) and ``httpx`` otherwise. ``httpx`` is a core dependency
+        while ``requests`` is only a dev/``windows`` extra, so without this
+        fallback a clean wheel install could not read a GraphQL system of record
+        at all: every verify raised inside :meth:`_fetch_records`, was read as
+        *unreadable*, and HALTed. That failed safe -- it never invented a
+        confirmation -- but it made ``effects.kind: graphql`` unusable out of the
+        box. Both clients expose the same ``post(url, json=..., headers=...,
+        timeout=...)`` surface and the same ``status_code`` / ``json()`` on the
+        response.
+        """
+        if self._session is None:
+            try:
+                import requests  # lazy: keep module import light
+            except ModuleNotFoundError:
+                import httpx
+
+                self._session = httpx.Client()
+            else:
+                self._session = requests.Session()
         return self._session
 
     def _fetch_records(self) -> Optional[list[dict[str, Any]]]:

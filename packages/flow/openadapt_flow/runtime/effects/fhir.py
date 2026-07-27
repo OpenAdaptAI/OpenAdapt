@@ -125,14 +125,40 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self.verify_tls = verify_tls
         self.poll_interval_s = poll_interval_s
         self._session = session
+        # ``requests`` accepts ``verify=`` on every call; ``httpx`` binds TLS
+        # verification when the CLIENT is constructed and rejects it per
+        # request. True for a ``requests`` session and for any injected
+        # (``requests``-style) session; flipped only for the httpx fallback
+        # client built in :meth:`_get_session`.
+        self._verify_per_request = True
 
     # -- transport ----------------------------------------------------------
 
     def _get_session(self) -> Any:
-        if self._session is None:
-            import requests  # lazy
+        """Return the read client, preferring an injected one.
 
-            self._session = requests.Session()
+        ``requests`` is used when present (unchanged for every deployment that
+        already has it) and ``httpx`` otherwise. ``httpx`` is a core dependency
+        while ``requests`` is only a dev/``windows`` extra, so without this
+        fallback a clean wheel install could not read a FHIR system of record at
+        all: every verify raised inside :meth:`_search`, was read as
+        *unreadable*, and HALTed. That failed safe -- it never invented a
+        confirmation -- but it made ``effects.kind: fhir`` unusable out of the
+        box. Both clients expose the same ``get(url, params=..., headers=...,
+        timeout=...)`` surface and the same ``status_code`` / ``json()`` on the
+        response; only ``verify`` differs, which
+        :attr:`_verify_per_request` accounts for.
+        """
+        if self._session is None:
+            try:
+                import requests  # lazy: keep module import light
+            except ModuleNotFoundError:
+                import httpx
+
+                self._session = httpx.Client(verify=self.verify_tls)
+                self._verify_per_request = False
+            else:
+                self._session = requests.Session()
         return self._session
 
     def _headers(self) -> dict[str, str]:
@@ -158,13 +184,18 @@ class FhirEffectVerifier(VerifierAdapterBase):
         malformed entries. Never raises.
         """
         url = f"{self.base_url}/{self.resource_type}"
+        session = self._get_session()
+        # ``verify`` is passed per request only for a ``requests``-style client;
+        # the httpx fallback already bound it at construction (see
+        # ``_get_session``), and passing it again would raise.
+        tls_kwargs = {"verify": self.verify_tls} if self._verify_per_request else {}
         try:
-            resp = self._get_session().get(
+            resp = session.get(
                 url,
                 params=self.search_params,
                 headers=self._headers(),
                 timeout=self.timeout_s,
-                verify=self.verify_tls,
+                **tls_kwargs,
             )
         except Exception:  # noqa: BLE001 - transport failure is unreadable
             return None

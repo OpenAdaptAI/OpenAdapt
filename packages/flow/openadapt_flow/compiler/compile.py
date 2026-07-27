@@ -16,7 +16,7 @@ import math
 import re
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Literal, Optional, cast
+from typing import TYPE_CHECKING, Iterable, Literal, Optional, Sequence, cast
 
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
@@ -90,6 +90,13 @@ REGION_STABLE_TOLERANCE = 16
 # drift; padding pulls stable structure (field borders, surrounding
 # whitespace) into the hashed region.
 REGION_STABLE_PAD = 24
+
+# ``_param_free_band`` blocks each parameter-bearing text row with this much
+# vertical margin (glyph antialiasing plus OCR bounding-box slop), and discards
+# any surviving slice shorter than CARVE_MIN_HEIGHT as glyph noise rather than
+# structure.
+CARVE_ROW_PAD = 6
+CARVE_MIN_HEIGHT = 2 * REGION_STABLE_PAD
 
 # Minimum characters for a TEXT_PRESENT candidate (filters OCR noise).
 MIN_TEXT_PRESENT_LEN = 3
@@ -339,6 +346,120 @@ def _largest_changed_region(before_png: bytes, after_png: bytes) -> Optional[Reg
     return (int(x), int(y), int(w), int(h))
 
 
+def _param_free_band(
+    region: Region, carriers: Sequence[OcrLine], lines: Sequence[OcrLine]
+) -> Optional[Region]:
+    """Best horizontal slice of ``region`` that no ``carriers`` row touches.
+
+    Removing a parameter-contaminated region outright also removes the step's
+    only screen-state gate. Screens lay out in rows, so the value's own row can
+    usually be carved out and the rest of the mined region kept: for a save
+    confirmation, carving the echoed note leaves the destination screen's own
+    chrome, which is a sound invariant.
+
+    Carving, not re-diffing: the changed area is normally one connected blob,
+    so erasing the glyphs from the change mask would just leave a ring whose
+    bounding rect still contains them.
+
+    Each carrier's row is blocked with ``CARVE_ROW_PAD`` of margin (antialiasing
+    and OCR box slop). A slice shorter than ``CARVE_MIN_HEIGHT`` is discarded --
+    a sliver is glyph noise, not structure. Among the survivors the slice
+    carrying the most readable text wins, height breaking ties: a slice holding
+    the destination screen's heading discriminates far better than a taller
+    slice of blank page, which would match any blank screen. Returns None when
+    nothing survives, which drops the postcondition (the fail-safe direction).
+    """
+    x, y, w, h = region
+    bottom = y + h
+    blocked = sorted(
+        (
+            max(y, line.region[1] - CARVE_ROW_PAD),
+            min(bottom, line.region[1] + line.region[3] + CARVE_ROW_PAD),
+        )
+        for line in carriers
+        if line.region[1] - CARVE_ROW_PAD < bottom
+        and line.region[1] + line.region[3] + CARVE_ROW_PAD > y
+    )
+    slices: list[tuple[int, int]] = []
+    cursor = y
+    for b0, b1 in blocked:
+        if b0 > cursor:
+            slices.append((cursor, b0))
+        cursor = max(cursor, b1)
+    if cursor < bottom:
+        slices.append((cursor, bottom))
+    tall = [s for s in slices if s[1] - s[0] >= CARVE_MIN_HEIGHT]
+    if not tall:
+        return None
+
+    def readable(s: tuple[int, int]) -> int:
+        return sum(
+            1
+            for line in lines
+            if line.confidence >= MIN_OCR_CONFIDENCE
+            and line.text.strip()
+            and line.region[1] >= s[0]
+            and line.region[1] + line.region[3] <= s[1]
+        )
+
+    top, end = max(tall, key=lambda s: (readable(s), s[1] - s[0]))
+    return (x, top, w, end - top)
+
+
+def _pad_region(region: Region, frame_w: int, frame_h: int) -> Region:
+    """``region`` grown by ``REGION_STABLE_PAD``, clamped to the frame."""
+    x, y, w, h = region
+    x0 = max(0, x - REGION_STABLE_PAD)
+    y0 = max(0, y - REGION_STABLE_PAD)
+    x1 = min(frame_w, x + w + REGION_STABLE_PAD)
+    y1 = min(frame_h, y + h + REGION_STABLE_PAD)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def _param_text_in_region(
+    region: Region, lines: list[OcrLine], excluded: tuple[str, ...]
+) -> tuple[list[OcrLine], Optional[str]]:
+    """Confident lines inside ``region`` that render an excluded value.
+
+    Detection is deliberately asymmetric to ``_contains_excluded``. A region is
+    contaminated only when it renders (most of) an excluded value, measured
+    over the region's lines JOINED -- OCR splits a rendered value across lines,
+    and no single fragment need carry it. The reverse containment
+    ``_contains_excluded`` also accepts (excluded value CONTAINS the text) must
+    NOT disqualify a region: an application's own literal word is frequently a
+    substring of a longer demonstrated value (MockMed's ``Triage`` inside the
+    note ``E2E triage booking three months``), and treating that as
+    contamination would disarm perfectly stable regions.
+
+    Returns ``(carriers, evidence)``: the individual lines carrying any part of
+    the value -- the rows ``_param_free_band`` must carve out -- and the joined
+    text that proves the contamination, or ``(_, None)`` when the region is
+    clean.
+    """
+    inside = [
+        line
+        for line in lines
+        if line.confidence >= MIN_OCR_CONFIDENCE
+        and line.text.strip()
+        and _regions_intersect(line.region, region)
+    ]
+    if not inside:
+        return [], None
+    joined = " ".join(line.text.strip() for line in inside)
+    hay = _squash(joined)
+    for raw in excluded:
+        ex = _squash(raw)
+        if len(ex) < MIN_EXCLUDE_CHARS:
+            continue
+        if coverage(ex, hay) < EXCLUDE_CONTAINMENT_RATIO:
+            continue
+        carriers = [
+            line for line in inside if _contains_excluded(line.text, (raw,))
+        ] or inside
+        return carriers, joined
+    return [], None
+
+
 def _squash(text: str) -> str:
     """Lowercase and remove ALL whitespace (OCR-tolerant comparison key)."""
     return "".join(normalize_text(text).split())
@@ -547,6 +668,7 @@ def _postconditions(
     next_before_png: Optional[bytes] = None,
     reference_date: Optional[date] = None,
     click_point: Optional[Point] = None,
+    dropped_param_regions: Optional[list[tuple[Region, str]]] = None,
 ) -> list[Postcondition]:
     """Derive postconditions from a step's before/after frames.
 
@@ -562,6 +684,19 @@ def _postconditions(
     entirely: for parameterized TYPE steps the changed region IS the typed
     value's pixels, and the value varies per run — asserting its rendering
     is the pixel-level equivalent of asserting the excluded text.
+
+    That flag only covers the TYPE step that *enters* a parameter. A LATER
+    step's changed region can render the SAME value — a save click whose diff
+    is the confirmation banner and the new record row, both echoing the typed
+    note — and freezing those pixels is exactly as demo-bound. Such a region
+    is screened here against ``exclude_texts`` using the frame OCR already
+    computed for ``TEXT_PRESENT`` (see ``_param_text_in_region``). A
+    contaminated region is first NARROWED — the value's own row is carved out
+    (``_param_free_band``), which usually keeps a sound invariant built from
+    the destination screen's own chrome. Only when nothing usable survives is
+    the postcondition dropped, and that ``(region, evidence)`` is appended to
+    ``dropped_param_regions`` when the caller supplies a sink, so the drop is
+    reported rather than silent.
 
     ``next_before_png`` / ``next_lines`` — the NEXT event's before frame
     (the same screen state captured moments later) and its OCR — arm the
@@ -587,6 +722,7 @@ def _postconditions(
         if include_region_stable
         else None
     )
+    padded: Optional[Region] = None
     if changed is not None:
         # ``after_png`` was already decoded successfully upstream (it produced
         # ``changed``), so the re-decode here is known-valid; cv2's stub types
@@ -596,12 +732,38 @@ def _postconditions(
             cv2.imdecode(np.frombuffer(after_png, dtype=np.uint8), cv2.IMREAD_COLOR),
         )
         frame_h, frame_w = after.shape[:2]
-        x, y, w, h = changed
-        x0 = max(0, x - REGION_STABLE_PAD)
-        y0 = max(0, y - REGION_STABLE_PAD)
-        x1 = min(frame_w, x + w + REGION_STABLE_PAD)
-        y1 = min(frame_h, y + h + REGION_STABLE_PAD)
-        padded: Region = (x0, y0, x1 - x0, y1 - y0)
+        padded = _pad_region(changed, frame_w, frame_h)
+        if exclude_texts:
+            # Parameter hygiene at the PIXEL level. A region that RENDERS a
+            # parameter's demonstrated value is run-specific data, not a stable
+            # property of the application: freezing its phash/template halts
+            # every run whose value differs, decided by the glyphs of that
+            # run's value.
+            #
+            # Removing the postcondition would also remove the step's only
+            # screen-state gate, so first CARVE the value's row out of the
+            # region: what remains is normally the destination screen's own
+            # chrome, which is a sound invariant. Only when nothing usable
+            # survives is the postcondition dropped -- the fail-safe
+            # direction, since an unverified step costs one missing check
+            # while a contaminated one false-halts every differing run.
+            carriers, evidence = _param_text_in_region(
+                padded, after_lines, exclude_texts
+            )
+            if evidence is not None:
+                contaminated = padded
+                band = _param_free_band(padded, carriers, after_lines)
+                if (
+                    band is not None
+                    and _param_text_in_region(band, after_lines, exclude_texts)[1]
+                    is None
+                ):
+                    padded = band
+                else:
+                    changed, padded = None, None
+                    if dropped_param_regions is not None:
+                        dropped_param_regions.append((contaminated, evidence))
+    if changed is not None and padded is not None:
         if (
             next_before_png is not None
             and phash_distance(
@@ -614,7 +776,7 @@ def _postconditions(
             # self-mutating (animation, clock, fading toast) and would
             # false-halt any replay; never assert it.
             changed = None
-    if changed is not None:
+    if changed is not None and padded is not None:
         template_rel: Optional[str] = None
         if bundle is not None and step_id is not None:
             template_rel = f"templates/{step_id}_expect.png"
@@ -689,6 +851,14 @@ def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> lis
 
     Values shorter than ``MIN_EXCLUDE_CHARS`` squashed characters are
     skipped (they fuzzily match everything).
+
+    Scope: this lint reads the compiled workflow, so it sees values baked in
+    as TEXT. The same class can also be encoded as PIXELS — a REGION_STABLE
+    region that renders the value — which no amount of workflow inspection can
+    detect once the region is a phash. That case is screened during mining in
+    ``_postconditions`` (which still has the frames and their OCR) and reported
+    by ``compile_recording`` through ``param_hygiene.json``; see the
+    "Parameter-hygiene NOTICES" block there.
 
     Returns:
         Human-readable violation strings (empty when clean).
@@ -1657,10 +1827,15 @@ def compile_recording(
         if step.anchor is not None and step.anchor.ocr_text
     )
     steps: list[Step] = []
+    # Param-hygiene notices: REGION_STABLE postconditions rejected because the
+    # changed region rendered a demonstrated parameter value. Reported (not
+    # raised) below — the drop is the safe outcome, but it must not be silent.
+    param_region_drops: list[tuple[str, Region, str]] = []
     for j, (step, step_before, step_after, event) in enumerate(pending):
         steps.append(step)
         if step.action is ActionKind.SCROLL:
             continue  # see the scroll branch in pass 1
+        step_region_drops: list[tuple[Region, str]] = []
         next_before: Optional[bytes] = None
         next_lines: Optional[list[OcrLine]] = None
         if j + 1 < len(pending):
@@ -1695,7 +1870,10 @@ def compile_recording(
             next_before_png=next_before,
             reference_date=reference_date,
             click_point=(step.anchor.click_point if step.anchor is not None else None),
+            dropped_param_regions=step_region_drops,
         )
+        for region, matched in step_region_drops:
+            param_region_drops.append((step.id, region, matched))
         if not step.expect:
             # Nothing visual survived mining: fall back to structural
             # postconditions (URL/title change, new tab) so the step is not
@@ -1830,6 +2008,54 @@ def compile_recording(
             "parameter values outside designated parameter slots:\n  "
             + "\n  ".join(violations)
         )
+
+    # Parameter-hygiene NOTICES (the pixel counterpart of the lint above). The
+    # lint catches a demo value baked in as a literal; this reports the class it
+    # cannot see — a REGION_STABLE region whose PIXELS render the value. Those
+    # regions are dropped during mining (fail-safe: an unverified step beats a
+    # postcondition that false-halts every run with a different value), but a
+    # bundle that silently lost a postcondition is undiagnosable, so the drop is
+    # logged and recorded in ``param_hygiene.json``. NOT fatal: dropping is the
+    # correct outcome, not a compilation error. The sidecar carries MASKED text
+    # only (a parameter value can be PHI) and is removed when a recompile finds
+    # nothing to report, so it never goes stale.
+    from openadapt_flow.compiler.annotate import mask_value as _mask_value
+
+    if param_region_drops:
+        for drop_step_id, drop_region, drop_text in param_region_drops:
+            logger.warning(
+                "param-hygiene %s: REGION_STABLE dropped — changed region %s "
+                "renders a demonstrated parameter value (%s); freezing it would "
+                "false-halt every run whose value differs. This step has no "
+                "pixel-region invariant.",
+                drop_step_id,
+                drop_region,
+                _mask_value(drop_text),
+            )
+        (bundle / "param_hygiene.json").write_text(
+            json.dumps(
+                {
+                    "note": (
+                        "REGION_STABLE postconditions dropped because the "
+                        "changed region rendered a demonstrated parameter "
+                        "value. These steps carry no pixel-region invariant; "
+                        "add an effect assertion if the step needs one. "
+                        "Matched text is masked."
+                    ),
+                    "dropped_region_stable": [
+                        {
+                            "step_id": drop_step_id,
+                            "region": list(drop_region),
+                            "matched_text": _mask_value(drop_text),
+                        }
+                        for drop_step_id, drop_region, drop_text in param_region_drops
+                    ],
+                },
+                indent=2,
+            )
+        )
+    else:
+        (bundle / "param_hygiene.json").unlink(missing_ok=True)
 
     # DETERMINISTIC field-label parameter proposals (no model, $0, always on):
     # a typed constant whose step carries field_label evidence yields a
