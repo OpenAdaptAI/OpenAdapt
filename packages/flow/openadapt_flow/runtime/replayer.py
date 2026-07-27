@@ -2373,12 +2373,18 @@ class Replayer:
         require a protected pre-delivery record baseline and are refused when
         one is unavailable.
         """
+        from openadapt_flow.policy import effects_for_actuation
         from openadapt_flow.runtime.effects import EffectState
         from openadapt_flow.runtime.effects._common import judge_records
 
         if not (0 <= step_index < len(workflow.steps)):
             raise StateDiverged("the attended pause references no workflow step")
         step = workflow.steps[step_index]
+        # A person completes the visible GUI path, never the optional API
+        # dispatch path. Keep the path-specific effect contracts distinct so
+        # an API-only verifier cannot certify a human GUI write and a failing
+        # API contract cannot incorrectly refute a correctly verified GUI one.
+        attended_effects = effects_for_actuation(step, "gui")
         result = StepResult(
             step_id=step.id,
             intent=step.intent,
@@ -2467,7 +2473,7 @@ class Replayer:
                 )
                 return result
 
-        if step.effects:
+        if attended_effects:
             if self.effect_verifier is None:
                 result.effect_verified = False
                 result.error = (
@@ -2489,7 +2495,7 @@ class Replayer:
                     run_dir, step.id, "attended-after", frame
                 )
                 return result
-            effects = self._resolve_effects(step.effects, params)
+            effects = self._resolve_effects(attended_effects, params)
             for effect in effects:
                 if effect.needs_operator_confirmation:
                     result.effect_verified = False
@@ -2538,7 +2544,7 @@ class Replayer:
                 )
                 return result
 
-        if not step.expect and not step.effects:
+        if not step.expect and not attended_effects:
             result.error = (
                 "the human-completed step declares neither a postcondition nor "
                 "an independent effect; delivery cannot be confused with outcome "

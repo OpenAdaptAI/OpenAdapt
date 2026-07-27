@@ -33,6 +33,7 @@ from typing import Any, Callable, Iterator, Literal, Optional, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.ir import State, StateKind, Step, StepResult, Workflow
+from openadapt_flow.policy import StepSafetyProjection, project_step_safety
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
     ApprovalRequired,
@@ -141,6 +142,10 @@ class AttendedPauseCapability(BaseModel):
     """Exact authority the engine grants for one durable pause."""
 
     schema_version: int = 1
+    #: Monotonic within one run's replaced pause-capability history. This is a
+    #: presentation/event-order binding, not a substitute for the random pause
+    #: id, signed pause digest, or exact durable-state validation.
+    event_sequence: int = Field(default=1, ge=1)
     pause_id: str
     run_id: str
     workflow_name: str
@@ -167,7 +172,13 @@ class AttendedPauseCapability(BaseModel):
     signature: str = ""
 
     def unsigned(self) -> dict[str, Any]:
-        return self.model_dump(exclude={"signature"}, mode="json")
+        exclude = {"signature"}
+        # Capabilities issued before event ordering was added used schema v1.
+        # Preserve their exact signing payload so an in-flight durable pause
+        # remains resumable across the package upgrade.
+        if self.schema_version < 2:
+            exclude.add("event_sequence")
+        return self.model_dump(exclude=exclude, mode="json")
 
     @property
     def digest(self) -> str:
@@ -347,6 +358,7 @@ def _allowed_actions(
     workflow: Workflow,
     pending: PendingEscalation,
     baseline: SignedTransitionBaseline,
+    manifest: Any,
 ) -> tuple[Literal["continue", "skip", "teach", "escalate"], ...]:
     """Derive mutation authority from the exact workflow step semantics."""
     actions: list[Literal["continue", "skip", "teach", "escalate"]] = [
@@ -366,6 +378,9 @@ def _allowed_actions(
     if step is None:
         return tuple(actions)
 
+    projection = _attended_step_safety(step, workflow, manifest)
+    gui_effects = dict(projection.effect_paths).get("gui", ())
+
     relative = _relative_postcondition_kinds(step)
     has_relative_baseline = (
         ("url_changed" not in relative or baseline.url_digest is not None)
@@ -376,23 +391,49 @@ def _allowed_actions(
         effect.needs_operator_confirmation
         or effect.count_new_only
         or effect.forbid_collateral_loss
-        for effect in step.effects
+        for effect in gui_effects
     )
     if (
-        bool(step.expect or step.effects)
+        bool(step.expect or gui_effects)
         and has_relative_baseline
         and not has_unsupported_effect
     ):
         actions.insert(0, "continue")
 
     if (
-        step.risk != "irreversible"
-        and not step.effects
+        not projection.consequential
         and step.guard is not None
         and step.guard.on_unmet == "skip"
     ):
         actions.insert(1 if actions[0] == "continue" else 0, "skip")
     return tuple(actions)
+
+
+def _attended_step_safety(
+    step: Step,
+    workflow: Workflow,
+    manifest: Any,
+) -> StepSafetyProjection:
+    """Project one step through the exact admitted qualification authority.
+
+    A bundle-local risk downgrade is not enough to grant an attended skip. A
+    production downgrade is authoritative only when the durable run carries
+    the exact policy digest whose current qualification can be reproduced.
+    Without that authority the canonical projection remains conservative.
+    """
+
+    authorization = getattr(manifest, "governed_authorization", None)
+    policy_digest = (
+        getattr(authorization, "admitted_policy_contract_sha256", None)
+        if authorization is not None
+        else None
+    )
+    return project_step_safety(
+        step,
+        workflow,
+        require_current_certification=True,
+        certifying_policy_sha256=policy_digest,
+    )
 
 
 class AttendedActionStore:
@@ -621,6 +662,8 @@ class AttendedActionStore:
         # baseline and capability signature one stable per-run trust root.
         self._key(create=True)
         baseline = self._transition_baseline(transition_observation)
+        allowed_actions = _allowed_actions(workflow, pending, baseline, manifest)
+        event_sequence = 1
         if self.capability_path.is_file():
             existing = self.read()
             if (
@@ -635,6 +678,7 @@ class AttendedActionStore:
                 and existing.run_id == manifest.run_id
                 and existing.workflow_name == pending.workflow_name
                 and existing.transition_baseline == baseline
+                and existing.allowed_actions == allowed_actions
             ):
                 return existing
             # A resumed run may halt again before the first request's terminal
@@ -658,6 +702,7 @@ class AttendedActionStore:
                 self.capability_history_path,
                 json.dumps(history, indent=2, sort_keys=True).encode("utf-8"),
             )
+            event_sequence = existing.event_sequence + 1
         now = _now()
         transition = _transition_payload(
             run_id=manifest.run_id,
@@ -667,6 +712,8 @@ class AttendedActionStore:
             expected_next_transition=expected,
         )
         capability = AttendedPauseCapability(
+            schema_version=2,
+            event_sequence=event_sequence,
             pause_id=secrets.token_hex(16),
             run_id=manifest.run_id,
             workflow_name=pending.workflow_name,
@@ -684,7 +731,7 @@ class AttendedActionStore:
             delivery_state=_delivery_state(result),
             issued_at=_iso(now),
             expires_at=_iso(now + timedelta(seconds=max(1.0, ttl_s))),
-            allowed_actions=_allowed_actions(workflow, pending, baseline),
+            allowed_actions=allowed_actions,
         )
         capability.signature = self._sign(capability, create_key=False)
         self._atomic_write(
@@ -1753,9 +1800,9 @@ class BoundAttendedExecutor:
                 state = None
                 params = dict(manifest.params)
                 step = workflow.steps[capability.step_index]
+            projection = _attended_step_safety(step, workflow, manifest)
             if (
-                step.risk == "irreversible"
-                or step.effects
+                projection.consequential
                 or step.guard is None
                 or step.guard.on_unmet != "skip"
             ):

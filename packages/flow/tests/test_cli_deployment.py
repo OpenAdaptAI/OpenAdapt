@@ -40,6 +40,42 @@ def test_empty_config_is_all_default_local() -> None:
     assert build_api_actuator(cfg.actuation) is None
     assert cfg.runtime.durable is False
     assert cfg.runtime.allow_model_grounding is False
+    assert cfg.human_decisions.remote.enabled is False
+    assert cfg.human_decisions.remote.tenant_id is None
+    assert cfg.human_decisions.remote.runner_id is None
+
+
+def test_remote_human_decisions_require_explicit_complete_scope() -> None:
+    with pytest.raises(ValueError, match="exact tenant_id and runner_id"):
+        DeploymentConfig.model_validate(
+            {"human_decisions": {"remote": {"enabled": True}}}
+        )
+
+    # Identifiers alone never infer or silently enable remote issuance.
+    inactive = DeploymentConfig.model_validate(
+        {
+            "human_decisions": {
+                "remote": {
+                    "tenant_id": "tenant_exact_01",
+                    "runner_id": "runner_exact_01",
+                }
+            }
+        }
+    )
+    assert inactive.human_decisions.remote.enabled is False
+
+    active = DeploymentConfig.model_validate(
+        {
+            "human_decisions": {
+                "remote": {
+                    "enabled": True,
+                    "tenant_id": "tenant_exact_01",
+                    "runner_id": "runner_exact_01",
+                }
+            }
+        }
+    )
+    assert active.human_decisions.remote.enabled is True
 
 
 def test_load_missing_file_raises(tmp_path: Path) -> None:

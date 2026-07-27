@@ -44,6 +44,42 @@ step's semantics:
 Normal console and CLI capabilities remain available. Attended mode is an
 additional operator workflow, not a reduced product mode.
 
+## Remote AAL2 decisions
+
+Local issuance remains the default. A customer-controlled runner may opt into
+the provider-neutral remote projection only with an exact deployment binding:
+
+```yaml
+human_decisions:
+  remote:
+    enabled: true
+    tenant_id: tenant_exact_01
+    runner_id: runner_exact_01
+```
+
+All three values are required; identifiers alone do not enable the path. The
+portable projection contains only the shared closed-enum task, opaque IDs,
+counts, digests, allowed operations, expiry, a monotonic pause-event sequence,
+and an idempotency scope. It requires AAL2. Screenshots, OCR text, raw values,
+workflow labels, parameters, local paths, and free-form operator answers remain
+inside the customer-controlled boundary.
+
+Flow deliberately supplies no remote network or authentication provider. The
+authenticated control plane returns an AAL2 principal through the runner's
+trusted transport, and the public `portable_remote_decision_task` /
+`execute_remote_attended_action` API rebinds that response to the exact tenant,
+runner, task revision, pause capability, allowed operation, expected transition,
+expiry, and idempotency scope. A signed task is presentation integrity, not
+execution authority.
+
+After a returned Continue, OpenAdapt observes a newly settled live frame,
+rechecks the human-completed postcondition and configured effect, proves the
+next state/target and armed identity, and commits the exact pause transition.
+The deterministic resume then enters the normal action path, where remote
+backends reacquire the exact client focus/frame lease and repeat target and
+identity resolution immediately before consequential input. The
+human-completed action is never blindly repeated.
+
 ## Action contract
 
 Every attended mutation is bound to an engine-issued capability covering:

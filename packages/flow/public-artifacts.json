@@ -621,7 +621,7 @@
     },
     {
       "path": "docs/deployment.example.yaml",
-      "sha256": "0daad37e8cbd11856357c955c65fc41cd932a14adff53ce6cfdb992b59bee258"
+      "sha256": "e677ef569116e7256600f806b12e8918e9390fe7f2bab73ae23f8d9d8552d4d9"
     },
     {
       "path": "docs/showcase-encounter-loop/body/manifest.json",

@@ -24,7 +24,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Import-light (pydantic only): the effect CONTRACT types double as the
 # declarative config vocabulary, so a deployment YAML binds run parameters
@@ -409,6 +409,42 @@ class PolicySection(BaseModel):
     policy: Optional[str] = None
 
 
+_OPAQUE_DELIVERY_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+
+
+class RemoteHumanDecisionConfig(BaseModel):
+    """Explicit remote attended-decision issuance policy.
+
+    This section does not configure a network provider and does not grant
+    execution authority.  It permits a customer-controlled runner to project
+    the current signed pause as a PHI-free AAL2 task for its configured control
+    plane.  The engine-owned pause capability and fresh live revalidation stay
+    authoritative when a decision returns.
+    """
+
+    #: Remote issuance is never inferred from identifiers or runner mode.
+    enabled: bool = False
+    #: Exact opaque control-plane tenant identity. Required when enabled.
+    tenant_id: Optional[str] = Field(default=None, pattern=_OPAQUE_DELIVERY_ID)
+    #: Exact opaque customer-controlled runner identity. Required when enabled.
+    runner_id: Optional[str] = Field(default=None, pattern=_OPAQUE_DELIVERY_ID)
+
+    @model_validator(mode="after")
+    def _require_exact_remote_scope(self) -> "RemoteHumanDecisionConfig":
+        if self.enabled and (self.tenant_id is None or self.runner_id is None):
+            raise ValueError(
+                "human_decisions.remote.enabled requires exact tenant_id and "
+                "runner_id bindings"
+            )
+        return self
+
+
+class HumanDecisionsConfig(BaseModel):
+    """Attended-decision delivery posture; local issuance is the default."""
+
+    remote: RemoteHumanDecisionConfig = Field(default_factory=RemoteHumanDecisionConfig)
+
+
 class DeploymentConfig(BaseModel):
     """The whole-deployment configuration (one ``deployment.yaml``)."""
 
@@ -419,6 +455,7 @@ class DeploymentConfig(BaseModel):
     effects: EffectsConfig = Field(default_factory=EffectsConfig)
     runtime: RuntimeSection = Field(default_factory=RuntimeSection)
     policy: PolicySection = Field(default_factory=PolicySection)
+    human_decisions: HumanDecisionsConfig = Field(default_factory=HumanDecisionsConfig)
 
 
 def load_deployment(source: str | Path) -> DeploymentConfig:

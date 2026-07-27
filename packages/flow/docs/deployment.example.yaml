@@ -204,6 +204,19 @@ runtime:
   # above. Default false => they are blocked under PHI regardless of allowlist.
   phi_egress_attested: false
 
+# -- human decisions: local by default; optional remote AAL2 projection ------
+# The engine emits local_session tasks unless remote issuance is explicitly
+# enabled with BOTH exact control-plane identities. This section configures no
+# network provider and sends no screenshot/text/value: it only allows the
+# customer runner to relay the signed PHI-free task contract. A returned AAL2
+# decision still must present the exact engine pause capability and is followed
+# by fresh live-state/identity/target verification before continuation acts.
+human_decisions:
+  remote:
+    enabled: false
+    # tenant_id: tenant_exact_01
+    # runner_id: runner_exact_01
+
 # -- policy: the safety policy that certifies this bundle --------------------
 policy:
   # A policy YAML path, or a shipped built-in name (permissive, clinical-write).
