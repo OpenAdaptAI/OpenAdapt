@@ -1183,6 +1183,36 @@ def test_closed_loop_scroll_requires_armed_target_identity(
     ]
 
 
+def test_closed_loop_scroll_does_not_accept_geometry_as_target_visibility(
+    bundle, run_dir
+):
+    """A fixed landmark cannot prove an off-screen form target is visible."""
+
+    vision = FakeVision()
+    vision.text_results["Fixed header"] = Match(
+        point=(150, 20), region=(100, 10, 100, 20), confidence=0.99
+    )
+    target = click_step(
+        ocr_text=None,
+        landmarks=[
+            Landmark(
+                relation="below",
+                ocr_text="Fixed header",
+                distance_px=100,
+            )
+        ],
+    )
+    workflow = Workflow(name="wf", steps=[scroll_step(), target])
+
+    report = Replayer(backend := FakeBackend(), vision=vision).run(
+        workflow, bundle_dir=bundle, run_dir=run_dir
+    )
+
+    assert report.success is False
+    assert "target never came into view" in report.results[0].error
+    assert backend.actions == [("scroll", 0, 400), ("scroll", 0, 400)]
+
+
 def test_closed_loop_scroll_budget_exhaustion_fails_loudly(bundle, run_dir):
     """When the anchor never resolves and no further SCROLL step follows,
     the loop stops at ~2.5x the recorded distance and fails the run,
@@ -1783,6 +1813,198 @@ def test_no_identity_check_without_recorded_context(bundle, run_dir):
 # -- typed-input verification ---------------------------------------------------
 
 
+class SelectRemoteBackend(RemoteLeaseBackend):
+    def __init__(self, *, selected_value: str):
+        frame = make_png()
+        super().__init__(initial_frame=frame, fresh_frame=frame)
+        self.selected_value = selected_value
+        self.select_calls: list[tuple[str, str]] = []
+
+    def select_option(self, text: str, commit_key: str) -> None:
+        self.select_calls.append((text, commit_key))
+        self.actions.append(("select_option", text, commit_key))
+        self._text_value = self.selected_value
+
+
+def _remote_selection_workflow(*, region=(100, 100, 50, 20)) -> Workflow:
+    anchor = click_step().anchor
+    assert anchor is not None
+    return Workflow(
+        name="remote-select",
+        surface="rdp",
+        execution_mode="external",
+        steps=[
+            Step(
+                id="t1",
+                intent="select <state>",
+                action=ActionKind.SELECT_OPTION,
+                param="state",
+                selection_commit_key="Enter",
+                selection_region=region,
+                anchor=anchor.model_copy(deep=True),
+            ),
+        ],
+    )
+
+
+def _selection_matches(*, region=(100, 100, 50, 20), point=(110, 105)):
+    return [Match(point=point, region=region, confidence=0.95) for _ in range(4)]
+
+
+def test_remote_selection_verifies_committed_value_in_live_resolved_region(
+    bundle, run_dir
+):
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    backend = SelectRemoteBackend(selected_value="Massachusetts")
+
+    report = Replayer(backend, vision=vision).run(
+        _remote_selection_workflow(),
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert backend.select_calls == [("Massachusetts", "Enter")]
+    assert backend.acquire_count == 2
+    assert backend.actions == [
+        ("click", 110, 105, False),
+        ("select_option", "Massachusetts", "Enter"),
+    ]
+    assert report.results[0].input_verified is True
+
+
+def test_remote_selection_refuses_incompatible_live_field_geometry(bundle, run_dir):
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(140, 105), region=(100, 100, 100, 20), confidence=0.95),
+    ]
+    backend = SelectRemoteBackend(selected_value="Massachusetts")
+
+    report = Replayer(backend, vision=vision).run(
+        _remote_selection_workflow(),
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.select_calls == []
+    assert "incompatible live field geometry" in (report.results[0].error or "")
+
+
+def test_remote_selection_halts_when_committed_value_mismatches(bundle, run_dir):
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    backend = SelectRemoteBackend(selected_value="Maryland")
+
+    report = Replayer(backend, vision=vision).run(
+        _remote_selection_workflow(),
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.select_calls == [("Massachusetts", "Enter")]
+    assert report.results[0].input_verified is False
+    assert "exact live re-resolved field region" in (report.results[0].error or "")
+
+
+def test_remote_selection_exact_ocr_rejects_substring_option(bundle, run_dir):
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    vision.ocr_lines = [OcrLine("West Virginia", region=(100, 100, 50, 20))]
+    backend = SelectRemoteBackend(selected_value="Virginia")
+    backend._text_value_supported = False
+
+    report = Replayer(backend, vision=vision).run(
+        _remote_selection_workflow(),
+        params={"state": "Virginia"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.select_calls == [("Virginia", "Enter")]
+    assert report.results[0].input_verified is False
+
+
+def test_remote_selection_revert_on_final_settled_frame_halts(bundle, run_dir):
+    class RevertingSelectionBackend(SelectRemoteBackend):
+        def screenshot(self):
+            if self.select_calls:
+                self._text_value = "Maryland"
+            return super().screenshot()
+
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    backend = RevertingSelectionBackend(selected_value="Massachusetts")
+
+    report = Replayer(backend, vision=vision).run(
+        _remote_selection_workflow(),
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.select_calls == [("Massachusetts", "Enter")]
+    assert report.results[0].input_verified is False
+
+
+def test_remote_selection_surface_mode_mismatch_refuses_before_focus(bundle, run_dir):
+    workflow = _remote_selection_workflow().model_copy(
+        update={"execution_mode": "in_session"}
+    )
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    backend = SelectRemoteBackend(selected_value="Massachusetts")
+
+    report = Replayer(backend, vision=vision).run(
+        workflow,
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.acquire_count == 0
+    assert backend.actions == []
+    assert backend.select_calls == []
+
+
+def test_remote_selection_contract_cannot_use_non_remote_backend(bundle, run_dir):
+    class LocalSelectBackend(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.select_calls = []
+
+        def select_option(self, text, commit_key):
+            self.select_calls.append((text, commit_key))
+
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    backend = LocalSelectBackend()
+
+    report = Replayer(backend, vision=vision).run(
+        _remote_selection_workflow(),
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.select_calls == []
+    assert backend.actions == []
+    assert "outside its qualified external opaque remote surface" in (
+        report.results[0].error or ""
+    )
+
+
 def test_type_verification_passes_with_exact_field_readback(bundle, run_dir):
     vision = FakeVision()
     vision.template_results = [
@@ -1807,6 +2029,43 @@ def test_type_verification_passes_with_exact_field_readback(bundle, run_dir):
     assert report.results[1].input_retried is False
     # Exact structural readback is authoritative; no OCR/pixel guess is needed.
     assert vision.pixels_changed_calls == []
+
+
+def test_visual_click_crop_does_not_narrow_following_type_verification(bundle, run_dir):
+    """A visual anchor crop is not the editable field's live bounds.
+
+    Opaque-remote recordings commonly locate a field from a compact label or
+    border fragment.  The resolver can return the correct click point while
+    the matched template lies elsewhere.  A following unanchored TYPE must
+    observe the point-centred field window, not the template crop.
+    """
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(210, 150), region=(20, 20, 12, 8), confidence=0.95)
+    ]
+    vision.pixels_changed_results = [True]
+    backend = FakeBackend(text_value_supported=False)
+    workflow = Workflow(
+        name="wf",
+        steps=[
+            click_step(),
+            Step(id="t1", intent="type state", action=ActionKind.TYPE, text="MA"),
+        ],
+    )
+
+    report = Replayer(backend, vision=vision).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert report.results[1].input_verified is True
+    # The 300x200 fixture is smaller than the standard point-centred field
+    # window, so the correct observation region is the complete viewport.
+    # Treating the visual template crop as field bounds would produce
+    # (4, 4, 44, 40) here and hide the typed value.
+    assert vision.pixels_changed_calls == [(0, 0, 300, 200)]
 
 
 def test_type_verification_prefers_exact_structural_field_region() -> None:

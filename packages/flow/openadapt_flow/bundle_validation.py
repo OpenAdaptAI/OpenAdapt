@@ -162,6 +162,24 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
                 "populated destination remains sealed content"
             ),
         ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="selection_commit_key",
+            omitted_values=(None,),
+            reason=(
+                "absent composite-selection commit evidence predates its v2 "
+                "field; a populated commit remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="selection_region",
+            omitted_values=(None,),
+            reason=(
+                "absent composite-selection readback evidence predates its v2 "
+                "field; a populated band remains sealed content"
+            ),
+        ),
     ),
 }
 

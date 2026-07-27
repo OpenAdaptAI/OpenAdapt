@@ -170,6 +170,8 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         assert step.pop("risk_review_required") is False
         assert step.pop("modifiers") == []
         assert step.pop("drag_end_anchor") is None
+        assert step.pop("selection_commit_key") is None
+        assert step.pop("selection_region") is None
     return content
 
 
@@ -214,6 +216,8 @@ def _write_synthetic_pre_field_bundle(
     assert _structural_payload(raw, shape).pop("frame_path") in (None, [])
     for step in _step_payloads(raw, shape):
         assert step.pop("field_label") is None
+        assert step.pop("selection_commit_key") is None
+        assert step.pop("selection_region") is None
     serialized = json.dumps(raw, sort_keys=True).encode("utf-8")
 
     if encrypted:
@@ -391,6 +395,9 @@ def test_sealed_empty_defaults_do_not_implicitly_cross_schema_versions():
 
     assert "interstitials" in rendered
     assert "frame_path" in _structural_payload(rendered, "linear")
+    step = _step_payloads(rendered, "linear")[0]
+    assert "selection_commit_key" in step
+    assert "selection_region" in step
 
 
 def test_digest_changes_when_content_changes(tmp_path):

@@ -44,6 +44,7 @@ _IDENTITY_ACTIONS = (
     ActionKind.RIGHT_CLICK,
     ActionKind.DRAG,
     ActionKind.TYPE,
+    ActionKind.SELECT_OPTION,
     ActionKind.KEY,
     ActionKind.HOTKEY,
 )
@@ -61,6 +62,7 @@ _EFFECT_ACTIONS = (
     ActionKind.RIGHT_CLICK,
     ActionKind.DRAG,
     ActionKind.TYPE,
+    ActionKind.SELECT_OPTION,
     ActionKind.KEY,
     ActionKind.HOTKEY,
 )
@@ -132,7 +134,7 @@ def is_vacuous(step: Step) -> bool:
     excluded from static visual postconditions. Other effect-expecting actions
     still require an authored or compiler-mined postcondition.
     """
-    if step.action is ActionKind.TYPE:
+    if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
         return False
     return expects_effect(step) and not step.expect
 
@@ -411,6 +413,8 @@ def step_tags(
         tags.add("drag")
     elif act is ActionKind.TYPE:
         tags.add("type")
+    elif act is ActionKind.SELECT_OPTION:
+        tags.update(("type", "select_option"))
     elif act in (ActionKind.KEY, ActionKind.HOTKEY):
         tags.update(("key", act.value))
     elif act is ActionKind.SCROLL:

@@ -29,7 +29,10 @@ and the RDP library stays replaceable):
 ``press`` additionally detects an optional ``supports_physical_key`` /
 ``physical_key`` transport seam. Aardwolf implements it with layout-bound
 scancodes because Unicode text events cannot participate in physical Windows
-shortcuts; ``type_text`` deliberately stays on the Unicode ``key`` path.
+shortcuts. ``type_text`` detects an optional ``supports_bulk_text`` /
+``bulk_type_text`` seam for transports that can deliver one bounded text
+gesture without per-character process or network startup latency. The legacy
+Unicode ``key`` path remains the fallback.
 
 Coordinate space: the backend works entirely in **framebuffer pixels** — the
 same pixels the resolver emits and the same pixels :meth:`screenshot` encodes,
@@ -329,6 +332,7 @@ class FreeRDPBackend:
         self._last_frame_monotonic: Optional[float] = None
         self._last_frame_digest: Optional[bytes] = None
         self._last_session_identity: Optional[str] = None
+        self._actuation_frame_png: Optional[bytes] = None
         self._actuation_lease_state = _LEASE_NONE
         # Keep capture/geometry validation and a complete input gesture in one
         # critical section. A concurrent screenshot may otherwise replace the
@@ -370,7 +374,7 @@ class FreeRDPBackend:
             self._last_frame_digest = self._canonical_frame_digest(img)
             self._last_session_identity = self._session_identity_from_frame(png)
             if self._actuation_lease_state == _LEASE_ARMED:
-                self._actuation_lease_state = _LEASE_INVALIDATED
+                self._invalidate_actuation_lease()
             return png
 
     def acquire_actuation_frame(self) -> bytes:
@@ -384,7 +388,7 @@ class FreeRDPBackend:
         with self._input_lock:
             png = self.screenshot()
             if self._readiness_probe is not None and not self._readiness_probe(png):
-                self._actuation_lease_state = _LEASE_INVALIDATED
+                self._invalidate_actuation_lease()
                 raise RuntimeError(
                     "RDP readiness probe rejected the fresh actuation frame "
                     "(locked, disconnected, or unexpected session)"
@@ -393,11 +397,12 @@ class FreeRDPBackend:
                 self._session_identity_configured
                 and self._last_session_identity is None
             ):
-                self._actuation_lease_state = _LEASE_INVALIDATED
+                self._invalidate_actuation_lease()
                 raise RuntimeError(
                     "configured RDP session identity is unavailable on the "
                     "fresh actuation frame"
                 )
+            self._actuation_frame_png = png
             self._actuation_lease_state = _LEASE_ARMED
             return png
 
@@ -428,7 +433,11 @@ class FreeRDPBackend:
             png = self._fresh_identity_frame()
             if png is None:
                 return None
-            observed = self._session_identity_from_frame(png)
+            observed = (
+                self._last_session_identity
+                if self._actuation_lease_state == _LEASE_ARMED
+                else self._session_identity_from_frame(png)
+            )
             if observed is None:
                 self._invalidate_actuation_lease()
                 return None
@@ -543,24 +552,27 @@ class FreeRDPBackend:
                         ) from exc
 
     def type_text(self, text: str) -> None:
-        """Type text into the focused control, one key down/up per character.
+        """Type text through a capability-gated bulk or per-character path.
 
-        Every character's key-up is sent in a ``finally`` so a transport
-        failure between down and up can never leave a key latched down: a real
-        RDP ``key()`` can time out mid-character, and a stuck key silently
-        corrupts every subsequent input (auto-repeat, or the held key acting as
-        a modifier). Releasing a key that never actually registered is a
-        harmless no-op on the target, so the guarantee costs nothing.
+        The optional bulk seam is important for native selects and other
+        type-ahead controls whose search buffer expires between characters:
+        starting a new helper process or network round-trip per character can
+        turn one demonstrated option selection into unrelated single-key
+        searches. The backend restores only the outer transport surface's
+        focus, then re-runs frame/session readiness before one bulk dispatch.
+        A bulk error is delivery-uncertain and is never retried through the
+        legacy path.
+
+        Without that explicit capability, every character's key-up is sent in
+        a ``finally`` so a transport failure between down and up can never
+        leave a key latched down.
         """
         if not text:
             return
         with self._input_lock:
+            self._focus_input_surface()
             self._ensure_input_ready()
-            for ch in text:
-                try:
-                    self._transport.key(ch, True)
-                finally:
-                    self._release_keys((ch,))
+            self._dispatch_text_locked(text)
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'ControlOrMeta+a'``.
@@ -580,46 +592,116 @@ class FreeRDPBackend:
         """
         parts = normalize_chord(key)
         with self._input_lock:
-            # Printable characters sent through Aardwolf's Unicode path cannot
-            # participate in physical shortcuts (Win+R, Ctrl+A, and similar).
-            # A transport may therefore expose a separate physical-key seam
-            # for press/chord only. Plain transports retain the original key()
-            # behavior, and type_text() always remains on key()/Unicode.
-            physical_key = getattr(self._transport, "physical_key", None)
-            supports_physical_key = getattr(
-                self._transport, "supports_physical_key", None
-            )
-            if callable(physical_key) and callable(supports_physical_key):
-                unsupported = [
-                    part for part in parts if not supports_physical_key(part)
-                ]
-                if unsupported:
-                    raise ValueError(
-                        "RDP transport cannot safely emit physical chord keys: "
-                        f"{unsupported!r}"
-                    )
-                sender = physical_key
-            else:
-                sender = self._transport.key
+            self._focus_input_surface()
             self._ensure_input_ready()
-            pressed: list[str] = []
-            try:
-                for part in parts:
-                    pressed.append(part)
-                    sender(part, True)
-            finally:
-                self._release_keys(reversed(pressed), sender=sender)
+            self._dispatch_key_locked(parts)
 
-    def _release_keys(self, parts, *, sender=None) -> None:
+    def select_option(self, text: str, commit_key: str) -> None:
+        """Type and commit one demonstrated option under a single input lock.
+
+        This is delivery, not verification. The runtime maps the qualified
+        readback band onto a freshly re-resolved live field after this method
+        returns. Once text dispatch begins, any error is delivery-uncertain:
+        retrying could choose or commit a different option.
+        """
+
+        if not text:
+            raise ValueError("RDP option text must be non-empty")
+        if commit_key not in {"Enter", "Tab"}:
+            raise ValueError("RDP option commit key must be Enter or Tab")
+        parts = normalize_chord(commit_key)
+        with self._input_lock:
+            self._focus_input_surface()
+            self._ensure_input_ready()
+            try:
+                self._dispatch_text_locked(text, strict_release=True)
+                self._dispatch_key_locked(parts, strict_release=True)
+            except ActionDeliveryUncertain:
+                raise
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="rdp_select_option",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
+
+    def _dispatch_text_locked(self, text: str, *, strict_release: bool = False) -> None:
+        """Dispatch text while ``_input_lock`` and readiness are held."""
+
+        supports_bulk = getattr(self._transport, "supports_bulk_text", None)
+        bulk_type = getattr(self._transport, "bulk_type_text", None)
+        if (
+            callable(supports_bulk)
+            and callable(bulk_type)
+            and bool(supports_bulk(text))
+        ):
+            try:
+                bulk_type(text)
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="rdp_bulk_type_text",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
+            return
+        for ch in text:
+            dispatch_error: Optional[Exception] = None
+            try:
+                self._transport.key(ch, True)
+            except Exception as exc:  # noqa: BLE001 - transport boundary
+                dispatch_error = exc
+            release_error = self._release_keys((ch,))
+            if dispatch_error is not None:
+                raise dispatch_error
+            if strict_release and release_error is not None:
+                raise release_error
+
+    def _dispatch_key_locked(
+        self, parts: list[str], *, strict_release: bool = False
+    ) -> None:
+        """Dispatch a normalized key/chord while the input lock is held."""
+
+        # Printable characters sent through Aardwolf's Unicode path cannot
+        # participate in physical shortcuts (Win+R, Ctrl+A, and similar).
+        physical_key = getattr(self._transport, "physical_key", None)
+        supports_physical_key = getattr(self._transport, "supports_physical_key", None)
+        if callable(physical_key) and callable(supports_physical_key):
+            unsupported = [part for part in parts if not supports_physical_key(part)]
+            if unsupported:
+                raise ValueError(
+                    "RDP transport cannot safely emit physical chord keys: "
+                    f"{unsupported!r}"
+                )
+            sender = physical_key
+        else:
+            sender = self._transport.key
+        pressed: list[str] = []
+        dispatch_error: Optional[Exception] = None
+        try:
+            for part in parts:
+                pressed.append(part)
+                sender(part, True)
+        except Exception as exc:  # noqa: BLE001 - transport boundary
+            dispatch_error = exc
+        release_error = self._release_keys(reversed(pressed), sender=sender)
+        if dispatch_error is not None:
+            raise dispatch_error
+        if strict_release and release_error is not None:
+            raise release_error
+
+    def _release_keys(self, parts, *, sender=None) -> Optional[Exception]:
         """Release each key token, best-effort: one failing release never
         blocks the others and never masks an in-flight exception."""
         if sender is None:
             sender = self._transport.key
+        first_error: Optional[Exception] = None
         for part in parts:
             try:
                 sender(part, False)
-            except Exception:  # noqa: BLE001 - release is best-effort teardown
-                pass
+            except Exception as exc:  # noqa: BLE001 - release boundary
+                if first_error is None:
+                    first_error = exc
+        return first_error
 
     def scroll(self, dx: int, dy: int) -> None:
         """Dispatch a wheel gesture by ``(dx, dy)`` pixels.
@@ -642,9 +724,26 @@ class FreeRDPBackend:
 
     def close(self) -> None:
         """Disconnect the underlying transport (idempotent)."""
-        self._transport.disconnect()
+        with self._input_lock:
+            self._invalidate_actuation_lease()
+            self._transport.disconnect()
 
     # -- internals -----------------------------------------------------------
+
+    def _focus_input_surface(self) -> None:
+        """Restore only the outer client focus before final frame validation.
+
+        Windowed FreeRDP transports can lose local focus while the remote
+        control remains the intended active field. The optional hook must not
+        click or otherwise change the remote application. Calling it before
+        :meth:`_ensure_input_ready` means any focus-related repaint or session
+        change is observed by the final freshness/readiness checks and can
+        refuse input.
+        """
+
+        focus = getattr(self._transport, "focus_input_surface", None)
+        if callable(focus):
+            focus()
 
     def _ensure_input_ready(self, *, point: Optional[tuple[int, int]] = None) -> None:
         """Validate the frame lease, dimensions, bounds and readiness hook.
@@ -698,7 +797,7 @@ class FreeRDPBackend:
             if self._readiness_probe is not None and not self._readiness_probe(
                 current_png
             ):
-                self._actuation_lease_state = _LEASE_INVALIDATED
+                self._invalidate_actuation_lease()
                 raise RuntimeError(
                     "RDP readiness probe rejected the current frame "
                     "(locked, disconnected, or unexpected session); refusing input"
@@ -716,13 +815,14 @@ class FreeRDPBackend:
             if self._actuation_lease_state == _LEASE_ARMED:
                 digest = self._canonical_frame_digest(current_img)
                 if self._last_frame_digest is None or digest != self._last_frame_digest:
-                    self._actuation_lease_state = _LEASE_INVALIDATED
+                    self._invalidate_actuation_lease()
                     raise RuntimeError(
                         "RDP frame content changed after target and identity "
                         "resolution; refusing input and requiring a fresh "
                         "actuation lease"
                     )
                 self._actuation_lease_state = _LEASE_NONE
+                self._actuation_frame_png = None
         # framebuffer/readiness work can block on the network; recheck at the
         # last common point before an input edge.
         self._assert_frame_fresh()
@@ -737,12 +837,18 @@ class FreeRDPBackend:
     def _invalidate_actuation_lease(self) -> None:
         if self._actuation_lease_state == _LEASE_ARMED:
             self._actuation_lease_state = _LEASE_INVALIDATED
+        self._actuation_frame_png = None
 
     def _fresh_identity_frame(self) -> Optional[bytes]:
         """Passively capture a fresh framebuffer without replacing a valid lease."""
 
         if self._actuation_lease_state == _LEASE_INVALIDATED:
             return None
+        if self._actuation_lease_state == _LEASE_ARMED:
+            if self._actuation_frame_png is None:
+                self._invalidate_actuation_lease()
+                return None
+            return self._actuation_frame_png
         try:
             frame, w, h = self._transport.framebuffer()
             current = (int(w), int(h))

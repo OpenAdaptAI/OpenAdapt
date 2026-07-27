@@ -68,7 +68,7 @@ from typing import Any, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from openadapt_flow.ir import ParamKind, ParamSpec, Step, Workflow
+from openadapt_flow.ir import ActionKind, ParamKind, ParamSpec, Step, Workflow
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +267,10 @@ class FieldLabelAnnotator:
         proposed: set[str] = set()
         steps: list[StepAnnotation] = []
         for step in workflow.steps:
-            if step.action.value != "type" or step.secret:
+            if (
+                step.action not in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
+                or step.secret
+            ):
                 continue
             if step.param is not None:
                 continue  # explicit param= wins: no proposal

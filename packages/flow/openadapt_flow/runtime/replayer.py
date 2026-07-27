@@ -56,6 +56,7 @@ from openadapt_flow.backend import (
     PreparedPointerActuationBackend,
     RemoteActuationBackend,
     RichPointerActionBackend,
+    SelectOptionBackend,
     StructuralResolutionRefused,
 )
 from openadapt_flow.bundle_validation import compute_parameter_schema_digest
@@ -1085,6 +1086,7 @@ class Replayer:
             ActionKind.RIGHT_CLICK: "right_click",
             ActionKind.DRAG: "drag",
             ActionKind.TYPE: "type",
+            ActionKind.SELECT_OPTION: "type",
             ActionKind.SCROLL: "scroll",
         }.get(step.action)
         if action_kind is None:
@@ -1192,6 +1194,7 @@ class Replayer:
                 ActionKind.RIGHT_CLICK,
                 ActionKind.DRAG,
                 ActionKind.TYPE,
+                ActionKind.SELECT_OPTION,
                 ActionKind.KEY,
                 ActionKind.HOTKEY,
             ):
@@ -2990,6 +2993,21 @@ class Replayer:
         delivery_uncertain = False
 
         try:
+            # Reject a composite remote-selection bundle/backend mismatch before
+            # target resolution can acquire a remote actuation lease.  The
+            # contract is intrinsic to SELECT_OPTION (old runtimes reject that
+            # enum value), so there is never a safe TYPE-like fallback.
+            selection_contract_error = self._selection_contract_error(step, workflow)
+            if selection_contract_error is not None:
+                result.error = selection_contract_error
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.after_png = self._save_step_png(
+                    run_dir, step.id, "after", last_frame
+                )
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
+
             # Workflow-program IR, Phase 1: evaluate the step's guard
             # (precondition) then its wait_until (readiness) BEFORE resolving /
             # acting. Both are model-free. A SCROLL step's wait_until is
@@ -3247,9 +3265,32 @@ class Replayer:
                         total_steps=overlay_total,
                         observation_png=after_png,
                     )
-                    postconditions_ok, last_frame, failed = self._check_postconditions(
-                        step, after_png, bundle_dir, start_state, result
-                    )
+                    selection_error: Optional[str] = None
+                    if step.action is ActionKind.SELECT_OPTION:
+                        selection_text = (
+                            params[step.param]
+                            if step.param is not None
+                            else step.text or ""
+                        )
+                        selection_error = self._verify_selected_option(
+                            step,
+                            selection_text,
+                            after_png,
+                            bundle_dir,
+                            workflow,
+                            result,
+                        )
+                    if selection_error is None:
+                        (
+                            postconditions_ok,
+                            last_frame,
+                            failed,
+                        ) = self._check_postconditions(
+                            step, after_png, bundle_dir, start_state, result
+                        )
+                    else:
+                        postconditions_ok = False
+                        failed = [selection_error]
                     if self._governed_asset_mutation is not None:
                         postconditions_ok = False
                         failed.append(self._governed_asset_mutation)
@@ -3272,12 +3313,15 @@ class Replayer:
                             "drift — " + rescued
                         )
                     if not postconditions_ok:
-                        detail = "; ".join(failed) or "unknown postcondition"
-                        error = (
-                            f"Postconditions failed for step '{step.id}' "
-                            f"({step.intent}): expected screen state not reached "
-                            f"(semantic drift) — failed: {detail} — run aborted"
-                        )
+                        if selection_error is not None:
+                            error = selection_error
+                        else:
+                            detail = "; ".join(failed) or "unknown postcondition"
+                            error = (
+                                f"Postconditions failed for step '{step.id}' "
+                                f"({step.intent}): expected screen state not reached "
+                                f"(semantic drift) — failed: {detail} — run aborted"
+                            )
                         if self.governed_authorization is not None:
                             result.safety_halt = True
                 except Exception as exc:
@@ -4104,6 +4148,7 @@ class Replayer:
                 ActionKind.RIGHT_CLICK,
                 ActionKind.DRAG,
                 ActionKind.TYPE,
+                ActionKind.SELECT_OPTION,
                 ActionKind.KEY,
                 ActionKind.HOTKEY,
             )
@@ -4196,6 +4241,36 @@ class Replayer:
             and authorization.requires_verified_identity(step.id)
         )
 
+    def _selection_contract_error(
+        self, step: Step, workflow: Workflow
+    ) -> Optional[str]:
+        """Return a fail-closed error for an unusable composite selection."""
+
+        if step.action is not ActionKind.SELECT_OPTION:
+            return None
+        if step.selection_region is None or step.selection_commit_key is None:
+            return (
+                f"Step '{step.id}' ({step.intent}) has an incomplete exact "
+                "option-selection contract; refusing input"
+            )
+        if (
+            workflow.surface not in ("rdp", "citrix")
+            or workflow.execution_mode != "external"
+            or not isinstance(self.backend, RemoteActuationBackend)
+        ):
+            return (
+                f"Step '{step.id}' ({step.intent}) carries a remote "
+                "option-selection contract outside its qualified external "
+                "opaque remote surface; refusing input"
+            )
+        if not isinstance(self.backend, SelectOptionBackend):
+            return (
+                f"Step '{step.id}' ({step.intent}) requires atomic option "
+                "selection, but this backend cannot bind type-ahead and "
+                "commit under one input lease"
+            )
+        return None
+
     def _step_has_identity_contract(self, step: Step, workflow: Workflow) -> bool:
         """Whether this step carries identity evidence or an explicit mandate."""
         authorization = self.governed_authorization
@@ -4223,6 +4298,17 @@ class Replayer:
         consequential action. Browser/native surfaces use the same pre-delivery
         refresh when identity is part of the action contract.
         """
+        if (
+            step.action is ActionKind.SELECT_OPTION
+            and workflow.surface in ("rdp", "citrix")
+            and workflow.execution_mode == "external"
+            and isinstance(self.backend, RemoteActuationBackend)
+        ):
+            # A selection is a composite focus -> typeahead -> commit gesture.
+            # It always needs an exact fresh-frame lease before the focus click
+            # and another after focus before text+commit, independent of a
+            # generic risk classifier's opinion of the TYPE step.
+            return True
         return self._step_is_consequential(step, workflow) and (
             isinstance(self.backend, RemoteActuationBackend)
             or self._step_has_identity_contract(step, workflow)
@@ -4245,6 +4331,7 @@ class Replayer:
                 ActionKind.RIGHT_CLICK,
                 ActionKind.DRAG,
                 ActionKind.TYPE,
+                ActionKind.SELECT_OPTION,
             )
             and self._step_is_consequential(step, workflow)
             and self._step_has_identity_contract(step, workflow)
@@ -4256,7 +4343,13 @@ class Replayer:
         """Whether keyboard delivery must stay bound to the verified focus."""
 
         return (
-            step.action in (ActionKind.KEY, ActionKind.HOTKEY, ActionKind.TYPE)
+            step.action
+            in (
+                ActionKind.KEY,
+                ActionKind.HOTKEY,
+                ActionKind.TYPE,
+                ActionKind.SELECT_OPTION,
+            )
             and self._step_is_consequential(step, workflow)
             and self._step_has_identity_contract(step, workflow)
         )
@@ -4313,7 +4406,10 @@ class Replayer:
             ActionKind.DOUBLE_CLICK,
             ActionKind.RIGHT_CLICK,
             ActionKind.DRAG,
-        ) or (step.action is ActionKind.TYPE and not arm_keyboard)
+        ) or (
+            step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
+            and not arm_keyboard
+        )
         structural_pointer = bool(
             step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
             and resolution is not None
@@ -4418,7 +4514,7 @@ class Replayer:
             and isinstance(self.backend, FocusedElementActuationLeaseBackend)
         )
         guarded_type_pointer_backend = (
-            step.action is ActionKind.TYPE
+            step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
             and self._requires_atomic_identity_pointer(step, workflow)
             and not isinstance(self.backend, RemoteActuationBackend)
             and isinstance(self.backend, GuardedCoordinateActionBackend)
@@ -4444,7 +4540,7 @@ class Replayer:
             ActionKind.RIGHT_CLICK,
             ActionKind.DRAG,
         ) or (
-            step.action is ActionKind.TYPE
+            step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
             and resolution is not None
             and not arm_keyboard
         )
@@ -4535,7 +4631,10 @@ class Replayer:
         elif fresh_resolution is not None:
             guarded_coordinate = (
                 self._requires_atomic_identity_pointer(step, workflow)
-                and not (arm_keyboard and step.action is ActionKind.TYPE)
+                and not (
+                    arm_keyboard
+                    and step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
+                )
                 # CLICK/DOUBLE_CLICK consume the native DOM/UIA handle when
                 # structural resolution wins. RIGHT_CLICK has no native
                 # structural actuator, so bind its resolved point to the
@@ -4564,7 +4663,10 @@ class Replayer:
                     "arm_guarded_editable_coordinate",
                     None,
                 )
-                if step.action is ActionKind.TYPE and callable(editable_arm):
+                if step.action in (
+                    ActionKind.TYPE,
+                    ActionKind.SELECT_OPTION,
+                ) and callable(editable_arm):
                     editable_arm(*fresh_resolution.point)
                 else:
                     coordinate_backend.arm_guarded_coordinate(*fresh_resolution.point)
@@ -4610,6 +4712,8 @@ class Replayer:
         screen_png: bytes,
         bundle_dir: Path,
         workflow: Workflow,
+        *,
+        allow_grounder: bool = True,
     ) -> tuple[Optional[Resolution], Optional[Region], Optional[str]]:
         """Resolve the step's anchor, applying the irreversible risk gate.
 
@@ -4660,7 +4764,7 @@ class Replayer:
             step.anchor,
             screen_png,
             self.vision,
-            self.grounder,
+            self.grounder if allow_grounder else None,
             step.intent,
             template_png=template_png,
             viewport=self.backend.viewport,
@@ -4809,6 +4913,11 @@ class Replayer:
                         double=step.action is ActionKind.DOUBLE_CLICK,
                     )
             self._last_click_point = (x, y)
+            # Only a STRUCTURAL handle reports the element's own bounds. A
+            # visual rung's ``matched_region`` is where the anchor TEMPLATE
+            # matched, which is not the field: narrowing a following TYPE's
+            # verification window to it hides the typed value and false-halts
+            # a healthy run.
             self._last_click_region = (
                 resolution.structural_handle.region
                 if resolution.rung == "structural"
@@ -4959,7 +5068,7 @@ class Replayer:
                 )
             return None
 
-        if step.action is ActionKind.TYPE:
+        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             if step.secret:
                 # Secret value is never in the bundle/params: inject it from
                 # the environment, failing fast with an actionable message.
@@ -5008,6 +5117,14 @@ class Replayer:
                     "input operation — refusing unguarded keyboard delivery; "
                     "run aborted"
                 )
+            if step.selection_commit_key is not None:
+                selection_contract_error = self._selection_contract_error(
+                    step, workflow
+                )
+                if selection_contract_error is not None:
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return selection_contract_error
             # The field point: this step's own focusing click (anchored
             # TYPE), or the immediately preceding step's click point (the
             # recorder's click-to-focus-then-type pattern). When focus was
@@ -5067,6 +5184,10 @@ class Replayer:
                         result.delivery_attempted = True
                         self.backend.click(x, y)
                 field_point = (x, y)
+                # See ``_last_click_region``: a visual rung's matched region is
+                # the anchor template's live position, not the field's bounds.
+                # SELECT_OPTION does not need it here — it always revalidates
+                # below and consumes that pass's fresh matched region.
                 field_region = (
                     resolution.structural_handle.region
                     if resolution.rung == "structural"
@@ -5110,6 +5231,24 @@ class Replayer:
             baseline_field_value = self._text_value_at(field_point)
             if baseline_field_value is None:
                 baseline_field_value = self._text_value_at(None)
+            if step.selection_commit_key is not None:
+                assert step.selection_region is not None
+                assert isinstance(self.backend, SelectOptionBackend)
+                assert step.anchor is not None
+                if not self._selection_region_compatible(
+                    step.anchor.region, field_region
+                ):
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) re-resolved to "
+                        "incompatible live field geometry; refusing option "
+                        "selection"
+                    )
+                assert field_region is not None
+                result.delivery_attempted = True
+                self.backend.select_option(text, step.selection_commit_key)
+                return None
             guarded_type = (
                 requires_atomic_keyboard
                 and not isinstance(self.backend, RemoteActuationBackend)
@@ -6919,6 +7058,166 @@ class Replayer:
             "a non-input target (focus lost); run aborted"
         )
 
+    def _verify_selected_option(
+        self,
+        step: Step,
+        text: str,
+        after_png: bytes,
+        bundle_dir: Path,
+        workflow: Workflow,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Require the option value on the final settled, re-resolved field.
+
+        Unlike ordinary TYPE verification, selection never accepts pixel
+        change alone and never retries: the commit key may already have changed
+        the control. Structural readback must equal the intended option, or OCR
+        must recover one complete exactly normalized line inside only the final
+        live field region. The compiled region qualifies geometry but never
+        supplies runtime coordinates. This method does not settle again: its
+        caller passes the one final frame used by all post-action checks.
+        """
+
+        qualified_readback = step.selection_region
+        qualified_target = step.anchor.region if step.anchor is not None else None
+        if qualified_readback is None or qualified_target is None:
+            result.input_verified = False
+            return f"Option selection for step '{step.id}' has no field region"
+        resolution, live_region, resolve_error = self._resolve_step(
+            step,
+            after_png,
+            bundle_dir,
+            workflow,
+            # Final option verification is exact retained-evidence work. A
+            # model may propose a governed repair after a halt, but it cannot
+            # supply the target region that certifies the committed value.
+            allow_grounder=False,
+        )
+        if (
+            resolve_error is not None
+            or resolution is None
+            or not self._selection_region_compatible(qualified_target, live_region)
+        ):
+            result.input_verified = False
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            return (
+                f"Selected option field could not be re-resolved with compatible "
+                f"geometry on the final settled frame for step '{step.id}' "
+                f"({step.intent}); the run halted"
+            )
+        assert live_region is not None
+        live_readback = self._mapped_selection_readback_region(
+            qualified_target,
+            qualified_readback,
+            live_region,
+            after_png,
+        )
+        if live_readback is None:
+            result.input_verified = False
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            return (
+                f"Selected option readback region could not be mapped onto the "
+                f"final settled frame for step '{step.id}' ({step.intent}); the "
+                "run halted"
+            )
+        exact = self._text_value_at(resolution.point)
+        if exact is not None:
+            verified = identity_mod.squash(exact) == identity_mod.squash(text)
+        else:
+            needle = identity_mod.squash(text)
+            verified = any(
+                getattr(line, "confidence", 1.0) >= 0.5
+                and identity_mod.squash(line.text) == needle
+                for line in self.vision.ocr(after_png, region=live_readback)
+            )
+            if not verified:
+                upscaled = identity_mod.upscale_crop(after_png, live_readback)
+                if upscaled is not None:
+                    verified = any(
+                        getattr(line, "confidence", 1.0) >= 0.5
+                        and identity_mod.squash(line.text) == needle
+                        for line in self.vision.ocr(upscaled, region=None)
+                    )
+        result.input_verified = verified
+        if verified:
+            return None
+        result.safety_halt = True
+        result.failure_category = "governed_refusal"
+        return (
+            f"Selected option could not be verified for step '{step.id}' "
+            f"({step.intent}) inside its exact live re-resolved field region; the "
+            "commit may have selected a different value, so the run halted"
+        )
+
+    @staticmethod
+    def _selection_region_compatible(
+        qualified: Region,
+        live: Optional[Region],
+    ) -> bool:
+        """Check live field shape without treating recorded coordinates as truth.
+
+        Remote drift may translate the field, so x/y intentionally do not
+        participate. A resolution rung that returns no region, flips the field
+        orientation, or changes either dimension by more than 25% cannot safely
+        inherit the recorded option-selection contract.
+        """
+
+        if live is None:
+            return False
+        _, _, qualified_w, qualified_h = qualified
+        _, _, live_w, live_h = live
+        if min(qualified_w, qualified_h, live_w, live_h) <= 0:
+            return False
+        if (qualified_w >= qualified_h) != (live_w >= live_h):
+            return False
+        return (
+            0.75 <= live_w / qualified_w <= 1.25
+            and 0.75 <= live_h / qualified_h <= 1.25
+        )
+
+    @staticmethod
+    def _mapped_selection_readback_region(
+        recorded_target: Region,
+        recorded_readback: Region,
+        live_target: Region,
+        frame_png: bytes,
+    ) -> Optional[Region]:
+        """Map the recorded readback band onto a fresh live target.
+
+        Absolute recording coordinates never drive verification. The mapping
+        preserves the band's target-relative offsets while allowing the
+        already-qualified target geometry to translate or scale modestly, then
+        clamps it to the exact final frame.
+        """
+
+        import cv2
+        import numpy as np
+
+        frame = cv2.imdecode(np.frombuffer(frame_png, np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            return None
+        frame_h, frame_w = frame.shape[:2]
+        target_x, target_y, target_w, target_h = recorded_target
+        read_x, read_y, read_w, read_h = recorded_readback
+        live_x, live_y, live_w, live_h = live_target
+        if min(target_w, target_h, read_w, read_h, live_w, live_h) <= 0:
+            return None
+        scale_x = live_w / target_w
+        scale_y = live_h / target_h
+        mapped_x = round(live_x + (read_x - target_x) * scale_x)
+        mapped_y = round(live_y + (read_y - target_y) * scale_y)
+        mapped_w = max(1, round(read_w * scale_x))
+        mapped_h = max(1, round(read_h * scale_y))
+        left = max(0, mapped_x)
+        top = max(0, mapped_y)
+        right = min(frame_w, mapped_x + mapped_w)
+        bottom = min(frame_h, mapped_y + mapped_h)
+        if right <= left or bottom <= top:
+            return None
+        return (left, top, right - left, bottom - top)
+
     # -- closed-loop scroll ------------------------------------------------------
 
     def _implicit_scroll_target_ready(
@@ -6961,6 +7260,20 @@ class Replayer:
         if resolved is None:
             return False
         resolution, _matched_region = resolved
+        # Geometry estimates a point from surrounding landmarks; it does not
+        # prove that the target itself is visible. In particular, a fixed
+        # header can project the recorded point while the form row is still
+        # off-screen, turning the preceding scroll into a false no-op. Scroll
+        # readiness therefore requires direct deterministic target evidence.
+        # Model grounding is disabled above and future weaker rungs must opt in
+        # deliberately rather than silently acquiring readiness authority.
+        if resolution.rung not in {
+            "structural",
+            "template",
+            "template_global",
+            "ocr",
+        }:
+            return False
         if not step.identity_armed:
             return True
         check = self._verify_identity(

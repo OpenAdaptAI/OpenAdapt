@@ -24,6 +24,7 @@ import pytest
 from PIL import Image
 
 from openadapt_flow.backend import (
+    ActionDeliveryUncertain,
     Backend,
     ExecutionContextIdentityBackend,
     IdentityBackend,
@@ -133,6 +134,7 @@ class FakeRDPTransport:
         self.state = 0
         self.connected = False
         self.disconnects = 0
+        self.framebuffer_calls = 0
         self.pointer_events: list[tuple[int, int, str, bool]] = []
         self.key_events: list[tuple[str, bool]] = []
         self.wheel_events: list[tuple[int, int]] = []
@@ -147,6 +149,7 @@ class FakeRDPTransport:
         self.disconnects += 1
 
     def framebuffer(self):
+        self.framebuffer_calls += 1
         img = self.screens[self.state]
         if self.as_raw_bytes:
             return img.tobytes(), img.width, img.height
@@ -344,8 +347,13 @@ def test_live_context_markers_preserve_unchanged_actuation_lease() -> None:
         ).hexdigest()
     )
     assert NOTE_VALUE not in repr((application, workflow_state, session))
+    # All identity votes are bound to the exact frame acquired for target
+    # resolution. They must not recapture independently and invalidate the
+    # lease on harmless remote rendering between sequential observers.
+    assert transport.framebuffer_calls == 1
 
     backend.click(*BUTTON_CENTER)
+    assert transport.framebuffer_calls == 2
     assert transport.pointer_events
 
 
@@ -364,7 +372,7 @@ def test_absent_rdp_application_marker_invalidates_actuation_lease() -> None:
     assert transport.pointer_events == []
 
 
-def test_rdp_context_observation_refuses_mutated_frame_before_input() -> None:
+def test_rdp_context_observation_is_bound_to_frame_then_refuses_mutated_input() -> None:
     transport = FakeRDPTransport(app_screens())
     backend = FreeRDPBackend(
         transport,
@@ -376,8 +384,8 @@ def test_rdp_context_observation_refuses_mutated_frame_before_input() -> None:
     changed.putpixel((0, 0), (244, 245, 245))
     transport.screens[0] = changed
 
-    assert backend.workflow_state_identity() is None
-    with pytest.raises(RuntimeError, match="invalidated"):
+    assert backend.workflow_state_identity() == "Ready to submit"
+    with pytest.raises(RuntimeError, match="frame content changed"):
         backend.click(*BUTTON_CENTER)
     assert transport.pointer_events == []
 
@@ -393,7 +401,27 @@ def test_rdp_live_session_digest_change_invalidates_before_input() -> None:
     assert backend.session_identity() == "a" * 64
 
     live["digest"] = "b" * 64
-    assert backend.session_identity() is None
+    # The identity vote remains bound to the acquired frame. The independent
+    # last-common-point check observes the changed live session and refuses
+    # before emitting input.
+    assert backend.session_identity() == "a" * 64
+    with pytest.raises(RuntimeError, match="session identity changed"):
+        backend.click(*BUTTON_CENTER)
+    assert transport.pointer_events == []
+
+
+def test_close_invalidates_retained_actuation_identity_frame() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(
+        transport,
+        application_marker="Accuro",
+        application_marker_probe=lambda _png: True,
+    )
+    backend.acquire_actuation_frame()
+
+    backend.close()
+
+    assert backend.application_identity() is None
     with pytest.raises(RuntimeError, match="invalidated"):
         backend.click(*BUTTON_CENTER)
     assert transport.pointer_events == []
@@ -638,6 +666,212 @@ def test_type_text_preserves_case_and_symbols(
         ("B", True),
         ("B", False),
     ]
+
+
+class _BulkTextTransport(FakeRDPTransport):
+    """Transport with an explicit one-dispatch text capability."""
+
+    def __init__(self, *, raise_bulk: bool = False) -> None:
+        super().__init__(app_screens())
+        self.raise_bulk = raise_bulk
+        self.focus_calls = 0
+        self.bulk_calls: list[str] = []
+        self.events: list[str] = []
+        self.change_frame_on_focus = False
+
+    def focus_input_surface(self) -> None:
+        self.events.append("focus")
+        self.focus_calls += 1
+        if self.change_frame_on_focus:
+            self.state = 1
+
+    @staticmethod
+    def supports_bulk_text(text: str) -> bool:
+        return "\x00" not in text
+
+    def bulk_type_text(self, text: str) -> None:
+        self.events.append("bulk")
+        self.bulk_calls.append(text)
+        if self.raise_bulk:
+            raise TransportError("bulk transport failed after dispatch")
+
+
+def test_type_text_prefers_one_bulk_dispatch_after_outer_focus() -> None:
+    transport = _BulkTextTransport()
+    backend = FreeRDPBackend(transport)
+
+    backend.type_text("Massachusetts")
+
+    assert transport.focus_calls == 1
+    assert transport.bulk_calls == ["Massachusetts"]
+    assert transport.key_events == []
+    assert transport.events == ["focus", "bulk"]
+
+
+def test_type_text_legacy_transport_keeps_balanced_per_character_fallback() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(transport)
+
+    backend.type_text("ab")
+
+    assert transport.key_events == [
+        ("a", True),
+        ("a", False),
+        ("b", True),
+        ("b", False),
+    ]
+
+
+def test_bulk_text_failure_is_uncertain_and_never_falls_back() -> None:
+    transport = _BulkTextTransport(raise_bulk=True)
+    backend = FreeRDPBackend(transport)
+
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        backend.type_text("Massachusetts")
+
+    assert raised.value.operation == "rdp_bulk_type_text"
+    assert raised.value.cause_type == "TransportError"
+    assert transport.bulk_calls == ["Massachusetts"]
+    assert transport.key_events == []
+
+
+def test_bulk_text_revalidates_frame_after_restoring_outer_focus() -> None:
+    transport = _BulkTextTransport()
+    backend = FreeRDPBackend(transport, readiness_probe=lambda _png: True)
+    backend.acquire_actuation_frame()
+    transport.change_frame_on_focus = True
+
+    with pytest.raises(RuntimeError, match="frame content changed"):
+        backend.type_text("Massachusetts")
+
+    assert transport.focus_calls == 1
+    assert transport.bulk_calls == []
+    assert transport.key_events == []
+
+
+def test_bulk_text_preserves_native_select_typeahead_until_enter() -> None:
+    class _TimedSelectTransport(_BulkTextTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.highlighted: str | None = None
+            self.selected = "Unassigned"
+
+        def bulk_type_text(self, text: str) -> None:
+            super().bulk_type_text(text)
+            self.highlighted = text
+
+        def key(self, keysym_or_char: str, down: bool) -> None:
+            super().key(keysym_or_char, down)
+            if down and keysym_or_char == "enter" and self.highlighted is not None:
+                self.selected = self.highlighted
+
+    transport = _TimedSelectTransport()
+    backend = FreeRDPBackend(transport)
+
+    backend.type_text("Massachusetts")
+    backend.press("Enter")
+
+    assert transport.bulk_calls == ["Massachusetts"]
+    assert transport.selected == "Massachusetts"
+    assert transport.focus_calls == 2
+
+
+def test_select_option_holds_one_focus_and_input_lease_through_commit() -> None:
+    class _TimedSelectTransport(_BulkTextTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.highlighted: str | None = None
+            self.selected = "Unassigned"
+
+        def bulk_type_text(self, text: str) -> None:
+            super().bulk_type_text(text)
+            self.highlighted = text
+
+        def key(self, keysym_or_char: str, down: bool) -> None:
+            super().key(keysym_or_char, down)
+            if down and keysym_or_char == "enter" and self.highlighted is not None:
+                self.selected = self.highlighted
+
+    transport = _TimedSelectTransport()
+    backend = FreeRDPBackend(transport)
+
+    backend.select_option("Massachusetts", "Enter")
+
+    assert transport.selected == "Massachusetts"
+    assert transport.focus_calls == 1
+    assert transport.events == ["focus", "bulk"]
+    assert transport.key_events == [("enter", True), ("enter", False)]
+
+
+def test_select_option_failure_after_text_is_uncertain_and_never_retries() -> None:
+    class _CommitFailureTransport(_BulkTextTransport):
+        def key(self, keysym_or_char: str, down: bool) -> None:
+            super().key(keysym_or_char, down)
+            if down and keysym_or_char == "enter":
+                raise TransportError("commit failed after dispatch")
+
+    transport = _CommitFailureTransport()
+    backend = FreeRDPBackend(transport)
+
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        backend.select_option("Massachusetts", "Enter")
+
+    assert raised.value.operation == "rdp_select_option"
+    assert transport.bulk_calls == ["Massachusetts"]
+    assert transport.focus_calls == 1
+    # The best-effort release is allowed; a second down edge is not.
+    assert transport.key_events.count(("enter", True)) == 1
+
+
+def test_select_option_revalidates_frame_after_restoring_outer_focus() -> None:
+    transport = _BulkTextTransport()
+    backend = FreeRDPBackend(transport, readiness_probe=lambda _png: True)
+    backend.acquire_actuation_frame()
+    transport.change_frame_on_focus = True
+
+    with pytest.raises(RuntimeError, match="frame content changed"):
+        backend.select_option("Massachusetts", "Enter")
+
+    assert transport.focus_calls == 1
+    assert transport.bulk_calls == []
+    assert transport.key_events == []
+
+
+def test_select_option_commit_key_up_failure_is_delivery_uncertain() -> None:
+    class _CommitReleaseFailureTransport(_BulkTextTransport):
+        def key(self, keysym_or_char: str, down: bool) -> None:
+            super().key(keysym_or_char, down)
+            if not down and keysym_or_char == "enter":
+                raise TransportError("commit key-up failed")
+
+    transport = _CommitReleaseFailureTransport()
+    backend = FreeRDPBackend(transport)
+
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        backend.select_option("Massachusetts", "Enter")
+
+    assert raised.value.operation == "rdp_select_option"
+    assert transport.key_events.count(("enter", True)) == 1
+    assert transport.key_events.count(("enter", False)) == 1
+
+
+def test_select_option_text_key_up_failure_is_delivery_uncertain() -> None:
+    class _TextReleaseFailureTransport(FakeRDPTransport):
+        def key(self, keysym_or_char: str, down: bool) -> None:
+            super().key(keysym_or_char, down)
+            if not down and keysym_or_char == "M":
+                raise TransportError("text key-up failed")
+
+    transport = _TextReleaseFailureTransport(app_screens())
+    backend = FreeRDPBackend(transport)
+
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        backend.select_option("Massachusetts", "Enter")
+
+    assert raised.value.operation == "rdp_select_option"
+    assert transport.key_events.count(("M", True)) == 1
+    assert transport.key_events.count(("M", False)) == 1
+    assert ("enter", True) not in transport.key_events
 
 
 # -- press ---------------------------------------------------------------------

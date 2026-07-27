@@ -81,6 +81,7 @@ class ActionKind(str, Enum):
     RIGHT_CLICK = "right_click"
     DRAG = "drag"
     TYPE = "type"
+    SELECT_OPTION = "select_option"
     KEY = "key"
     HOTKEY = "hotkey"
     WAIT = "wait"
@@ -881,7 +882,8 @@ class Step(BaseModel):
     field_label: Optional[str] = Field(
         default=None,
         description=(
-            "TYPE steps only: the receiving field's best available label,"
+            "TYPE/SELECT_OPTION steps only: the receiving field's best "
+            "available label,"
             " captured PASSIVELY at record time (DOM <label>/aria-label/"
             "placeholder/name for web; accessibility label for native where"
             " the seam exists; nearby-OCR text as a compile-time fallback)."
@@ -890,6 +892,24 @@ class Step(BaseModel):
             " a source of silent parameterization: a label-derived parameter"
             " proposal is always gated behind operator confirmation (see"
             " compiler.annotate.FieldLabelAnnotator)."
+        ),
+    )
+    selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
+        default=None,
+        description=(
+            "SELECT_OPTION only: the Enter/Tab commit key compiled from a "
+            "demonstrated provisional type-ahead followed immediately by that "
+            "key. Runtime delivers text+commit as one backend "
+            "operation and verifies the selected value in selection_region."
+        ),
+    )
+    selection_region: Optional[Region] = Field(
+        default=None,
+        description=(
+            "Exact demonstrated readback band where the complete option value "
+            "was readable after commit. Runtime maps this band relative to the "
+            "freshly re-resolved anchor; its recorded absolute coordinates are "
+            "never replayed directly."
         ),
     )
     key: Optional[str] = None  # for KEY/HOTKEY, e.g. "Enter" or "s"
@@ -970,10 +990,30 @@ class Step(BaseModel):
                 raise ValueError("HOTKEY steps require a key and at least one modifier")
         elif self.modifiers:
             raise ValueError("modifiers are valid only for HOTKEY steps")
+        if (self.selection_commit_key is None) != (self.selection_region is None):
+            raise ValueError(
+                "selection_commit_key and selection_region must be set together"
+            )
+        if self.selection_commit_key is not None:
+            if self.action is not ActionKind.SELECT_OPTION:
+                raise ValueError(
+                    "option-selection contracts are valid only on SELECT_OPTION"
+                )
+            if self.secret:
+                raise ValueError("secret TYPE steps cannot be option selections")
+            if self.anchor is None:
+                raise ValueError(
+                    "option-selection contracts require the demonstrated field "
+                    "anchor for fresh pre-commit re-resolution"
+                )
+        elif self.action is ActionKind.SELECT_OPTION:
+            raise ValueError(
+                "SELECT_OPTION requires selection_commit_key and selection_region"
+            )
         return self
 
     timeout_s: float = 10.0
-    # Identity-protection audit trail (clicks and anchored TYPE steps):
+    # Identity-protection audit trail (clicks and anchored text/select steps):
     # whether this step's click is guarded by the pre-click identity check
     # (anchor.context_text present). Written by the compiler so an
     # operator can audit a bundle's protection coverage BEFORE running it;
@@ -983,7 +1023,7 @@ class Step(BaseModel):
     identity_armed: Optional[bool] = Field(
         default=None,
         description=(
-            "Clicks/anchored TYPE only: True when the pre-click identity"
+            "Clicks/anchored TYPE/SELECT_OPTION only: True when the pre-click identity"
             " check is armed (context band recorded); False when the step"
             " will click WITHOUT identity verification; None for steps"
             " the check does not apply to (or pre-metric bundles)."
@@ -2020,8 +2060,8 @@ class StepResult(BaseModel):
     resolution: Optional[Resolution] = None
     drag_end_resolution: Optional[Resolution] = None
     identity: Optional[IdentityCheck] = None  # pre-click identity verdict
-    input_verified: Optional[bool] = None  # TYPE steps: typed input landed
-    input_retried: bool = False  # TYPE steps: refocus-and-retype fired
+    input_verified: Optional[bool] = None  # TYPE/SELECT_OPTION input contract
+    input_retried: bool = False  # TYPE only: refocus-and-retype fired
     postconditions_ok: Optional[bool] = None
     # Every pre-step interstitial key/click is appended BEFORE backend delivery,
     # so even an exception cannot produce an unreported action attempt. Failed

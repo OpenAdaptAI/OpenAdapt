@@ -75,6 +75,48 @@ MIN_TEMPLATE_STD = 5.0
 # Minimum OCR confidence for a line to be used as ocr_text / landmark text.
 MIN_OCR_CONFIDENCE = 0.5
 
+
+def _exact_ocr_value_present(png: bytes, text: str, region: Region) -> bool:
+    """Require one complete normalized OCR line to equal the option value.
+
+    Fuzzy substring evidence is unsafe for enum selection: ``Virginia`` must
+    not certify a committed ``West Virginia`` value. False negatives halt
+    compilation of the richer action and preserve the explicit click/type/key
+    sequence; false positives could delete the demonstrated commit step.
+    """
+
+    expected = normalize_text(text)
+    return any(
+        line.confidence >= MIN_OCR_CONFIDENCE and normalize_text(line.text) == expected
+        for line in ocr(png, region=region)
+    )
+
+
+def _selection_readback_region(png: bytes, target_region: Region) -> Region:
+    """Return a bounded horizontal readback band around a resolved target.
+
+    Visual target templates are intentionally compact and centered on the
+    demonstrated click. A click near a native select's arrow can therefore
+    crop the first glyphs of its value. Selection verification keeps the exact
+    target region for resolution and stores this separate, deterministically
+    expanded band for complete-value OCR. Runtime maps the band from the
+    recorded target to the freshly re-resolved live target; its absolute
+    recording coordinates are never replayed directly.
+    """
+
+    frame = cv2.imdecode(np.frombuffer(png, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        return target_region
+    frame_h, frame_w = frame.shape[:2]
+    x, y, width, height = target_region
+    pad = max(16, width // 4)
+    left = max(0, x - pad)
+    right = min(frame_w, x + width + pad)
+    top = max(0, y)
+    bottom = min(frame_h, y + height)
+    return (left, top, right - left, bottom - top)
+
+
 # Before/after diff parameters (see DESIGN.md "Compiler").
 DIFF_THRESHOLD = 25
 # Tolerance for REGION_STABLE postconditions. The structural (edge-based)
@@ -1146,7 +1188,9 @@ def _emit_identifier_crop(
 
 
 def _surface_binding_from_meta(
-    meta: dict, backend_hints: Optional[BackendHints]
+    meta: dict,
+    backend_hints: Optional[BackendHints],
+    target_surface: Optional[ExecutionTargetKind] = None,
 ) -> tuple[Optional[ExecutionTargetKind], Optional[ExecutionMode]]:
     """Resolve the recording's surface binding (roadmap Section 5).
 
@@ -1166,6 +1210,13 @@ def _surface_binding_from_meta(
     surface_raw = meta.get("surface")
     if surface_raw is None and backend_hints is not None:
         surface_raw = backend_hints.backend
+    if target_surface is not None:
+        if surface_raw is not None and surface_raw != target_surface:
+            raise ValueError(
+                "explicit target_surface contradicts the recording's surface; "
+                "a recording captures exactly one execution surface"
+            )
+        surface_raw = target_surface
     if surface_raw is None:
         return None, None
     if surface_raw not in ("web", "windows", "macos", "linux", "rdp", "citrix"):
@@ -1272,6 +1323,7 @@ def compile_recording(
     mine_effects: bool = False,
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
+    target_surface: Optional[ExecutionTargetKind] = None,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -1370,6 +1422,9 @@ def compile_recording(
             AnthropicStepAnnotator` (the real model, resolved lazily -- it needs
             an API key only when it actually runs). Tests pass a network-free
             fake. Ignored when ``annotate`` is False.
+        target_surface: Explicit surface binding for a legacy recording whose
+            ``meta.json`` predates surface stamps. This may only fill missing
+            metadata; contradicting a recorded surface fails compilation.
 
     Returns:
         The compiled :class:`Workflow` (also saved to the bundle).
@@ -1401,7 +1456,9 @@ def compile_recording(
                 "meta.json backend_hints does not match the closed "
                 "rdp/citrix execution-target schema"
             ) from exc
-    surface, execution_mode = _surface_binding_from_meta(meta, backend_hints)
+    surface, execution_mode = _surface_binding_from_meta(
+        meta, backend_hints, target_surface
+    )
     events = _load_events(recording)
     params: dict[str, str] = dict(meta.get("params") or {})
     secret_params: list[str] = list(meta.get("secret_params") or [])
@@ -1817,6 +1874,115 @@ def compile_recording(
         else:
             raise ValueError(f"unknown event kind {kind!r} (event {i})")
 
+    # Collapse a demonstrated native/pixel option selection into one explicit
+    # SELECT_OPTION contract. This is deliberately evidence-gated and remote-only:
+    # the prior click names an exact field region; typing produces a provisional
+    # visual change without committing the value there; the immediately
+    # following Enter/Tab starts from that exact provisional frame; and only its
+    # after-frame makes the demonstrated value readable in the field. Runtime
+    # can then deliver text+commit atomically and verify the parameterized value
+    # in a qualified readback band mapped from the freshly resolved target,
+    # rather than falsely requiring an uncommitted native select to expose the
+    # value after TYPE alone.
+    absorbed_step_aliases: dict[str, str] = {}
+    if surface in ("rdp", "citrix"):
+        collapsed: list[tuple[Step, Optional[bytes], Optional[bytes], dict]] = []
+        index = 0
+        while index < len(pending):
+            current = pending[index]
+            if index + 1 < len(pending) and collapsed:
+                step, type_before, type_after, type_event = current
+                key_step, key_before, key_after, key_event = pending[index + 1]
+                previous, _previous_before, previous_after, _previous_event = collapsed[
+                    -1
+                ]
+                commit = (
+                    "Enter"
+                    if (key_step.key or "").casefold() in {"enter", "return"}
+                    else "Tab"
+                    if (key_step.key or "").casefold() == "tab"
+                    else None
+                )
+                demonstrated = step.text
+                previous_anchor = previous.anchor
+                target_region = (
+                    previous_anchor.region if previous_anchor is not None else None
+                )
+                selection_region = (
+                    _selection_readback_region(key_after, target_region)
+                    if key_after is not None and target_region is not None
+                    else None
+                )
+                if (
+                    previous.action is ActionKind.CLICK
+                    and previous_anchor is not None
+                    and step.action is ActionKind.TYPE
+                    and not step.secret
+                    and key_step.action is ActionKind.KEY
+                    and commit is not None
+                    and demonstrated
+                    and target_region is not None
+                    and selection_region is not None
+                    and type_before is not None
+                    and type_after is not None
+                    and key_before is not None
+                    and key_after is not None
+                    and previous_after is not None
+                    and hashlib.sha256(previous_after).digest()
+                    == hashlib.sha256(type_before).digest()
+                    and hashlib.sha256(type_after).digest()
+                    == hashlib.sha256(key_before).digest()
+                    and hashlib.sha256(type_before).digest()
+                    != hashlib.sha256(type_after).digest()
+                    and not _exact_ocr_value_present(
+                        type_before, demonstrated, selection_region
+                    )
+                    and not _exact_ocr_value_present(
+                        type_after, demonstrated, selection_region
+                    )
+                    and _exact_ocr_value_present(
+                        key_after, demonstrated, selection_region
+                    )
+                ):
+                    merged_event = dict(type_event)
+                    for name, value in key_event.items():
+                        if name.endswith("_after"):
+                            merged_event[name] = value
+                    selected = step.model_copy(
+                        update={
+                            "action": ActionKind.SELECT_OPTION,
+                            "intent": (
+                                f"select <{step.param}>"
+                                if step.param is not None
+                                else f"select '{_text_preview(demonstrated)}'"
+                            ),
+                            "selection_commit_key": commit,
+                            "selection_region": selection_region,
+                            "anchor": previous_anchor.model_copy(deep=True),
+                            "identity_armed": previous.identity_armed,
+                            "identity_unarmed_reason": (
+                                previous.identity_unarmed_reason
+                            ),
+                            "identifier_crop_missing_reason": (
+                                previous.identifier_crop_missing_reason
+                            ),
+                        }
+                    )
+                    # The focusing click, provisional TYPE, and commit key are
+                    # one demonstrated selection gesture. Keep only the
+                    # anchored SELECT_OPTION contract so replay focuses exactly once,
+                    # then re-resolves and leases that same field before the
+                    # atomic text+commit delivery.
+                    collapsed.pop()
+                    absorbed_step_aliases[previous.id] = selected.id
+                    absorbed_step_aliases[key_step.id] = selected.id
+                    collapsed.append((selected, type_before, key_after, merged_event))
+                    index += 2
+                    continue
+            collapsed.append(current)
+            index += 1
+        pending = collapsed
+
     # Pass 2: derive postconditions, never asserting parameterized values or
     # any click target's label, selecting for stability (volatility
     # classifier + persistence into the next frame), and falling back to
@@ -1852,10 +2018,10 @@ def compile_recording(
             avoid_labels=anchor_labels,
             bundle=bundle,
             step_id=step.id,
-            # A parameterized TYPE step's changed region is the typed
+            # A parameterized TYPE/SELECT_OPTION step's changed region is the
             # value's own pixels — never assert it (it varies per run).
             include_region_stable=not (
-                step.action is ActionKind.TYPE
+                step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
                 and (step.param is not None or step.secret)
             ),
             before_lines=(
@@ -1896,8 +2062,10 @@ def compile_recording(
 
     if risk_overrides:
         by_id = {step.id: step for step in steps}
+        resolved_overrides: dict[str, tuple[str, str]] = {}
         for step_id, risk in risk_overrides.items():
-            if step_id not in by_id:
+            resolved_step_id = absorbed_step_aliases.get(step_id, step_id)
+            if resolved_step_id not in by_id:
                 raise ValueError(
                     f"risk_overrides names unknown step {step_id!r} "
                     f"(steps: {', '.join(by_id)})"
@@ -1907,11 +2075,25 @@ def compile_recording(
                     f"invalid risk {risk!r} for {step_id!r} (use "
                     "'reversible' or 'irreversible')"
                 )
+            prior = resolved_overrides.get(resolved_step_id)
+            if prior is not None and prior[1] != risk:
+                raise ValueError(
+                    "conflicting risk_overrides for absorbed selection gesture "
+                    f"{prior[0]!r} and {step_id!r}"
+                )
+            resolved_overrides[resolved_step_id] = (step_id, risk)
+        for resolved_step_id, (source_step_id, risk) in resolved_overrides.items():
             # Validated against the two legal values just above, so this narrows
             # the free-form ``dict[str, str]`` override value to Step.risk's Literal.
-            by_id[step_id].risk = cast(Literal["reversible", "irreversible"], risk)
-            by_id[step_id].risk_explanation = f"operator-qualified override: {risk}"
-            by_id[step_id].risk_review_required = False
+            by_id[resolved_step_id].risk = cast(
+                Literal["reversible", "irreversible"], risk
+            )
+            by_id[
+                resolved_step_id
+            ].risk_explanation = (
+                f"operator-qualified override from {source_step_id}: {risk}"
+            )
+            by_id[resolved_step_id].risk_review_required = False
 
     # System-of-record effect mining (opt-in). Runs LAST, after risk_overrides,
     # so each step's `risk` (the consequential-write signal) is final. Attaches
@@ -1982,6 +2164,7 @@ def compile_recording(
         "param_overrides": dict(sorted((param_overrides or {}).items())),
         "risk_overrides": dict(sorted((risk_overrides or {}).items())),
         "secret_param_steps": sorted(secret_param_steps or ()),
+        "target_surface": target_surface,
     }
     compiler_config_sha256 = hashlib.sha256(
         json.dumps(

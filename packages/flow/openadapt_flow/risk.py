@@ -136,6 +136,17 @@ def step_text(step: Step) -> str:
 def infer_step_risk(step: Step) -> RiskInference:
     """Infer risk while retaining why qualification must review ambiguity."""
 
+    if step.action is ActionKind.SELECT_OPTION:
+        if is_write_shaped(step_text(step)):
+            return RiskInference(
+                "irreversible",
+                "option commit context names a consequential state change",
+            )
+        return RiskInference(
+            "reversible",
+            "option commit may edit a form locally or trigger application state",
+            requires_review=True,
+        )
     if step.action is ActionKind.DRAG:
         if is_write_shaped(step_text(step)):
             return RiskInference(

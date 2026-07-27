@@ -442,6 +442,21 @@ class TextValueBackend(Protocol):
 
 
 @runtime_checkable
+class SelectOptionBackend(Protocol):
+    """Atomic parameterized option selection for opaque/native controls.
+
+    Implementations keep the type-ahead text and Enter/Tab commit under one
+    input/focus lease. This protocol reports delivery only; the runtime still
+    requires the intended committed value inside a compiler-qualified readback
+    band mapped onto the freshly re-resolved live field before continuing.
+    """
+
+    def select_option(self, text: str, commit_key: str) -> None:
+        """Type ``text`` and commit it with Enter/Tab as one input operation."""
+        ...
+
+
+@runtime_checkable
 class RemoteActuationBackend(Protocol):
     """Optional two-phase actuation seam for opaque remote surfaces.
 

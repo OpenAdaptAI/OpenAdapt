@@ -9,10 +9,10 @@ interoperate with evals, emit, and any agent that speaks the shared vocabulary.
 
 Design (per ``docs/ECOSYSTEM_INTEGRATION.md`` §2):
 
-* **Adopt the words, keep the core.** flow's ``ActionKind`` is a
-  byte-identical *subset* of ``ActionType`` (21 members) — string values match
-  exactly, so the enum map (:data:`ACTION_KIND_TO_ACTION_TYPE`) is trivial and
-  exhaustive.
+* **Adopt the words, keep the core.** Losslessly shared ``ActionKind`` values
+  map byte-identically to ``ActionType``. Composite compiler actions such as
+  ``SELECT_OPTION`` fail export until the shared schema can carry their atomic
+  delivery and verification contract; they are never degraded to ``TYPE``.
 * **Drop compiler-only IR at the boundary.** ``Anchor`` (template crops,
   regions, OCR/context/structured identity, landmarks), ``Postcondition``,
   ``Resolution``, ``IdentityCheck``, ``HealEvent``, ``risk`` and
@@ -108,12 +108,13 @@ _ActionErrorType = Literal[
     "infrastructure_error",
 ]
 
-# The trivial, exhaustive enum map. flow's ActionKind values are a byte-identical
-# subset of openadapt-types ActionType, so we key by the shared string value and
-# resolve the ActionType member lazily (keeps this module import-light). Every
-# ActionKind member appears here; a CI/regression test asserts exhaustiveness.
+# The shared enum map. SELECT_OPTION deliberately stays outside it until the
+# cross-package schema can carry its commit key and field evidence without
+# degrading it to TYPE; :func:`step_to_action` refuses that conversion loudly.
 ACTION_KIND_TO_ACTION_TYPE: dict[ir.ActionKind, str] = {
-    kind: kind.value for kind in ir.ActionKind
+    kind: kind.value
+    for kind in ir.ActionKind
+    if kind is not ir.ActionKind.SELECT_OPTION
 }
 
 
@@ -172,6 +173,11 @@ def step_to_action(step: ir.Step) -> "Action":
     """
     from openadapt_types import Action, ActionTarget, ActionType
 
+    if step.action is ir.ActionKind.SELECT_OPTION:
+        raise ValueError(
+            "SELECT_OPTION is not representable in openadapt-types without "
+            "losing its atomic commit contract"
+        )
     action_type = ActionType(ACTION_KIND_TO_ACTION_TYPE[step.action])
 
     # Target: canonical coordinates come from the anchor's click point. The

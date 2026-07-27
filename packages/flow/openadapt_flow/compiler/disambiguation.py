@@ -399,7 +399,7 @@ def detect_ambiguities(workflow: Workflow) -> list[DisambiguationQuestion]:
 
         # (1) parameter candidate: an untagged, non-trivial typed value.
         if (
-            step.action is ActionKind.TYPE
+            step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
             and not step.param
             and step.text
             and len(step.text.strip()) >= MIN_PARAM_VALUE_CHARS
@@ -431,7 +431,7 @@ def detect_ambiguities(workflow: Workflow) -> list[DisambiguationQuestion]:
                 _optional_dialog_question(step, consequential, dialog_text)
             )
 
-        if step.action is ActionKind.TYPE:
+        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             seen_type_before = True
 
     return questions

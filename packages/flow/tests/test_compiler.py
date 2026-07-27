@@ -175,6 +175,219 @@ class TestCompileRecording:
             ActionKind.CLICK,
         ]
 
+    def test_remote_typeahead_and_commit_compile_as_one_verified_selection(
+        self, tmp_path: Path
+    ) -> None:
+        recording = tmp_path / "recording"
+        (recording / "frames").mkdir(parents=True)
+        field_center = (900, 300)
+
+        before = blank()
+        cv2.rectangle(before, (820, 268), (980, 332), (80, 80, 80), 2)
+        draw_text(before, 835, 310, "Unassigned")
+        provisional = before.copy()
+        # Native select type-ahead changes a dropdown highlight outside the
+        # closed field, while the field itself still reads its old value.
+        cv2.rectangle(provisional, (820, 350), (1120, 390), (210, 210, 210), -1)
+        draw_text(provisional, 835, 382, "Massachusetts")
+        committed = before.copy()
+        cv2.rectangle(committed, (822, 270), (978, 330), (245, 245, 245), -1)
+        draw_text(committed, 828, 310, "Massachusetts")
+
+        events = [
+            {"i": 0, "kind": "click", "x": 900, "y": 300, "t": 1.0},
+            {
+                "i": 1,
+                "kind": "type",
+                "text": "Massachusetts",
+                "param": "state_label",
+                "t": 2.0,
+            },
+            {"i": 2, "kind": "key", "key": "Enter", "t": 3.0},
+        ]
+        frames = {
+            0: (before, before),
+            1: (before, provisional),
+            2: (provisional, committed),
+        }
+        for i, (frame_before, frame_after) in frames.items():
+            write_frame(recording, i, "before", frame_before)
+            write_frame(recording, i, "after", frame_after)
+        (recording / "events.jsonl").write_text(
+            "\n".join(json.dumps(event) for event in events) + "\n"
+        )
+        (recording / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "remote-select",
+                    "viewport": list(VIEWPORT),
+                    "params": {"state_label": "Massachusetts"},
+                }
+            )
+        )
+
+        uncollapsed = compile_recording(
+            recording,
+            tmp_path / "uncollapsed-bundle",
+            name="remote-select-unbound",
+        )
+        original_click = uncollapsed.steps[0]
+
+        workflow = compile_recording(
+            recording,
+            tmp_path / "bundle",
+            name="remote-select",
+            target_surface="rdp",
+        )
+
+        assert workflow.surface == "rdp"
+        assert [step.id for step in workflow.steps] == ["step_001"]
+        selected = workflow.steps[0]
+        assert selected.action is ActionKind.SELECT_OPTION
+        assert selected.param == "state_label"
+        assert selected.selection_commit_key == "Enter"
+        assert selected.selection_region == (
+            field_center[0] - 120,
+            field_center[1] - 32,
+            240,
+            64,
+        )
+        assert selected.anchor == original_click.anchor
+        assert selected.identity_armed == original_click.identity_armed
+        assert (
+            selected.identity_unarmed_reason == original_click.identity_unarmed_reason
+        )
+        assert (
+            selected.identifier_crop_missing_reason
+            == original_click.identifier_crop_missing_reason
+        )
+        assert selected.risk_review_required is True
+        assert all(
+            postcondition.kind is not PostconditionKind.REGION_STABLE
+            for postcondition in selected.expect
+        )
+
+        citrix = compile_recording(
+            recording,
+            tmp_path / "citrix-bundle",
+            name="remote-select",
+            target_surface="citrix",
+        )
+        assert workflow.manifest is not None and citrix.manifest is not None
+        assert workflow.manifest.provenance is not None
+        assert citrix.manifest.provenance is not None
+        assert (
+            workflow.manifest.provenance.compiler_config_sha256
+            != citrix.manifest.provenance.compiler_config_sha256
+        )
+
+        with pytest.raises(ValueError, match="conflicting risk_overrides"):
+            compile_recording(
+                recording,
+                tmp_path / "risk-conflict-bundle",
+                name="remote-select-risk-conflict",
+                target_surface="rdp",
+                risk_overrides={
+                    "step_000": "irreversible",
+                    "step_002": "reversible",
+                },
+            )
+
+        # If anything changes between the provisional TYPE after-frame and
+        # the commit before-frame, the compiler must keep Enter separate. It
+        # cannot prove one uninterrupted select interaction in that case.
+        discontinuous = provisional.copy()
+        cv2.circle(discontinuous, (40, 40), 8, (0, 0, 0), -1)
+        write_frame(recording, 2, "before", discontinuous)
+        refused = compile_recording(
+            recording,
+            tmp_path / "refused-bundle",
+            name="remote-select-discontinuous",
+            target_surface="rdp",
+        )
+        assert refused.steps[1].selection_commit_key is None
+        assert refused.steps[2].action is ActionKind.KEY
+        assert refused.steps[2].key == "Enter"
+
+        # The focus click's after-frame must also be exactly the TYPE
+        # before-frame. A repaint or application transition between them means
+        # the three events are not one provable selection gesture.
+        write_frame(recording, 2, "before", provisional)
+        click_discontinuous = before.copy()
+        cv2.circle(click_discontinuous, (40, 40), 8, (0, 0, 0), -1)
+        write_frame(recording, 1, "before", click_discontinuous)
+        refused_focus = compile_recording(
+            recording,
+            tmp_path / "refused-focus-bundle",
+            name="remote-select-focus-discontinuous",
+            target_surface="rdp",
+        )
+        assert [step.action for step in refused_focus.steps] == [
+            ActionKind.CLICK,
+            ActionKind.TYPE,
+            ActionKind.KEY,
+        ]
+
+        # Exact field evidence matters: an intended "Virginia" may not be
+        # inferred as committed when the field actually reads "West Virginia".
+        write_frame(recording, 1, "before", before)
+        events[1]["text"] = "Virginia"
+        (recording / "events.jsonl").write_text(
+            "\n".join(json.dumps(event) for event in events) + "\n"
+        )
+        meta = json.loads((recording / "meta.json").read_text())
+        meta["params"]["state_label"] = "Virginia"
+        (recording / "meta.json").write_text(json.dumps(meta))
+        west = before.copy()
+        cv2.rectangle(west, (822, 270), (978, 330), (245, 245, 245), -1)
+        draw_text(west, 828, 310, "West Virginia")
+        write_frame(recording, 2, "after", west)
+        substring = compile_recording(
+            recording,
+            tmp_path / "substring-bundle",
+            name="remote-select-substring",
+            target_surface="rdp",
+        )
+        assert [step.action for step in substring.steps] == [
+            ActionKind.CLICK,
+            ActionKind.TYPE,
+            ActionKind.KEY,
+        ]
+
+    def test_target_surface_cannot_contradict_recorded_surface(
+        self, tmp_path: Path
+    ) -> None:
+        recording = tmp_path / "recording"
+        (recording / "frames").mkdir(parents=True)
+        (recording / "events.jsonl").write_text("")
+        (recording / "meta.json").write_text(
+            json.dumps({"viewport": list(VIEWPORT), "surface": "web"})
+        )
+
+        with pytest.raises(ValueError, match="target_surface contradicts"):
+            compile_recording(
+                recording,
+                tmp_path / "bundle",
+                name="surface-conflict",
+                target_surface="rdp",
+            )
+
+    def test_select_option_fails_loud_on_legacy_action_enum(self) -> None:
+        from enum import Enum
+
+        from pydantic import BaseModel, ValidationError
+
+        class LegacyActionKind(str, Enum):
+            CLICK = "click"
+            TYPE = "type"
+            KEY = "key"
+
+        class LegacyStep(BaseModel):
+            action: LegacyActionKind
+
+        with pytest.raises(ValidationError):
+            LegacyStep.model_validate({"action": "select_option"})
+
     def test_citrix_target_hints_compile_but_never_enter_manifest(
         self, tmp_path: Path
     ) -> None:

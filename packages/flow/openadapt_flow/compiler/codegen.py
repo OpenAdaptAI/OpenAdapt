@@ -94,6 +94,11 @@ def _step_call(step: Step) -> str:
         if step.param:
             return f"    flow.type_text(params[{step.param!r}])"
         return f"    flow.type_text({(step.text or '')!r})"
+    if step.action is ActionKind.SELECT_OPTION:
+        value = f"params[{step.param!r}]" if step.param else repr(step.text or "")
+        return (
+            f"    flow.select_option({value}, commit_key={step.selection_commit_key!r})"
+        )
     if step.action is ActionKind.KEY:
         return f"    flow.press({(step.key or '')!r})"
     if step.action is ActionKind.HOTKEY:

@@ -502,6 +502,10 @@ def _as_readback_nav(step: Step) -> Optional[ReadbackNav]:
         if step.secret or step.param is not None or not step.text:
             return None
         return ReadbackNav(action="type", text=step.text)
+    if step.action is ActionKind.SELECT_OPTION:
+        # ReadbackNav cannot express the atomic focus/typeahead/commit contract.
+        # Refuse to turn it into a lossy TYPE+KEY sequence during effect mining.
+        return None
     if step.action is ActionKind.KEY:
         if not step.key:
             return None

@@ -33,8 +33,7 @@ pytest.importorskip("openadapt_types")
 # --- enum map: exhaustive, value-correct, subset ---------------------------
 
 
-def test_action_kind_map_is_exhaustive_and_value_correct() -> None:
-    """Every Flow action maps to its identical shared-vocabulary value."""
+def test_action_kind_map_covers_losslessly_shared_values() -> None:
     expected = {
         ir.ActionKind.CLICK: "click",
         ir.ActionKind.DOUBLE_CLICK: "double_click",
@@ -46,7 +45,9 @@ def test_action_kind_map_is_exhaustive_and_value_correct() -> None:
         ir.ActionKind.WAIT: "wait",
         ir.ActionKind.SCROLL: "scroll",
     }
-    assert set(interop.ACTION_KIND_TO_ACTION_TYPE) == set(ir.ActionKind)
+    assert set(interop.ACTION_KIND_TO_ACTION_TYPE) == set(ir.ActionKind) - {
+        ir.ActionKind.SELECT_OPTION
+    }
     assert interop.ACTION_KIND_TO_ACTION_TYPE == expected
 
 
@@ -54,12 +55,28 @@ def test_action_kind_is_byte_identical_subset_of_action_type() -> None:
     """set(ActionKind values) is a subset of set(ActionType values), identical."""
     from openadapt_types import ActionType
 
-    kind_values = {k.value for k in ir.ActionKind}
+    kind_values = set(interop.ACTION_KIND_TO_ACTION_TYPE.values())
     type_values = {t.value for t in ActionType}
     assert kind_values <= type_values
     # And each flow value resolves to a real ActionType member with equal value.
     for kind, value in interop.ACTION_KIND_TO_ACTION_TYPE.items():
         assert ActionType(value).value == kind.value
+
+
+def test_select_option_refuses_lossy_shared_type_conversion() -> None:
+    anchor = _click_step().anchor
+    assert anchor is not None
+    step = ir.Step(
+        id="select",
+        intent="select state",
+        action=ir.ActionKind.SELECT_OPTION,
+        text="Virginia",
+        anchor=anchor,
+        selection_commit_key="Enter",
+        selection_region=anchor.region,
+    )
+    with pytest.raises(ValueError, match="not representable"):
+        interop.step_to_action(step)
 
 
 # --- Step -> Action --------------------------------------------------------

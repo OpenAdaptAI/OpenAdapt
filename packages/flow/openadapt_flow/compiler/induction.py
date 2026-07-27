@@ -351,7 +351,7 @@ def _value(step: Step) -> Optional[str]:
     clicked) -- the structural name when present (highest fidelity), else the
     anchor's OCR text -- because that is the dimension a selection parameter
     varies over."""
-    if step.action is ActionKind.TYPE:
+    if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
         return step.text if step.text is not None else step.param
     if step.action is ActionKind.KEY:
         return step.key
@@ -804,7 +804,7 @@ def _emit_loop(idx, col, present, n, taken, param_specs, data_sources, result):
     for bi, bstep in enumerate(body_steps):
         sid = f"{body_id}_s{bi}"
         step = bstep.model_copy(deep=True)
-        if step.action is ActionKind.TYPE:
+        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             step.param = param_name
             step.text = None
         st = State(
@@ -916,7 +916,7 @@ def _emit_required_single(idx, col, present, taken, param_specs, result):
             )
         )
         kind, param_name, literal = "ambiguous_selection", None, None
-    elif step0.action is ActionKind.TYPE and varies:
+    elif step0.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION) and varies:
         # A value that VARIES across traces at the same field is a PARAMETER
         # (cross-trace evidence makes WebRobot value-speculation determinate).
         name = _param_name_for(field, taken, f"value_{idx}")
@@ -933,7 +933,7 @@ def _emit_required_single(idx, col, present, taken, param_specs, result):
         kind, param_name, literal = "param", name, None
     else:
         literal = values[0]
-        if step0.action is ActionKind.TYPE:
+        if step0.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             result.inferred.append(
                 f"literal '{field}' = {literal!r} -- constant across traces"
             )

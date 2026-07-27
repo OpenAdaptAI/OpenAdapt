@@ -213,6 +213,9 @@ def _describe_step(step: Any) -> str:
         if step.param:
             return f"type <{step.param}> — substitute this run's {step.param} value"
         return f'type "{step.text or ""}"'
+    if action == "select_option":
+        value = f"<{step.param}>" if step.param else f'"{step.text or ""}"'
+        return f"select {value} and commit with {step.selection_commit_key}"
     if action == "key":
         return f"press the {step.key} key"
     if action == "scroll":
