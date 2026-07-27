@@ -15,3 +15,11 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    # github/codeql-action/init and .../analyze must run at the SAME version;
+    # a run with mismatched versions aborts with "Loaded a configuration file
+    # for version X, but running version Y". Ungrouped, Dependabot opens one
+    # PR per sub-action, so each one is red on its own and neither can merge.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
