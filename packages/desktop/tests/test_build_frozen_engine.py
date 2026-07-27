@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import subprocess
@@ -401,8 +402,13 @@ def test_frozen_flow_pin_must_request_the_console_and_browser_extras(tmp_path: P
 
     from scripts import frozen_notices
 
+    # The directory name is a counter, not the pin: a pin carries ``[]``, ``,``,
+    # ``=`` and ``>``, and ``>`` is not a legal Windows filename character
+    # (WinError 123). Only the file's *contents* are under test.
+    fixtures = itertools.count()
+
     def _pyproject(pin: str) -> Path:
-        root = tmp_path / pin.replace("/", "-")
+        root = tmp_path / f"pin-{next(fixtures)}"
         root.mkdir()
         (root / "pyproject.toml").write_text(
             "[project]\nname = 'x'\n\n"

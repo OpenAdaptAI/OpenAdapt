@@ -465,3 +465,50 @@ def test_a_console_that_exits_is_not_waited_out(monkeypatch, tmp_path) -> None:
     with pytest.raises(PortalError, match="did not answer"):
         service.start()
     assert time.monotonic() - started < 30.0
+
+
+# ---------------------------------------------------- stopping the whole tree
+
+
+def test_stopping_the_console_kills_the_whole_process_tree_on_windows(
+    monkeypatch,
+) -> None:
+    """A one-file sidecar runs the console in a child of what we spawned.
+
+    Terminating only the outer bootloader on Windows leaves an
+    ``--allow-actions`` attended console still serving after the operator
+    stopped the portal.
+    """
+    from engine.portal import service as service_mod
+
+    calls: list = []
+    monkeypatch.setattr(service_mod, "_WINDOWS", True)
+    monkeypatch.setattr(
+        service_mod.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append(command),
+    )
+
+    class Spawned(FakeProcess):
+        pid = 4321
+
+        def terminate(self):  # pragma: no cover - must not be used on Windows
+            raise AssertionError("Windows must kill the tree, not the bootloader")
+
+    service_mod._kill_tree(Spawned(""))
+    assert calls == [["taskkill", "/F", "/T", "/PID", "4321"]]
+
+
+def test_stopping_the_console_terminates_directly_off_windows(monkeypatch) -> None:
+    """POSIX bootloaders exec into the app, so one terminate is the whole tree."""
+    from engine.portal import service as service_mod
+
+    monkeypatch.setattr(service_mod, "_WINDOWS", False)
+    monkeypatch.setattr(
+        service_mod.subprocess,
+        "run",
+        lambda *a, **k: pytest.fail("POSIX must not shell out to taskkill"),
+    )
+    process = FakeProcess("")
+    service_mod._kill_tree(process)
+    assert process.terminated is True

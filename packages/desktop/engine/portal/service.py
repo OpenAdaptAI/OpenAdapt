@@ -62,6 +62,7 @@ from __future__ import annotations
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -114,10 +115,38 @@ class PortalError(RuntimeError):
     """The portal could not be started or is not in a state to serve."""
 
 
+#: Whether this host needs a tree kill to stop the console (see _kill_tree).
+_WINDOWS = sys.platform == "win32"
+
+
+def _kill_tree(process: Any) -> None:
+    """Stop the console *and every child it spawned*.
+
+    The console runs inside the PyInstaller one-file sidecar, which executes the
+    real application in a **child** of the process Desktop spawned. On Windows
+    ``terminate()`` maps to ``TerminateProcess`` on that outer bootloader only,
+    so the inner process keeps running -- an ``--allow-actions`` attended console
+    still serving after the operator stopped the portal, still holding the
+    extracted runtime's DLLs open. ``taskkill /T`` stops the whole tree.
+
+    POSIX bootloaders ``exec`` into the application rather than forking it, so
+    the single ``terminate()`` is already the whole tree there.
+    """
+    pid = getattr(process, "pid", None)
+    if _WINDOWS and isinstance(pid, int):
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            capture_output=True,
+            check=False,
+        )
+        return
+    process.terminate()
+
+
 def _terminate(process: Any) -> None:
-    """Stop a console process without leaving a zombie behind."""
+    """Stop a console process without leaving a zombie or an orphan behind."""
     try:
-        process.terminate()
+        _kill_tree(process)
         process.wait(timeout=10)
     except Exception:  # pragma: no cover - defensive
         try:

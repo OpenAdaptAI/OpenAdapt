@@ -284,7 +284,16 @@ def _drive_portal_surface(
 
 
 def _stop(process: subprocess.Popen) -> None:
-    process.terminate()
+    """Stop the console the same way the portal service does: the whole tree.
+
+    A PyInstaller one-file binary runs the application in a *child* of the
+    process we spawned. Terminating only the outer bootloader on Windows leaves
+    that child alive, still mapping the extracted runtime's DLLs -- which then
+    makes this smoke's temporary directory undeletable.
+    """
+    from engine.portal.service import _kill_tree
+
+    _kill_tree(process)
     try:
         process.wait(timeout=30)
     except subprocess.TimeoutExpired:  # pragma: no cover - defensive
@@ -462,7 +471,13 @@ def main() -> int:
     args = parser.parse_args()
     executable = args.artifact.resolve(strict=True)
 
-    with tempfile.TemporaryDirectory(prefix="openadapt-frozen-flow-") as raw_root:
+    # ``ignore_cleanup_errors`` is a safety net, not the fix: ``_stop`` kills the
+    # whole console tree so nothing should still hold the extracted runtime open.
+    # But a scratch directory that Windows briefly refuses to delete must never
+    # fail a smoke whose assertions have all already passed.
+    with tempfile.TemporaryDirectory(
+        prefix="openadapt-frozen-flow-", ignore_cleanup_errors=True
+    ) as raw_root:
         root = Path(raw_root)
         env = dict(os.environ)
         # A brand-new path proves the frozen executable itself performs the
