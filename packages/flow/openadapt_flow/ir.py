@@ -78,8 +78,11 @@ TEMPLATE_AAD: Final[bytes] = b"openadapt-flow/template"
 class ActionKind(str, Enum):
     CLICK = "click"
     DOUBLE_CLICK = "double_click"
+    RIGHT_CLICK = "right_click"
+    DRAG = "drag"
     TYPE = "type"
     KEY = "key"
+    HOTKEY = "hotkey"
     WAIT = "wait"
     SCROLL = "scroll"
 
@@ -888,7 +891,19 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
-    key: Optional[str] = None  # for KEY, e.g. "Enter"
+    key: Optional[str] = None  # for KEY/HOTKEY, e.g. "Enter" or "s"
+    modifiers: list[str] = Field(
+        default_factory=list,
+        max_length=4,
+        description="HOTKEY modifiers in deterministic press order",
+    )
+    drag_end_anchor: Optional[Anchor] = Field(
+        default=None,
+        description=(
+            "DRAG destination evidence, resolved independently on the same fresh "
+            "pre-actuation frame as the source anchor"
+        ),
+    )
     scroll_dx: Optional[int] = None  # for SCROLL: wheel delta, px right
     scroll_dy: Optional[int] = None  # for SCROLL: wheel delta, px down
     expect: list[Postcondition] = Field(default_factory=list)
@@ -915,6 +930,21 @@ class Step(BaseModel):
     # configured also falls through to the GUI (the API tier's safe fallback).
     api_binding: Optional[ApiBinding] = None
     risk: Literal["reversible", "irreversible"] = "reversible"
+    risk_explanation: Optional[str] = Field(
+        default=None,
+        max_length=512,
+        description=(
+            "Why the compiler or qualifying operator assigned this risk. "
+            "This is provenance, not runtime evidence."
+        ),
+    )
+    risk_review_required: bool = Field(
+        default=False,
+        description=(
+            "True when risk is ambiguous and certification must refuse until "
+            "an operator supplies an explicit reviewed override"
+        ),
+    )
     # Workflow-program IR, Phase 1 (RFC §6) -- both OPTIONAL and additive; a
     # step with neither replays EXACTLY as a v0 step. Orthogonal to effects /
     # risk / identity above.
@@ -928,6 +958,19 @@ class Step(BaseModel):
     # ``guard``: a deterministic precondition evaluated on the entry frame.
     # Unmet => HALT (default) or SKIP the step (see Guard.on_unmet).
     guard: Optional[Guard] = None
+
+    @model_validator(mode="after")
+    def _validate_rich_action_contract(self) -> "Step":
+        if self.action is not ActionKind.DRAG and self.drag_end_anchor is not None:
+            raise ValueError("drag_end_anchor is valid only for DRAG steps")
+
+        if self.action is ActionKind.HOTKEY:
+            if not self.key or not self.modifiers:
+                raise ValueError("HOTKEY steps require a key and at least one modifier")
+        elif self.modifiers:
+            raise ValueError("modifiers are valid only for HOTKEY steps")
+        return self
+
     timeout_s: float = 10.0
     # Identity-protection audit trail (clicks and anchored TYPE steps):
     # whether this step's click is guarded by the pre-click identity check
@@ -1960,6 +2003,9 @@ class StepResult(BaseModel):
     step_id: str
     intent: str
     ok: bool
+    risk: Literal["reversible", "irreversible"] = "reversible"
+    risk_explanation: Optional[str] = None
+    risk_review_required: bool = False
     # Workflow-program IR, Phase 1: True when a step was SKIPPED because its
     # ``guard`` was unmet with ``on_unmet="skip"`` (a no-op success -- the
     # step did not act). False for every executed step; additive.
@@ -1971,6 +2017,7 @@ class StepResult(BaseModel):
     # default False for every linear-mode and unhandled result.
     exception_handled: bool = False
     resolution: Optional[Resolution] = None
+    drag_end_resolution: Optional[Resolution] = None
     identity: Optional[IdentityCheck] = None  # pre-click identity verdict
     input_verified: Optional[bool] = None  # TYPE steps: typed input landed
     input_retried: bool = False  # TYPE steps: refocus-and-retype fired

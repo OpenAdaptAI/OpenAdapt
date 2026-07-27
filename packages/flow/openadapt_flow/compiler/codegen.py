@@ -60,8 +60,18 @@ def _effect_comment(effects: list[Effect]) -> list[str]:
 
 def _step_call(step: Step) -> str:
     """Render the flow.<action>(...) call for a step."""
-    if step.action is ActionKind.CLICK or step.action is ActionKind.DOUBLE_CLICK:
-        fn = "click" if step.action is ActionKind.CLICK else "double_click"
+    if step.action in (
+        ActionKind.CLICK,
+        ActionKind.DOUBLE_CLICK,
+        ActionKind.RIGHT_CLICK,
+        ActionKind.DRAG,
+    ):
+        fn = {
+            ActionKind.CLICK: "click",
+            ActionKind.DOUBLE_CLICK: "double_click",
+            ActionKind.RIGHT_CLICK: "right_click",
+            ActionKind.DRAG: "drag",
+        }[step.action]
         assert step.anchor is not None
         args = [
             f"template={step.anchor.template!r}",
@@ -70,6 +80,15 @@ def _step_call(step: Step) -> str:
         ]
         if step.anchor.ocr_text:
             args.append(f"ocr_text={step.anchor.ocr_text!r}")
+        if step.action is ActionKind.DRAG:
+            assert step.drag_end_anchor is not None
+            args.extend(
+                [
+                    f"end_template={step.drag_end_anchor.template!r}",
+                    f"end_click_point={step.drag_end_anchor.click_point!r}",
+                    f"end_region={step.drag_end_anchor.region!r}",
+                ]
+            )
         return f"    flow.{fn}({', '.join(args)})"
     if step.action is ActionKind.TYPE:
         if step.param:
@@ -77,6 +96,9 @@ def _step_call(step: Step) -> str:
         return f"    flow.type_text({(step.text or '')!r})"
     if step.action is ActionKind.KEY:
         return f"    flow.press({(step.key or '')!r})"
+    if step.action is ActionKind.HOTKEY:
+        chord = "+".join([*step.modifiers, step.key or ""])
+        return f"    flow.hotkey({chord!r})"
     if step.action is ActionKind.WAIT:
         return f"    flow.wait(timeout_s={step.timeout_s!r})"
     if step.action is ActionKind.SCROLL:

@@ -129,6 +129,39 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
                 "CARRYING a label is new content and changes the digest"
             ),
         ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="risk_explanation",
+            omitted_values=(None,),
+            reason=(
+                "absent risk provenance predates the v2 field; populated "
+                "provenance remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="risk_review_required",
+            omitted_values=(False,),
+            reason=(
+                "the false default predates the v2 field; a pending risk "
+                "review remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="modifiers",
+            omitted_values=([],),
+            reason="empty hotkey modifiers predate their v2 field",
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="drag_end_anchor",
+            omitted_values=(None,),
+            reason=(
+                "absent drag destination evidence predates the v2 field; a "
+                "populated destination remains sealed content"
+            ),
+        ),
     ),
 }
 

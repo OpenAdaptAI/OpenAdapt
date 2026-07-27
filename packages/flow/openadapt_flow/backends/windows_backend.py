@@ -45,7 +45,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from openadapt_flow.backend import StructuralResolutionRefused
+from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     StructuralHandle,
@@ -370,6 +370,29 @@ class WindowsBackend:
 
     def _post_typed_action(self, path: str, payload: dict) -> dict:
         """POST a bounded typed action and fail loudly on non-delivery."""
+        bounded_input = payload.get("input")
+        if not isinstance(bounded_input, dict):
+            bounded_input = payload
+        action = bounded_input.get("action")
+        if not isinstance(action, str):
+            action = ""
+        if action == "click":
+            operation = (
+                "physical_double_click"
+                if bounded_input.get("double") is True
+                else (
+                    "physical_right_click"
+                    if bounded_input.get("button") == "right"
+                    else "physical_click"
+                )
+            )
+        else:
+            operation = {
+                "drag": "physical_drag",
+                "type_text": "physical_type_text",
+                "press": "physical_press",
+                "scroll": "physical_scroll",
+            }.get(action, "win_agent_action")
         try:
             response = self._session.post(
                 f"{self.server_url}{path}",
@@ -377,8 +400,10 @@ class WindowsBackend:
                 **self._request_kwargs(),
             )
         except requests.RequestException as exc:
-            raise RuntimeError(
-                f"typed win-agent action {path} unreachable: {exc}"
+            raise ActionDeliveryUncertain(
+                operation=operation,
+                native=False,
+                cause_type=type(exc).__name__,
             ) from exc
         if response.status_code != 200:
             if response.status_code == 404:
@@ -420,6 +445,12 @@ class WindowsBackend:
                     "guarded Windows input refused "
                     f"({code}): {message or 'identity binding changed'}"
                 )
+            if response.status_code >= 500:
+                raise ActionDeliveryUncertain(
+                    operation=operation,
+                    native=False,
+                    cause_type=f"HTTP{response.status_code}",
+                )
             raise RuntimeError(
                 f"typed win-agent action {path} HTTP {response.status_code}: "
                 f"{response.text[:200]}"
@@ -427,12 +458,16 @@ class WindowsBackend:
         try:
             data = response.json()
         except Exception as exc:
-            raise RuntimeError(
-                f"typed win-agent action {path} returned invalid JSON"
+            raise ActionDeliveryUncertain(
+                operation=operation,
+                native=False,
+                cause_type=type(exc).__name__,
             ) from exc
         if not isinstance(data, dict):
-            raise RuntimeError(
-                f"typed win-agent action {path} returned invalid payload"
+            raise ActionDeliveryUncertain(
+                operation=operation,
+                native=False,
+                cause_type="InvalidPayload",
             )
         return data
 
@@ -442,8 +477,10 @@ class WindowsBackend:
         try:
             receipt = ActionDeliveryReceipt.model_validate(payload)
         except Exception as exc:
-            raise RuntimeError(
-                "typed input returned an invalid delivery receipt"
+            raise ActionDeliveryUncertain(
+                operation=operation,
+                native=False,
+                cause_type=type(exc).__name__,
             ) from exc
         if (
             receipt.operation != operation
@@ -451,7 +488,11 @@ class WindowsBackend:
             or receipt.target_fingerprint is not None
             or receipt.outcome_verified is not False
         ):
-            raise RuntimeError("typed input returned a mismatched delivery receipt")
+            raise ActionDeliveryUncertain(
+                operation=operation,
+                native=False,
+                cause_type="MismatchedReceipt",
+            )
 
     # -- live execution-context identity -----------------------------------
 
@@ -1011,8 +1052,10 @@ class WindowsBackend:
         try:
             receipt = ActionDeliveryReceipt.model_validate(payload)
         except Exception as exc:
-            raise RuntimeError(
-                "guarded Windows input returned an invalid delivery receipt"
+            raise ActionDeliveryUncertain(
+                operation=operation,
+                native=False,
+                cause_type=type(exc).__name__,
             ) from exc
         if (
             receipt.operation != operation
@@ -1020,8 +1063,10 @@ class WindowsBackend:
             or receipt.target_fingerprint is not None
             or receipt.outcome_verified is not False
         ):
-            raise RuntimeError(
-                "guarded Windows input returned a mismatched delivery receipt"
+            raise ActionDeliveryUncertain(
+                operation=operation,
+                native=False,
+                cause_type="MismatchedReceipt",
             )
         return receipt
 
@@ -1032,6 +1077,7 @@ class WindowsBackend:
         *,
         expected_frame_sha256: str,
         double: bool = False,
+        button: str = "left",
     ) -> ActionDeliveryReceipt:
         pending = self._guarded_coordinate
         self._guarded_coordinate = None
@@ -1044,7 +1090,19 @@ class WindowsBackend:
             raise StructuralResolutionRefused(
                 "Windows coordinate target changed after identity verification"
             )
-        operation = "physical_double_click" if double else "physical_click"
+        if button not in {"left", "right"}:
+            raise StructuralResolutionRefused(
+                f"unsupported Windows pointer button {button!r}"
+            )
+        if double and button != "left":
+            raise StructuralResolutionRefused(
+                "Windows guarded right-button double click is unsupported"
+            )
+        operation = (
+            "physical_double_click"
+            if double
+            else ("physical_right_click" if button == "right" else "physical_click")
+        )
         response = self._post_typed_action(
             "/input/guarded",
             {
@@ -1055,10 +1113,52 @@ class WindowsBackend:
                     "x": point[0],
                     "y": point[1],
                     "double": bool(double),
+                    "button": button,
                 },
             },
         )
         return self._guarded_receipt(response, operation)
+
+    def drag_guarded(
+        self,
+        x: int,
+        y: int,
+        end_x: int,
+        end_y: int,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        pending = self._guarded_coordinate
+        self._guarded_coordinate = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "Windows drag has no pre-identity source binding"
+            )
+        point, context = pending
+        if point != (int(x), int(y)):
+            raise StructuralResolutionRefused(
+                "Windows drag source changed after identity verification"
+            )
+        width, height = self.viewport
+        if not (0 <= int(end_x) < width and 0 <= int(end_y) < height):
+            raise StructuralResolutionRefused(
+                "Windows drag destination is outside the captured viewport"
+            )
+        response = self._post_typed_action(
+            "/input/guarded",
+            {
+                "expected_frame_sha256": expected_frame_sha256,
+                "expected_context": context,
+                "input": {
+                    "action": "drag",
+                    "x": point[0],
+                    "y": point[1],
+                    "end_x": int(end_x),
+                    "end_y": int(end_y),
+                },
+            },
+        )
+        return self._guarded_receipt(response, "physical_drag")
 
     def type_text_guarded(
         self,
@@ -1133,6 +1233,56 @@ class WindowsBackend:
                 raise
         fn = "doubleClick" if double else "click"
         self._execute(f"import pyautogui; pyautogui.{fn}({int(x)}, {int(y)})")
+
+    def right_click(self, x: int, y: int) -> None:
+        """Right-click through the bounded typed input contract."""
+
+        try:
+            response = self._post_typed_action(
+                "/input",
+                {
+                    "action": "click",
+                    "x": int(x),
+                    "y": int(y),
+                    "double": False,
+                    "button": "right",
+                },
+            )
+            self._validate_physical_receipt(response, "physical_right_click")
+            return
+        except _TypedRouteUnavailable:
+            if not self._allow_legacy_exec:
+                raise
+        self._execute(
+            f"import pyautogui; pyautogui.click({int(x)}, {int(y)}, button='right')"
+        )
+
+    def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
+        """Drag through the bounded typed input contract."""
+
+        try:
+            response = self._post_typed_action(
+                "/input",
+                {
+                    "action": "drag",
+                    "x": int(x),
+                    "y": int(y),
+                    "end_x": int(end_x),
+                    "end_y": int(end_y),
+                },
+            )
+            self._validate_physical_receipt(response, "physical_drag")
+            return
+        except _TypedRouteUnavailable:
+            if not self._allow_legacy_exec:
+                raise
+        self._execute(
+            "import pyautogui; "
+            f"pyautogui.moveTo({int(x)}, {int(y)}); "
+            "pyautogui.mouseDown(button='left'); "
+            f"pyautogui.moveTo({int(end_x)}, {int(end_y)}, duration=0.2); "
+            "pyautogui.mouseUp(button='left')"
+        )
 
     def type_text(self, text: str) -> None:
         """Type text into the currently focused element.

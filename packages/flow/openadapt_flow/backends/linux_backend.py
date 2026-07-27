@@ -694,6 +694,7 @@ class LinuxBackend:
         *,
         expected_frame_sha256: str,
         double: bool = False,
+        button: str = "left",
     ) -> ActionDeliveryReceipt:
         pending = self._guarded_coordinate
         self._guarded_coordinate = None
@@ -705,6 +706,11 @@ class LinuxBackend:
         if point != (int(x), int(y)):
             raise LinuxBackendError(
                 "Linux coordinate target changed after identity verification"
+            )
+        if button != "left":
+            raise LinuxBackendError(
+                "guarded Linux right-click input is not implemented by the "
+                "qualified physical-input client"
             )
         if not self._allow_physical_input:
             raise LinuxBackendError(

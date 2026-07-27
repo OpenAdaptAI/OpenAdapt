@@ -166,6 +166,10 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
     for step in _step_payloads(content, shape):
         # Reviewed v2 omission: field_label evidence postdates these seals.
         assert step.pop("field_label") is None
+        assert step.pop("risk_explanation") is None
+        assert step.pop("risk_review_required") is False
+        assert step.pop("modifiers") == []
+        assert step.pop("drag_end_anchor") is None
     return content
 
 
@@ -343,6 +347,15 @@ def test_empty_frame_path_preserves_pre_field_sealed_v2_digest(
     unrelated = loaded.model_copy(deep=True)
     unrelated.params["frame_path"] = ""
     assert bv.compute_content_digest(unrelated, file_hashes) != legacy_digest
+
+    reviewed = loaded.model_copy(deep=True)
+    reviewed_step = (
+        reviewed.steps[0] if reviewed.steps else reviewed.program.states["s1"].step
+    )
+    assert reviewed_step is not None
+    reviewed_step.risk_review_required = True
+    reviewed_step.risk_explanation = "unlabelled pointer control"
+    assert bv.compute_content_digest(reviewed, file_hashes) != legacy_digest
 
 
 def test_pre_field_encrypted_certified_bundle_loads_with_original_digest(tmp_path):

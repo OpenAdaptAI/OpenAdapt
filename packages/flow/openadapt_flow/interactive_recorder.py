@@ -124,6 +124,78 @@ _INIT_JS = r"""
     } catch (e) { return null; }
   }
 
+  function targetRole(el) {
+    const explicit = el.getAttribute('role');
+    if (explicit) return explicit;
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'button') return 'button';
+    if (tag === 'a' && el.hasAttribute('href')) return 'link';
+    if (tag === 'textarea') return 'textbox';
+    if (tag === 'select') return 'combobox';
+    if (tag === 'input') {
+      const type = (el.getAttribute('type') || 'text').toLowerCase();
+      if (type === 'checkbox') return 'checkbox';
+      if (type === 'radio') return 'radio';
+      if (['button', 'submit', 'reset'].indexOf(type) >= 0) return 'button';
+      return 'textbox';
+    }
+    return null;
+  }
+
+  function targetName(el) {
+    const aria = (el.getAttribute('aria-label') || '').trim();
+    if (aria) return aria;
+    const labelledBy = (el.getAttribute('aria-labelledby') || '').trim();
+    if (labelledBy) {
+      const value = labelledBy.split(/\s+/).map((id) => {
+        const node = document.getElementById(id);
+        return node ? (node.textContent || '').trim() : '';
+      }).filter(Boolean).join(' ');
+      if (value) return value;
+    }
+    if (el.id) {
+      const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (label && (label.textContent || '').trim()) return label.textContent.trim();
+    }
+    const wrapping = el.closest('label');
+    if (wrapping && wrapping !== el && (wrapping.textContent || '').trim()) {
+      return wrapping.textContent.trim();
+    }
+    for (const attr of ['alt', 'title', 'placeholder']) {
+      const value = (el.getAttribute(attr) || '').trim();
+      if (value) return value;
+    }
+    const text = (el.innerText || '').replace(/\s+/g, ' ').trim();
+    return text ? text.slice(0, 200) : null;
+  }
+
+  function uniqueSelector(el) {
+    if (el.id) {
+      const selector = `#${CSS.escape(el.id)}`;
+      if (document.querySelectorAll(selector).length === 1) return selector;
+    }
+    for (const attr of ['data-testid', 'data-test', 'name']) {
+      const value = el.getAttribute(attr);
+      if (!value) continue;
+      const selector = `${el.tagName.toLowerCase()}[${attr}="${CSS.escape(value)}"]`;
+      if (document.querySelectorAll(selector).length === 1) return selector;
+    }
+    return null;
+  }
+
+  function structuralTarget(px, py) {
+    try {
+      const el = document.elementFromPoint(px, py);
+      if (!el) return null;
+      const target = {
+        selector: uniqueSelector(el),
+        role: targetRole(el),
+        name: targetName(el),
+      };
+      return (target.selector || target.role || target.name) ? target : null;
+    } catch (e) { return null; }
+  }
+
   function isSecretEl(el) {
     if (!el) return false;
     if ((el.type || '').toLowerCase() === 'password') return true;
@@ -186,11 +258,53 @@ _INIT_JS = r"""
 
   function emit(o) { try { window.__oaflow_emit(o); } catch (e) {} }
 
+  let pointerDown = null;
+  let suppressClick = false;
+  document.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    pointerDown = {
+      x: Math.round(e.clientX), y: Math.round(e.clientY),
+      sid: structuredIdentity(e.clientX, e.clientY),
+      structural: structuralTarget(e.clientX, e.clientY),
+      idr: identifierRect(),
+    };
+  }, true);
+
+  document.addEventListener('pointerup', (e) => {
+    if (e.button !== 0 || !pointerDown) return;
+    const start = pointerDown;
+    pointerDown = null;
+    const endX = Math.round(e.clientX), endY = Math.round(e.clientY);
+    if (Math.hypot(endX - start.x, endY - start.y) < 5) return;
+    suppressClick = true;
+    setTimeout(() => { suppressClick = false; }, 0);
+    emit({
+      kind: 'drag', x: start.x, y: start.y, end_x: endX, end_y: endY,
+      sid: start.sid, structural: start.structural,
+      end_structural: structuralTarget(endX, endY), idr: start.idr,
+      url: location.href, title: document.title,
+    });
+  }, true);
+
   document.addEventListener('click', (e) => {
+    if (e.button !== 0) return;
+    if (suppressClick) { suppressClick = false; return; }
     emit({
       kind: 'click',
       x: Math.round(e.clientX), y: Math.round(e.clientY),
       sid: structuredIdentity(e.clientX, e.clientY),
+      structural: structuralTarget(e.clientX, e.clientY),
+      idr: identifierRect(),
+      url: location.href, title: document.title,
+    });
+  }, true);
+
+  document.addEventListener('contextmenu', (e) => {
+    emit({
+      kind: 'right_click',
+      x: Math.round(e.clientX), y: Math.round(e.clientY),
+      sid: structuredIdentity(e.clientX, e.clientY),
+      structural: structuralTarget(e.clientX, e.clientY),
       idr: identifierRect(),
       url: location.href, title: document.title,
     });
@@ -216,6 +330,21 @@ _INIT_JS = r"""
   }, true);
 
   document.addEventListener('keydown', (e) => {
+    const modifiers = [];
+    if (e.ctrlKey) modifiers.push('ctrl');
+    if (e.altKey) modifiers.push('alt');
+    if (e.shiftKey) modifiers.push('shift');
+    if (e.metaKey) modifiers.push('meta');
+    const pureModifier = ['Control', 'Alt', 'Shift', 'Meta'].indexOf(e.key) >= 0;
+    const shiftedText = modifiers.length === 1
+      && modifiers[0] === 'shift' && e.key.length === 1;
+    if (modifiers.length && !pureModifier && !shiftedText && !e.repeat) {
+      emit({
+        kind: 'hotkey', key: e.key, modifiers,
+        url: location.href, title: document.title,
+      });
+      return;
+    }
     if (SPECIAL.indexOf(e.key) < 0) return;
     emit({ kind: 'key', key: e.key, url: location.href, title: document.title });
   }, true);
@@ -399,11 +528,11 @@ class InteractiveRecorder:
         elif kind == "scroll":
             self._flush_type()
             self._accumulate_scroll(ev)
-        elif kind == "click":
+        elif kind in {"click", "right_click", "drag"}:
             self._flush_type()
             self._flush_scroll()
-            self._record_click(ev)
-        elif kind == "key":
+            self._record_pointer(ev)
+        elif kind in {"key", "hotkey"}:
             self._flush_type()
             self._flush_scroll()
             self._record_key(ev)
@@ -529,9 +658,20 @@ class InteractiveRecorder:
         )
         self._set_last(after_png, structural_after)
 
-    def _record_click(self, ev: dict[str, Any]) -> None:
+    def _record_pointer(self, ev: dict[str, Any]) -> None:
         assert self.recorder is not None
-        event: dict[str, Any] = {"kind": "click", "x": int(ev["x"]), "y": int(ev["y"])}
+        kind = str(ev["kind"])
+        event: dict[str, Any] = {
+            "kind": kind,
+            "x": int(ev["x"]),
+            "y": int(ev["y"]),
+        }
+        if kind == "drag":
+            event.update(end_x=int(ev["end_x"]), end_y=int(ev["end_y"]))
+            if ev.get("end_structural"):
+                event["drag_end_structural"] = ev["end_structural"]
+        if ev.get("structural"):
+            event["structural"] = ev["structural"]
         # Marked identifier field rect (--identifier FIELD), captured in-page
         # at click time: the compiler crops these pixels
         # (anchor.identifier_crop) to arm the pixel identity tier.
@@ -548,8 +688,11 @@ class InteractiveRecorder:
 
     def _record_key(self, ev: dict[str, Any]) -> None:
         assert self.recorder is not None
+        event: dict[str, Any] = {"kind": ev["kind"], "key": ev["key"]}
+        if ev["kind"] == "hotkey":
+            event["modifiers"] = [str(value) for value in ev.get("modifiers", [])]
         self.recorder.record_observed(
-            {"kind": "key", "key": ev["key"]},
+            event,
             before_png=self._last_frame,
             structural_before=self._last_structural,
         )

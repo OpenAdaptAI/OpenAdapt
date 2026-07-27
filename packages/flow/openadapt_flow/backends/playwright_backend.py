@@ -9,6 +9,7 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import math
 import re
 import uuid
@@ -1327,7 +1328,7 @@ class PlaywrightBackend:
                 point=point,
                 region=region,
                 target_fingerprint=fingerprint,
-                supported_operations=["dom_click", "dom_double_click"],
+                supported_operations=["dom_click", "dom_double_click", "dom_drag"],
             )
         except StructuralResolutionRefused:
             raise
@@ -1558,6 +1559,107 @@ class PlaywrightBackend:
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def drag_structural_guarded(
+        self,
+        source_locator: StructuralLocator,
+        source_handle: StructuralHandle,
+        destination_locator: StructuralLocator,
+        destination_handle: StructuralHandle,
+    ) -> ActionDeliveryReceipt:
+        """Drag between two exact DOM elements retained from one resolution pass."""
+
+        source_fingerprint = source_handle.target_fingerprint
+        destination_fingerprint = destination_handle.target_fingerprint
+        if (
+            source_fingerprint is None
+            or destination_fingerprint is None
+            or source_fingerprint == destination_fingerprint
+        ):
+            raise StructuralResolutionRefused(
+                "guarded DOM drag requires two distinct target fingerprints"
+            )
+        source_guard = self._structural_tokens.pop(source_fingerprint, None)
+        destination_guard = self._structural_tokens.pop(destination_fingerprint, None)
+        if source_guard is None or destination_guard is None:
+            for guard in (source_guard, destination_guard):
+                if guard is not None:
+                    self._cleanup_guard(guard.token, guard.scope)
+            raise StructuralResolutionRefused(
+                "guarded DOM drag endpoint is missing, stale, or already consumed"
+            )
+
+        def current_token_locator(
+            locator: StructuralLocator,
+            guard: _StructuralGuard,
+        ) -> Any:
+            resolved = self._locator_with_scope(locator)
+            if resolved is None:
+                raise StructuralResolutionRefused(
+                    "guarded DOM drag endpoint no longer resolves uniquely"
+                )
+            scope, candidate = resolved
+            if (
+                scope != guard.scope
+                or tuple(locator.frame_path or ()) != guard.frame_path
+            ):
+                raise StructuralResolutionRefused(
+                    "guarded DOM drag frame context changed before delivery"
+                )
+            if (
+                not self._context_guard_is_current(guard)
+                or candidate.count() != 1
+                or not self._guard_is_current(candidate, guard.token)
+            ):
+                raise StructuralResolutionRefused(
+                    "guarded DOM drag endpoint, record, or context changed before delivery"
+                )
+            token_locator = self._token_locator(guard.token, guard.scope)
+            if token_locator.count() != 1:
+                raise StructuralResolutionRefused(
+                    "guarded DOM drag token is missing or ambiguous at delivery"
+                )
+            return token_locator
+
+        try:
+            source = current_token_locator(source_locator, source_guard)
+            destination = current_token_locator(destination_locator, destination_guard)
+            try:
+                source.drag_to(destination, timeout=1000, trial=True)
+            except Exception as exc:
+                raise StructuralResolutionRefused(
+                    "guarded DOM drag endpoints were unactionable during pre-dispatch trial"
+                ) from exc
+            source = current_token_locator(source_locator, source_guard)
+            destination = current_token_locator(destination_locator, destination_guard)
+            try:
+                source.drag_to(destination, timeout=1000)
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="guarded_dom_drag",
+                    native=False,
+                    target_fingerprint=source_fingerprint,
+                    cause_type=type(exc).__name__,
+                ) from exc
+        except ActionDeliveryUncertain:
+            raise
+        except StructuralResolutionRefused:
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "guarded DOM drag endpoints changed before delivery"
+            ) from exc
+        finally:
+            self._cleanup_guard(source_guard.token, source_guard.scope)
+            self._cleanup_guard(destination_guard.token, destination_guard.scope)
+
+        return ActionDeliveryReceipt(
+            receipt_id=f"playwright-{uuid.uuid4().hex}",
+            operation="guarded_dom_drag",
+            native=False,
+            target_fingerprint=source_fingerprint,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
     def _arm_guarded_coordinate(
         self,
         x: int,
@@ -1645,6 +1747,7 @@ class PlaywrightBackend:
         *,
         expected_frame_sha256: str,
         double: bool = False,
+        button: str = "left",
     ) -> ActionDeliveryReceipt:
         """Consume the target binding armed before the fresh identity read.
 
@@ -1663,8 +1766,24 @@ class PlaywrightBackend:
             raise StructuralResolutionRefused(
                 "visual DOM actuation has no pre-identity target binding"
             )
+        if button not in {"left", "right"}:
+            self._cleanup_guard(pending.token, pending.scope)
+            raise StructuralResolutionRefused(
+                f"unsupported guarded pointer button {button!r}"
+            )
+        if double and button != "left":
+            self._cleanup_guard(pending.token, pending.scope)
+            raise StructuralResolutionRefused(
+                "guarded right-button double click is not supported"
+            )
         operation = (
-            "guarded_coordinate_double_click" if double else "guarded_coordinate_click"
+            "guarded_coordinate_double_click"
+            if double
+            else (
+                "guarded_coordinate_right_click"
+                if button == "right"
+                else "guarded_coordinate_click"
+            )
         )
         try:
             if pending.point != point:
@@ -1697,6 +1816,7 @@ class PlaywrightBackend:
                         position=position,
                         timeout=1000,
                         trial=True,
+                        button=button,
                     )
             except Exception as exc:
                 raise StructuralResolutionRefused(
@@ -1715,7 +1835,11 @@ class PlaywrightBackend:
                 if double:
                     token_locator.dblclick(position=position, timeout=1000)
                 else:
-                    token_locator.click(position=position, timeout=1000)
+                    token_locator.click(
+                        position=position,
+                        timeout=1000,
+                        button=button,
+                    )
             except Exception as exc:
                 raise ActionDeliveryUncertain(
                     operation=operation,
@@ -1932,6 +2056,115 @@ class PlaywrightBackend:
             self.page.mouse.dblclick(x, y)
         else:
             self.page.mouse.click(x, y)
+
+    def right_click(self, x: int, y: int) -> None:
+        """Open the context menu at a resolved point."""
+
+        try:
+            self.page.mouse.click(x, y, button="right")
+        except Exception as exc:
+            raise ActionDeliveryUncertain(
+                operation="coordinate_right_click",
+                native=False,
+                cause_type=type(exc).__name__,
+            ) from exc
+
+    def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
+        """Drag between two independently resolved points."""
+
+        self.page.mouse.move(x, y)
+        down_attempted = False
+        try:
+            down_attempted = True
+            self.page.mouse.down(button="left")
+            self.page.mouse.move(end_x, end_y)
+        except Exception as exc:
+            raise ActionDeliveryUncertain(
+                operation="coordinate_drag",
+                native=False,
+                cause_type=type(exc).__name__,
+            ) from exc
+        finally:
+            if down_attempted:
+                try:
+                    self.page.mouse.up(button="left")
+                except Exception as exc:
+                    raise ActionDeliveryUncertain(
+                        operation="coordinate_drag",
+                        native=False,
+                        cause_type=type(exc).__name__,
+                    ) from exc
+
+    def drag_guarded(
+        self,
+        x: int,
+        y: int,
+        end_x: int,
+        end_y: int,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        """Bind a fresh source lease and exact-frame destination to one drag."""
+
+        point = (int(x), int(y))
+        pending = self._guarded_coordinate
+        self._guarded_coordinate = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "visual DOM drag has no pre-identity source binding"
+            )
+        try:
+            if pending.point != point:
+                raise StructuralResolutionRefused(
+                    "visual DOM drag source changed after target binding"
+                )
+            token_locator = self._token_locator(pending.token, pending.scope)
+            if not self._point_guard_is_current(pending, token_locator):
+                raise StructuralResolutionRefused(
+                    "visual drag source, record, or context changed before delivery"
+                )
+            current_sha256 = hashlib.sha256(self.screenshot()).hexdigest()
+            if not hmac.compare_digest(current_sha256, expected_frame_sha256):
+                raise StructuralResolutionRefused(
+                    "visual drag frame changed after both endpoints were resolved"
+                )
+            down_attempted = False
+            try:
+                self.page.mouse.move(*point)
+                down_attempted = True
+                self.page.mouse.down(button="left")
+                self.page.mouse.move(int(end_x), int(end_y))
+            except Exception as exc:
+                if down_attempted:
+                    raise ActionDeliveryUncertain(
+                        operation="guarded_coordinate_drag",
+                        native=False,
+                        target_fingerprint=pending.fingerprint,
+                        cause_type=type(exc).__name__,
+                    ) from exc
+                raise StructuralResolutionRefused(
+                    "identity-bound drag became unactionable before delivery"
+                ) from exc
+            finally:
+                if down_attempted:
+                    try:
+                        self.page.mouse.up(button="left")
+                    except Exception as exc:
+                        raise ActionDeliveryUncertain(
+                            operation="guarded_coordinate_drag",
+                            native=False,
+                            target_fingerprint=pending.fingerprint,
+                            cause_type=type(exc).__name__,
+                        ) from exc
+        finally:
+            self._cleanup_guard(pending.token, pending.scope)
+        return ActionDeliveryReceipt(
+            receipt_id=f"playwright-coordinate-{uuid.uuid4().hex}",
+            operation="guarded_coordinate_drag",
+            native=False,
+            target_fingerprint=pending.fingerprint,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
 
     def type_text(self, text: str) -> None:
         """Type text into the currently focused element."""

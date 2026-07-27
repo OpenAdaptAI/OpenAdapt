@@ -2105,7 +2105,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-capture"
-version = "1.1.0"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
@@ -2128,9 +2128,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/53/2d/a1b2aed4b7ebc8cab0991b4430e30c7694f1ddba3ea26d7e7fda2f752ee1/openadapt_capture-1.1.0.tar.gz", hash = "sha256:378fc89ba9ca5aae1b661c7b587ffda10246e53da9809c7e14fd5981d8d8e6ea", size = 11056899 }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/98/ea22edf242430b9a15689d22c8608852db49265a356f603ec3d5bdd64595/openadapt_capture-1.2.0.tar.gz", hash = "sha256:5eb5f7df329e58a15df27caba4cd3b76cf1d5779515c4c0f0cdd439631736390", size = 11059730 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/6d/773d2382cffc5c79c4a70fcc17dd1312bc7cfd43aaa00f2fd28aceebbf52/openadapt_capture-1.1.0-py3-none-any.whl", hash = "sha256:fb2fb66da20d51f916ac61257015305cccfa1dad874718dd68346b681e4aff97", size = 194441 },
+    { url = "https://files.pythonhosted.org/packages/ee/4c/6b5c0ab21b7300c03d22d8096b85e279def7ff7552b207ff4239e1af3108/openadapt_capture-1.2.0-py3-none-any.whl", hash = "sha256:da3b2ef52b3eb24c0a565ec4c6f0eda1dcebf30be78a48b704a28d3e1316f053", size = 196471 },
 ]
 
 [[package]]
@@ -2235,7 +2235,7 @@ requires-dist = [
     { name = "mlx-vlm", marker = "extra == 'service-mlx'", specifier = ">=0.6.4,<0.7" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.1.0" },
+    { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
     { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.5.0,<0.6.0" },

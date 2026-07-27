@@ -280,6 +280,21 @@ def test_implements_backend_protocol(backend: FreeRDPBackend) -> None:
     assert isinstance(backend, ExecutionContextIdentityBackend)
 
 
+def test_rich_pointer_actions_use_bounded_framebuffer_coordinates(
+    backend: FreeRDPBackend, transport: FakeRDPTransport
+) -> None:
+    backend.screenshot()
+    backend.right_click(100, 100)
+    backend.drag(100, 100, 200, 150)
+    assert transport.pointer_events == [
+        (100, 100, "right", True),
+        (100, 100, "right", False),
+        (100, 100, "left", True),
+        (200, 150, "left", True),
+        (200, 150, "left", False),
+    ]
+
+
 def test_connect_on_construction(transport: FakeRDPTransport) -> None:
     assert transport.connected is False
     FreeRDPBackend(transport)

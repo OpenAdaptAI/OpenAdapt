@@ -872,7 +872,10 @@ def test_backend_exception_is_failed_even_when_halt_observation_is_emitted(tmp_p
 
 
 def test_standard_rechecks_settled_requirement_at_actuation_boundary(tmp_path):
-    workflow = _key_workflow("settled-boundary", with_effect=False)
+    # Enter targets the retained "Submit" control, so it is a consequential
+    # keyboard submission and needs an effect contract before Standard can
+    # reach the actuation-boundary settled-state recheck exercised here.
+    workflow = _key_workflow("settled-boundary", with_effect=True)
     workflow, bundle = _sealed(tmp_path, workflow, encrypted=False)
     gate = _gate(
         workflow,

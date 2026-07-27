@@ -122,6 +122,7 @@ def test_recording_shape_matches_the_demonstration(recording: Path) -> None:
 
     # structured identity was captured in-page for at least one row click
     assert any(e.get("structured_identity") for e in events if e["kind"] == "click")
+    assert all(e.get("structural") for e in events if e["kind"] == "click")
 
 
 def test_field_labels_captured_passively_on_type_events(recording: Path) -> None:
@@ -280,3 +281,45 @@ def test_identifier_field_marking_records_region_and_compiles_crop(
     assert anchor.identifier_region == tuple(region)
     assert (bundle / anchor.identifier_crop).is_file()
     assert click_steps[0].identifier_crop_missing_reason is None
+
+
+def test_browser_recorder_retains_right_click_drag_and_shortcut(
+    server_url: str, tmp_path: Path
+) -> None:
+    def drive(page, pump) -> None:
+        username = page.locator("#username")
+        signin = page.locator("#signin")
+        username.click(button="right")
+        pump()
+        start = username.bounding_box()
+        end = signin.bounding_box()
+        assert start and end
+        page.mouse.move(start["x"] + 5, start["y"] + 5)
+        page.mouse.down()
+        page.mouse.move(end["x"] + 5, end["y"] + 5)
+        page.mouse.up()
+        pump()
+        page.keyboard.press("Shift+Tab")
+        pump()
+
+    rec = record_interactive(
+        server_url,
+        tmp_path / "rich-rec",
+        headless=True,
+        script=drive,
+    )
+    events = _events(rec)
+    assert [event["kind"] for event in events] == [
+        "right_click",
+        "drag",
+        "hotkey",
+    ]
+    workflow = compile_recording(rec, tmp_path / "rich-bundle", name="rich")
+    assert [step.action.value for step in workflow.steps] == [
+        "right_click",
+        "drag",
+        "hotkey",
+    ]
+    assert workflow.steps[1].drag_end_anchor is not None
+    assert workflow.steps[0].anchor.structural is not None
+    assert workflow.steps[1].drag_end_anchor.structural is not None

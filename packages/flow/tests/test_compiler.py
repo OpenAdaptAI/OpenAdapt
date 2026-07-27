@@ -1089,25 +1089,26 @@ class TestStructuralPostconditions:
 
 
 class TestRiskOverrides:
-    """Risk is opt-in at compile time — never auto-assigned. Without an
-    override every step is reversible, which means the irreversible
-    safeguards (below-OCR-rung refusal, unreadable-identity-band refusal)
-    are UNREACHABLE from a default compile; this is disclosed in
-    docs/LIMITS.md. The override is the supported way to arm them."""
+    """Inference covers risky gestures; operator overrides remain authoritative."""
 
-    def test_default_compile_marks_every_step_reversible(self, compiled):
-        assert all(s.risk == "reversible" for s in compiled["workflow"].steps)
+    def test_default_compile_infers_consequential_gestures(self, compiled):
+        by_id = {s.id: s for s in compiled["workflow"].steps}
+        # A bare Enter can edit locally or submit, so qualification must review it
+        # instead of the compiler silently choosing either business meaning.
+        assert by_id["step_002"].risk == "reversible"
+        assert by_id["step_002"].risk_review_required is True
+        assert by_id["step_003"].risk == "reversible"  # labelled Menu navigation
 
-    def test_override_marks_step_irreversible(self, compiled, tmp_path):
+    def test_override_can_lower_inferred_risk(self, compiled, tmp_path):
         workflow = compile_recording(
             compiled["recording"],
             tmp_path / "bundle",
             name="risky",
-            risk_overrides={"step_003": "irreversible"},
+            risk_overrides={"step_002": "reversible"},
         )
         by_id = {s.id: s for s in workflow.steps}
-        assert by_id["step_003"].risk == "irreversible"
-        assert all(s.risk == "reversible" for s in workflow.steps if s.id != "step_003")
+        assert by_id["step_002"].risk == "reversible"
+        assert by_id["step_003"].risk == "reversible"
         # The risk survives the bundle round-trip.
         reloaded = Workflow.load(tmp_path / "bundle")
         assert {s.id: s.risk for s in reloaded.steps} == {

@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 import pytest
 
-from openadapt_flow.backend import Backend
+from openadapt_flow.backend import ActionDeliveryUncertain, Backend
 from openadapt_flow.backends.windows_backend import (
     WindowsBackend,
     normalize_chord,
@@ -264,12 +264,14 @@ def test_implements_structural_action_protocol(backend: WindowsBackend) -> None:
 # -- hardening: unreachable / non-2xx / empty UIA (never a silent wrong action) --
 
 
-def test_execute_unreachable_raises_runtime_error() -> None:
-    # An action against a dead endpoint must FAIL LOUDLY (a dropped click is a
-    # silent wrong action), not raise a bare transport error or no-op.
+def test_execute_unreachable_is_not_safe_to_retry() -> None:
+    # The transport cannot prove whether a request failed before or after the
+    # remote action boundary, so it must never collapse the error into a
+    # retryable generic failure.
     backend = WindowsBackend("http://127.0.0.1:9", timeout_s=0.5)
-    with pytest.raises(RuntimeError, match="unreachable"):
+    with pytest.raises(ActionDeliveryUncertain) as raised:
         backend.click(1, 1)
+    assert raised.value.operation == "physical_click"
 
 
 def test_structural_locator_unreachable_returns_none() -> None:
@@ -379,6 +381,22 @@ def test_double_click_command(
     backend.click(10, 20, double=True)
     fake = exec_last_command(waa, monkeypatch)
     assert fake.calls == [("doubleClick", (10, 20), {})]
+
+
+def test_rich_pointer_commands(
+    waa: MockWaa, backend: WindowsBackend, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend.right_click(10, 20)
+    assert exec_last_command(waa, monkeypatch).calls == [
+        ("click", (10, 20), {"button": "right"})
+    ]
+    backend.drag(10, 20, 30, 40)
+    assert [call[0] for call in exec_last_command(waa, monkeypatch).calls] == [
+        "moveTo",
+        "mouseDown",
+        "moveTo",
+        "mouseUp",
+    ]
 
 
 def test_execute_error_raises(waa: MockWaa) -> None:

@@ -617,7 +617,16 @@ def run_qualification(
     rec.finish()
     _arm_recorded_identifiers(rec_dir)
 
-    workflow = compile_recording(rec_dir, bundle_dir, name="rdp-vision-ladder")
+    workflow = compile_recording(
+        rec_dir,
+        bundle_dir,
+        name="rdp-vision-ladder",
+        # The second pointer event only focuses the known note field.  Its
+        # blank visual label is conservatively classified as consequential by
+        # default; qualification explicitly records the fixture-specific
+        # override instead of weakening that fail-safe classifier.
+        risk_overrides={"step_001": "reversible"},
+    )
     workflow, save_step_id, verifier, gate_report = _seal_and_admit_workflow(
         workflow, bundle_dir, oracle_root
     )

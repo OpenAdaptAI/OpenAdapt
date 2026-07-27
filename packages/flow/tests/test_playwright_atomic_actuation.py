@@ -422,6 +422,71 @@ def test_structural_revalidation_replaces_stale_guard(tmp_path) -> None:
     assert clicked == 1
 
 
+def test_structural_drag_binds_both_freshly_resolved_endpoints(tmp_path) -> None:
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": 800, "height": 400},
+            device_scale_factor=1,
+        )
+        page.set_content(
+            """<!doctype html><html><body><table><tbody><tr>
+            <td>MRN-1</td><td>Jane Sample</td>
+            <td><button id="source">Move</button></td>
+            <td><button id="destination"
+              onmouseup="window.drops += 1">Destination</button></td>
+            </tr></tbody></table><script>window.drops = 0;</script>
+            </body></html>"""
+        )
+        backend = PlaywrightBackend(page)
+        source = backend.locate_structural(StructuralLocator(selector="#source"))
+        destination = backend.locate_structural(
+            StructuralLocator(selector="#destination")
+        )
+        assert source is not None and destination is not None
+        identity = backend.structured_text_at(*source.point)
+        assert identity
+        bundle = tmp_path / "bundle"
+        (bundle / "templates").mkdir(parents=True)
+        (bundle / "templates" / "source.png").write_bytes(make_png((20, 10)))
+        (bundle / "templates" / "destination.png").write_bytes(make_png((20, 10)))
+        step = Step(
+            id="move",
+            intent="move patient item",
+            action=ActionKind.DRAG,
+            risk="irreversible",
+            anchor=Anchor(
+                template="templates/source.png",
+                structural=StructuralLocator(selector="#source"),
+                region=source.region,
+                click_point=source.point,
+                structured_identity=identity,
+            ),
+            drag_end_anchor=Anchor(
+                template="templates/destination.png",
+                structural=StructuralLocator(selector="#destination"),
+                region=destination.region,
+                click_point=destination.point,
+            ),
+        )
+
+        report = Replayer(backend).run(
+            Workflow(name="structural-drag", steps=[step]),
+            bundle_dir=bundle,
+            run_dir=tmp_path / "run",
+        )
+        drops = page.evaluate("window.drops")
+        browser.close()
+
+    assert report.success is True, report.results[0].error
+    assert report.results[0].drag_end_resolution is not None
+    assert report.results[0].drag_end_resolution.rung == "structural"
+    assert drops == 1
+
+
 def test_guarded_button_ignores_screenshot_caret_side_effects(tmp_path) -> None:
     """A focused field in the same record must not invalidate a stable button."""
 

@@ -194,6 +194,7 @@ class FakeBackend:
         *,
         expected_frame_sha256,
         double=False,
+        button="left",
     ):
         point = self._guarded_point
         self._guarded_point = None
@@ -201,7 +202,10 @@ class FakeBackend:
             raise RuntimeError("guarded coordinate target was not pre-armed")
         if hashlib.sha256(self._frame).hexdigest() != expected_frame_sha256:
             raise RuntimeError("guarded coordinate frame changed")
-        self.click(x, y, double=double)
+        if button == "right":
+            self.right_click(x, y)
+        else:
+            self.click(x, y, double=double)
         return ActionDeliveryReceipt(
             receipt_id="test-guarded-coordinate",
             operation="guarded_coordinate_click",
@@ -259,6 +263,27 @@ class FakeBackend:
         self.actions.append(("press", key))
         if key == "ControlOrMeta+a":
             self._select_all = True
+
+    def right_click(self, x, y):
+        self.actions.append(("right_click", x, y))
+
+    def drag(self, x, y, end_x, end_y):
+        self.actions.append(("drag", x, y, end_x, end_y))
+
+    def drag_guarded(self, x, y, end_x, end_y, *, expected_frame_sha256):
+        point = self._guarded_point
+        self._guarded_point = None
+        if point != (int(x), int(y)):
+            raise RuntimeError("guarded drag source was not pre-armed")
+        if hashlib.sha256(self._frame).hexdigest() != expected_frame_sha256:
+            raise RuntimeError("guarded drag frame changed")
+        self.drag(x, y, end_x, end_y)
+        return ActionDeliveryReceipt(
+            receipt_id="test-guarded-drag",
+            operation="guarded_coordinate_drag",
+            native=False,
+            delivered_at="2026-07-25T00:00:00+00:00",
+        )
 
     def scroll(self, dx, dy):
         self.actions.append(("scroll", dx, dy))
@@ -391,6 +416,66 @@ def test_happy_path_click_then_param_type(bundle, run_dir):
     assert report.results[0].after_png == "steps/s1_after.png"
     assert report.results[0].postconditions_ok is True
     assert report.results[0].elapsed_ms > 0
+
+
+def test_rich_actions_use_resolved_endpoints_and_explicit_shortcut(bundle, run_dir):
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(30, 40), region=(20, 30, 30, 20)),
+        Match(point=(60, 70), region=(50, 60, 30, 20)),
+        Match(point=(210, 150), region=(200, 140, 30, 20)),
+    ]
+    backend = FakeBackend()
+    anchor = Anchor(
+        template="templates/btn.png",
+        region=(20, 30, 30, 20),
+        click_point=(30, 40),
+        ocr_text="Item",
+    )
+    workflow = Workflow(
+        name="rich-actions",
+        steps=[
+            Step(
+                id="right",
+                intent="open context menu",
+                action=ActionKind.RIGHT_CLICK,
+                anchor=anchor,
+            ),
+            Step(
+                id="drag",
+                intent="move item",
+                action=ActionKind.DRAG,
+                anchor=anchor,
+                drag_end_anchor=anchor.model_copy(
+                    update={
+                        "region": (200, 140, 30, 20),
+                        "click_point": (210, 150),
+                    }
+                ),
+            ),
+            Step(
+                id="shortcut",
+                intent="save",
+                action=ActionKind.HOTKEY,
+                key="s",
+                modifiers=["Control"],
+            ),
+        ],
+    )
+
+    report = Replayer(backend, vision=vision).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert backend.actions == [
+        ("right_click", 30, 40),
+        ("drag", 60, 70, 210, 150),
+        ("press", "Control+s"),
+    ]
+    assert report.results[1].drag_end_resolution is not None
 
 
 def test_consequential_remote_click_re_resolves_on_fresh_frame(bundle, run_dir):
@@ -2122,7 +2207,7 @@ def _coverage_workflow() -> Workflow:
     )
     legacy_unarmed = click_step("s_legacy")  # pre-metric bundle: fields None
     keyboard = Step(
-        id="s_key", intent="press Enter", action=ActionKind.KEY, key="Enter"
+        id="s_key", intent="submit with Enter", action=ActionKind.KEY, key="Enter"
     )
     return Workflow(name="coverage", steps=[armed, unarmed, legacy_unarmed, keyboard])
 
@@ -2133,13 +2218,14 @@ def test_identity_coverage_recorded_on_report():
     at run start, before any step executes."""
     report = RunReport(workflow_name="coverage", started_at="t")
     Replayer._record_identity_coverage(_coverage_workflow(), report)
-    assert report.identity_applicable_steps == 3  # keyboard step excluded
+    assert report.identity_applicable_steps == 4
     assert report.identity_armed_steps == 1
     ids = [u.step_id for u in report.identity_unarmed]
-    assert ids == ["s_unarmed", "s_legacy"]
+    assert ids == ["s_unarmed", "s_legacy", "s_key"]
     assert "icon-only" in report.identity_unarmed[0].reason
     # A pre-metric bundle still lists the step, with an honest reason.
     assert "predates" in report.identity_unarmed[1].reason
+    assert "keyboard action" in report.identity_unarmed[2].reason
 
 
 def test_identity_coverage_counts_anchored_type_steps():

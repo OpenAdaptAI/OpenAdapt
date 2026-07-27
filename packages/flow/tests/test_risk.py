@@ -14,7 +14,7 @@ import pytest
 
 from openadapt_flow.compiler import compile_recording
 from openadapt_flow.ir import ActionKind, Anchor, Step
-from openadapt_flow.risk import classify_step_risk, is_write_shaped
+from openadapt_flow.risk import classify_step_risk, infer_step_risk, is_write_shaped
 
 VIEWPORT = (1280, 800)
 
@@ -48,6 +48,9 @@ class TestHeuristic:
             "Approve",
             "Pay now",
             "Sign up",
+            "Next",
+            "Continue",
+            "Cancel",
         ],
     )
     def test_write_shaped_true(self, text: str) -> None:
@@ -62,9 +65,7 @@ class TestHeuristic:
             "Belford, Phil",
             "Address book",  # 'add' must not trip inside 'address'
             "Postal code",  # 'post' must not trip inside 'postal'
-            "Next",
             "Open chart",
-            "Cancel",
             "",
         ],
     )
@@ -84,23 +85,59 @@ class TestHeuristic:
             == "reversible"
         )
 
-    def test_only_clicks_can_be_irreversible(self) -> None:
-        # A TYPE step's text is write-shaped, but typing is reversible: only
-        # CLICK/DOUBLE_CLICK actuators can classify irreversible.
+    def test_keyboard_and_drag_risks_are_explicit(self) -> None:
         typing = Step(id="s", intent="type 'save the world'", action=ActionKind.TYPE)
         assert classify_step_risk(typing) == "reversible"
         key = Step(id="s", intent="press Enter", action=ActionKind.KEY, key="Enter")
-        assert classify_step_risk(key) == "reversible"
+        key_inference = infer_step_risk(key)
+        assert key_inference.risk == "reversible"
+        assert key_inference.requires_review is True
+        submit_key = Step(
+            id="s",
+            intent="press Enter to submit",
+            action=ActionKind.KEY,
+            key="Enter",
+        )
+        assert classify_step_risk(submit_key) == "irreversible"
+        hotkey = Step(
+            id="s",
+            intent="press Control+s",
+            action=ActionKind.HOTKEY,
+            key="s",
+            modifiers=["Control"],
+        )
+        assert classify_step_risk(hotkey) == "irreversible"
+        select_all = Step(
+            id="s",
+            intent="press Control+a",
+            action=ActionKind.HOTKEY,
+            key="a",
+            modifiers=["Control"],
+        )
+        select_inference = infer_step_risk(select_all)
+        assert select_inference.risk == "reversible"
+        assert select_inference.requires_review is True
+        drag = Step(id="s", intent="drag item", action=ActionKind.DRAG)
+        drag_inference = infer_step_risk(drag)
+        assert drag_inference.risk == "reversible"
+        assert drag_inference.requires_review is True
+        destructive_drag = Step(
+            id="s",
+            intent="drag item to Delete",
+            action=ActionKind.DRAG,
+        )
+        assert classify_step_risk(destructive_drag) == "irreversible"
 
-    def test_unlabelled_coordinate_click_is_reversible(self) -> None:
-        # No signal -> stays reversible (we do not fabricate risk).
+    def test_unlabelled_coordinate_click_requires_review(self) -> None:
         step = Step(
             id="s",
             intent="click at (10, 12)",
             action=ActionKind.CLICK,
             anchor=Anchor(template="t.png", region=(0, 0, 1, 1), click_point=(10, 12)),
         )
-        assert classify_step_risk(step) == "reversible"
+        inference = infer_step_risk(step)
+        assert inference.risk == "reversible"
+        assert inference.requires_review is True
 
 
 # --- end-to-end through the compiler ---------------------------------------
@@ -208,3 +245,4 @@ def test_risk_overrides_still_win_both_directions(two_button_bundle, tmp_path):
     # Overrides flip BOTH the auto-reversible and the auto-irreversible step.
     assert by_id["step_000"].risk == "irreversible"
     assert by_id["step_001"].risk == "reversible"
+    assert all(not step.risk_review_required for step in by_id.values())

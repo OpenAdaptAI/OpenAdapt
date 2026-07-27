@@ -80,6 +80,7 @@ class _Backend:
         *,
         expected_frame_sha256: str,
         double: bool = False,
+        button: str = "left",
     ) -> ActionDeliveryReceipt:
         armed_point = self._guarded_point
         armed_frame_sha256 = self._guarded_frame_sha256

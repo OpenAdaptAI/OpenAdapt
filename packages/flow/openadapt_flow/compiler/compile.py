@@ -44,7 +44,7 @@ from openadapt_flow.ir import (
     StructuralLocator,
     Workflow,
 )
-from openadapt_flow.risk import classify_step_risk
+from openadapt_flow.risk import infer_step_risk
 from openadapt_flow.runtime.identity import (
     band_region,
     context_from_lines,
@@ -1310,7 +1310,7 @@ def compile_recording(
         before_png = _read_png(before_path)
         after_png = _read_png(after_path)
 
-        if kind in ("click", "double_click"):
+        if kind in ("click", "double_click", "right_click", "drag"):
             if before_png is None:
                 raise FileNotFoundError(
                     f"missing before frame for {kind} event {i} in {recording}"
@@ -1433,6 +1433,37 @@ def compile_recording(
                 identifier_crop=identifier_crop_rel,
                 identifier_region=identifier_region,
             )
+            drag_end_anchor: Optional[Anchor] = None
+            if kind == "drag":
+                drag_end: Point = (int(event["end_x"]), int(event["end_y"]))
+                end_crop_region = _discriminative_crop_region(frame, drag_end)
+                end_template_rel = f"templates/{step_id}_drag_end.png"
+                (bundle / end_template_rel).write_bytes(
+                    _crop_png(before_png, end_crop_region)
+                )
+                end_ocr_text = _best_crop_text(
+                    ocr(before_png, region=end_crop_region), click_y=drag_end[1]
+                )
+                drag_end_structural_raw = event.get("drag_end_structural") or None
+                drag_end_structural = (
+                    StructuralLocator.model_validate(drag_end_structural_raw)
+                    if drag_end_structural_raw
+                    else None
+                )
+                drag_end_anchor = Anchor(
+                    template=end_template_rel,
+                    region=end_crop_region,
+                    click_point=drag_end,
+                    ocr_text=end_ocr_text,
+                    structural=drag_end_structural,
+                    landmarks=_landmarks_for(
+                        frame_lines,
+                        end_crop_region,
+                        drag_end,
+                        exclude_texts=exclude_texts,
+                        reference_date=reference_date,
+                    ),
+                )
             # Identity-protection audit trail: an UNARMED click proceeds
             # with NO identity verification at replay (docs/LIMITS.md), so
             # the bundle records armed/unarmed per step — with the reason
@@ -1458,23 +1489,38 @@ def compile_recording(
                     ),
                     exclude_region=crop_region,
                 )
-            verb = "double-click" if kind == "double_click" else "click"
-            intent = (
-                f"{verb} '{ocr_text}'"
-                if ocr_text
-                else f"{verb} at ({click[0]}, {click[1]})"
-            )
+            if kind == "drag":
+                destination = drag_end_anchor.ocr_text if drag_end_anchor else None
+                intent = "drag " + (
+                    f"'{ocr_text}'" if ocr_text else "recorded visual target"
+                )
+                intent += " to " + (
+                    f"'{destination}'" if destination else "recorded visual destination"
+                )
+            else:
+                verb = {
+                    "click": "click",
+                    "double_click": "double-click",
+                    "right_click": "right-click",
+                }[kind]
+                intent = (
+                    f"{verb} '{ocr_text}'"
+                    if ocr_text
+                    else f"{verb} recorded visual target"
+                )
             pending.append(
                 (
                     Step(
                         id=step_id,
                         intent=intent,
-                        action=(
-                            ActionKind.DOUBLE_CLICK
-                            if kind == "double_click"
-                            else ActionKind.CLICK
-                        ),
+                        action={
+                            "click": ActionKind.CLICK,
+                            "double_click": ActionKind.DOUBLE_CLICK,
+                            "right_click": ActionKind.RIGHT_CLICK,
+                            "drag": ActionKind.DRAG,
+                        }[kind],
                         anchor=anchor,
+                        drag_end_anchor=drag_end_anchor,
                         identity_armed=identity_armed,
                         identity_unarmed_reason=unarmed_reason,
                         identifier_crop_missing_reason=idcrop_missing,
@@ -1550,6 +1596,23 @@ def compile_recording(
                         intent=f"press {key}",
                         action=ActionKind.KEY,
                         key=key,
+                    ),
+                    before_png,
+                    after_png,
+                    event,
+                )
+            )
+        elif kind == "hotkey":
+            key = str(event["key"])
+            modifiers = [str(value) for value in event.get("modifiers", [])]
+            pending.append(
+                (
+                    Step(
+                        id=step_id,
+                        intent=f"press {'+'.join([*modifiers, key])}",
+                        action=ActionKind.HOTKEY,
+                        key=key,
+                        modifiers=modifiers,
                     ),
                     before_png,
                     after_png,
@@ -1648,7 +1711,10 @@ def compile_recording(
     # passes risk_overrides. Conservative: an unsure write-shaped step leans
     # irreversible (the safe direction). Explicit risk_overrides below win.
     for step in steps:
-        step.risk = classify_step_risk(step)
+        inference = infer_step_risk(step)
+        step.risk = inference.risk
+        step.risk_explanation = inference.explanation
+        step.risk_review_required = inference.requires_review
 
     if risk_overrides:
         by_id = {step.id: step for step in steps}
@@ -1666,6 +1732,8 @@ def compile_recording(
             # Validated against the two legal values just above, so this narrows
             # the free-form ``dict[str, str]`` override value to Step.risk's Literal.
             by_id[step_id].risk = cast(Literal["reversible", "irreversible"], risk)
+            by_id[step_id].risk_explanation = f"operator-qualified override: {risk}"
+            by_id[step_id].risk_review_required = False
 
     # System-of-record effect mining (opt-in). Runs LAST, after risk_overrides,
     # so each step's `risk` (the consequential-write signal) is final. Attaches

@@ -32,9 +32,12 @@ Action mapping (capture ``Action.type`` -> flow event ``kind``):
 
     mouse.singleclick   -> {"kind": "click", x, y}
     mouse.doubleclick   -> {"kind": "double_click", x, y}
+    right single-click  -> {"kind": "right_click", x, y}
+    mouse.drag          -> {"kind": "drag", x, y, end_x, end_y}
     mouse.scroll        -> {"kind": "scroll", dx, dy}
     key.type            -> {"kind": "type", text[, param]}  OR
                            {"kind": "key", key}             (see below)
+    key.shortcut        -> {"kind": "hotkey", modifiers, key}
 
 capture's processing merges *all* keyboard input into ``key.type``
 (``KeyTypeEvent``) actions, one per key-release burst — so a typed word arrives
@@ -49,10 +52,9 @@ Enter arrives as a ``key.type`` with **empty** ``.text`` and its name in
     Enter/Tab/Escape/arrows), mapped through ``_KEY_NAME_MAP``;
   * skips a bare modifier press (no workflow meaning on its own).
 
-Loud rejection (a demonstrated action must never be *silently* dropped): drags
-(``mouse.drag``), non-left clicks, modifier chords/shortcuts (ctrl/alt/cmd + a
-key), unmapped named keys, and any unknown input action type all raise instead
-of being ignored.
+Loud rejection (a demonstrated action must never be *silently* dropped):
+middle clicks, right-button double-clicks/drags, malformed shortcuts, unmapped
+named keys, and any unknown input action type all raise instead of being ignored.
 
 Coordinate spaces: capture mouse coordinates are in *logical points*;
 captured frames are *physical pixels*. openadapt-flow requires event coordinates in
@@ -408,6 +410,27 @@ def _reject_out_of_window(
                 f"window-scoped {action.type} carries non-finite pointer "
                 "coordinates or timestamp; its target window cannot be verified"
             )
+        points = [
+            (
+                parsed_x,
+                parsed_y,
+                "start" if action.type == "mouse.drag" else "",
+            )
+        ]
+        if action.type == "mouse.drag":
+            dx, dy = action.dx, action.dy
+            try:
+                parsed_dx = float(dx)
+                parsed_dy = float(dy)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "window-scoped mouse.drag carries a non-numeric destination"
+                ) from exc
+            if not all(math.isfinite(value) for value in (parsed_dx, parsed_dy)):
+                raise ValueError(
+                    "window-scoped mouse.drag carries a non-finite destination"
+                )
+            points.append((parsed_x + parsed_dx, parsed_y + parsed_dy, "destination"))
         active_size: Optional[tuple[int, int]] = None
         for entry_ts, size in timeline:
             if entry_ts <= ts:
@@ -421,24 +444,26 @@ def _reject_out_of_window(
                 "verified safely"
             )
         width, height = active_size
-        emitted_x = int(round(parsed_x))
-        emitted_y = int(round(parsed_y))
-        if not (
-            0 <= parsed_x < width
-            and 0 <= parsed_y < height
-            and 0 <= emitted_x < width
-            and 0 <= emitted_y < height
-        ):
-            raise ValueError(
-                f"out-of-window input: {action.type} at "
-                f"({parsed_x:.3f}, {parsed_y:.3f}) "
-                f"(t={ts:.3f}) falls outside the captured window viewport "
-                f"{width}x{height}, or rounds outside it as "
-                f"({emitted_x}, {emitted_y}); the demonstrated action targeted "
-                "a different window or the desktop, so converting it would "
-                "compile a wrong-target step — re-record keeping all input "
-                "inside the captured window"
-            )
+        for point_x, point_y, point_name in points:
+            emitted_x = int(round(point_x))
+            emitted_y = int(round(point_y))
+            point_suffix = f" {point_name}" if point_name else ""
+            if not (
+                0 <= point_x < width
+                and 0 <= point_y < height
+                and 0 <= emitted_x < width
+                and 0 <= emitted_y < height
+            ):
+                raise ValueError(
+                    f"out-of-window input: {action.type}{point_suffix} at "
+                    f"({point_x:.3f}, {point_y:.3f}) "
+                    f"(t={ts:.3f}) falls outside the captured window viewport "
+                    f"{width}x{height}, or rounds outside it as "
+                    f"({emitted_x}, {emitted_y}); the demonstrated action targeted "
+                    "a different window or the desktop, so converting it would "
+                    "compile a wrong-target step — re-record keeping all input "
+                    "inside the captured window"
+                )
 
 
 def _window_selectors(
@@ -600,9 +625,9 @@ def _flow_events(
     character ``key.type`` actions are coalesced into a single ``type`` event.
 
     Raises:
-        ValueError: On any action that has no flow equivalent (drag, non-left
-            click, modifier chord, unmapped named key, unknown input type) —
-            converting it would silently drop a demonstrated action.
+        ValueError: On malformed or still-unsupported input (for example a
+            non-primary drag, unmapped named key, or unknown input type) rather
+            than silently dropping a demonstrated action.
     """
     events: list[dict[str, Any]] = []
     # A run of typed characters, buffered so the compiler sees one ``type``
@@ -631,12 +656,15 @@ def _flow_events(
         if atype in ("mouse.singleclick", "mouse.doubleclick"):
             flush_text()
             button = action.button or "left"
-            if button != "left":
+            if button == "right" and atype == "mouse.singleclick":
+                kind = "right_click"
+            elif button == "left":
+                kind = "click" if atype == "mouse.singleclick" else "double_click"
+            else:
                 raise ValueError(
-                    f"{atype} with button={button!r} has no flow equivalent "
-                    f"(t={ts:.3f}); converting would silently drop a user action"
+                    f"{atype} with button={button!r} is not a supported governed "
+                    f"pointer action (t={ts:.3f})"
                 )
-            kind = "click" if atype == "mouse.singleclick" else "double_click"
             event = {
                 "kind": kind,
                 "x": int(round((action.x or 0.0) * scale)),
@@ -661,12 +689,61 @@ def _flow_events(
                 }
             )
         elif atype == "mouse.drag":
-            raise ValueError(
-                f"mouse.drag has no flow equivalent (t={ts:.3f}); converting "
-                "would silently drop a user action"
+            flush_text()
+            button = action.button or "left"
+            if button != "left":
+                raise ValueError(
+                    f"mouse.drag with button={button!r} is not a supported "
+                    f"governed drag (t={ts:.3f})"
+                )
+            if None in (action.x, action.y, action.dx, action.dy):
+                raise ValueError(f"mouse.drag at t={ts:.3f} has incomplete endpoints")
+            start_x = float(action.x)
+            start_y = float(action.y)
+            event = {
+                "kind": "drag",
+                "x": int(round(start_x * scale)),
+                "y": int(round(start_y * scale)),
+                "end_x": int(round((start_x + float(action.dx)) * scale)),
+                "end_y": int(round((start_y + float(action.dy)) * scale)),
+                "_ts": ts,
+            }
+            structural = (
+                _capture_structural_locator(action) if include_structural else None
             )
+            if structural is not None:
+                event["structural"] = structural
+            events.append(event)
         elif atype == "key.type":
             _convert_key_type(action, ts, events, text_run, flush_text)
+        elif atype == "key.shortcut":
+            flush_text()
+            keys = list(action.keys or [])
+            if len(keys) < 2:
+                raise ValueError(
+                    f"key.shortcut at t={ts:.3f} has no modifier and trigger"
+                )
+            modifiers = [str(value).strip().lower() for value in keys[:-1]]
+            trigger = str(keys[-1]).strip()
+            if (
+                not trigger
+                or not modifiers
+                or any(
+                    value not in {"ctrl", "alt", "shift", "meta"} for value in modifiers
+                )
+                or len(set(modifiers)) != len(modifiers)
+            ):
+                raise ValueError(
+                    f"key.shortcut at t={ts:.3f} has malformed keys {keys!r}"
+                )
+            events.append(
+                {
+                    "kind": "hotkey",
+                    "modifiers": modifiers,
+                    "key": trigger,
+                    "_ts": ts,
+                }
+            )
         elif atype == "mouse.move":
             continue  # defensive: include_moves=False already filters these
         elif atype.startswith(("mouse.", "key.")):
@@ -693,7 +770,8 @@ def _convert_key_type(
     capture merges all keyboard input into ``key.type`` actions. This routes
     each one:
 
-      * modifier chord (ctrl/alt/cmd + key) -> reject (no flow equivalent);
+      * legacy modifier chord encoded as ``key.type`` -> reject (current
+        Capture emits the lossless ``key.shortcut`` action instead);
       * non-empty ``.text`` -> typed characters, accumulated into ``text_run``
         (spaces and shifted characters included);
       * empty ``.text`` with a single named special key -> flow ``key`` event;

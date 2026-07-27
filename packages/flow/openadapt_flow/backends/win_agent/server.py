@@ -191,6 +191,9 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
                 "x",
                 "y",
                 "double",
+                "button",
+                "end_x",
+                "end_y",
                 "text",
                 "interval_s",
                 "keys",
@@ -201,11 +204,11 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
         label="input request",
     )
     action = data["action"]
-    if action not in {"click", "type_text", "press", "scroll"}:
+    if action not in {"click", "drag", "type_text", "press", "scroll"}:
         raise AgentRequestError(400, "unsupported_action", "unsupported input action")
 
     if action == "click":
-        expected = {"action", "x", "y", "double"}
+        expected = {"action", "x", "y", "double", "button"}
         if set(data) - expected or not {"x", "y"}.issubset(data):
             raise AgentRequestError(400, "invalid_schema", "invalid click fields")
         x = _bounded_int(data["x"], "x")
@@ -213,13 +216,49 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
         double = data.get("double", False)
         if not isinstance(double, bool):
             raise AgentRequestError(400, "invalid_schema", "double must be boolean")
+        button = data.get("button", "left")
+        if button not in {"left", "right"}:
+            raise AgentRequestError(
+                400, "invalid_schema", "button must be left or right"
+            )
+        if double and button != "left":
+            raise AgentRequestError(
+                400, "invalid_schema", "double right click is unsupported"
+            )
         import pyautogui  # noqa: PLC0415 - Windows-only, lazy by design
 
         pyautogui.FAILSAFE = False
-        (pyautogui.doubleClick if double else pyautogui.click)(x, y)
+        if double:
+            pyautogui.doubleClick(x, y, button=button)
+        else:
+            pyautogui.click(x, y, button=button)
         return _delivery_receipt(
-            "physical_double_click" if double else "physical_click", native=False
+            "physical_double_click"
+            if double
+            else ("physical_right_click" if button == "right" else "physical_click"),
+            native=False,
         )
+
+    if action == "drag":
+        if set(data) != {"action", "x", "y", "end_x", "end_y"}:
+            raise AgentRequestError(400, "invalid_schema", "invalid drag fields")
+        x = _bounded_int(data["x"], "x")
+        y = _bounded_int(data["y"], "y")
+        end_x = _bounded_int(data["end_x"], "end_x")
+        end_y = _bounded_int(data["end_y"], "end_y")
+        import pyautogui  # noqa: PLC0415 - Windows-only, lazy by design
+
+        pyautogui.FAILSAFE = False
+        down_sent = False
+        try:
+            pyautogui.moveTo(x, y)
+            pyautogui.mouseDown(button="left")
+            down_sent = True
+            pyautogui.moveTo(end_x, end_y, duration=0.2)
+        finally:
+            if down_sent:
+                pyautogui.mouseUp(button="left")
+        return _delivery_receipt("physical_drag", native=False)
 
     if action == "type_text":
         expected = {"action", "text", "interval_s"}
@@ -1208,6 +1247,9 @@ def make_handler_class(
                                     "x",
                                     "y",
                                     "double",
+                                    "button",
+                                    "end_x",
+                                    "end_y",
                                     "text",
                                     "interval_s",
                                     "keys",

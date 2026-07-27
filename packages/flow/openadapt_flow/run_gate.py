@@ -144,7 +144,7 @@ def must_be_identity_armed(step: Step) -> bool:
     on a specific on-screen entity (the wrong-entity surface). These are the
     steps that must never act without a verified target identity.
     """
-    if step.action is ActionKind.KEY and is_consequential(step):
+    if step.action in (ActionKind.KEY, ActionKind.HOTKEY) and is_consequential(step):
         # A consequential keyboard submission with no retained anchor is an
         # identity-coverage defect, not a reason to exempt the action.
         return True

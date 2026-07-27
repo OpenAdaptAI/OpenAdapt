@@ -232,11 +232,15 @@ def _action_node(step: "Step", index: int, node_id: str, kind: NodeKind) -> Grap
         halts.append(f"halts if not ready in time ({wait_summary})")
     if step.risk == "irreversible" and identity.applicable and identity.armed is False:
         halts.append("irreversible write WITHOUT an armed identity gate")
+    if step.risk_review_required:
+        halts.append("certification halts until action risk is explicitly reviewed")
 
     # -- badges (compact capability / risk chips) --
     badges: list[str] = []
     if step.risk == "irreversible":
         badges.append("irreversible")
+    if step.risk_review_required:
+        badges.append("risk review")
     if identity.armed is True:
         badges.append("identity gate")
     elif identity.applicable and identity.armed is False:
@@ -257,6 +261,8 @@ def _action_node(step: "Step", index: int, node_id: str, kind: NodeKind) -> Grap
         title=_action_title(step),
         action=step.action.value,
         risk=step.risk,
+        risk_explanation=step.risk_explanation,
+        risk_review_required=step.risk_review_required,
         param=step.param,
         secret=step.secret,
         key=step.key,

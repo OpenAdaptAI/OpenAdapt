@@ -371,6 +371,53 @@ def test_event_mapping_and_order(converted: Path) -> None:
     assert [e["t"] for e in events] == [1.0, 2.0, 3.0]
 
 
+def test_rich_actions_map_without_loss() -> None:
+    actions = [
+        SimpleNamespace(
+            type="mouse.singleclick",
+            timestamp=T0 + 1,
+            button="right",
+            x=10.0,
+            y=20.0,
+        ),
+        SimpleNamespace(
+            type="mouse.drag",
+            timestamp=T0 + 2,
+            button="left",
+            x=30.0,
+            y=40.0,
+            dx=50.0,
+            dy=-10.0,
+        ),
+        SimpleNamespace(
+            type="key.shortcut",
+            timestamp=T0 + 3,
+            keys=["ctrl", "shift", "s"],
+        ),
+    ]
+
+    events = _flow_events(
+        actions,
+        scale=2.0,
+        value_to_param={},
+        include_structural=False,
+    )
+
+    assert [event["kind"] for event in events] == [
+        "right_click",
+        "drag",
+        "hotkey",
+    ]
+    assert (events[0]["x"], events[0]["y"]) == (20, 40)
+    assert (events[1]["x"], events[1]["y"], events[1]["end_x"], events[1]["end_y"]) == (
+        60,
+        80,
+        160,
+        60,
+    )
+    assert (events[2]["modifiers"], events[2]["key"]) == (["ctrl", "shift"], "s")
+
+
 def test_coordinates_scaled_to_frame_pixels(converted: Path) -> None:
     # Capture points are logical (Retina /2); frames are physical pixels.
     click = events_of(converted)[0]
@@ -607,57 +654,10 @@ def test_no_actions_rejected(tmp_path: Path) -> None:
         convert_capture(capture_dir, tmp_path / "recording")
 
 
-def test_drag_rejected_not_dropped(tmp_path: Path) -> None:
-    # down -> moves -> up at a far position -> capture emits a mouse.drag.
-    rows = [
-        {
-            "name": "click",
-            "timestamp": T0 + 1.0,
-            "mouse_x": 10.0,
-            "mouse_y": 10.0,
-            "mouse_button_name": "left",
-            "mouse_pressed": True,
-        },
-        {"name": "move", "timestamp": T0 + 1.1, "mouse_x": 60.0, "mouse_y": 60.0},
-        {"name": "move", "timestamp": T0 + 1.2, "mouse_x": 120.0, "mouse_y": 120.0},
-        {
-            "name": "click",
-            "timestamp": T0 + 1.3,
-            "mouse_x": 120.0,
-            "mouse_y": 120.0,
-            "mouse_button_name": "left",
-            "mouse_pressed": False,
-        },
-    ]
-    capture_dir = make_capture(tmp_path, rows, screens=app_screens()[:1])
-    with pytest.raises(ValueError, match="mouse.drag"):
-        convert_capture(capture_dir, tmp_path / "recording")
-
-
-def test_right_click_rejected(tmp_path: Path) -> None:
-    rows = _click_rows(T0 + 1.0, 10.0, 10.0, button="right")
-    capture_dir = make_capture(tmp_path, rows, screens=app_screens()[:1])
-    with pytest.raises(ValueError, match="button='right'"):
-        convert_capture(capture_dir, tmp_path / "recording")
-
-
 def test_unknown_named_key_rejected(tmp_path: Path) -> None:
     rows = _named_key_rows(T0 + 1.0, "f13")
     capture_dir = make_capture(tmp_path, rows, screens=app_screens()[:1])
     with pytest.raises(ValueError, match="f13"):
-        convert_capture(capture_dir, tmp_path / "recording")
-
-
-def test_shortcut_rejected(tmp_path: Path) -> None:
-    # ctrl down, c down, c up, ctrl up -> one key.type with keys=[ctrl, c].
-    rows = [
-        {"name": "press", "timestamp": T0 + 1.0, "key_name": "ctrl"},
-        {"name": "press", "timestamp": T0 + 1.01, "key_char": "c"},
-        {"name": "release", "timestamp": T0 + 1.02, "key_char": "c"},
-        {"name": "release", "timestamp": T0 + 1.03, "key_name": "ctrl"},
-    ]
-    capture_dir = make_capture(tmp_path, rows, screens=app_screens()[:1])
-    with pytest.raises(ValueError, match="shortcut"):
         convert_capture(capture_dir, tmp_path / "recording")
 
 
@@ -938,6 +938,19 @@ def test_window_mode_rounding_outside_viewport_rejected() -> None:
             [action],
             [(float("-inf"), FRAME_SIZE)],
         )
+
+
+def test_window_mode_drag_destination_outside_viewport_rejected() -> None:
+    action = SimpleNamespace(
+        type="mouse.drag",
+        x=100.0,
+        y=100.0,
+        dx=FRAME_SIZE[0],
+        dy=0.0,
+        timestamp=T0,
+    )
+    with pytest.raises(ValueError, match="mouse.drag destination"):
+        _reject_out_of_window([action], [(float("-inf"), FRAME_SIZE)])
 
 
 def test_window_mode_missing_pointer_coordinate_rejected() -> None:

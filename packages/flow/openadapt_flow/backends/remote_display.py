@@ -65,6 +65,8 @@ from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from PIL import Image
 
+from openadapt_flow.backend import ActionDeliveryUncertain
+
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _LEASE_NONE = 0
 _LEASE_ARMED = 1
@@ -849,6 +851,136 @@ class RemoteDisplayBackend:
                 time.sleep(self._settle_s)
                 self._client.mouse(sx, sy, button="left", down=False, click_count=i + 1)
                 time.sleep(self._settle_s)
+
+    def right_click(self, x: int, y: int) -> None:
+        """Right-click through the same exact-frame remote input lease."""
+
+        with self._input_lock:
+            point = (int(x), int(y))
+            if self._actuation_lease_state == _LEASE_ARMED:
+                if self._prepared_pointer_point != point:
+                    self._actuation_lease_state = _LEASE_INVALIDATED
+                    self._prepared_pointer_point = None
+                    raise RemoteDisplayError(
+                        "consequential remote right click was not pre-positioned "
+                        "at the freshly resolved target"
+                    )
+                self._ensure_input_ready(point=point)
+            else:
+                self._ensure_input_ready(point=point)
+                sx, sy = self._to_screen(*point)
+                self._assert_click_target(sx, sy)
+                self._client.mouse_move(sx, sy)
+                time.sleep(self._settle_s)
+                self._ensure_input_ready(point=point)
+            sx, sy = self._to_screen(*point)
+            self._prepared_pointer_point = None
+            self._assert_click_target(sx, sy)
+            self._assert_frame_fresh()
+            try:
+                self._client.mouse(
+                    sx,
+                    sy,
+                    button="right",
+                    down=True,
+                    click_count=1,
+                )
+                self._client.mouse(
+                    sx,
+                    sy,
+                    button="right",
+                    down=False,
+                    click_count=1,
+                )
+            except Exception as exc:
+                try:
+                    self._client.mouse(
+                        sx,
+                        sy,
+                        button="right",
+                        down=False,
+                        click_count=1,
+                    )
+                except Exception:
+                    pass
+                raise ActionDeliveryUncertain(
+                    operation="remote_right_click",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
+            time.sleep(self._settle_s)
+
+    def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
+        """Drag between two points resolved on one fresh remote frame."""
+
+        with self._input_lock:
+            start = (int(x), int(y))
+            end = (int(end_x), int(end_y))
+            if self._actuation_lease_state == _LEASE_ARMED:
+                if self._prepared_pointer_point != start:
+                    self._actuation_lease_state = _LEASE_INVALIDATED
+                    self._prepared_pointer_point = None
+                    raise RemoteDisplayError(
+                        "consequential remote drag was not pre-positioned at "
+                        "the freshly resolved source"
+                    )
+                self._ensure_input_ready(point=start)
+            else:
+                self._ensure_input_ready(point=start)
+                start_sx, start_sy = self._to_screen(*start)
+                self._assert_click_target(start_sx, start_sy)
+                self._client.mouse_move(start_sx, start_sy)
+                time.sleep(self._settle_s)
+                self._ensure_input_ready(point=start)
+            assert self._viewport is not None
+            if not (
+                0 <= end[0] < self._viewport[0] and 0 <= end[1] < self._viewport[1]
+            ):
+                raise RemoteDisplayError(
+                    f"drag destination {end!r} is outside captured frame "
+                    f"{self._viewport!r}"
+                )
+            start_sx, start_sy = self._to_screen(*start)
+            end_sx, end_sy = self._to_screen(*end)
+            self._assert_click_target(start_sx, start_sy)
+            self._assert_click_target(end_sx, end_sy)
+            self._assert_frame_fresh()
+            self._prepared_pointer_point = None
+            down_attempted = False
+            try:
+                down_attempted = True
+                self._client.mouse(
+                    start_sx,
+                    start_sy,
+                    button="left",
+                    down=True,
+                    click_count=1,
+                )
+                self._client.mouse_move(end_sx, end_sy)
+            except Exception as exc:
+                if down_attempted:
+                    raise ActionDeliveryUncertain(
+                        operation="remote_drag",
+                        native=False,
+                        cause_type=type(exc).__name__,
+                    ) from exc
+            finally:
+                if down_attempted:
+                    try:
+                        self._client.mouse(
+                            end_sx,
+                            end_sy,
+                            button="left",
+                            down=False,
+                            click_count=1,
+                        )
+                    except Exception as exc:
+                        raise ActionDeliveryUncertain(
+                            operation="remote_drag",
+                            native=False,
+                            cause_type=type(exc).__name__,
+                        ) from exc
+            time.sleep(self._settle_s)
 
     def type_text(self, text: str) -> None:
         """Type ``text`` into the focused control (hardware-like key codes)."""

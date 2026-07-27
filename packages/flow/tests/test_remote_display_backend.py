@@ -371,6 +371,20 @@ def test_click_maps_captured_pixels_to_screen_points() -> None:
     assert downs[0][2] == pytest.approx(288.0)  # 38 + 500/2
 
 
+def test_rich_pointer_actions_share_the_remote_frame_lease() -> None:
+    backend, client = _backend()
+    backend.screenshot()
+    backend.right_click(100, 100)
+    backend.drag(100, 100, 200, 150)
+    edges = [call for call in client.calls if call[0] == "mouse"]
+    assert [edge[3:5] for edge in edges] == [
+        ("right", True),
+        ("right", False),
+        ("left", True),
+        ("left", False),
+    ]
+
+
 def test_click_refuses_point_outside_captured_frame() -> None:
     backend, client = _backend()
     backend.screenshot()

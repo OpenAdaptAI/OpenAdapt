@@ -282,6 +282,8 @@ def _step_projection(step: Step, index: int) -> dict[str, Any]:
         "intent": "recorded label retained in protected bundle",
         "action": step.action.value,
         "risk": step.risk,
+        "risk_explanation": step.risk_explanation,
+        "risk_review_required": step.risk_review_required,
         "secret": step.secret,
         "identity_applicable": is_identity_applicable(step),
         "identity_armed": (

@@ -144,6 +144,18 @@ STRICT = Policy(
 
 
 class TestCertify:
+    def test_ambiguous_risk_requires_review_under_every_policy(self) -> None:
+        step = _click("step_000", "click recorded visual target", ocr=None)
+        step.risk_review_required = True
+        step.risk_explanation = "unlabelled pointer control"
+        workflow = Workflow(name="risk-review", steps=[step])
+
+        assert not evaluate_policy(workflow, Policy(name="empty")).passed
+        assert any(
+            finding.code == "risk_review_required"
+            for finding in lint_workflow(workflow).findings
+        )
+
     def test_parameterized_type_has_intrinsic_input_verification(self):
         step = Step(
             id="step_000",

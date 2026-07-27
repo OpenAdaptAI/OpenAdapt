@@ -196,6 +196,8 @@ class GraphNode(BaseModel):
         default=None, description="click|type|key|wait|scroll"
     )
     risk: Optional[str] = Field(default=None, description="reversible|irreversible")
+    risk_explanation: Optional[str] = None
+    risk_review_required: bool = False
     param: Optional[str] = Field(
         default=None, description="Bound run parameter, if any"
     )

@@ -1,9 +1,10 @@
-"""Backend protocol: the only interface the runtime uses to touch a GUI.
+"""Backend protocols: the runtime boundary for observing and acting on a GUI.
 
-The runtime is vision-only by construction — it sees PNG bytes and emits
-clicks/keys at pixel coordinates. Anything that can screenshot and inject
-input can be a backend: a Playwright page (reference/test backend), a native
-OS layer (pyautogui/Quartz), or an RDP session.
+Every backend provides fresh frames and bounded input. Browser and native
+backends may additionally expose structural candidates and native operations;
+opaque RDP/Citrix surfaces retain the visual/OCR/relational ladder. The
+governed runtime owns uniqueness, identity, authorization, effect verification,
+and refusal regardless of which observation or actuation rung is available.
 """
 
 from __future__ import annotations
@@ -353,6 +354,7 @@ class GuardedCoordinateActionBackend(Protocol):
         *,
         expected_frame_sha256: str,
         double: bool = False,
+        button: str = "left",
     ) -> "ActionDeliveryReceipt":
         """Verify the exact frame and deliver one coordinate action atomically."""
         ...
@@ -475,6 +477,30 @@ class PreparedPointerActuationBackend(Protocol):
     def prepare_pointer_actuation(self, x: int, y: int) -> None:
         """Position the pointer without pressing a button or claiming success."""
         ...
+
+
+@runtime_checkable
+class RichPointerActionBackend(Protocol):
+    """Pointer actions beyond the primary/double click contract."""
+
+    def right_click(self, x: int, y: int) -> None: ...
+
+    def drag(self, x: int, y: int, end_x: int, end_y: int) -> None: ...
+
+
+@runtime_checkable
+class GuardedDragActionBackend(Protocol):
+    """Consume a pre-identity coordinate lease for one exact drag."""
+
+    def drag_guarded(
+        self,
+        x: int,
+        y: int,
+        end_x: int,
+        end_y: int,
+        *,
+        expected_frame_sha256: str,
+    ) -> "ActionDeliveryReceipt": ...
 
 
 @runtime_checkable

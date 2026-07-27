@@ -6,6 +6,8 @@ Recording format (DESIGN.md):
       meta.json          # {"id", "created_at", "viewport": [w,h], "app_url",
                          #  "params": {"<param_name>": "<value typed>"}}
       events.jsonl       # {"i":0,"kind":"click","x":123,"y":45,"t":1.20}
+                         # right_click uses the same point; drag also carries
+                         # end_x/end_y for its independently resolved endpoint.
                          # {"i":1,"kind":"type","text":"...","param":"note",...}
                          # TYPE events also carry "field_label" (the receiving
                          # field's DOM/a11y label, captured passively when the
@@ -13,6 +15,7 @@ Recording format (DESIGN.md):
                          # recorder, "field_rect" (the field's viewport rect,
                          # for the compiler's nearby-OCR label fallback).
                          # {"i":2,"kind":"key","key":"Enter","t":3.10}
+                         # hotkey carries explicit modifiers + trigger key.
                          # {"i":3,"kind":"scroll","dx":0,"dy":400,"t":4.02}
                          # Events additionally carry url/title/pages
                          # _before/_after keys when the backend exposes
@@ -38,7 +41,7 @@ from typing import Any, Callable, Optional
 
 from PIL import Image, ImageDraw
 
-from openadapt_flow.backend import Backend
+from openadapt_flow.backend import Backend, RichPointerActionBackend
 from openadapt_flow.image_hash import perceptual_hash
 from openadapt_flow.ir import StructuralLocator
 
@@ -115,6 +118,34 @@ class Recorder:
             lambda: self._backend.click(int(x), int(y), double=True),
         )
 
+    def right_click(self, x: int, y: int) -> None:
+        """Right-click at pixel coordinates, recording the event."""
+
+        if not isinstance(self._backend, RichPointerActionBackend):
+            raise RuntimeError("recording backend does not support right-click input")
+        backend = self._backend
+        self._record(
+            {"kind": "right_click", "x": int(x), "y": int(y)},
+            lambda: backend.right_click(int(x), int(y)),
+        )
+
+    def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
+        """Drag between two points, retaining both endpoints as evidence."""
+
+        if not isinstance(self._backend, RichPointerActionBackend):
+            raise RuntimeError("recording backend does not support drag input")
+        backend = self._backend
+        self._record(
+            {
+                "kind": "drag",
+                "x": int(x),
+                "y": int(y),
+                "end_x": int(end_x),
+                "end_y": int(end_y),
+            },
+            lambda: backend.drag(int(x), int(y), int(end_x), int(end_y)),
+        )
+
     def type_text(self, text: str, param: Optional[str] = None) -> None:
         """Type text into the focused element, recording the event.
 
@@ -144,6 +175,15 @@ class Recorder:
     def press(self, key: str) -> None:
         """Press a key or chord (e.g. ``'Enter'``), recording the event."""
         self._record({"kind": "key", "key": key}, lambda: self._backend.press(key))
+
+    def hotkey(self, modifiers: list[str], key: str) -> None:
+        """Press and record an explicit modifier chord."""
+
+        chord = "+".join([*modifiers, key])
+        self._record(
+            {"kind": "hotkey", "modifiers": list(modifiers), "key": key},
+            lambda: self._backend.press(chord),
+        )
 
     def scroll(self, dx: int, dy: int) -> None:
         """Scroll by (dx, dy) pixels via the wheel, recording the event."""
@@ -179,7 +219,12 @@ class Recorder:
         # action, so the compiler can store it on the anchor and the replayer
         # can verify identity against the highest-fidelity signal (no OCR
         # ambiguity). Pointer events only (they carry x/y); absent otherwise.
-        if event.get("kind") in ("click", "double_click"):
+        if event.get("kind") in (
+            "click",
+            "double_click",
+            "right_click",
+            "drag",
+        ):
             # Structural locator (DOM selector / role+name, or UIA identifiers)
             # for the clicked element, when the backend exposes it
             # (StructuralActionBackend). Stored on the event so the compiler can
@@ -243,7 +288,16 @@ class Recorder:
                 is settled and captured now.
         """
         event = dict(event)
-        if event.get("kind") in ("click", "double_click") and structured_identity:
+        if (
+            event.get("kind")
+            in (
+                "click",
+                "double_click",
+                "right_click",
+                "drag",
+            )
+            and structured_identity
+        ):
             event["structured_identity"] = structured_identity
         if param is not None:
             event["param"] = param

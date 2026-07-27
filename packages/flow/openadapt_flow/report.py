@@ -454,6 +454,13 @@ def render_run_report(run_dir: Path | str) -> Path:
             if result.error:
                 lines.append(f"> ❌ **Error:** {_md_phi(result.error)}")
                 lines.append("")
+            if result.risk_review_required:
+                explanation = result.risk_explanation or "classification is ambiguous"
+                lines.append(
+                    "> ⚠️ **Qualification required:** action risk needs explicit "
+                    f"operator review ({_md_phi(explanation)})."
+                )
+                lines.append("")
             lines.append(_step_evidence_line(result))
             lines.append("")
             lines.extend(_before_after_table(run, result))

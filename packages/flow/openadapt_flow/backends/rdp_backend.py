@@ -58,6 +58,8 @@ from typing import Callable, Optional, Protocol, Union, runtime_checkable
 
 from PIL import Image
 
+from openadapt_flow.backend import ActionDeliveryUncertain
+
 # What a transport may hand back as the current frame: a PIL image, or raw
 # pixel bytes (RGB or RGBA, row-major) that the backend wraps with the
 # reported (width, height).
@@ -479,6 +481,66 @@ class FreeRDPBackend:
                 self._assert_frame_fresh()
                 self._transport.pointer(int(x), int(y), "left", True)
                 self._transport.pointer(int(x), int(y), "left", False)
+
+    def right_click(self, x: int, y: int) -> None:
+        """Right-click at a freshly resolved framebuffer point."""
+
+        with self._input_lock:
+            point = (int(x), int(y))
+            self._ensure_input_ready(point=point)
+            self._assert_frame_fresh()
+            try:
+                self._transport.pointer(*point, "right", True)
+                self._transport.pointer(*point, "right", False)
+            except Exception as exc:
+                try:
+                    self._transport.pointer(*point, "right", False)
+                except Exception:
+                    pass
+                raise ActionDeliveryUncertain(
+                    operation="rdp_right_click",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
+
+    def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
+        """Drag between two points resolved from the same fresh framebuffer."""
+
+        with self._input_lock:
+            start = (int(x), int(y))
+            end = (int(end_x), int(end_y))
+            self._ensure_input_ready(point=start)
+            assert self._viewport is not None
+            if not (
+                0 <= end[0] < self._viewport[0] and 0 <= end[1] < self._viewport[1]
+            ):
+                raise RuntimeError(
+                    f"RDP drag destination {end!r} is outside framebuffer "
+                    f"{self._viewport!r}"
+                )
+            self._assert_frame_fresh()
+            down_attempted = False
+            try:
+                down_attempted = True
+                self._transport.pointer(*start, "left", True)
+                self._transport.pointer(*end, "left", True)
+            except Exception as exc:
+                if down_attempted:
+                    raise ActionDeliveryUncertain(
+                        operation="rdp_drag",
+                        native=False,
+                        cause_type=type(exc).__name__,
+                    ) from exc
+            finally:
+                if down_attempted:
+                    try:
+                        self._transport.pointer(*end, "left", False)
+                    except Exception as exc:
+                        raise ActionDeliveryUncertain(
+                            operation="rdp_drag",
+                            native=False,
+                            cause_type=type(exc).__name__,
+                        ) from exc
 
     def type_text(self, text: str) -> None:
         """Type text into the focused control, one key down/up per character.

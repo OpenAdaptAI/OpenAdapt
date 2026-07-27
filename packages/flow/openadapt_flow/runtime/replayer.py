@@ -51,9 +51,11 @@ from openadapt_flow.backend import (
     BrowserPresentationGeometryBackend,
     FocusedElementActuationLeaseBackend,
     GuardedCoordinateActionBackend,
+    GuardedDragActionBackend,
     GuardedKeyboardActionBackend,
     PreparedPointerActuationBackend,
     RemoteActuationBackend,
+    RichPointerActionBackend,
     StructuralResolutionRefused,
 )
 from openadapt_flow.bundle_validation import compute_parameter_schema_digest
@@ -1077,6 +1079,8 @@ class Replayer:
         action_kind = {
             ActionKind.CLICK: "click",
             ActionKind.DOUBLE_CLICK: "double_click",
+            ActionKind.RIGHT_CLICK: "right_click",
+            ActionKind.DRAG: "drag",
             ActionKind.TYPE: "type",
             ActionKind.SCROLL: "scroll",
         }.get(step.action)
@@ -1179,15 +1183,24 @@ class Replayer:
         # subflows -- so a hand-authored/compiled PROGRAM's identity coverage is
         # audited exactly as a linear bundle's is.
         for step in _all_workflow_steps(workflow):
-            if step.anchor is None or step.action not in (
+            if step.action not in (
                 ActionKind.CLICK,
                 ActionKind.DOUBLE_CLICK,
+                ActionKind.RIGHT_CLICK,
+                ActionKind.DRAG,
                 ActionKind.TYPE,
                 ActionKind.KEY,
+                ActionKind.HOTKEY,
             ):
                 continue
+            anchorless_submission = step.action in (
+                ActionKind.KEY,
+                ActionKind.HOTKEY,
+            ) and is_consequential(step)
+            if step.anchor is None and not anchorless_submission:
+                continue
             report.identity_applicable_steps += 1
-            if (
+            if step.anchor is not None and (
                 step.anchor.context_text
                 or step.anchor.structured_identity
                 or step.anchor.identity_template
@@ -1200,6 +1213,12 @@ class Replayer:
                         step_id=step.id,
                         intent=step.intent,
                         reason=step.identity_unarmed_reason
+                        or (
+                            "consequential keyboard action has no declared "
+                            "record identity evidence"
+                            if anchorless_submission
+                            else None
+                        )
                         or (
                             "no identity context recorded at compile time"
                             " (bundle predates the armed-coverage audit"
@@ -1931,6 +1950,9 @@ class Replayer:
             step_id=step.id,
             intent=step.intent,
             ok=True,
+            risk=step.risk,
+            risk_explanation=step.risk_explanation,
+            risk_review_required=step.risk_review_required,
             effect_verified=True if confirmed else None,
             effect_approved_unverified=not confirmed,
             effect_contract_hashes=keys,
@@ -2343,6 +2365,9 @@ class Replayer:
             step_id=step.id,
             intent=step.intent,
             ok=False,
+            risk=step.risk,
+            risk_explanation=step.risk_explanation,
+            risk_review_required=step.risk_review_required,
             actuation="human_attended",
         )
         self._run_id = run_id
@@ -2857,7 +2882,14 @@ class Replayer:
         so a linear run is byte-for-byte unchanged.
         """
         t0 = time.monotonic()
-        result = StepResult(step_id=step.id, intent=step.intent, ok=False)
+        result = StepResult(
+            step_id=step.id,
+            intent=step.intent,
+            ok=False,
+            risk=step.risk,
+            risk_explanation=step.risk_explanation,
+            risk_review_required=step.risk_review_required,
+        )
         overlay_current, overlay_total = self._control_overlay_progress(
             workflow, step_index, graph_ctx
         )
@@ -3092,7 +3124,7 @@ class Replayer:
                     workflow,
                     bundle_dir,
                     result,
-                    arm_keyboard=step.action is ActionKind.KEY,
+                    arm_keyboard=step.action in (ActionKind.KEY, ActionKind.HOTKEY),
                 )
                 result.resolution = resolution
                 if before_png is not last_frame:
@@ -3983,8 +4015,11 @@ class Replayer:
             not in (
                 ActionKind.CLICK,
                 ActionKind.DOUBLE_CLICK,
+                ActionKind.RIGHT_CLICK,
+                ActionKind.DRAG,
                 ActionKind.TYPE,
                 ActionKind.KEY,
+                ActionKind.HOTKEY,
             )
             or step.anchor is None
             or (
@@ -4117,7 +4152,14 @@ class Replayer:
         """
 
         return (
-            step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.TYPE)
+            step.action
+            in (
+                ActionKind.CLICK,
+                ActionKind.DOUBLE_CLICK,
+                ActionKind.RIGHT_CLICK,
+                ActionKind.DRAG,
+                ActionKind.TYPE,
+            )
             and self._step_is_consequential(step)
             and self._step_has_identity_contract(step, workflow)
         )
@@ -4128,7 +4170,7 @@ class Replayer:
         """Whether keyboard delivery must stay bound to the verified focus."""
 
         return (
-            step.action in (ActionKind.KEY, ActionKind.TYPE)
+            step.action in (ActionKind.KEY, ActionKind.HOTKEY, ActionKind.TYPE)
             and self._step_is_consequential(step)
             and self._step_has_identity_contract(step, workflow)
         )
@@ -4183,9 +4225,12 @@ class Replayer:
         pointer_edge_pending = step.action in (
             ActionKind.CLICK,
             ActionKind.DOUBLE_CLICK,
+            ActionKind.RIGHT_CLICK,
+            ActionKind.DRAG,
         ) or (step.action is ActionKind.TYPE and not arm_keyboard)
         structural_pointer = bool(
-            resolution is not None
+            step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and resolution is not None
             and resolution.rung == "structural"
             and resolution.structural_handle is not None
             and resolution.structural_handle.target_fingerprint is not None
@@ -4205,6 +4250,17 @@ class Replayer:
                 "identity-gated pointer action, but this backend cannot bind "
                 "target and context verification to the same actuation operation "
                 "— refusing raw coordinate delivery; run aborted"
+            )
+        if (
+            requires_pointer
+            and step.action is ActionKind.DRAG
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and not isinstance(self.backend, GuardedDragActionBackend)
+        ):
+            return (
+                f"Step '{step.id}' ({step.intent}) is a consequential drag, "
+                "but this backend cannot bind both endpoints to the fresh "
+                "identity-verified frame — refusing input; run aborted"
             )
         return None
 
@@ -4283,7 +4339,13 @@ class Replayer:
             and isinstance(self.backend, GuardedKeyboardActionBackend)
         )
         guarded_click_pointer_backend = (
-            step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            step.action
+            in (
+                ActionKind.CLICK,
+                ActionKind.DOUBLE_CLICK,
+                ActionKind.RIGHT_CLICK,
+                ActionKind.DRAG,
+            )
             and self._requires_atomic_identity_pointer(step, workflow)
             and not isinstance(self.backend, RemoteActuationBackend)
             and isinstance(self.backend, GuardedCoordinateActionBackend)
@@ -4293,6 +4355,8 @@ class Replayer:
         pointer_edge_pending = step.action in (
             ActionKind.CLICK,
             ActionKind.DOUBLE_CLICK,
+            ActionKind.RIGHT_CLICK,
+            ActionKind.DRAG,
         ) or (
             step.action is ActionKind.TYPE
             and resolution is not None
@@ -4386,12 +4450,29 @@ class Replayer:
             guarded_coordinate = (
                 self._requires_atomic_identity_pointer(step, workflow)
                 and not (arm_keyboard and step.action is ActionKind.TYPE)
-                and fresh_resolution.rung != "structural"
+                # CLICK/DOUBLE_CLICK consume the native DOM/UIA handle when
+                # structural resolution wins. RIGHT_CLICK has no native
+                # structural actuator, so bind its resolved point to the
+                # identity-verified target instead. DRAG is armed only after
+                # its independently resolved destination is known below.
+                and step.action is not ActionKind.DRAG
+                and (
+                    fresh_resolution.rung != "structural"
+                    or step.action is ActionKind.RIGHT_CLICK
+                )
                 and not isinstance(self.backend, RemoteActuationBackend)
                 and isinstance(self.backend, GuardedCoordinateActionBackend)
             )
             if guarded_coordinate:
                 coordinate_backend = cast(GuardedCoordinateActionBackend, self.backend)
+                if step.action is ActionKind.RIGHT_CLICK:
+                    cancel_structural = getattr(
+                        self.backend,
+                        "cancel_pending_structural_guards",
+                        None,
+                    )
+                    if callable(cancel_structural):
+                        cancel_structural()
                 editable_arm = getattr(
                     coordinate_backend,
                     "arm_guarded_editable_coordinate",
@@ -4451,7 +4532,12 @@ class Replayer:
             step needs an anchor it doesn't have, the ladder fails, or the
             risk gate blocks acting.
         """
-        needs_anchor = step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+        needs_anchor = step.action in (
+            ActionKind.CLICK,
+            ActionKind.DOUBLE_CLICK,
+            ActionKind.RIGHT_CLICK,
+            ActionKind.DRAG,
+        )
         if step.anchor is None:
             if needs_anchor:
                 return (
@@ -4516,6 +4602,37 @@ class Replayer:
                 ),
             )
         return resolution, matched_region, None
+
+    def _resolve_drag_end(
+        self,
+        step: Step,
+        screen_png: bytes,
+        bundle_dir: Path,
+        workflow: Workflow,
+    ) -> tuple[Optional[Resolution], Optional[str]]:
+        """Resolve a drag destination independently on the actuation frame.
+
+        A drag is never replayed as a stored coordinate pair. The compiler
+        retains separate evidence for both endpoints; immediately before
+        delivery the runtime resolves both against the same fresh frame and
+        applies the same irreversible-action resolution floor to each.
+        """
+
+        if step.drag_end_anchor is None:
+            return None, (
+                f"Step '{step.id}' ({step.intent}) is a drag step but has no "
+                "destination anchor"
+            )
+        endpoint_step = step.model_copy(
+            update={"action": ActionKind.CLICK, "anchor": step.drag_end_anchor}
+        )
+        resolution, _region, error = self._resolve_step(
+            endpoint_step,
+            screen_png,
+            bundle_dir,
+            workflow,
+        )
+        return resolution, error
 
     def _act(
         self,
@@ -4608,6 +4725,142 @@ class Replayer:
                 and resolution.structural_handle is not None
                 else None
             )
+            return None
+
+        if step.action is ActionKind.RIGHT_CLICK:
+            assert resolution is not None  # guaranteed by _resolve_step
+            x, y = resolution.point
+            requires_atomic_identity = self._requires_atomic_identity_pointer(
+                step, workflow
+            )
+            if requires_atomic_identity:
+                if isinstance(self.backend, RemoteActuationBackend):
+                    if not isinstance(self.backend, RichPointerActionBackend):
+                        return (
+                            f"Step '{step.id}' ({step.intent}) requires a right "
+                            "click, but this backend has no bounded right-click "
+                            "operation"
+                        )
+                    self.backend.right_click(x, y)
+                elif isinstance(self.backend, GuardedCoordinateActionBackend):
+                    result.delivery_receipt = self.backend.act_guarded_coordinate(
+                        x,
+                        y,
+                        expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                        button="right",
+                    )
+                    result.actuation = "guarded_coordinate"
+                else:
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) is a consequential "
+                        "identity-gated right click, but this backend cannot bind "
+                        "identity verification to delivery; run aborted"
+                    )
+            elif isinstance(self.backend, RichPointerActionBackend):
+                self.backend.right_click(x, y)
+            else:
+                return (
+                    f"Step '{step.id}' ({step.intent}) requires a right click, "
+                    "but this backend does not implement it"
+                )
+            return None
+
+        if step.action is ActionKind.DRAG:
+            assert resolution is not None  # guaranteed by _resolve_step
+            drag_end, drag_error = self._resolve_drag_end(
+                step,
+                before_png,
+                bundle_dir,
+                workflow,
+            )
+            result.drag_end_resolution = drag_end
+            if drag_error is not None:
+                self._cancel_guarded_coordinate()
+                return drag_error
+            assert drag_end is not None
+            x, y = resolution.point
+            end_x, end_y = drag_end.point
+            requires_atomic_identity = self._requires_atomic_identity_pointer(
+                step, workflow
+            )
+            structural_drag = getattr(self.backend, "drag_structural_guarded", None)
+            if (
+                resolution.rung == "structural"
+                and drag_end.rung == "structural"
+                and resolution.structural_handle is not None
+                and drag_end.structural_handle is not None
+                and step.anchor is not None
+                and step.anchor.structural is not None
+                and step.drag_end_anchor is not None
+                and step.drag_end_anchor.structural is not None
+                and callable(structural_drag)
+            ):
+                result.delivery_receipt = structural_drag(
+                    step.anchor.structural,
+                    resolution.structural_handle,
+                    step.drag_end_anchor.structural,
+                    drag_end.structural_handle,
+                )
+                result.actuation = "dom"
+            elif requires_atomic_identity and not isinstance(
+                self.backend, RemoteActuationBackend
+            ):
+                if not isinstance(self.backend, GuardedDragActionBackend):
+                    self._cancel_guarded_coordinate()
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) is a consequential "
+                        "drag, but this backend cannot bind both freshly "
+                        "resolved endpoints to delivery; run aborted"
+                    )
+                # Pixel-only source and destination evidence were resolved
+                # against ``before_png``. Drop any unused structural tokens,
+                # then bind the source coordinate and require that exact frame
+                # immediately before mouse-down. Fully structural browser
+                # drags take the stronger two-element lease above.
+                cancel_structural = getattr(
+                    self.backend,
+                    "cancel_pending_structural_guards",
+                    None,
+                )
+                if callable(cancel_structural):
+                    cancel_structural()
+                if not isinstance(self.backend, GuardedCoordinateActionBackend):
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) is a consequential "
+                        "drag, but this backend cannot bind its freshly "
+                        "resolved source to delivery; run aborted"
+                    )
+                try:
+                    self.backend.arm_guarded_coordinate(x, y)
+                except Exception as exc:  # noqa: BLE001 - backend boundary
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    detail = _scrub_phi(str(exc)) or type(exc).__name__
+                    return (
+                        f"Step '{step.id}' ({step.intent}) could not bind its "
+                        f"freshly resolved drag source: {detail}; run aborted"
+                    )
+                result.delivery_receipt = self.backend.drag_guarded(
+                    x,
+                    y,
+                    end_x,
+                    end_y,
+                    expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                )
+                result.actuation = "guarded_coordinate"
+            elif isinstance(self.backend, RichPointerActionBackend):
+                self.backend.drag(x, y, end_x, end_y)
+            else:
+                return (
+                    f"Step '{step.id}' ({step.intent}) requires a drag, but "
+                    "this backend does not implement it"
+                )
             return None
 
         if step.action is ActionKind.TYPE:
@@ -4797,9 +5050,17 @@ class Replayer:
                 allow_retry=not guarded_type,
             )
 
-        if step.action is ActionKind.KEY:
+        if step.action in (ActionKind.KEY, ActionKind.HOTKEY):
             if not step.key:
-                return f"Step '{step.id}' ({step.intent}) is a KEY step with no key"
+                return (
+                    f"Step '{step.id}' ({step.intent}) is a "
+                    f"{step.action.value} step with no key"
+                )
+            key = (
+                "+".join([*step.modifiers, step.key])
+                if step.action is ActionKind.HOTKEY
+                else step.key
+            )
             requires_atomic_keyboard = self._requires_atomic_identity_keyboard(
                 step, workflow
             )
@@ -4812,7 +5073,7 @@ class Replayer:
                 result.delivery_receipt = cast(
                     GuardedKeyboardActionBackend, self.backend
                 ).press_guarded(
-                    step.key,
+                    key,
                     expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
                 )
                 result.actuation = "guarded_keyboard"
@@ -4827,7 +5088,7 @@ class Replayer:
                     "run aborted"
                 )
             else:
-                self.backend.press(step.key)
+                self.backend.press(key)
             return None
 
         if step.action is ActionKind.WAIT:

@@ -127,11 +127,10 @@ service-mlx = [
 # Cross-platform desktop recording on-ramp: convert an openadapt-capture
 # session into a flow recording (openadapt_flow.adapters.capture). Optional and
 # imported lazily — the flow core never pulls it onto the replay hot path.
-# Floor 0.6.0: adds window-scoped recording and CaptureSession.window_capture,
-# while retaining headless-safe import and persisted pixel_ratio. The adapter
-# tests therefore run against the exact producer contract in headless CI (the
-# `test` job installs this extra).
-capture = ["openadapt-capture>=1.1.0"]
+# Floor 1.2.0 retains window-scoped/UIA evidence and preserves keyboard
+# shortcuts as first-class typed actions. The `test` job installs this extra
+# so Flow validates against the released producer contract in headless CI.
+capture = ["openadapt-capture>=1.2.0"]
 # Canonical action-vocabulary interop (openadapt_flow.interop.types). Boundary
 # only (emit / benchmark round-trip); never on the replay hot path. The shim
 # imports openadapt-types lazily, so the core stays importable without it.

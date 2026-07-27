@@ -9,7 +9,7 @@ interoperate with evals, emit, and any agent that speaks the shared vocabulary.
 
 Design (per ``docs/ECOSYSTEM_INTEGRATION.md`` §2):
 
-* **Adopt the words, keep the core.** flow's ``ActionKind`` (6 members) is a
+* **Adopt the words, keep the core.** flow's ``ActionKind`` is a
   byte-identical *subset* of ``ActionType`` (21 members) — string values match
   exactly, so the enum map (:data:`ACTION_KIND_TO_ACTION_TYPE`) is trivial and
   exhaustive.
@@ -36,7 +36,8 @@ flow ``ir``                             ``openadapt-types``
 ``Step.text``                           ``Action.text``
 ``Step.param``                          ``Action.text = "{param}"`` placeholder when
                                         no literal ``text`` (TYPE needs non-empty text)
-``Step.key``                            ``Action.key``
+``Step.key`` / ``Step.modifiers``       ``Action.key`` / ``Action.modifiers``
+``Step.drag_end_anchor.click_point``    ``Action.drag_end``
 ``Step.scroll_dx`` / ``scroll_dy``      ``Action.scroll_direction`` + ``scroll_amount``
 ======================================  ==========================================
 
@@ -61,9 +62,9 @@ from a passive ``Action`` — those never existed in the canonical schema — so
 the target coordinates in ``Action.target`` are dropped and the resulting
 ``Step`` has ``anchor=None`` and is **not replayable**. It exists for
 ingest/round-trip of the shared vocabulary (evals -> flow), not to rebuild a
-compiled bundle. ``Action`` types outside flow's 6-member ``ActionKind`` (e.g.
-``right_click``, ``drag``, ``hotkey``, ``goto``) raise ``ValueError`` rather
-than silently dropping an untranslatable action.
+compiled bundle. ``Action`` types outside flow's ``ActionKind`` (for example
+``goto``) raise ``ValueError`` rather than silently dropping an untranslatable
+action.
 """
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ from openadapt_flow import ir
 _PARAM_PLACEHOLDER_RE = re.compile(r"^\{(\w+)\}$")
 
 if TYPE_CHECKING:  # import-light: only for type checkers, never at runtime import
-    from openadapt_types import Action, ActionResult
+    from openadapt_types import Action, ActionResult, ActionTarget
 
     # Without pydantic's mypy plugin, ``Field(None, ...)`` defaults in
     # openadapt-types look required to mypy.  The whole-package development
@@ -91,9 +92,9 @@ if TYPE_CHECKING:  # import-light: only for type checkers, never at runtime impo
     class _ActionTargetSchemaDefaults(TypedDict):
         node_id: None
 
-    class _ActionSchemaDefaults(TypedDict):
-        modifiers: None
-        drag_end: None
+    class _ActionSchemaDefaults(TypedDict, total=False):
+        modifiers: Optional[list[str]]
+        drag_end: Optional["ActionTarget"]
         raw: None
 
 
@@ -203,15 +204,35 @@ def step_to_action(step: ir.Step) -> "Action":
     scroll_direction, scroll_amount = _scroll_to_canonical(
         step.scroll_dx, step.scroll_dy
     )
+    drag_end: Optional[ActionTarget] = None
+    if step.drag_end_anchor is not None:
+        end_x, end_y = step.drag_end_anchor.click_point
+        if TYPE_CHECKING:
+            drag_target_defaults: _ActionTargetSchemaDefaults = {"node_id": None}
+        else:
+            drag_target_defaults = {}
+        drag_end = ActionTarget(
+            x=float(end_x),
+            y=float(end_y),
+            is_normalized=False,
+            description=(
+                step.drag_end_anchor.ocr_text or step.drag_end_anchor.context_text
+            ),
+            **drag_target_defaults,
+        )
 
     if TYPE_CHECKING:
         action_schema_defaults: _ActionSchemaDefaults = {
-            "modifiers": None,
-            "drag_end": None,
+            "modifiers": None if not step.modifiers else step.modifiers,
+            "drag_end": drag_end,
             "raw": None,
         }
     else:
         action_schema_defaults = {}
+        if step.modifiers:
+            action_schema_defaults["modifiers"] = step.modifiers
+        if drag_end is not None:
+            action_schema_defaults["drag_end"] = drag_end
 
     return Action(
         type=action_type,
@@ -303,9 +324,9 @@ def action_to_step(action: "Action", *, step_id: str = "ingested") -> ir.Step:
         A partial flow ``Step`` carrying the shared fields.
 
     Raises:
-        ValueError: If ``action.type`` is outside flow's 6-member ``ActionKind``
-            (e.g. ``right_click``, ``drag``, ``hotkey``, ``goto``) — such
-            actions are untranslatable and are refused rather than dropped.
+        ValueError: If ``action.type`` is outside flow's ``ActionKind`` (for
+            example ``goto``); unsupported actions are refused rather than
+            dropped.
     """
     try:
         kind = ir.ActionKind(action.type.value)
@@ -340,6 +361,7 @@ def action_to_step(action: "Action", *, step_id: str = "ingested") -> ir.Step:
         text=text,
         param=param,
         key=action.key,
+        modifiers=list(action.modifiers or []),
         scroll_dx=scroll_dx,
         scroll_dy=scroll_dy,
     )
