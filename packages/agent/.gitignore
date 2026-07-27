@@ -121,7 +121,9 @@ dmypy.json
 .ruff_cache/
 
 # uv
-uv.lock
+# The MCPB is a local application bundle, so keep its dependency lock for a
+# repeatable one-click install.
+!uv.lock
 
 # IDE
 .idea/

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-agent"
-version = "2.0.1"
+version = "2.0.2"
 description = "Local agent bridge for governed OpenAdapt workflows, attended actions, MCP, and Agent Skills"
 readme = "README.md"
 # openadapt-flow pins <3.13 (rapidocr-onnxruntime); this package inherits it.
@@ -45,8 +45,6 @@ dev = [
     "build>=1.2.0",
     "pytest>=8.0.0",
     "ruff>=0.4.0",
-    # Parses smithery.yaml in the distribution-artifact guard tests.
-    "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -64,6 +62,11 @@ packages = ["src/openadapt_agent"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+# Pin Ruff's historical default gate so future releases cannot silently expand
+# the CI policy and fail unchanged code.
+select = ["E4", "E7", "E9", "F"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

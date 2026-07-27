@@ -1,0 +1,135 @@
+{
+  "manifest_version": "0.4",
+  "name": "openadapt-agent",
+  "display_name": "OpenAdapt",
+  "version": "2.0.2",
+  "description": "Governed local MCP bridge for compiled OpenAdapt workflows and attended decisions.",
+  "long_description": "Inspect compiled workflows, run them through OpenAdapt's policy and verification gates, and resolve durable Needs Attention items. The server runs locally; workflow bundles and protected evidence stay on the operator's machine by default.",
+  "author": {
+    "name": "OpenAdaptAI",
+    "email": "contact@openadapt.ai",
+    "url": "https://openadapt.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenAdaptAI/openadapt-agent.git"
+  },
+  "homepage": "https://openadapt.ai",
+  "documentation": "https://docs.openadapt.ai",
+  "support": "https://github.com/OpenAdaptAI/openadapt-agent/issues",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/openadapt_agent/mcpb_entry.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "python",
+        "-m",
+        "openadapt_agent.mcpb_entry"
+      ],
+      "env": {
+        "OPENADAPT_AGENT_BUNDLES_DIR": "${user_config.bundles_dir}",
+        "OPENADAPT_AGENT_RUNS_DIR": "${user_config.runs_dir}",
+        "OPENADAPT_AGENT_ALLOW_RUN": "${user_config.allow_run}",
+        "OPENADAPT_AGENT_ALLOW_ATTENDED_ACTIONS": "${user_config.allow_attended_actions}",
+        "OPENADAPT_AGENT_DEPLOYMENT_CONFIG": "${user_config.deployment_config}",
+        "OPENADAPT_AGENT_HEADED": "${user_config.headed}",
+        "OPENADAPT_AGENT_BUNDLE_KEY": "${user_config.bundle_key}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "list_workflows",
+      "description": "List PHI-safe projections of locally compiled OpenAdapt workflows."
+    },
+    {
+      "name": "get_workflow",
+      "description": "Inspect one workflow's governed, PHI-safe capability summary."
+    },
+    {
+      "name": "get_run_report",
+      "description": "Read a PHI-safe status and count summary for a run created by this server."
+    },
+    {
+      "name": "list_needs_attention",
+      "description": "List durable workflow pauses that need an operator decision."
+    },
+    {
+      "name": "get_attention_item",
+      "description": "Inspect one PHI-safe Needs Attention item and its allowed actions."
+    }
+  ],
+  "tools_generated": true,
+  "keywords": [
+    "mcp",
+    "automation",
+    "workflow",
+    "gui",
+    "governed",
+    "attended"
+  ],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "runtimes": {
+      "python": ">=3.10,<3.13"
+    }
+  },
+  "user_config": {
+    "bundles_dir": {
+      "type": "directory",
+      "title": "Workflow bundles",
+      "description": "Choose a compiled OpenAdapt bundle or a directory containing bundles. The files stay on this machine.",
+      "required": true
+    },
+    "runs_dir": {
+      "type": "directory",
+      "title": "Run evidence",
+      "description": "Directory for local reports, durable pauses, and protected evidence.",
+      "required": false,
+      "default": "${HOME}/.openadapt/runs"
+    },
+    "allow_run": {
+      "type": "boolean",
+      "title": "Allow governed workflow runs",
+      "description": "Add run tools. Every run still passes OpenAdapt's admission, identity, policy, and effect-verification gates.",
+      "required": false,
+      "default": false
+    },
+    "allow_attended_actions": {
+      "type": "boolean",
+      "title": "Allow Needs Attention decisions",
+      "description": "Add Teach and Escalate. A qualified deployment config also enables Continue and Skip with live revalidation.",
+      "required": false,
+      "default": false
+    },
+    "deployment_config": {
+      "type": "file",
+      "title": "Qualified deployment config",
+      "description": "Optional OpenAdapt deployment YAML used for live Continue and Skip verification.",
+      "required": false
+    },
+    "headed": {
+      "type": "boolean",
+      "title": "Show the attended browser",
+      "description": "Keep a deployment-configured browser visible while resolving attended pauses.",
+      "required": false,
+      "default": false
+    },
+    "bundle_key": {
+      "type": "string",
+      "title": "Bundle decryption key",
+      "description": "Optional key for an encrypted-at-rest workflow bundle.",
+      "sensitive": true,
+      "required": false
+    }
+  }
+}

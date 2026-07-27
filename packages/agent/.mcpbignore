@@ -1,0 +1,16 @@
+.github/
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+docs/
+scripts/
+tests/
+*.egg-info/
+**/__pycache__/
+*.pyc
+CLAUDE.md
+SECURITY.md
+llms.txt
+server.json
