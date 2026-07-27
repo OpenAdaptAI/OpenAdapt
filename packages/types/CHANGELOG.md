@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.6.0 (2026-07-27)
+
+### Features
+
+- Add signed human decision task contract
+  ([#11](https://github.com/OpenAdaptAI/openadapt-types/pull/11),
+  [`b8b3275`](https://github.com/OpenAdaptAI/openadapt-types/commit/b8b32756117c8dcc0c6edd14274b14e0e15c6e62))
+
+
 ## v0.5.0 (2026-07-25)
 
 ### Bug Fixes
