@@ -44,7 +44,7 @@ dev = [
     "ruff>=0.1.0",
 ]
 release = [
-    "uv==0.11.29",
+    "uv==0.11.32",
 ]
 all = [
     "openadapt-tray[macos-native]",
@@ -82,7 +82,7 @@ commit_message = "chore: release {version}"
 allow_zero_version = true
 major_on_zero = false
 build_command = """
-python -m pip install --disable-pip-version-check "uv==0.11.29" &&
+python -m pip install --disable-pip-version-check "uv==0.11.32" &&
 python scripts/check_release_consistency.py --write-lock &&
 uv lock --locked --offline &&
 git add uv.lock &&

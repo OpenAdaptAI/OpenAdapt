@@ -20,6 +20,18 @@ def test_release_versions_are_synchronized() -> None:
     assert len(set(versions.values())) == 1, versions
 
 
+def test_release_uv_pin_is_declared_once() -> None:
+    """The `release` extra and the build command must install the same uv.
+
+    The pin lives in two places in pyproject.toml. Only the `release` extra is
+    reflected in uv.lock, so if a bump touches one and not the other, the
+    release build silently installs a uv that is neither declared nor locked.
+    """
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    pins = set(re.findall(r'"uv==([^"]+)"', pyproject))
+    assert len(pins) == 1, f"pyproject.toml pins uv at more than one version: {pins}"
+
+
 def test_semantic_release_refreshes_and_stages_lock_before_tagging() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert (
@@ -32,7 +44,7 @@ def test_semantic_release_refreshes_and_stages_lock_before_tagging() -> None:
     assert "uv lock --upgrade-package" not in pyproject
 
     install = pyproject.index(
-        'python -m pip install --disable-pip-version-check "uv==0.11.29"'
+        'python -m pip install --disable-pip-version-check "uv==0.11.32"'
     )
     synchronize = pyproject.index(
         "python scripts/check_release_consistency.py --write-lock"
