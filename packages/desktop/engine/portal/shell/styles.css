@@ -8,6 +8,9 @@
   --text: #eef2f6;
   --muted: #9fadbc;
   --accent: #4c9aff;
+  /* Used only to mark stakes. Never on a button: nothing in the action bar is
+     allowed to be more salient than anything else in it. */
+  --warn: #f0b429;
   /* Measured from the real action bar by app.js. A constant was wrong once the
      bar carried three two-line buttons, and the outcome line -- the last thing
      in the card -- ended up underneath it. */
@@ -117,8 +120,28 @@ html, body {
 .row-title { display: block; font-weight: 550; }
 .row-meta { display: block; color: var(--muted); font-size: 13px; margin-top: 4px; }
 
+/* Stakes, above the question. Marked out by a rule rather than a fill so it
+   reads as part of the decision and never competes with the answers. */
+.stakes {
+  margin: 4px 0 14px;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--warn);
+}
+.stakes h2 { font-size: 15px; margin: 0 0 4px; color: var(--warn); }
+.stakes p { margin: 0; font-size: 14px; }
+
+/* What the engine cannot check. This is full-size body text, not `.muted`:
+   it is the last thing read before answering and it has to be readable. */
+.limit {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+
 .shot { margin: 16px 0; }
 .shot summary { cursor: pointer; padding: 10px 0; color: var(--accent); }
+.shot .muted { margin: 8px 0 0; }
 .shot img {
   width: 100%;
   height: auto;
@@ -149,11 +172,14 @@ html, body {
    what was observed after a terminal receipt. */
 .actions[hidden] { display: none; }
 
+/* With no filled action, the bar has to read as a set of controls on its own
+   contrast rather than on one accent, so the surface is lifted and the border
+   strengthened -- equally, for all of them. */
 .actions button {
   min-height: 52px;
   border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--panel);
+  border: 1px solid #3a444f;
+  background: #212831;
   color: var(--text);
   font: 600 16px/1.2 inherit;
   cursor: pointer;
@@ -166,8 +192,31 @@ html, body {
 .actions button .label { font-weight: 600; }
 .actions button .brief { font-weight: 400; font-size: 13px; opacity: 0.78; }
 
-.actions button.primary { background: var(--accent); border-color: var(--accent); color: #06121f; }
+/* Every answer is styled identically. There is deliberately no `.primary` rule:
+   the accent used to be painted on `allowed_actions[0]`, which the engine sets
+   from a predicate about what it can re-verify, not about what the operator
+   should do. See the comment above `renderActions` in app.js. Do not
+   reintroduce a filled action here without a field that actually means
+   "recommended". */
 .actions button[disabled] { opacity: 0.55; }
+
+/* Shown in the bar until the operator reaches the end of the decision. It is
+   not an answer and it is not tappable -- there is no shortcut past the
+   content, because the content being on the path is the entire point. */
+.gate {
+  margin: 0;
+  padding: 12px 14px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+/* A zero-height mark at the very end of the document. Reaching it is what
+   opens the gate, so it must not be `display: none`. */
+.gate-mark { height: 1px; }
 
 .lede { font-size: 17px; margin: 0 0 10px; }
 

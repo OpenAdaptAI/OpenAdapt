@@ -26,6 +26,8 @@ const RESOLUTION_HALT = {
     capability_digest: "sha256:" + "a".repeat(64),
     signature: "hmac-sha256:" + "b".repeat(64),
     delivery_state: "not_delivered",
+    risk_class: "unknown",
+    created_at: "2026-07-27T21:00:00+00:00",
     expires_at: "2026-07-27T22:00:00+00:00",
     allowed_actions: ["verify_and_resume", "teach", "escalate"],
     evidence: {},
@@ -35,6 +37,7 @@ const RESOLUTION_HALT = {
     question: "Can you prepare one unambiguous target in the live application?",
     explanation: "The compiled target could not be resolved uniquely.",
     assurance: "Your answer does not mark the run verified.",
+    after_artifact_id: "artifact-1",
     halt: {
       category: "resolution",
       step_ordinal: 1,
@@ -143,6 +146,9 @@ function outcomeText() {
 }
 
 beforeEach(() => {
+  // The gate tests replace `IntersectionObserver`; drop every stub so one test
+  // cannot decide whether the next one is gated.
+  vi.unstubAllGlobals();
   detail = RESOLUTION_HALT;
   decisionReply = { status: 200, body: null };
   window.sessionStorage.clear();
@@ -330,6 +336,157 @@ describe("the terminal receipt shape", () => {
     await answer();
     expect(outcomeText()).toContain("The result is uncertain");
     expect(outcomeText()).not.toContain("Waiting for this computer");
+  });
+});
+
+describe("no answer is rendered as the recommended one", () => {
+  it("gives every action the same styling, however the engine ordered them", async () => {
+    await boot();
+    await openTask();
+    const buttons = Array.from(
+      document.querySelectorAll("#actions [data-action]"),
+    ) as HTMLButtonElement[];
+    expect(buttons).toHaveLength(3);
+    // `allowed_actions[0]` is `verify_and_resume` here, which is exactly the
+    // case that used to be painted in filled accent.
+    expect(buttons[0].dataset.action).toBe("verify_and_resume");
+    const classes = new Set(buttons.map((b) => b.className));
+    expect(classes).toEqual(new Set([""]));
+    expect(document.getElementById("actions")!.innerHTML).not.toContain("primary");
+  });
+});
+
+describe("the assurance sentence names both halves of the boundary", () => {
+  it("says what the engine cannot check and puts it above the actions", async () => {
+    await boot();
+    await openTask();
+    const limit = document.querySelector(".limit")!.textContent ?? "";
+    expect(limit).toContain("re-checks what it can measure");
+    expect(limit).toContain("cannot check whether you actually looked");
+    expect(limit).toContain("Answer from the live application");
+    // The engine's one-sided sentence is replaced, not printed beside it.
+    const text = document.getElementById("main")!.textContent ?? "";
+    expect(text).not.toContain("Your answer does not mark the run verified");
+    // Reading order: the limit precedes the action bar, which is the last
+    // element the operator reaches.
+    const card = document.querySelector(".card")!;
+    const limitNode = card.querySelector(".limit")!;
+    const outcome = card.querySelector(".outcome")!;
+    expect(limitNode.compareDocumentPosition(outcome) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("the retained frame is named as history, not as the live screen", () => {
+  it("labels it by when OpenAdapt stopped, ages it, and points at the app", async () => {
+    detail = {
+      ...RESOLUTION_HALT,
+      task: {
+        ...RESOLUTION_HALT.task,
+        created_at: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
+      },
+    };
+    await boot();
+    await openTask();
+    const shot = document.querySelector(".shot")!.textContent ?? "";
+    expect(shot).toContain("Screen when OpenAdapt stopped");
+    expect(shot).toContain("about 14 minutes ago");
+    expect(shot).toContain("not the live screen");
+    expect(shot).toContain("Look at the application itself");
+    expect(shot).not.toContain("current screen");
+    // A refresh control would manufacture the liveness this wording removes,
+    // and the runner does not re-observe on demand.
+    expect(document.querySelector(".shot")!.innerHTML).not.toContain("Refresh");
+  });
+});
+
+describe("stakes are shown above the question, and only when they are known", () => {
+  it("renders the irreversible case", async () => {
+    detail = {
+      ...RESOLUTION_HALT,
+      task: { ...RESOLUTION_HALT.task, risk_class: "irreversible" },
+    };
+    await boot();
+    await openTask();
+    const stakes = document.querySelector(".stakes")!.textContent ?? "";
+    expect(stakes).toContain("This cannot be undone");
+    // Above the question, not below it.
+    const card = document.querySelector(".card")!;
+    const heading = card.querySelector("h1")!;
+    expect(
+      card.querySelector(".stakes")!.compareDocumentPosition(heading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("says nothing at all when the engine could not establish the stakes", async () => {
+    await boot();
+    await openTask();
+    expect(document.querySelector(".stakes")).toBeNull();
+  });
+});
+
+describe("the answers are gated on reaching the end of the decision", () => {
+  let observed: Element[] = [];
+  let fire: ((entries: unknown[]) => void) | null = null;
+
+  function stubObserver() {
+    observed = [];
+    fire = null;
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: (entries: unknown[]) => void) {
+          fire = callback;
+        }
+        observe(node: Element) {
+          observed.push(node);
+        }
+        disconnect() {
+          fire = null;
+        }
+      },
+    );
+  }
+
+  it("shows a prompt instead of the answers until the gate is reached", async () => {
+    stubObserver();
+    await boot();
+    await openTask();
+    const bar = document.getElementById("actions")!;
+    expect(bar.querySelectorAll("[data-action]")).toHaveLength(0);
+    expect(bar.textContent).toContain("Read this decision to the end");
+    // Nothing in the prompt is tappable: there is no shortcut past the content.
+    expect(bar.querySelectorAll("button")).toHaveLength(0);
+    // The gate is the last element in the document, after the consequence card.
+    expect(observed).toHaveLength(1);
+    expect(observed[0].id).toBe("gate");
+    expect(document.getElementById("main")!.lastElementChild!.id).toBe("gate");
+
+    fire!([{ isIntersecting: true }]);
+    await flush();
+    expect(bar.querySelectorAll("[data-action]")).toHaveLength(3);
+    expect(bar.textContent).not.toContain("Read this decision to the end");
+  });
+
+  it("answers normally once the gate has opened", async () => {
+    stubObserver();
+    decisionReply = {
+      status: 200,
+      body: { state: "completed", reason_code: "verified_and_resumed", action: "verify_and_resume" },
+    };
+    await boot();
+    await openTask();
+    fire!([{ isIntersecting: true }]);
+    await flush();
+    await answer();
+    expect(outcomeText()).toContain("Checked and continued");
+  });
+
+  it("fails open where the browser cannot observe the gate", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    await boot();
+    await openTask();
+    expect(document.querySelectorAll("#actions [data-action]")).toHaveLength(3);
   });
 });
 

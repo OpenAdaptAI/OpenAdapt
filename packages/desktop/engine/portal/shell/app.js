@@ -234,6 +234,48 @@ const RECHECK_NOUN = {
   delivery_reconciliation: "reconcile an action that may already have been sent",
 };
 
+// ------------------------------------------------------------------- stakes
+//
+// Flow computes `risk_class` and seals it into the signed task, and this shell
+// used to drop it. It is the one field that says what a wrong answer costs, so
+// it goes at the very top -- above the question, above everything.
+//
+// Only `irreversible` and `consequential` are rendered. `unknown` is the
+// majority case, and a row that says nothing on most halts is the mechanism by
+// which its neighbours become ignorable too.
+
+const RISK_COPY = {
+  irreversible: {
+    title: "This cannot be undone",
+    body:
+      "The step OpenAdapt stopped on writes something that cannot be taken " +
+      "back. If you are not certain, hand it on instead of continuing.",
+  },
+  consequential: {
+    title: "This writes to the system of record",
+    body:
+      "The step OpenAdapt stopped on changes stored data, and the result has " +
+      "to be proved afterwards rather than assumed.",
+  },
+};
+
+// --------------------------------------------------- what the engine cannot do
+//
+// Flow sends a one-sided `presentation.assurance`: "your answer does not mark
+// the run verified, OpenAdapt re-checks the live state". Read on a phone that
+// says *the computer will catch me*, which is an over-trust message -- it names
+// the half of the boundary that protects the operator and omits the half they
+// are solely responsible for. The engine can re-prove its own postconditions,
+// identity contract, and effect contract. It cannot observe whether a person
+// looked. So the shell states both halves, and states them above the actions
+// rather than under them, because a sentence below the buttons is read after
+// the decision if it is read at all.
+
+const LIMIT_COPY =
+  "OpenAdapt re-checks what it can measure and stops again if that fails. It " +
+  "cannot check whether you actually looked. Answer from the live " +
+  "application, not from this page.";
+
 const main = document.getElementById("main");
 const actionBar = document.getElementById("actions");
 const deviceLabel = document.getElementById("device");
@@ -362,6 +404,7 @@ function syncActionBarSpace() {
 // now carries an explicit `.actions[hidden]`, and every hide goes through here
 // so the reserved space is released at the same moment.
 function hideActions() {
+  closeGate();
   actionBar.hidden = true;
   actionBar.innerHTML = "";
   syncActionBarSpace();
@@ -498,6 +541,57 @@ function recheckBlock(halt) {
     </section>`;
 }
 
+function stakesBlock(task) {
+  const copy = RISK_COPY[task && task.risk_class];
+  if (!copy) return "";
+  return `<section class="stakes">
+      <h2>${esc(copy.title)}</h2>
+      <p>${esc(copy.body)}</p>
+    </section>`;
+}
+
+// "about 14 minutes" / "about 3 hours" / "about 2 days". Deliberately coarse:
+// the point is that the picture is old, not exactly how old, and a precise
+// figure invites the reader to treat it as a live reading.
+function describeAge(iso) {
+  const then = Date.parse(iso || "");
+  if (!Number.isFinite(then)) return "";
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (seconds < 0) return "";
+  if (seconds < 90) return "less than a minute";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `about ${minutes} minutes`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return `about ${hours} hour${hours === 1 ? "" : "s"}`;
+  return `about ${Math.round(hours / 24)} days`;
+}
+
+// The frame is a RE-ENTRY CUE, not evidence. This operator was not doing this
+// task when it stopped, so they have no goal to retrieve and the picture is the
+// only orientation the interface offers -- which is why it stays. But it used
+// to be introduced as "View current screen" while showing a retained artifact,
+// on a product whose whole thesis is that the screen is not the record. An
+// operator who reads "current", looks, and answers has produced a confident
+// wrong answer by doing what the label told them to.
+//
+// So: name it as history, say how old it is, and point at the live application.
+// There is deliberately NO refresh control. The runner does not re-observe on
+// demand, and a refresh that re-fetched this same stored artifact would
+// manufacture the exact illusion of liveness this wording exists to remove.
+function frameBlock(task, presentation) {
+  const frameId = presentation.after_artifact_id || presentation.before_artifact_id;
+  if (!frameId) return "";
+  const age = describeAge(task && task.created_at);
+  const stopped = age ? `when it stopped ${age} ago` : "when it stopped";
+  return `<details class="shot"><summary>Screen when OpenAdapt stopped</summary>
+      <img id="frame" alt="The screen OpenAdapt retained when it stopped"
+           data-artifact="${esc(frameId)}">
+      <p class="muted">This is the picture OpenAdapt kept ${esc(stopped)}. It is
+      not the live screen and it does not update. Look at the application itself
+      before you answer.</p>
+    </details>`;
+}
+
 function consequenceBlock(task) {
   const actions = (task && task.allowed_actions) || [];
   const items = actions
@@ -525,38 +619,38 @@ async function showTask(runId) {
     delivered: "Sent",
     unknown: "May have been sent",
   }[delivery];
-  const frameId = presentation.after_artifact_id || presentation.before_artifact_id;
   const halt = presentation.halt;
   const stopped = describeStop(halt);
+  // Reading order matters more than length here. What a wrong answer costs and
+  // what the engine cannot check are placed where they are passed on the way to
+  // the buttons; the counts, the expiry and the long-form consequence card are
+  // left below, where volume is free.
+  //
+  // `presentation.assurance` is deliberately not rendered: it is the one-sided
+  // sentence LIMIT_COPY replaces, and printing both would restate the reassuring
+  // half twice and the limit once.
   render(`
     <button class="back" id="back">← All decisions</button>
     <section class="card">
       ${deliveryText ? `<p class="chip">${esc(deliveryText)}</p>` : ""}
+      ${stakesBlock(task)}
       <h1>${esc(presentation.question || "OpenAdapt needs a decision")}</h1>
       ${stopped ? `<p class="lede">${esc(stopped)}</p>` : ""}
       ${presentation.explanation ? `<p class="muted">${esc(presentation.explanation)}</p>` : ""}
+      ${frameBlock(task, presentation)}
       ${ladderRows(halt)}
       ${recheckBlock(halt)}
       ${evidenceRows(task)}
-      ${
-        frameId
-          ? `<details class="shot"><summary>View current screen</summary>
-             <img id="frame" alt="Retained local screen" data-artifact="${esc(frameId)}">
-             </details>`
-          : ""
-      }
       ${
         task && task.expires_at
           ? `<p class="muted">This decision is valid until ${esc(task.expires_at)}.</p>`
           : ""
       }
-      <p class="muted">${esc(
-        presentation.assurance ||
-          "Your answer does not mark the run verified. OpenAdapt re-checks the live state before it can continue.",
-      )}</p>
+      <p class="limit">${esc(LIMIT_COPY)}</p>
       <p class="outcome" id="outcome"></p>
     </section>
     ${consequenceBlock(task)}
+    <div id="gate" class="gate-mark" aria-hidden="true"></div>
   `);
   document.getElementById("back").addEventListener("click", showList);
   const frame = document.getElementById("frame");
@@ -589,27 +683,104 @@ async function loadFrame(runId, image) {
   image.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
 }
 
+// -------------------------------------------------------- the action gate
+//
+// The bar is `position: fixed`, which is correct mobile engineering and stays
+// exactly where it is. What changes is the GATING. Previously the buttons were
+// equally available at scroll position 0 and at scroll position 100%, so a
+// complete tappable decision fitted in one viewport with no evidence consulted
+// and there was no scroll depth at which reading was required. Everything that
+// calibrates the answer was present on the page and none of it was on the path
+// to the action.
+//
+// `#gate` is the last element in the document, so the answers become available
+// only once the operator has reached the end of what the engine had to say.
+// When the engine had little to say the gate is already on screen and the
+// answers appear at once: this is meant to be fast when the answer is obvious
+// and structurally slower when it is not, in proportion to the evidence, rather
+// than a fixed tax on every decision.
+//
+// It fails OPEN. Without `IntersectionObserver` the answers render immediately;
+// an operator who cannot answer at all is a worse outcome than one who answers
+// early.
+
+let gateObserver = null;
+
+function closeGate() {
+  if (gateObserver) {
+    gateObserver.disconnect();
+    gateObserver = null;
+  }
+}
+
+function gatePrompt() {
+  actionBar.innerHTML =
+    `<p class="gate" role="status">Read this decision to the end — the answers ` +
+    `are below it.</p>`;
+  actionBar.hidden = false;
+  syncActionBarSpace();
+}
+
 function renderActions(runId, detail) {
   const task = detail.task;
   if (!task || !Array.isArray(task.allowed_actions)) return;
-  actionBar.innerHTML = task.allowed_actions
+  const buttons = task.allowed_actions
     .filter((action) => ACTION_WIRE[action])
     .map(
-      (action, index) =>
+      (action) =>
         // Each button carries its consequence, because "verify & continue",
         // "teach" and "needs more help" are indistinguishable from their names
         // alone -- and they differ in whether the saved workflow changes.
-        `<button class="${index === 0 ? "primary" : ""}" data-action="${esc(action)}">
+        //
+        // Every button is styled identically, on purpose. The accent used to
+        // follow `allowed_actions[0]`, and Flow puts `continue` at index 0
+        // exactly when the step has enough contract for the engine to re-verify
+        // a continue. That is a statement about what the engine can CATCH, and
+        // rendering it as a filled primary turned it into a recommendation to
+        // the operator -- emphasising continue precisely where a wrong answer
+        // is catchable, which is the inverse of what a person needs, and in a
+        // place they cannot see the difference. Which option looks like the
+        // default is the largest measured lever on this kind of screen, so it
+        // must not be set by a predicate that does not mean "recommended". No
+        // field here means that, so nothing is emphasised.
+        `<button data-action="${esc(action)}">
            <span class="label">${esc(ACTION_WIRE[action].label)}</span>
            <span class="brief">${esc(ACTION_WIRE[action].brief)}</span>
          </button>`,
     )
     .join("");
-  actionBar.hidden = actionBar.innerHTML === "";
-  syncActionBarSpace();
-  actionBar.querySelectorAll("[data-action]").forEach((node) => {
-    node.addEventListener("click", () => decide(runId, detail, node.dataset.action));
+  if (!buttons) {
+    hideActions();
+    return;
+  }
+  const open = () => {
+    closeGate();
+    // The bar grows when the one-line prompt becomes three two-line buttons,
+    // and it grows upward over content the operator was already reading. Take
+    // the scroll position down by exactly that much so nothing that was on
+    // screen is swallowed -- the same defect as the outcome line disappearing
+    // under a taller-than-guessed bar.
+    const before = actionBar.hidden ? 0 : actionBar.getBoundingClientRect().height;
+    actionBar.innerHTML = buttons;
+    actionBar.hidden = false;
+    syncActionBarSpace();
+    const growth = actionBar.getBoundingClientRect().height - before;
+    const scroller = document.scrollingElement || document.documentElement;
+    if (growth > 0 && scroller) scroller.scrollTop += growth;
+    actionBar.querySelectorAll("[data-action]").forEach((node) => {
+      node.addEventListener("click", () => decide(runId, detail, node.dataset.action));
+    });
+  };
+  const gate = document.getElementById("gate");
+  if (!gate || typeof IntersectionObserver !== "function") {
+    open();
+    return;
+  }
+  gatePrompt();
+  gateObserver = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) open();
   });
+  gateObserver.observe(gate);
 }
 
 // Translate one reply into operator copy. Returns `terminal` (the decision is
