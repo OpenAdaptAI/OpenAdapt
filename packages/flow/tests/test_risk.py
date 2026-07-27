@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from openadapt_flow.compiler import compile_recording
-from openadapt_flow.ir import ActionKind, Anchor, Step
+from openadapt_flow.ir import ActionKind, Anchor, Step, StructuralLocator
 from openadapt_flow.risk import classify_step_risk, infer_step_risk, is_write_shaped
 
 VIEWPORT = (1280, 800)
@@ -138,6 +138,41 @@ class TestHeuristic:
         inference = infer_step_risk(step)
         assert inference.risk == "reversible"
         assert inference.requires_review is True
+
+    def test_role_only_text_field_still_requires_review(self) -> None:
+        step = Step(
+            id="s",
+            intent="click at (10, 12)",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="t.png",
+                region=(0, 0, 1, 1),
+                click_point=(10, 12),
+                structural=StructuralLocator(selector="#username", role="textbox"),
+            ),
+        )
+        assert infer_step_risk(step).requires_review is True
+
+    def test_structural_accessible_name_is_risk_evidence(self) -> None:
+        step = Step(
+            id="s",
+            intent="click at (10, 12)",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="t.png",
+                region=(0, 0, 1, 1),
+                click_point=(10, 12),
+                structural=StructuralLocator(
+                    selector="#username", role="textbox", name="Username"
+                ),
+            ),
+        )
+        inference = infer_step_risk(step)
+        assert inference.risk == "reversible"
+        assert inference.requires_review is False
+
+        step.anchor.structural.name = "Save"
+        assert infer_step_risk(step).risk == "irreversible"
 
 
 # --- end-to-end through the compiler ---------------------------------------

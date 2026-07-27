@@ -525,6 +525,14 @@ class TestPlaywrightFocusedFieldLabel:
 
                 page.click("#a")
                 assert backend.focused_field_label() == "Insurance No."
+                box = page.locator("#a").bounding_box()
+                assert box is not None
+                structural = backend.structural_locator_at(
+                    int(box["x"] + box["width"] / 2),
+                    int(box["y"] + box["height"] / 2),
+                )
+                assert structural is not None
+                assert structural.name == "Insurance No."
 
                 page.click("#w")
                 page.keyboard.type("WARD-VALUE-NEVER-A-LABEL")

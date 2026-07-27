@@ -120,12 +120,16 @@ def is_write_shaped(text: str) -> bool:
 
 def step_text(step: Step) -> str:
     """The text a click step's risk is inferred from: its intent plus its
-    target's OCR label (the intent already embeds the label for labelled
-    clicks, but an unlabelled coordinate click carries none, and a healed
-    anchor may carry a fresher label than the frozen intent)."""
+    target's retained OCR and structural-accessibility labels (the intent
+    already embeds the label for ordinary labelled clicks, but a coordinate
+    click may carry none, and a healed anchor may carry fresher evidence than
+    the frozen intent)."""
     parts = [step.intent or ""]
     if step.anchor is not None and step.anchor.ocr_text:
         parts.append(step.anchor.ocr_text)
+    structural = step.anchor.structural if step.anchor is not None else None
+    if structural is not None and structural.name:
+        parts.append(structural.name)
     return " ".join(parts)
 
 
@@ -190,7 +194,14 @@ def infer_step_risk(step: Step) -> RiskInference:
         )
     if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
         return RiskInference("reversible", "action is not a pointer submission")
-    if step.anchor is None or not (step.anchor.ocr_text or "").strip():
+    structural = step.anchor.structural if step.anchor is not None else None
+    target_labels = (
+        (step.anchor.ocr_text if step.anchor is not None else None),
+        (structural.name if structural is not None else None),
+    )
+    if step.anchor is None or not any(
+        isinstance(value, str) and value.strip() for value in target_labels
+    ):
         # An unlabelled primary click may be a focus/navigation action or an
         # icon-only write. Demo replay remains usable, but no policy may certify
         # the unresolved classification until qualification supplies an

@@ -546,7 +546,8 @@ _CLEAN_GUARD_JS = r"""(args) => {
     if (tokenMap instanceof Map) tokenMap.delete(args.token);
 }"""
 
-_STRUCTURAL_LOCATOR_AT_JS = r"""([px, py]) => {
+_STRUCTURAL_LOCATOR_AT_JS = (
+    r"""([px, py]) => {
     const el = document.elementFromPoint(px, py);
     if (!el) return null;
     const actionable = el.closest(
@@ -568,7 +569,11 @@ _STRUCTURAL_LOCATOR_AT_JS = r"""([px, py]) => {
         role = map[tag] || null;
         if (tag === 'a' && !actionable.getAttribute('href')) role = null;
     }
+    const fieldLabel = """
+    + _FIELD_LABEL_JS
+    + r""";
     let name = actionable.getAttribute('aria-label');
+    if (!name) name = fieldLabel(actionable);
     if (!name) {
         const text = (actionable.textContent || '').replace(/\s+/g, ' ').trim();
         name = text ? text.slice(0, 120) : null;
@@ -576,6 +581,7 @@ _STRUCTURAL_LOCATOR_AT_JS = r"""([px, py]) => {
     if (!selector && !(role && name)) return null;
     return {selector: selector, role: role, name: name};
 }"""
+)
 
 _FRAME_SELECTOR_JS = r"""(el) => {
     const doc = el.ownerDocument;
