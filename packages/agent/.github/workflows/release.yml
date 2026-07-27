@@ -42,7 +42,7 @@ jobs:
     name: Build + validate (dry run, no publish)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -113,7 +113,7 @@ jobs:
       id-token: write # OIDC for PyPI Trusted Publishing
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Resolve release version + assert it matches the package
         id: ver
         shell: bash
@@ -171,7 +171,7 @@ jobs:
       id-token: write # OIDC for `mcp-publisher login github-oidc`
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Resolve release version
         id: ver
         shell: bash
