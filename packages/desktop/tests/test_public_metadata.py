@@ -227,7 +227,12 @@ def test_beta_release_notes_describe_the_bundled_flow_runtime() -> None:
         if dependency.startswith("openadapt-flow")
     ]
     assert flow_dependencies == ["openadapt-flow[browser,console]==1.25.0"]
-    assert "openadapt-capture>=1.1.0" in dependencies
+    # At or above the floor the bundled Flow declares for its ``capture``
+    # extra; ``tests/test_capture_runtime_contract.py`` compares the two
+    # authoritatively. 1.2.1 specifically, because 1.2.0 and every release
+    # before it could upload a raw microphone waveform to a hosted recognizer.
+    assert "openadapt-capture>=1.2.1" in dependencies
+    assert 'name = "openadapt-capture"\nversion = "1.2.1"' in lock
     assert "openadapt-privacy>=1.0.0" in dependencies
     assert "Development Status :: 4 - Beta" in classifiers
     assert "Development Status :: 2 - Pre-Alpha" not in classifiers

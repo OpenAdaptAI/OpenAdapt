@@ -433,6 +433,137 @@ def cmd_capabilities(args: argparse.Namespace, engine: types.SimpleNamespace) ->
     print("=" * 72)
 
 
+#: The distribution whose ``capture`` extra declares the producer contract
+#: Desktop's native record path depends on.
+FLOW_DISTRIBUTION_NAME = "openadapt-flow"
+CAPTURE_DISTRIBUTION_NAME = "openadapt-capture"
+
+
+def _declared_capture_floor() -> str | None:
+    """Return the capture lower bound the installed Flow runtime declares.
+
+    ``None`` when there is nothing authoritative to compare against: no Flow
+    runtime, no ``packaging``, or no such requirement. Desktop never installs
+    Flow's ``capture`` extra by name -- it depends on ``openadapt-capture``
+    directly -- so no resolver ever compares these two numbers even though the
+    frozen sidecar runs Flow's capture adapter against this exact build.
+    """
+
+    from importlib.metadata import PackageNotFoundError, distribution
+
+    try:
+        from packaging.requirements import InvalidRequirement, Requirement
+    except ModuleNotFoundError:  # pragma: no cover - packaging is always present
+        return None
+    try:
+        flow = distribution(FLOW_DISTRIBUTION_NAME)
+    except PackageNotFoundError:
+        return None
+    for raw_requirement in flow.requires or ():
+        try:
+            requirement = Requirement(raw_requirement)
+        except InvalidRequirement:
+            continue
+        if requirement.name.replace("_", "-").lower() != CAPTURE_DISTRIBUTION_NAME:
+            continue
+        if "capture" not in str(requirement.marker or ""):
+            continue
+        for specifier in requirement.specifier:
+            if specifier.operator == ">=":
+                return str(specifier.version)
+    return None
+
+
+#: Printed by ``doctor`` when the demonstrated-chord conversion actually runs.
+#: The frozen smoke asserts on this exact phrase, because a version string
+#: cannot tell you whether the two libraries inside a one-file binary can still
+#: hand a modifier chord to one another.
+CAPTURE_CHORD_VERIFIED = "converts a demonstrated chord"
+
+
+def _chord_conversion_works() -> bool | None:
+    """Convert one synthetic Ctrl+S through capture and Flow's adapter.
+
+    ``None`` when there is no Flow adapter to convert into. This is the exact
+    pair of hops Desktop's native record path performs after the operator stops
+    recording, so running it costs microseconds here and saves discovering the
+    failure at the end of a real demonstration.
+    """
+
+    try:
+        from openadapt_capture.capture import Action
+        from openadapt_capture.events import KeyDownEvent, KeyUpEvent
+        from openadapt_capture.processing import process_events
+        from openadapt_flow.adapters.capture import _flow_events
+    except ImportError:
+        return None
+
+    try:
+        processed = process_events(
+            [
+                KeyDownEvent(timestamp=1.00, key_name="ctrl"),
+                KeyDownEvent(timestamp=1.05, key_char="s"),
+                KeyUpEvent(timestamp=1.10, key_char="s"),
+                KeyUpEvent(timestamp=1.15, key_name="ctrl"),
+            ]
+        )
+        events = _flow_events(
+            [Action(event=event, _capture=None) for event in processed],
+            1.0,
+            {},
+            include_structural=False,
+        )
+    except Exception:
+        return False
+    return [event.get("kind") for event in events] == ["hotkey"]
+
+
+def capture_contract_status(installed: str) -> tuple[bool, str]:
+    """Report the installed capture against the bundled Flow's declared floor.
+
+    The floor is the cheap signal; the conversion probe is the decisive one.
+    A capture below Flow's floor imports cleanly and records cleanly, then
+    refuses to convert any demonstration containing a modifier chord -- after
+    the operator has already performed the whole workflow.
+    """
+
+    chord = _chord_conversion_works()
+    if chord is False:
+        return False, (
+            f"{installed} cannot hand a demonstrated keyboard shortcut to the "
+            "bundled Flow runtime; recordings containing one will fail to "
+            "convert"
+        )
+
+    floor = _declared_capture_floor()
+    if floor is None:
+        detail = installed
+    else:
+        try:
+            from packaging.version import InvalidVersion, Version
+        except ModuleNotFoundError:  # pragma: no cover - packaging is present
+            detail = installed
+        else:
+            try:
+                satisfied = Version(installed) >= Version(floor)
+            except InvalidVersion:
+                return False, (
+                    f"{installed} is not a readable version; the bundled Flow "
+                    f"runtime requires >={floor}"
+                )
+            if not satisfied:
+                return False, (
+                    f"{installed} is below the >={floor} the bundled Flow "
+                    "runtime requires; a demonstration containing a keyboard "
+                    "shortcut will fail to convert"
+                )
+            detail = f"{installed} (satisfies bundled Flow >={floor})"
+
+    if chord is True:
+        detail = f"{detail}, {CAPTURE_CHORD_VERIFIED}"
+    return True, detail
+
+
 def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """Check system dependencies and configuration."""
     from engine import __version__
@@ -458,13 +589,32 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     except Exception as e:
         checks.append(("Database (SQLite)", False, str(e)))
 
-    # openadapt-capture
+    # openadapt-capture, and whether it satisfies the recording contract the
+    # bundled Flow runtime declares. A capture below Flow's ``capture`` extra
+    # floor imports cleanly and records cleanly, then refuses to convert any
+    # demonstration containing a modifier chord -- after the operator has
+    # already performed the whole workflow. Surface that here instead.
+    #
+    # Activate an already-provisioned vision runtime first, without
+    # downloading one: capture imports NumPy at package level, and NumPy lives
+    # in that verified first-use cache rather than in the MIT sidecar. Skipping
+    # this made a frozen sidecar that does bundle capture report it as "not
+    # installed".
+    from engine.managed_vision import activate_provisioned_vision_runtime
+
+    activate_provisioned_vision_runtime()
     try:
         import openadapt_capture
         ver = getattr(openadapt_capture, "__version__", "installed")
-        checks.append(("openadapt-capture", True, ver))
-    except ImportError:
-        checks.append(("openadapt-capture", False, "not installed (recording disabled)"))
+        ok, detail = capture_contract_status(ver)
+        checks.append(("openadapt-capture", ok, detail))
+    except ImportError as exc:
+        checks.append((
+            "openadapt-capture",
+            False,
+            f"unusable: {exc} (run a record or replay once to provision the "
+            "local vision runtime, or pip install openadapt-capture)",
+        ))
 
     # openadapt-privacy
     try:

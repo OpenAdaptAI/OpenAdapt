@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tarfile
 import zipfile
+from importlib import metadata
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -265,7 +266,14 @@ def test_frozen_notice_inventory_binds_concrete_archive_bytes(
         packages.append(
             {
                 "name": name,
-                "version": "1.0.0",
+                # Capture carries its real version: the inventory is where the
+                # artifact gate reads the number it compares against the floor
+                # the bundled Flow declares for its ``capture`` extra.
+                "version": (
+                    metadata.version(verify.CAPTURE_DISTRIBUTION)
+                    if name == verify.CAPTURE_DISTRIBUTION
+                    else "1.0.0"
+                ),
                 "license_evidence": ["MIT"],
                 "notices": notices,
             }
@@ -298,12 +306,33 @@ def test_frozen_notice_inventory_binds_concrete_archive_bytes(
         }
     ).encode()
 
+    # Supplied explicitly because this job installs Desktop without the build
+    # extra, so there is no bundled Flow distribution to read the floor from.
+    # The real gate reads it from Flow's own metadata; that path is covered by
+    # ``test_bundled_capture_floor_comes_from_the_frozen_flow_runtime``.
     build_only_roots = verify.validate_frozen_notice_inventory(
         inventory,
         members=set(payloads),
         extract_member=payloads.__getitem__,
+        capture_floor="1.2.0",
     )
     assert build_only_roots == ("PyInstaller",)
+
+    # The same archive with the capture version that actually shipped in
+    # openadapt-desktop 0.14.0 must not pass. That build imports and records
+    # perfectly well, and then refuses to convert any demonstration containing
+    # a modifier chord, so the artifact gate is the last place to catch it.
+    skewed = json.loads(inventory)
+    for package in skewed["packages"]:
+        if package["name"] == verify.CAPTURE_DISTRIBUTION:
+            package["version"] = "1.1.1"
+    with pytest.raises(ValueError, match="below the >=1.2.0 floor"):
+        verify.validate_frozen_notice_inventory(
+            json.dumps(skewed).encode(),
+            members=set(payloads),
+            extract_member=payloads.__getitem__,
+            capture_floor="1.2.0",
+        )
 
 
 def test_frozen_archive_rejects_build_only_python_modules() -> None:
@@ -470,3 +499,47 @@ def test_attended_console_survives_freezing(tmp_path: Path) -> None:
     assert ["--python-option", "u"] == command[
         command.index("--python-option") : command.index("--python-option") + 2
     ]
+
+
+def test_frozen_capture_carries_its_own_distribution_metadata(tmp_path: Path) -> None:
+    """``openadapt_capture.__version__`` is read from installed metadata.
+
+    Without ``--copy-metadata`` PyInstaller ships no dist-info, the frozen
+    sidecar reports ``0+unknown``, and neither ``doctor`` nor the frozen smoke
+    can tell which capture the installer actually contains -- let alone whether
+    it satisfies the floor the bundled Flow declares for its ``capture`` extra.
+    """
+
+    command = _build_command("", tmp_path)
+
+    copied = [
+        command[index + 1]
+        for index, value in enumerate(command)
+        if value == "--copy-metadata"
+    ]
+    assert "openadapt-capture" in copied
+    assert "openadapt-flow" in copied
+
+
+def test_bundled_capture_floor_comes_from_the_frozen_flow_runtime() -> None:
+    """The floor is read from Flow's metadata, never restated in this repo."""
+
+    from scripts import frozen_notices
+
+    try:
+        metadata.distribution(frozen_notices.FLOW_DISTRIBUTION)
+    except metadata.PackageNotFoundError:
+        pytest.skip(
+            "the bundled openadapt-flow runtime is installed by the build "
+            "extra; the qualification-contract job supplies it"
+        )
+
+    floor = frozen_notices.declared_capture_floor()
+    assert frozen_notices.capture_floor_is_satisfied(floor, floor)
+    assert not frozen_notices.capture_floor_is_satisfied("1.1.1", floor)
+
+    installed = metadata.version(frozen_notices.CAPTURE_DISTRIBUTION)
+    assert frozen_notices.capture_floor_is_satisfied(installed, floor), (
+        f"openadapt-capture {installed} is below the >={floor} the bundled "
+        "openadapt-flow declares for its 'capture' extra"
+    )

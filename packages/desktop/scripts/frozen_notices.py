@@ -87,6 +87,75 @@ def bundled_flow_pin(root: Path = REPOSITORY_ROOT) -> tuple[str, tuple[str, ...]
     return str(version), extras
 
 
+CAPTURE_DISTRIBUTION = "openadapt-capture"
+CAPTURE_CONSUMER_EXTRA = "capture"
+
+
+def declared_capture_floor(
+    *,
+    distribution_getter: Callable[[str], object] = distribution,
+) -> str:
+    """Return the ``openadapt-capture`` floor the bundled Flow itself declares.
+
+    Desktop's native record path runs Flow's own capture adapter in-process
+    against whatever ``openadapt-capture`` Desktop resolved, so Flow's
+    ``capture`` extra is the authoritative producer/consumer contract even
+    though Desktop never installs that extra by name -- which is exactly why
+    the skew was invisible to the resolver. Read the floor from the *installed*
+    Flow distribution rather than restating it, so raising it upstream fails
+    this build instead of silently shipping a producer Flow refuses.
+
+    Raises:
+        RuntimeError: If Flow is not installed, or declares no such floor.
+    """
+
+    try:
+        from packaging.requirements import InvalidRequirement, Requirement
+    except ModuleNotFoundError as exc:  # pragma: no cover - build environment guard
+        raise RuntimeError(
+            "the build extra is required to read the bundled capture floor"
+        ) from exc
+
+    try:
+        dist = distribution_getter(FLOW_DISTRIBUTION)
+    except PackageNotFoundError as exc:
+        raise RuntimeError(
+            "the bundled openadapt-flow runtime is not installed, so its "
+            "declared openadapt-capture floor cannot be read"
+        ) from exc
+
+    for raw_requirement in dist.requires or ():
+        try:
+            requirement = Requirement(raw_requirement)
+        except InvalidRequirement:
+            continue
+        if _canonicalize_name(requirement.name) != CAPTURE_DISTRIBUTION:
+            continue
+        marker = str(requirement.marker or "")
+        if CAPTURE_CONSUMER_EXTRA not in marker:
+            continue
+        for specifier in requirement.specifier:
+            if specifier.operator == ">=":
+                return str(specifier.version)
+    raise RuntimeError(
+        "the bundled openadapt-flow runtime declares no openadapt-capture "
+        f"lower bound for its {CAPTURE_CONSUMER_EXTRA!r} extra"
+    )
+
+
+def capture_floor_is_satisfied(candidate: str, floor: str) -> bool:
+    """Return whether ``candidate`` meets the bundled Flow's capture floor."""
+
+    from packaging.version import InvalidVersion, Version
+
+    try:
+        return Version(candidate) >= Version(floor)
+    except InvalidVersion as exc:
+        raise RuntimeError(
+            f"unusable openadapt-capture version {candidate!r}: {exc}"
+        ) from exc
+
+
 # PyInstaller itself is a build tool and must not be classified as an ordinary
 # frozen runtime package. Its compiled bootloader and loader files are,
 # however, embedded in every executable under the upstream Bootloader

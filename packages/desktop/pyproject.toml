@@ -25,7 +25,19 @@ classifiers = [
 ]
 
 dependencies = [
-    "openadapt-capture>=1.1.0",
+    # Floor, not decoration. Desktop freezes an exact Flow pin whose own
+    # ``capture`` extra declares ``openadapt-capture>=1.2.0``, and Desktop's
+    # native record path runs Flow's capture adapter in-process against
+    # whatever capture this resolves to. Below that floor the producer never
+    # emits ``key.shortcut``, so Flow's adapter refuses every demonstration
+    # containing a modifier chord ("keyboard shortcut 'ctrl+s' has no flow
+    # equivalent") -- after the operator has already performed the workflow.
+    # 1.2.1 rather than 1.2.0 because 1.2.0 and every earlier release resolve
+    # ``capture transcribe``'s default ``auto`` backend to a hosted recognizer
+    # and upload the raw microphone waveform; 1.2.1 removed that path.
+    # ``tests/test_capture_runtime_contract.py`` asserts this floor against the
+    # bundled Flow distribution's own declared extra, so it cannot drift back.
+    "openadapt-capture>=1.2.1",
     "openadapt-privacy>=1.0.0",
     # Exact cross-surface status/target contract used by the presentation
     # exporter and by the generated TypeScript projection checked into src/.

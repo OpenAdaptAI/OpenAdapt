@@ -64,3 +64,14 @@ jobs:
           tests/test_engine/test_qualification.py
           tests/test_engine/test_qualification_capabilities.py
           -v
+
+      # The capture floor is only checkable where the bundled Flow runtime is
+      # installed: Flow's own metadata declares it, and converting a
+      # demonstrated modifier chord needs both libraries. These assertions skip
+      # in the plain test job, so name the file here explicitly.
+      - name: Exercise the capture/Flow producer contract
+        run: >-
+          uv run pytest
+          tests/test_capture_runtime_contract.py
+          tests/test_build_frozen_engine.py::test_bundled_capture_floor_comes_from_the_frozen_flow_runtime
+          -v

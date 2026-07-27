@@ -642,6 +642,30 @@ def _activate(path: Path, contract: RuntimeContract) -> None:
             )
 
 
+def activate_provisioned_vision_runtime() -> Path | None:
+    """Activate an already-provisioned runtime, downloading nothing.
+
+    ``openadapt_capture`` imports NumPy at package level, and NumPy is
+    deliberately outside the MIT sidecar -- it is provisioned on first use into
+    this verified cache. A diagnostic must therefore activate whatever is
+    already provisioned before deciding the capture runtime is missing, or it
+    reports "not installed" about a package the installer definitely contains.
+
+    Returns ``None`` when no valid runtime is provisioned yet. Never
+    provisions, never downloads, never raises.
+    """
+
+    try:
+        contract = load_contract()
+        final = runtime_root() / contract.build_id / contract.target
+        if not _cache_is_valid(final, contract):
+            return None
+        _activate(final, contract)
+    except Exception:
+        return None
+    return final
+
+
 def ensure_managed_vision_runtime(
     *,
     status: Callable[[str], None] | None = None,

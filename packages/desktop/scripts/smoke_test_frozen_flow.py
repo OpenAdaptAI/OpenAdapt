@@ -300,6 +300,65 @@ def _stop(process: subprocess.Popen) -> None:
         process.kill()
 
 
+def _verify_bundled_capture(executable: Path, root: Path, env: dict[str, str]) -> dict:
+    """Prove the frozen sidecar can still record *and* convert a demonstration.
+
+    Two facts a version string in a diff cannot establish, both checked by
+    running the artifact:
+
+    1.  ``openadapt_capture`` and ``openadapt_flow.adapters.capture`` are both
+        reachable inside the one-file archive. Desktop and Flow each import
+        them lazily, from inside functions, which is exactly the shape that
+        survives a source install and then turns out to be missing from a
+        freeze (``uvicorn``'s string-imported loop/protocol modules were this
+        same failure).
+    2.  The capture the installer actually froze satisfies the floor the
+        bundled Flow declares for its ``capture`` extra, and the pair really
+        does hand a demonstrated Ctrl+S across the boundary as a hotkey. Below
+        that floor the producer never emits ``key.shortcut`` and conversion
+        raises -- at the end of the operator's demonstration, not at startup.
+
+    ``doctor`` performs both checks in-process, so this asserts on its verdict
+    rather than reimplementing it here.
+    """
+
+    # The exact phrase the engine prints, imported rather than restated so a
+    # reworded verdict cannot make this assertion quietly vacuous.
+    from engine.cli import CAPTURE_CHORD_VERIFIED as CAPTURE_CHORD_MARKER
+
+    probe_env = dict(env)
+    probe_env["OPENADAPT_DATA_DIR"] = str(root / "capture-contract-data")
+    output, _ = _run([str(executable), "doctor"], env=probe_env, timeout=300)
+
+    line = next(
+        (
+            candidate.strip()
+            for candidate in output.splitlines()
+            if "openadapt-capture:" in candidate
+        ),
+        None,
+    )
+    if line is None:
+        raise RuntimeError(f"the frozen sidecar reported no capture runtime: {output[-2000:]}")
+    if not line.startswith("[OK]"):
+        raise RuntimeError(f"the frozen sidecar's capture runtime is unusable: {line}")
+    if "satisfies bundled Flow >=" not in line:
+        raise RuntimeError(
+            "the frozen sidecar could not compare its capture runtime against "
+            "the bundled Flow's declared floor -- most likely the capture "
+            f"distribution metadata is missing from the freeze: {line}"
+        )
+    if CAPTURE_CHORD_MARKER not in line:
+        raise RuntimeError(
+            "the frozen sidecar did not convert a demonstrated keyboard "
+            f"shortcut through its bundled capture/Flow pair: {line}"
+        )
+    version = line.split("openadapt-capture:", 1)[1].strip().split(" ", 1)[0]
+    if not version or version.startswith("0+"):
+        raise RuntimeError(f"the frozen sidecar cannot name its capture runtime: {line}")
+    return {"bundled_capture": version, "bundled_capture_converts_chord": True}
+
+
 def _verify_attended_console(executable: Path, root: Path, env: dict[str, str]) -> dict:
     """Prove the frozen sidecar serves the portal's decision surface.
 
@@ -606,6 +665,7 @@ def main() -> int:
         ):
             raise RuntimeError("warm run attempted to download the vision runtime again")
 
+        capture = _verify_bundled_capture(executable, root, env)
         console = _verify_attended_console(executable, root, env)
 
         print(
@@ -621,6 +681,7 @@ def main() -> int:
                     "external_network_calls": network_observation,
                     "silent_incorrect_successes": 0,
                     "model_calls": 0,
+                    **capture,
                     **console,
                 },
                 sort_keys=True,

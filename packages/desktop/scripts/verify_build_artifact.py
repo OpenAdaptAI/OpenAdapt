@@ -15,6 +15,7 @@ from pathlib import Path
 
 try:
     from scripts.frozen_notices import (
+        CAPTURE_DISTRIBUTION,
         EXTERNALLY_PROVISIONED_DISTRIBUTIONS,
         FORBIDDEN_FROZEN_DISTRIBUTIONS,
         FROZEN_RUNTIME_ROOTS,
@@ -27,10 +28,13 @@ try:
         PYINSTALLER_VERSION,
         REQUIRED_NOTICE_TOKENS,
         bundled_flow_pin,
+        capture_floor_is_satisfied,
+        declared_capture_floor,
         has_unapproved_copyleft_evidence,
     )
 except ModuleNotFoundError:  # pragma: no cover - direct ``python scripts/...`` use
     from frozen_notices import (
+        CAPTURE_DISTRIBUTION,
         EXTERNALLY_PROVISIONED_DISTRIBUTIONS,
         FORBIDDEN_FROZEN_DISTRIBUTIONS,
         FROZEN_RUNTIME_ROOTS,
@@ -43,6 +47,8 @@ except ModuleNotFoundError:  # pragma: no cover - direct ``python scripts/...`` 
         PYINSTALLER_VERSION,
         REQUIRED_NOTICE_TOKENS,
         bundled_flow_pin,
+        capture_floor_is_satisfied,
+        declared_capture_floor,
         has_unapproved_copyleft_evidence,
     )
 
@@ -110,8 +116,14 @@ def validate_frozen_notice_inventory(
     *,
     members: set[str],
     extract_member,
+    capture_floor: str | None = None,
 ) -> tuple[str, ...]:
-    """Validate the generated notice inventory against exact archive bytes."""
+    """Validate the generated notice inventory against exact archive bytes.
+
+    ``capture_floor`` defaults to the bound the bundled Flow distribution
+    declares for its ``capture`` extra, read from installed metadata. Only a
+    caller without that distribution installed -- a unit test -- supplies it.
+    """
 
     try:
         inventory = json.loads(inventory_payload)
@@ -162,6 +174,25 @@ def validate_frozen_notice_inventory(
             if hashlib.sha256(payload).hexdigest() != expected_hash:
                 raise ValueError(f"notice hash mismatch for {name}: {member}")
         package_index[name] = package
+
+    # The producer/consumer floor, checked against the bytes actually shipped.
+    # Desktop never installs Flow's ``capture`` extra by name, so no resolver
+    # ever compares these two numbers; the frozen sidecar nonetheless runs
+    # Flow's capture adapter against this exact capture build. Shipping one
+    # below Flow's declared floor makes every demonstration containing a
+    # modifier chord fail conversion after the operator has already performed
+    # the workflow.
+    capture_package = package_index.get(CAPTURE_DISTRIBUTION)
+    if capture_package is None:
+        raise ValueError(f"frozen runtime closure omits {CAPTURE_DISTRIBUTION}")
+    capture_floor = capture_floor or declared_capture_floor()
+    capture_version = str(capture_package["version"])
+    if not capture_floor_is_satisfied(capture_version, capture_floor):
+        raise ValueError(
+            f"frozen {CAPTURE_DISTRIBUTION} {capture_version} is below the "
+            f">={capture_floor} floor the bundled openadapt-flow declares for "
+            "its 'capture' extra"
+        )
 
     for required_name, required_tokens in REQUIRED_NOTICE_TOKENS.items():
         package = package_index.get(required_name)

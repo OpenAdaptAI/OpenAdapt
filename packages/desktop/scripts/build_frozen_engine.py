@@ -230,6 +230,16 @@ def build_command(
         "tqdm",
         "--copy-metadata",
         "openadapt-flow",
+        # openadapt-capture resolves ``__version__`` from its own installed
+        # distribution metadata. PyInstaller does not carry dist-info unless
+        # asked, so without this the frozen sidecar reports ``0+unknown``:
+        # neither an operator running ``doctor`` nor this repository's frozen
+        # smoke can then tell which capture the installer actually shipped, let
+        # alone whether it satisfies the floor the bundled Flow declares for
+        # its ``capture`` extra. That floor is load-bearing -- below it, Flow's
+        # adapter refuses every demonstration containing a modifier chord.
+        "--copy-metadata",
+        "openadapt-capture",
     ]
     command.extend(CONSOLE_COLLECTION)
     for source, destination in notice_data(onnxruntime_dir):
