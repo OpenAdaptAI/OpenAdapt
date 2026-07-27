@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-07-27)
+
+### Bug Fixes
+
+- **manifest**: Correct published digests and make drift detectable
+  ([#1062](https://github.com/OpenAdaptAI/OpenAdapt/pull/1062),
+  [`5e6ef4e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5e6ef4e55ef2883726a93c747d1968e0e0e195db))
+
+### Chores
+
+- **release**: Reconcile platform manifest
+  ([`74dcd46`](https://github.com/OpenAdaptAI/OpenAdapt/commit/74dcd46ab03811809f1934da3fc15a8d37598642))
+
+### Continuous Integration
+
+- **manifest**: Keep the scheduled drift probe stdlib-only
+  ([#1062](https://github.com/OpenAdaptAI/OpenAdapt/pull/1062),
+  [`5e6ef4e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5e6ef4e55ef2883726a93c747d1968e0e0e195db))
+
+### Features
+
+- Add explicit browser install capability
+  ([#1060](https://github.com/OpenAdaptAI/OpenAdapt/pull/1060),
+  [`4d81ded`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4d81ded3a078ea9c8552e288ac033b21c61d2924))
+
+
 ## v1.9.0 (2026-07-26)
 
 ### Chores
