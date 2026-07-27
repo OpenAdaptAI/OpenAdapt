@@ -1,0 +1,44 @@
+{
+  "$comment": [
+    "Input to scripts/check_release_health.py. One entry per RELEASE LANE:",
+    "a tag namespace plus the workflow that is supposed to publish it.",
+    "The native lane is the one that failed four times in silence:",
+    "desktop-v0.12.0 (failed macOS x86_64 build, run 30169968004),",
+    "desktop-v0.8.0 (ungranted native-release environment approval, run",
+    "29799291231), desktop-v0.7.0 (wholly cancelled run 29756479649), and",
+    "desktop-v0.1.0 (ModuleNotFoundError: tomllib on a pre-3.11 runner, run",
+    "29514474536). Each left an immutable public tag promising installers that",
+    "were never published, and native-release.yml has no failure notifier at",
+    "all -- nor could one see `cancelled` or `skipped`.",
+    "tag_without_release_grace_hours is 6 on the native lane because a full",
+    "macOS/Windows/Linux Tauri build, smoke test, and attest legitimately takes",
+    "far longer than a wheel; a run still waiting on the native-release human",
+    "approval gate suppresses the detector regardless of age."
+  ],
+  "repository": "OpenAdaptAI/openadapt-desktop",
+  "branch": "main",
+  "ci_workflows": ["test.yml"],
+  "lanes": [
+    {
+      "id": "engine",
+      "name": "PyPI package",
+      "tag_pattern": "^v(\\d+\\.\\d+\\.\\d+)$",
+      "release_workflows": ["release.yml"],
+      "pypi_package": "openadapt-desktop",
+      "tracks_main": true,
+      "unreleased_grace_hours": 4,
+      "tag_without_release_grace_hours": 1,
+      "pypi_lag_grace_minutes": 30,
+      "remediation": "gh workflow run release.yml --repo OpenAdaptAI/openadapt-desktop --ref main -f operation=semantic-release"
+    },
+    {
+      "id": "native",
+      "name": "Native installers",
+      "tag_pattern": "^desktop-v(\\d+\\.\\d+\\.\\d+)$",
+      "release_workflows": ["native-release.yml"],
+      "tracks_main": false,
+      "tag_without_release_grace_hours": 6,
+      "remediation": "# Rebuild the installers for an existing engine version (X.Y.Z), then\n# approve the native-release environment when the publish-draft job requests it.\ngh workflow run native-freshness.yml --repo OpenAdaptAI/openadapt-desktop --ref main -f version=X.Y.Z"
+    }
+  ]
+}

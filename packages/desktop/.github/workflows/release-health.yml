@@ -1,0 +1,140 @@
+name: Release health
+
+# Nothing here publishes anything. Releases stay a deliberate operation: the
+# engine lane is `workflow_dispatch`-only and the native lane keeps its
+# `native-release` reviewer gate on `publish-draft`, the single point where
+# installer bytes are written. That design exists because Flow 1.13.0/1.14.0
+# were yanked for shipping AGPL benchmark files. This workflow only LOOKS, and
+# prints the command a human would run.
+#
+# Why it exists: four native releases here never published, and nothing said
+# so. `desktop-v0.12.0`, `desktop-v0.8.0`, `desktop-v0.7.0` and
+# `desktop-v0.1.0` are immutable public tags with no release object behind
+# them -- a failed macOS x86_64 build (run 30169968004), an ungranted
+# `native-release` environment approval (29799291231), a wholly cancelled run
+# (29756479649), and `ModuleNotFoundError: No module named 'tomllib'` on a
+# pre-3.11 runner (29514474536). Different causes, one shape: a human-gated
+# publish job that is skipped, cancelled, or fails produces no signal.
+# native-release.yml has no failure notifier at all, and an `if: failure()`
+# step could not have seen `cancelled` or `skipped` anyway.
+#
+# Three triggers, one script:
+#   schedule      -- the actual detector. Bounds "how long can a releasable fix
+#                    sit unnoticed" to ~7h instead of "until someone looks".
+#   workflow_run  -- fires when a release run COMPLETES NON-SUCCESSFULLY, which
+#                    includes `cancelled` and `skipped`. `if: failure()` steps
+#                    inside a release workflow cannot see either, and a run
+#                    cancelled at a human approval gate is exactly that case.
+#   pull_request  -- runs the detector's own offline scenarios when the
+#                    detector changes. A detector nobody has seen fail is a
+#                    detector nobody should trust.
+
+on:
+  schedule:
+    # Every 3 hours. One stdlib step, no dependency install, no cache, so this
+    # costs seconds a day rather than a matrix. With the 4h grace window below,
+    # a releasable commit is surfaced within ~7h at worst.
+    - cron: '07 */3 * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Release and PyPI Publish", "Native Installer Release"]
+    types: [completed]
+  pull_request:
+    paths:
+      - 'scripts/check_release_health.py'
+      - '.github/release-health.json'
+      - '.github/workflows/release-health.yml'
+
+concurrency:
+  # Keyed by ref so a pull request's self-test can never queue behind (or be
+  # cancelled by) a scheduled main run. The check is stateless and idempotent,
+  # so superseding an in-flight one costs nothing.
+  group: release-health-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: Prove the detectors fire and stay quiet
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # 3.12 explicitly: openadapt-desktop release run 29514474536 died on
+      # `ModuleNotFoundError: No module named 'tomllib'` on a pre-3.11 runner.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python scripts/check_release_health.py --self-test
+
+  check:
+    name: Detect unreleased work and silently skipped publishes
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.conclusion != 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Evaluate every release lane
+        id: evaluate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/check_release_health.py \
+            --markdown release-health.md \
+            --github-output "${GITHUB_OUTPUT}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      # One issue per repository, rewritten in place. A new issue every day is
+      # the same as no issue: it stops being read. Editing a body does not
+      # notify, so a persistent gap does not become a daily ping either.
+      - name: Open or update the single release-health issue
+        if: steps.evaluate.outputs.alert == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Release health - unreleased work or an incomplete publish"
+        run: |
+          set -euo pipefail
+          # Match on a colon-free prefix and compare the full title in jq: a
+          # colon inside a GitHub search phrase is parsed as a qualifier.
+          EXISTING=$(gh issue list --repo "${GITHUB_REPOSITORY}" --state open \
+            --search "in:title \"Release health\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ -n "${EXISTING}" ]; then
+            gh issue edit "${EXISTING}" --repo "${GITHUB_REPOSITORY}" \
+              --body-file release-health.md
+            echo "Updated issue #${EXISTING}."
+          else
+            gh issue create --repo "${GITHUB_REPOSITORY}" \
+              --title "${TITLE}" --body-file release-health.md
+          fi
+
+      - name: Close the issue once every gap is closed
+        if: steps.evaluate.outputs.alert != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Release health - unreleased work or an incomplete publish"
+        run: |
+          set -euo pipefail
+          # Match on a colon-free prefix and compare the full title in jq: a
+          # colon inside a GitHub search phrase is parsed as a qualifier.
+          EXISTING=$(gh issue list --repo "${GITHUB_REPOSITORY}" --state open \
+            --search "in:title \"Release health\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ -n "${EXISTING}" ]; then
+            gh issue close "${EXISTING}" --repo "${GITHUB_REPOSITORY}" \
+              --comment "Every release lane is published and current as of ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Closing automatically."
+          else
+            echo "No release-health alerts and no open issue."
+          fi
