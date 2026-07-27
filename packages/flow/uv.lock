@@ -2157,6 +2157,7 @@ capture = [
 ]
 console = [
     { name = "fastapi" },
+    { name = "openadapt-types" },
     { name = "uvicorn" },
 ]
 dev = [
@@ -2166,6 +2167,7 @@ dev = [
     { name = "jsonschema" },
     { name = "matplotlib" },
     { name = "mypy" },
+    { name = "openadapt-types" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-timeout" },
@@ -2238,7 +2240,9 @@ requires-dist = [
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
-    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.5.0,<0.6.0" },
+    { name = "openadapt-types", marker = "extra == 'console'", specifier = ">=0.6.0,<0.7.0" },
+    { name = "openadapt-types", marker = "extra == 'dev'", specifier = ">=0.6.0,<0.7.0" },
+    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.6.0,<0.7.0" },
     { name = "opencv-python-headless", specifier = ">=4.9" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "playwright", specifier = ">=1.44" },
@@ -2302,14 +2306,14 @@ presidio = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.5.0"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/55/b8/e3764cb9f6c0e9acbc6efdbd2f83f2883739c4e2cbf345f80512e30e155b/openadapt_types-0.5.0.tar.gz", hash = "sha256:89dd3d7240b6a61785934738a39fc7a4177fefc6d28f995a3876a6a1263adf65", size = 74240 }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/d2/48be0ad922b681d4381ec20dcec3e39546aec19531ba50b01cc1b0a8574b/openadapt_types-0.6.0.tar.gz", hash = "sha256:7e38c10c5a22dfdf4056829bb431438108f19a32e9d3651434e723ca0efd9815", size = 79363 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/bc/84e180a74811b92c8545136bb097aa6488709027f08614b78f9ed9cb193e/openadapt_types-0.5.0-py3-none-any.whl", hash = "sha256:d4740e0c7e29f258469bccd1ce5450c4b4d79b6e3107ac687e66a412b9a6341b", size = 42742 },
+    { url = "https://files.pythonhosted.org/packages/0d/2c/0044cb9f70b406adde6b0a0149e38eb216610412bb339a7800ba90a46c23/openadapt_types-0.6.0-py3-none-any.whl", hash = "sha256:b56908fd68bda7079efb9936718b747b8a08229403038205efa74558cbd057e7", size = 48213 },
 ]
 
 [[package]]

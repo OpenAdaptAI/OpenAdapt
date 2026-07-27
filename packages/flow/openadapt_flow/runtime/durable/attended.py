@@ -475,6 +475,36 @@ class AttendedActionStore:
             ).hexdigest()
         )
 
+    def seal_human_decision_task(self, unsigned: dict[str, Any]) -> dict[str, Any]:
+        """Sign one PHI-free task projection with a separate HMAC domain.
+
+        The result is presentation integrity, never execution authority. The
+        engine still requires the separately signed pause capability and all
+        normal attended-action admission checks.
+        """
+        try:
+            from openadapt_types import sign_human_decision_task_hmac
+
+            task = sign_human_decision_task_hmac(
+                key=self._key(create=False),
+                fields=unsigned,
+            )
+        except (ImportError, ValueError) as exc:
+            raise AttendedActionRefused(
+                "the shared human decision task contract is unavailable or invalid"
+            ) from exc
+        return task.model_dump(mode="json")
+
+    def verify_human_decision_task(self, task: dict[str, Any]) -> bool:
+        """Verify a projected task without treating it as pause authority."""
+        try:
+            from openadapt_types import HumanDecisionTaskV1
+
+            validated = HumanDecisionTaskV1.model_validate(task)
+            return validated.verify_hmac(self._key(create=False))
+        except (ImportError, ValueError, AttendedActionRefused):
+            return False
+
     def _receipt_path(self, pause_id: str) -> Path:
         if len(pause_id) != 32 or any(ch not in "0123456789abcdef" for ch in pause_id):
             raise AttendedActionRefused("the program receipt pause id is invalid")

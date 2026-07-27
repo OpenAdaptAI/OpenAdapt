@@ -60,6 +60,7 @@ dev = [
     # uvicorn for the console's boot smoke test.
     "fastapi>=0.110",
     "uvicorn>=0.29",
+    "openadapt-types>=0.6.0,<0.7.0",
     # Engineering-hygiene gates (lint+format, type-check, coverage). Pinned to
     # majors so CI and local dev run the same checkers.
     "ruff==0.15.22",
@@ -76,7 +77,11 @@ grounding = ["openadapt-grounding>=0.1.0"]
 # Operator console: `openadapt-flow console` serves a localhost-only web UI
 # over compiled bundles / run reports / skill libraries (openadapt_flow.console).
 # FastAPI app + uvicorn server; the API client side (httpx) is already core.
-console = ["fastapi>=0.110", "uvicorn>=0.29"]
+console = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "openadapt-types>=0.6.0,<0.7.0",
+]
 # WindowsBackend: HTTP client for the WAA (Windows Agent Arena) server.
 windows = ["requests>=2.31"]
 # Native macOS window capture/input. Imported lazily; other platforms never
@@ -136,10 +141,11 @@ capture = ["openadapt-capture>=1.2.0"]
 # imports openadapt-types lazily, so the core stays importable without it.
 # Bounded pin: openadapt-types is 0-based semver (major_on_zero=false), so
 # breaking changes land at the MINOR level. The action shim and runtime-overlay
-# producer are field-exact against the released 0.5.x schemas. The
+# producer and attended-decision portal are field-exact against the released
+# 0.6.x schemas. The
 # `interop-types` CI job type-checks and tests both boundaries against the real
 # package; raise the ceiling only after validating the next minor.
-interop = ["openadapt-types>=0.5.0,<0.6.0"]
+interop = ["openadapt-types>=0.6.0,<0.7.0"]
 
 [project.scripts]
 openadapt-flow = "openadapt_flow.__main__:main"

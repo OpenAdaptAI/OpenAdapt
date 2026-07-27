@@ -1643,7 +1643,29 @@ def test_attended_http_action_requires_auth_csrf_and_exact_capability(
     assert health["attended_actions_ready"] is True
     assert item["capability"]["digest"] == capability.digest
     assert "expected_next_transition" not in item["capability"]
-    payload = _request(capability, key="request-key-http1").model_dump()
+    detail = client.get(f"/api/attention/{item['id']}").json()
+    task = detail["task"]
+    assert task["schema_version"] == "openadapt.human-decision-task/v1"
+    assert task["capability_digest"] == capability.digest
+    assert task["run_id"].startswith("run_")
+    assert capability.run_id not in json.dumps(detail)
+    assert task["question"]["template"] == "review_uncertain_delivery"
+    assert "Please verify you are human" not in json.dumps(detail)
+    payload = {
+        **_request(capability, key="request-key-http1").model_dump(),
+        "task_digest": detail["task_digest"],
+        "task_signature": task["signature"],
+    }
+    tampered = client.post(
+        f"/api/attention/{item['id']}/actions/continue",
+        json={
+            **payload,
+            "idempotency_key": "request-key-http-tampered",
+            "task_signature": "hmac-sha256:" + ("0" * 64),
+        },
+    )
+    assert tampered.status_code == 409
+    assert executor.calls == 0
     response = client.post(
         f"/api/attention/{item['id']}/actions/continue",
         json=payload,
@@ -1712,10 +1734,13 @@ def test_attended_http_can_teach_or_escalate_without_live_executor(
     assert health["attended_decisions_ready"] is True
     assert health["attended_actions_ready"] is False
     item = client.get("/api/attention").json()[0]
+    detail = client.get(f"/api/attention/{item['id']}").json()
     response = client.post(
         f"/api/attention/{item['id']}/actions/teach",
         json={
             "capability_digest": capability.digest,
+            "task_digest": detail["task_digest"],
+            "task_signature": detail["task"]["signature"],
             "idempotency_key": "request-key-http-teach",
             "action": "teach",
             "disposition": "teach_requested",

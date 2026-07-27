@@ -243,6 +243,79 @@ a { color: var(--accent); }
 }
 .button-link:hover { border-color: var(--accent); }
 
+.decision-shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding-bottom: 24px;
+}
+.decision-back {
+  display: inline-block;
+  margin-bottom: 16px;
+  text-decoration: none;
+}
+.decision-title-row,
+.decision-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.decision-shell h2 {
+  margin: 12px 0 7px;
+  font-size: clamp(20px, 4vw, 28px);
+  line-height: 1.2;
+}
+.decision-explanation { color: var(--muted); font-size: 15px; }
+.decision-media {
+  margin: 18px 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0a0d10;
+}
+.decision-media figure { margin: 0; }
+.decision-media img {
+  display: block;
+  width: 100%;
+  max-height: 56vh;
+  object-fit: contain;
+  border-radius: 5px;
+}
+.decision-media figcaption { margin-top: 6px; color: var(--muted); font-size: 12px; }
+.decision-checks {
+  margin: 14px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.decision-checks h3 { margin: 0; padding: 12px 14px; font-size: 14px; }
+.decision-checks div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+}
+.decision-checks span { color: var(--muted); }
+.decision-checks strong { text-align: right; font-weight: 500; }
+.decision-assurance {
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(77, 163, 255, .08);
+  color: var(--muted);
+}
+.decision-actions { margin-top: 16px; }
+.decision-actions button,
+.decision-actions .button-link {
+  min-height: 44px;
+  padding: 10px 14px;
+}
+.decision-primary {
+  border-color: var(--accent);
+  background: rgba(77, 163, 255, .18);
+}
+
 .artifact-links {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -362,6 +435,22 @@ a { color: var(--accent); }
 
 @media (max-width: 640px) {
   main { padding: 14px 12px; }
+  header { align-items: flex-start; flex-wrap: wrap; padding: 12px; }
+  header nav { order: 3; width: 100%; overflow-x: auto; white-space: nowrap; }
+  #mode { margin-left: auto; }
+  .decision-checks div { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .decision-checks strong { text-align: left; }
+  .decision-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 18px -12px 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: rgba(15, 18, 22, .96);
+  }
+  .decision-actions button,
+  .decision-actions .button-link { flex: 1 1 100%; text-align: center; }
   .json-viewer-head { align-items: flex-start; }
   .json-viewer-actions { width: 100%; }
   .json-viewer-actions button { flex: 1; }

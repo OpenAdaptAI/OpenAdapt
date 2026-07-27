@@ -1793,11 +1793,11 @@
     },
     {
       "path": "openadapt_flow/console/static/console.css",
-      "sha256": "15360619d73d65f83188d9fe0f2e52d4ddc7e6e6ce7c8dc4d58c2bb71cafc351"
+      "sha256": "24c23e7bc857eec761781388762e3d97d2506c88ea801b3f644f129064ad0f64"
     },
     {
       "path": "openadapt_flow/console/static/console.js",
-      "sha256": "1ef048cdc535b022c12dd75b4a1cb8421f10d04221439884de0222261bc6aa1d"
+      "sha256": "c9993957bafa238cf0eab55b62efefdc448957ff57364f93ffa77bcfbaf0c68b"
     },
     {
       "path": "openadapt_flow/console/static/index.html",

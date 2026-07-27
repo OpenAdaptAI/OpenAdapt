@@ -35,11 +35,10 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from openadapt_flow import __version__
 from openadapt_flow.console import actions as actions_mod
 from openadapt_flow.console import attention as attention_mod
-from openadapt_flow.console import data, json_artifacts
+from openadapt_flow.console import data, human_decisions, json_artifacts
 from openadapt_flow.runtime.durable.approval import ResumeRefused
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRefused,
-    AttendedActionRequest,
     execute_attended_action,
 )
 from openadapt_flow.runtime.durable.attended_service import AttendedActionService
@@ -569,13 +568,13 @@ def create_app(
         item = attention_mod.attention_item(runs, run_dir)
         if item is None:
             raise HTTPException(status_code=404, detail="no open attention item")
-        return item.model_dump()
+        return human_decisions.decision_detail(run_dir, item)
 
     @app.post("/api/attention/{run_id:path}/actions/{action_id}")
     def execute_attention_action(
         run_id: str,
         action_id: str,
-        payload: AttendedActionRequest,
+        payload: human_decisions.ConsoleAttendedActionRequest,
     ) -> dict[str, Any]:
         if not attend:
             raise HTTPException(status_code=404, detail="no such action")
@@ -591,16 +590,22 @@ def create_app(
             )
         run_dir = _resolve_run(runs, run_id)
         try:
+            item = attention_mod.attention_item(runs, run_dir)
+            if item is None:
+                raise AttendedActionRefused(
+                    "the attention item is no longer current; reload the queue"
+                )
+            request = human_decisions.admit_console_action(run_dir, item, payload)
             decision = (
                 attended_service.execute(
                     run_dir,
-                    payload,
+                    request,
                     operator=operator,
                 )
                 if attended_service is not None
                 else execute_attended_action(
                     run_dir,
-                    payload,
+                    request,
                     operator=operator,
                 )
             )

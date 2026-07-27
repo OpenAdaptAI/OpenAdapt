@@ -330,35 +330,94 @@ async function viewAttention() {
           ${item.status === "approved" ? '<span class="chip ok">approved</span>' : ""}
         </p>
         <div class="attention-actions">
-          <a class="button-link" href="#/runs/${enc(item.id)}">Review protected evidence</a>
-          ${HEALTH.attended_decisions_ready && item.capability ? `
-            ${HEALTH.attended_actions_ready &&
-              item.capability.allowed_actions.includes("continue") ? `
-              <button data-attended-action="continue" data-run-id="${esc(item.id)}"
-                data-capability="${esc(item.capability.digest)}">I fixed it — Continue</button>` : ""}
-            ${HEALTH.attended_actions_ready &&
-              item.capability.allowed_actions.includes("skip") ? `
-              <button data-attended-action="skip" data-run-id="${esc(item.id)}"
-                data-capability="${esc(item.capability.digest)}">Skip / disposition</button>` : ""}
-            ${item.capability.allowed_actions.includes("teach") ? `
-              <button data-attended-action="teach" data-run-id="${esc(item.id)}"
-                data-capability="${esc(item.capability.digest)}">Teach the fix</button>` : ""}
-            ${item.capability.allowed_actions.includes("escalate") ? `
-              <button data-attended-action="escalate" data-run-id="${esc(item.id)}"
-                data-capability="${esc(item.capability.digest)}">Needs more time</button>` : ""}
-          ` : ""}
+          <a class="button-link" href="#/attention/${enc(item.id)}">Review decision</a>
+          <a class="button-link" href="#/runs/${enc(item.id)}">Full run evidence</a>
         </div>
         <p class="attention-result muted" aria-live="polite"></p>
       </article>`).join("")}</div>`;
 }
 
+const coverageValue = (confirmed, required) => required == null
+  ? "No retained check for this halt"
+  : `${safeNumber(confirmed, "0")} of ${safeNumber(required, "0")} confirmed`;
+
+function attendedDecisionButtons(detail) {
+  const task = detail.task;
+  if (!task || !HEALTH.attended_decisions_ready) return "";
+  const allows = (action) => task.allowed_actions.includes(action);
+  const common = `data-run-id="${esc(detail.item.id)}"
+    data-capability="${esc(task.capability_digest)}"
+    data-task-digest="${esc(detail.task_digest)}"
+    data-task-signature="${esc(task.signature)}"`;
+  return `
+    ${HEALTH.attended_actions_ready && allows("verify_and_resume") ? `
+      <button class="decision-primary" data-attended-action="continue" ${common}>
+        Re-check and continue
+      </button>` : ""}
+    ${HEALTH.attended_actions_ready && allows("skip") ? `
+      <button data-attended-action="skip" ${common}>Skip this step</button>` : ""}
+    ${allows("teach") ? `
+      <button data-attended-action="teach" ${common}>Teach the fix</button>` : ""}
+    ${allows("escalate") ? `
+      <button data-attended-action="escalate" ${common}>Needs more time</button>` : ""}`;
+}
+
+async function viewAttentionDetail(id) {
+  const detail = await api(`/api/attention/${id}`);
+  const item = detail.item;
+  const task = detail.task;
+  const evidence = task ? task.evidence : {};
+  const latestFrame = detail.presentation.after_artifact_id ||
+    detail.presentation.before_artifact_id;
+  const latestCaption = detail.presentation.after_artifact_id
+    ? "Latest retained local frame"
+    : "Frame before the halted step";
+  return `<div class="decision-shell">
+    <a class="decision-back" href="#/attention">← Needs Attention</a>
+    <div class="decision-title-row">
+      <span class="chip ${item.human_required ? "info" : "warn"}">${esc(item.category)}</span>
+      ${task ? `<span class="chip">expires ${fmtTime(task.expires_at)}</span>` : ""}
+    </div>
+    <h2>${esc(detail.presentation.question)}</h2>
+    <p class="decision-explanation">${esc(detail.presentation.explanation)}</p>
+    ${latestFrame ? `<div class="decision-media">
+      ${shot(item.id, latestFrame, latestCaption)}
+    </div>` : `<div class="attention-empty">
+      <p>No retained frame is available. Review the live application and full run evidence.</p>
+    </div>`}
+    <section class="decision-checks" aria-label="What OpenAdapt checked">
+      <h3>What OpenAdapt checked</h3>
+      <div><span>Record identity</span><strong>${esc(coverageValue(
+        evidence.identity_confirmed_count,
+        evidence.identity_required_count,
+      ))}</strong></div>
+      <div><span>Business effect</span><strong>${esc(coverageValue(
+        evidence.effect_confirmed_count,
+        evidence.effect_required_count,
+      ))}</strong></div>
+      <div><span>Action delivery</span><strong>${esc(
+        task ? task.delivery_state.replaceAll("_", " ") : "No signed pause capability",
+      )}</strong></div>
+    </section>
+    <p>${esc(detail.presentation.next_action)}</p>
+    <p class="decision-assurance">${esc(detail.presentation.assurance)}</p>
+    <div class="decision-actions">
+      ${attendedDecisionButtons(detail)}
+      <a class="button-link" href="#/runs/${enc(item.id)}">Inspect full evidence</a>
+    </div>
+    <p class="attention-result muted" aria-live="polite"></p>
+  </div>`;
+}
+
 async function attendedAction(button) {
-  const card = button.closest(".attention-card");
+  const card = button.closest(".attention-card, .decision-shell");
   const output = card ? card.querySelector(".attention-result") : null;
   const action = button.dataset.attendedAction;
   const runId = button.dataset.runId;
   const capability = button.dataset.capability;
-  if (!action || !runId || !capability) return;
+  const taskDigest = button.dataset.taskDigest;
+  const taskSignature = button.dataset.taskSignature;
+  if (!action || !runId || !capability || !taskDigest || !taskSignature) return;
   const siblings = card ? [...card.querySelectorAll("[data-attended-action]")] : [button];
   siblings.forEach((item) => { item.disabled = true; });
   if (output) output.textContent = "Submitting governed decision…";
@@ -376,6 +435,8 @@ async function attendedAction(button) {
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
           capability_digest: capability,
+          task_digest: taskDigest,
+          task_signature: taskSignature,
           idempotency_key: crypto.randomUUID().replaceAll("-", ""),
           action,
           disposition,
@@ -384,7 +445,7 @@ async function attendedAction(button) {
     );
     if (output) output.textContent = result.message || result.status;
     if (result.status === "completed" || result.status === "halted") {
-      await route();
+      window.location.hash = "#/attention";
     }
   } catch (error) {
     const detail = error.body && error.body.detail;
@@ -867,7 +928,9 @@ async function route() {
     const diffIndex = parts.indexOf("diff");
     const artifactIndex = parts.indexOf("artifacts");
     const queryParams = new URLSearchParams(query || "");
-    if (nav === "attention") {
+    if (nav === "attention" && parts.length > 1) {
+      html = await viewAttentionDetail(enc(parts.slice(1).join("/")));
+    } else if (nav === "attention") {
       html = await viewAttention();
     } else if ((nav === "workflows" || nav === "runs") && artifactIndex > 0) {
       html = await viewJsonArtifact(

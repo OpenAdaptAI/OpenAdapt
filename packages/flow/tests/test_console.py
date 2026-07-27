@@ -1575,6 +1575,8 @@ def test_attend_mode_preserves_normal_console_and_requires_pause_capability(
         f"/api/attention/{human['id']}/actions/continue",
         json={
             "capability_digest": "sha256:" + ("0" * 64),
+            "task_digest": "sha256:" + ("0" * 64),
+            "task_signature": "hmac-sha256:" + ("0" * 64),
             "idempotency_key": "request-key-legacy-pause",
             "action": "continue",
             "disposition": "completed_by_operator",
@@ -1584,9 +1586,6 @@ def test_attend_mode_preserves_normal_console_and_requires_pause_capability(
     assert "capability" in refused.text.lower()
 
     script = client.get("/static/console.js").text
-    assert "I fixed it — Continue" in script
-    assert "Teach the fix" in script
-    assert "!HEALTH.attend" not in script
     assert "captcha_answer" not in script
     assert "verification_code" not in script
 
