@@ -1,0 +1,403 @@
+{
+  "$defs": {
+    "HumanDecisionAction": {
+      "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.",
+      "enum": [
+        "verify_and_resume",
+        "skip",
+        "teach",
+        "escalate"
+      ],
+      "title": "HumanDecisionAction",
+      "type": "string"
+    },
+    "HumanDecisionDeliveryState": {
+      "enum": [
+        "not_delivered",
+        "delivered",
+        "unknown"
+      ],
+      "title": "HumanDecisionDeliveryState",
+      "type": "string"
+    },
+    "HumanDecisionEvidenceSummaryV1": {
+      "additionalProperties": false,
+      "properties": {
+        "effect_confirmed_count": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Confirmed Count"
+        },
+        "effect_required_count": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Required Count"
+        },
+        "frame_available_locally": {
+          "default": false,
+          "title": "Frame Available Locally",
+          "type": "boolean"
+        },
+        "identity_confirmed_count": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identity Confirmed Count"
+        },
+        "identity_required_count": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identity Required Count"
+        },
+        "minimum_effect_tier": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum Effect Tier"
+        },
+        "observed_effect_tier": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed Effect Tier"
+        },
+        "sensitive_evidence_local_only": {
+          "const": true,
+          "default": true,
+          "title": "Sensitive Evidence Local Only",
+          "type": "boolean"
+        }
+      },
+      "title": "HumanDecisionEvidenceSummaryV1",
+      "type": "object"
+    },
+    "HumanDecisionQuestionTemplate": {
+      "enum": [
+        "confirm_identity",
+        "confirm_persisted_effect",
+        "resolve_ambiguity",
+        "complete_human_step",
+        "review_uncertain_delivery",
+        "review_halt"
+      ],
+      "title": "HumanDecisionQuestionTemplate",
+      "type": "string"
+    },
+    "HumanDecisionQuestionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "safe_slots": {
+          "$ref": "#/$defs/HumanDecisionSafeSlotsV1"
+        },
+        "template": {
+          "$ref": "#/$defs/HumanDecisionQuestionTemplate"
+        }
+      },
+      "required": [
+        "template"
+      ],
+      "title": "HumanDecisionQuestionV1",
+      "type": "object"
+    },
+    "HumanDecisionRequiredAuthn": {
+      "enum": [
+        "local_session",
+        "aal2",
+        "webauthn"
+      ],
+      "title": "HumanDecisionRequiredAuthn",
+      "type": "string"
+    },
+    "HumanDecisionRiskClass": {
+      "enum": [
+        "read_only",
+        "state_changing",
+        "consequential",
+        "irreversible",
+        "unknown"
+      ],
+      "title": "HumanDecisionRiskClass",
+      "type": "string"
+    },
+    "HumanDecisionSafeSlotsV1": {
+      "additionalProperties": false,
+      "description": "Bounded numeric context safe to relay outside the evidence boundary.",
+      "properties": {
+        "candidate_count": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Count"
+        },
+        "confirmed_signal_count": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirmed Signal Count"
+        },
+        "required_signal_count": {
+          "anyOf": [
+            {
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Required Signal Count"
+        }
+      },
+      "title": "HumanDecisionSafeSlotsV1",
+      "type": "object"
+    },
+    "HumanDecisionSubstrate": {
+      "enum": [
+        "browser",
+        "windows",
+        "macos",
+        "linux",
+        "rdp",
+        "citrix",
+        "mixed",
+        "unknown"
+      ],
+      "title": "HumanDecisionSubstrate",
+      "type": "string"
+    },
+    "HumanDecisionTaskKind": {
+      "enum": [
+        "identity",
+        "effect",
+        "ambiguity",
+        "human_step",
+        "delivery_uncertain",
+        "halt",
+        "operator_review"
+      ],
+      "title": "HumanDecisionTaskKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A signed, PHI-free projection of one exact attended runtime pause.",
+  "properties": {
+    "allowed_actions": {
+      "items": {
+        "$ref": "#/$defs/HumanDecisionAction"
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "title": "Allowed Actions",
+      "type": "array"
+    },
+    "bundle_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Bundle Digest",
+      "type": "string"
+    },
+    "capability_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Capability Digest",
+      "type": "string"
+    },
+    "created_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "title": "Created At",
+      "type": "string"
+    },
+    "delivery_state": {
+      "$ref": "#/$defs/HumanDecisionDeliveryState"
+    },
+    "evidence": {
+      "$ref": "#/$defs/HumanDecisionEvidenceSummaryV1"
+    },
+    "expires_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "title": "Expires At",
+      "type": "string"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "nonce": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Nonce",
+      "type": "string"
+    },
+    "pause_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Pause Id",
+      "type": "string"
+    },
+    "question": {
+      "$ref": "#/$defs/HumanDecisionQuestionV1"
+    },
+    "required_authn": {
+      "$ref": "#/$defs/HumanDecisionRequiredAuthn"
+    },
+    "risk_class": {
+      "$ref": "#/$defs/HumanDecisionRiskClass",
+      "default": "unknown"
+    },
+    "run_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "runner_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runner Id"
+    },
+    "schema_version": {
+      "const": "openadapt.human-decision-task/v1",
+      "default": "openadapt.human-decision-task/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "hmac-sha256",
+      "default": "hmac-sha256",
+      "title": "Signature Algorithm",
+      "type": "string"
+    },
+    "substrate": {
+      "$ref": "#/$defs/HumanDecisionSubstrate",
+      "default": "unknown"
+    },
+    "task_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_kind": {
+      "$ref": "#/$defs/HumanDecisionTaskKind"
+    },
+    "task_revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Task Revision",
+      "type": "integer"
+    },
+    "tenant_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tenant Id"
+    }
+  },
+  "required": [
+    "task_id",
+    "run_id",
+    "pause_id",
+    "capability_digest",
+    "bundle_digest",
+    "task_kind",
+    "delivery_state",
+    "question",
+    "evidence",
+    "allowed_actions",
+    "required_authn",
+    "created_at",
+    "expires_at",
+    "nonce",
+    "issuer_key_id",
+    "signature"
+  ],
+  "title": "HumanDecisionTaskV1",
+  "type": "object"
+}

@@ -10,6 +10,7 @@ from openadapt_types import (
     ControlOverlayFrameV2,
     ControlOverlayTimelineV1,
     ControlOverlayTimelineV2,
+    HumanDecisionTaskV1,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,7 @@ SCHEMAS = {
     "control-overlay-timeline-v1.json": ControlOverlayTimelineV1,
     "control-overlay-frame-v2.json": ControlOverlayFrameV2,
     "control-overlay-timeline-v2.json": ControlOverlayTimelineV2,
+    "human-decision-task-v1.json": HumanDecisionTaskV1,
 }
 
 

@@ -80,6 +80,21 @@ from openadapt_types.control_overlay_tracking import (
 )
 from openadapt_types.episode import Episode, Step
 from openadapt_types.failure import FailureCategory, FailureRecord
+from openadapt_types.human_decision import (
+    HUMAN_DECISION_TASK_SCHEMA,
+    HumanDecisionAction,
+    HumanDecisionDeliveryState,
+    HumanDecisionEvidenceSummaryV1,
+    HumanDecisionQuestionTemplate,
+    HumanDecisionQuestionV1,
+    HumanDecisionRequiredAuthn,
+    HumanDecisionRiskClass,
+    HumanDecisionSafeSlotsV1,
+    HumanDecisionSubstrate,
+    HumanDecisionTaskKind,
+    HumanDecisionTaskV1,
+    sign_human_decision_task_hmac,
+)
 from openadapt_types.parsing import (
     from_benchmark_action,
     parse_action,
@@ -150,6 +165,20 @@ __all__ = [
     # failure
     "FailureCategory",
     "FailureRecord",
+    # attended human decisions
+    "HUMAN_DECISION_TASK_SCHEMA",
+    "HumanDecisionAction",
+    "HumanDecisionDeliveryState",
+    "HumanDecisionEvidenceSummaryV1",
+    "HumanDecisionQuestionTemplate",
+    "HumanDecisionQuestionV1",
+    "HumanDecisionRequiredAuthn",
+    "HumanDecisionRiskClass",
+    "HumanDecisionSafeSlotsV1",
+    "HumanDecisionSubstrate",
+    "HumanDecisionTaskKind",
+    "HumanDecisionTaskV1",
+    "sign_human_decision_task_hmac",
     # parsing
     "from_benchmark_action",
     "parse_action",
