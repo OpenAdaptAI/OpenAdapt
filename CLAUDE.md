@@ -1,51 +1,46 @@
 # Claude Code Guidelines for OpenAdapt
 
-## Repository Overview
-This is the main OpenAdapt meta-package repository. It provides a unified CLI that coordinates sub-packages:
+## Repository role
 
-- `openadapt-capture` - GUI recording
-- `openadapt-ml` - ML training/inference
-- `openadapt-evals` - Benchmark evaluation
-- `openadapt-viewer` - HTML visualization
-- `openadapt-grounding` - UI element localization
-- `openadapt-retrieval` - Multimodal retrieval
-- `openadapt-privacy` - PII/PHI scrubbing
+This public repository is the Beta launcher/meta-package and stable community
+entry point for OpenAdapt. It owns `pip install openadapt`, the unified
+`openadapt` CLI, release compatibility, and launcher packaging.
 
-## Important Rules
+The canonical compiler and governed runtime live in
+[`OpenAdaptAI/openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+Engine, replay, verification, repair, policy, and backend changes belong there;
+do not implement a second engine in this repository.
 
-### Always Use Pull Requests
-**NEVER push directly to the `main` branch.** Always create a feature branch and submit a PR, even for small changes.
+The current product compiles demonstrated GUI workflows into deterministic,
+locally executable programs. Healthy runs make no model calls. Training,
+retrieval, and general computer-use agents are separate research surfaces.
+
+## Before changing the repository
+
+1. Read the workspace `AGENTS.md` and current `STATUS.md` when available.
+2. Fetch `origin` and base findings and changes on fresh `origin/main`.
+3. Read [README.md](README.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+4. Keep public installation centered on `pip install openadapt` and
+   `openadapt ...`; `openadapt-flow` remains the contributor/engine package.
+5. Preserve local-first use, fail-closed execution, and the open-core boundary.
+
+## Repository layout
+
+- `openadapt/`: launcher package and unified CLI
+- `tests/`: launcher, integration-seam, and release-artifact tests
+- `legacy/`: frozen pre-1.0 monolith
+- `docs/`: noncanonical historical repository documentation;
+  docs.openadapt.ai is maintained in `OpenAdaptAI/openadapt-ops`
+- `.github/`: CI, security, dependency, and release workflows
+
+## Development and delivery
 
 ```bash
-# Create a new branch
-git checkout -b feature/my-change
-
-# Make changes and commit
-git add .
-git commit -m "Description of change"
-
-# Push branch and create PR
-git push -u origin feature/my-change
-gh pr create --title "Title" --body "Description"
+python -m pip install -e '.[dev]'
+pytest
+ruff check openadapt tests
 ```
 
-Branch protection is configured but can be bypassed by admins - don't do it.
-
-### Development Setup
-```bash
-pip install -e ".[dev]"
-```
-
-### Key Directories
-- `src/openadapt/` - Main package code (CLI, lazy imports)
-- `docs/` - Documentation (architecture, permissions guide)
-- `legacy/` - Archived monolithic codebase (v0.46.0)
-- `.github/` - CI/CD workflows, issue templates
-
-### Release Process
-Releases are automated via GitHub Actions using python-semantic-release.
-Tag format: `vX.Y.Z`
-
-## Related Repositories
-- Website: https://github.com/OpenAdaptAI/openadapt-web
-- All sub-packages: https://github.com/OpenAdaptAI/openadapt-*
+Use a focused branch and pull request for every change. Do not push directly to
+`main`. Releases are performed only through the reviewed GitHub Actions release
+workflow after explicit authorization; never publish from a development task.
