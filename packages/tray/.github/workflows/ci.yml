@@ -39,6 +39,9 @@ jobs:
       - name: Build distributions
         run: uv build
 
+      - name: Verify the public distribution boundary
+        run: python scripts/check_source_boundary.py --require-dist
+
   test:
     name: test (${{ matrix.os }}, Python ${{ matrix.python }})
     strategy:
