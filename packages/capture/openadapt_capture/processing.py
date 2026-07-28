@@ -148,7 +148,16 @@ def remove_invalid_keyboard_events(events: list[ActionEvent]) -> list[ActionEven
     for event in events:
         if isinstance(event, (KeyDownEvent, KeyUpEvent)):
             # Filter out events with no key information
-            if not any([event.key_name, event.key_char, event.key_vk]):
+            if not any(
+                [
+                    event.key_name,
+                    event.key_char,
+                    event.key_vk,
+                    event.canonical_key_name,
+                    event.canonical_key_char,
+                    event.canonical_key_vk,
+                ]
+            ):
                 continue
         valid_events.append(event)
     return valid_events
@@ -245,9 +254,10 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
                 )
         else:
             text = "".join(
-                event.key_char
+                event.key_char or event.canonical_key_char
                 for event in down_events
-                if event.key_char and _modifier_for(event) is None
+                if (event.key_char or event.canonical_key_char)
+                and _modifier_for(event) is None
             )
             type_event = KeyTypeEvent(
                 timestamp=first_event.timestamp,
@@ -264,11 +274,11 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
 
     for event in events:
         if isinstance(event, KeyDownEvent):
-            key_id = event.key_name or event.key_char or event.key_vk or ""
+            key_id = _keyboard_key(event)
             pressed_keys.add(key_id)
             keyboard_buffer.append(event)
         elif isinstance(event, KeyUpEvent):
-            key_id = event.key_name or event.key_char or event.key_vk or ""
+            key_id = _keyboard_key(event)
             pressed_keys.discard(key_id)
             keyboard_buffer.append(event)
 

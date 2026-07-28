@@ -192,6 +192,8 @@ class TestPlotCapturePerformance:
         capture, storage = create_capture(
             tmp_path / "empty_capture",
             task_description="Empty test",
+            screen_width=1280,
+            screen_height=720,
         )
         storage.close()
 
@@ -211,6 +213,8 @@ class TestPlotCapturePerformance:
         capture, storage = create_capture(
             tmp_path / "test_capture",
             task_description="Test",
+            screen_width=1280,
+            screen_height=720,
         )
 
         # Add some events
@@ -242,6 +246,8 @@ class TestPlotCapturePerformance:
         capture, storage = create_capture(
             tmp_path / "test_capture",
             task_description="Test",
+            screen_width=1280,
+            screen_height=720,
         )
         storage.write_event(MouseDownEvent(
             timestamp=1.0,

@@ -61,8 +61,8 @@ class Capture(BaseModel):
     platform: str = Field(description="Platform identifier: 'darwin' | 'win32' | 'linux'")
     screen_width: int = Field(description="Screen width in physical pixels")
     screen_height: int = Field(description="Screen height in physical pixels")
-    pixel_ratio: float = Field(
-        default=1.0,
+    pixel_ratio: float | None = Field(
+        default=None,
         description="Display pixel ratio (physical/logical), e.g., 2.0 for Retina"
     )
     task_description: str | None = Field(default=None, description="User-provided task description")
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS capture (
     platform TEXT NOT NULL,
     screen_width INTEGER NOT NULL,
     screen_height INTEGER NOT NULL,
-    pixel_ratio REAL DEFAULT 1.0,
+    pixel_ratio REAL,
     task_description TEXT,
     double_click_interval_seconds REAL,
     double_click_distance_pixels REAL,
@@ -301,7 +301,7 @@ class CaptureStorage:
             platform=row["platform"],
             screen_width=row["screen_width"],
             screen_height=row["screen_height"],
-            pixel_ratio=row["pixel_ratio"] if "pixel_ratio" in row.keys() else 1.0,
+            pixel_ratio=row["pixel_ratio"] if "pixel_ratio" in row.keys() else None,
             task_description=row["task_description"],
             double_click_interval_seconds=row["double_click_interval_seconds"],
             double_click_distance_pixels=row["double_click_distance_pixels"],
@@ -537,13 +537,10 @@ def _detect_platform() -> str:
 
 
 def _detect_screen_size() -> tuple[int, int]:
-    """Detect screen dimensions."""
-    try:
-        from PIL import ImageGrab
-        screenshot = ImageGrab.grab()
-        return screenshot.size
-    except Exception:
-        return (1920, 1080)  # Fallback default
+    """Measure screen dimensions without substituting plausible geometry."""
+    from openadapt_capture import platform as capture_platform
+
+    return capture_platform.get_screen_dimensions()
 
 
 def create_capture(

@@ -13,8 +13,9 @@ import pytest
 
 from openadapt_capture import recorder as recorder_module
 from openadapt_capture import video
-from openadapt_capture.capture import Capture
+from openadapt_capture.capture import Capture, InvalidCaptureEvent
 from openadapt_capture.db import create_db, crud
+from openadapt_capture.platform import DisplayMetricsUnavailable
 from openadapt_capture.recorder import Recorder
 
 # Sessions/engines created by _create_test_recording, released by the
@@ -452,8 +453,8 @@ class TestCaptureEdgeCases:
         with pytest.raises(FileNotFoundError, match="no recording found"):
             Capture.load(capture_path)
 
-    def test_mouse_pressed_none_skipped(self, temp_capture_dir):
-        """Test that click events with mouse_pressed=None are skipped."""
+    def test_mouse_pressed_none_is_refused(self, temp_capture_dir):
+        """A corrupt click cannot disappear from the replay event stream."""
         capture_path = str(Path(temp_capture_dir) / "capture")
         recording, db_path, session = _create_test_recording(capture_path)
 
@@ -474,10 +475,8 @@ class TestCaptureEdgeCases:
         })
 
         capture = Capture.load(capture_path)
-        events = capture.raw_events()
-        # The click with mouse_pressed=None should be skipped
-        assert len(events) == 1
-        assert events[0].type == "mouse.move"
+        with pytest.raises(InvalidCaptureEvent, match="pressed/released"):
+            capture.raw_events()
         capture.close()
 
     def test_disabled_events_filtered(self, temp_capture_dir):
@@ -659,7 +658,7 @@ class TestPixelRatio:
         assert capture.pixel_ratio == 1.5  # recovered from config JSON
         capture.close()
 
-        # No column and no config -> genuinely unknown -> 1.0.
+        # No column and no config -> genuinely unknown -> refuse.
         capture_path2 = str(Path(temp_capture_dir) / "old_no_config")
         os.makedirs(capture_path2, exist_ok=True)
         db_path2 = os.path.join(capture_path2, "recording.db")
@@ -686,5 +685,6 @@ class TestPixelRatio:
         con.close()
 
         capture2 = Capture.load(capture_path2)
-        assert capture2.pixel_ratio == 1.0
+        with pytest.raises(DisplayMetricsUnavailable):
+            _ = capture2.pixel_ratio
         capture2.close()

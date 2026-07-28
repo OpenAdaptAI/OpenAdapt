@@ -17,6 +17,7 @@ import pytest
 
 from openadapt_capture import platform as capture_platform
 from openadapt_capture import recorder, window
+from openadapt_capture.capture import CaptureSession, InvalidCaptureEvent, _convert_action_event
 from openadapt_capture.platform import DisplayMetricsUnavailable
 from openadapt_capture.structural import StructuralObservationRequest
 from openadapt_capture.structural_observer.windows import WindowsUIAStructuralObserver
@@ -89,6 +90,138 @@ class TestDisplayMetricsAreMeasuredOrRefused:
         # NULL, not 1.0: the column is nullable so that unknown is
         # representable in the recording itself.
         assert recording.pixel_ratio is None
+
+    def test_session_refuses_an_unknown_pixel_ratio(self) -> None:
+        session = CaptureSession(
+            "/tmp/unused",
+            None,
+            SimpleNamespace(pixel_ratio=None, config={}),
+        )
+
+        with pytest.raises(DisplayMetricsUnavailable, match="no measured"):
+            _ = session.pixel_ratio
+
+    @pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), True, "bad"])
+    def test_session_refuses_an_invalid_pixel_ratio(self, value: object) -> None:
+        session = CaptureSession(
+            "/tmp/unused",
+            None,
+            SimpleNamespace(pixel_ratio=value, config={}),
+        )
+
+        with pytest.raises(DisplayMetricsUnavailable, match="invalid stored"):
+            _ = session.pixel_ratio
+
+    def test_session_refuses_an_invalid_legacy_pixel_ratio(self) -> None:
+        session = CaptureSession(
+            "/tmp/unused",
+            None,
+            SimpleNamespace(pixel_ratio=None, config={"pixel_ratio": None}),
+        )
+
+        with pytest.raises(DisplayMetricsUnavailable, match="invalid legacy"):
+            _ = session.pixel_ratio
+
+    def test_storage_create_capture_refuses_an_unmeasured_display(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        from openadapt_capture.storage import create_capture
+
+        def unavailable() -> tuple[int, int]:
+            raise DisplayMetricsUnavailable("display probe failed")
+
+        monkeypatch.setattr(capture_platform, "get_screen_dimensions", unavailable)
+
+        with pytest.raises(DisplayMetricsUnavailable, match="probe failed"):
+            create_capture(tmp_path / "capture")
+
+    def test_storage_create_capture_accepts_explicit_display_geometry(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        from openadapt_capture.storage import create_capture
+
+        def unavailable() -> tuple[int, int]:
+            raise DisplayMetricsUnavailable("must not run")
+
+        monkeypatch.setattr(capture_platform, "get_screen_dimensions", unavailable)
+        capture, storage = create_capture(
+            tmp_path / "capture",
+            screen_width=1280,
+            screen_height=720,
+        )
+        try:
+            assert (capture.screen_width, capture.screen_height) == (1280, 720)
+        finally:
+            storage.close()
+
+
+class TestStoredInputDataIsNotInvented:
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("mouse_x", None),
+            ("mouse_y", None),
+            ("mouse_button_name", None),
+            ("mouse_button_name", ""),
+            ("mouse_pressed", None),
+        ],
+    )
+    def test_incomplete_click_is_refused(self, field: str, value: object) -> None:
+        event = SimpleNamespace(
+            name="click",
+            timestamp=1.0,
+            structural_observation=None,
+            mouse_x=10,
+            mouse_y=20,
+            mouse_button_name="left",
+            mouse_pressed=True,
+        )
+        setattr(event, field, value)
+
+        with pytest.raises(InvalidCaptureEvent):
+            _convert_action_event(event)
+
+    def test_unknown_action_event_is_refused(self) -> None:
+        event = SimpleNamespace(
+            name="future-action",
+            timestamp=1.0,
+            structural_observation=None,
+        )
+
+        with pytest.raises(InvalidCaptureEvent, match="unknown stored action"):
+            _convert_action_event(event)
+
+    def test_key_event_without_an_identity_is_refused(self) -> None:
+        event = SimpleNamespace(
+            name="press",
+            timestamp=1.0,
+            structural_observation=None,
+            key_name=None,
+            key_char=None,
+            key_vk=None,
+            canonical_key_name=None,
+            canonical_key_char=None,
+            canonical_key_vk=None,
+        )
+
+        with pytest.raises(InvalidCaptureEvent, match="no key identity"):
+            _convert_action_event(event)
+
+    def test_key_event_with_empty_identities_is_refused(self) -> None:
+        event = SimpleNamespace(
+            name="press",
+            timestamp=1.0,
+            structural_observation=None,
+            key_name="",
+            key_char="",
+            key_vk="",
+            canonical_key_name="",
+            canonical_key_char="",
+            canonical_key_vk="",
+        )
+
+        with pytest.raises(InvalidCaptureEvent, match="no key identity"):
+            _convert_action_event(event)
 
 
 class TestWindowBackendAvailability:

@@ -292,6 +292,7 @@ class TestCaptureModel:
         )
         assert capture.ended_at is None
         assert capture.task_description is None
+        assert capture.pixel_ratio is None
         assert capture.double_click_interval_seconds == 0.5
         assert capture.double_click_distance_pixels == 5.0
         assert capture.metadata == {}

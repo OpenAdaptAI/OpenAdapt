@@ -45,6 +45,10 @@ if TYPE_CHECKING:
     from openadapt_capture.browser_events import BrowserEvent
 
 
+class InvalidCaptureEvent(ValueError):
+    """A stored input event lacks the data required for deterministic replay."""
+
+
 def _parse_structural_observation(raw: object) -> StructuralObservation | None:
     """Load optional structural evidence without breaking legacy recordings."""
 
@@ -56,14 +60,52 @@ def _parse_structural_observation(raw: object) -> StructuralObservation | None:
         return None
 
 
-def _convert_action_event(db_event) -> PydanticActionEvent | None:
+def _required_event_value(db_event, field: str):
+    value = getattr(db_event, field, None)
+    if value is None:
+        raise InvalidCaptureEvent(
+            f"stored {getattr(db_event, 'name', 'unknown')!r} event is missing {field!r}"
+        )
+    return value
+
+
+def _required_nonempty_string(db_event, field: str) -> str:
+    value = _required_event_value(db_event, field)
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidCaptureEvent(
+            f"stored {getattr(db_event, 'name', 'unknown')!r} event has invalid {field!r}"
+        )
+    return value
+
+
+def _require_key_identity(db_event) -> None:
+    fields = (
+        "key_name",
+        "key_char",
+        "key_vk",
+        "canonical_key_name",
+        "canonical_key_char",
+        "canonical_key_vk",
+    )
+    if not any(getattr(db_event, field, None) not in (None, "") for field in fields):
+        raise InvalidCaptureEvent(
+            f"stored {getattr(db_event, 'name', 'unknown')!r} event has no key identity"
+        )
+
+
+def _convert_action_event(db_event) -> PydanticActionEvent:
     """Convert a SQLAlchemy ActionEvent to a Pydantic event.
 
     Args:
         db_event: SQLAlchemy ActionEvent instance.
 
     Returns:
-        Pydantic event or None if unrecognized.
+        A validated Pydantic event.
+
+    Raises:
+        InvalidCaptureEvent: If the stored event is unknown or lacks data that
+            deterministic replay requires. Missing coordinates are never
+            replaced with zero because zero is a valid screen position.
     """
     common = {
         "timestamp": db_event.timestamp,
@@ -75,37 +117,40 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
     if db_event.name == "move":
         return MouseMoveEvent(
             **common,
-            x=db_event.mouse_x or 0,
-            y=db_event.mouse_y or 0,
+            x=_required_event_value(db_event, "mouse_x"),
+            y=_required_event_value(db_event, "mouse_y"),
         )
     elif db_event.name == "click":
-        button = db_event.mouse_button_name or "left"
+        button = _required_nonempty_string(db_event, "mouse_button_name")
 
         if db_event.mouse_pressed is True:
             return MouseDownEvent(
                 **common,
-                x=db_event.mouse_x or 0,
-                y=db_event.mouse_y or 0,
+                x=_required_event_value(db_event, "mouse_x"),
+                y=_required_event_value(db_event, "mouse_y"),
                 button=button,
             )
         elif db_event.mouse_pressed is False:
             return MouseUpEvent(
                 **common,
-                x=db_event.mouse_x or 0,
-                y=db_event.mouse_y or 0,
+                x=_required_event_value(db_event, "mouse_x"),
+                y=_required_event_value(db_event, "mouse_y"),
                 button=button,
             )
         else:
-            return None
+            raise InvalidCaptureEvent(
+                "stored 'click' event has no pressed/released state"
+            )
     elif db_event.name == "scroll":
         return MouseScrollEvent(
             **common,
-            x=db_event.mouse_x or 0,
-            y=db_event.mouse_y or 0,
-            dx=db_event.mouse_dx or 0,
-            dy=db_event.mouse_dy or 0,
+            x=_required_event_value(db_event, "mouse_x"),
+            y=_required_event_value(db_event, "mouse_y"),
+            dx=_required_event_value(db_event, "mouse_dx"),
+            dy=_required_event_value(db_event, "mouse_dy"),
         )
     elif db_event.name == "press":
+        _require_key_identity(db_event)
         return KeyDownEvent(
             **common,
             key_name=db_event.key_name,
@@ -116,6 +161,7 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
             canonical_key_vk=db_event.canonical_key_vk,
         )
     elif db_event.name == "release":
+        _require_key_identity(db_event)
         return KeyUpEvent(
             **common,
             key_name=db_event.key_name,
@@ -125,7 +171,7 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
             canonical_key_char=db_event.canonical_key_char,
             canonical_key_vk=db_event.canonical_key_vk,
         )
-    return None
+    raise InvalidCaptureEvent(f"unknown stored action event name {db_event.name!r}")
 
 
 def _parse_element_ref(raw: dict | None) -> SemanticElementRef | None:
@@ -360,7 +406,14 @@ class Action:
             for child in self.event.children:
                 if isinstance(child, KeyDownEvent):
                     # Get key identifier
-                    key_id = child.key_name or child.key_char or child.key_vk
+                    key_id = (
+                        child.canonical_key_name
+                        or child.key_name
+                        or child.canonical_key_char
+                        or child.key_char
+                        or child.canonical_key_vk
+                        or child.key_vk
+                    )
                     if key_id and key_id not in seen:
                         seen.add(key_id)
                         key_names.append(key_id)
@@ -540,17 +593,42 @@ class CaptureSession:
     def pixel_ratio(self) -> float:
         """Display pixel ratio (physical/logical), e.g. 2.0 for Retina.
 
-        Defaults to 1.0 if not stored in the recording.
+        Raises ``DisplayMetricsUnavailable`` when no measurement was retained.
         """
+        from math import isfinite
+
+        from openadapt_capture.platform import DisplayMetricsUnavailable
+
+        def validate(value: object, source: str) -> float:
+            if isinstance(value, bool):
+                raise DisplayMetricsUnavailable(
+                    f"The capture has an invalid {source} display pixel ratio."
+                )
+            try:
+                parsed = float(value)
+            except (TypeError, ValueError) as exc:
+                raise DisplayMetricsUnavailable(
+                    f"The capture has an invalid {source} display pixel ratio."
+                ) from exc
+            if not isfinite(parsed) or parsed <= 0:
+                raise DisplayMetricsUnavailable(
+                    f"The capture has an invalid {source} display pixel ratio."
+                )
+            return parsed
+
         # Check if the Recording model has a pixel_ratio column
         ratio = getattr(self._recording, "pixel_ratio", None)
         if ratio is not None:
-            return float(ratio)
+            return validate(ratio, "stored")
         # Check the config JSON for pixel_ratio
         config = getattr(self._recording, "config", None)
         if isinstance(config, dict) and "pixel_ratio" in config:
-            return float(config["pixel_ratio"])
-        return 1.0
+            return validate(config["pixel_ratio"], "legacy")
+
+        raise DisplayMetricsUnavailable(
+            "The capture has no measured display pixel ratio. Supply an exact "
+            "pixel_ratio in the legacy capture config or record the workflow again."
+        )
 
     @property
     def window_capture(self) -> dict | None:
@@ -593,9 +671,7 @@ class CaptureSession:
         for db_event in self._recording.action_events:
             if getattr(db_event, "disabled", False):
                 continue
-            pydantic_event = _convert_action_event(db_event)
-            if pydantic_event is not None:
-                events.append(pydantic_event)
+            events.append(_convert_action_event(db_event))
         return events
 
     def actions(self, include_moves: bool = False) -> Iterator[Action]:

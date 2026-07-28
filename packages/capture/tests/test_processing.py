@@ -1,6 +1,7 @@
 """Tests for event processing pipeline."""
 
 
+from openadapt_capture.capture import Action
 from openadapt_capture.events import (
     KeyDownEvent,
     KeyShortcutEvent,
@@ -50,6 +51,31 @@ class TestRemoveInvalidKeyboardEvents:
         ]
         result = remove_invalid_keyboard_events(events)
         assert len(result) == 3
+
+    def test_keeps_canonical_only_key_events(self):
+        event = KeyDownEvent(timestamp=1.0, canonical_key_name="enter")
+
+        assert remove_invalid_keyboard_events([event]) == [event]
+
+    def test_canonical_only_enter_survives_the_action_pipeline(self):
+        events = [
+            KeyDownEvent(timestamp=1.0, canonical_key_name="enter"),
+            KeyUpEvent(timestamp=1.1, canonical_key_name="enter"),
+        ]
+
+        processed = process_events(events)
+        assert len(processed) == 1
+        assert Action(processed[0], object()).keys == ["enter"]
+
+    def test_raw_typed_character_preserves_case(self):
+        events = [
+            KeyDownEvent(timestamp=1.0, key_char="A", canonical_key_char="a"),
+            KeyUpEvent(timestamp=1.1, key_char="A", canonical_key_char="a"),
+        ]
+
+        processed = process_events(events)
+        assert len(processed) == 1
+        assert processed[0].text == "A"
 
 
 class TestRemoveRedundantMouseMoveEvents:
