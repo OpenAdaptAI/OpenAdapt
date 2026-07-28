@@ -127,12 +127,36 @@ never attempted rather than as failures. `will_recheck` becomes the list the
 engine re-proves after a continue, so "I fixed it" is visibly not a
 repeat-the-step button.
 
-**What each answer does.** The three actions differ in whether the saved
-workflow changes, and that is what an operator cannot infer from their names.
-Each button carries its consequence, and the card states it in full: *check and
-continue* is this run only and the same drift stops the next run; *teach the
+**What each answer does.** The actions differ in whether the saved workflow
+changes and in what becomes of the run, and neither is inferable from their
+names. Each button carries its consequence, and the card states it in full:
+*check and continue* is this run only and the same drift stops the next run;
+*stop — this is wrong* ends this run and it cannot be resumed; *teach the
 correction* changes future runs and continues nothing now; *needs more help*
 leaves the run paused and untouched.
+
+**Stop and needs-more-help are not two phrasings of one answer.** Escalation
+*parks* the run: the durable pause stays intact and a qualified operator can
+still continue it. A rejection *terminates* it — the engine marks the pause
+rejected, no approval resumes it, and the run report records the terminal
+transaction outcome. The two exist separately because merging them would leave
+the recorded answer distribution unable to distinguish "I don't know" from
+"stop", which is the only signal a disagreement action is worth its cost for.
+Without one, an operator who looks at the live application and concludes the
+engine was right to stop has no answer that says so, and the only one-tap
+resolution on the screen is the agreeable one.
+
+**No answer is the recommended one, including this one.** The accent used to
+follow `allowed_actions[0]`, which Flow sets from a predicate about what it can
+re-verify rather than about what the operator should do. Emphasising the
+disagreement answer instead would be the same mistake pointed the other way.
+Nothing on the task means "recommended", so nothing is emphasised.
+
+**Four buttons is the ordinary bar, and five is reachable.** Measured in
+headless Chromium at 360x640, the tightest device that still ships: three
+buttons 207px, four 248px, five 286px, against a 44px touch-target floor that
+is not crossed. The page reserves the bar's *measured* height, never a
+constant, so the outcome line is never left underneath it.
 
 **What came back.** Flow returns `HumanDecisionReceiptV1`: a `state` and a
 `reason_code` from fixed enums, and no message. The shell maps every

@@ -29,7 +29,7 @@ const RESOLUTION_HALT = {
     risk_class: "unknown",
     created_at: "2026-07-27T21:00:00+00:00",
     expires_at: "2026-07-27T22:00:00+00:00",
-    allowed_actions: ["verify_and_resume", "teach", "escalate"],
+    allowed_actions: ["verify_and_resume", "reject", "teach", "escalate"],
     evidence: {},
   },
   task_digest: "sha256:" + "c".repeat(64),
@@ -201,12 +201,13 @@ describe("the decision view says what broke", () => {
   });
 });
 
-describe("the three answers are distinguishable by consequence", () => {
+describe("the answers are distinguishable by consequence", () => {
   it("puts the consequence on each button and spells it out in the card", async () => {
     await boot();
     await openTask();
     const bar = document.getElementById("actions")!.textContent ?? "";
     expect(bar).toContain("This run only");
+    expect(bar).toContain("Ends this run");
     expect(bar).toContain("Changes future runs");
     expect(bar).toContain("Hands this to someone else");
 
@@ -216,6 +217,87 @@ describe("the three answers are distinguishable by consequence", () => {
     expect(consequences).toContain("The run stays paused exactly where it is");
     // Only the actions the signed task allows are described.
     expect(consequences).not.toContain("Skip this step");
+  });
+
+  it("distinguishes ending the run from parking it for someone else", async () => {
+    await boot();
+    await openTask();
+    const briefs = Object.fromEntries(
+      Array.from(document.querySelectorAll("#actions [data-action]")).map((b) => [
+        (b as HTMLElement).dataset.action,
+        b.querySelector(".brief")?.textContent ?? "",
+      ]),
+    );
+    // The whole reason reject is its own wire action: these two answers do
+    // opposite things to the run, and an operator who reads them as synonyms
+    // has been told the wrong thing about what happens next.
+    expect(briefs.reject).toBe("Ends this run");
+    expect(briefs.escalate).toBe("Hands this to someone else");
+
+    const consequences = document.querySelector(".consequences")!.textContent ?? "";
+    expect(consequences).toContain("this run cannot be resumed afterwards");
+    expect(consequences).toContain("The run stays paused exactly where it is");
+    // Reject is about THIS RUN, never about the saved workflow.
+    expect(consequences).toContain(
+      "Ends this run now. Nothing in the application is touched",
+    );
+  });
+
+  it("sends the closed reject disposition and never any free text", async () => {
+    await boot();
+    await openTask();
+    await answer("reject");
+    const body = JSON.parse(
+      (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+        .map((call) => call[1] as { body?: string } | undefined)
+        .filter((init) => init?.body)
+        .pop()!.body!,
+    );
+    expect(body.action).toBe("reject");
+    expect(body.disposition).toBe("rejected_by_operator");
+    // No field on the wire could carry a reason an operator typed.
+    expect(Object.keys(body).sort()).toEqual([
+      "action",
+      "capability_digest",
+      "disposition",
+      "idempotency_key",
+      "task_digest",
+      "task_signature",
+    ]);
+  });
+});
+
+describe("a rejection is reported as the end of the run", () => {
+  it("never says someone will pick it up", async () => {
+    decisionReply = {
+      status: 200,
+      body: {
+        schema_version: "openadapt.human-decision-receipt/v1",
+        action: "reject",
+        state: "rejected",
+        reason_code: "rejected_by_operator",
+        report_success: null,
+      },
+    };
+    await boot();
+    await openTask();
+    await answer("reject");
+    const text = outcomeText();
+    expect(text).toContain("This run is over and cannot be resumed");
+    expect(text).toContain("nothing in the application was touched");
+    // The escalation wording would be an actively wrong instruction here.
+    expect(text).not.toContain("until someone picks it up");
+    expect(text).not.toContain("stays paused");
+    // Terminal: the answers go away.
+    expect(document.getElementById("actions")!.hidden).toBe(true);
+  });
+
+  it("renders a runner that still returns the older decision record", async () => {
+    decisionReply = { status: 200, body: { status: "rejected" } };
+    await boot();
+    await openTask();
+    await answer("reject");
+    expect(outcomeText()).toContain("This run is over and cannot be resumed");
   });
 });
 
@@ -346,9 +428,12 @@ describe("no answer is rendered as the recommended one", () => {
     const buttons = Array.from(
       document.querySelectorAll("#actions [data-action]"),
     ) as HTMLButtonElement[];
-    expect(buttons).toHaveLength(3);
+    expect(buttons).toHaveLength(4);
     // `allowed_actions[0]` is `verify_and_resume` here, which is exactly the
-    // case that used to be painted in filled accent.
+    // case that used to be painted in filled accent. `reject` must not become
+    // the new emphasised one either: removing a recommendation and then
+    // recommending the opposite answer is the same mistake pointed the other
+    // way, and nothing on this task means "recommended".
     expect(buttons[0].dataset.action).toBe("verify_and_resume");
     const classes = new Set(buttons.map((b) => b.className));
     expect(classes).toEqual(new Set([""]));
@@ -464,7 +549,7 @@ describe("the answers are gated on reaching the end of the decision", () => {
 
     fire!([{ isIntersecting: true }]);
     await flush();
-    expect(bar.querySelectorAll("[data-action]")).toHaveLength(3);
+    expect(bar.querySelectorAll("[data-action]")).toHaveLength(4);
     expect(bar.textContent).not.toContain("Read this decision to the end");
   });
 
@@ -486,7 +571,7 @@ describe("the answers are gated on reaching the end of the decision", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     await boot();
     await openTask();
-    expect(document.querySelectorAll("#actions [data-action]")).toHaveLength(3);
+    expect(document.querySelectorAll("#actions [data-action]")).toHaveLength(4);
   });
 });
 

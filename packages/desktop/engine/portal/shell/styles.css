@@ -192,6 +192,36 @@ html, body {
 .actions button .label { font-weight: 600; }
 .actions button .brief { font-weight: 400; font-size: 13px; opacity: 0.78; }
 
+/* A fixed bar that eats half the phone is a legibility problem in its own
+   right, and adding `reject` made a four-button bar the ordinary case.
+   Measured on a 360x640 device before this rule: three buttons 207px (32% of
+   the viewport), four 270px (42%), five 333px (52%) -- so at five the operator
+   could see 307px of the decision at a time.
+
+   Every button shrinks by the same amount. The alternative -- letting the bar
+   scroll -- would put whichever answers fall below its fold out of sight, and
+   that is a prominence difference decided by list position, which is the exact
+   defect the flat styling above exists to prevent.
+
+   44px is the floor and is not crossed: it is the smallest reliable touch
+   target, and a mis-tap here is a wrong answer to a governed decision.
+
+   A browser without `:has()` keeps the taller buttons. That degrades to
+   today's layout, which is safe -- nothing is occluded, because the page
+   reserves the bar's MEASURED height -- rather than to a broken one. */
+.actions:has(button:nth-child(4)) button {
+  min-height: 46px;
+  padding: 7px 14px;
+}
+.actions:has(button:nth-child(4)) { gap: 8px; }
+
+.actions:has(button:nth-child(5)) button {
+  min-height: 44px;
+  padding: 6px 14px;
+}
+.actions:has(button:nth-child(5)) { gap: 7px; }
+.actions:has(button:nth-child(5)) button .brief { font-size: 12.5px; }
+
 /* Every answer is styled identically. There is deliberately no `.primary` rule:
    the accent used to be painted on `allowed_actions[0]`, which the engine sets
    from a predicate about what it can re-verify, not about what the operator

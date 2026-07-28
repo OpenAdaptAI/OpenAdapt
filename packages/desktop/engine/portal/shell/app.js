@@ -33,6 +33,20 @@ const ACTION_WIRE = {
       "The workflow continues without this step. Offered only when the " +
       "workflow itself declares the step skippable.",
   },
+  reject: {
+    wire: "reject",
+    // The disagreement answer. Its label is the assertion the operator makes,
+    // and it is about THIS RUN -- not about the saved workflow, which is what
+    // "Teach the correction" is for and which carries a requalification gate
+    // this button does not.
+    label: "Stop — this is wrong",
+    brief: "Ends this run",
+    consequence:
+      "Ends this run now. Nothing in the application is touched and nothing " +
+      "continues. Use it when you have looked at the live application and " +
+      "OpenAdapt was right to stop. The saved workflow is not changed, and " +
+      "this run cannot be resumed afterwards.",
+  },
   teach: {
     wire: "teach",
     label: "Teach the correction",
@@ -55,6 +69,7 @@ const ACTION_WIRE = {
 const DISPOSITION = {
   continue: "completed_by_operator",
   skip: "not_applicable",
+  reject: "rejected_by_operator",
   teach: "teach_requested",
   escalate: "needs_assistance",
 };
@@ -124,6 +139,16 @@ const RECEIPT_COPY = {
       "it up.",
     terminal: true,
   },
+  // Deliberately not worded like the escalation above. That one says someone
+  // will pick this up; this one says nobody will, because there is no longer a
+  // run to pick up. An operator told the wrong one of those acts on it.
+  "rejected/rejected_by_operator": {
+    text:
+      "Stopped. This run is over and cannot be resumed, and nothing in the " +
+      "application was touched. Start it again on the computer if it should be " +
+      "attempted.",
+    terminal: true,
+  },
 };
 
 // Flow's own `_RECEIPT_STATE`: engine decision status -> receipt state. Kept so
@@ -139,6 +164,7 @@ const LEGACY_RECEIPT_STATE = {
   halted: ["halted", "continuation_halted"],
   needs_demonstration: ["demonstration_requested", "demonstration_requested"],
   escalated: ["escalated", "escalation_recorded"],
+  rejected: ["rejected", "rejected_by_operator"],
 };
 
 // ------------------------------------------------- describing the halted step
