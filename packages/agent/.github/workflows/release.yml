@@ -28,6 +28,8 @@ on:
       - "scripts/check_mcpb.py"
       - "scripts/check_release_artifacts.py"
       - "scripts/check_dist.py"
+      - "scripts/check_source_boundary.py"
+      - "source-policy.public.json"
       - ".github/workflows/release.yml"
 
 concurrency:
@@ -58,10 +60,11 @@ jobs:
         run: python -m pytest tests/test_distribution.py -q
       - name: Build sdist + wheel
         run: python -m build
-      - name: License / package-boundary check on built archives
+      - name: License and source-policy checks on built archives
         run: |
           python scripts/check_release_artifacts.py dist
           python scripts/check_dist.py dist/*
+          python scripts/check_source_boundary.py --require-dist
       - name: twine check
         run: twine check dist/*
       - name: Validate and pack the local MCPB

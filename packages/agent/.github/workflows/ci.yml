@@ -32,3 +32,4 @@ jobs:
         run: |
           python scripts/check_release_artifacts.py dist
           python scripts/check_dist.py dist/*
+          python scripts/check_source_boundary.py --require-dist

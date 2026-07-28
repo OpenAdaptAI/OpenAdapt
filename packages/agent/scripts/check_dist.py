@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail a release if its archives violate the OpenAdapt package boundary."""
+"""Fail a release if its archives violate the OpenAdapt license boundary."""
 
 from __future__ import annotations
 
@@ -8,18 +8,6 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-_FORBIDDEN_PATH_MARKERS = (
-    "openimis",
-    "benchmark/openimis",
-    "benchmarks/openimis",
-    "adversary_corpus",
-    "identity_roc",
-    "pixel_verify_cert",
-    "oracle_recipe",
-    "real_emr",
-    "held_out_corpus",
-    "/private/",
-)
 _COPYLEFT_MARKERS = (
     b"GNU " + b"AFFERO GENERAL PUBLIC LICENSE",
     b"GNU " + b"GENERAL PUBLIC LICENSE",
@@ -54,15 +42,6 @@ def check(path: Path) -> None:
     members = _members(path)
     if not members:
         raise ArtifactError(f"{path}: empty archive")
-
-    lowered_names = {name: name.lower() for name in members}
-    forbidden = sorted(
-        name
-        for name, lowered in lowered_names.items()
-        if any(marker in lowered for marker in _FORBIDDEN_PATH_MARKERS)
-    )
-    if forbidden:
-        raise ArtifactError(f"{path}: repository-only benchmark material in artifact: {forbidden}")
 
     metadata = [
         body
