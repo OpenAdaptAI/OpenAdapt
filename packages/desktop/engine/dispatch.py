@@ -454,7 +454,7 @@ class EngineDispatcher:
         return {"capture_id": capture_id, "recording": True}
 
     def stop_recording(self, **params: Any) -> dict:
-        """Stop the active recording and emit ``recording_stopped``."""
+        """Stop the active recording, retain it, and compile it automatically."""
         controller = self.services.controller
         active = self._flow_recording
         if active is not None:
@@ -469,7 +469,12 @@ class EngineDispatcher:
         metadata = controller.stop()
         self.emit("recording_stopped", metadata)
         self.emit("status_update", self._status_dict(controller))
-        return {"capture_id": metadata.get("id"), **metadata}
+        stopped = {"capture_id": metadata.get("id"), **metadata}
+        stopped["compile"] = self._compile_registered_capture(
+            str(stopped["capture_id"]),
+            automatic=True,
+        )
+        return stopped
 
     def _finalize_flow_capture(self, active: _ActiveFlowRecording, result: Any) -> dict:
         """Register one compile-ready Flow capture and emit its local evidence."""
@@ -522,6 +527,10 @@ class EngineDispatcher:
         }
         self.emit("recording_stopped", metadata)
         self.emit("status_update", self._status_dict(self.services.controller))
+        metadata["compile"] = self._compile_registered_capture(
+            active.capture_id,
+            automatic=True,
+        )
         return metadata
 
     def pause_recording(self, **params: Any) -> dict:
@@ -672,23 +681,75 @@ class EngineDispatcher:
         capture_id = params.get("capture_id")
         if not capture_id:
             return {"ok": False, "error": "capture_id is required", "workflow_id": ""}
+        return self._compile_registered_capture(str(capture_id), automatic=False)
+
+    def _compile_registered_capture(self, capture_id: str, *, automatic: bool) -> dict:
+        """Compile one retained capture and report a retryable local state.
+
+        Flow writes the bundle to a separate directory. The source recording
+        remains in the capture directory on success and on failure.
+        """
+        progress = {"capture_id": capture_id, "automatic": automatic}
         capture = self.services.db.get_capture(capture_id)
         capture_dir = capture and (capture.get("capture_path") or capture.get("capture_dir"))
         if not capture_dir:
-            return {"ok": False, "error": f"Unknown capture {capture_id}", "workflow_id": ""}
-        self.emit("compile_progress", {"capture_id": capture_id, "state": "compiling"})
-        compiled = self.services.controller.compile_capture(capture_id, Path(capture_dir))
+            error = f"OpenAdapt could not find the retained recording {capture_id}."
+            self.emit(
+                "compile_progress",
+                {
+                    **progress,
+                    "state": "failed",
+                    "error": error,
+                    "recording_retained": False,
+                },
+            )
+            return {
+                "ok": False,
+                "error": error,
+                "workflow_id": "",
+                "recording_retained": False,
+            }
+        self.emit("compile_progress", {**progress, "state": "compiling"})
+        try:
+            compiled = self.services.controller.compile_capture(capture_id, Path(capture_dir))
+        except Exception:
+            logger.exception("Compile failed for retained capture {cid}", cid=capture_id)
+            compiled = None
+        recording_retained = Path(capture_dir).is_dir()
         if not compiled:
-            self.emit("compile_progress", {"capture_id": capture_id, "state": "failed"})
-            return {"ok": False, "error": "Compile failed (see logs)", "workflow_id": ""}
+            error = (
+                "OpenAdapt could not compile this recording. "
+                "The raw recording was retained and is ready for another attempt."
+                if recording_retained
+                else "OpenAdapt could not compile because the recording is no longer available."
+            )
+            failed = {
+                **progress,
+                "state": "failed",
+                "error": error,
+                "recording_retained": recording_retained,
+            }
+            self.emit("compile_progress", failed)
+            return {
+                "ok": False,
+                "error": error,
+                "workflow_id": "",
+                "recording_retained": recording_retained,
+            }
         self.emit(
             "compile_progress",
-            {"capture_id": capture_id, "state": "compiled", "bundle_id": compiled["bundle_id"]},
+            {
+                **progress,
+                "state": "compiled",
+                "bundle_id": compiled["bundle_id"],
+                "recording_retained": recording_retained,
+            },
         )
         return {
             "ok": True,
             "workflow_id": compiled["bundle_id"],
             "bundle_path": compiled["bundle_path"],
+            "recording_retained": recording_retained,
         }
 
     def replay_workflow(self, **params: Any) -> dict:

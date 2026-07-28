@@ -55,11 +55,14 @@ def _precise_report(
 class FakeController:
     """Minimal recording controller stand-in."""
 
-    def __init__(self) -> None:
+    def __init__(self, db: IndexDB, capture_dir: Path) -> None:
         self.state = RecordingState.IDLE
         self._current_capture_id = None
         self._started_at = None
+        self.db = db
+        self.capture_dir = capture_dir
         self.compiled: dict | None = {"bundle_id": "bnd1", "bundle_path": "/tmp/b", "ok": True}
+        self.compile_calls = 0
 
     @property
     def is_recording(self) -> bool:
@@ -72,6 +75,14 @@ class FakeController:
     def start(self, task_description: str = "") -> str:
         self.state = RecordingState.RECORDING
         self._current_capture_id = "cap1"
+        self.capture_dir.mkdir(parents=True, exist_ok=True)
+        if self.db.get_capture("cap1") is None:
+            self.db.insert_capture(
+                "cap1",
+                str(self.capture_dir),
+                "2026-07-28T00:00:00+00:00",
+                task_description=task_description,
+            )
         return "cap1"
 
     def stop(self) -> dict:
@@ -80,6 +91,7 @@ class FakeController:
         return {"id": cid, "duration": 1.0, "event_count": 3, "size_bytes": 10}
 
     def compile_capture(self, capture_id, capture_dir):
+        self.compile_calls += 1
         return self.compiled
 
 
@@ -108,7 +120,7 @@ def deps(tmp_path: Path):
         db=db,
         storage=FakeStorage(),
         audit=FakeAudit(),
-        controller=FakeController(),
+        controller=FakeController(db, config.data_dir / "captures" / "cap1"),
     )
     disp = EngineDispatcher(config, services=services, emit=lambda e, d: events.append((e, d)))
     yield disp, db, events
@@ -124,7 +136,50 @@ class TestRecordingCommands:
         assert ("recording_started", {"capture_id": "cap1"}) in events
         r2 = disp.dispatch("stop_recording", {})
         assert r2["capture_id"] == "cap1"
+        assert r2["compile"]["workflow_id"] == "bnd1"
+        assert r2["compile"]["recording_retained"] is True
+        assert disp.services.controller.compile_calls == 1
         assert any(e == "recording_stopped" for e, _ in events)
+        assert [data["state"] for event, data in events if event == "compile_progress"] == [
+            "compiling",
+            "compiled",
+        ]
+
+    def test_compile_failure_retains_recording_and_retry_succeeds(self, deps, monkeypatch) -> None:
+        disp, _db, events = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "linux")
+        disp.services.controller.compiled = None
+
+        disp.dispatch("start_recording", {})
+        result = disp.dispatch("stop_recording", {})
+
+        assert result["compile"]["ok"] is False
+        assert result["compile"]["recording_retained"] is True
+        assert disp.services.controller.capture_dir.is_dir()
+        failure = [
+            data
+            for event, data in events
+            if event == "compile_progress" and data["state"] == "failed"
+        ][-1]
+        assert failure["automatic"] is True
+        assert failure["recording_retained"] is True
+
+        disp.services.controller.compiled = {
+            "bundle_id": "bnd-retry",
+            "bundle_path": "/tmp/retry",
+            "ok": True,
+        }
+        retry = disp.dispatch("compile_recording", {"capture_id": "cap1"})
+
+        assert retry["ok"] is True
+        assert retry["workflow_id"] == "bnd-retry"
+        assert disp.services.controller.capture_dir.is_dir()
+        compiled = [
+            data
+            for event, data in events
+            if event == "compile_progress" and data["state"] == "compiled"
+        ][-1]
+        assert compiled["automatic"] is False
 
     def test_get_status_shape(self, deps) -> None:
         disp, _db, _e = deps
@@ -278,6 +333,7 @@ class TestRecordingCommands:
 
         assert calls == ["ensure", "demo"]
         assert result["recording"] is False
+        assert result["compile"]["workflow_id"] == "bnd1"
         assert db.get_capture(result["capture_id"])["task_description"] == ("My first workflow")
         assert [event for event, _data in events if event.startswith("recording_")] == [
             "recording_started",
@@ -396,6 +452,7 @@ class TestRecordingCommands:
 
         assert started["recording"] is True
         assert stopped["capture_id"] == started["capture_id"]
+        assert stopped["compile"]["workflow_id"] == "bnd1"
         assert private_requests[0]["target"] == target
         assert private_requests[0]["task"] == "Review patient workflow"
         assert db.get_capture(started["capture_id"]) is not None
@@ -408,6 +465,10 @@ class TestRecordingCommands:
         assert "Jane Doe" not in emitted[0]
         assert "MRN 12345" not in emitted[0]
         assert "Review patient workflow" not in emitted[0]
+        assert [data["state"] for event, data in events if event == "compile_progress"] == [
+            "compiling",
+            "compiled",
+        ]
 
 
 class TestLibraryCommands:

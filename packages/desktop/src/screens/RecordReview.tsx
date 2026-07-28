@@ -1,7 +1,7 @@
 // Record & review — drive a recording, then review + compile it.
 // Recording state comes from the engine via events + get_status; after stop the
 // capture can be scrubbed (PHI gate) and compiled into a workflow.
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CMD, engineInvoke, engineTry, onEngineEvent, EVT } from "../lib/engine";
 import type {
   BrowserRuntimeStatus,
@@ -21,6 +21,28 @@ function fmt(secs?: number | null) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+type CompilePhase = "idle" | "compiling" | "failed";
+
+interface CompileResult {
+  ok: boolean;
+  workflow_id?: string;
+  error?: string;
+  recording_retained?: boolean;
+}
+
+interface RecordingResult {
+  capture_id?: string;
+  compile?: CompileResult;
+}
+
+interface CompileProgress {
+  capture_id?: string;
+  state: "compiling" | "compiled" | "failed";
+  bundle_id?: string;
+  error?: string;
+  recording_retained?: boolean;
+}
+
 export function RecordReview({
   onCompiled,
 }: {
@@ -34,7 +56,8 @@ export function RecordReview({
     controls: { pause: false, resume: false, stop: false },
   });
   const [lastCapture, setLastCapture] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"idle" | "compiling">("idle");
+  const [phase, setPhase] = useState<CompilePhase>("idle");
+  const [compileError, setCompileError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [target, setTarget] = useState<ExecutionTarget>({ backend: "web" });
   const [task, setTask] = useState("");
@@ -46,6 +69,17 @@ export function RecordReview({
   const [presentationError, setPresentationError] = useState<string | null>(null);
   const [exportingPresentation, setExportingPresentation] = useState(false);
   const fieldPrefix = useId();
+  const targetRef = useRef(target);
+  const onCompiledRef = useRef(onCompiled);
+  const openedWorkflowRef = useRef<string | null>(null);
+  targetRef.current = target;
+  onCompiledRef.current = onCompiled;
+
+  function openCompiledWorkflow(workflowId: string) {
+    if (openedWorkflowRef.current === workflowId) return;
+    openedWorkflowRef.current = workflowId;
+    onCompiledRef.current(workflowId, targetRef.current);
+  }
 
   async function refresh() {
     const s = await engineTry<EngineStatus>(CMD.GET_STATUS, {}, status);
@@ -57,7 +91,26 @@ export function RecordReview({
     const unsubs = [
       onEngineEvent(EVT.STATUS_UPDATE, (s: EngineStatus) => setStatus(s)),
       onEngineEvent(EVT.RECORDING_STOPPED, (d: { capture_id?: string }) => {
-        if (d?.capture_id) setLastCapture(d.capture_id);
+        if (d?.capture_id) {
+          setLastCapture(d.capture_id);
+          setCompileError(null);
+          setPhase("compiling");
+        }
+      }),
+      onEngineEvent(EVT.COMPILE_PROGRESS, (next: CompileProgress) => {
+        if (next.capture_id) setLastCapture(next.capture_id);
+        if (next.state === "compiling") {
+          setCompileError(null);
+          setPhase("compiling");
+        } else if (next.state === "failed") {
+          setCompileError(
+            next.error ||
+              "OpenAdapt could not compile this recording. The raw recording was retained.",
+          );
+          setPhase("failed");
+        } else if (next.bundle_id) {
+          openCompiledWorkflow(next.bundle_id);
+        }
       }),
       onEngineEvent(EVT.BROWSER_RUNTIME, (next: BrowserRuntimeStatus) => {
         if (next.workflow_id === "recording") setRuntime(next);
@@ -88,11 +141,16 @@ export function RecordReview({
   async function start() {
     setBusy(true);
     setRuntime(null);
+    setLastCapture(null);
+    setCompileError(null);
+    setPhase("idle");
+    openedWorkflowRef.current = null;
     try {
-      await engineInvoke(CMD.START_RECORDING, {
+      const result = await engineInvoke<RecordingResult>(CMD.START_RECORDING, {
         target,
         ...(task.trim() ? { purpose: task.trim() } : {}),
       });
+      applyCompileResult(result);
     } finally {
       setBusy(false);
     }
@@ -100,26 +158,54 @@ export function RecordReview({
   async function stop() {
     setBusy(true);
     try {
-      const r = await engineInvoke<{ capture_id?: string }>(
+      const r = await engineInvoke<RecordingResult>(
         CMD.STOP_RECORDING,
         {},
       );
       if (r?.capture_id) setLastCapture(r.capture_id);
+      applyCompileResult(r);
     } finally {
       setBusy(false);
     }
   }
-  async function compile() {
+
+  function applyCompileResult(result: RecordingResult) {
+    const compiled = result.compile;
+    if (!compiled) return;
+    if (compiled.ok && compiled.workflow_id) {
+      openCompiledWorkflow(compiled.workflow_id);
+      return;
+    }
+    setCompileError(
+      compiled.error ||
+        "OpenAdapt could not compile this recording. The raw recording was retained.",
+    );
+    setPhase("failed");
+  }
+
+  async function retryCompile() {
     if (!lastCapture) return;
     setPhase("compiling");
+    setCompileError(null);
     try {
-      const r = await engineInvoke<{ workflow_id?: string }>(
+      const r = await engineInvoke<CompileResult>(
         CMD.COMPILE_RECORDING,
         { capture_id: lastCapture },
       );
-      if (r?.workflow_id) onCompiled(r.workflow_id, target);
-    } finally {
-      setPhase("idle");
+      if (r.ok && r.workflow_id) {
+        openCompiledWorkflow(r.workflow_id);
+      } else {
+        setCompileError(
+          r.error ||
+            "OpenAdapt could not compile this recording. The raw recording was retained.",
+        );
+        setPhase("failed");
+      }
+    } catch {
+      setCompileError(
+        "OpenAdapt could not start compilation. The raw recording is still available.",
+      );
+      setPhase("failed");
     }
   }
 
@@ -265,10 +351,29 @@ export function RecordReview({
       {lastCapture && !recording && (
         <Card>
           <CardHead
-            eyebrow="Review"
-            title="Compile this recording"
+            eyebrow="Build"
+            title={
+              phase === "compiling"
+                ? "Building your workflow"
+                : phase === "failed"
+                  ? "Compilation needs attention"
+                  : "Preparing your workflow"
+            }
             sub={`capture ${lastCapture}`}
           />
+          <div role="status" aria-live="polite">
+            {phase === "compiling" && (
+              <Callout tone="info" title="Compilation is in progress">
+                OpenAdapt is converting the completed demonstration into a
+                deterministic workflow. The raw recording stays unchanged.
+              </Callout>
+            )}
+            {phase === "failed" && (
+              <Callout tone="warn" title="The recording is safe">
+                {compileError}
+              </Callout>
+            )}
+          </div>
           <Callout tone="info" title="PHI stays local until you push">
             OpenAdapt scrubs the recording (fail-closed) before any upload. On
             the BYOC lane it is never uploaded — compile, replay, and teach all
@@ -278,9 +383,13 @@ export function RecordReview({
             <Button
               variant="primary"
               disabled={phase === "compiling"}
-              onClick={compile}
+              onClick={retryCompile}
             >
-              {phase === "compiling" ? "Compiling…" : "Compile to workflow"}
+              {phase === "compiling"
+                ? "Compiling…"
+                : phase === "failed"
+                  ? "Retry compilation"
+                  : "Compile to workflow"}
             </Button>
             <Button
               variant="ghost"

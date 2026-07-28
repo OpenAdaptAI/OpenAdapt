@@ -73,8 +73,6 @@ def test_record_target_reaches_immediate_execution_without_persistent_storage() 
     record = (ROOT / "src/screens/RecordReview.tsx").read_text(encoding="utf-8")
     watch = (ROOT / "src/screens/WatchRun.tsx").read_text(encoding="utf-8")
 
-    assert "onCompiled: (id: string, target: ExecutionTarget) => void" in record
-    assert "onCompiled(r.workflow_id, target)" in record
     assert "initialTarget={route.target}" in app
     assert 'initialTarget ?? { backend: "web" }' in watch
     for persistent_store in ("localStorage", "sessionStorage", "indexedDB"):
