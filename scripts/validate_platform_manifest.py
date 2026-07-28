@@ -29,8 +29,18 @@ What it validates TODAY:
   class of check (for example in an airgapped environment).
 * Status-document agreement (network): version skew against
   https://openadapt.ai/status.json is reported as a WARNING by default,
-  because status.json is regenerated on its own cadence in openadapt-web.
-  Pass --strict-status to escalate the skew to a failure.
+  because status.json lives in another repository and this manifest is not its
+  source of truth. It stays a warning so a release here cannot be blocked by an
+  edit nobody in this repo can make. Pass --strict-status to escalate the skew
+  to a failure.
+
+  Do NOT read that warning as self-healing. status.json is HAND-MAINTAINED in
+  openadapt-web; nothing generates it from PyPI or from this manifest. On
+  2026-07-28 it advertised flow 1.24.0 and launcher 1.10.0 while PyPI had
+  1.25.1 and 1.10.1. openadapt-web runs its own daily guard
+  (scripts/check_published_version_claims.mjs) that fails on exactly this, but
+  that is after-the-fact detection and still needs a person to open the
+  corrective PR. Skew reported here means someone must go and edit that file.
 
 What it does NOT validate yet (planned, see docs/platform-manifest.md):
 
@@ -395,8 +405,10 @@ def check_against_status(manifest: dict, report: Report, strict: bool) -> None:
             emit(
                 f"{role} skew vs {STATUS_URL}: manifest has "
                 f"{component.get('version')!r}, status.json has "
-                f"{status_version!r} (status.json regenerates on its own "
-                "cadence in openadapt-web)"
+                f"{status_version!r} (status.json is hand-maintained in "
+                "openadapt-web and will not correct itself -- edit "
+                "public/status.json and data/published-version-claims.json "
+                "there)"
             )
     lifecycle = (status.get("product_lifecycle") or "").lower()
     if lifecycle and lifecycle != manifest.get("release_channel"):
