@@ -1,7 +1,5 @@
 """Tests for scrubbing pipelines."""
 
-import pytest
-
 from openadapt_privacy.base import ScrubbingProvider
 from openadapt_privacy.pipelines.dicts import DictScrubber, scrub_dict, scrub_list_dicts
 
@@ -70,6 +68,65 @@ class TestDictScrubber:
 
         assert result["children"] == ["<REDACTED> item 1", "<REDACTED> item 2"]
 
+    def test_scrub_dict_recurses_through_gui_child_trees(self) -> None:
+        """Scrub configured fields in element dictionaries nested in lists."""
+        provider = MockScrubbingProvider()
+        scrubber = DictScrubber(provider)
+
+        input_dict = {
+            "state": {"unlisted": "secret active patient"},
+            "children": [
+                {
+                    "text": "secret patient",
+                    "tooltip": "secret MRN",
+                    "bounds": [10, 20, 30, 40],
+                    "children": [
+                        {
+                            "text": "secret member ID",
+                            "role": "textbox",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        result = scrubber.scrub_dict(input_dict)
+
+        assert result["state"] == {"unlisted": "<REDACTED> active patient"}
+        child = result["children"][0]
+        assert child["text"] == "<REDACTED> patient"
+        assert "secret" not in child["tooltip"]
+        assert child["bounds"] == [10, 20, 30, 40]
+        assert child["children"][0] == {
+            "text": "<REDACTED> member ID",
+            "role": "textbox",
+        }
+
+    def test_state_scrub_all_has_container_parity(self) -> None:
+        """Apply the state rule to direct strings, lists, and nested lists."""
+        provider = MockScrubbingProvider()
+        scrubber = DictScrubber(provider)
+
+        direct = scrubber.scrub_dict({"state": "secret direct"})
+        listed = scrubber.scrub_dict(
+            {
+                "state": [
+                    "secret list item",
+                    {"unlisted": "secret child"},
+                    [["secret nested list"], [{"deep": "secret nested child"}]],
+                ]
+            }
+        )
+
+        assert direct == {"state": "<REDACTED> direct"}
+        assert listed == {
+            "state": [
+                "<REDACTED> list item",
+                {"unlisted": "<REDACTED> child"},
+                [["<REDACTED> nested list"], [{"deep": "<REDACTED> nested child"}]],
+            ]
+        }
+
     def test_scrub_dict_preserves_non_string_values(self) -> None:
         """Test that non-string values are preserved."""
         provider = MockScrubbingProvider()
@@ -117,6 +174,33 @@ class TestDictScrubber:
 
         assert result["any_key"] == "<REDACTED>"
         assert result["another"] == "<REDACTED> data"
+
+    def test_scrub_all_applies_at_every_nested_depth(self) -> None:
+        """Apply scrub_all to nested dictionaries and nested lists."""
+        provider = MockScrubbingProvider()
+        scrubber = DictScrubber(provider)
+
+        input_dict = {
+            "metadata": {"unlisted": "secret patient"},
+            "items": [
+                "secret row",
+                {"unlisted": "secret account"},
+                [["secret nested row"]],
+            ],
+            "count": 2,
+        }
+
+        result = scrubber.scrub_dict(input_dict, scrub_all=True)
+
+        assert result == {
+            "metadata": {"unlisted": "<REDACTED> patient"},
+            "items": [
+                "<REDACTED> row",
+                {"unlisted": "<REDACTED> account"},
+                [["<REDACTED> nested row"]],
+            ],
+            "count": 2,
+        }
 
 
 class TestScrubDictFunction:

@@ -184,16 +184,26 @@ class TextScrubbingMixin:
         for key, value in input_dict.items():
             if self._should_scrub_text(key, value, list_keys, scrub_all):
                 scrubbed_text = self._scrub_text_item(value, key, force_scrub_children)
-                if key in ("text", "canonical_text") and self._is_scrubbed(
-                    value, scrubbed_text
-                ):
+                if key in ("text", "canonical_text") and self._is_scrubbed(value, scrubbed_text):
                     force_scrub_children = True
                 scrubbed_dict[key] = scrubbed_text
             elif isinstance(value, list):
+                list_scrub_all = scrub_all or (isinstance(key, str) and key == "state")
                 scrubbed_list = [
                     (
-                        self._scrub_list_item(item, key, list_keys, force_scrub_children)
-                        if self._should_scrub_list_item(item, key, list_keys)
+                        self._scrub_list_item(
+                            item,
+                            key,
+                            list_keys,
+                            scrub_all=list_scrub_all,
+                            force_scrub_children=force_scrub_children,
+                        )
+                        if self._should_scrub_list_item(
+                            item,
+                            key,
+                            list_keys,
+                            scrub_all=list_scrub_all,
+                        )
                         else item
                     )
                     for item in value
@@ -201,10 +211,11 @@ class TextScrubbingMixin:
                 scrubbed_dict[key] = scrubbed_list
                 force_scrub_children = False
             elif isinstance(value, dict):
-                if isinstance(key, str) and key == "state":
-                    scrubbed_dict[key] = self.scrub_dict(value, list_keys, scrub_all=True)
-                else:
-                    scrubbed_dict[key] = self.scrub_dict(value, list_keys)
+                scrubbed_dict[key] = self.scrub_dict(
+                    value,
+                    list_keys,
+                    scrub_all=scrub_all or (isinstance(key, str) and key == "state"),
+                )
             else:
                 scrubbed_dict[key] = value
 
@@ -244,9 +255,7 @@ class TextScrubbingMixin:
         Returns:
             True if the value should be scrubbed, False otherwise.
         """
-        return (
-            isinstance(value, str) and isinstance(key, str) and (key in list_keys or scrub_all)
-        )
+        return isinstance(value, str) and isinstance(key, str) and (key in list_keys or scrub_all)
 
     def _is_scrubbed(self, old_text: str, new_text: str) -> bool:
         """Check if text was modified by scrubbing.
@@ -287,6 +296,7 @@ class TextScrubbingMixin:
         item: Any,
         key: str,
         list_keys: list[str],
+        scrub_all: bool = False,
     ) -> bool:
         """Check if a list item should be scrubbed.
 
@@ -294,19 +304,23 @@ class TextScrubbingMixin:
             item: List item.
             key: Dictionary key containing the list.
             list_keys: List of keys that should be scrubbed.
+            scrub_all: If True, scrub every string at every list depth.
 
         Returns:
             True if the item should be scrubbed, False otherwise.
         """
-        return isinstance(item, str) and isinstance(key, str) and key in list_keys
+        if isinstance(item, (dict, list)):
+            return True
+        return isinstance(item, str) and isinstance(key, str) and (key in list_keys or scrub_all)
 
     def _scrub_list_item(
         self,
-        item: str | dict[str, Any],
+        item: Any,
         key: str,
         list_keys: list[str],
         force_scrub_children: bool = False,
-    ) -> str | dict[str, Any]:
+        scrub_all: bool = False,
+    ) -> Any:
         """Scrub a single list item.
 
         Args:
@@ -314,12 +328,38 @@ class TextScrubbingMixin:
             key: Dictionary key containing the list.
             list_keys: List of keys that should be scrubbed.
             force_scrub_children: If True, use aggressive scrubbing.
+            scrub_all: If True, scrub every string at every list depth.
 
         Returns:
             Scrubbed item.
         """
         if isinstance(item, dict):
-            return self.scrub_dict(item, list_keys, force_scrub_children=force_scrub_children)
+            return self.scrub_dict(
+                item,
+                list_keys,
+                scrub_all=scrub_all,
+                force_scrub_children=force_scrub_children,
+            )
+        if isinstance(item, list):
+            return [
+                (
+                    self._scrub_list_item(
+                        nested_item,
+                        key,
+                        list_keys,
+                        scrub_all=scrub_all,
+                        force_scrub_children=force_scrub_children,
+                    )
+                    if self._should_scrub_list_item(
+                        nested_item,
+                        key,
+                        list_keys,
+                        scrub_all=scrub_all,
+                    )
+                    else nested_item
+                )
+                for nested_item in item
+            ]
         return self._scrub_text_item(item, key)
 
 
