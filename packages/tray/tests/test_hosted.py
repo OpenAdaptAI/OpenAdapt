@@ -11,11 +11,18 @@ from openadapt_tray.config import (
 )
 from openadapt_tray.hosted import (
     CountResult,
+    CredentialWarningStore,
     HostedPoller,
     InvalidCountPayload,
+    InvalidCredentialPayload,
     count_url,
+    credential_identity,
+    parse_credential_status,
     route_break_click,
 )
+from openadapt_tray.state import CredentialState
+
+VALID_INGEST_TOKEN = "oai_ingest_" + ("A" * 43)
 
 
 def make_config(**kw):
@@ -24,9 +31,10 @@ def make_config(**kw):
 
 
 class _FakeResponse:
-    def __init__(self, status_code=200, payload=None):
+    def __init__(self, status_code=200, payload=None, headers=None):
         self.status_code = status_code
         self._payload = payload or {}
+        self.headers = headers or {}
 
     def json(self):
         return self._payload
@@ -76,6 +84,16 @@ class TestCountUrl:
             == "https://example.test/api/needs-attention/count"
         )
 
+    def test_credential_identity_is_stable_and_host_bound(self):
+        first = credential_identity("https://example.test", VALID_INGEST_TOKEN)
+
+        assert first == credential_identity(
+            "https://example.test/", VALID_INGEST_TOKEN
+        )
+        assert first != credential_identity(
+            "https://other.test", VALID_INGEST_TOKEN
+        )
+
 
 class TestPollOnce:
     """Tests for the single authenticated request."""
@@ -83,7 +101,7 @@ class TestPollOnce:
     def test_poll_once_success(self):
         cfg = make_config()
         poller = HostedPoller(
-            cfg, on_count=lambda r: None, token_provider=lambda: "oai_ingest_x"
+            cfg, on_count=lambda r: None, token_provider=lambda: VALID_INGEST_TOKEN
         )
         fake = _FakeClient(
             _FakeResponse(200, {"count": 4, "halts": 3, "uncertain_dispatches": 1})
@@ -97,7 +115,80 @@ class TestPollOnce:
         assert result.uncertain_dispatches == 1
         # Verify the exact request contract (endpoint + bearer auth).
         assert fake.last_url == "https://example.test/api/needs-attention/count"
-        assert fake.last_headers["Authorization"] == "Bearer oai_ingest_x"
+        assert fake.last_headers["Authorization"] == f"Bearer {VALID_INGEST_TOKEN}"
+
+    def test_poll_once_parses_closed_credential_contract(self):
+        cfg = make_config()
+        poller = HostedPoller(
+            cfg, on_count=lambda r: None, token_provider=lambda: VALID_INGEST_TOKEN
+        )
+        payload = {
+            "count": 0,
+            "credential": {
+                "expires_at": "2026-08-05T12:00:00Z",
+                "expires_in_days": 8,
+                "expiring_soon": True,
+                "legacy_non_expiring": False,
+                "warning_days": 14,
+            },
+        }
+        fake = _FakeClient(
+            _FakeResponse(
+                200,
+                payload,
+                {
+                    "Cache-Control": "no-store",
+                    "X-OpenAdapt-Credential-Warning-Days": "14",
+                    "X-OpenAdapt-Credential-Expires-In-Days": "8",
+                },
+            )
+        )
+        with patch("openadapt_tray.hosted.httpx.Client", return_value=fake):
+            result = poller.poll_once()
+
+        assert result is not None
+        assert result.credential.state == CredentialState.EXPIRING
+        assert result.credential_identity == credential_identity(
+            cfg.hosted_url, VALID_INGEST_TOKEN
+        )
+
+    def test_missing_no_store_header_keeps_valid_attention_count(self):
+        result = CountResult.from_payload(
+            {
+                "count": 4,
+                "credential": {
+                    "expires_at": "2026-08-05T12:00:00Z",
+                    "expires_in_days": 8,
+                    "expiring_soon": True,
+                    "legacy_non_expiring": False,
+                    "warning_days": 14,
+                },
+            },
+            headers={
+                "X-OpenAdapt-Credential-Warning-Days": "14",
+                "X-OpenAdapt-Credential-Expires-In-Days": "8",
+            },
+        )
+
+        assert result.count == 4
+        assert result.credential.state == CredentialState.UNKNOWN
+        assert result.credential_error is not None
+
+    @pytest.mark.parametrize(
+        ("days", "expiring"),
+        [(13, False), (15, True)],
+    )
+    def test_impossible_expiry_combinations_are_rejected(self, days, expiring):
+        with pytest.raises(InvalidCredentialPayload):
+            parse_credential_status(
+                {
+                    "expires_at": "2026-08-05T12:00:00Z",
+                    "expires_in_days": days,
+                    "expiring_soon": expiring,
+                    "legacy_non_expiring": False,
+                    "warning_days": 14,
+                }
+            )
 
     def test_poll_once_no_token_returns_none(self):
         cfg = make_config()
@@ -112,7 +203,7 @@ class TestPollOnce:
     def test_poll_once_non_200_returns_none(self):
         cfg = make_config()
         poller = HostedPoller(
-            cfg, on_count=lambda r: None, token_provider=lambda: "t"
+            cfg, on_count=lambda r: None, token_provider=lambda: VALID_INGEST_TOKEN
         )
         fake = _FakeClient(_FakeResponse(401, {}))
         with patch("openadapt_tray.hosted.httpx.Client", return_value=fake):
@@ -121,11 +212,22 @@ class TestPollOnce:
     def test_poll_once_network_error_returns_none(self):
         cfg = make_config()
         poller = HostedPoller(
-            cfg, on_count=lambda r: None, token_provider=lambda: "t"
+            cfg, on_count=lambda r: None, token_provider=lambda: VALID_INGEST_TOKEN
         )
         fake = _FakeClient(raise_exc=OSError("no route to host"))
         with patch("openadapt_tray.hosted.httpx.Client", return_value=fake):
             assert poller.poll_once() is None
+
+    def test_poll_once_rejects_wrong_token_type_before_http(self):
+        poller = HostedPoller(
+            make_config(),
+            on_count=lambda r: None,
+            token_provider=lambda: "oap_pairing_secret",
+        )
+
+        with patch("openadapt_tray.hosted.httpx.Client") as mock_client:
+            assert poller.poll_once() is None
+        mock_client.assert_not_called()
 
 
 class TestHandleResult:
@@ -220,6 +322,20 @@ class TestHandleResult:
         poller._handle_result(CountResult(count=0))
         assert poller.current_interval == MIN_POLL_INTERVAL_S
 
+    def test_unreachable_status_is_unknown_not_healthy(self):
+        statuses = []
+        poller = HostedPoller(
+            make_config(),
+            on_count=lambda r: None,
+            on_credential=statuses.append,
+            token_provider=lambda: "t",
+        )
+        poller._last_had_token = True
+
+        poller._handle_result(None)
+
+        assert statuses[-1].state == CredentialState.UNKNOWN
+
 
 class TestRouteBreakClick:
     """Tests for lane-aware click routing (spec §3c)."""
@@ -308,7 +424,7 @@ class TestUnreadableCountPayload:
         """The poller must return None, never ``CountResult(count=0)``."""
         cfg = make_config()
         poller = HostedPoller(
-            cfg, on_count=lambda r: None, token_provider=lambda: "t"
+            cfg, on_count=lambda r: None, token_provider=lambda: VALID_INGEST_TOKEN
         )
         fake = _FakeClient(_FakeResponse(200, {"total": 7}))  # no "count"
         with patch("openadapt_tray.hosted.httpx.Client", return_value=fake):
@@ -320,7 +436,7 @@ class TestUnreadableCountPayload:
         counts = []
         poller = HostedPoller(
             cfg, on_count=lambda r: counts.append(r.count),
-            token_provider=lambda: "t",
+            token_provider=lambda: VALID_INGEST_TOKEN,
         )
         good = _FakeClient(_FakeResponse(200, {"count": 4}))
         with patch("openadapt_tray.hosted.httpx.Client", return_value=good):
@@ -391,6 +507,119 @@ class TestNotificationDelivery:
             make_config(), on_count=lambda r: None, token_provider=lambda: "t"
         )
         assert poller._fire_notification(1) is False
+
+
+class TestCredentialExpiryWarning:
+    def _credential(
+        self,
+        *,
+        expiring_soon=True,
+        expires_in_days=8,
+        expires_at="2026-08-05T12:00:00Z",
+    ):
+        return parse_credential_status(
+            {
+                "expires_at": expires_at,
+                "expires_in_days": expires_in_days,
+                "expiring_soon": expiring_soon,
+                "legacy_non_expiring": False,
+                "warning_days": 14,
+            }
+        )
+
+    def test_server_decision_controls_warning_at_day_fourteen(self, tmp_path):
+        notifier = MagicMock()
+        notifier.show.return_value = True
+        poller = HostedPoller(
+            make_config(),
+            on_count=lambda r: None,
+            notifier=notifier,
+            token_provider=lambda: "t",
+            warning_store=CredentialWarningStore(tmp_path / "warnings.json"),
+        )
+        poller._handle_result(
+            CountResult(
+                count=0,
+                credential=self._credential(
+                    expiring_soon=False, expires_in_days=14
+                ),
+                credential_identity="credential-a",
+            )
+        )
+
+        notifier.show.assert_not_called()
+
+    def test_delivered_warning_survives_poller_restart(self, tmp_path):
+        path = tmp_path / "warnings.json"
+        notifier = MagicMock()
+        notifier.show.return_value = True
+        raw_token = "oai_ingest_secret-value"
+        result = CountResult(
+            count=0,
+            credential=self._credential(),
+            credential_identity=credential_identity(
+                "https://example.test", raw_token
+            ),
+        )
+
+        first = HostedPoller(
+            make_config(),
+            on_count=lambda r: None,
+            notifier=notifier,
+            token_provider=lambda: "t",
+            warning_store=CredentialWarningStore(path),
+        )
+        first._handle_result(result)
+        second = HostedPoller(
+            make_config(),
+            on_count=lambda r: None,
+            notifier=notifier,
+            token_provider=lambda: "t",
+            warning_store=CredentialWarningStore(path),
+        )
+        second._handle_result(result)
+
+        notifier.show.assert_called_once()
+        assert raw_token not in path.read_text()
+
+    def test_new_identity_or_expiry_can_warn_again(self, tmp_path):
+        notifier = MagicMock()
+        notifier.show.return_value = True
+        store = CredentialWarningStore(tmp_path / "warnings.json")
+        poller = HostedPoller(
+            make_config(),
+            on_count=lambda r: None,
+            notifier=notifier,
+            token_provider=lambda: "t",
+            warning_store=store,
+        )
+        credential = self._credential()
+
+        poller._handle_result(
+            CountResult(
+                count=0,
+                credential=credential,
+                credential_identity="credential-a",
+            )
+        )
+        poller._handle_result(
+            CountResult(
+                count=0,
+                credential=credential,
+                credential_identity="credential-b",
+            )
+        )
+        poller._handle_result(
+            CountResult(
+                count=0,
+                credential=self._credential(
+                    expires_at="2026-08-06T12:00:00Z"
+                ),
+                credential_identity="credential-b",
+            )
+        )
+
+        assert notifier.show.call_count == 3
 
 
 class TestBreakClickReportsFailure:

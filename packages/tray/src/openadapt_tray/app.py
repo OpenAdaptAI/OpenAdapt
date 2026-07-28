@@ -34,6 +34,7 @@ from openadapt_tray.state import (
     LANE_BYOC,
     LANE_CLOUD,
     AppState,
+    CredentialStatus,
     StateManager,
     SyncState,
     TrayState,
@@ -85,6 +86,8 @@ class TrayApplication:
             on_count=self._on_hosted_count,
             notifier=self.notifications,
             on_break_clicked=self.open_needs_attention,
+            on_credential=self._on_hosted_credential,
+            on_credential_clicked=self.login,
             set_offline=self._on_hosted_offline,
         )
 
@@ -457,6 +460,10 @@ class TrayApplication:
     def _on_hosted_count(self, result: CountResult) -> None:
         """Apply a needs-attention count from the cloud poller."""
         self.state.set_break_count(result.count)
+
+    def _on_hosted_credential(self, credential: CredentialStatus) -> None:
+        """Apply the privacy-safe credential status from the cloud poller."""
+        self.state.set_credential_status(credential)
 
     def _on_hosted_offline(self, offline: bool) -> None:
         """Reflect the cloud poller's online/offline status on the sync channel."""

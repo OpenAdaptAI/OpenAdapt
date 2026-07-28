@@ -7,7 +7,12 @@ import pytest
 
 from openadapt_tray.menu import CaptureInfo, MenuBuilder
 from openadapt_tray.platform.base import DialogUnavailableError
-from openadapt_tray.state import AppState, TrayState
+from openadapt_tray.state import (
+    AppState,
+    CredentialState,
+    CredentialStatus,
+    TrayState,
+)
 
 
 class TestCaptureInfo:
@@ -127,6 +132,28 @@ class TestMenuBuilder:
 
         item = builder._build_sync_item(app.state.current)
         assert "Pause Sync" in str(item.text)
+
+    @pytest.mark.parametrize(
+        ("credential", "label"),
+        [
+            (CredentialStatus.signed_out(), "sign in"),
+            (CredentialStatus.unknown(), "status unavailable"),
+            (
+                CredentialStatus(
+                    state=CredentialState.EXPIRING,
+                    expires_at="2026-08-05T12:00:00Z",
+                    expires_in_days=8,
+                    warning_days=14,
+                ),
+                "expires in 8 days",
+            ),
+        ],
+    )
+    def test_account_item_exposes_actionable_status(self, credential, label):
+        app = self.create_mock_app(AppState(credential=credential))
+        item = MenuBuilder(app)._build_account_item(app.state.current)
+
+        assert label in str(item.text).lower()
 
     def test_get_recent_captures_empty(self):
         """Test get_recent_captures returns empty list when no captures."""

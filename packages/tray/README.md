@@ -106,11 +106,14 @@ Recent Captures
 <N automations need attention>    # only when count > 0
 Open Desktop App
 Open Cloud Dashboard
+Account: connected · <N> days left
 Pause Sync / Sync (offline)
-Login...
 Settings...
 Quit
 ```
+
+The account row changes to a sign-in action, an expiry warning, or an
+unavailable status. Selecting it opens the credential settings page.
 
 During a local operation, the recording item changes to Starting, Stop
 Recording, Stopping, or Compiling. These labels reflect events; the tray does
@@ -137,11 +140,23 @@ The poller calls:
 ```text
 GET <hosted_url>/api/needs-attention/count
 Authorization: Bearer <ingest token>
+→ { "count": 0, "credential": {
+     "expires_at": "2026-08-05T12:00:00Z",
+     "expires_in_days": 8,
+     "expiring_soon": true,
+     "legacy_non_expiring": false,
+     "warning_days": 14
+   } }
 ```
 
 The token is resolved from `OPENADAPT_INGEST_TOKEN` or the OS keychain and is
 not written to `tray.json`. The default poll interval is 60 seconds, clamped to
 at least 30 seconds, with a slower offline retry.
+
+The control plane decides when the credential enters its 14-day warning
+window. The tray shows one actionable notification for each credential and
+expiry, including after a tray restart. It stores only a non-secret identity
+digest for notification deduplication. It never stores or logs the token.
 
 This is a narrow status endpoint, not hosted execution. The tray does not upload
 screenshots, workflow bundles, or capture artifacts through this poller.

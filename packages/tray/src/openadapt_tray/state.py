@@ -43,6 +43,37 @@ class SyncState(Enum):
         return cls.SYNCING
 
 
+class CredentialState(Enum):
+    """Status of the hosted credential reported by the control plane."""
+
+    NOT_CHECKED = auto()
+    ACTIVE = auto()
+    EXPIRING = auto()
+    LEGACY = auto()
+    SIGNED_OUT = auto()
+    UNKNOWN = auto()
+
+
+@dataclass(frozen=True)
+class CredentialStatus:
+    """Privacy-safe credential status for the tray UI."""
+
+    state: CredentialState = CredentialState.NOT_CHECKED
+    expires_at: str | None = None
+    expires_in_days: int | None = None
+    warning_days: int | None = None
+
+    @classmethod
+    def signed_out(cls) -> "CredentialStatus":
+        """Return the status used when no hosted credential is available."""
+        return cls(state=CredentialState.SIGNED_OUT)
+
+    @classmethod
+    def unknown(cls) -> "CredentialStatus":
+        """Return the fail-visible status for unreadable or unreachable data."""
+        return cls(state=CredentialState.UNKNOWN)
+
+
 # Deployment lanes (drives break-click routing; learned from desktop/config).
 LANE_CLOUD = "cloud"
 LANE_BYOC = "byoc"
@@ -62,6 +93,9 @@ class AppState:
 
     # Break / needs-attention badge (sourced from the cloud count endpoint).
     break_count: int = 0
+
+    # Hosted credential state. This never contains the credential value.
+    credential: CredentialStatus = CredentialStatus()
 
     # Deployment lane — drives lane-aware break-click routing.
     deployment_lane: str = LANE_CLOUD
@@ -160,6 +194,7 @@ class StateManager:
         # Preserve the orthogonal channels unless explicitly overridden.
         kwargs.setdefault("sync_state", self._state.sync_state)
         kwargs.setdefault("break_count", self._state.break_count)
+        kwargs.setdefault("credential", self._state.credential)
         kwargs.setdefault("deployment_lane", self._state.deployment_lane)
 
         self._state = AppState(state=new_state, **kwargs)
@@ -182,6 +217,15 @@ class StateManager:
         from dataclasses import replace
 
         self._state = replace(self._state, break_count=count)
+        self._emit()
+
+    def set_credential_status(self, credential: CredentialStatus) -> None:
+        """Update only the hosted credential status."""
+        if self._state.credential == credential:
+            return
+        from dataclasses import replace
+
+        self._state = replace(self._state, credential=credential)
         self._emit()
 
     def set_deployment_lane(self, lane: str) -> None:

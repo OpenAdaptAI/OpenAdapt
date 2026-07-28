@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from openadapt_tray.app import TrayApplication
 
 from openadapt_tray.platform.base import DialogUnavailableError
-from openadapt_tray.state import TrayState
+from openadapt_tray.state import CredentialState, TrayState
 
 
 @dataclass
@@ -60,8 +60,8 @@ class MenuBuilder:
             Menu.SEPARATOR,
             Item("Open Desktop App", self._open_desktop_app),
             Item("Open Cloud Dashboard", self._open_cloud_dashboard),
+            self._build_account_item(state),
             self._build_sync_item(state),
-            Item("Login...", self._login),
             Item("Settings...", self._open_settings),
             Menu.SEPARATOR,
             Item("Quit", self._quit),
@@ -86,6 +86,31 @@ class MenuBuilder:
             f"⚠ {count} {noun} need attention",
             lambda: self.app.open_needs_attention(),
         )
+
+    def _build_account_item(self, state) -> Item:
+        """Build the hosted account status and renewal action."""
+        credential = state.credential
+        if credential.state == CredentialState.NOT_CHECKED:
+            return Item("Account: checking status...", None, enabled=False)
+        if credential.state == CredentialState.SIGNED_OUT:
+            return Item("Account: sign in", self._login)
+        if credential.state == CredentialState.UNKNOWN:
+            return Item("Account: status unavailable", self._login)
+        if credential.state == CredentialState.LEGACY:
+            return Item("Account: connected · renew credential", self._login)
+        if credential.state == CredentialState.EXPIRING:
+            days = credential.expires_in_days
+            if days == 0:
+                label = "Account: sign-in expires today"
+            else:
+                noun = "day" if days == 1 else "days"
+                label = f"Account: sign-in expires in {days} {noun}"
+            return Item(label, self._login)
+        days = credential.expires_in_days
+        if days is None:
+            return Item("Account: connected", self._login)
+        noun = "day" if days == 1 else "days"
+        return Item(f"Account: connected · {days} {noun} left", self._login)
 
     def _build_sync_item(self, state) -> Item:
         """Build the pause/resume-sync toggle.

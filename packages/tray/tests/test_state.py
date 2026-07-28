@@ -5,6 +5,8 @@ from openadapt_tray.state import (
     LANE_BYOC,
     LANE_CLOUD,
     AppState,
+    CredentialState,
+    CredentialStatus,
     StateManager,
     SyncState,
     TrayState,
@@ -229,6 +231,21 @@ class TestStateManager:
 
         assert manager.current.break_count == 0
         assert received == [3, 0]
+
+    def test_credential_update_preserves_attention_count(self):
+        manager = StateManager()
+        manager.set_break_count(3)
+        manager.set_credential_status(
+            CredentialStatus(
+                state=CredentialState.EXPIRING,
+                expires_at="2026-08-05T12:00:00Z",
+                expires_in_days=8,
+                warning_days=14,
+            )
+        )
+
+        assert manager.current.break_count == 3
+        assert manager.current.credential.state == CredentialState.EXPIRING
 
     def test_reset_preserves_sync_channel(self):
         """reset() returns recording to IDLE but keeps the sync channel."""
