@@ -54,9 +54,20 @@ python scripts/validate_platform_manifest.py
 
 CI runs this on every pull request, on pushes to `main`, and DAILY
 (`.github/workflows/platform-manifest.yml`), so drift between the committed
-manifest and the actually published artifacts fails loudly. A component
-repository can also trigger the check immediately via a
-`component-released` `repository_dispatch`.
+manifest and the actually published artifacts fails loudly.
+
+The workflow also accepts a `component-released` `repository_dispatch` so a
+component repository can trigger the check immediately. **No component
+repository sends it yet.** `openadapt-flow`, `openadapt-capture`, and
+`openadapt-desktop` have no dispatch step in their release workflows, so the
+daily cron is in practice the only automatic detector, and a component release
+can serve stale digests for up to a day. Wiring the sender needs a token with
+`contents: write` on `OpenAdaptAI/OpenAdapt` stored as a secret in each
+component repository; the component's own `GITHUB_TOKEN` cannot dispatch
+across repositories.
+
+Detection is not repair. Both the cron and a dispatched run validate and file
+an issue; regenerating and committing the manifest remains a human step.
 
 ### Why the schedule is daily and why false reds are not tolerated
 
