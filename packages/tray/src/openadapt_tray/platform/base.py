@@ -1,7 +1,7 @@
 """Abstract base class for platform-specific functionality."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from openadapt_tray.config import TrayConfig
@@ -16,10 +16,9 @@ class PlatformHandler(ABC):
 
         Called once when the tray application starts.
         """
-        pass
 
     @abstractmethod
-    def prompt_input(self, title: str, message: str) -> Optional[str]:
+    def prompt_input(self, title: str, message: str) -> str | None:
         """Show input dialog and return user input.
 
         Args:
@@ -29,7 +28,6 @@ class PlatformHandler(ABC):
         Returns:
             User input string, or None if cancelled.
         """
-        pass
 
     @abstractmethod
     def confirm_dialog(self, title: str, message: str) -> bool:
@@ -42,7 +40,6 @@ class PlatformHandler(ABC):
         Returns:
             True if user confirmed, False otherwise.
         """
-        pass
 
     @abstractmethod
     def open_settings_dialog(self, config: "TrayConfig") -> None:
@@ -51,12 +48,10 @@ class PlatformHandler(ABC):
         Args:
             config: Current configuration.
         """
-        pass
 
     @abstractmethod
     def open_training_dialog(self) -> None:
         """Open training configuration dialog."""
-        pass
 
     def setup_autostart(self, enabled: bool) -> bool:
         """Configure auto-start on login.
@@ -74,7 +69,6 @@ class PlatformHandler(ABC):
 
         Called when the tray application is shutting down.
         """
-        pass
 
     @property
     def supports_native_dialogs(self) -> bool:

@@ -1,8 +1,9 @@
 """Tests for platform detection and handlers."""
 
 import sys
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from openadapt_tray.platform import get_platform_handler
 from openadapt_tray.platform.base import PlatformHandler

@@ -19,16 +19,16 @@ PNGs committed under the repo ``assets/icons`` directory are used when present
 (dev/website), and are the same tinted marks produced at runtime.
 """
 
-from pathlib import Path
-from typing import Optional, Dict, Tuple
 import sys
+from pathlib import Path
+from typing import ClassVar
 
 from PIL import Image, ImageDraw
 
 from openadapt_tray.state import TrayState
 
 
-def _hex_to_rgb(color: str) -> Tuple[int, int, int]:
+def _hex_to_rgb(color: str) -> tuple[int, int, int]:
     """Parse a ``#RRGGBB`` (or ``RRGGBB``) hex string into an RGB tuple."""
     color = color.lstrip("#")
     return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
@@ -45,7 +45,7 @@ class IconManager:
     # State to icon filename mapping (one file per state; produced by
     # ``scripts/generate_icons.py`` from the same master + colours used at
     # runtime, so file-backed and runtime-tinted icons are identical).
-    STATE_ICONS: Dict[TrayState, str] = {
+    STATE_ICONS: ClassVar[dict[TrayState, str]] = {
         TrayState.IDLE: "idle.png",
         TrayState.RECORDING_STARTING: "recording_starting.png",
         TrayState.RECORDING: "recording.png",
@@ -55,7 +55,7 @@ class IconManager:
     }
 
     # Per-state mark tint. Keeps the historical state->colour signalling.
-    STATE_COLORS: Dict[TrayState, str] = {
+    STATE_COLORS: ClassVar[dict[TrayState, str]] = {
         TrayState.IDLE: "#4A90D9",  # Brand blue
         TrayState.RECORDING_STARTING: "#F5A623",  # Amber (spinning up)
         TrayState.RECORDING: "#D0021B",  # Red
@@ -70,7 +70,7 @@ class IconManager:
     # Packaged mark master (transparent silhouette). Ships in the wheel.
     MASTER_PATH = Path(__file__).parent / "assets" / "mark-master.png"
 
-    def __init__(self, assets_dir: Optional[Path] = None):
+    def __init__(self, assets_dir: Path | None = None):
         """Initialize the icon manager.
 
         Args:
@@ -84,8 +84,8 @@ class IconManager:
             assets_dir = module_dir.parent.parent / "assets" / "icons"
 
         self.assets_dir = assets_dir
-        self._cache: Dict[str, Image.Image] = {}
-        self._master: Optional[Image.Image] = None
+        self._cache: dict[str, Image.Image] = {}
+        self._master: Image.Image | None = None
         self._retina_scale = self._detect_retina()
 
     def _detect_retina(self) -> int:
@@ -95,7 +95,7 @@ class IconManager:
             return 2
         return 1
 
-    def _load_master(self) -> Optional[Image.Image]:
+    def _load_master(self) -> Image.Image | None:
         """Load (and cache) the transparent mark master, if available."""
         if self._master is not None:
             return self._master
@@ -147,7 +147,7 @@ class IconManager:
             A new image with the badge composited on top.
         """
         base = icon.convert("RGBA").copy()
-        w, h = base.size
+        w, _h = base.size
         draw = ImageDraw.Draw(base)
 
         # Badge sized relative to the icon, anchored top-right.
@@ -167,7 +167,7 @@ class IconManager:
         )
         return base
 
-    def _load_icon(self, icon_name: str) -> Optional[Image.Image]:
+    def _load_icon(self, icon_name: str) -> Image.Image | None:
         """Try to load a pre-rendered icon from the assets directory.
 
         Args:
@@ -186,16 +186,21 @@ class IconManager:
             if retina_path.exists():
                 try:
                     return Image.open(retina_path)
-                except Exception:
-                    pass
+                except OSError as e:
+                    # Present but unreadable/corrupt. Fall through to the 1x file
+                    # and then to runtime tinting, but say why -- silently
+                    # ignoring a bad PNG made a broken asset indistinguishable
+                    # from a missing one.
+                    print(f"Could not read icon {retina_path}: {e}")
 
         # Try regular version
         icon_path = self.assets_dir / icon_name
         if icon_path.exists():
             try:
                 return Image.open(icon_path)
-            except Exception:
-                pass
+            except OSError as e:
+                # Fall through to runtime tinting of the packaged master.
+                print(f"Could not read icon {icon_path}: {e}")
 
         return None
 

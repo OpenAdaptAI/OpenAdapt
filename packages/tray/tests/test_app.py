@@ -1,9 +1,9 @@
 """Tests for the main TrayApplication."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from openadapt_tray.state import TrayState
 from openadapt_tray.config import TrayConfig
+from openadapt_tray.state import TrayState
 
 
 class TestTrayApplicationInit:

@@ -3,18 +3,18 @@
 __version__ = "0.2.1"
 
 from openadapt_tray.app import TrayApplication, main
-from openadapt_tray.state import TrayState, SyncState, AppState, StateManager
 from openadapt_tray.config import TrayConfig
-from openadapt_tray.hosted import HostedPoller, CountResult
+from openadapt_tray.hosted import CountResult, HostedPoller
+from openadapt_tray.state import AppState, StateManager, SyncState, TrayState
 
 __all__ = [
-    "TrayApplication",
-    "TrayState",
-    "SyncState",
     "AppState",
-    "StateManager",
-    "TrayConfig",
-    "HostedPoller",
     "CountResult",
+    "HostedPoller",
+    "StateManager",
+    "SyncState",
+    "TrayApplication",
+    "TrayConfig",
+    "TrayState",
     "main",
 ]

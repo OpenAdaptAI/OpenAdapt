@@ -1,8 +1,9 @@
 """Global hotkey handling for OpenAdapt Tray."""
 
-from dataclasses import dataclass
-from typing import Callable, Dict, Optional
+import contextlib
 import threading
+from collections.abc import Callable
+from dataclasses import dataclass
 
 
 @dataclass
@@ -17,13 +18,13 @@ class HotkeyConfig:
 class HotkeyManager:
     """Manages global hotkeys."""
 
-    def __init__(self, config: Optional[HotkeyConfig] = None):
+    def __init__(self, config: HotkeyConfig | None = None):
         self.config = config or HotkeyConfig()
-        self._handlers: Dict[str, Callable] = {}
+        self._handlers: dict[str, Callable] = {}
         self._listener = None
         self._key_listener = None
         self._ctrl_count = 0
-        self._ctrl_timer: Optional[threading.Timer] = None
+        self._ctrl_timer: threading.Timer | None = None
         self._running = False
 
     def register(self, hotkey: str, handler: Callable) -> None:
@@ -125,18 +126,18 @@ class HotkeyManager:
         """Stop listening for hotkeys."""
         self._running = False
 
+        # stop() is called from quit(). pynput's platform backends can raise on
+        # teardown (X11 display already gone, macOS run loop torn down); the
+        # listener threads are daemons either way, so there is nothing to act on
+        # and refusing to quit over it would be worse.
         if self._listener:
-            try:
+            with contextlib.suppress(Exception):
                 self._listener.stop()
-            except Exception:
-                pass
             self._listener = None
 
         if self._key_listener:
-            try:
+            with contextlib.suppress(Exception):
                 self._key_listener.stop()
-            except Exception:
-                pass
             self._key_listener = None
 
         if self._ctrl_timer:

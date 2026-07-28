@@ -10,7 +10,6 @@ Resolution precedence for reads (mirrors the desktop ``push`` tool):
 """
 
 import os
-from typing import Optional
 
 # Shared with the desktop app (spec §3a/§3e): service "ai.openadapt.desktop",
 # account keyed by hosted host.
@@ -31,7 +30,7 @@ def _account(host: str) -> str:
     return (host or "").rstrip("/")
 
 
-def get_ingest_token(host: str) -> Optional[str]:
+def get_ingest_token(host: str) -> str | None:
     """Resolve the ingest token for a hosted host.
 
     Args:
@@ -87,8 +86,13 @@ def clear_ingest_token(host: str) -> bool:
     try:
         keyring.delete_password(KEYCHAIN_SERVICE, _account(host))
         return True
-    except Exception:
-        # keyring raises if the entry is absent; treat as a no-op success.
+    except keyring.errors.PasswordDeleteError:
+        # keyring raises this when the entry is absent. The contract is "removed
+        # OR already absent", so this IS the success case -- returning False here
+        # made a signed-out tray look like a failed sign-out.
+        return True
+    except Exception as e:  # pragma: no cover - backend errors
+        print(f"Keychain delete failed: {e}")
         return False
 
 

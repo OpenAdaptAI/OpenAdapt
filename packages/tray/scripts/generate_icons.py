@@ -33,8 +33,8 @@ from PIL import Image
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from openadapt_tray.icons import IconManager  # noqa: E402
-from openadapt_tray.state import TrayState  # noqa: E402
+from openadapt_tray.icons import IconManager
+from openadapt_tray.state import TrayState
 
 ASSETS = REPO_ROOT / "assets"
 ICONS_DIR = ASSETS / "icons"
@@ -77,8 +77,10 @@ def _render_svg_to_png(svg: Path, out: Path, size: int) -> bool:
             url=str(svg), write_to=str(out), output_width=size, output_height=size
         )
         return True
-    except Exception:
-        pass
+    except Exception as e:
+        # Deliberate fall-through to inkscape, but say why: swallowing this made
+        # a broken cairosvg install look identical to "no rasterizer found".
+        print(f"  cairosvg unavailable or failed ({e}); trying inkscape.")
     if shutil.which("inkscape"):
         subprocess.run(
             ["inkscape", str(svg), "-w", str(size), "-h", str(size),

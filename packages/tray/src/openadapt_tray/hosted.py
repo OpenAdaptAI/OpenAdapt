@@ -17,15 +17,15 @@ Click routing is lane-aware:
 
 import threading
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import httpx
 
 from openadapt_tray.config import (
-    TrayConfig,
     MIN_POLL_INTERVAL_S,
     OFFLINE_POLL_INTERVAL_S,
+    TrayConfig,
 )
 
 COUNT_ENDPOINT_PATH = "/api/needs-attention/count"
@@ -68,10 +68,10 @@ class HostedPoller:
         self,
         config: TrayConfig,
         on_count: Callable[[CountResult], None],
-        notifier: Optional[object] = None,
-        on_break_clicked: Optional[Callable[[], None]] = None,
-        token_provider: Optional[Callable[[], Optional[str]]] = None,
-        set_offline: Optional[Callable[[bool], None]] = None,
+        notifier: object | None = None,
+        on_break_clicked: Callable[[], None] | None = None,
+        token_provider: Callable[[], str | None] | None = None,
+        set_offline: Callable[[bool], None] | None = None,
     ):
         """Initialize the poller.
 
@@ -97,12 +97,12 @@ class HostedPoller:
 
         self._last_count = 0
         self._current_interval = config.effective_poll_interval_s()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._stop = threading.Event()
 
     # --- single-shot request ------------------------------------------------
 
-    def poll_once(self) -> Optional[CountResult]:
+    def poll_once(self) -> CountResult | None:
         """Perform one authenticated count request.
 
         Returns:
@@ -130,7 +130,7 @@ class HostedPoller:
 
     # --- badge + notification -----------------------------------------------
 
-    def _handle_result(self, result: Optional[CountResult]) -> None:
+    def _handle_result(self, result: CountResult | None) -> None:
         """Apply a poll result: update badge, notify on increase, set interval."""
         if result is None:
             # Offline / unauthenticated → back off, mark offline.
@@ -207,7 +207,7 @@ class HostedPoller:
 
 def route_break_click(
     config: TrayConfig,
-    ipc_client: Optional[object] = None,
+    ipc_client: object | None = None,
 ) -> None:
     """Route a break/needs-attention click by deployment lane.
 
@@ -215,13 +215,13 @@ def route_break_click(
         config: Tray configuration (provides lane + hosted_url).
         ipc_client: Optional IPC client used for the byoc local-teach route.
     """
-    if config.deployment_lane == "byoc":
-        # PHI stays local: open the desktop teach view over IPC.
-        if ipc_client is not None:
-            try:
-                ipc_client.send_open_teach()
-                return
-            except Exception as e:
-                print(f"Failed to route byoc break click to desktop: {e}")
-        # Fall through to the dashboard if the desktop is unreachable.
+    # PHI stays local on the byoc lane: open the desktop teach view over IPC,
+    # and fall through to the hosted dashboard only if the desktop is
+    # unreachable (or there is no IPC client to reach it with).
+    if config.deployment_lane == "byoc" and ipc_client is not None:
+        try:
+            ipc_client.send_open_teach()
+            return
+        except Exception as e:
+            print(f"Failed to route byoc break click to desktop: {e}")
     webbrowser.open(f"{config.hosted_url.rstrip('/')}/dashboard")

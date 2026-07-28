@@ -11,14 +11,15 @@ desktop→tray. The desktop app is the source of truth for all state — the tra
 only renders it.
 """
 
+import contextlib
 import json
 import socket
 import threading
-from pathlib import Path
-from typing import Optional, Callable, Dict, Any
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-
+from pathlib import Path
+from typing import Any, Optional
 
 # Discovery file the desktop app writes on startup (see §3d of the spec).
 DEFAULT_DISCOVERY_PATH = Path.home() / ".openadapt" / "desktop_ipc.json"
@@ -56,12 +57,12 @@ class IPCMessage:
     """
 
     type: IPCMessageType
-    data: Optional[Dict[str, Any]] = None
-    token: Optional[str] = None
+    data: dict[str, Any] | None = None
+    token: str | None = None
 
     def to_json(self) -> str:
         """Serialize to JSON string."""
-        obj: Dict[str, Any] = {
+        obj: dict[str, Any] = {
             "type": self.type.value,
             "data": self.data,
         }
@@ -86,11 +87,11 @@ class DesktopEndpoint:
 
     host: str
     port: int
-    token: Optional[str] = None
+    token: str | None = None
 
     @classmethod
     def load(
-        cls, path: Optional[Path] = None
+        cls, path: Path | None = None
     ) -> Optional["DesktopEndpoint"]:
         """Load the desktop IPC endpoint from the discovery file.
 
@@ -130,7 +131,7 @@ class IPCClient:
         self,
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
-        token: Optional[str] = None,
+        token: str | None = None,
     ):
         """Initialize IPC client.
 
@@ -143,14 +144,14 @@ class IPCClient:
         self.host = host
         self.port = port
         self.token = token
-        self._socket: Optional[socket.socket] = None
-        self._listener_thread: Optional[threading.Thread] = None
+        self._socket: socket.socket | None = None
+        self._listener_thread: threading.Thread | None = None
         self._running = False
-        self._handlers: Dict[IPCMessageType, Callable[[IPCMessage], None]] = {}
+        self._handlers: dict[IPCMessageType, Callable[[IPCMessage], None]] = {}
 
     @classmethod
     def from_discovery(
-        cls, path: Optional[Path] = None
+        cls, path: Path | None = None
     ) -> Optional["IPCClient"]:
         """Build a client from the desktop discovery file, if present.
 
@@ -167,7 +168,7 @@ class IPCClient:
             return None
         return cls(host=endpoint.host, port=endpoint.port, token=endpoint.token)
 
-    def refresh_from_discovery(self, path: Optional[Path] = None) -> bool:
+    def refresh_from_discovery(self, path: Path | None = None) -> bool:
         """Re-read the discovery file and update host/port/token in place.
 
         Useful after launching the desktop app: the discovery file appears once
@@ -221,7 +222,7 @@ class IPCClient:
             self._listener_thread.start()
 
             return True
-        except (socket.error, OSError) as e:
+        except OSError as e:
             print(f"IPC connection failed: {e}")
             self._socket = None
             return False
@@ -243,9 +244,9 @@ class IPCClient:
                     if line:
                         self._handle_message(line)
 
-            except socket.timeout:
+            except TimeoutError:
                 continue
-            except (socket.error, OSError):
+            except OSError:
                 break
             except Exception as e:
                 print(f"IPC receive error: {e}")
@@ -289,14 +290,14 @@ class IPCClient:
             data = message.to_json() + "\n"
             self._socket.sendall(data.encode("utf-8"))
             return True
-        except (socket.error, OSError) as e:
+        except OSError as e:
             print(f"IPC send error: {e}")
             return False
 
     def send_command(
         self,
         message_type: IPCMessageType,
-        data: Optional[Dict[str, Any]] = None,
+        data: dict[str, Any] | None = None,
     ) -> bool:
         """Send a parameterless-or-simple command to the desktop.
 
@@ -337,7 +338,7 @@ class IPCClient:
         """Ask the desktop to open its local workflow library window."""
         return self.send(IPCMessage(type=IPCMessageType.OPEN_WORKFLOW_LIBRARY))
 
-    def send_open_teach(self, workflow_id: Optional[str] = None) -> bool:
+    def send_open_teach(self, workflow_id: str | None = None) -> bool:
         """Ask the desktop to open the local teach-the-fix view.
 
         Args:
@@ -363,10 +364,10 @@ class IPCClient:
         self._running = False
 
         if self._socket:
-            try:
+            # A close() failure on teardown is not actionable: the fd is dropped
+            # either way and the process is on its way out.
+            with contextlib.suppress(OSError):
                 self._socket.close()
-            except Exception:
-                pass
             self._socket = None
 
         if self._listener_thread:
@@ -390,14 +391,14 @@ class IPCServer:
         """
         self.host = host
         self.port = port
-        self._socket: Optional[socket.socket] = None
+        self._socket: socket.socket | None = None
         self._running = False
-        self._handlers: Dict[IPCMessageType, Callable[[IPCMessage], IPCMessage]] = {}
+        self._handlers: dict[IPCMessageType, Callable[[IPCMessage], IPCMessage]] = {}
 
     def register_handler(
         self,
         message_type: IPCMessageType,
-        handler: Callable[[IPCMessage], Optional[IPCMessage]],
+        handler: Callable[[IPCMessage], IPCMessage | None],
     ) -> None:
         """Register a message handler.
 
@@ -423,7 +424,7 @@ class IPCServer:
             threading.Thread(target=self._accept_loop, daemon=True).start()
 
             return True
-        except (socket.error, OSError) as e:
+        except OSError as e:
             print(f"IPC server start failed: {e}")
             return False
 
@@ -432,15 +433,21 @@ class IPCServer:
         while self._running and self._socket:
             try:
                 self._socket.settimeout(1.0)
-                client, addr = self._socket.accept()
+                client, _addr = self._socket.accept()
                 threading.Thread(
                     target=self._handle_client,
                     args=(client,),
                     daemon=True,
                 ).start()
-            except socket.timeout:
+            except TimeoutError:
                 continue
-            except Exception:
+            except OSError as e:
+                # accept() raises only OSError subclasses. The expected one is
+                # stop() closing the listening socket out from under us; anything
+                # else means the server really has stopped accepting, so say so
+                # instead of ending the loop silently.
+                if self._running:
+                    print(f"IPC server stopped accepting connections: {e}")
                 break
 
     def _handle_client(self, client: socket.socket) -> None:
@@ -469,7 +476,7 @@ class IPCServer:
         finally:
             client.close()
 
-    def _process_message(self, json_str: str) -> Optional[IPCMessage]:
+    def _process_message(self, json_str: str) -> IPCMessage | None:
         """Process an incoming message.
 
         Args:
@@ -491,8 +498,7 @@ class IPCServer:
         """Stop the IPC server."""
         self._running = False
         if self._socket:
-            try:
+            # See IPCClient.close(): a teardown close() failure is not actionable.
+            with contextlib.suppress(OSError):
                 self._socket.close()
-            except Exception:
-                pass
             self._socket = None

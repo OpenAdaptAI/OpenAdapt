@@ -1,13 +1,14 @@
 """Menu construction and actions for OpenAdapt Tray."""
 
-from typing import TYPE_CHECKING, Optional, List
-from functools import partial
-from dataclasses import dataclass
-from datetime import datetime
-import subprocess
 import shutil
+import subprocess
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from functools import partial
+from typing import TYPE_CHECKING
 
-from pystray import MenuItem as Item, Menu
+from pystray import Menu
+from pystray import MenuItem as Item
 
 if TYPE_CHECKING:
     from openadapt_tray.app import TrayApplication
@@ -67,7 +68,7 @@ class MenuBuilder:
 
         return Menu(*items)
 
-    def _build_break_item(self, state) -> Optional[Item]:
+    def _build_break_item(self, state) -> Item | None:
         """Build the needs-attention entry when breaks are present.
 
         Args:
@@ -156,7 +157,7 @@ class MenuBuilder:
 
         return Item("Recent Captures", Menu(*capture_items))
 
-    def _get_recent_captures(self) -> List[CaptureInfo]:
+    def _get_recent_captures(self) -> list[CaptureInfo]:
         """Get list of recent captures.
 
         Returns:
@@ -176,7 +177,12 @@ class MenuBuilder:
                 if d.is_dir():
                     # Check for metadata.json (formal capture)
                     # or just any directory (simpler check)
-                    mtime = datetime.fromtimestamp(d.stat().st_mtime)
+                    # Displayed to the user, so render in LOCAL time --
+                    # parse the epoch as UTC and convert, rather than
+                    # relying on an implicit naive-local conversion.
+                    mtime = datetime.fromtimestamp(
+                        d.stat().st_mtime, tz=timezone.utc
+                    ).astimezone()
                     captures.append(
                         CaptureInfo(
                             name=d.name,
@@ -264,9 +270,11 @@ class MenuBuilder:
         """
         import sys
 
+        # check=False: a file browser that is missing or refuses to open is
+        # not worth raising over -- this is a best-effort convenience action.
         if sys.platform == "darwin":
-            subprocess.run(["open", path])
+            subprocess.run(["open", path], check=False)
         elif sys.platform == "win32":
-            subprocess.run(["explorer", path])
+            subprocess.run(["explorer", path], check=False)
         else:
-            subprocess.run(["xdg-open", path])
+            subprocess.run(["xdg-open", path], check=False)

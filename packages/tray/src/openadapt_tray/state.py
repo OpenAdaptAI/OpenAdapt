@@ -13,9 +13,9 @@ workflow while its previous push is still ``SYNCING``, or sit ``IDLE`` while
 sourced from the cloud needs-attention count.
 """
 
-from enum import Enum, auto
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Callable, List
+from enum import Enum, auto
 
 
 class TrayState(Enum):
@@ -38,7 +38,7 @@ class SyncState(Enum):
 
     # Backwards/spec-friendly alias: the spec names this channel "SYNCING/PUSHING".
     @classmethod
-    def PUSHING(cls) -> "SyncState":  # noqa: N802 - alias helper
+    def PUSHING(cls) -> "SyncState":
         """Alias for :attr:`SYNCING` (the spec uses SYNCING/PUSHING interchangeably)."""
         return cls.SYNCING
 
@@ -54,8 +54,8 @@ class AppState:
 
     # Recording / compile lifecycle.
     state: TrayState = TrayState.IDLE
-    current_capture: Optional[str] = None
-    error_message: Optional[str] = None
+    current_capture: str | None = None
+    error_message: str | None = None
 
     # Sync channel (independent of the recording lifecycle).
     sync_state: SyncState = SyncState.SYNCED
@@ -117,7 +117,7 @@ class StateManager:
 
     def __init__(self):
         self._state = AppState()
-        self._listeners: List[Callable[[AppState], None]] = []
+        self._listeners: list[Callable[[AppState], None]] = []
 
     def add_listener(self, callback: Callable[[AppState], None]) -> None:
         """Add a state change listener."""

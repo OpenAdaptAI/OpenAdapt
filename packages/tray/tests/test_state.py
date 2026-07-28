@@ -2,12 +2,12 @@
 
 
 from openadapt_tray.state import (
-    TrayState,
-    SyncState,
+    LANE_BYOC,
+    LANE_CLOUD,
     AppState,
     StateManager,
-    LANE_CLOUD,
-    LANE_BYOC,
+    SyncState,
+    TrayState,
 )
 
 

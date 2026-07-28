@@ -1,9 +1,9 @@
 """macOS-specific functionality for OpenAdapt Tray."""
 
 import subprocess
-from pathlib import Path
-from typing import Optional, TYPE_CHECKING
 import webbrowser
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from openadapt_tray.platform.base import PlatformHandler
 
@@ -26,7 +26,7 @@ class MacOSHandler(PlatformHandler):
             # AppKit not available, continue without Dock hiding
             pass
 
-    def prompt_input(self, title: str, message: str) -> Optional[str]:
+    def prompt_input(self, title: str, message: str) -> str | None:
         """Show native macOS input dialog.
 
         Args:
@@ -52,6 +52,7 @@ class MacOSHandler(PlatformHandler):
                 capture_output=True,
                 text=True,
                 timeout=60,  # 1 minute timeout for user input
+                check=False,  # returncode is inspected directly below
             )
             if result.returncode == 0:
                 return result.stdout.strip()
@@ -87,6 +88,7 @@ class MacOSHandler(PlatformHandler):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,  # returncode is inspected directly below
             )
             return result.returncode == 0 and "OK" in result.stdout
         except subprocess.TimeoutExpired:
@@ -147,9 +149,13 @@ class MacOSHandler(PlatformHandler):
                 subprocess.run(["launchctl", "load", str(plist_path)], check=True)
             else:
                 if plist_path.exists():
+                    # check=False on purpose: unloading an agent that was
+                    # never loaded exits non-zero, and we still want to delete
+                    # the plist below.
                     subprocess.run(
                         ["launchctl", "unload", str(plist_path)],
                         capture_output=True,
+                        check=False,
                     )
                     plist_path.unlink()
             return True
@@ -157,7 +163,7 @@ class MacOSHandler(PlatformHandler):
             print(f"Error configuring auto-start: {e}")
             return False
 
-    def _find_executable(self) -> Optional[str]:
+    def _find_executable(self) -> str | None:
         """Find the openadapt-tray executable path."""
         import shutil
         import sys
@@ -178,4 +184,3 @@ class MacOSHandler(PlatformHandler):
 
     def cleanup(self) -> None:
         """Cleanup any platform-specific resources."""
-        pass

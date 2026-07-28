@@ -2,13 +2,12 @@
 
 import json
 
-
 from openadapt_tray.ipc import (
+    DEFAULT_DISCOVERY_PATH,
+    DesktopEndpoint,
+    IPCClient,
     IPCMessage,
     IPCMessageType,
-    IPCClient,
-    DesktopEndpoint,
-    DEFAULT_DISCOVERY_PATH,
 )
 
 

@@ -1,8 +1,8 @@
 """Tests for hotkey/shortcut handling."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from openadapt_tray.shortcuts import HotkeyManager, HotkeyConfig
+from openadapt_tray.shortcuts import HotkeyConfig, HotkeyManager
 
 
 class TestHotkeyManager:

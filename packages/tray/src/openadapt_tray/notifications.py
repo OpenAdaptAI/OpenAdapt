@@ -6,13 +6,13 @@ for modern, native notifications across all platforms.
 
 import asyncio
 import os
-import sys
 import subprocess
-from typing import Optional, Callable
+import sys
+from collections.abc import Callable
 from pathlib import Path
 
 try:
-    from desktop_notifier import DesktopNotifier, Urgency, Button, ReplyField
+    from desktop_notifier import Button, DesktopNotifier, ReplyField, Urgency
     DESKTOP_NOTIFIER_AVAILABLE = True
 except ImportError:
     DESKTOP_NOTIFIER_AVAILABLE = False
@@ -103,12 +103,12 @@ class NotificationManager:
         self,
         title: str,
         body: str,
-        icon_path: Optional[str] = None,
+        icon_path: str | None = None,
         duration_ms: int = 5000,
-        on_clicked: Optional[Callable] = None,
+        on_clicked: Callable | None = None,
         urgency: str = "normal",
-        buttons: Optional[list] = None,
-        reply_field: Optional[str] = None,
+        buttons: list | None = None,
+        reply_field: str | None = None,
     ) -> bool:
         """Show a notification.
 
@@ -144,11 +144,11 @@ class NotificationManager:
         self,
         title: str,
         body: str,
-        icon_path: Optional[str],
-        on_clicked: Optional[Callable],
+        icon_path: str | None,
+        on_clicked: Callable | None,
         urgency: str,
-        buttons: Optional[list],
-        reply_field: Optional[str],
+        buttons: list | None,
+        reply_field: str | None,
     ) -> bool:
         """Show notification using desktop-notifier.
 
@@ -241,6 +241,7 @@ class NotificationManager:
             ["osascript", "-e", script],
             capture_output=True,
             timeout=5,
+            check=False,  # returncode is the success signal we return below
         )
         return result.returncode == 0
 
@@ -248,7 +249,7 @@ class NotificationManager:
         self,
         title: str,
         body: str,
-        icon_path: Optional[str],
+        icon_path: str | None,
         duration_ms: int,
     ) -> bool:
         """Show notification on Windows using pystray's built-in notify (fallback).
@@ -266,8 +267,11 @@ class NotificationManager:
             try:
                 self._tray_icon.notify(body, title)
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                # Deliberate fall-through to the PowerShell toast below, but say
+                # why -- a silent pass made a broken pystray balloon look like a
+                # missing tray icon.
+                print(f"pystray notify failed, falling back to toast: {e}")
 
         # Fallback to Windows toast notification via PowerShell
         try:
@@ -289,20 +293,32 @@ class NotificationManager:
             $toast = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("OpenAdapt")
             $toast.Show($xml)
             """
-            subprocess.run(
+            result = subprocess.run(
                 ["powershell", "-Command", script],
                 capture_output=True,
                 timeout=10,
+                check=False,  # returncode is the success signal we return below
             )
+            # Previously this returned True unconditionally, so a PowerShell
+            # failure (WinRT unavailable, execution policy, missing toast
+            # notifier) was reported to the caller as a delivered notification.
+            # The macOS and Linux paths have always checked returncode.
+            if result.returncode != 0:
+                print(
+                    "Windows toast notification failed "
+                    f"(exit {result.returncode}): {result.stderr}"
+                )
+                return False
             return True
-        except Exception:
+        except Exception as e:
+            print(f"Windows toast notification failed: {e}")
             return False
 
     def _show_linux(
         self,
         title: str,
         body: str,
-        icon_path: Optional[str],
+        icon_path: str | None,
     ) -> bool:
         """Show notification on Linux using notify-send (fallback).
 
@@ -322,6 +338,7 @@ class NotificationManager:
             cmd,
             capture_output=True,
             timeout=5,
+            check=False,  # returncode is the success signal we return below
         )
         return result.returncode == 0
 
@@ -329,11 +346,11 @@ class NotificationManager:
         self,
         title: str,
         body: str,
-        icon_path: Optional[str] = None,
-        on_clicked: Optional[Callable] = None,
+        icon_path: str | None = None,
+        on_clicked: Callable | None = None,
         urgency: str = "normal",
-        buttons: Optional[list] = None,
-        reply_field: Optional[str] = None,
+        buttons: list | None = None,
+        reply_field: str | None = None,
     ) -> bool:
         """Show a notification asynchronously (desktop-notifier only).
 

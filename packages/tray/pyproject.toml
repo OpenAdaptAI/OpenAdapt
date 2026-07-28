@@ -41,7 +41,14 @@ dev = [
     "pytest>=9.0.3",
     "pytest-mock>=3.10.0",
     "Pygments>=2.20.0",
-    "ruff>=0.1.0",
+    # Bounded on purpose. `ruff>=0.1.0` unpinned is a live hazard, not a
+    # theoretical one: ruff 0.16.0 grew its DEFAULT rule set from 59 rules to
+    # 413, this project selects no rules explicitly, and CI runs a blocking
+    # `ruff check src tests scripts`. Only the 0.14.x pin in `uv.lock` was
+    # keeping `main` green -- the next dependabot bump would have turned it red
+    # with 216 findings and no code change. Raise the ceiling deliberately,
+    # with the findings fixed in the same change.
+    "ruff>=0.16,<0.17",
 ]
 release = [
     "uv==0.11.32",
@@ -73,6 +80,37 @@ packages = ["src/openadapt_tray"]
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+
+# No `select` on purpose: this project keeps ruff's FULL default rule set.
+# The residual after safe autofix was 91 findings in a 3.9k-line tree, which is
+# small enough to read and judge one by one, so the coverage is worth keeping
+# rather than trading away for a narrow `["E","F","I","W"]`. The ruff version
+# is bounded above in `[project.optional-dependencies].dev`, so the default set
+# can only change when a person raises that ceiling.
+[tool.ruff.lint]
+# BLE001 (blind `except Exception`) is the one rule in ruff 0.16's expanded
+# defaults that is wrong for this codebase, so it is disabled deliberately
+# rather than suppressed at 50-odd individual sites.
+#
+# The tray is almost nothing BUT boundaries to flaky, optional, platform-owned
+# subsystems: pystray and pynput backends, Pillow decoders, the OS keychain via
+# `keyring`, `desktop-notifier`/Cocoa, tkinter, zenity/kdialog, AppleScript via
+# `osascript`, PowerShell, `winreg` and `ctypes.windll`. Every one of those
+# handlers logs and degrades -- returns False, falls through to the next
+# fallback, or keeps a daemon thread alive -- because a menu-bar app that dies
+# when a notification daemon is missing is a worse product than one that keeps
+# running without notifications.
+#
+# There is also nothing to narrow to. Those subsystems share no exception
+# hierarchy, and several raise backend-specific errors that are not part of any
+# published API. Enumerating them would silently reintroduce
+# crash-on-first-surprise the next time a dependency added an exception type,
+# which is a behaviour change, not a style change.
+#
+# Where a blind catch was hiding a real defect rather than guarding a boundary,
+# the code was fixed instead (see `keychain.clear_ingest_token`,
+# `NotificationManager._show_windows`, `IPCServer._accept_loop`).
+ignore = ["BLE001"]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]

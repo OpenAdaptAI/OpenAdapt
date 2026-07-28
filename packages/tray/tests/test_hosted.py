@@ -2,15 +2,14 @@
 
 from unittest.mock import MagicMock, patch
 
-
 from openadapt_tray.config import (
-    TrayConfig,
-    OFFLINE_POLL_INTERVAL_S,
     MIN_POLL_INTERVAL_S,
+    OFFLINE_POLL_INTERVAL_S,
+    TrayConfig,
 )
 from openadapt_tray.hosted import (
-    HostedPoller,
     CountResult,
+    HostedPoller,
     count_url,
     route_break_click,
 )
@@ -145,7 +144,7 @@ class TestHandleResult:
         assert counts == [2]
         notifier.show.assert_called_once()
         # Body reads "N automations need attention".
-        args, kwargs = notifier.show.call_args
+        args, _kwargs = notifier.show.call_args
         assert "2 automations need attention" in args[1]
 
     def test_no_notify_on_same_count(self):

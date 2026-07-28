@@ -1,13 +1,13 @@
 """Configuration management for OpenAdapt Tray."""
 
-from dataclasses import dataclass, field, fields
-from pathlib import Path
-from typing import Optional, Any, Dict
 import json
 import os
+from dataclasses import dataclass, field, fields
+from pathlib import Path
+from typing import Any
 
-from openadapt_tray.shortcuts import HotkeyConfig
 from openadapt_tray import keychain
+from openadapt_tray.shortcuts import HotkeyConfig
 
 # Sane bounds for the cloud needs-attention poll (spec §3c).
 MIN_POLL_INTERVAL_S = 30
@@ -35,7 +35,7 @@ class TrayConfig:
     # ``~/.openadapt/desktop_ipc.json``; this is an optional override/fallback.
     dashboard_port: int = 8080
     auto_launch_dashboard: bool = True
-    desktop_ipc_port: Optional[int] = None
+    desktop_ipc_port: int | None = None
 
     # Hosted control plane (cloud). ``deployment_lane`` drives lane-aware
     # break-click routing (cloud → dashboard; byoc → local teach).
@@ -87,7 +87,7 @@ class TrayConfig:
         return cls()
 
     @classmethod
-    def _from_dict(cls, data: Dict[str, Any]) -> "TrayConfig":
+    def _from_dict(cls, data: dict[str, Any]) -> "TrayConfig":
         """Create a TrayConfig from a dictionary.
 
         Unknown/stale keys (e.g. the retired ``training_output_directory``) are
@@ -119,7 +119,7 @@ class TrayConfig:
         data = self.to_dict()
         path.write_text(json.dumps(data, indent=2))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to a dictionary (non-secret prefs only)."""
         return {
             "hotkeys": {
@@ -152,6 +152,6 @@ class TrayConfig:
         """Return the configured poll interval, clamped to the safe minimum."""
         return max(MIN_POLL_INTERVAL_S, int(self.poll_interval_s))
 
-    def get_ingest_token(self) -> Optional[str]:
+    def get_ingest_token(self) -> str | None:
         """Resolve the hosted ingest token from env/keychain (never the file)."""
         return keychain.get_ingest_token(self.hosted_url)

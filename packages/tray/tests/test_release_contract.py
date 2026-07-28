@@ -11,7 +11,6 @@ from scripts.check_release_consistency import (
     synchronize_release_lock,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

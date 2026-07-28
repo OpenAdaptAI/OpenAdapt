@@ -1,10 +1,10 @@
 """Linux-specific functionality for OpenAdapt Tray."""
 
-import subprocess
-from pathlib import Path
-from typing import Optional, TYPE_CHECKING
-import webbrowser
 import os
+import subprocess
+import webbrowser
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from openadapt_tray.platform.base import PlatformHandler
 
@@ -18,9 +18,8 @@ class LinuxHandler(PlatformHandler):
     def setup(self) -> None:
         """Linux-specific setup."""
         # No special setup needed on most Linux systems
-        pass
 
-    def prompt_input(self, title: str, message: str) -> Optional[str]:
+    def prompt_input(self, title: str, message: str) -> str | None:
         """Show input dialog using zenity or kdialog.
 
         Args:
@@ -42,6 +41,7 @@ class LinuxHandler(PlatformHandler):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,  # returncode is inspected directly below
             )
             if result.returncode == 0:
                 return result.stdout.strip()
@@ -64,6 +64,7 @@ class LinuxHandler(PlatformHandler):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,  # returncode is inspected directly below
             )
             if result.returncode == 0:
                 return result.stdout.strip()
@@ -108,6 +109,7 @@ class LinuxHandler(PlatformHandler):
                 ],
                 capture_output=True,
                 timeout=60,
+                check=False,  # returncode is inspected directly below
             )
             return result.returncode == 0
         except FileNotFoundError:
@@ -127,6 +129,7 @@ class LinuxHandler(PlatformHandler):
                 ],
                 capture_output=True,
                 timeout=60,
+                check=False,  # returncode is inspected directly below
             )
             return result.returncode == 0
         except FileNotFoundError:
@@ -203,7 +206,7 @@ X-GNOME-Autostart-enabled=true
             print(f"Error configuring auto-start: {e}")
             return False
 
-    def _find_executable(self) -> Optional[str]:
+    def _find_executable(self) -> str | None:
         """Find the openadapt-tray executable path."""
         import shutil
         import sys
@@ -223,4 +226,3 @@ X-GNOME-Autostart-enabled=true
 
     def cleanup(self) -> None:
         """Cleanup any platform-specific resources."""
-        pass

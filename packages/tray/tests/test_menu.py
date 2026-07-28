@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from openadapt_tray.state import TrayState, AppState
-from openadapt_tray.menu import MenuBuilder, CaptureInfo
+from openadapt_tray.menu import CaptureInfo, MenuBuilder
+from openadapt_tray.state import AppState, TrayState
 
 
 class TestCaptureInfo:

@@ -1,7 +1,7 @@
 """Windows-specific functionality for OpenAdapt Tray."""
 
-from typing import Optional, TYPE_CHECKING
 import webbrowser
+from typing import TYPE_CHECKING
 
 from openadapt_tray.platform.base import PlatformHandler
 
@@ -15,9 +15,8 @@ class WindowsHandler(PlatformHandler):
     def setup(self) -> None:
         """Windows-specific setup."""
         # No special setup needed on Windows
-        pass
 
-    def prompt_input(self, title: str, message: str) -> Optional[str]:
+    def prompt_input(self, title: str, message: str) -> str | None:
         """Show Windows input dialog using tkinter.
 
         Args:
@@ -129,8 +128,9 @@ class WindowsHandler(PlatformHandler):
             print(f"Error configuring auto-start: {e}")
             return False
 
-    def _find_executable(self) -> Optional[str]:
+    def _find_executable(self) -> str | None:
         """Find the openadapt-tray executable path."""
+        import os
         import shutil
         import sys
 
@@ -139,16 +139,13 @@ class WindowsHandler(PlatformHandler):
         if exe:
             return exe
 
-        # Check for .exe in Scripts folder
+        # Check for .exe in Scripts folder. `os.path.exists` swallows its own
+        # OSErrors and returns False, so the try/except/pass that used to wrap
+        # this was unreachable, and it also hid a failed `import os`.
         python_dir = sys.prefix
         exe_path = f"{python_dir}\\Scripts\\openadapt-tray.exe"
-        try:
-            import os
-
-            if os.path.exists(exe_path):
-                return exe_path
-        except Exception:
-            pass
+        if os.path.exists(exe_path):
+            return exe_path
 
         # Fallback to Python module invocation
         return f'"{sys.executable}" -m openadapt_tray'
@@ -160,4 +157,3 @@ class WindowsHandler(PlatformHandler):
 
     def cleanup(self) -> None:
         """Cleanup any platform-specific resources."""
-        pass

@@ -9,30 +9,29 @@ The tray is a lightweight status mirror + launcher. It owns no business logic:
 * the desktop app is the source of truth for all state — the tray renders it.
 """
 
+import subprocess
 import sys
 import threading
-import subprocess
 import webbrowser
-from typing import Optional
 
 import pystray
 
+from openadapt_tray.config import TrayConfig
+from openadapt_tray.hosted import CountResult, HostedPoller, route_break_click
+from openadapt_tray.icons import IconManager
+from openadapt_tray.ipc import IPCClient, IPCMessageType
+from openadapt_tray.menu import MenuBuilder
+from openadapt_tray.notifications import NotificationManager
+from openadapt_tray.platform import get_platform_handler
+from openadapt_tray.shortcuts import HotkeyManager
 from openadapt_tray.state import (
-    StateManager,
-    TrayState,
-    SyncState,
-    AppState,
     LANE_BYOC,
     LANE_CLOUD,
+    AppState,
+    StateManager,
+    SyncState,
+    TrayState,
 )
-from openadapt_tray.menu import MenuBuilder
-from openadapt_tray.icons import IconManager
-from openadapt_tray.shortcuts import HotkeyManager
-from openadapt_tray.notifications import NotificationManager
-from openadapt_tray.ipc import IPCClient, IPCMessageType
-from openadapt_tray.config import TrayConfig
-from openadapt_tray.hosted import HostedPoller, CountResult, route_break_click
-from openadapt_tray.platform import get_platform_handler
 
 # How the tray launches the desktop app when the socket is unreachable.
 DESKTOP_APP_COMMAND = "openadapt-desktop"
@@ -41,7 +40,7 @@ DESKTOP_APP_COMMAND = "openadapt-desktop"
 class TrayApplication:
     """Main system tray application."""
 
-    def __init__(self, config: Optional[TrayConfig] = None):
+    def __init__(self, config: TrayConfig | None = None):
         """Initialize the tray application.
 
         Args:
@@ -244,7 +243,7 @@ class TrayApplication:
 
     # --- recording actions (delegated to the desktop over IPC) --------------
 
-    def start_recording(self, name: Optional[str] = None) -> None:
+    def start_recording(self, name: str | None = None) -> None:
         """Start a new capture session via the desktop app.
 
         Args:
@@ -264,9 +263,13 @@ class TrayApplication:
 
         # Use default name if still not set
         if not name:
-            from datetime import datetime
+            from datetime import datetime, timezone
 
-            name = datetime.now().strftime("capture_%Y%m%d_%H%M%S")
+            # The default name is shown to the user next to their other
+            # captures, so it stays in LOCAL time -- made explicit rather than
+            # leaning on a naive `datetime.now()`.
+            local_now = datetime.now(tz=timezone.utc).astimezone()
+            name = local_now.strftime("capture_%Y%m%d_%H%M%S")
 
         self.state.transition(TrayState.RECORDING_STARTING, current_capture=name)
 
@@ -438,7 +441,7 @@ class TrayApplication:
         data = message.data or {}
         self.state.set_break_count(data.get("count") or 0)
 
-    def _apply_sync_state(self, name: Optional[str]) -> None:
+    def _apply_sync_state(self, name: str | None) -> None:
         """Map a sync-state name from IPC onto the SyncState channel."""
         if not name:
             return
