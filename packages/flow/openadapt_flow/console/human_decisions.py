@@ -16,7 +16,13 @@ Two projections come out of one pause, and they are not the same thing:
   that already serves protected screenshot crops, and it is where
   :mod:`openadapt_flow.console.halt_detail` puts the closed-vocabulary "what
   broke / what gets re-checked" detail an operator needs to answer at all.
-  :func:`portable_remote_decision_task` discards it.
+  :func:`portable_remote_decision_task` discards all of it except one closed
+  re-projection: :func:`openadapt_flow.console.decision_context.remote_halt_context`
+  rebuilds ``presentation["halt"]`` **without** its single string field, so a
+  remote surface can say what broke in values that cannot represent protected
+  content. Which tier a projection carries is
+  :mod:`openadapt_flow.decision_delivery`'s decision, recorded on the wire, and
+  never inferred.
 """
 
 from __future__ import annotations
@@ -35,7 +41,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from openadapt_flow.console import data
 from openadapt_flow.console import halt_detail as halt_detail_mod
 from openadapt_flow.console.attention import AttentionItem, _last_failed_result
+from openadapt_flow.console.decision_context import (
+    RemoteHaltContextV1,
+    remote_halt_context,
+)
+from openadapt_flow.decision_delivery import (
+    DecisionDeliveryTier,
+    effective_remote_tier,
+)
 from openadapt_flow.deployment import DeploymentConfig
+from openadapt_flow.execution_profiles import execution_profile_contract
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionExecutor,
     AttendedActionRefused,
@@ -218,6 +233,18 @@ class RemoteDecisionProjection(BaseModel):
     event_sequence: int = Field(ge=1)
     expected_transition_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     idempotency_scope_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    #: Which rung of :class:`~openadapt_flow.decision_delivery.DecisionDeliveryTier`
+    #: this projection carries. Recorded rather than implied, so a consumer that
+    #: renders a decision on degraded context can say so, and so an audit can
+    #: tell a context-free answer from an informed one.
+    delivery_tier: Literal["remote_closed_context", "remote_identifiers"] = (
+        "remote_identifiers"
+    )
+    #: What broke, in closed enums, bounded integers and booleans only. Present
+    #: exactly when ``delivery_tier`` is ``remote_closed_context``; ``None``
+    #: otherwise, and ``None`` also when the halt carried no category this
+    #: engine version recognises. It is never a partial or best-effort object.
+    halt_context: Optional[RemoteHaltContextV1] = None
     binding_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
@@ -319,6 +346,42 @@ def _remote_scope(
             "remote decision issuance lacks an exact tenant or runner binding"
         )
     return True, remote.tenant_id, remote.runner_id
+
+
+def _remote_delivery_tier(
+    deployment: DeploymentConfig, report: Any = None
+) -> DecisionDeliveryTier:
+    """How much context this pause's remote projection may carry.
+
+    Three independent ceilings apply and the weakest wins:
+
+    * the deployment's own ``human_decisions.remote.context_tier``;
+    * the profile named in ``deployment.runtime.profile``; and
+    * the profile the RUN was actually executed under, recorded on its report.
+
+    The third matters because a governed dispatch can carry an execution
+    profile the local deployment file does not name — a hosted runner is given
+    its authorization at dispatch time. Reading only the deployment would let a
+    run executed as ``regulated`` be projected under a ``demo`` ceiling. An
+    unprofiled deployment and a report with no profile both take ``regulated``,
+    matching
+    :func:`~openadapt_flow.execution_profiles.resolve_execution_profile`'s
+    default — the strictest posture, never the most permissive.
+    """
+    profiles = [
+        getattr(report, "execution_profile", None) or "regulated",
+        deployment.runtime.profile or "regulated",
+    ]
+    ceiling = max(
+        execution_profile_contract(profile).max_remote_decision_tier
+        for profile in profiles
+    )
+    try:
+        return effective_remote_tier(
+            deployment.human_decisions.remote.context_tier, ceiling
+        )
+    except ValueError as exc:
+        raise AttendedActionRefused(str(exc)) from exc
 
 
 def _task_and_presentation(
@@ -516,13 +579,21 @@ def portable_remote_decision_task(
     No screenshot, OCR text, free text, workflow label, parameter, or path is
     returned. Identifiers alone never activate this path: the deployment must
     explicitly enable remote issuance and bind both tenant and runner.
+
+    At ``remote_closed_context`` the projection additionally carries
+    :class:`~openadapt_flow.console.decision_context.RemoteHaltContextV1`. That
+    object has no string-valued field, so this docstring's first sentence stays
+    literally true: the context widens what a remote operator KNOWS without
+    widening what the envelope can REPRESENT. The signed
+    :class:`~openadapt_types.HumanDecisionTaskV1` is unchanged, byte for byte,
+    at every tier.
     """
     remote, tenant_id, runner_id = _remote_scope(deployment)
     if not remote or tenant_id is None or runner_id is None:
         raise AttendedActionRefused(
             "remote decision issuance is not explicitly enabled for this deployment"
         )
-    task_raw, task_digest, _presentation = _task_and_presentation(
+    task_raw, task_digest, presentation = _task_and_presentation(
         run_dir, item, deployment=deployment
     )
     if task_raw is None or task_digest is None:
@@ -530,6 +601,25 @@ def portable_remote_decision_task(
             "the run has no current signed human decision task or pause capability"
         )
     task = HumanDecisionTaskV1.model_validate(task_raw)
+    # The rest of `presentation` -- the screenshot artifact ids, the composed
+    # question, the gated control label inside `halt` -- is still discarded.
+    # Only the closed-vocabulary re-projection of `halt` may cross, and only at
+    # the tier that permits it.
+    report, _ = data._load_report(run_dir)
+    tier = _remote_delivery_tier(deployment, report)
+    halt_context = (
+        remote_halt_context(presentation.get("halt"))
+        if tier is DecisionDeliveryTier.REMOTE_CLOSED_CONTEXT
+        else None
+    )
+    # A tier that promised context and produced none is reported as the tier it
+    # actually delivered. The projection never claims a fidelity it did not
+    # reach; that is the same rule the effect ladder applies to evidence.
+    delivered_tier = (
+        DecisionDeliveryTier.REMOTE_CLOSED_CONTEXT
+        if halt_context is not None
+        else DecisionDeliveryTier.REMOTE_IDENTIFIERS
+    )
     capability = AttendedActionStore(run_dir).read()
     idempotency_scope = _sha256(
         {
@@ -555,12 +645,29 @@ def portable_remote_decision_task(
         "expected_transition_digest": capability.expected_transition_digest,
         "idempotency_scope_digest": idempotency_scope,
     }
+    # `delivery_tier` and `halt_context` are deliberately NOT in the binding.
+    #
+    # The binding is execution AUTHORITY, and `admit_remote_action` re-derives
+    # it on every response, including a replayed one after the pause already
+    # resumed. It must therefore be a deterministic function of the signed
+    # capability. The halt context is not: it is read from the run's live
+    # checkpoint, which legitimately empties once the pause closes, so binding
+    # it would make a correct idempotent replay refuse.
+    #
+    # Nothing is lost. The context is PRESENTATION -- a hosted surface renders
+    # it and is trusted to render it faithfully, exactly as it is trusted to
+    # render the task it already receives. What protects the customer is
+    # downstream and unchanged: any returned decision is re-bound to the exact
+    # current pause capability, and the engine re-reads the live application and
+    # re-proves every contract in `will_recheck` before anything continues.
     return RemoteDecisionProjection(
         task=task,
         task_digest=task_digest,
         event_sequence=capability.event_sequence,
         expected_transition_digest=capability.expected_transition_digest,
         idempotency_scope_digest=idempotency_scope,
+        delivery_tier=delivered_tier.name.lower(),  # type: ignore[arg-type]
+        halt_context=halt_context,
         binding_digest=_sha256(binding),
     )
 

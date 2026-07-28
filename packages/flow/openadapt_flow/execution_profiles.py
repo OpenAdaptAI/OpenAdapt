@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Literal
 
+from openadapt_flow.decision_delivery import DecisionDeliveryTier
 from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:
@@ -57,6 +58,16 @@ class ExecutionProfileContract:
     require_durable: bool
     require_settled: bool
     default_policy: str | None
+    #: The most context this profile permits a REMOTE attended-decision surface
+    #: to carry. Local delivery is unaffected: the loopback console and the
+    #: runner-local portal always serve
+    #: :attr:`~openadapt_flow.decision_delivery.DecisionDeliveryTier.LOCAL_FULL`.
+    #: Every profile currently permits ``REMOTE_CLOSED_CONTEXT`` because that
+    #: tier adds only closed enums, bounded integers, and booleans — it widens
+    #: what a remote operator KNOWS without widening what the envelope can
+    #: REPRESENT. A future scrubbed tier would not have that property, and this
+    #: field is where ``regulated`` refuses it.
+    max_remote_decision_tier: DecisionDeliveryTier
 
 
 _CONTRACTS = {
@@ -74,6 +85,7 @@ _CONTRACTS = {
         require_durable=False,
         require_settled=False,
         default_policy=None,
+        max_remote_decision_tier=DecisionDeliveryTier.REMOTE_CLOSED_CONTEXT,
     ),
     ExecutionProfile.STANDARD: ExecutionProfileContract(
         profile=ExecutionProfile.STANDARD,
@@ -89,6 +101,7 @@ _CONTRACTS = {
         require_durable=True,
         require_settled=True,
         default_policy="clinical-write",
+        max_remote_decision_tier=DecisionDeliveryTier.REMOTE_CLOSED_CONTEXT,
     ),
     ExecutionProfile.REGULATED: ExecutionProfileContract(
         profile=ExecutionProfile.REGULATED,
@@ -104,6 +117,7 @@ _CONTRACTS = {
         require_durable=True,
         require_settled=True,
         default_policy="clinical-write",
+        max_remote_decision_tier=DecisionDeliveryTier.REMOTE_CLOSED_CONTEXT,
     ),
 }
 

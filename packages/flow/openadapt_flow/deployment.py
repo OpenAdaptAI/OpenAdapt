@@ -428,6 +428,17 @@ class RemoteHumanDecisionConfig(BaseModel):
     tenant_id: Optional[str] = Field(default=None, pattern=_OPAQUE_DELIVERY_ID)
     #: Exact opaque customer-controlled runner identity. Required when enabled.
     runner_id: Optional[str] = Field(default=None, pattern=_OPAQUE_DELIVERY_ID)
+    #: How much pause context the remote projection may carry. See
+    #: :mod:`openadapt_flow.decision_delivery`. ``remote_closed_context`` (the
+    #: default) adds the closed-vocabulary "what broke" block, which contains no
+    #: string field and no image and is therefore no more capable of
+    #: representing protected content than ``remote_identifiers``, only more
+    #: useful. A deployment may still cap itself at ``remote_identifiers``; the
+    #: active execution profile applies its own ceiling on top of this.
+    #: ``local_full`` is refused here — a remote surface never gets pixels.
+    context_tier: Literal["remote_closed_context", "remote_identifiers"] = (
+        "remote_closed_context"
+    )
 
     @model_validator(mode="after")
     def _require_exact_remote_scope(self) -> "RemoteHumanDecisionConfig":

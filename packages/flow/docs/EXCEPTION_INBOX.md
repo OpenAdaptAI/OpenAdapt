@@ -60,17 +60,23 @@ human_decisions:
 All three values are required; identifiers alone do not enable the path. The
 portable projection contains only the shared closed-enum task, opaque IDs,
 counts, digests, allowed operations, expiry, a monotonic pause-event sequence,
-and an idempotency scope. It requires AAL2. Screenshots, OCR text, raw values,
-workflow labels, parameters, local paths, and free-form operator answers remain
-inside the customer-controlled boundary.
+an idempotency scope, and — at the `remote_closed_context` delivery tier — the
+closed halt context described in `docs/DECISION_DELIVERY.md`. It requires AAL2.
+Screenshots, OCR text, raw values, workflow labels, parameters, local paths, and
+free-form operator answers remain inside the customer-controlled boundary; the
+halt context has no string-valued field at all, so none of them are
+representable in it.
 
-Flow deliberately supplies no remote network or authentication provider. The
-authenticated control plane returns an AAL2 principal through the runner's
-trusted transport, and the public `portable_remote_decision_task` /
-`execute_remote_attended_action` API rebinds that response to the exact tenant,
-runner, task revision, pause capability, allowed operation, expected transition,
-expiry, and idempotency scope. A signed task is presentation integrity, not
-execution authority.
+Flow supplies **no remote authentication provider**, and its network client is
+outbound-only. `openadapt_flow.console.decision_relay.DecisionRelay` dials the
+control plane over HTTPS — publish, long-poll, acknowledge — so a runner behind
+NAT needs no inbound port, port forward, certificate, or reverse proxy. The
+authenticated control plane returns an AAL2 principal through that transport,
+and the public `portable_remote_decision_task` / `execute_remote_attended_action`
+API rebinds the response to the exact tenant, runner, task revision, pause
+capability, allowed operation, expected transition, expiry, and idempotency
+scope. A signed task is presentation integrity, not execution authority, and a
+relayed answer is neither.
 
 After a returned Continue, OpenAdapt observes a newly settled live frame,
 rechecks the human-completed postcondition and configured effect, proves the
