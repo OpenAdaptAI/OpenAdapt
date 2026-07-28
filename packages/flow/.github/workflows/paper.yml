@@ -56,7 +56,7 @@ jobs:
       contents: write # create/overwrite the release asset on the stable tag
     steps:
       - name: Download built full report PDF
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: openadapt-paper
           path: pdf

@@ -101,7 +101,7 @@
     },
     {
       "path": ".github/workflows/paper.yml",
-      "sha256": "7b796c6f5b2a27511ca3069a0dcfbe670404a141deeb63425b017c957f483587"
+      "sha256": "bb94d80c8aa12ebeac953743c5bed514d29ebf6106d7af8e5ab7ad007423ca21"
     },
     {
       "path": ".github/workflows/quickstart-lifecycle.yml",
@@ -113,7 +113,7 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "14a1c913df4b2ecdcf22b13164acf7026bee6bbfcd00db802a6df594140d3243"
+      "sha256": "d986d5fd270150366769a7ea89b0f97f1e6a3a8a722aa0d6627c1d891fd2c16c"
     },
     {
       "path": ".github/workflows/validate-claims.yml",
