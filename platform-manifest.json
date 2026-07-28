@@ -1,26 +1,26 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.0.0",
-  "generated_at": "2026-07-28T06:17:23+00:00",
+  "generated_at": "2026-07-28T06:27:45+00:00",
   "release_channel": "beta",
   "components": {
     "launcher": {
       "package": "openadapt",
-      "version": "1.10.1",
+      "version": "1.10.2",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt-1.10.1-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/2a/5c/37191657f3b1349511f552a45b958d015f05c99c270b02910d093038f9fa/openadapt-1.10.1-py3-none-any.whl",
-          "sha256": "9f66bfb7cfdbdf9f8153d0a2a11ea03a22b68b2bf3083583480f5f0125f3ec5b"
+          "filename": "openadapt-1.10.2-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/0b/72/5d99b13bd81d684dd0d619c95cffff7a09b0553c7d7c18cb9c8a81374919/openadapt-1.10.2-py3-none-any.whl",
+          "sha256": "717adffae146a3dea22f82a57317e45d15c98b1f115285e60a93b01fe45464d6"
         },
         {
           "type": "sdist",
-          "filename": "openadapt-1.10.1.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/50/0e/97a085982bb83ce8f3451cbb4003700b66d4f64ce4567c33ad78e99b88a6/openadapt-1.10.1.tar.gz",
-          "sha256": "bb44fb5fdb4ffa3e6e91680e9064ed1d63515f87c041b5cbd93d85c37fdef273"
+          "filename": "openadapt-1.10.2.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/41/8c/5ee0de5ad16a3403646019b50b7479499f4f18374fd0bd4c191dd2384d95/openadapt-1.10.2.tar.gz",
+          "sha256": "cae5a1421213521c7d60f613024d8683b2cb0c118186202279c5cb03d2731a38"
         }
       ]
     },
