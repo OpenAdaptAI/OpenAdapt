@@ -31,9 +31,19 @@ if TYPE_CHECKING:
             ...
 
         @staticmethod
-        def is_accessibility_enabled() -> bool:
+        def is_accessibility_enabled() -> bool | None:
             """Check if accessibility permissions are enabled."""
             ...
+
+
+class DisplayMetricsUnavailable(RuntimeError):
+    """A display measurement could not be taken.
+
+    Raised instead of returning a plausible default. A fabricated pixel ratio
+    or screen size is written into the recording and is indistinguishable from
+    a measured one, so every downstream coordinate is silently reinterpreted
+    at the wrong scale while the recording reports success.
+    """
 
 
 def get_platform() -> str:
@@ -77,18 +87,26 @@ def get_screen_dimensions() -> tuple[int, int]:
 
     Returns:
         Tuple of (width, height) in physical pixels.
+
+    Raises:
+        DisplayMetricsUnavailable: If the screen could not be measured. A
+            plausible default is never returned: it would be recorded as a
+            real measurement.
     """
     try:
         provider = get_platform_provider()
         return provider.get_screen_dimensions()
-    except (NotImplementedError, ImportError):
+    except (NotImplementedError, ImportError) as exc:
         # Fallback to generic implementation
         try:
             from PIL import ImageGrab
             screenshot = ImageGrab.grab()
             return screenshot.size
-        except Exception:
-            return (1920, 1080)  # Default fallback
+        except Exception as grab_exc:
+            raise DisplayMetricsUnavailable(
+                f"Could not measure screen dimensions: {exc}; "
+                f"the generic screenshot fallback also failed: {grab_exc}"
+            ) from grab_exc
 
 
 def get_display_pixel_ratio() -> float:
@@ -99,31 +117,43 @@ def get_display_pixel_ratio() -> float:
 
     Returns:
         Pixel ratio (e.g., 1.0 for standard displays, 2.0 for Retina).
+
+    Raises:
+        DisplayMetricsUnavailable: If the ratio could not be measured. `1.0` is
+            never substituted: a Retina display whose probe failed would be
+            recorded as a standard display and every captured coordinate would
+            be reinterpreted at half scale.
     """
     try:
         provider = get_platform_provider()
         return provider.get_display_pixel_ratio()
-    except (NotImplementedError, ImportError):
-        return 1.0
+    except (NotImplementedError, ImportError) as exc:
+        raise DisplayMetricsUnavailable(
+            f"Could not measure the display pixel ratio: {exc}"
+        ) from exc
 
 
-def is_accessibility_enabled() -> bool:
+def is_accessibility_enabled() -> bool | None:
     """Check if accessibility permissions are enabled.
 
     On macOS, this checks if the application has accessibility permissions
     required for keyboard and mouse event capture.
 
     Returns:
-        True if accessibility is enabled, False otherwise.
+        True if accessibility is verified enabled, False if it is verified
+        disabled, and None if the permission state could not be determined.
+        None is not a synonym for True: a caller gating "safe to record" on an
+        undetermined state would start a recording that captures no input.
     """
     try:
         provider = get_platform_provider()
         return provider.is_accessibility_enabled()
     except (NotImplementedError, ImportError):
-        return True  # Assume enabled on unknown platforms
+        return None
 
 
 __all__ = [
+    "DisplayMetricsUnavailable",
     "get_platform",
     "get_platform_provider",
     "get_screen_dimensions",

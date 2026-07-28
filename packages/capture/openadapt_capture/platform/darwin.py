@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import sys
 
+from openadapt_capture.platform import DisplayMetricsUnavailable
+
 if sys.platform != "darwin":
     raise ImportError("This module is only available on macOS")
 
@@ -30,12 +32,15 @@ class DarwinPlatform:
 
         Returns:
             Tuple of (width, height) in physical pixels.
+
+        Raises:
+            DisplayMetricsUnavailable: If the screen could not be measured.
         """
         try:
             from PIL import ImageGrab
             screenshot = ImageGrab.grab()
             return screenshot.size
-        except Exception:
+        except Exception as grab_exc:
             # Fallback using Quartz
             try:
                 import Quartz
@@ -44,8 +49,12 @@ class DarwinPlatform:
                 width = Quartz.CGDisplayPixelsWide(main_display)
                 height = Quartz.CGDisplayPixelsHigh(main_display)
                 return (width, height)
-            except Exception:
-                return (1920, 1080)
+            except Exception as quartz_exc:
+                raise DisplayMetricsUnavailable(
+                    "Could not measure macOS screen dimensions: "
+                    f"ImageGrab failed ({grab_exc}) and Quartz failed "
+                    f"({quartz_exc})"
+                ) from quartz_exc
 
     @staticmethod
     def get_display_pixel_ratio() -> float:
@@ -73,8 +82,11 @@ class DarwinPlatform:
             if logical_width > 0:
                 return physical_width / logical_width
 
-            return 1.0
-        except ImportError:
+            raise DisplayMetricsUnavailable(
+                "macOS reported a non-positive logical display width; "
+                "the pixel ratio could not be measured"
+            )
+        except ImportError as import_exc:
             # Try using Quartz directly
             try:
                 import Quartz
@@ -91,21 +103,35 @@ class DarwinPlatform:
                     if logical_width > 0:
                         return physical_width / logical_width
 
-                return 1.0
-            except Exception:
-                return 1.0
-        except Exception:
-            return 1.0
+                raise DisplayMetricsUnavailable(
+                    "Quartz did not report a usable display mode; "
+                    "the pixel ratio could not be measured"
+                )
+            except DisplayMetricsUnavailable:
+                raise
+            except Exception as quartz_exc:
+                raise DisplayMetricsUnavailable(
+                    "Could not measure the macOS pixel ratio: mss/PIL missing "
+                    f"({import_exc}) and Quartz failed ({quartz_exc})"
+                ) from quartz_exc
+        except DisplayMetricsUnavailable:
+            raise
+        except Exception as exc:
+            raise DisplayMetricsUnavailable(
+                f"Could not measure the macOS pixel ratio: {exc}"
+            ) from exc
 
     @staticmethod
-    def is_accessibility_enabled() -> bool:
+    def is_accessibility_enabled() -> bool | None:
         """Check if accessibility permissions are enabled.
 
         macOS requires accessibility permissions for capturing
         keyboard and mouse events globally.
 
         Returns:
-            True if accessibility is enabled, False otherwise.
+            True if verified enabled, False if verified disabled, and None if
+            the permission state could not be determined. None must not be
+            read as True: an unchecked permission is not a granted one.
         """
         try:
             import Quartz  # noqa: F401 - needed for ApplicationServices
@@ -136,9 +162,9 @@ class DarwinPlatform:
                 )
                 return result.returncode == 0
             except Exception:
-                return True  # Assume enabled if we can't check
+                return None  # Undetermined - never report this as enabled
         except Exception:
-            return True  # Assume enabled if we can't check
+            return None  # Undetermined - never report this as enabled
 
     @staticmethod
     def get_active_window_info() -> dict | None:

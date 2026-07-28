@@ -166,10 +166,13 @@ def get_active_element_state(x: int, y: int) -> dict | None:
         y (int): The y-coordinate of the element.
 
     Returns:
-        dict or None: A dictionary containing the state of the active element.
+        None. Linux element-level state retrieval is not implemented (it would
+        need AT-SPI). None means "not observed"; the previous placeholder dict
+        was persisted verbatim onto every ActionEvent, so a consumer could not
+        tell invented state from captured accessibility data.
     """
-    # Placeholder: Implement element-level state retrieval if necessary.
-    return {"x": x, "y": y, "state": "placeholder"}
+    del x, y  # No provider to query.
+    return None
 
 
 def main() -> None:

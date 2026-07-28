@@ -10,7 +10,19 @@ from loguru import logger
 
 from openadapt_capture.config import config
 
+
+class WindowCaptureUnavailable(RuntimeError):
+    """No window-capture backend could be loaded for this process.
+
+    Raised rather than letting every window query return an empty result
+    forever. An unavailable backend and a momentarily unreadable window
+    otherwise look identical, and a recording proceeds with a silently empty
+    window timeline.
+    """
+
+
 impl = None
+impl_unavailable_reason: str | None = None
 try:
     if sys.platform == "darwin":
         from . import _macos as impl
@@ -19,9 +31,31 @@ try:
     elif sys.platform.startswith("linux"):
         from . import _linux as impl
     else:
-        logger.warning(f"Unsupported platform for window capture: {sys.platform}")
+        impl_unavailable_reason = (
+            f"Unsupported platform for window capture: {sys.platform}"
+        )
+        logger.warning(impl_unavailable_reason)
 except ImportError as exc:
-    logger.warning(f"Window capture not available: {exc}")
+    impl_unavailable_reason = f"Window capture backend failed to import: {exc}"
+    logger.error(impl_unavailable_reason)
+
+
+def require_impl() -> Any:
+    """Return the window-capture backend, or refuse.
+
+    Returns:
+        The platform backend module.
+
+    Raises:
+        WindowCaptureUnavailable: If no backend loaded. Call this before
+            starting a window-reading loop so an absent backend surfaces as a
+            recording-startup failure instead of an empty window timeline.
+    """
+    if impl is None:
+        raise WindowCaptureUnavailable(
+            impl_unavailable_reason or "No window-capture backend is loaded"
+        )
+    return impl
 
 
 def get_active_window_data(
@@ -34,11 +68,13 @@ def get_active_window_data(
 
     Returns:
         dict or None: A dictionary containing information about the active window,
-            or None if the state is not available.
+            or None if the state is not available. `None` is the documented
+            unavailable answer; an empty dict is never returned, because a
+            caller cannot tell it from a window with no fields.
     """
     state = get_active_window_state(include_window_data)
     if not state:
-        return {}
+        return None
     title = state["title"]
     left = state["left"]
     top = state["top"]

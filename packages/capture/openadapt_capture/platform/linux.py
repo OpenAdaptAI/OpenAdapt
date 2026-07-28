@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 
+from openadapt_capture.platform import DisplayMetricsUnavailable
 from openadapt_capture.x11_threads import ensure_xlib_thread_support
 
 if not sys.platform.startswith("linux"):
@@ -99,7 +100,10 @@ class LinuxPlatform:
             except Exception:
                 pass
 
-            return (1920, 1080)
+            raise DisplayMetricsUnavailable(
+                "Could not measure Linux screen dimensions: none of mss/PIL, "
+                "xdpyinfo, or wlr-randr produced a usable result"
+            )
 
     @staticmethod
     def get_display_pixel_ratio() -> float:
@@ -164,10 +168,13 @@ class LinuxPlatform:
         except Exception:
             pass
 
-        return 1.0
+        raise DisplayMetricsUnavailable(
+            "Could not measure the Linux pixel ratio: gsettings, GDK_SCALE, "
+            "QT_SCALE_FACTOR, and the mss/PIL comparison all failed"
+        )
 
     @staticmethod
-    def is_accessibility_enabled() -> bool:
+    def is_accessibility_enabled() -> bool | None:
         """Check if input capture is available.
 
         On Linux, this typically requires:
@@ -175,7 +182,9 @@ class LinuxPlatform:
         - Wayland: Portal permissions or root access
 
         Returns:
-            True if input capture is likely available, False otherwise.
+            True if input capture is verified available, False if it is
+            verified unavailable, and None if the state could not be
+            determined. None must not be read as True.
         """
         import os
 
@@ -213,8 +222,9 @@ class LinuxPlatform:
         except Exception:
             pass
 
-        # Assume enabled if we can't determine
-        return True
+        # Undetermined: the portal probe could not run. Never report this as
+        # enabled - a caller would start a recording that captures no input.
+        return None
 
     @staticmethod
     def get_active_window_info() -> dict | None:

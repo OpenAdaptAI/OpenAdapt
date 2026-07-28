@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import sys
 
+from openadapt_capture.platform import DisplayMetricsUnavailable
+
 if sys.platform != "win32":
     raise ImportError("This module is only available on Windows")
 
@@ -35,7 +37,7 @@ class WindowsPlatform:
             from PIL import ImageGrab
             screenshot = ImageGrab.grab()
             return screenshot.size
-        except Exception:
+        except Exception as grab_exc:
             # Fallback using ctypes
             try:
                 import ctypes
@@ -53,8 +55,12 @@ class WindowsPlatform:
                 width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
                 height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
                 return (width, height)
-            except Exception:
-                return (1920, 1080)
+            except Exception as ctypes_exc:
+                raise DisplayMetricsUnavailable(
+                    "Could not measure Windows screen dimensions: ImageGrab "
+                    f"failed ({grab_exc}) and GetSystemMetrics failed "
+                    f"({ctypes_exc})"
+                ) from ctypes_exc
 
     @staticmethod
     def get_display_pixel_ratio() -> float:
@@ -96,32 +102,42 @@ class WindowsPlatform:
             except Exception:
                 pass
 
-            return 1.0
-        except Exception:
-            return 1.0
+            raise DisplayMetricsUnavailable(
+                "Could not measure the Windows pixel ratio: neither "
+                "GetDpiForMonitor nor GetDeviceCaps produced a result"
+            )
+        except DisplayMetricsUnavailable:
+            raise
+        except Exception as exc:
+            raise DisplayMetricsUnavailable(
+                f"Could not measure the Windows pixel ratio: {exc}"
+            ) from exc
 
     @staticmethod
-    def is_accessibility_enabled() -> bool:
+    def is_accessibility_enabled() -> bool | None:
         """Check if the application can capture input events.
 
-        On Windows, input capture typically works without special permissions,
-        but we check if we're running with sufficient privileges.
+        On Windows, input capture works for both administrator and standard
+        users, so a successful probe of the Win32 privilege API is what makes
+        the True answer a *checked* one rather than an assumed one.
 
         Returns:
-            True if input capture is available, False otherwise.
+            True if the Win32 privilege API answered, and None if it could not
+            be reached at all. None must not be read as True: the previous
+            version computed `IsUserAnAdmin()`, discarded the result, and
+            returned True from every branch including the failure handler, so
+            the answer carried no information.
         """
         try:
             import ctypes
 
-            # Check if running as administrator
-            try:
-                ctypes.windll.shell32.IsUserAnAdmin()
-                # Even non-admin can typically capture input
-                return True
-            except Exception:
-                return True  # Assume enabled
-        except Exception:
+            # The result is intentionally not used to gate the answer: a
+            # standard user can capture input. Reaching the API at all is what
+            # is being verified.
+            ctypes.windll.shell32.IsUserAnAdmin()
             return True
+        except Exception:
+            return None
 
     @staticmethod
     def get_active_window_info() -> dict | None:

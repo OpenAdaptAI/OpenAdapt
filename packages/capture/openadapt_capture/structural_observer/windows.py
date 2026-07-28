@@ -398,8 +398,15 @@ def _observe_with_runtime(
     if target is None:
         return None
 
-    element = _as_element(target)
     info = _element_info(target)
+    if info is None:
+        # The element vanished or the COM read failed. Emitting an observation
+        # whose element carries no identity fields would be positive evidence
+        # that windows_uia observed this action, indistinguishable from an
+        # element that legitimately exposes nothing. Report no observation.
+        return None
+
+    element = _as_element(target)
     process_id = _present_int(_safe_value(info, "process_id"))
     process = None
     if process_id is not None:

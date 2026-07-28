@@ -1144,6 +1144,11 @@ def read_window_events(
     """
     utils.set_start_time(recording.timestamp)
 
+    # Refuse at the boundary. Without this the loop below polls a backend that
+    # can never answer, never sets started_event, and the recording hangs in
+    # startup with no stated cause.
+    window.require_impl()
+
     logger.info("Starting")
     prev_window_data = {}
     started = False
@@ -1310,7 +1315,15 @@ def create_recording(
 
     timestamp = utils.set_start_time()
     monitor_width, monitor_height = utils.get_monitor_dims()
-    pixel_ratio = platform.get_display_pixel_ratio()
+    try:
+        pixel_ratio = platform.get_display_pixel_ratio()
+    except platform.DisplayMetricsUnavailable as exc:
+        # Persist NULL, not 1.0. The column is nullable precisely so that
+        # "unknown" is representable; recording 1.0 would report an
+        # unmeasured display as a verified standard-density one and every
+        # downstream coordinate would be rescaled from a fabricated number.
+        logger.error(f"Display pixel ratio could not be measured: {exc}")
+        pixel_ratio = None
     double_click_distance_pixels = utils.get_double_click_distance_pixels()
     double_click_interval_seconds = utils.get_double_click_interval_seconds()
     recording_data = {
@@ -1825,15 +1838,21 @@ def record(
     # DIFFERENT window (whichever is focused), so it stays off.
     if config.RECORD_WINDOW_DATA and window_scope is None:
         window_event_reader = threading.Thread(
-            target=read_window_events,
+            target=_run_task_fail_loud,
             daemon=True,
             args=(
-                event_q,
-                terminate_processing,
-                recording,
-                task_started_events.setdefault(
-                    "window_event_reader", threading.Event()
+                "window_event_reader",
+                read_window_events,
+                (
+                    event_q,
+                    terminate_processing,
+                    recording,
+                    task_started_events.setdefault(
+                        "window_event_reader", threading.Event()
+                    ),
                 ),
+                terminate_processing,
+                task_errors,
             ),
         )
         window_event_reader.start()
