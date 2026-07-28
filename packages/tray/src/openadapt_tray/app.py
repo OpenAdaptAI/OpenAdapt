@@ -17,7 +17,12 @@ import webbrowser
 import pystray
 
 from openadapt_tray.config import ConfigLoadError, TrayConfig
-from openadapt_tray.hosted import CountResult, HostedPoller, route_break_click
+from openadapt_tray.hosted import (
+    CountResult,
+    HostedPoller,
+    InvalidCountPayload,
+    route_break_click,
+)
 from openadapt_tray.icons import IconManager
 from openadapt_tray.ipc import IPCClient, IPCMessageType
 from openadapt_tray.menu import MenuBuilder
@@ -95,6 +100,7 @@ class TrayApplication:
         self.notifications.set_tray_icon(self.icon)
 
         # Register state change handler
+        self._last_notified_tray_state = self.state.current.state
         self.state.add_listener(self._on_state_change)
 
         # Register IPC handlers
@@ -174,6 +180,10 @@ class TrayApplication:
         Args:
             state: Current application state.
         """
+        if state.state == self._last_notified_tray_state:
+            return
+        self._last_notified_tray_state = state.state
+
         messages = {
             TrayState.RECORDING: (
                 "Recording Started",
@@ -323,7 +333,11 @@ class TrayApplication:
             return
 
         self.state.transition(TrayState.RECORDING_STOPPING)
-        self.ipc.send_stop_recording()
+        if not self.ipc.send_stop_recording():
+            self.state.transition(
+                TrayState.ERROR,
+                error_message="Failed to send stop-recording command.",
+            )
         # The desktop confirms via RECORDING_STOPPED (then COMPILE_PROGRESS).
 
     # --- quick actions ------------------------------------------------------
@@ -331,7 +345,8 @@ class TrayApplication:
     def open_desktop_app(self) -> None:
         """Open (or focus) the desktop app's workflow library."""
         if self.ipc.is_connected():
-            self.ipc.send_open_workflow_library()
+            if not self.ipc.send_open_workflow_library():
+                self._report_desktop_open_failure()
             return
         # Not connected — launch/connect, then ask it to open the library.
         threading.Thread(
@@ -342,11 +357,24 @@ class TrayApplication:
     def _open_desktop_app_async(self) -> None:
         """Background helper for :meth:`open_desktop_app`."""
         if self.ensure_desktop_connection():
-            self.ipc.send_open_workflow_library()
+            if not self.ipc.send_open_workflow_library():
+                self._report_desktop_open_failure()
+        else:
+            self._report_desktop_open_failure()
 
-    def open_cloud_dashboard(self) -> None:
+    def _report_desktop_open_failure(self) -> None:
+        """Report that the workflow-library command did not reach the desktop."""
+        self.notifications.show(
+            "Could not open the desktop app",
+            "The tray could not send the workflow-library command.",
+        )
+
+    def open_cloud_dashboard(self) -> bool:
         """Open the hosted cloud dashboard in the system browser."""
-        webbrowser.open(self.config.hosted_url)
+        return self._open_browser(
+            self.config.hosted_url,
+            "Could not open the cloud dashboard",
+        )
 
     def open_needs_attention(self) -> bool:
         """Route a needs-attention click by deployment lane (§3c).
@@ -367,27 +395,51 @@ class TrayApplication:
             )
         return routed
 
-    def login(self) -> None:
+    def login(self) -> bool:
         """Start the hosted login flow.
 
         The tray does not implement auth; it opens the ingest-token settings
         page (the desktop app owns the interactive providers) so the user can
         mint/paste a token that lands in the shared keychain.
         """
-        webbrowser.open(
-            f"{self.config.hosted_url.rstrip('/')}/dashboard/settings/ingest"
+        return self._open_browser(
+            f"{self.config.hosted_url.rstrip('/')}/dashboard/settings/ingest",
+            "Could not open login settings",
         )
 
-    def pause_sync(self) -> None:
-        """Ask the desktop to pause the upload/sync queue."""
-        if self.ipc.is_connected():
-            self.ipc.send_pause_sync()
-        self.state.set_sync_state(SyncState.SYNCED)
+    def _open_browser(self, url: str, failure_title: str) -> bool:
+        """Open a URL and keep a missing browser distinct from a successful open."""
+        try:
+            if webbrowser.open(url):
+                return True
+        except Exception as e:
+            print(f"Failed to open {url}: {e}")
+        self.notifications.show(
+            failure_title,
+            f"No usable browser opened. Open {url} manually.",
+        )
+        return False
 
-    def resume_sync(self) -> None:
+    def pause_sync(self) -> bool:
+        """Ask the desktop to pause the upload/sync queue."""
+        if not self.ipc.is_connected() or not self.ipc.send_pause_sync():
+            self.notifications.show(
+                "Could not pause sync",
+                "The desktop app did not accept the pause command.",
+            )
+            return False
+        self.state.set_sync_state(SyncState.SYNCED)
+        return True
+
+    def resume_sync(self) -> bool:
         """Ask the desktop to resume the upload/sync queue."""
-        if self.ipc.is_connected():
-            self.ipc.send_resume_sync()
+        if not self.ipc.is_connected() or not self.ipc.send_resume_sync():
+            self.notifications.show(
+                "Could not resume sync",
+                "The desktop app did not accept the resume command.",
+            )
+            return False
+        return True
 
     def _report_config_error(self) -> None:
         """Tell the user when the tray is running on defaults it did not choose."""
@@ -453,7 +505,7 @@ class TrayApplication:
             self._apply_sync_state(sync)
 
         if "break_count" in data:
-            self.state.set_break_count(data.get("break_count") or 0)
+            self._apply_break_count(data.get("break_count"))
 
         state_name = data.get("state")
         if state_name:
@@ -483,7 +535,16 @@ class TrayApplication:
     def _on_ipc_break_count(self, message) -> None:
         """Handle a break-count event pushed from the desktop."""
         data = message.data or {}
-        self.state.set_break_count(data.get("count") or 0)
+        self._apply_break_count(data.get("count"))
+
+    def _apply_break_count(self, value: object) -> None:
+        """Apply a validated count without turning an unreadable value into zero."""
+        try:
+            result = CountResult.from_payload({"count": value})
+        except InvalidCountPayload as e:
+            print(f"Ignored unusable IPC break count: {e}")
+            return
+        self.state.set_break_count(result.count)
 
     def _apply_sync_state(self, name: str | None) -> None:
         """Map a sync-state name from IPC onto the SyncState channel."""

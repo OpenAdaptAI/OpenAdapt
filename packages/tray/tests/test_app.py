@@ -5,7 +5,19 @@ from unittest.mock import MagicMock, patch
 
 from openadapt_tray.config import ConfigLoadError, TrayConfig
 from openadapt_tray.platform.base import DialogUnavailableError
-from openadapt_tray.state import TrayState
+from openadapt_tray.state import SyncState, TrayState
+
+
+def _make_test_app():
+    """Build an app without platform or tray side effects."""
+    from openadapt_tray.app import TrayApplication
+
+    with patch("openadapt_tray.app.get_platform_handler") as platform, patch(
+        "openadapt_tray.app.pystray"
+    ) as pystray:
+        platform.return_value = MagicMock()
+        pystray.Icon.return_value = MagicMock()
+        return TrayApplication(config=TrayConfig())
 
 
 class TestTrayApplicationInit:
@@ -97,11 +109,23 @@ class TestRecordingControls:
         app.state.transition(TrayState.RECORDING, current_capture="test")
 
         with patch.object(app.ipc, "send_stop_recording") as mock_stop:
+            mock_stop.return_value = True
             app.stop_recording()
             mock_stop.assert_called_once()
 
         # The tray waits for the desktop's RECORDING_STOPPED event.
         assert app.state.current.state == TrayState.RECORDING_STOPPING
+
+    def test_failed_stop_command_enters_error(self):
+        """A command that was not sent must not render as stopping."""
+        app = _make_test_app()
+        app.state.transition(TrayState.RECORDING, current_capture="test")
+
+        with patch.object(app.ipc, "send_stop_recording", return_value=False):
+            app.stop_recording()
+
+        assert app.state.current.state == TrayState.ERROR
+        assert "stop-recording" in (app.state.current.error_message or "")
 
     @patch("openadapt_tray.app.pystray")
     @patch("openadapt_tray.app.get_platform_handler")
@@ -191,6 +215,15 @@ class TestStateNotifications:
         with patch.object(app.notifications, "show") as mock_show:
             app.state.transition(TrayState.RECORDING, current_capture="test")
             mock_show.assert_not_called()
+
+    def test_sync_change_does_not_claim_recording_stopped(self):
+        """An orthogonal sync update is not a recording completion."""
+        app = _make_test_app()
+
+        with patch.object(app.notifications, "show") as mock_show:
+            app.state.set_sync_state(SyncState.SYNCING)
+
+        mock_show.assert_not_called()
 
 
 class TestQuit:
@@ -369,3 +402,94 @@ class TestNeedsAttentionClickReportsDeadEnds:
         with patch("openadapt_tray.app.route_break_click", return_value=True):
             assert app.open_needs_attention() is True
         app.notifications.show.assert_not_called()
+
+
+class TestOpenActionsReportDeadEnds:
+    def test_connected_desktop_command_failure_is_reported(self):
+        app = _make_test_app()
+        app.notifications = MagicMock()
+        app.ipc = MagicMock()
+        app.ipc.is_connected.return_value = True
+        app.ipc.send_open_workflow_library.return_value = False
+
+        app.open_desktop_app()
+
+        app.notifications.show.assert_called_once()
+
+    def test_browser_failure_is_not_reported_as_opened(self):
+        app = _make_test_app()
+        app.notifications = MagicMock()
+
+        with patch("openadapt_tray.app.webbrowser.open", return_value=False):
+            assert app.open_cloud_dashboard() is False
+
+        app.notifications.show.assert_called_once()
+
+    def test_browser_exception_is_reported(self):
+        app = _make_test_app()
+        app.notifications = MagicMock()
+
+        with patch(
+            "openadapt_tray.app.webbrowser.open", side_effect=OSError("no browser")
+        ):
+            assert app.open_cloud_dashboard() is False
+
+        app.notifications.show.assert_called_once()
+
+
+class TestFailedIPCResultsStayFailed:
+    """A False command result means that the tray sent no command."""
+
+    def test_failed_pause_does_not_report_synced(self):
+        app = _make_test_app()
+        app.notifications = MagicMock()
+        app.state.set_sync_state(SyncState.SYNCING)
+        app.ipc = MagicMock()
+        app.ipc.is_connected.return_value = True
+        app.ipc.send_pause_sync.return_value = False
+
+        assert app.pause_sync() is False
+        assert app.state.current.sync_state == SyncState.SYNCING
+        app.notifications.show.assert_called_once()
+
+    def test_successful_pause_updates_sync_state(self):
+        app = _make_test_app()
+        app.state.set_sync_state(SyncState.SYNCING)
+        app.ipc = MagicMock()
+        app.ipc.is_connected.return_value = True
+        app.ipc.send_pause_sync.return_value = True
+
+        assert app.pause_sync() is True
+        assert app.state.current.sync_state == SyncState.SYNCED
+
+    def test_failed_resume_is_reported(self):
+        app = _make_test_app()
+        app.notifications = MagicMock()
+        app.ipc = MagicMock()
+        app.ipc.is_connected.return_value = True
+        app.ipc.send_resume_sync.return_value = False
+
+        assert app.resume_sync() is False
+        app.notifications.show.assert_called_once()
+
+
+class TestUnreadableIPCBreakCounts:
+    """An unreadable pushed count must not clear the last known badge."""
+
+    def test_missing_count_keeps_last_known_value(self):
+        app = _make_test_app()
+        app.state.set_break_count(4)
+        message = MagicMock(data={})
+
+        app._on_ipc_break_count(message)
+
+        assert app.state.current.break_count == 4
+
+    def test_invalid_status_count_keeps_last_known_value(self):
+        app = _make_test_app()
+        app.state.set_break_count(4)
+        message = MagicMock(data={"break_count": "unknown"})
+
+        app._on_ipc_status_update(message)
+
+        assert app.state.current.break_count == 4

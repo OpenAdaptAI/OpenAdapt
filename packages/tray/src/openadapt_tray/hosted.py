@@ -93,12 +93,12 @@ class CountResult:
             )
         if "count" not in payload:
             raise InvalidCountPayload("response body has no 'count' field")
-        try:
-            count = int(payload["count"])
-        except (TypeError, ValueError) as e:
-            raise InvalidCountPayload(
-                f"'count' is not an integer: {payload['count']!r}"
-            ) from e
+        count = payload["count"]
+        # JSON booleans are Python integers, and ``int(1.9)`` truncates. Both
+        # conversions can turn an unreadable response into a confident badge
+        # value, including the unsafe ``false`` -> ``0`` all-clear.
+        if isinstance(count, bool) or not isinstance(count, int):
+            raise InvalidCountPayload(f"'count' is not an integer: {count!r}")
         if count < 0:
             raise InvalidCountPayload(f"'count' is negative: {count}")
         return cls(
@@ -314,13 +314,18 @@ def route_break_click(
     # unreachable (or there is no IPC client to reach it with).
     if config.deployment_lane == "byoc" and ipc_client is not None:
         try:
-            ipc_client.send_open_teach()
-            return True
+            if ipc_client.send_open_teach():
+                return True
+            print("Desktop refused the open-teach command; trying the dashboard")
         except Exception as e:
             print(f"Failed to route byoc break click to desktop: {e}")
     # webbrowser.open returns False when it could not find or start a browser.
     # Discarding that made a dead click indistinguishable from a served one.
-    opened = webbrowser.open(f"{config.hosted_url.rstrip('/')}/dashboard")
+    try:
+        opened = webbrowser.open(f"{config.hosted_url.rstrip('/')}/dashboard")
+    except Exception as e:
+        print(f"Could not open the hosted dashboard: {e}")
+        return False
     if not opened:
         print("Could not open the hosted dashboard: no usable browser")
     return bool(opened)

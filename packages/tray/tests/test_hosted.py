@@ -233,16 +233,36 @@ class TestRouteBreakClick:
     def test_byoc_lane_routes_to_desktop(self):
         cfg = make_config(deployment_lane="byoc")
         ipc = MagicMock()
+        ipc.send_open_teach.return_value = True
         with patch("openadapt_tray.hosted.webbrowser.open") as mock_open:
-            route_break_click(cfg, ipc_client=ipc)
+            assert route_break_click(cfg, ipc_client=ipc) is True
         ipc.send_open_teach.assert_called_once()
         mock_open.assert_not_called()
+
+    def test_byoc_command_failure_falls_back_to_dashboard(self):
+        """A False IPC result means the local teach view did not open."""
+        cfg = make_config(deployment_lane="byoc")
+        ipc = MagicMock()
+        ipc.send_open_teach.return_value = False
+        with patch(
+            "openadapt_tray.hosted.webbrowser.open", return_value=True
+        ) as mock_open:
+            assert route_break_click(cfg, ipc_client=ipc) is True
+        mock_open.assert_called_once_with("https://example.test/dashboard")
 
     def test_byoc_falls_back_to_dashboard_when_no_desktop(self):
         cfg = make_config(deployment_lane="byoc")
         with patch("openadapt_tray.hosted.webbrowser.open") as mock_open:
             route_break_click(cfg, ipc_client=None)
         mock_open.assert_called_once()
+
+    def test_browser_exception_reports_no_route(self):
+        cfg = make_config(deployment_lane="cloud")
+        with patch(
+            "openadapt_tray.hosted.webbrowser.open",
+            side_effect=OSError("no browser"),
+        ):
+            assert route_break_click(cfg, ipc_client=None) is False
 
 
 class TestUnreadableCountPayload:
@@ -266,6 +286,11 @@ class TestUnreadableCountPayload:
     def test_non_numeric_count_raises(self):
         with pytest.raises(InvalidCountPayload):
             CountResult.from_payload({"count": "lots"})
+
+    @pytest.mark.parametrize("value", [False, True, 0.0, 1.9, "2"])
+    def test_non_json_integer_count_raises(self, value):
+        with pytest.raises(InvalidCountPayload):
+            CountResult.from_payload({"count": value})
 
     def test_negative_count_raises(self):
         with pytest.raises(InvalidCountPayload):
