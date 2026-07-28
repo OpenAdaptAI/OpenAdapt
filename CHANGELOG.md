@@ -2,6 +2,49 @@
 
 <!-- version list -->
 
+## v1.10.1 (2026-07-28)
+
+### Bug Fixes
+
+- Regenerate platform manifest for openadapt-flow 1.25.1
+  ([#1067](https://github.com/OpenAdaptAI/OpenAdapt/pull/1067),
+  [`c11ce10`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c11ce10c304d0e0118352c6140b297ef7bafdaf1))
+
+### Chores
+
+- **release**: Reconcile platform manifest
+  ([`a34498d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a34498dd80d4ef26813e7395efd41421806f4866))
+
+- **release**: Reconcile platform manifest with capture 1.2.1
+  ([#1063](https://github.com/OpenAdaptAI/OpenAdapt/pull/1063),
+  [`83e3939`](https://github.com/OpenAdaptAI/OpenAdapt/commit/83e393999062608b14ca455c833ecb9290b2ba0d))
+
+### Continuous Integration
+
+- Cancel stale launcher matrices ([#1061](https://github.com/OpenAdaptAI/OpenAdapt/pull/1061),
+  [`d53e9e1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d53e9e1064a0f4ee712b2764526628ded7d00605))
+
+- Detect unreleased work and silently skipped publishes
+  ([#1063](https://github.com/OpenAdaptAI/OpenAdapt/pull/1063),
+  [`83e3939`](https://github.com/OpenAdaptAI/OpenAdapt/commit/83e393999062608b14ca455c833ecb9290b2ba0d))
+
+- Preserve the full launcher matrix on exact main
+  ([#1061](https://github.com/OpenAdaptAI/OpenAdapt/pull/1061),
+  [`d53e9e1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d53e9e1064a0f4ee712b2764526628ded7d00605))
+
+- Reduce launcher PR matrix cost ([#1061](https://github.com/OpenAdaptAI/OpenAdapt/pull/1061),
+  [`d53e9e1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d53e9e1064a0f4ee712b2764526628ded7d00605))
+
+### Documentation
+
+- Remove obsolete planning artifacts ([#1065](https://github.com/OpenAdaptAI/OpenAdapt/pull/1065),
+  [`b9f4fec`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b9f4fecdbf3babe4bd58fa0e98a4689fa6756ab5))
+
+- **metadata**: Align launcher with governed execution
+  ([#1064](https://github.com/OpenAdaptAI/OpenAdapt/pull/1064),
+  [`b9d35f4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b9d35f4439c1ccc2846cfc6517cba8f6ce6d029b))
+
+
 ## v1.10.0 (2026-07-27)
 
 ### Bug Fixes
