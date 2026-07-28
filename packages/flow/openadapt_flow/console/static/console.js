@@ -365,6 +365,9 @@ const RECEIPT_COPY = {
     + "Do not retry — reopen this task and reconcile the live record first.",
   demonstration_requested: "Correction request recorded. The run stays paused.",
   escalation_recorded: "Escalation recorded. The run stays paused.",
+  rejected_by_operator: "Rejection recorded. This run is over and cannot be "
+    + "resumed; nothing was actuated. Start a fresh run if it should be "
+    + "attempted again.",
 };
 // A state that is definite: the operator may safely decide again.
 const DEFINITE_RECEIPT_STATES = new Set([
@@ -374,6 +377,7 @@ const DEFINITE_RECEIPT_STATES = new Set([
   "expired",
   "demonstration_requested",
   "escalated",
+  "rejected",
 ]);
 
 // One decision attempt keeps ONE idempotency key for as long as its outcome is
@@ -408,6 +412,8 @@ function attendedDecisionButtons(detail) {
       </button>` : ""}
     ${HEALTH.attended_actions_ready && allows("skip") ? `
       <button data-attended-action="skip" ${common}>Skip this step</button>` : ""}
+    ${allows("reject") ? `
+      <button data-attended-action="reject" ${common}>Stop — this is wrong</button>` : ""}
     ${allows("teach") ? `
       <button data-attended-action="teach" ${common}>Teach the fix</button>` : ""}
     ${allows("escalate") ? `
@@ -478,6 +484,7 @@ async function attendedAction(button) {
   const disposition = {
     continue: "completed_by_operator",
     skip: "not_applicable",
+    reject: "rejected_by_operator",
     teach: "teach_requested",
     escalate: "needs_assistance",
   }[action];

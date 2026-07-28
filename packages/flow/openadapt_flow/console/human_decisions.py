@@ -100,6 +100,7 @@ _DEFAULT_TASK_COPY = (
 _ACTION_MAP = {
     "continue": "verify_and_resume",
     "skip": "skip",
+    "reject": "reject",
     "teach": "teach",
     "escalate": "escalate",
 }
@@ -124,6 +125,11 @@ _RECEIPT_STATE: dict[str, tuple[str, str]] = {
     "halted": ("halted", "continuation_halted"),
     "needs_demonstration": ("demonstration_requested", "demonstration_requested"),
     "escalated": ("escalated", "escalation_recorded"),
+    #: Terminal and distinct from ``escalated``: that one leaves the run
+    #: resumable, this one ends it. A consumer reads the pair to decide whether
+    #: to tell the operator someone will pick this up, and the two answers are
+    #: opposite.
+    "rejected": ("rejected", "rejected_by_operator"),
 }
 
 
@@ -445,6 +451,15 @@ def _task_and_presentation(
             ),
             "sensitive_evidence_local_only": True,
         },
+        # Relayed verbatim from the sealed capability, including `reject`, even
+        # when the journal above has since made delivery uncertain. Filtering
+        # it here was tried and reverted: `allowed_actions` is inside the
+        # signed payload, so withdrawing one action mid-flight changes the task
+        # digest, and every request the phone already holds then fails as "the
+        # task changed" instead of with the specific refusal that tells the
+        # operator a write may have landed. `execute_attended_action` owns that
+        # refusal, exactly as it already does for continue and skip, and its
+        # message names the correct next step.
         "allowed_actions": [
             _ACTION_MAP[action] for action in capability.allowed_actions
         ],

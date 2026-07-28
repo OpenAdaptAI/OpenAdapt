@@ -685,7 +685,8 @@ def run_detail(root: Path, path: Path) -> dict[str, Any]:
             "category": "operator_review",
             "status": (
                 pending.get("status")
-                if pending.get("status") in {"pending", "approved", "resolved"}
+                if pending.get("status")
+                in {"pending", "approved", "resolved", "rejected"}
                 else "unknown"
             ),
             "resume_from_index": (

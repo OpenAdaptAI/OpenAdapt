@@ -13,6 +13,7 @@ Enforcement is layered (each raises a :class:`ResumeRefused` subclass):
 - the pause is older than its stale-pause expiry -> ``PauseExpired``
 - the approval was granted against a DIFFERENT bundle/version -> ``BundleMismatch``
 - the approval predates the pause it claims to resolve -> ``ApprovalRequired``
+- an operator REJECTED the run at its attended pause -> ``RunRejected``
 
 Import-light (pydantic + datetime): no vision, no backend, no model.
 """
@@ -60,6 +61,16 @@ class PauseExpired(ResumeRefused):
 class BundleMismatch(ResumeRefused):
     """The approval / checkpoint was captured against a different bundle version
     than the one being resumed -- the compiled program changed underneath it."""
+
+
+class RunRejected(ResumeRefused):
+    """An operator ended this run at its attended pause -- it is terminal.
+
+    Distinct from :class:`ApprovalRequired`: no approval can revive it. An
+    ``escalate`` decision PARKS a run and a later approval resumes it; a
+    ``reject`` decision is the operator asserting the run must not proceed at
+    all, and the durable pause is retained only as the audit record of why.
+    """
 
 
 class StateDiverged(ResumeRefused):
@@ -124,6 +135,20 @@ def enforce_resume_authorization(
         (all :class:`ResumeRefused`).
     """
     now = now or datetime.now(timezone.utc)
+
+    # (0) A REJECTED pause is terminal. Checked before everything else,
+    # including expiry, because the reason it cannot be resumed is not that the
+    # authorization went stale -- it is that a human ended the run, and an
+    # operator who is told "the pause expired, re-approve it" would reasonably
+    # try to. No approval can override this; the pause file survives only as
+    # the audit record of what was rejected and when.
+    if getattr(pending, "status", "pending") == "rejected":
+        raise RunRejected(
+            f"the pause at step '{getattr(pending, 'step_id', '?')}' was "
+            "rejected by an operator; the run is terminal and cannot be "
+            "resumed. Start a fresh run if the workflow should be attempted "
+            "again"
+        )
 
     # (1) Stale-pause expiry -- an approval cannot revive a pause whose expected
     # app state can no longer be trusted. Checked FIRST so an expired pause is

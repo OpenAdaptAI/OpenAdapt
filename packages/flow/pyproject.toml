@@ -63,7 +63,12 @@ dev = [
     # uvicorn for the console's boot smoke test.
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "openadapt-types>=0.6.2,<0.7.0",
+    # FLOOR is load-bearing, not cosmetic. The attended `reject` action and the
+    # `rejected` / `rejected_by_operator` receipt pair are named symbols that
+    # only exist from 0.6.3; a resolver satisfied by 0.6.2 fails at IMPORT, not
+    # at resolve, and does so inside the operator decision path. Raise this with
+    # every new symbol taken from the contract.
+    "openadapt-types>=0.6.3,<0.7.0",
     # Engineering-hygiene gates (lint+format, type-check, coverage). Pinned to
     # majors so CI and local dev run the same checkers.
     "ruff==0.15.22",
@@ -86,7 +91,7 @@ grounding = ["openadapt-grounding>=0.1.0"]
 console = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "openadapt-types>=0.6.2,<0.7.0",
+    "openadapt-types>=0.6.3,<0.7.0",
 ]
 # WindowsBackend: HTTP client for the WAA (Windows Agent Arena) server.
 windows = ["requests>=2.31"]
@@ -151,7 +156,7 @@ capture = ["openadapt-capture>=1.2.0"]
 # 0.6.x schemas. The
 # `interop-types` CI job type-checks and tests both boundaries against the real
 # package; raise the ceiling only after validating the next minor.
-interop = ["openadapt-types>=0.6.2,<0.7.0"]
+interop = ["openadapt-types>=0.6.3,<0.7.0"]
 
 [project.scripts]
 openadapt-flow = "openadapt_flow.__main__:main"

@@ -23,6 +23,7 @@ from openadapt_flow.console.human_decisions import (
 )
 from openadapt_flow.deployment import DeploymentConfig
 from openadapt_flow.ir import (
+    ActionDeliveryUncertainty,
     ActionKind,
     Anchor,
     ApiBinding,
@@ -50,7 +51,11 @@ from openadapt_flow.qualification import (
     set_action_classification,
 )
 from openadapt_flow.runtime.authorization import GovernedRunAuthorization
-from openadapt_flow.runtime.durable.approval import ApprovalRecord
+from openadapt_flow.runtime.durable.approval import (
+    ApprovalRecord,
+    ApprovalRequired,
+    enforce_resume_authorization,
+)
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRefused,
     AttendedActionRequest,
@@ -263,7 +268,7 @@ def test_capability_binds_run_bundle_pause_and_transition(tmp_path):
 
 def test_capability_derives_only_semantically_supported_actions(tmp_path):
     _workflow, _bundle, _run, _store, verified = _paused(tmp_path / "verified")
-    assert verified.allowed_actions == ("continue", "teach", "escalate")
+    assert verified.allowed_actions == ("continue", "reject", "teach", "escalate")
 
     unverified_workflow = Workflow(
         name="unverified",
@@ -272,7 +277,7 @@ def test_capability_derives_only_semantically_supported_actions(tmp_path):
     _workflow, _bundle, _run, _store, unverified = _paused(
         tmp_path / "unverified", workflow=unverified_workflow
     )
-    assert unverified.allowed_actions == ("teach", "escalate")
+    assert unverified.allowed_actions == ("reject", "teach", "escalate")
 
     optional_workflow = Workflow(
         name="optional",
@@ -294,7 +299,7 @@ def test_capability_derives_only_semantically_supported_actions(tmp_path):
     _workflow, _bundle, _run, _store, optional = _paused(
         tmp_path / "optional", workflow=optional_workflow
     )
-    assert optional.allowed_actions == ("skip", "teach", "escalate")
+    assert optional.allowed_actions == ("skip", "reject", "teach", "escalate")
 
     absolute_effect_workflow = Workflow(
         name="absolute-effect",
@@ -317,7 +322,7 @@ def test_capability_derives_only_semantically_supported_actions(tmp_path):
     _workflow, _bundle, _run, _store, absolute = _paused(
         tmp_path / "absolute", workflow=absolute_effect_workflow
     )
-    assert absolute.allowed_actions == ("continue", "teach", "escalate")
+    assert absolute.allowed_actions == ("continue", "reject", "teach", "escalate")
 
     delta_effect_workflow = absolute_effect_workflow.model_copy(deep=True)
     delta_effect_workflow.name = "delta-effect"
@@ -325,7 +330,7 @@ def test_capability_derives_only_semantically_supported_actions(tmp_path):
     _workflow, _bundle, _run, _store, delta = _paused(
         tmp_path / "delta", workflow=delta_effect_workflow
     )
-    assert delta.allowed_actions == ("teach", "escalate")
+    assert delta.allowed_actions == ("reject", "teach", "escalate")
 
 
 def test_transition_baseline_is_keyed_signed_and_contains_no_raw_phi(tmp_path):
@@ -359,7 +364,7 @@ def test_transition_baseline_is_keyed_signed_and_contains_no_raw_phi(tmp_path):
     assert capability.transition_baseline.url_digest.startswith("hmac-sha256:")
     assert capability.transition_baseline.title_digest.startswith("hmac-sha256:")
     assert capability.transition_baseline.page_count == 1
-    assert capability.allowed_actions == ("continue", "teach", "escalate")
+    assert capability.allowed_actions == ("continue", "reject", "teach", "escalate")
     store = AttendedActionStore(run)
     assert store.transition_value_digest("url", raw_url) == (
         capability.transition_baseline.url_digest
@@ -465,7 +470,7 @@ def test_relative_continue_is_not_advertised_without_signed_baseline(tmp_path):
         ],
     )
     _workflow, _bundle, run, _store, capability = _paused(tmp_path, workflow=workflow)
-    assert capability.allowed_actions == ("teach", "escalate")
+    assert capability.allowed_actions == ("reject", "teach", "escalate")
     with pytest.raises(AttendedActionRefused, match="does not allow"):
         execute_attended_action(
             run,
@@ -537,7 +542,7 @@ def test_program_pause_never_advertises_generic_continue_or_skip(tmp_path):
         ),
         transition_observation=TransitionObservation(url="https://payer.example/mfa"),
     )
-    assert capability.allowed_actions == ("teach", "escalate")
+    assert capability.allowed_actions == ("reject", "teach", "escalate")
 
 
 def _attended_program(*, guarded_transition: bool = False, skippable: bool = False):
@@ -644,7 +649,7 @@ def test_program_continue_commits_exact_receipt_without_reactuating_source(tmp_p
         tmp_path, workflow
     )
     assert initial_backend.actions == [("press", "A")]
-    assert capability.allowed_actions == ("continue", "teach", "escalate")
+    assert capability.allowed_actions == ("continue", "reject", "teach", "escalate")
     pending = store.read_pending()
     assert pending is not None
     assert [frame.state_id for frame in pending.program_frames] == ["human"]
@@ -2132,3 +2137,211 @@ def test_attended_http_can_teach_or_escalate_without_live_executor(
     )
     assert response.status_code == 200
     assert response.json()["state"] == "demonstration_requested"
+
+
+def test_reject_ends_the_run_where_teach_and_escalate_leave_it_resumable(tmp_path):
+    """The three non-actuating answers must not converge on one outcome.
+
+    ``teach`` and ``escalate`` both leave the durable pause ``pending``; the
+    run can still be approved and resumed. ``reject`` marks it ``rejected``,
+    which no approval overrides. If these collapsed into one recorded state,
+    the answer distribution could not tell "someone will pick this up" from
+    "this run is over" -- which is the entire reason reject exists as its own
+    member rather than as a second label on escalate.
+    """
+    from openadapt_flow.runtime.durable.approval import RunRejected
+
+    for action, disposition, status in (
+        ("teach", "teach_requested", "needs_demonstration"),
+        ("escalate", "needs_assistance", "escalated"),
+    ):
+        _wf, _bundle, run, store, capability = _paused(tmp_path / action)
+        decision = execute_attended_action(
+            run,
+            AttendedActionRequest(
+                capability_digest=capability.digest,
+                idempotency_key=f"parks-the-run-{action}-01",
+                action=action,
+                disposition=disposition,
+            ),
+            operator="staff",
+        )
+        assert decision.status == status
+        assert store.read_pending().status == "pending"
+
+    _wf, _bundle, run, store, capability = _paused(tmp_path / "reject")
+    decision = execute_attended_action(
+        run,
+        AttendedActionRequest(
+            capability_digest=capability.digest,
+            idempotency_key="ends-the-run-reject-01",
+            action="reject",
+            disposition="rejected_by_operator",
+        ),
+        operator="staff",
+    )
+    assert decision.status == "rejected"
+    assert decision.disposition == "rejected_by_operator"
+    assert store.read_pending().status == "rejected"
+    with pytest.raises(RunRejected):
+        enforce_resume_authorization(
+            store.read_pending(),
+            ApprovalRecord(approver="supervisor", resolution="resume anyway"),
+            bundle_version="",
+        )
+
+
+def test_reject_admission_refuses_every_mutation_of_its_preconditions(tmp_path):
+    """Each precondition, removed one at a time, must refuse on its own.
+
+    A rejection is terminal and unactuated, which makes it tempting to admit
+    cheaply. It is admitted through the same authority as every other attended
+    action: an authenticated operator, a matching closed disposition, the exact
+    signed capability, and that capability's own action set.
+    """
+    _wf, _bundle, run, _store, capability = _paused(tmp_path / "mutations")
+
+    # (1) A disposition that does not belong to `reject`.
+    for wrong in ("completed_by_operator", "needs_assistance", "teach_requested"):
+        with pytest.raises(AttendedActionRefused, match="disposition"):
+            execute_attended_action(
+                run,
+                AttendedActionRequest(
+                    capability_digest=capability.digest,
+                    idempotency_key=f"reject-wrong-disposition-{wrong}",
+                    action="reject",
+                    disposition=wrong,
+                ),
+                operator="staff",
+            )
+
+    # (2) No authenticated operator.
+    with pytest.raises(ApprovalRequired):
+        execute_attended_action(
+            run,
+            AttendedActionRequest(
+                capability_digest=capability.digest,
+                idempotency_key="reject-without-operator-1",
+                action="reject",
+                disposition="rejected_by_operator",
+            ),
+            operator="   ",
+        )
+
+    # (3) A capability digest that is not this pause's.
+    with pytest.raises(AttendedActionRefused):
+        execute_attended_action(
+            run,
+            AttendedActionRequest(
+                capability_digest="sha256:" + "f" * 64,
+                idempotency_key="reject-wrong-capability-1",
+                action="reject",
+                disposition="rejected_by_operator",
+            ),
+            operator="staff",
+        )
+
+    # (4) A pause whose signed capability never carried `reject`, because the
+    # runtime positively recorded that this step may already have actuated.
+    uncertain_run = tmp_path / "uncertain" / "run"
+    workflow = Workflow(name="uncertain", steps=[_step("human", "A", expect="DONE")])
+    bundle = tmp_path / "uncertain" / "bundle"
+    workflow.save(bundle)
+    store = CheckpointStore(uncertain_run)
+    store.write_manifest(
+        RunManifest(
+            run_id="run-uncertain-a",
+            workflow_name=workflow.name,
+            bundle_dir=str(bundle),
+            params={},
+        )
+    )
+    uncertainty = ActionDeliveryUncertainty(
+        operation="click",
+        native=True,
+        observed_at="2026-07-18T12:00:01+00:00",
+        cause_type="TimeoutError",
+    )
+    pending = PendingEscalation(
+        workflow_name=workflow.name,
+        step_index=0,
+        step_id="human",
+        intent=workflow.steps[0].intent,
+        category="delivery_uncertain",
+        reason="the action may already have been delivered",
+        resume_from_index=0,
+        delivery_uncertainty=uncertainty,
+    )
+    store.write_pending(pending)
+    uncertain_result = StepResult(
+        step_id="human",
+        intent=workflow.steps[0].intent,
+        ok=False,
+        error="the action may already have been delivered",
+        delivery_attempted=True,
+        delivery_uncertainty=uncertainty,
+    )
+    RunReport(
+        workflow_name=workflow.name,
+        started_at="2026-07-18T12:00:00+00:00",
+        success=False,
+        results=[uncertain_result],
+    ).save(uncertain_run)
+    uncertain = issue_attended_capability(
+        uncertain_run,
+        store=store,
+        pending=pending,
+        workflow=workflow,
+        result=uncertain_result,
+    )
+    assert uncertain.delivery_state == "unknown"
+    assert "reject" not in uncertain.allowed_actions
+    # And escalate survives: handing a possibly-landed write to someone who can
+    # reconcile is the correct answer there, not throwing the pause away.
+    assert "escalate" in uncertain.allowed_actions
+    with pytest.raises(AttendedActionRefused, match="does not allow this action"):
+        execute_attended_action(
+            uncertain_run,
+            AttendedActionRequest(
+                capability_digest=uncertain.digest,
+                idempotency_key="reject-uncertain-pause-01",
+                action="reject",
+                disposition="rejected_by_operator",
+            ),
+            operator="staff",
+        )
+    assert store.read_pending().status == "pending"
+
+    # Nothing above may have ended the original run.
+    assert CheckpointStore(run).read_pending().status == "pending"
+
+
+def test_a_rejection_still_ends_the_run_when_the_report_is_unreadable(tmp_path):
+    """An unreadable report must not prevent an operator from stopping a run.
+
+    The report is where the terminal transaction outcome is recorded, so a
+    rejection over a corrupt one loses that record. It does not lose the
+    TERMINATION: the pause status is the enforcement point, and refusing to let
+    an operator stop a run because a JSON file will not parse would be the
+    wrong failure to choose. The decision message says the outcome is
+    unrecorded rather than implying one was written.
+    """
+    _wf, _bundle, run, store, capability = _paused(tmp_path / "corrupt")
+    (run / "report.json").write_text("{not json", encoding="utf-8")
+
+    decision = execute_attended_action(
+        run,
+        AttendedActionRequest(
+            capability_digest=capability.digest,
+            idempotency_key="reject-corrupt-report-01",
+            action="reject",
+            disposition="rejected_by_operator",
+        ),
+        operator="staff",
+    )
+    assert decision.status == "rejected"
+    assert "unrecorded" in decision.message
+    assert store.read_pending().status == "rejected"
+    # And the corrupt file was not overwritten with a partial report.
+    assert (run / "report.json").read_text(encoding="utf-8") == "{not json"
+    assert not list(run.glob("*.rejecting"))

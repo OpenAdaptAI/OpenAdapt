@@ -201,7 +201,12 @@ class PendingEscalation(BaseModel):
     resume_from_step_id: Optional[str] = None
     #: The run's parameter bindings, so an approved resume re-binds identically.
     params: dict[str, str] = Field(default_factory=dict)
-    status: Literal["pending", "approved"] = "pending"
+    #: ``rejected`` is TERMINAL: an operator answered the attended pause with
+    #: ``reject``, asserting this run must not proceed. The file is retained
+    #: rather than cleared so the audit trail keeps WHY the run stopped and
+    #: what was rejected; :func:`~.approval.enforce_resume_authorization`
+    #: refuses any resume, and no approval overrides it.
+    status: Literal["pending", "approved", "rejected"] = "pending"
     #: Stale-pause expiry (RFC §5, P0-5): a resume attempted more than this many
     #: seconds after ``created_at`` is REFUSED (:class:`~.approval.PauseExpired`)
     #: -- the app state a stale checkpoint expects can no longer be trusted.

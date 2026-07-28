@@ -165,7 +165,10 @@ class AttendedPauseCapability(BaseModel):
     delivery_state: Literal["not_delivered", "delivered", "unknown"] = "unknown"
     issued_at: str
     expires_at: str
-    allowed_actions: tuple[Literal["continue", "skip", "teach", "escalate"], ...] = (
+    allowed_actions: tuple[
+        Literal["continue", "skip", "reject", "teach", "escalate"], ...
+    ] = (
+        "reject",
         "teach",
         "escalate",
     )
@@ -197,7 +200,13 @@ class AttendedActionRequest(BaseModel):
         max_length=200,
         pattern=r"^[A-Za-z0-9._:-]+$",
     )
-    action: Literal["continue", "skip", "teach", "escalate"]
+    action: Literal["continue", "skip", "reject", "teach", "escalate"]
+    #: Closed cause, never free text. ``rejected_by_operator`` is the only
+    #: cause of a rejection today. A richer disagreement taxonomy would make
+    #: the answer distribution more informative, but there is no evidence yet
+    #: for what its members should be -- the reject rate is the data that would
+    #: design them -- and adding members here later is additive, whereas a
+    #: free-text reason could never be closed again.
     disposition: Optional[
         Literal[
             "completed_by_operator",
@@ -205,6 +214,7 @@ class AttendedActionRequest(BaseModel):
             "cannot_complete",
             "needs_assistance",
             "teach_requested",
+            "rejected_by_operator",
         ]
     ] = None
 
@@ -229,7 +239,7 @@ class AttendedDecision(BaseModel):
     capability_digest: str
     request_digest: str
     idempotency_key: str
-    action: Literal["continue", "skip", "teach", "escalate"]
+    action: Literal["continue", "skip", "reject", "teach", "escalate"]
     operator: str
     disposition: Optional[str] = None
     status: Literal[
@@ -241,6 +251,7 @@ class AttendedDecision(BaseModel):
         "halted",
         "needs_demonstration",
         "escalated",
+        "rejected",
     ]
     message: str
     created_at: str = Field(default_factory=lambda: _iso(_now()))
@@ -359,12 +370,47 @@ def _allowed_actions(
     pending: PendingEscalation,
     baseline: SignedTransitionBaseline,
     manifest: Any,
-) -> tuple[Literal["continue", "skip", "teach", "escalate"], ...]:
-    """Derive mutation authority from the exact workflow step semantics."""
-    actions: list[Literal["continue", "skip", "teach", "escalate"]] = [
+) -> tuple[Literal["continue", "skip", "reject", "teach", "escalate"], ...]:
+    """Derive mutation authority from the exact workflow step semantics.
+
+    ``reject`` is offered at every pause EXCEPT one where the runtime
+    POSITIVELY recorded that this step may already have actuated, and that
+    exception is the whole of its gating.
+
+    It is deliberately not gated on halt category. Rejecting asserts something
+    about THIS RUN -- that it must not proceed -- which an operator looking at
+    the live application can conclude at a resolution halt as readily as at an
+    effect halt. Gating on category would remove it from exactly the halts
+    where ``continue`` IS offered (those with postconditions and a usable
+    baseline) and leave it only where ``continue`` often is not, which inverts
+    the reason it exists: the pressure toward the agreeable one-tap answer
+    lives wherever the agreeable answer is one tap.
+
+    An uncertain delivery is different in kind. The action may already have
+    landed, so a button reading "stop this" would imply a write was prevented
+    that may not have been, and the operator's task there is reconciliation
+    rather than termination. ``escalate`` keeps the pause and hands it to
+    someone who can reconcile; that is the correct path, so ``reject`` is
+    withheld.
+
+    Note what this does NOT read. ``_delivery_state`` is fail-closed and
+    returns ``unknown`` for most halts simply because nothing proved
+    non-delivery -- gating on it would withhold ``reject`` from nearly every
+    pause and quietly undo the whole point. The gate is
+    ``pending.delivery_uncertainty``, which exists only where the runtime
+    recorded a real post-delivery uncertainty. :func:`execute_attended_action`
+    adds the matching live-journal check, because a delivery can become
+    uncertain AFTER this capability was issued.
+    """
+    actions: list[Literal["continue", "skip", "reject", "teach", "escalate"]] = [
         "teach",
         "escalate",
     ]
+    # Reject needs no step semantics: it neither actuates nor resumes, so it is
+    # available even where the pause carries no resolvable action step at all
+    # (a non-action program pause), unlike continue and skip below.
+    if pending.delivery_uncertainty is None:
+        actions.insert(0, "reject")
     step: Optional[Step]
     if pending.program:
         state = _program_pause_state(workflow, pending)
@@ -662,6 +708,7 @@ class AttendedActionStore:
         # baseline and capability signature one stable per-run trust root.
         self._key(create=True)
         baseline = self._transition_baseline(transition_observation)
+        delivery_state = _delivery_state(result)
         allowed_actions = _allowed_actions(workflow, pending, baseline, manifest)
         event_sequence = 1
         if self.capability_path.is_file():
@@ -728,7 +775,7 @@ class AttendedActionStore:
             expected_transition_digest=_digest(transition),
             program_cursor_digest=_program_cursor_digest(pending),
             transition_baseline=baseline,
-            delivery_state=_delivery_state(result),
+            delivery_state=delivery_state,
             issued_at=_iso(now),
             expires_at=_iso(now + timedelta(seconds=max(1.0, ttl_s))),
             allowed_actions=allowed_actions,
@@ -1022,6 +1069,85 @@ def attended_capability_summary(
     }
 
 
+def _refuse_rejected_pause(pending: PendingEscalation) -> None:
+    """Refuse every attended action on a pause an operator already rejected.
+
+    A rejection is terminal, so a second answer -- from a stale phone tab, a
+    retried relay, or a different operator -- must not reopen the run. This is
+    checked before and again under the single-flight lease, because the first
+    read happens before the lock is held.
+    """
+    if getattr(pending, "status", "pending") == "rejected":
+        raise AttendedActionRefused(
+            "this run was rejected by an operator and is terminal; no further "
+            "attended action can be taken on it"
+        )
+
+
+def _terminate_rejected_run(
+    run_dir: Path,
+    checkpoints: CheckpointStore,
+    pending: PendingEscalation,
+) -> Optional[str]:
+    """End a run an operator rejected, and record the terminal outcome.
+
+    Two durable artifacts, and both matter.
+
+    The PAUSE is rewritten with ``status="rejected"`` rather than cleared.
+    Clearing it would make the run look like one that was never paused, and the
+    reason it stopped is precisely what an auditor needs; keeping it also makes
+    the refusal in :func:`~.approval.enforce_resume_authorization` reachable, so
+    "terminal" is enforced rather than merely reported.
+
+    The REPORT gets ``canceled=True`` and a re-derived ``transaction_outcome``.
+    This is the consequential design call, and the important part is what it
+    does NOT do: it does not force ``CANCELED``. It states the human intent and
+    lets :func:`~openadapt_flow.transaction.classify_transaction_outcome` decide
+    what the evidence supports. A rejection over a run whose consequential steps
+    are positively proven effect-free is ``CANCELED``. A rejection over one that
+    may have written is still ``RECONCILIATION_REQUIRED`` -- an operator tapping
+    "stop" must never be able to convert an unreconciled write into a clean bill
+    of health, and the absence-proof gate that prevents it is the same one every
+    other absence-asserting outcome passes through.
+
+    ``execution_outcome`` is deliberately untouched. The run really did HALT;
+    ``transaction_outcome`` refines what is known about the business effect
+    without rewriting the coarse lifecycle, which is the contract the
+    transaction module documents.
+
+    Returns the terminal transaction outcome, or ``None`` when no readable
+    report exists. A missing report does not block the rejection: the run is
+    terminated by the pause status either way, and refusing to let an operator
+    stop a run because its report is unreadable would be the wrong failure.
+    """
+    from openadapt_flow.ir import RunReport
+    from openadapt_flow.transaction import classify_transaction_outcome
+
+    checkpoints.write_pending(pending.model_copy(update={"status": "rejected"}))
+
+    # Read the report directly rather than through the console's loader: the
+    # console is an optional extra and a presentation layer, and the runtime
+    # must not acquire a dependency on it to end a run.
+    try:
+        report = RunReport.model_validate_json(
+            (run_dir / "report.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return None
+    report.canceled = True
+    outcome = classify_transaction_outcome(report)
+    report.transaction_outcome = outcome.value
+    report.transaction_billable = outcome.is_billable
+    report.transaction_platform_fault = outcome.is_platform_fault
+    # Atomic, because a torn report.json would lose the only machine-readable
+    # record that this run is over.
+    target = run_dir / "report.json"
+    tmp = target.with_suffix(".json.rejecting")
+    tmp.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    os.replace(tmp, target)
+    return outcome.value
+
+
 def _approval(
     capability: AttendedPauseCapability,
     *,
@@ -1061,6 +1187,7 @@ def execute_attended_action(
         "skip": {None, "not_applicable"},
         "teach": {None, "teach_requested"},
         "escalate": {None, "cannot_complete", "needs_assistance"},
+        "reject": {None, "rejected_by_operator"},
     }
     if request.disposition not in expected_dispositions[request.action]:
         raise AttendedActionRefused(
@@ -1082,6 +1209,7 @@ def execute_attended_action(
     manifest = checkpoints.read_manifest()
     if pending is None or manifest is None:
         raise AttendedActionRefused("the run is not durably paused")
+    _refuse_rejected_pause(pending)
     capability = actions.validate(request, pending=pending, manifest=manifest, now=now)
 
     with actions.lease(request, now=now):
@@ -1091,6 +1219,7 @@ def execute_attended_action(
         manifest = checkpoints.read_manifest()
         if pending is None or manifest is None:
             raise AttendedActionRefused("the run is no longer durably paused")
+        _refuse_rejected_pause(pending)
         capability = actions.validate(
             request, pending=pending, manifest=manifest, now=now
         )
@@ -1110,6 +1239,51 @@ def execute_attended_action(
                 "another request for this pause may have crossed the delivery "
                 "boundary; reconcile its live state before continuing or skipping"
             )
+
+        if request.action == "reject":
+            # Two authorities, and neither subsumes the other.
+            #
+            # The SEALED one is already enforced above by
+            # `AttendedActionStore.validate`: a pause issued over an uncertain
+            # delivery never carried `reject` in its signed action set, so the
+            # request never reaches here.
+            #
+            # This is the LIVE one. A delivery can become uncertain AFTER the
+            # capability was sealed, when another request for this same pause
+            # crosses the boundary without returning a terminal receipt. The
+            # signed capability cannot see that, so the journal is re-read.
+            # Dropping this check would leave a real pause unguarded.
+            # `_allowed_actions` explains why an uncertain delivery is the one
+            # pause reject is withheld on.
+            if unresolved is not None:
+                raise AttendedActionRefused(
+                    "this action may already have been delivered; ending the "
+                    "run cannot un-send it and would remove the pause needed "
+                    "to reconcile. Escalate it instead"
+                )
+            terminal = _terminate_rejected_run(run_dir, checkpoints, pending)
+            decision = AttendedDecision(
+                pause_id=capability.pause_id,
+                capability_digest=capability.digest,
+                request_digest=request_digest,
+                idempotency_key=request.idempotency_key,
+                action=request.action,
+                operator=operator,
+                disposition=request.disposition or "rejected_by_operator",
+                status="rejected",
+                message=(
+                    "Rejection recorded and the run is over. Nothing was "
+                    "actuated, the durable pause is retained as the audit "
+                    "record of what was rejected, and no approval can resume "
+                    "it. The terminal transaction outcome is "
+                    f"{terminal or 'unrecorded (no readable run report)'}. "
+                    "Start a fresh run if the workflow should be attempted "
+                    "again."
+                ),
+                next_transition=capability.expected_next_transition,
+            )
+            actions.append(decision)
+            return decision
 
         if request.action == "teach":
             decision = AttendedDecision(

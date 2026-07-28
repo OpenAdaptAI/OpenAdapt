@@ -233,7 +233,17 @@ def attention_item(root: Path, path: Path) -> Optional[AttentionItem]:
         status = report.execution_outcome.lower()
     if pending is not None:
         raw_status = pending.get("status")
-        status = raw_status if raw_status in {"pending", "approved"} else "pending"
+        status = (
+            raw_status
+            if raw_status in {"pending", "approved", "rejected"}
+            else "pending"
+        )
+    # An operator ENDED this run at its pause. The file survives as the audit
+    # record of what was rejected, but the run is terminal: it is no longer
+    # awaiting an answer, and leaving it "durably paused" would keep offering
+    # an answerable question the engine must refuse -- the dangling pause the
+    # reject action exists to avoid.
+    rejected = pending is not None and pending.get("status") == "rejected"
 
     before_id, after_id = _artifact_ids(failed, failed_index)
     observed_count = (
@@ -254,7 +264,7 @@ def attention_item(root: Path, path: Path) -> Optional[AttentionItem]:
         next_action=next_action,
         status=status,
         human_required=category == "human_required",
-        durably_paused=pending is not None or encrypted_pause,
+        durably_paused=(pending is not None or encrypted_pause) and not rejected,
         encrypted_pause=encrypted_pause,
         observed_text_count=observed_count,
         completed_intent_count=completed_count,
