@@ -15,8 +15,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  artifact-scope:
+    name: Select artifact scope
+    runs-on: ubuntu-22.04
+    outputs:
+      run_sidecar: ${{ steps.scope.outputs.run_sidecar }}
+      run_native: ${{ steps.scope.outputs.run_native }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+
+      - name: Classify changed files before expensive builds
+        id: scope
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_paths="${RUNNER_TEMP}/openadapt-desktop-changed-paths.txt"
+          : > "${changed_paths}"
+          if [ "${EVENT_NAME}" = "push" ]; then
+            before="${BEFORE_SHA}"
+            if [ -z "${before}" ] || [ "${before}" = "0000000000000000000000000000000000000000" ]; then
+              before="$(git rev-parse HEAD^)"
+            fi
+            git diff --name-only "${before}" HEAD > "${changed_paths}"
+          fi
+          python scripts/classify_build_changes.py \
+            --event "${EVENT_NAME}" \
+            --paths-file "${changed_paths}" \
+            --github-output "${GITHUB_OUTPUT}"
+
   frontend:
     name: Frontend behavior and build
+    needs: artifact-scope
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,6 +68,7 @@ jobs:
 
   python-distribution:
     name: Python distribution
+    needs: artifact-scope
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,12 +97,14 @@ jobs:
 
   python-sidecar:
     name: Python sidecar (${{ matrix.os }})
+    needs: artifact-scope
+    if: needs.artifact-scope.outputs.run_sidecar == 'true'
     strategy:
       fail-fast: false
       matrix:
-        # PRs prove the frozen-engine contract once on Linux. The exact main
-        # commit rebuilds it on every supported OS before release, avoiding
-        # two expensive duplicate platform builds on every review push.
+        # PRs prove the frozen-engine contract once on Linux. Main repeats the
+        # complete matrix for dependency, toolchain, packaging, and native
+        # changes. Immutable native release tags rebuild every supported OS.
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -103,11 +140,13 @@ jobs:
 
   native-installers:
     name: Native installer (${{ matrix.label }})
-    # Installer packaging, installation, launch, uninstall, and checksums are
-    # exact-main/release evidence. PRs already exercise the frontend, Python
-    # distribution, and representative frozen sidecar without paying for four
-    # complete installer builds on each incremental push.
-    if: github.event_name != 'pull_request'
+    needs: artifact-scope
+    # Main runs this evidence for dependency, toolchain, packaging, and native
+    # changes. Application-only merges already pass the PR checks and the
+    # exact-main frontend, distribution, and cross-platform test jobs. Every
+    # immutable desktop-v* release tag rebuilds and tests all installers in the
+    # separate Native Installer Release workflow.
+    if: needs.artifact-scope.outputs.run_native == 'true'
     strategy:
       fail-fast: false
       matrix:
