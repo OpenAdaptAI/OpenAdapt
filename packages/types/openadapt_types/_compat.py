@@ -26,6 +26,22 @@ from typing import Any, Optional
 from .action import Action, ActionTarget, ActionType
 from .computer_state import BoundingBox, ComputerState, UINode
 
+#: Marker placed in ``Action.raw`` when the source action type was absent or
+#: unrecognized. These converters previously substituted ``ActionType.DONE``,
+#: which a runner reads as "the task completed successfully" - so an
+#: unconvertible record became a successful terminal step. ``ActionType.FAIL``
+#: keeps "could not convert" distinguishable from "the agent finished".
+UNCONVERTIBLE_ACTION_KEY = "unconvertible_action_type"
+
+
+def _unconvertible_action(reason: str, source: dict[str, Any]) -> Action:
+    """Return a FAIL action naming why the source action could not convert."""
+    return Action(
+        type=ActionType.FAIL,
+        reasoning=f"conversion failure: {reason}",
+        raw={UNCONVERTIBLE_ACTION_KEY: reason, "source": source},
+    )
+
 
 # =====================================================================
 # From openadapt_evals.adapters.base (dataclass dicts)
@@ -75,11 +91,15 @@ def from_benchmark_action(act: dict[str, Any]) -> Action:
     - ``answer`` → ``answer``
     - ``raw_action`` → ``raw``
     """
-    action_type_str = act.get("type", "done")
+    if act.get("type") is None:
+        return _unconvertible_action("BenchmarkAction has no 'type' field", act)
+    action_type_str = act["type"]
     try:
         action_type = ActionType(action_type_str)
     except ValueError:
-        action_type = ActionType.DONE
+        return _unconvertible_action(
+            f"unknown BenchmarkAction type {action_type_str!r}", act
+        )
 
     # Build target
     target = None
@@ -133,11 +153,15 @@ def from_ml_observation(obs: dict[str, Any]) -> ComputerState:
 def from_ml_action(act: dict[str, Any]) -> Action:
     """Convert an ``openadapt_ml.schema.episode.Action.model_dump()``
     to :class:`Action`."""
-    action_type_str = act.get("type", "done")
+    if act.get("type") is None:
+        return _unconvertible_action("openadapt-ml action has no 'type' field", act)
+    action_type_str = act["type"]
     try:
         action_type = ActionType(action_type_str)
     except ValueError:
-        action_type = ActionType.DONE
+        return _unconvertible_action(
+            f"unknown openadapt-ml action type {action_type_str!r}", act
+        )
 
     # Coordinates
     target = None
@@ -230,7 +254,9 @@ def from_omnimcp_action_decision(decision: dict[str, Any]) -> Action:
     - ``parameters`` → keyboard/scroll/wait params
     - ``analysis_reasoning`` → ``reasoning``
     """
-    action_type_str = decision.get("action_type", "done")
+    if decision.get("action_type") is None:
+        return _unconvertible_action("ActionDecision has no 'action_type' field", decision)
+    action_type_str = decision["action_type"]
     type_map = {
         "click": ActionType.CLICK,
         "type": ActionType.TYPE,
@@ -240,7 +266,11 @@ def from_omnimcp_action_decision(decision: dict[str, Any]) -> Action:
         "finish": ActionType.DONE,
         "launch_app": ActionType.OPEN_APP,
     }
-    action_type = type_map.get(action_type_str, ActionType.DONE)
+    if action_type_str not in type_map:
+        return _unconvertible_action(
+            f"unknown omnimcp action_type {action_type_str!r}", decision
+        )
+    action_type = type_map[action_type_str]
 
     target = None
     elem_id = decision.get("target_element_id")

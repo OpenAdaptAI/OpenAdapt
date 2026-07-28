@@ -20,6 +20,8 @@ Quick start::
     )
 """
 
+from importlib import metadata
+
 from openadapt_types.action import (
     Action,
     ActionResult,
@@ -103,6 +105,7 @@ from openadapt_types.human_decision import (
     sign_human_decision_task_hmac,
 )
 from openadapt_types.parsing import (
+    PARSE_ERROR_KEY,
     from_benchmark_action,
     parse_action,
     parse_action_dsl,
@@ -110,7 +113,12 @@ from openadapt_types.parsing import (
     to_benchmark_action_dict,
 )
 
-__version__ = "0.1.0"
+try:
+    __version__ = metadata.version("openadapt-types")
+except metadata.PackageNotFoundError:  # pragma: no cover - source checkout only
+    # Never report a hard-coded version. An unmeasurable version is reported as
+    # unknown so a caller cannot mistake a stale literal for the installed one.
+    __version__ = "unknown"
 
 __all__ = [
     # computer_state
@@ -194,6 +202,7 @@ __all__ = [
     "sign_human_decision_receipt_hmac",
     "sign_human_decision_task_hmac",
     # parsing
+    "PARSE_ERROR_KEY",
     "from_benchmark_action",
     "parse_action",
     "parse_action_dsl",

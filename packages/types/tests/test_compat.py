@@ -2,6 +2,7 @@
 
 from openadapt_types import ActionType, ComputerState
 from openadapt_types._compat import (
+    UNCONVERTIBLE_ACTION_KEY,
     from_benchmark_action,
     from_benchmark_observation,
     from_ml_action,
@@ -67,7 +68,10 @@ class TestBenchmarkCompat:
     def test_unknown_type(self):
         act = {"type": "some_future_action"}
         action = from_benchmark_action(act)
-        assert action.type == ActionType.DONE  # fallback
+        # An unconvertible action is FAIL, never DONE. DONE would report the
+        # unreadable record as a completed task.
+        assert action.type == ActionType.FAIL
+        assert UNCONVERTIBLE_ACTION_KEY in action.raw
 
 
 class TestMLCompat:

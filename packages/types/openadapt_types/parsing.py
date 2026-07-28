@@ -2,8 +2,15 @@
 
 Converts multiple input formats into the canonical :class:`openadapt_types.Action`
 model.  Every public function is safe to call with arbitrary input -- malformed
-data yields ``Action(type=ActionType.DONE)`` with a logged warning instead of
+data yields ``Action(type=ActionType.FAIL)`` with a logged warning instead of
 raising.
+
+A parse failure is reported as ``ActionType.FAIL``, never ``ActionType.DONE``.
+``DONE`` means the agent finished the task; a runner treats it as a successful
+terminal state. Returning it for input the parser could not read made an
+unreadable model response indistinguishable from a completed task. The failure
+Action carries the reason in ``Action.reasoning`` and in
+``Action.raw[PARSE_ERROR_KEY]``.
 
 Supported input formats
 -----------------------
@@ -83,10 +90,27 @@ def _make_target(
     )
 
 
-def _done(reason: str) -> Action:
-    """Return a DONE action and log a warning."""
-    logger.warning("Falling back to DONE: %s", reason)
-    return Action(type=ActionType.DONE)
+#: Marker placed in ``Action.raw`` when the parser could not parse its input.
+#: Its presence is the machine-checkable "this action was never parsed" signal.
+PARSE_ERROR_KEY = "parse_error"
+
+
+def _failed(reason: str) -> Action:
+    """Return a FAIL action carrying the reason, and log a warning.
+
+    A parse failure must not be reported as ``ActionType.DONE``. ``DONE`` is a
+    real, terminal, successful outcome: it means the agent completed the task.
+    Returning it for unparseable input made "the model said it finished" and
+    "we could not read the model's output at all" the same value, so a runner
+    ended the episode as a success. ``ActionType.FAIL`` exists for exactly this
+    and forces the caller to handle the two cases apart.
+    """
+    logger.warning("Parse failed: %s", reason)
+    return Action(
+        type=ActionType.FAIL,
+        reasoning=f"parse failure: {reason}",
+        raw={PARSE_ERROR_KEY: reason},
+    )
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -152,11 +176,11 @@ def parse_action_dsl(text: str) -> Action:
     Returns
     -------
     Action
-        Parsed action, or ``Action(type=ActionType.DONE)`` on failure.
+        Parsed action, or ``Action(type=ActionType.FAIL)`` on failure.
     """
     text = text.strip()
     if not text:
-        return _done("empty DSL input")
+        return _failed("empty DSL input")
 
     # Extract thought and action call
     thought: Optional[str] = None
@@ -172,7 +196,7 @@ def parse_action_dsl(text: str) -> Action:
             action_call = m2.group("action_call")
 
     if not action_call:
-        return _done(f"no DSL action call found in: {text!r}")
+        return _failed(f"no DSL action call found in: {text!r}")
 
     # Split name and args
     paren_idx = action_call.index("(")
@@ -181,7 +205,7 @@ def parse_action_dsl(text: str) -> Action:
 
     action_type = _resolve_action_type(action_name)
     if action_type is None:
-        return _done(f"unknown action type: {action_name!r}")
+        return _failed(f"unknown action type: {action_name!r}")
 
     args = _parse_dsl_args(args_str)
 
@@ -192,7 +216,7 @@ def parse_action_dsl(text: str) -> Action:
     try:
         return _build_action_from_parsed(action_type, args, reasoning=thought)
     except Exception as exc:
-        return _done(f"failed to build action: {exc}")
+        return _failed(f"failed to build action: {exc}")
 
 
 def _build_action_from_parsed(
@@ -206,7 +230,7 @@ def _build_action_from_parsed(
 
     # Validate coordinates -- if they were supposed to be numbers but aren't
     if ("x" in args and x is None) or ("y" in args and y is None):
-        return _done(f"malformed coordinates: x={args.get('x')!r}, y={args.get('y')!r}")
+        return _failed(f"malformed coordinates: x={args.get('x')!r}, y={args.get('y')!r}")
 
     kwargs: dict[str, Any] = {"type": action_type, "reasoning": reasoning}
 
@@ -214,7 +238,7 @@ def _build_action_from_parsed(
         end_x = _safe_float(args.get("end_x"))
         end_y = _safe_float(args.get("end_y"))
         if end_x is None or end_y is None:
-            return _done("DRAG requires end_x and end_y")
+            return _failed("DRAG requires end_x and end_y")
         kwargs["target"] = _make_target(x, y)
         kwargs["drag_end"] = _make_target(end_x, end_y)
     elif x is not None and y is not None:
@@ -235,7 +259,7 @@ def _build_action_from_parsed(
     try:
         return Action(**kwargs)
     except ValidationError as exc:
-        return _done(f"validation error: {exc}")
+        return _failed(f"validation error: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -265,11 +289,11 @@ def parse_action_json(text: str) -> Action:
     Returns
     -------
     Action
-        Parsed action, or ``Action(type=ActionType.DONE)`` on failure.
+        Parsed action, or ``Action(type=ActionType.FAIL)`` on failure.
     """
     text = text.strip()
     if not text:
-        return _done("empty JSON input")
+        return _failed("empty JSON input")
 
     # Strip markdown fences
     fence_match = _FENCE_RE.search(text)
@@ -279,17 +303,17 @@ def parse_action_json(text: str) -> Action:
     # Find first JSON object
     json_match = _JSON_OBJECT_RE.search(text)
     if not json_match:
-        return _done(f"no JSON object found in: {text[:100]!r}")
+        return _failed(f"no JSON object found in: {text[:100]!r}")
 
     json_str = json_match.group(0)
 
     try:
         data = json.loads(json_str)
     except json.JSONDecodeError as exc:
-        return _done(f"invalid JSON: {exc}")
+        return _failed(f"invalid JSON: {exc}")
 
     if not isinstance(data, dict):
-        return _done(f"JSON is not an object: {type(data)}")
+        return _failed(f"JSON is not an object: {type(data)}")
 
     return _parse_json_dict(data)
 
@@ -299,11 +323,11 @@ def _parse_json_dict(data: dict[str, Any]) -> Action:
     # Normalize type field
     raw_type = data.get("type") or data.get("action_type") or data.get("action")
     if raw_type is None:
-        return _done("JSON missing 'type' or 'action_type' field")
+        return _failed("JSON missing 'type' or 'action_type' field")
 
     action_type = _resolve_action_type(str(raw_type))
     if action_type is None:
-        return _done(f"unknown action type in JSON: {raw_type!r}")
+        return _failed(f"unknown action type in JSON: {raw_type!r}")
 
     # Extract reasoning from various field names
     reasoning = (
@@ -385,7 +409,7 @@ def _parse_json_dict(data: dict[str, Any]) -> Action:
     try:
         return Action(**kwargs)
     except ValidationError as exc:
-        return _done(f"validation error: {exc}")
+        return _failed(f"validation error: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +421,7 @@ def parse_action(text: str) -> Action:
     """Auto-detect format and parse *text* into an :class:`Action`.
 
     Tries JSON first if the text looks like it contains JSON, otherwise
-    tries DSL.  Falls back to ``Action(type=ActionType.DONE)`` on failure.
+    tries DSL.  Falls back to ``Action(type=ActionType.FAIL)`` on failure.
 
     Parameters
     ----------
@@ -411,17 +435,17 @@ def parse_action(text: str) -> Action:
     """
     text = text.strip()
     if not text:
-        return _done("empty input")
+        return _failed("empty input")
 
     # Heuristic: if it looks like JSON, try JSON first
     if "{" in text:
         result = parse_action_json(text)
-        if result.type != ActionType.DONE:
+        if result.type != ActionType.FAIL:
             return result
-        # JSON parse returned DONE -- might be DSL with a brace in argument
-        # Try DSL as well
+        # JSON parse failed -- might be DSL with a brace in an argument.
+        # Try DSL as well.
         dsl_result = parse_action_dsl(text)
-        if dsl_result.type != ActionType.DONE:
+        if dsl_result.type != ActionType.FAIL:
             return dsl_result
         # Both failed, return the JSON result (first attempt)
         return result
@@ -450,18 +474,18 @@ def from_benchmark_action(data: dict[str, Any]) -> Action:
     Returns
     -------
     Action
-        Converted action, or ``Action(type=ActionType.DONE)`` on failure.
+        Converted action, or ``Action(type=ActionType.FAIL)`` on failure.
     """
     if not isinstance(data, dict):
-        return _done(f"expected dict, got {type(data)}")
+        return _failed(f"expected dict, got {type(data)}")
 
     raw_type = data.get("type") or data.get("action_type")
     if raw_type is None:
-        return _done("BenchmarkAction missing 'type' field")
+        return _failed("BenchmarkAction missing 'type' field")
 
     action_type = _resolve_action_type(str(raw_type))
     if action_type is None:
-        return _done(f"unknown action type: {raw_type!r}")
+        return _failed(f"unknown action type: {raw_type!r}")
 
     # Build target
     x = _safe_float(data.get("x"))
@@ -509,7 +533,7 @@ def from_benchmark_action(data: dict[str, Any]) -> Action:
     try:
         return Action(**kwargs)
     except ValidationError as exc:
-        return _done(f"validation error from BenchmarkAction: {exc}")
+        return _failed(f"validation error from BenchmarkAction: {exc}")
 
 
 def to_benchmark_action_dict(action: Action) -> dict[str, Any]:

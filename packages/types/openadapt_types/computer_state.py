@@ -240,10 +240,20 @@ class ComputerState(BaseModel):
         return None
 
     def get_children(self, node_id: str) -> list[UINode]:
-        """Return direct children of *node_id*."""
+        """Return direct children of *node_id*.
+
+        Raises:
+            KeyError: If *node_id* is not in this state. An unknown node and a
+                childless node previously both returned ``[]``, so a caller
+                querying a stale or mistyped id observed "this element has no
+                children" instead of "this element is not here".
+        """
         node = self.get_node(node_id)
-        if not node:
-            return []
+        if node is None:
+            raise KeyError(
+                f"node_id {node_id!r} is not in this ComputerState; "
+                "an unknown node is not a node without children"
+            )
         return [n for n in self.nodes if n.node_id in node.children_ids]
 
     def to_text_tree(self, max_depth: int = 5) -> str:

@@ -5,6 +5,7 @@ import json
 import pytest
 
 from openadapt_types import (
+    PARSE_ERROR_KEY,
     Action,
     ActionTarget,
     ActionType,
@@ -37,7 +38,8 @@ class TestParseDSL:
 
     def test_click_malformed_coords_dots(self):
         action = parse_action_dsl('CLICK(x="...", y=0.3)')
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
+        assert PARSE_ERROR_KEY in action.raw
 
     def test_click_malformed_coords_negative(self):
         # Negative coordinates get clamped for normalized, but for pixels
@@ -60,9 +62,10 @@ class TestParseDSL:
         assert action.text == 'say "hi"'
 
     def test_type_empty_text(self):
-        # Empty text violates TYPE validation -> DONE
+        # Empty text violates TYPE validation -> FAIL, never DONE
         action = parse_action_dsl('TYPE(text="")')
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
+        assert PARSE_ERROR_KEY in action.raw
 
     def test_key_standard(self):
         action = parse_action_dsl('KEY(key="enter")')
@@ -127,19 +130,19 @@ class TestParseDSL:
 
     def test_empty_input(self):
         action = parse_action_dsl("")
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_garbage_input(self):
         action = parse_action_dsl("just some random text with no action")
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_unknown_action_type(self):
         action = parse_action_dsl("FOOBAR(x=0.5, y=0.3)")
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_drag_missing_end_coords(self):
         action = parse_action_dsl("DRAG(x=0.1, y=0.2)")
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
 
 # ── JSON Parsing ─────────────────────────────────────────────────────
@@ -202,12 +205,12 @@ class TestParseJSON:
     def test_invalid_json(self):
         text = '{not valid json at all'
         action = parse_action_json(text)
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_unknown_type(self):
         text = '{"type": "teleport", "x": 0.5, "y": 0.3}'
         action = parse_action_json(text)
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_type_action(self):
         text = '{"type": "type", "text": "hello"}'
@@ -223,16 +226,16 @@ class TestParseJSON:
 
     def test_empty_input(self):
         action = parse_action_json("")
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_no_json_object(self):
         action = parse_action_json("just plain text no braces")
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_missing_type_field(self):
         text = '{"x": 0.5, "y": 0.3}'
         action = parse_action_json(text)
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_scroll_action(self):
         text = '{"type": "scroll", "scroll_direction": "down", "scroll_amount": 3}'
@@ -273,13 +276,13 @@ class TestParseAction:
         assert action.type == ActionType.CLICK
         assert action.target.x == pytest.approx(0.5)
 
-    def test_garbage_returns_done(self):
+    def test_garbage_returns_fail_not_done(self):
         action = parse_action("some random garbage")
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
-    def test_empty_returns_done(self):
+    def test_empty_returns_fail_not_done(self):
         action = parse_action("")
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_json_with_fences(self):
         action = parse_action('```json\n{"type": "type", "text": "hello"}\n```')
@@ -361,12 +364,12 @@ class TestBenchmarkAction:
     def test_missing_type(self):
         data = {"x": 0.5, "y": 0.3}
         action = from_benchmark_action(data)
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
     def test_unknown_type(self):
         data = {"type": "teleport", "x": 0.5, "y": 0.3}
         action = from_benchmark_action(data)
-        assert action.type == ActionType.DONE
+        assert action.type == ActionType.FAIL
 
 
 class TestToBenchmarkActionDict:
