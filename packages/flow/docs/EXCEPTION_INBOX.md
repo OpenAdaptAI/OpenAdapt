@@ -78,6 +78,16 @@ capability, allowed operation, expected transition, expiry, and idempotency
 scope. A signed task is presentation integrity, not execution authority, and a
 relayed answer is neither.
 
+`console.decision_supervisor.DecisionSupervisor` drives that transport for a
+whole `runs` root, so an open pause is published without a caller, and an
+answered decision is matched back to the pause it was minted from — by task id
+and capability digest, re-read at decision time — before it is executed. A
+decision that matches no currently open pause is acknowledged `stale`; one whose
+deadline has passed or cannot be parsed is acknowledged `expired`. Neither is
+executed. `console --attend --allow-actions --remote-decisions` starts it beside
+the loopback server, and every misconfiguration stops the console rather than
+disabling the lane silently.
+
 After a returned Continue, OpenAdapt observes a newly settled live frame,
 rechecks the human-completed postcondition and configured effect, proves the
 next state/target and armed identity, and commits the exact pause transition.

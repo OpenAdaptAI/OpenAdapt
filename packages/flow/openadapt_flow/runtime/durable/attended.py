@@ -24,11 +24,13 @@ import hmac
 import json
 import os
 import secrets
+import stat
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal, Optional, Protocol
+from typing import Any, Callable, Iterator, Literal, Optional, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -58,10 +60,14 @@ CAPABILITY_FILENAME = "attended_capability.json"
 CAPABILITY_HISTORY_FILENAME = "attended_capability_history.json"
 CAPABILITY_KEY_FILENAME = ".attended_capability.key"
 DECISIONS_FILENAME = "attended_decisions.json"
+DECISIONS_LOCK_FILENAME = ".attended_decisions.lock"
 LEASE_FILENAME = ".attended_action.lease"
 PROGRAM_RECEIPTS_DIRNAME = ".attended_program_receipts"
+RELAY_ACK_RECORD_DOMAIN = b"openadapt:relay-ack-record-v1\0"
+RELAY_ACK_WORKFLOW_DOMAIN = b"openadapt:relay-ack-workflow-v1\0"
 DEFAULT_CAPABILITY_TTL_S = 24 * 3600.0
 DEFAULT_LEASE_TTL_S = 15 * 60.0
+DEFAULT_DECISION_LOG_LOCK_TIMEOUT_S = 5.0
 
 
 def _now() -> datetime:
@@ -260,9 +266,82 @@ class AttendedDecision(BaseModel):
     transition_receipt_digest: Optional[str] = None
 
 
+class AttendedRelayBinding(BaseModel):
+    """Exact signed hosted decision bound to one retained engine outcome."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    decision_id: str = Field(
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$",
+    )
+    relay_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    relay_signature: str = Field(pattern=r"^hmac-sha256:[0-9a-f]{64}$")
+    idempotency_key: str = Field(
+        min_length=16,
+        max_length=200,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    capability_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    event_sequence: int = Field(ge=1)
+    action: Literal["continue", "skip", "reject", "teach", "escalate"]
+
+
+RelayOutcomeStatus = Literal[
+    "completed",
+    "refused",
+    "halted",
+    "needs_demonstration",
+    "escalated",
+    "rejected",
+]
+
+
+class AttendedRelayAcknowledgement(AttendedRelayBinding):
+    """Durable hosted acknowledgement linked to one journaled decision."""
+
+    engine_ack_result: Literal["accepted", "refused"]
+    run_id: str
+    workflow_digest: str = Field(pattern=r"^hmac-sha256:[0-9a-f]{64}$")
+    bundle_version: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    pause_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    retained_decision_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    retained_decision_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    retained_request_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    retained_status: RelayOutcomeStatus
+    confirmed: bool = False
+    created_at: str = Field(default_factory=lambda: _iso(_now()))
+    confirmed_at: Optional[str] = None
+    record_mac: str = Field(pattern=r"^hmac-sha256:[0-9a-f]{64}$")
+
+    def unsigned(self) -> dict[str, Any]:
+        return self.model_dump(exclude={"record_mac"}, mode="json")
+
+    def binding(self) -> AttendedRelayBinding:
+        return AttendedRelayBinding.model_validate(
+            self.model_dump(
+                include={
+                    "schema_version",
+                    "decision_id",
+                    "relay_digest",
+                    "relay_signature",
+                    "idempotency_key",
+                    "capability_digest",
+                    "event_sequence",
+                    "action",
+                }
+            )
+        )
+
+
 class AttendedDecisionLog(BaseModel):
     schema_version: int = 1
     decisions: list[AttendedDecision] = Field(default_factory=list)
+    relay_acknowledgements: list[AttendedRelayAcknowledgement] = Field(
+        default_factory=list
+    )
 
 
 def _delivery_state(
@@ -491,6 +570,7 @@ class AttendedActionStore:
         self.capability_history_path = self.run_dir / CAPABILITY_HISTORY_FILENAME
         self.key_path = self.run_dir / CAPABILITY_KEY_FILENAME
         self.decisions_path = self.run_dir / DECISIONS_FILENAME
+        self.decisions_lock_path = self.run_dir / DECISIONS_LOCK_FILENAME
         self.lease_path = self.run_dir / LEASE_FILENAME
 
     @staticmethod
@@ -552,6 +632,90 @@ class AttendedActionStore:
             )
         return key
 
+    @contextmanager
+    def _decision_log_lock(
+        self,
+        *,
+        timeout_s: float = DEFAULT_DECISION_LOG_LOCK_TIMEOUT_S,
+    ) -> Iterator[None]:
+        """Serialize cross-process decision-journal read-modify-write cycles.
+
+        There is no stale automatic takeover. If a process dies while it owns
+        this lock, an operator must reconcile and remove the private lock file.
+        Guessing that a journal writer died would permit two writers to replace
+        one another's retained outcomes.
+        """
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + max(0.0, timeout_s)
+        while True:
+            try:
+                fd = os.open(
+                    self.decisions_lock_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o600,
+                )
+                break
+            except FileExistsError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise AttendedActionBusy(
+                        "the attended decision journal is being updated or "
+                        "requires operator reconciliation"
+                    ) from None
+                time.sleep(min(0.01, remaining))
+        owner_nonce = secrets.token_bytes(32)
+        owner_stat = os.fstat(fd)
+        try:
+            if os.write(fd, owner_nonce) != len(owner_nonce):
+                raise OSError("the decision journal lock nonce write was incomplete")
+            os.fsync(fd)
+            self._fsync_parent(self.decisions_lock_path)
+            yield
+        finally:
+            cleanup_error: Optional[AttendedActionBusy] = None
+            try:
+                current_lstat = os.lstat(self.decisions_lock_path)
+                same_entry = (
+                    stat.S_ISREG(current_lstat.st_mode)
+                    and current_lstat.st_dev == owner_stat.st_dev
+                    and current_lstat.st_ino == owner_stat.st_ino
+                )
+                if not same_entry:
+                    raise OSError("the lock path no longer names the owner file")
+                current_fd = os.open(
+                    self.decisions_lock_path,
+                    os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                )
+                try:
+                    current_fstat = os.fstat(current_fd)
+                    current_nonce = os.read(current_fd, len(owner_nonce) + 1)
+                finally:
+                    os.close(current_fd)
+                if (
+                    not stat.S_ISREG(current_fstat.st_mode)
+                    or current_fstat.st_dev != owner_stat.st_dev
+                    or current_fstat.st_ino != owner_stat.st_ino
+                    or not hmac.compare_digest(current_nonce, owner_nonce)
+                ):
+                    raise OSError("the lock owner nonce or file identity changed")
+                final_lstat = os.lstat(self.decisions_lock_path)
+                if (
+                    final_lstat.st_dev != owner_stat.st_dev
+                    or final_lstat.st_ino != owner_stat.st_ino
+                ):
+                    raise OSError("the lock path changed before release")
+                self.decisions_lock_path.unlink()
+                self._fsync_parent(self.decisions_lock_path)
+            except OSError:
+                cleanup_error = AttendedActionBusy(
+                    "the attended decision journal lock changed while owned; "
+                    "the replacement lock was retained for reconciliation"
+                )
+            finally:
+                os.close(fd)
+            if cleanup_error is not None:
+                raise cleanup_error
+
     def _sign(self, capability: AttendedPauseCapability, *, create_key: bool) -> str:
         return (
             "hmac-sha256:"
@@ -561,6 +725,142 @@ class AttendedActionStore:
                 hashlib.sha256,
             ).hexdigest()
         )
+
+    def _workflow_digest(self, workflow_name: str) -> str:
+        return (
+            "hmac-sha256:"
+            + hmac.new(
+                self._key(create=False),
+                RELAY_ACK_WORKFLOW_DOMAIN + workflow_name.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+        )
+
+    def _relay_ack_mac(self, record: AttendedRelayAcknowledgement) -> str:
+        return (
+            "hmac-sha256:"
+            + hmac.new(
+                self._key(create=False),
+                RELAY_ACK_RECORD_DOMAIN + _canonical(record.unsigned()),
+                hashlib.sha256,
+            ).hexdigest()
+        )
+
+    def _verify_relay_ack_mac(self, record: AttendedRelayAcknowledgement) -> None:
+        expected = self._relay_ack_mac(record)
+        if not hmac.compare_digest(record.record_mac, expected):
+            raise AttendedActionRefused(
+                "the retained relay acknowledgement HMAC does not verify"
+            )
+
+    def _signed_capabilities(self) -> list[AttendedPauseCapability]:
+        """Read and authenticate the current and historical pause authorities."""
+        if (
+            self.capability_path.is_symlink()
+            or self.capability_history_path.is_symlink()
+        ):
+            raise AttendedActionRefused(
+                "the attended capability path must not be a symlink"
+            )
+        capabilities: list[AttendedPauseCapability] = []
+        if self.capability_path.is_file():
+            try:
+                capabilities.append(
+                    AttendedPauseCapability.model_validate_json(
+                        self.capability_path.read_text()
+                    )
+                )
+            except ValueError as exc:
+                raise AttendedActionRefused(
+                    "the current attended capability is invalid"
+                ) from exc
+        if self.capability_history_path.is_file():
+            try:
+                raw_history = json.loads(self.capability_history_path.read_text())
+                if not isinstance(raw_history, list):
+                    raise ValueError("history is not a list")
+                capabilities.extend(
+                    AttendedPauseCapability.model_validate(raw) for raw in raw_history
+                )
+            except (OSError, ValueError) as exc:
+                raise AttendedActionRefused(
+                    "the attended capability history is invalid"
+                ) from exc
+        if not capabilities:
+            raise AttendedActionRefused(
+                "no signed attended capability can authenticate this relay outcome"
+            )
+        for capability in capabilities:
+            expected = self._sign(capability, create_key=False)
+            if not hmac.compare_digest(capability.signature, expected):
+                raise AttendedActionRefused(
+                    "an attended capability signature does not verify"
+                )
+        return capabilities
+
+    def _capability_for_relay_binding(
+        self,
+        binding: AttendedRelayBinding,
+    ) -> AttendedPauseCapability:
+        matches = [
+            capability
+            for capability in self._signed_capabilities()
+            if capability.digest == binding.capability_digest
+            and capability.event_sequence == binding.event_sequence
+        ]
+        if len(matches) != 1:
+            raise AttendedActionRefused(
+                "the exact signed pause capability for this relay is missing "
+                "or ambiguous"
+            )
+        return matches[0]
+
+    def _verify_relay_ack_context(
+        self,
+        record: AttendedRelayAcknowledgement,
+        *,
+        key: Optional[str] = None,
+    ) -> AttendedPauseCapability:
+        """Verify the record against its signed pause and live run manifest."""
+        capability = self._capability_for_relay_binding(record.binding())
+        if (
+            capability.run_id != record.run_id
+            or capability.bundle_version != record.bundle_version
+            or capability.pause_id != record.pause_id
+            or capability.event_sequence != record.event_sequence
+            or capability.digest != record.capability_digest
+            or self._workflow_digest(capability.workflow_name) != record.workflow_digest
+        ):
+            raise AttendedActionRefused(
+                "the retained relay acknowledgement does not match its signed "
+                "pause capability"
+            )
+
+        from openadapt_flow import crypto as _crypto
+
+        manifest = CheckpointStore(
+            self.run_dir, key=_crypto.resolve_key(key)
+        ).read_manifest()
+        if manifest is None:
+            raise AttendedActionRefused(
+                "the live run manifest is missing for relay acknowledgement recovery"
+            )
+        try:
+            live_bundle_version = bundle_version(manifest.bundle_dir)
+        except (OSError, ValueError) as exc:
+            raise AttendedActionRefused(
+                "the live bundle version cannot be verified for relay recovery"
+            ) from exc
+        if (
+            manifest.run_id != record.run_id
+            or live_bundle_version != record.bundle_version
+            or self._workflow_digest(manifest.workflow_name) != record.workflow_digest
+        ):
+            raise AttendedActionRefused(
+                "the live run manifest does not match the retained relay "
+                "acknowledgement"
+            )
+        return capability
 
     def seal_human_decision_task(self, unsigned: dict[str, Any]) -> dict[str, Any]:
         """Sign one PHI-free task projection with a separate HMAC domain.
@@ -897,12 +1197,229 @@ class AttendedActionStore:
                 return decision
         return None
 
-    def append(self, decision: AttendedDecision) -> None:
-        log = self._read_log()
-        log.decisions.append(decision)
-        self._atomic_write(
-            self.decisions_path, log.model_dump_json(indent=2).encode("utf-8")
+    def _relay_acknowledgement(
+        self,
+        binding: AttendedRelayBinding,
+        decision: AttendedDecision,
+        *,
+        key: Optional[str] = None,
+    ) -> AttendedRelayAcknowledgement:
+        if decision.status in {"prepared", "delivery_started", "delivery_uncertain"}:
+            raise AttendedActionRefused(
+                "a non-terminal engine decision cannot authorize a relay "
+                "acknowledgement"
+            )
+        capability = self._capability_for_relay_binding(binding)
+        record = AttendedRelayAcknowledgement(
+            **binding.model_dump(),
+            engine_ack_result=(
+                "refused" if decision.status == "refused" else "accepted"
+            ),
+            run_id=capability.run_id,
+            workflow_digest=self._workflow_digest(capability.workflow_name),
+            bundle_version=capability.bundle_version,
+            pause_id=capability.pause_id,
+            retained_decision_id=decision.decision_id,
+            retained_decision_digest=_digest(decision),
+            retained_request_digest=decision.request_digest,
+            retained_status=cast(RelayOutcomeStatus, decision.status),
+            record_mac="hmac-sha256:" + ("0" * 64),
         )
+        record = record.model_copy(update={"record_mac": self._relay_ack_mac(record)})
+        self._verify_relay_ack_context(record, key=key)
+        return record
+
+    def _add_relay_acknowledgement(
+        self,
+        log: AttendedDecisionLog,
+        binding: AttendedRelayBinding,
+        decision: AttendedDecision,
+        *,
+        key: Optional[str] = None,
+    ) -> None:
+        acknowledgement = self._relay_acknowledgement(binding, decision, key=key)
+        existing = [
+            record
+            for record in log.relay_acknowledgements
+            if record.decision_id == binding.decision_id
+        ]
+        if len(existing) > 1:
+            raise AttendedActionRefused(
+                "the relay decision has multiple retained acknowledgement records"
+            )
+        if existing:
+            record = existing[0]
+            self._verify_relay_ack_mac(record)
+            self._verify_relay_ack_context(record, key=key)
+            if (
+                record.binding() != binding
+                or record.engine_ack_result != acknowledgement.engine_ack_result
+                or record.retained_decision_id != acknowledgement.retained_decision_id
+                or record.retained_decision_digest
+                != acknowledgement.retained_decision_digest
+                or record.retained_request_digest
+                != acknowledgement.retained_request_digest
+                or record.retained_status != acknowledgement.retained_status
+            ):
+                raise AttendedActionRefused(
+                    "the relay decision id is already bound to a different "
+                    "signed decision or retained engine outcome"
+                )
+            return
+        log.relay_acknowledgements.append(acknowledgement)
+
+    def append(
+        self,
+        decision: AttendedDecision,
+        *,
+        relay_binding: Optional[AttendedRelayBinding] = None,
+        key: Optional[str] = None,
+    ) -> None:
+        with self._decision_log_lock():
+            log = self._read_log()
+            log.decisions.append(decision)
+            if relay_binding is not None:
+                self._add_relay_acknowledgement(log, relay_binding, decision, key=key)
+            self._atomic_write(
+                self.decisions_path, log.model_dump_json(indent=2).encode("utf-8")
+            )
+
+    def retain_relay_acknowledgement(
+        self,
+        binding: AttendedRelayBinding,
+        decision: AttendedDecision,
+        *,
+        key: Optional[str] = None,
+    ) -> None:
+        """Bind a prior exact engine result for an idempotent remote replay."""
+        with self._decision_log_lock():
+            log = self._read_log()
+            retained = [
+                candidate
+                for candidate in log.decisions
+                if candidate.decision_id == decision.decision_id
+            ]
+            if len(retained) != 1 or retained[0] != decision:
+                raise AttendedActionRefused(
+                    "the retained engine outcome for this relay cannot be proved"
+                )
+            before = len(log.relay_acknowledgements)
+            self._add_relay_acknowledgement(log, binding, decision, key=key)
+            if len(log.relay_acknowledgements) != before:
+                self._atomic_write(
+                    self.decisions_path,
+                    log.model_dump_json(indent=2).encode("utf-8"),
+                )
+
+    def _validated_relay_acknowledgement(
+        self,
+        log: AttendedDecisionLog,
+        binding: AttendedRelayBinding,
+        *,
+        key: Optional[str] = None,
+    ) -> Optional[tuple[AttendedRelayAcknowledgement, AttendedDecision]]:
+        records = [
+            record
+            for record in log.relay_acknowledgements
+            if record.decision_id == binding.decision_id
+        ]
+        if not records:
+            orphaned = [
+                decision
+                for decision in log.decisions
+                if decision.idempotency_key == binding.idempotency_key
+                and decision.capability_digest == binding.capability_digest
+                and decision.action == binding.action
+                and decision.status not in {"prepared", "delivery_started"}
+            ]
+            if orphaned:
+                raise AttendedActionRefused(
+                    "a retained engine outcome has no authenticated relay "
+                    "acknowledgement record"
+                )
+            return None
+        if len(records) != 1:
+            raise AttendedActionRefused(
+                "the relay decision has multiple retained acknowledgement records"
+            )
+        record = records[0]
+        self._verify_relay_ack_mac(record)
+        self._verify_relay_ack_context(record, key=key)
+        if record.binding() != binding:
+            raise AttendedActionRefused(
+                "a re-delivered decision changed its exact signed or "
+                "idempotency binding"
+            )
+        retained = [
+            decision
+            for decision in log.decisions
+            if decision.decision_id == record.retained_decision_id
+        ]
+        if len(retained) != 1:
+            raise AttendedActionRefused(
+                "the engine outcome retained for this relay is missing or ambiguous"
+            )
+        outcome = retained[0]
+        if (
+            _digest(outcome) != record.retained_decision_digest
+            or outcome.request_digest != record.retained_request_digest
+            or outcome.idempotency_key != record.idempotency_key
+            or outcome.capability_digest != record.capability_digest
+            or outcome.action != record.action
+            or outcome.status != record.retained_status
+            or ("refused" if outcome.status == "refused" else "accepted")
+            != record.engine_ack_result
+        ):
+            raise AttendedActionRefused(
+                "the engine outcome retained for this relay no longer verifies"
+            )
+        return record, outcome
+
+    def relay_acknowledgement(
+        self,
+        binding: AttendedRelayBinding,
+        *,
+        key: Optional[str] = None,
+    ) -> Optional[tuple[AttendedRelayAcknowledgement, AttendedDecision]]:
+        """Return an exact retained result, or refuse a changed relay binding."""
+        return self._validated_relay_acknowledgement(self._read_log(), binding, key=key)
+
+    def confirm_relay_acknowledgement(
+        self,
+        binding: AttendedRelayBinding,
+        *,
+        key: Optional[str] = None,
+    ) -> None:
+        """Mark the exact relay record only after Cloud accepted the ACK."""
+        with self._decision_log_lock():
+            log = self._read_log()
+            matched = self._validated_relay_acknowledgement(log, binding, key=key)
+            if matched is None:
+                raise AttendedActionRefused(
+                    "the relay acknowledgement has no retained engine outcome"
+                )
+            record, _outcome = matched
+            if record.confirmed:
+                return
+            index = next(
+                index
+                for index, candidate in enumerate(log.relay_acknowledgements)
+                if candidate == record
+            )
+            candidate = record.model_copy(
+                update={
+                    "confirmed": True,
+                    "confirmed_at": _iso(_now()),
+                    "record_mac": "hmac-sha256:" + ("0" * 64),
+                }
+            )
+            candidate = candidate.model_copy(
+                update={"record_mac": self._relay_ack_mac(candidate)}
+            )
+            log.relay_acknowledgements[index] = candidate
+            self._atomic_write(
+                self.decisions_path, log.model_dump_json(indent=2).encode("utf-8")
+            )
 
     @contextmanager
     def lease(
@@ -1172,6 +1689,7 @@ def execute_attended_action(
     *,
     operator: str,
     executor: Optional[AttendedActionExecutor] = None,
+    relay_binding: Optional[AttendedRelayBinding] = None,
     key: Optional[str] = None,
     now: Optional[datetime] = None,
 ) -> AttendedDecision:
@@ -1202,6 +1720,8 @@ def execute_attended_action(
                 "automatic retry is refused until an audited reconciliation"
             )
         if prior.status != "prepared":
+            if relay_binding is not None:
+                actions.retain_relay_acknowledgement(relay_binding, prior, key=key)
             return prior
 
     checkpoints = CheckpointStore(run_dir, key=key)
@@ -1231,6 +1751,8 @@ def execute_attended_action(
                     "automatic retry is refused until reconciliation"
                 )
             if prior.status != "prepared":
+                if relay_binding is not None:
+                    actions.retain_relay_acknowledgement(relay_binding, prior, key=key)
                 return prior
         request_digest = _digest(request)
         unresolved = actions.unresolved_delivery(capability.pause_id)
@@ -1282,7 +1804,7 @@ def execute_attended_action(
                 ),
                 next_transition=capability.expected_next_transition,
             )
-            actions.append(decision)
+            actions.append(decision, relay_binding=relay_binding, key=key)
             return decision
 
         if request.action == "teach":
@@ -1303,7 +1825,7 @@ def execute_attended_action(
                 ),
                 next_transition=capability.expected_next_transition,
             )
-            actions.append(decision)
+            actions.append(decision, relay_binding=relay_binding, key=key)
             return decision
 
         if request.action == "escalate":
@@ -1322,7 +1844,7 @@ def execute_attended_action(
                 ),
                 next_transition=capability.expected_next_transition,
             )
-            actions.append(decision)
+            actions.append(decision, relay_binding=relay_binding, key=key)
             return decision
 
         if executor is None:
@@ -1399,7 +1921,7 @@ def execute_attended_action(
             next_transition=result.next_transition,
             transition_receipt_digest=result.transition_receipt_digest,
         )
-        actions.append(decision)
+        actions.append(decision, relay_binding=relay_binding, key=key)
         return decision
 
 

@@ -57,6 +57,7 @@ from openadapt_flow.runtime.durable.attended import (
     AttendedActionRequest,
     AttendedActionStore,
     AttendedDecision,
+    AttendedRelayBinding,
     execute_attended_action,
 )
 
@@ -731,6 +732,7 @@ def execute_remote_attended_action(
     deployment: DeploymentConfig,
     principal: RemoteDecisionPrincipal,
     executor: Optional[AttendedActionExecutor] = None,
+    relay_binding: Optional[AttendedRelayBinding] = None,
     key: Optional[str] = None,
 ) -> AttendedDecision:
     """Provider-neutral AAL2 admission followed by normal governed execution.
@@ -752,6 +754,7 @@ def execute_remote_attended_action(
         engine_request,
         operator=principal.subject,
         executor=executor,
+        relay_binding=relay_binding,
         key=key,
     )
 

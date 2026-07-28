@@ -4738,6 +4738,28 @@ def build_parser() -> argparse.ArgumentParser:
             "fresh attended verification and deterministic continuation"
         ),
     )
+    p.add_argument(
+        "--remote-decisions",
+        action="store_true",
+        help=(
+            "Publish open attended pauses to the hosted decision surface over "
+            "an OUTBOUND-ONLY connection, so a paired phone can answer them "
+            "from anywhere without any inbound port, certificate, or reverse "
+            "proxy. Requires --attend --allow-actions, a --config whose "
+            "human_decisions.remote is enabled with an exact tenant and runner, "
+            "and OPENADAPT_RUNNER_TOKEN. Only the PHI-free signed task and the "
+            "closed halt context cross the wire; screenshots never leave"
+        ),
+    )
+    p.add_argument(
+        "--remote-decision-host",
+        default=None,
+        metavar="URL",
+        help=(
+            "Hosted control-plane origin for --remote-decisions "
+            "(default: the configured hosted host, https://app.openadapt.ai)"
+        ),
+    )
     _add_backend_flags(p)
     _add_deployment_flags(p)
     p.set_defaults(func=_cmd_console)
@@ -4867,6 +4889,69 @@ def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
         raise SystemExit(str(exc)) from exc
 
 
+def _decision_supervisor_from_args(
+    args: argparse.Namespace, attended_service: Any
+) -> Any:
+    """Build the outbound decision lane, or fail loudly. Never returns silently.
+
+    Every refusal here is a ``SystemExit`` rather than a disabled feature. An
+    operator who asked for ``--remote-decisions`` and got a loopback-only
+    console instead would believe a phone can answer a halt when nothing is
+    listening for one, which is the exact "looks like it works" failure this
+    lane must not have.
+    """
+    if not getattr(args, "remote_decisions", False):
+        return None
+    if not (args.attend and args.allow_actions):
+        raise SystemExit(
+            "--remote-decisions requires --attend --allow-actions: a remote "
+            "answer is executed through the same governed attended path as a "
+            "local one, and that path is not available in a read-only console"
+        )
+    if attended_service is None:  # pragma: no cover - guarded by the check above
+        raise SystemExit("--remote-decisions requires an attended action service")
+
+    from openadapt_flow.console.decision_relay import (
+        DecisionRelay,
+        HttpxRelayTransport,
+        RelayRefused,
+        resolve_runner_token,
+    )
+    from openadapt_flow.console.decision_supervisor import (
+        DecisionSupervisor,
+        DecisionSupervisorThread,
+    )
+    from openadapt_flow.hosted import HostedError, resolve_host
+
+    try:
+        cfg, _effects_cfg, _actuation_cfg = _deployment_sections(args)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+    remote = cfg.human_decisions.remote
+    if not remote.enabled:
+        raise SystemExit(
+            "--remote-decisions requires human_decisions.remote.enabled in "
+            "--config, with the exact tenant_id and runner_id the control "
+            "plane issued for this machine"
+        )
+    try:
+        token = resolve_runner_token()
+        origin = resolve_host(getattr(args, "remote_decision_host", None))
+        relay = DecisionRelay(
+            HttpxRelayTransport(origin, token), token=token, deployment=cfg
+        )
+    except (RelayRefused, HostedError) as exc:
+        raise SystemExit(str(exc)) from exc
+    supervisor = DecisionSupervisor(
+        args.runs, relay=relay, deployment=cfg, executor=attended_service
+    )
+    print(
+        f"  remote decisions: outbound-only to {origin} "
+        f"(tier {remote.context_tier}; no inbound port, no certificate)"
+    )
+    return DecisionSupervisorThread(supervisor)
+
+
 def _cmd_console(args: argparse.Namespace) -> int:
     # find_spec first so "extra not installed" is distinguishable from "the
     # console package itself is broken" (a wiring bug must surface, not hide
@@ -4898,6 +4983,7 @@ def _cmd_console(args: argparse.Namespace) -> int:
             allow_actions=allow_actions,
             attend=args.attend,
             attended_service=attended_service,
+            decision_supervisor=_decision_supervisor_from_args(args, attended_service),
             port=args.port,
         )
     return 0

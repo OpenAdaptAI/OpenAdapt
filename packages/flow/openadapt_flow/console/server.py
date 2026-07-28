@@ -11,6 +11,7 @@ import secrets
 from pathlib import Path
 from typing import Optional
 
+from openadapt_flow.console.decision_supervisor import DecisionSupervisorThread
 from openadapt_flow.runtime.durable.attended_service import AttendedActionService
 
 #: The only address the console ever binds. Not configurable.
@@ -27,9 +28,20 @@ def serve(
     allow_actions: bool = False,
     attend: bool = False,
     attended_service: Optional[AttendedActionService] = None,
+    decision_supervisor: Optional[DecisionSupervisorThread] = None,
     port: int = DEFAULT_PORT,
 ) -> None:
-    """Build the app and serve it on ``http://127.0.0.1:<port>`` (blocking)."""
+    """Build the app and serve it on ``http://127.0.0.1:<port>`` (blocking).
+
+    Args:
+        decision_supervisor: When given, the outbound decision lane runs beside
+            the server for as long as it serves. The console process is the
+            right host for it because it already owns the deployment-bound
+            action service a continuation needs, and because
+            ``execute_attended_action`` takes a single-flight lease over the
+            pause -- so an answer from a phone and one from this browser cannot
+            both execute.
+    """
     import uvicorn
 
     from openadapt_flow.console.app import create_app
@@ -51,4 +63,10 @@ def serve(
         "Open this private console URL in your browser:\n"
         f"  http://{LOOPBACK_HOST}:{port}/#token={access_token}"
     )
-    uvicorn.run(app, host=LOOPBACK_HOST, port=port, log_level="info")
+    if decision_supervisor is not None:
+        decision_supervisor.start()
+    try:
+        uvicorn.run(app, host=LOOPBACK_HOST, port=port, log_level="info")
+    finally:
+        if decision_supervisor is not None:
+            decision_supervisor.stop()

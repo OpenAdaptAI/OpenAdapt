@@ -89,12 +89,47 @@ NAT and on an ordinary practice broadband line.
        # context_tier defaults to remote_closed_context
    ```
 
-2. Staff open `app.openadapt.ai` on their phone and sign in. It is a web page;
+2. Run the attended console with the lane on. Desktop does this for the
+   operator; the equivalent command by hand is:
+
+   ```
+   OPENADAPT_RUNNER_TOKEN=oar_...  openadapt-flow console \
+       --attend --allow-actions --remote-decisions --config deployment.yaml
+   ```
+
+3. Staff open `app.openadapt.ai` on their phone and sign in. It is a web page;
    there is no app to install.
 
 That is the whole list. Nobody terminates TLS, because the only TLS involved is
 the runner's outbound connection to a public host with an ordinary public
 certificate.
+
+### What actually runs, once step 2 is on
+
+`console.decision_supervisor.DecisionSupervisor` owns the whole `runs` root
+rather than one run, which is what makes the lane automatic instead of a library
+somebody has to call:
+
+- Every cycle it publishes **every** currently open attended pause, so a halt
+  becomes answerable on a phone without anyone doing anything.
+- When an answer comes back it re-scans and requires the relayed `task_id` *and*
+  `capability_digest` to match a pause that is open **right now**. A decision
+  that matches none is acknowledged `stale` and never executed. This matters the
+  moment two runs are halted at once, which is the ordinary case: revalidation
+  would catch a *wrong* answer, but not a *correct* answer applied to the wrong
+  run.
+- A relay whose deadline has passed, or whose deadline cannot be parsed, is
+  acknowledged `expired`. An unreadable deadline is not a licence to act.
+- It runs as a daemon thread inside the attended console, because that process
+  already owns the deployment-bound action service, and because
+  `execute_attended_action` takes a single-flight lease over the pause — so an
+  answer from the phone and one from the local browser cannot both execute.
+
+Every refusal at start-up is a hard exit, never a disabled feature. An operator
+who passed `--remote-decisions` and silently got a loopback-only console would
+believe a phone can answer a halt while nothing is listening for one. Missing
+runner token, remote issuance not enabled, a read-only console, or a plaintext
+control-plane origin each stop the console rather than degrade it.
 
 ### Runner-local portal — full fidelity, on the practice's own terms
 
@@ -242,6 +277,22 @@ exists, the pairing it needs already exists in desktop, and the analysis above
 says the frame is triage context rather than the source of any answer. Building
 the crypto before a pilot has told us the closed context is insufficient would
 be building the expensive half of the answer first.
+
+## What is not done yet
+
+Stated plainly, because a half-wired lane that reads as finished is worse than
+an honest gap.
+
+- **Desktop does not pass `--remote-decisions` yet.** `engine/portal/service.py`
+  spawns `openadapt-flow console --attend --allow-actions`; adding the flag is a
+  small change, but the installer bundles a pinned frozen Flow, so the pin has
+  to move to a release containing the flag first. Until then the lane is
+  available from the CLI and not from the Desktop toggle.
+- **The hosted side must be deployed.** The control plane has to accept the two
+  new projection fields before the lane carries context; without that it still
+  publishes and answers, at `remote_identifiers`.
+- **`max_remote_decision_tier` is not yet discriminating** (see above). It
+  becomes load-bearing when a tier exists that some profile must refuse.
 
 ## What is deliberately not claimed
 

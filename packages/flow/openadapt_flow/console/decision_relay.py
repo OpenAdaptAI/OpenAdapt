@@ -85,6 +85,7 @@ from openadapt_flow.runtime.durable.attended import (
     AttendedActionExecutor,
     AttendedActionRefused,
     AttendedDecision,
+    AttendedRelayBinding,
 )
 
 #: Wire schema of a relayed decision, as minted by the hosted control plane.
@@ -221,6 +222,18 @@ class RelayedDecision:
     @property
     def action(self) -> str:
         return str(self.relay["action"])
+
+    def durable_binding(self) -> AttendedRelayBinding:
+        """Exact PHI-free fields required to recover a lost acknowledgement."""
+        return AttendedRelayBinding(
+            decision_id=self.decision_id,
+            relay_digest=self.relay_digest,
+            relay_signature=self.relay_signature,
+            idempotency_key=str(self.relay["idempotency_key"]),
+            capability_digest=str(self.relay["capability_digest"]),
+            event_sequence=int(self.relay["event_sequence"]),
+            action=self.action,  # type: ignore[arg-type]
+        )
 
 
 class RelayTransport(Protocol):
@@ -569,6 +582,7 @@ class DecisionRelay:
             deployment=self._deployment,
             principal=principal,
             executor=executor,
+            relay_binding=decision.durable_binding(),
             key=key,
         )
 
