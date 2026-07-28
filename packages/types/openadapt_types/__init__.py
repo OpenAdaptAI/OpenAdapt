@@ -81,6 +81,14 @@ from openadapt_types.control_overlay_tracking import (
     control_overlay_state_id_v2,
 )
 from openadapt_types.episode import Episode, Step
+from openadapt_types.execution_requirements import (
+    CAPABILITY_MATCH_SCHEMA,
+    EXECUTION_REQUIREMENTS_SCHEMA,
+    CapabilityMatchV1,
+    CapabilityMismatchCode,
+    ExecutionRequirementsV1,
+    match_runner_capabilities,
+)
 from openadapt_types.failure import FailureCategory, FailureRecord
 from openadapt_types.human_decision import (
     HUMAN_DECISION_RECEIPT_REASONS,
@@ -112,6 +120,18 @@ from openadapt_types.parsing import (
     parse_action_json,
     to_benchmark_action_dict,
 )
+from openadapt_types.runner_capability import (
+    RUNNER_CAPABILITY_MANIFEST_SCHEMA,
+    EffectVerificationTier,
+    ExecutionMode,
+    ExecutionProfile,
+    ExecutionSurface,
+    RunnerArchitecture,
+    RunnerCapability,
+    RunnerCapabilityLaneV1,
+    RunnerCapabilityManifestV1,
+    RunnerHostOS,
+)
 
 try:
     __version__ = metadata.version("openadapt-types")
@@ -120,7 +140,8 @@ except metadata.PackageNotFoundError:  # pragma: no cover - source checkout only
     # unknown so a caller cannot mistake a stale literal for the installed one.
     __version__ = "unknown"
 
-__all__ = [
+# Keep the exports grouped by contract family for API review.
+__all__ = [  # noqa: RUF022
     # computer_state
     "BoundingBox",
     "ComputerState",
@@ -177,6 +198,23 @@ __all__ = [
     # episode
     "Episode",
     "Step",
+    # runner capability and execution requirements
+    "CAPABILITY_MATCH_SCHEMA",
+    "EXECUTION_REQUIREMENTS_SCHEMA",
+    "RUNNER_CAPABILITY_MANIFEST_SCHEMA",
+    "CapabilityMatchV1",
+    "CapabilityMismatchCode",
+    "EffectVerificationTier",
+    "ExecutionMode",
+    "ExecutionProfile",
+    "ExecutionRequirementsV1",
+    "ExecutionSurface",
+    "RunnerArchitecture",
+    "RunnerCapability",
+    "RunnerCapabilityLaneV1",
+    "RunnerCapabilityManifestV1",
+    "RunnerHostOS",
+    "match_runner_capabilities",
     # failure
     "FailureCategory",
     "FailureRecord",
