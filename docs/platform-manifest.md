@@ -116,8 +116,18 @@ Validated today:
   An unreachable PyPI warns rather than fails — it is not evidence of drift —
   unless `--require-network` is passed.
 - Status skew: disagreement with `status.json` versions is a warning by
-  default (status.json regenerates on its own cadence in `openadapt-web`);
-  `--strict-status` escalates it to a failure.
+  default, because that file lives in another repository and a release here
+  must not be blocked by an edit nobody in this repo can make;
+  `--strict-status` escalates it to a failure. The warning is **not**
+  self-healing: `status.json` is hand-maintained in `openadapt-web` and
+  nothing generates it from PyPI or from this manifest. On 2026-07-28 it
+  advertised flow 1.24.0 and launcher 1.10.0 against PyPI's 1.25.1 and 1.10.1.
+  `openadapt-web` runs a daily guard
+  (`scripts/check_published_version_claims.mjs`) that fails on exactly this,
+  but that detects after the fact and still needs a person to open the
+  corrective pull request. Skew reported here means someone must edit
+  `public/status.json` and `data/published-version-claims.json` in
+  `openadapt-web`.
 
 Not validated yet (planned):
 
