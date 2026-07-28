@@ -1937,13 +1937,12 @@ def test_attended_http_action_requires_auth_csrf_and_exact_capability(
         json=payload,
     )
     assert response.status_code == 200
-    assert response.json()["status"] == "completed"
-    assert set(response.json()) == {
-        "action",
-        "status",
-        "message",
-        "report_success",
-    }
+    # The browser boundary returns the closed, PHI-free receipt: the engine's
+    # free-text message and operator principal stay in the durable audit.
+    receipt = response.json()
+    assert receipt["state"] == "completed"
+    assert receipt["action"] == "verify_and_resume"
+    assert "message" not in receipt and "operator" not in receipt
     assert executor.calls == 1
 
     wrong_path = client.post(
@@ -2132,4 +2131,4 @@ def test_attended_http_can_teach_or_escalate_without_live_executor(
         },
     )
     assert response.status_code == 200
-    assert response.json()["status"] == "needs_demonstration"
+    assert response.json()["state"] == "demonstration_requested"

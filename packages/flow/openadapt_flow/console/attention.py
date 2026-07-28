@@ -107,6 +107,10 @@ class AttentionItem(BaseModel):
     next_action: str
     status: str
     human_required: bool = False
+    #: True only while a durable pause is actually open. A run that resumed, or
+    #: that merely needs post-hoc review, is not answerable from a phone: there
+    #: is no pause left for a decision to be bound to.
+    durably_paused: bool = False
     encrypted_pause: bool = False
     observed_text_count: int = 0
     completed_intent_count: int = 0
@@ -214,7 +218,13 @@ def attention_item(root: Path, path: Path) -> Optional[AttentionItem]:
         pending.get("category") if pending is not None else None,
         *protected_texts,
     )
-    if outcome_needs_review:
+    # A non-VERIFIED report outcome alone means "a person must look at this".
+    # A *durable pause* carries the engine's own typed halt category, which is
+    # strictly more informative and is what the deterministic decision question
+    # is derived from.  Only fall back to the generic label when there is no
+    # pause to read a typed category from; otherwise every real durable halt
+    # would be re-labelled and lose its engine-derived question template.
+    if outcome_needs_review and pending is None:
         category = "operator_review"
     headline, next_action = _COPY.get(category, _COPY["operator_review"])
     status = "encrypted" if encrypted_pause and pending is None else "halted"
@@ -244,6 +254,7 @@ def attention_item(root: Path, path: Path) -> Optional[AttentionItem]:
         next_action=next_action,
         status=status,
         human_required=category == "human_required",
+        durably_paused=pending is not None or encrypted_pause,
         encrypted_pause=encrypted_pause,
         observed_text_count=observed_count,
         completed_intent_count=completed_count,

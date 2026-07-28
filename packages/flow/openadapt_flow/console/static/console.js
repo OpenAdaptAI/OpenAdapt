@@ -341,6 +341,58 @@ const coverageValue = (confirmed, required) => required == null
   ? "No retained check for this halt"
   : `${safeNumber(confirmed, "0")} of ${safeNumber(required, "0")} confirmed`;
 
+// "May have been sent" is a distinct state and must never be collapsed into
+// "Not sent" or "Sent". The runner decides which one is true; this map only
+// renders it in words a person can act on.
+const DELIVERY_LABEL = {
+  not_delivered: "Not sent",
+  delivered: "Sent",
+  unknown: "May have been sent",
+};
+
+// Deterministic copy for the closed receipt reason codes. The runner never
+// sends display text, so a new reason code degrades to the code itself rather
+// than to an invented outcome.
+const RECEIPT_COPY = {
+  pending_runner: "Submitted, waiting for the runner.",
+  verified_and_resumed: "Verified against the live application, then continued.",
+  skipped_and_resumed: "Declared optional step skipped; the run continued.",
+  continuation_halted: "The run halted again and stays paused for review.",
+  revalidation_refused: "Refused: the live application did not match what this "
+    + "decision required. Nothing was actuated.",
+  expired: "This decision expired. Reload the current pause.",
+  delivery_uncertain: "May have been sent. OpenAdapt did not get a result. "
+    + "Do not retry — reopen this task and reconcile the live record first.",
+  demonstration_requested: "Correction request recorded. The run stays paused.",
+  escalation_recorded: "Escalation recorded. The run stays paused.",
+};
+// A state that is definite: the operator may safely decide again.
+const DEFINITE_RECEIPT_STATES = new Set([
+  "completed",
+  "halted",
+  "refused",
+  "expired",
+  "demonstration_requested",
+  "escalated",
+]);
+
+// One decision attempt keeps ONE idempotency key for as long as its outcome is
+// unknown, so a retry after an ambiguous network result replays the recorded
+// receipt instead of becoming a second request. A fresh key is minted only
+// after a definite outcome.
+function decisionKeySlot(runId, taskDigest, action) {
+  return `openadapt.decision.${runId}.${taskDigest}.${action}`;
+}
+
+function decisionKey(slot) {
+  let key = window.sessionStorage.getItem(slot);
+  if (!key) {
+    key = crypto.randomUUID().replaceAll("-", "");
+    window.sessionStorage.setItem(slot, key);
+  }
+  return key;
+}
+
 function attendedDecisionButtons(detail) {
   const task = detail.task;
   if (!task || !HEALTH.attended_decisions_ready) return "";
@@ -396,7 +448,9 @@ async function viewAttentionDetail(id) {
         evidence.effect_required_count,
       ))}</strong></div>
       <div><span>Action delivery</span><strong>${esc(
-        task ? task.delivery_state.replaceAll("_", " ") : "No signed pause capability",
+        task
+          ? (DELIVERY_LABEL[task.delivery_state] || "May have been sent")
+          : "No signed pause capability",
       )}</strong></div>
     </section>
     <p>${esc(detail.presentation.next_action)}</p>
@@ -427,6 +481,7 @@ async function attendedAction(button) {
     teach: "teach_requested",
     escalate: "needs_assistance",
   }[action];
+  const slot = decisionKeySlot(runId, taskDigest, action);
   try {
     const result = await api(
       `/api/attention/${enc(runId)}/actions/${enc(action)}`,
@@ -437,23 +492,48 @@ async function attendedAction(button) {
           capability_digest: capability,
           task_digest: taskDigest,
           task_signature: taskSignature,
-          idempotency_key: crypto.randomUUID().replaceAll("-", ""),
+          idempotency_key: decisionKey(slot),
           action,
           disposition,
         }),
       },
     );
-    if (output) output.textContent = result.message || result.status;
-    if (result.status === "completed" || result.status === "halted") {
-      window.location.hash = "#/attention";
+    const state = result && result.state;
+    if (output) {
+      output.textContent = RECEIPT_COPY[result && result.reason_code]
+        || String(state || "");
     }
-  } catch (error) {
-    const detail = error.body && error.body.detail;
-    if (output) output.textContent = typeof detail === "string"
-      ? detail
-      : "Decision refused; reload the current pause and review live state.";
-  } finally {
+    if (!DEFINITE_RECEIPT_STATES.has(state)) {
+      // accepted_pending_runner / delivery_uncertain: the outcome is not known.
+      // Keep the same idempotency key and keep the controls disabled so the
+      // next tap cannot become a second request.
+      return;
+    }
+    window.sessionStorage.removeItem(slot);
+    if (state === "completed" || state === "halted") {
+      window.location.hash = "#/attention";
+      return;
+    }
     siblings.forEach((item) => { item.disabled = false; });
+  } catch (error) {
+    const status = error && error.status;
+    const detail = error && error.body && error.body.detail;
+    if (typeof status === "number" && status >= 400 && status < 500) {
+      // The runner answered and definitively refused: nothing was actuated,
+      // so the operator may review live state and decide again.
+      window.sessionStorage.removeItem(slot);
+      if (output) {
+        output.textContent = typeof detail === "string"
+          ? detail
+          : "Decision refused; reload the current pause and review live state.";
+      }
+      siblings.forEach((item) => { item.disabled = false; });
+      return;
+    }
+    // No answer, or an answer that cannot be interpreted. The decision may
+    // already have reached the runner, so this is NEVER reported as refused
+    // and never as success, and the controls stay disabled.
+    if (output) output.textContent = RECEIPT_COPY.delivery_uncertain;
   }
 }
 

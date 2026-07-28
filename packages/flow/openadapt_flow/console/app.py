@@ -39,12 +39,17 @@ from openadapt_flow.console import data, human_decisions, json_artifacts
 from openadapt_flow.runtime.durable.approval import ResumeRefused
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRefused,
+    AttendedActionStore,
     execute_attended_action,
 )
 from openadapt_flow.runtime.durable.attended_service import AttendedActionService
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _MAX_BODY_BYTES = 16 * 1024
+#: Protected evidence crops are served to a phone-sized viewport over an
+#: operator's network. Bound what one authenticated request can pull into
+#: memory and across that link; the raw artifact on disk stays unchanged.
+_MAX_PROTECTED_CROP_BYTES = 16 * 1024 * 1024
 _SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -463,6 +468,12 @@ def create_app(
         if artifact is None:
             raise HTTPException(status_code=404, detail="no such artifact")
         try:
+            if artifact.stat().st_size > _MAX_PROTECTED_CROP_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail="protected evidence exceeds the bounded crop size; "
+                    "inspect it in the local run directory",
+                )
             content = artifact.read_bytes()
         except OSError as exc:
             raise HTTPException(status_code=404, detail="no such artifact") from exc
@@ -575,7 +586,7 @@ def create_app(
         run_id: str,
         action_id: str,
         payload: human_decisions.ConsoleAttendedActionRequest,
-    ) -> dict[str, Any]:
+    ) -> JSONResponse:
         if not attend:
             raise HTTPException(status_code=404, detail="no such action")
         _refuse_or_none(
@@ -611,15 +622,40 @@ def create_app(
             )
         except (AttendedActionRefused, ResumeRefused) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        # The durable audit keeps operator, request, capability, and transition
-        # bindings. The browser needs only the decision outcome; never reflect
-        # those protected identifiers back across the presentation boundary.
-        return {
-            "action": decision.action,
-            "status": decision.status,
-            "message": decision.message,
-            "report_success": decision.report_success,
-        }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            # The deployment-bound action did not return a terminal receipt.
+            # It may already have crossed the delivery boundary, so this can
+            # never surface as success and must never surface as a bare 500
+            # that a phone would render as an ordinary failure. Classify from
+            # the durable journal and default to "may have been sent" whenever
+            # the journal cannot positively rule delivery out.
+            unresolved = None
+            try:
+                store = AttendedActionStore(run_dir)
+                unresolved = store.unresolved_delivery(store.read().pause_id)
+            except (AttendedActionRefused, OSError, ValueError):
+                unresolved = None
+            if unresolved is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="the attended decision did not return a terminal "
+                    "receipt; no workflow continuation was admitted",
+                ) from exc
+            return JSONResponse(
+                status_code=202,
+                content=human_decisions.decision_receipt(unresolved).model_dump(
+                    mode="json"
+                ),
+            )
+        # The durable audit keeps operator, message, request, capability, and
+        # transition bindings. Only the closed, PHI-free receipt crosses this
+        # presentation boundary; protected content is unrepresentable in it
+        # rather than stripped from the audit record on the way out.
+        return JSONResponse(
+            content=human_decisions.decision_receipt(decision).model_dump(mode="json")
+        )
 
     # -- skills -------------------------------------------------------------
 

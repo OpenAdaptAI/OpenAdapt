@@ -4,6 +4,19 @@ The portable task contains only opaque identifiers, closed enums, counts,
 digests, and expiry. Protected screenshots remain separate authenticated local
 artifacts. A signed task is presentation integrity, not execution authority;
 the runtime's exact pause capability and fresh revalidation remain mandatory.
+
+Two projections come out of one pause, and they are not the same thing:
+
+* ``task`` -- the signed, Cloud-safe :class:`HumanDecisionTaskV1`. It is what
+  :func:`portable_remote_decision_task` relays to an authenticated remote
+  surface, so nothing may be added to it that could carry protected content.
+* ``presentation`` -- **local only**. It is returned by :func:`decision_detail`
+  to the loopback console and, through the customer-controlled runner-local
+  portal, to a paired phone on the customer's own network. This is the boundary
+  that already serves protected screenshot crops, and it is where
+  :mod:`openadapt_flow.console.halt_detail` puts the closed-vocabulary "what
+  broke / what gets re-checked" detail an operator needs to answer at all.
+  :func:`portable_remote_decision_task` discards it.
 """
 
 from __future__ import annotations
@@ -12,10 +25,15 @@ import hashlib
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from openadapt_types import HUMAN_DECISION_TASK_SCHEMA, HumanDecisionTaskV1
+from openadapt_types import (
+    HUMAN_DECISION_TASK_SCHEMA,
+    HumanDecisionReceiptV1,
+    HumanDecisionTaskV1,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.console import data
+from openadapt_flow.console import halt_detail as halt_detail_mod
 from openadapt_flow.console.attention import AttentionItem, _last_failed_result
 from openadapt_flow.deployment import DeploymentConfig
 from openadapt_flow.runtime.durable.attended import (
@@ -93,6 +111,60 @@ _SUBSTRATE_MAP = {
     "rdp": "rdp",
     "citrix": "citrix",
 }
+
+#: Engine decision status -> (portable receipt state, closed reason code).
+#: ``prepared``/``delivery_started`` are journal states that were reached
+#: without a terminal receipt, so both project as "may have been sent".
+_RECEIPT_STATE: dict[str, tuple[str, str]] = {
+    "prepared": ("accepted_pending_runner", "pending_runner"),
+    "delivery_started": ("delivery_uncertain", "delivery_uncertain"),
+    "delivery_uncertain": ("delivery_uncertain", "delivery_uncertain"),
+    "completed": ("completed", "verified_and_resumed"),
+    "refused": ("refused", "revalidation_refused"),
+    "halted": ("halted", "continuation_halted"),
+    "needs_demonstration": ("demonstration_requested", "demonstration_requested"),
+    "escalated": ("escalated", "escalation_recorded"),
+}
+
+
+def decision_receipt(decision: AttendedDecision) -> HumanDecisionReceiptV1:
+    """Project one engine decision into the closed, PHI-free shared receipt.
+
+    ``AttendedDecision`` is the durable audit record: it carries a free-text
+    message and the operator principal on purpose. Neither may leave the
+    runner, so this projection *rebuilds* a closed value instead of redacting
+    the audit record field by field.
+
+    The shape is the shared ``openadapt-types`` contract rather than a
+    Flow-local model, so protected content stays structurally unrepresentable
+    on both sides of the wire: every field is an opaque id, a digest, a closed
+    enum, or a pattern-checked RFC 3339 timestamp. The shared type also pins
+    the permitted ``state``/``reason_code`` pairs and forbids
+    ``report_success`` outside ``completed``, which a Flow-local model could
+    not enforce for a remote consumer.
+
+    ``action`` uses the portable vocabulary (``verify_and_resume``), never the
+    engine's internal ``continue``, so a consumer compares it directly against
+    the task's ``allowed_actions``. The receipt is unsigned: the console
+    returns it over loopback, and an unsigned receipt never verifies, so a
+    remote consumer that requires a signature is not weakened by its absence.
+    """
+    state, reason_code = _RECEIPT_STATE[decision.status]
+    if decision.status == "completed" and decision.action == "skip":
+        reason_code = "skipped_and_resumed"
+    return HumanDecisionReceiptV1(
+        task_id=f"task_{decision.pause_id}",
+        pause_id=decision.pause_id,
+        capability_digest=decision.capability_digest,
+        request_digest=decision.request_digest,
+        decision_digest=_sha256(decision.model_dump(mode="json")),
+        transition_receipt_digest=decision.transition_receipt_digest,
+        action=_ACTION_MAP[decision.action],  # type: ignore[arg-type]
+        state=state,  # type: ignore[arg-type]
+        reason_code=reason_code,  # type: ignore[arg-type]
+        report_success=decision.report_success,
+        decided_at=decision.created_at,
+    )
 
 
 class ConsoleAttendedActionRequest(AttendedActionRequest):
@@ -269,7 +341,7 @@ def _task_and_presentation(
         for evidence in (failed.effect_evidence if failed is not None else [])
         if evidence.verification_tier is not None
     ]
-    presentation = {
+    presentation: dict[str, Any] = {
         "question": question[2],
         "explanation": item.headline,
         "next_action": item.next_action,
@@ -280,11 +352,25 @@ def _task_and_presentation(
         "before_artifact_id": item.before_artifact_id,
         "after_artifact_id": item.after_artifact_id,
     }
-    if capability is None:
+    # A decision task is a projection of an OPEN pause. The signed capability
+    # file survives a completed resume, so a run that already continued would
+    # otherwise keep offering an answerable question the engine must refuse.
+    if capability is None or not item.durably_paused:
         return None, None, presentation
 
     task_kind, question_template, _ = question
-    if capability.delivery_state == "unknown":
+    # "May have been sent" must never collapse into "Not sent" or "Sent". The
+    # capability records what the engine knew when it paused; a later attended
+    # request for this same pause can have crossed the delivery boundary
+    # without returning a terminal receipt. The pause-wide journal is the
+    # authority on that, so re-read it every time the task is projected.
+    delivery_state = capability.delivery_state
+    if (
+        AttendedActionStore(run_dir).unresolved_delivery(capability.pause_id)
+        is not None
+    ):
+        delivery_state = "unknown"
+    if delivery_state == "unknown":
         task_kind = "delivery_uncertain"
         question_template = "review_uncertain_delivery"
         presentation["question"] = (
@@ -296,6 +382,20 @@ def _task_and_presentation(
         )
     surface = report.execution_target_kind if report is not None else None
     substrate = _SUBSTRATE_MAP.get(surface, "unknown") if surface else "unknown"
+    # LOCAL-ONLY. `presentation` never crosses the Cloud lane: the remote
+    # projection below returns a `RemoteDecisionProjection` built from `task`
+    # alone and discards this block. Keeping the enrichment here rather than in
+    # the signed task is what lets the phone say what broke without widening a
+    # contract whose `safe_slots` are null by design.
+    presentation["halt"] = halt_detail_mod.halt_detail(
+        run_dir,
+        category=item.category,
+        report=report,
+        failed=failed,
+        substrate=substrate,
+        delivery_state=delivery_state,
+        identity_required=identity_required,
+    )
     remote, tenant_id, runner_id = _remote_scope(deployment)
     unsigned: dict[str, Any] = {
         "schema_version": HUMAN_DECISION_TASK_SCHEMA,
@@ -308,7 +408,7 @@ def _task_and_presentation(
         "capability_digest": capability.digest,
         "bundle_digest": capability.bundle_version,
         "task_kind": task_kind,
-        "delivery_state": capability.delivery_state,
+        "delivery_state": delivery_state,
         "risk_class": _risk_class(failed, effect_required),
         "substrate": substrate,
         "question": {
@@ -373,10 +473,19 @@ def decision_detail(run_dir: Path, item: AttentionItem) -> dict[str, Any]:
 
 
 def _sha256(payload: dict[str, Any]) -> str:
+    """Digest one payload under the normative cross-language canonical form.
+
+    ``ensure_ascii=True`` matches ``openadapt-types``' canonicalization. The
+    remote-projection digests this also feeds are computed over
+    pattern-constrained ASCII values only, so aligning cannot move them (see
+    ``test_remote_binding_digests_are_ascii_canonicalization_invariant``); the
+    receipt's ``decision_digest`` covers the engine's free-text message, which
+    can be non-ASCII, so only that digest is made reproducible by the change.
+    """
     import json
 
     canonical = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     ).encode("utf-8")
     return "sha256:" + hashlib.sha256(canonical).hexdigest()
 
