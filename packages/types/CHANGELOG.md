@@ -1,6 +1,49 @@
 # CHANGELOG
 
 
+## v0.6.3 (2026-07-28)
+
+### Bug Fixes
+
+- **human-decision**: Give operator disagreement a closed wire channel
+  ([#15](https://github.com/OpenAdaptAI/openadapt-types/pull/15),
+  [`995d4d0`](https://github.com/OpenAdaptAI/openadapt-types/commit/995d4d0de3eddf3825aca68733a28253204fe2aa))
+
+The attended vocabulary was closed at continue/skip/teach/escalate. An operator who looked at the
+  live application and concluded the engine was right to stop had no way to say so: escalate PARKS
+  the run for a colleague and reads as "I don't know", and continue asserts a repair that did not
+  happen. Disagreement therefore had no channel, so the recorded answer distribution could not
+  report how often a halt was correct -- the exact measurement needed before anyone tunes a halt
+  rate.
+
+Add `reject` to `HumanDecisionAction` and the terminal `rejected` / `rejected_by_operator` pair to
+  the receipt. Reject and escalate stay separate members because they do opposite things to the run:
+  escalate leaves the durable pause resumable, reject ends it. Collapsing them is cheaper and
+  destroys the signal.
+
+`allowed_actions` widens from four to five entries, which is the size of the vocabulary rather than
+  a policy: a pause that is skippable, re-verifiable, rejectable, teachable and escalatable is
+  legitimate, and a stale bound would have refused to issue that task at all.
+
+The cause of a rejection is a closed enum with one member. A reason taxonomy would be more
+  informative, but there is no evidence yet for what its members should be -- the reject rate is the
+  data that would design them -- and adding members later is additive, whereas a free-text reason
+  could never be closed again.
+
+### Chores
+
+- Gitignore .private/ ([#14](https://github.com/OpenAdaptAI/openadapt-types/pull/14),
+  [`79e4987`](https://github.com/OpenAdaptAI/openadapt-types/commit/79e498773ba1411ec1f30b8bf4b830b3d03c1336))
+
+`.private/` is the workspace-wide convention for material that must never be published. It was not
+  ignored here, so a directory created inside this checkout was one stray `git add` from being
+  committed. Ignore it mechanically rather than relying on that never happening.
+
+Claude-Session: https://claude.ai/code/session_01NyCHrzA1psrKMFfroYbzaM
+
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+
+
 ## v0.6.2 (2026-07-27)
 
 ### Bug Fixes
