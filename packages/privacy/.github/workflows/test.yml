@@ -30,6 +30,12 @@ jobs:
       - name: Run tests (without Presidio)
         run: uv run pytest tests/ -v --ignore=tests/test_presidio.py
 
+      - name: Build and verify the public distribution boundary
+        if: matrix.python-version == '3.12'
+        run: |
+          uv build
+          python scripts/check_source_boundary.py --require-dist
+
   test-presidio:
     runs-on: ubuntu-latest
 

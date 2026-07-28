@@ -42,7 +42,9 @@ jobs:
 
       - name: Build package
         if: steps.release.outputs.released == 'true'
-        run: uv build
+        run: |
+          uv build
+          python scripts/check_source_boundary.py --require-dist
 
       - name: Publish to PyPI
         if: steps.release.outputs.released == 'true'
