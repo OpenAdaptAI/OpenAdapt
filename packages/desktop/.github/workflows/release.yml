@@ -238,7 +238,9 @@ jobs:
           python scripts/check_release_consistency.py --require-dist
 
       - name: Independently validate recovery artifacts with the current main guard
-        run: python guard/scripts/verify_build_artifact.py python-distribution --root target
+        run: |
+          python guard/scripts/verify_build_artifact.py python-distribution --root target
+          python guard/scripts/check_source_boundary.py --root target --require-dist
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1
