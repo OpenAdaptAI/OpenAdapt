@@ -15,6 +15,29 @@ DEFAULT_POLL_INTERVAL_S = 60
 OFFLINE_POLL_INTERVAL_S = 300
 
 
+class ConfigLoadError(Exception):
+    """``tray.json`` exists but could not be read.
+
+    Distinct from "no config file", which legitimately means defaults.
+    """
+
+    def __init__(self, path: Path, cause: Exception):
+        """Record which file failed and why.
+
+        Args:
+            path: The configuration file that could not be read.
+            cause: The underlying parse/IO error.
+        """
+        super().__init__(f"Could not read {path}: {cause}")
+        self.path = path
+        self.cause = cause
+
+    @property
+    def defaults(self) -> "TrayConfig":
+        """The default configuration, for a caller that chooses to continue."""
+        return TrayConfig()
+
+
 @dataclass
 class TrayConfig:
     """Tray application configuration.
@@ -76,15 +99,46 @@ class TrayConfig:
 
     @classmethod
     def load(cls) -> "TrayConfig":
-        """Load configuration from file."""
+        """Load configuration from file.
+
+        A file that is not there means "this user has no saved preferences",
+        and defaults are the right answer. A file that IS there but cannot be
+        read is a different thing entirely, and defaults are the WRONG answer:
+        ``deployment_lane`` defaults to ``"cloud"``, so silently substituting
+        defaults would move a ``byoc`` install -- where the fix must stay local
+        -- onto the hosted route without telling anybody.
+
+        Returns:
+            The saved configuration, or defaults when no file exists.
+
+        Raises:
+            ConfigLoadError: The file exists but could not be read or parsed.
+                It carries ``defaults`` so a caller that chooses to continue
+                does so knowingly.
+        """
         path = cls.config_path()
-        if path.exists():
-            try:
-                data = json.loads(path.read_text())
-                return cls._from_dict(data)
-            except Exception as e:
-                print(f"Warning: Could not load config: {e}")
-        return cls()
+        if not path.exists():
+            return cls()
+        try:
+            data = json.loads(path.read_text())
+            return cls._from_dict(data)
+        except Exception as e:
+            raise ConfigLoadError(path, e) from e
+
+    @classmethod
+    def load_or_defaults(cls) -> tuple["TrayConfig", "ConfigLoadError | None"]:
+        """Load the configuration, reporting an unreadable file instead of hiding it.
+
+        Returns:
+            ``(config, error)``. ``error`` is ``None`` on a clean load. When it
+            is set, ``config`` is the default configuration AND the caller is
+            obliged to surface the error -- that is the whole point of handing
+            both back instead of one silently-defaulted object.
+        """
+        try:
+            return cls.load(), None
+        except ConfigLoadError as e:
+            return e.defaults, e
 
     @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> "TrayConfig":

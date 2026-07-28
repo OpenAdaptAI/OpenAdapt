@@ -30,8 +30,11 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --extra dev
 
+      # The whole repository, not just src/tests/scripts. The narrower form
+      # left examples/ and the four root-level helper scripts outside every
+      # gate -- 15 findings sat there unreported while CI showed a green lint.
       - name: Ruff lint
-        run: uv run ruff check src tests scripts
+        run: uv run ruff check .
 
       - name: Build distributions
         run: uv build

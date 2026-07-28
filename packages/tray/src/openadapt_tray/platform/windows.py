@@ -3,7 +3,7 @@
 import webbrowser
 from typing import TYPE_CHECKING
 
-from openadapt_tray.platform.base import PlatformHandler
+from openadapt_tray.platform.base import DialogUnavailableError, PlatformHandler
 
 if TYPE_CHECKING:
     from openadapt_tray.config import TrayConfig
@@ -24,7 +24,12 @@ class WindowsHandler(PlatformHandler):
             message: Prompt message.
 
         Returns:
-            User input string, or None if cancelled.
+            User input string, or None if the user cancelled.
+
+        Raises:
+            DialogUnavailableError: tkinter could not show a dialog, so the
+                user was never prompted. This used to return ``None``, which
+                the caller reads as "the user cancelled".
         """
         try:
             import tkinter as tk
@@ -38,8 +43,7 @@ class WindowsHandler(PlatformHandler):
             root.destroy()
             return result
         except Exception as e:
-            print(f"Error showing input dialog: {e}")
-            return None
+            raise DialogUnavailableError(f"no input dialog available: {e}") from e
 
     def confirm_dialog(self, title: str, message: str) -> bool:
         """Show Windows confirmation dialog.
@@ -49,7 +53,13 @@ class WindowsHandler(PlatformHandler):
             message: Confirmation message.
 
         Returns:
-            True if user clicked OK.
+            True if the user clicked OK, False if the user declined.
+
+        Raises:
+            DialogUnavailableError: Neither MessageBoxW nor tkinter could show
+                a dialog. This used to return ``False``, which the caller reads
+                as "the user said no" -- so a destructive action would appear
+                to be declined by a user who was never asked.
         """
         try:
             import ctypes
@@ -61,6 +71,9 @@ class WindowsHandler(PlatformHandler):
             result = ctypes.windll.user32.MessageBoxW(
                 0, message, title, MB_OKCANCEL | MB_ICONQUESTION
             )
+            # MessageBoxW returns 0 when it could not create the box at all.
+            if result == 0:
+                raise OSError("MessageBoxW returned 0 (dialog not created)")
             return result == IDOK
         except Exception as e:
             print(f"Error showing confirm dialog: {e}")
@@ -73,9 +86,12 @@ class WindowsHandler(PlatformHandler):
                 root.withdraw()
                 result = messagebox.askokcancel(title, message)
                 root.destroy()
-                return result
-            except Exception:
-                return False
+                return bool(result)
+            except Exception as fallback_error:
+                raise DialogUnavailableError(
+                    "no confirmation dialog available "
+                    f"(MessageBoxW: {e}; tkinter: {fallback_error})"
+                ) from fallback_error
 
     def open_settings_dialog(self, config: "TrayConfig") -> None:
         """Open settings in default browser.

@@ -1,8 +1,12 @@
 """Tests for menu construction."""
 
-from unittest.mock import MagicMock
+import subprocess
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from openadapt_tray.menu import CaptureInfo, MenuBuilder
+from openadapt_tray.platform.base import DialogUnavailableError
 from openadapt_tray.state import AppState, TrayState
 
 
@@ -175,3 +179,103 @@ class TestMenuBuilder:
         builder._quit()
 
         app.quit.assert_called_once()
+
+
+class TestCapturesSubmenuDistinguishesEmptyFromUnreadable:
+    """"Nothing there" and "could not look" must not render the same.
+
+    ``_get_recent_captures`` used to swallow every exception and return ``[]``,
+    so an unreadable captures directory (permissions, a dead mount) produced
+    the same reassuring "No captures" entry as a directory that really was
+    empty.
+    """
+
+    def _app_with_captures_dir(self, captures_dir):
+        app = MagicMock()
+        app.config.get_captures_path.return_value = captures_dir
+        return app
+
+    def test_empty_directory_says_no_captures(self, tmp_path):
+        builder = MenuBuilder(self._app_with_captures_dir(tmp_path))
+        item = builder._build_captures_submenu()
+        labels = [str(i.text) for i in item.submenu.items]
+        assert "No captures" in labels
+
+    def test_unreadable_directory_says_so(self):
+        captures_dir = MagicMock()
+        captures_dir.exists.return_value = True
+        captures_dir.iterdir.side_effect = PermissionError("permission denied")
+        builder = MenuBuilder(self._app_with_captures_dir(captures_dir))
+
+        item = builder._build_captures_submenu()
+
+        labels = [str(i.text) for i in item.submenu.items]
+        assert "Could not read captures" in labels
+        assert "No captures" not in labels
+
+    def test_get_recent_captures_raises_rather_than_returning_empty(self):
+        captures_dir = MagicMock()
+        captures_dir.exists.return_value = True
+        captures_dir.iterdir.side_effect = PermissionError("permission denied")
+        builder = MenuBuilder(self._app_with_captures_dir(captures_dir))
+
+        with pytest.raises(OSError):
+            builder._get_recent_captures()
+
+
+class TestViewCaptureChecksExitStatus:
+    """A CLI that ran and failed used to be indistinguishable from one that worked."""
+
+    def test_nonzero_exit_falls_back_to_file_browser(self):
+        builder = MenuBuilder(MagicMock())
+        with patch("subprocess.run") as run, patch.object(
+            builder, "_open_in_file_browser"
+        ) as fallback:
+            run.return_value = subprocess.CompletedProcess([], 2, b"", b"boom")
+            builder._view_capture("/tmp/capture")
+        fallback.assert_called_once_with("/tmp/capture")
+
+    def test_zero_exit_does_not_fall_back(self):
+        builder = MenuBuilder(MagicMock())
+        with patch("subprocess.run") as run, patch.object(
+            builder, "_open_in_file_browser"
+        ) as fallback:
+            run.return_value = subprocess.CompletedProcess([], 0, b"", b"")
+            builder._view_capture("/tmp/capture")
+        fallback.assert_not_called()
+
+    def test_missing_cli_falls_back_once(self):
+        builder = MenuBuilder(MagicMock())
+        with patch("subprocess.run", side_effect=FileNotFoundError), patch.object(
+            builder, "_open_in_file_browser"
+        ) as fallback:
+            builder._view_capture("/tmp/capture")
+        fallback.assert_called_once_with("/tmp/capture")
+
+
+class TestDeleteCaptureWhenNoDialogCanBeShown:
+    """"We never asked" must not be silently read as "the user said no"."""
+
+    def test_unavailable_dialog_deletes_nothing_and_says_so(self):
+        app = MagicMock()
+        app.platform.confirm_dialog.side_effect = DialogUnavailableError("no display")
+        builder = MenuBuilder(app)
+
+        with patch("shutil.rmtree") as rmtree:
+            builder._delete_capture("/tmp/capture", "cap")
+
+        rmtree.assert_not_called()
+        app.notifications.show.assert_called_once()
+        title = app.notifications.show.call_args[0][0]
+        assert "confirm" in title.lower()
+
+    def test_declining_deletes_nothing_and_stays_quiet(self):
+        app = MagicMock()
+        app.platform.confirm_dialog.return_value = False
+        builder = MenuBuilder(app)
+
+        with patch("shutil.rmtree") as rmtree:
+            builder._delete_capture("/tmp/capture", "cap")
+
+        rmtree.assert_not_called()
+        app.notifications.show.assert_not_called()

@@ -5,10 +5,36 @@ import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from openadapt_tray.platform.base import PlatformHandler
+from openadapt_tray.platform.base import DialogUnavailableError, PlatformHandler
 
 if TYPE_CHECKING:
     from openadapt_tray.config import TrayConfig
+
+# osascript exits 1 both when the user cancels a dialog AND when the script
+# itself fails (no Apple-events permission, no window server). The two are only
+# distinguishable by stderr, which carries this marker on a real failure.
+OSASCRIPT_ERROR_MARKER = "execution error"
+
+
+def _raise_if_osascript_failed(
+    result: subprocess.CompletedProcess, kind: str
+) -> None:
+    """Raise when a non-zero osascript exit was a failure, not a user decision.
+
+    Args:
+        result: The finished ``osascript`` process.
+        kind: Dialog kind, used in the error message.
+
+    Raises:
+        DialogUnavailableError: stderr carries an AppleScript execution error,
+            which means no dialog was shown -- as opposed to the user clicking
+            Cancel, which exits non-zero with a quiet stderr.
+    """
+    stderr = result.stderr or ""
+    if OSASCRIPT_ERROR_MARKER in stderr.lower():
+        raise DialogUnavailableError(
+            f"osascript could not show the {kind} dialog: {stderr.strip()}"
+        )
 
 
 class MacOSHandler(PlatformHandler):
@@ -34,7 +60,12 @@ class MacOSHandler(PlatformHandler):
             message: Prompt message.
 
         Returns:
-            User input string, or None if cancelled.
+            User input string, or None if the user cancelled (or did not answer
+            within the timeout).
+
+        Raises:
+            DialogUnavailableError: osascript is missing or reported an
+                execution error, so no dialog ever reached the screen.
         """
         # Escape special characters for AppleScript
         title_escaped = title.replace('"', '\\"').replace("\\", "\\\\")
@@ -54,13 +85,16 @@ class MacOSHandler(PlatformHandler):
                 timeout=60,  # 1 minute timeout for user input
                 check=False,  # returncode is inspected directly below
             )
-            if result.returncode == 0:
-                return result.stdout.strip()
         except subprocess.TimeoutExpired:
-            pass
+            # The dialog WAS shown; the user just did not answer it.
+            return None
         except Exception as e:
-            print(f"Error showing input dialog: {e}")
-        return None
+            raise DialogUnavailableError(f"could not run osascript: {e}") from e
+
+        if result.returncode == 0:
+            return result.stdout.strip()
+        _raise_if_osascript_failed(result, "input")
+        return None  # The user cancelled.
 
     def confirm_dialog(self, title: str, message: str) -> bool:
         """Show native macOS confirmation dialog.
@@ -70,7 +104,12 @@ class MacOSHandler(PlatformHandler):
             message: Confirmation message.
 
         Returns:
-            True if user clicked OK.
+            True if the user clicked OK, False if the user declined (or did not
+            answer within the timeout).
+
+        Raises:
+            DialogUnavailableError: osascript is missing or reported an
+                execution error, so the user was never asked.
         """
         # Escape special characters for AppleScript
         title_escaped = title.replace('"', '\\"').replace("\\", "\\\\")
@@ -90,12 +129,16 @@ class MacOSHandler(PlatformHandler):
                 timeout=60,
                 check=False,  # returncode is inspected directly below
             )
-            return result.returncode == 0 and "OK" in result.stdout
         except subprocess.TimeoutExpired:
+            # The dialog WAS shown; the user just did not answer it.
             return False
         except Exception as e:
-            print(f"Error showing confirm dialog: {e}")
-            return False
+            raise DialogUnavailableError(f"could not run osascript: {e}") from e
+
+        if result.returncode == 0:
+            return "OK" in result.stdout
+        _raise_if_osascript_failed(result, "confirmation")
+        return False  # The user clicked Cancel.
 
     def open_settings_dialog(self, config: "TrayConfig") -> None:
         """Open settings in default browser.

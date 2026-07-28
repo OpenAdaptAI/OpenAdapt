@@ -1,12 +1,16 @@
 """Tests for platform detection and handlers."""
 
+import subprocess
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from openadapt_tray.platform import get_platform_handler
-from openadapt_tray.platform.base import PlatformHandler
+from openadapt_tray.platform.base import DialogUnavailableError, PlatformHandler
+from openadapt_tray.platform.linux import LinuxHandler
+from openadapt_tray.platform.macos import MacOSHandler
+from openadapt_tray.platform.windows import WindowsHandler
 
 
 class TestPlatformDetection:
@@ -186,3 +190,125 @@ class TestLinuxHandler:
 
         handler = LinuxHandler()
         handler.setup()  # Should not raise
+
+
+class TestLinuxDialogsSeparateFailureFromAnswer:
+    """A dialog tool that could not run must not speak for the user.
+
+    zenity/kdialog exit 1 when the user cancels and 255 when the tool itself
+    fails (no DISPLAY, broken GTK). Treating every non-zero exit as the user's
+    answer both invented an answer AND skipped the remaining fallbacks.
+    """
+
+    def _result(self, returncode, stdout=""):
+        return subprocess.CompletedProcess([], returncode, stdout, "")
+
+    def test_prompt_input_exit_1_is_a_real_cancel(self):
+        handler = LinuxHandler()
+        with patch("subprocess.run", return_value=self._result(1)) as run:
+            assert handler.prompt_input("t", "m") is None
+        # Cancel is an answer: no point asking kdialog the same question.
+        assert run.call_count == 1
+
+    def test_prompt_input_tool_failure_tries_the_next_tool(self):
+        handler = LinuxHandler()
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd[0])
+            if cmd[0] == "zenity":
+                return self._result(255)  # zenity could not show anything
+            return self._result(0, "typed name")
+
+        with patch("subprocess.run", side_effect=fake_run):
+            assert handler.prompt_input("t", "m") == "typed name"
+        assert calls == ["zenity", "kdialog"]
+
+    def test_prompt_input_raises_when_nothing_can_ask(self):
+        handler = LinuxHandler()
+        with patch("subprocess.run", return_value=self._result(255)), patch.dict(
+            sys.modules, {"tkinter": None}
+        ), pytest.raises(DialogUnavailableError):
+            handler.prompt_input("t", "m")
+
+    def test_confirm_dialog_exit_1_is_a_real_no(self):
+        handler = LinuxHandler()
+        with patch("subprocess.run", return_value=self._result(1)) as run:
+            assert handler.confirm_dialog("t", "m") is False
+        assert run.call_count == 1
+
+    def test_confirm_dialog_tool_failure_tries_the_next_tool(self):
+        handler = LinuxHandler()
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd[0])
+            if cmd[0] == "zenity":
+                return self._result(255)
+            return self._result(0)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            assert handler.confirm_dialog("t", "m") is True
+        assert calls == ["zenity", "kdialog"]
+
+    def test_confirm_dialog_raises_rather_than_answering_no_for_the_user(self):
+        handler = LinuxHandler()
+        with patch("subprocess.run", return_value=self._result(255)), patch.dict(
+            sys.modules, {"tkinter": None}
+        ), pytest.raises(DialogUnavailableError):
+            handler.confirm_dialog("t", "m")
+
+
+class TestWindowsDialogsSeparateFailureFromAnswer:
+    def test_confirm_dialog_raises_when_no_dialog_can_be_shown(self):
+        handler = WindowsHandler()
+        # Block BOTH mechanisms, on every OS: blocking ctypes matters on
+        # Windows runners, where the real MessageBoxW would block forever.
+        with patch.dict(
+            sys.modules, {"ctypes": None, "tkinter": None}
+        ), pytest.raises(DialogUnavailableError):
+            handler.confirm_dialog("t", "m")
+
+    def test_prompt_input_raises_when_no_dialog_can_be_shown(self):
+        handler = WindowsHandler()
+        with patch.dict(sys.modules, {"tkinter": None}), pytest.raises(
+            DialogUnavailableError
+        ):
+            handler.prompt_input("t", "m")
+
+
+class TestMacOSDialogsSeparateFailureFromAnswer:
+    """osascript exits 1 for a user cancel AND for an execution error."""
+
+    def _result(self, returncode, stdout="", stderr=""):
+        return subprocess.CompletedProcess([], returncode, stdout, stderr)
+
+    def test_cancel_is_an_answer(self):
+        handler = MacOSHandler()
+        with patch("subprocess.run", return_value=self._result(1, "", "")):
+            assert handler.confirm_dialog("t", "m") is False
+            assert handler.prompt_input("t", "m") is None
+
+    def test_execution_error_raises_instead_of_answering_for_the_user(self):
+        handler = MacOSHandler()
+        failure = self._result(
+            1, "", "execution error: Not authorized to send Apple events (-1743)"
+        )
+        with patch("subprocess.run", return_value=failure):
+            with pytest.raises(DialogUnavailableError):
+                handler.confirm_dialog("t", "m")
+            with pytest.raises(DialogUnavailableError):
+                handler.prompt_input("t", "m")
+
+    def test_missing_osascript_raises(self):
+        handler = MacOSHandler()
+        with patch("subprocess.run", side_effect=FileNotFoundError("osascript")):
+            with pytest.raises(DialogUnavailableError):
+                handler.confirm_dialog("t", "m")
+            with pytest.raises(DialogUnavailableError):
+                handler.prompt_input("t", "m")
+
+    def test_ok_is_still_ok(self):
+        handler = MacOSHandler()
+        with patch("subprocess.run", return_value=self._result(0, "OK", "")):
+            assert handler.confirm_dialog("t", "m") is True

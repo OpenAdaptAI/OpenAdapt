@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from openadapt_tray.config import (
     MIN_POLL_INTERVAL_S,
     OFFLINE_POLL_INTERVAL_S,
@@ -10,6 +12,7 @@ from openadapt_tray.config import (
 from openadapt_tray.hosted import (
     CountResult,
     HostedPoller,
+    InvalidCountPayload,
     count_url,
     route_break_click,
 )
@@ -240,3 +243,144 @@ class TestRouteBreakClick:
         with patch("openadapt_tray.hosted.webbrowser.open") as mock_open:
             route_break_click(cfg, ipc_client=None)
         mock_open.assert_called_once()
+
+
+class TestUnreadableCountPayload:
+    """A body we cannot read is NOT a count of zero.
+
+    ``count`` drives the badge and the "N automations need attention"
+    notification. ``payload.get("count", 0)`` used to turn any response that
+    lost or renamed the field into a confident all-clear -- the single most
+    dangerous value this module can invent.
+    """
+
+    def test_missing_count_raises_instead_of_reporting_zero(self):
+        with pytest.raises(InvalidCountPayload) as excinfo:
+            CountResult.from_payload({"halts": 0})
+        assert "count" in str(excinfo.value)
+
+    def test_null_count_raises(self):
+        with pytest.raises(InvalidCountPayload):
+            CountResult.from_payload({"count": None})
+
+    def test_non_numeric_count_raises(self):
+        with pytest.raises(InvalidCountPayload):
+            CountResult.from_payload({"count": "lots"})
+
+    def test_negative_count_raises(self):
+        with pytest.raises(InvalidCountPayload):
+            CountResult.from_payload({"count": -1})
+
+    def test_non_object_body_raises(self):
+        with pytest.raises(InvalidCountPayload):
+            CountResult.from_payload([1, 2, 3])
+
+    def test_unreadable_subfield_raises(self):
+        with pytest.raises(InvalidCountPayload):
+            CountResult.from_payload({"count": 1, "halts": "two"})
+
+    def test_poll_once_reports_failure_not_zero(self):
+        """The poller must return None, never ``CountResult(count=0)``."""
+        cfg = make_config()
+        poller = HostedPoller(
+            cfg, on_count=lambda r: None, token_provider=lambda: "t"
+        )
+        fake = _FakeClient(_FakeResponse(200, {"total": 7}))  # no "count"
+        with patch("openadapt_tray.hosted.httpx.Client", return_value=fake):
+            assert poller.poll_once() is None
+
+    def test_unreadable_body_never_clears_the_badge(self):
+        """The badge keeps its last known value rather than dropping to 0."""
+        cfg = make_config()
+        counts = []
+        poller = HostedPoller(
+            cfg, on_count=lambda r: counts.append(r.count),
+            token_provider=lambda: "t",
+        )
+        good = _FakeClient(_FakeResponse(200, {"count": 4}))
+        with patch("openadapt_tray.hosted.httpx.Client", return_value=good):
+            poller._handle_result(poller.poll_once())
+        bad = _FakeClient(_FakeResponse(200, {"total": 7}))
+        with patch("openadapt_tray.hosted.httpx.Client", return_value=bad):
+            poller._handle_result(poller.poll_once())
+        # 4 was reported once; the unreadable body reported nothing at all.
+        assert counts == [4]
+
+
+class TestNotificationDelivery:
+    """The notifier's answer about delivery must be acted on, not discarded.
+
+    PR #29 made ``_show_windows`` return False when the PowerShell toast never
+    appeared. That honest answer was then thrown away here: ``_last_count`` was
+    advanced regardless, recording the user as informed about breaks they were
+    never shown, and suppressing every retry until the count rose again.
+    """
+
+    def _poller(self, notifier):
+        return HostedPoller(
+            make_config(),
+            on_count=lambda r: None,
+            notifier=notifier,
+            token_provider=lambda: "t",
+        )
+
+    def test_undelivered_notification_is_retried_on_the_next_poll(self):
+        notifier = MagicMock()
+        notifier.show.return_value = False  # e.g. WinRT toast unavailable
+        poller = self._poller(notifier)
+
+        poller._handle_result(CountResult(count=3))
+        assert notifier.show.call_count == 1
+
+        # Same count again: the user still has not been told, so try again.
+        poller._handle_result(CountResult(count=3))
+        assert notifier.show.call_count == 2
+
+    def test_delivered_notification_is_not_repeated(self):
+        notifier = MagicMock()
+        notifier.show.return_value = True
+        poller = self._poller(notifier)
+
+        poller._handle_result(CountResult(count=3))
+        poller._handle_result(CountResult(count=3))
+        assert notifier.show.call_count == 1
+
+    def test_raising_notifier_is_treated_as_undelivered(self):
+        notifier = MagicMock()
+        notifier.show.side_effect = RuntimeError("no notification daemon")
+        poller = self._poller(notifier)
+
+        poller._handle_result(CountResult(count=2))
+        poller._handle_result(CountResult(count=2))
+        assert notifier.show.call_count == 2
+
+    def test_fire_notification_reports_delivery(self):
+        notifier = MagicMock()
+        notifier.show.return_value = False
+        assert self._poller(notifier)._fire_notification(1) is False
+        notifier.show.return_value = True
+        assert self._poller(notifier)._fire_notification(1) is True
+
+    def test_no_notifier_is_not_a_delivery(self):
+        poller = HostedPoller(
+            make_config(), on_count=lambda r: None, token_provider=lambda: "t"
+        )
+        assert poller._fire_notification(1) is False
+
+
+class TestBreakClickReportsFailure:
+    """A click that opened nothing must not report itself as routed."""
+
+    def test_returns_false_when_no_browser_could_be_opened(self):
+        cfg = make_config(deployment_lane="cloud")
+        with patch("openadapt_tray.hosted.webbrowser.open", return_value=False):
+            assert route_break_click(cfg, ipc_client=None) is False
+
+    def test_returns_true_when_the_browser_opened(self):
+        cfg = make_config(deployment_lane="cloud")
+        with patch("openadapt_tray.hosted.webbrowser.open", return_value=True):
+            assert route_break_click(cfg, ipc_client=None) is True
+
+    def test_byoc_desktop_route_returns_true(self):
+        cfg = make_config(deployment_lane="byoc")
+        assert route_break_click(cfg, ipc_client=MagicMock()) is True

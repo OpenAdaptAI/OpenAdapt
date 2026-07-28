@@ -25,8 +25,8 @@ Screenshots to capture:
     10. Settings/configuration (if available)
 """
 
-import time
 import sys
+import time
 from pathlib import Path
 
 # Try to import the notification system
@@ -187,18 +187,24 @@ def main():
         print()
 
         # Countdown before action
-        countdown(3, f"  Triggering")
+        countdown(3, "  Triggering")
 
-        # Execute action
+        # Execute action. The notification helpers return whether the
+        # notification was actually delivered; printing a tick regardless told
+        # the operator to photograph a notification that was never shown.
+        shown = True
         if callable(shot['action']):
-            result = shot['action']()
+            shown = shot['action']() is not False
 
         # Wait for notification to appear and give time to screenshot
-        print(f"  ✓ Triggered! Capture screenshot now...")
+        if shown:
+            print("  ✓ Triggered! Capture screenshot now...")
+        else:
+            print("  ✗ NOT delivered — there is nothing on screen to capture.")
         time.sleep(shot['wait'])
 
         # Give extra time to capture
-        countdown(shot['wait'] + 3, f"  Time remaining")
+        countdown(shot['wait'] + 3, "  Time remaining")
 
         print()
         print("-" * 80)

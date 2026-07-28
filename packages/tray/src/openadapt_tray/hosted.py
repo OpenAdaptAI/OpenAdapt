@@ -32,6 +32,29 @@ COUNT_ENDPOINT_PATH = "/api/needs-attention/count"
 REQUEST_TIMEOUT_S = 10.0
 
 
+class InvalidCountPayload(ValueError):
+    """The count endpoint returned a body we cannot read as a count.
+
+    Raised instead of defaulting, because an unreadable body is NOT a count of
+    zero: zero renders as "nothing needs attention", which is the one answer we
+    must never invent.
+    """
+
+
+def _optional_int(payload: dict, key: str) -> int:
+    """Read an optional integer subfield.
+
+    Absent means zero (documented tolerance for the display-only subfields).
+    Present but unreadable means the body is malformed, which is an error.
+    """
+    if key not in payload:
+        return 0
+    try:
+        return int(payload[key])
+    except (TypeError, ValueError) as e:
+        raise InvalidCountPayload(f"{key!r} is not an integer: {payload[key]!r}") from e
+
+
 @dataclass
 class CountResult:
     """Parsed response from the needs-attention count endpoint."""
@@ -41,12 +64,47 @@ class CountResult:
     uncertain_dispatches: int = 0
 
     @classmethod
-    def from_payload(cls, payload: dict) -> "CountResult":
-        """Build a result from the JSON body, tolerating missing subfields."""
+    def from_payload(cls, payload: object) -> "CountResult":
+        """Build a result from the JSON body.
+
+        ``count`` is the safety-critical number: it drives the badge and the
+        "N automations need attention" notification. A body without a readable
+        integer ``count`` means we do NOT know the count, so this raises
+        :class:`InvalidCountPayload` rather than substituting ``0`` -- an
+        absent field used to render as a confident all-clear.
+
+        The display-only subfields (``halts``, ``uncertain_dispatches``) stay
+        tolerant of absence; see :func:`_optional_int`.
+
+        Args:
+            payload: The decoded JSON body.
+
+        Returns:
+            A parsed :class:`CountResult`.
+
+        Raises:
+            InvalidCountPayload: The body is not a JSON object, has no
+                ``count``, or carries a count that is not a non-negative
+                integer.
+        """
+        if not isinstance(payload, dict):
+            raise InvalidCountPayload(
+                f"expected a JSON object, got {type(payload).__name__}"
+            )
+        if "count" not in payload:
+            raise InvalidCountPayload("response body has no 'count' field")
+        try:
+            count = int(payload["count"])
+        except (TypeError, ValueError) as e:
+            raise InvalidCountPayload(
+                f"'count' is not an integer: {payload['count']!r}"
+            ) from e
+        if count < 0:
+            raise InvalidCountPayload(f"'count' is negative: {count}")
         return cls(
-            count=int(payload.get("count", 0)),
-            halts=int(payload.get("halts", 0)),
-            uncertain_dispatches=int(payload.get("uncertain_dispatches", 0)),
+            count=count,
+            halts=_optional_int(payload, "halts"),
+            uncertain_dispatches=_optional_int(payload, "uncertain_dispatches"),
         )
 
 
@@ -122,7 +180,14 @@ class HostedPoller:
             if resp.status_code != 200:
                 print(f"needs-attention count returned {resp.status_code}")
                 return None
-            return CountResult.from_payload(resp.json())
+            try:
+                return CountResult.from_payload(resp.json())
+            except InvalidCountPayload as e:
+                # A body we cannot read is not a count of zero. Report it as a
+                # failed poll so the badge keeps its last known value instead of
+                # clearing to a confident all-clear.
+                print(f"needs-attention count response unusable: {e}")
+                return None
         except Exception as e:
             # Network error / DNS / timeout / bad JSON → offline.
             print(f"needs-attention poll failed: {e}")
@@ -151,17 +216,32 @@ class HostedPoller:
 
         # Notify only when the count RISES (0→N or N→N+1), never on a decrease.
         if result.count > self._last_count and result.count > 0:
-            self._fire_notification(result.count)
+            if self._fire_notification(result.count):
+                self._last_count = result.count
+            # Not delivered: leave ``_last_count`` behind on purpose. Advancing
+            # it would record the user as informed about breaks they were never
+            # shown, and the count would have to rise AGAIN before we tried a
+            # second time. Holding it back makes the next poll retry.
+        else:
+            self._last_count = result.count
 
-        self._last_count = result.count
+    def _fire_notification(self, count: int) -> bool:
+        """Fire the 'N automations need attention' notification.
 
-    def _fire_notification(self, count: int) -> None:
-        """Fire the 'N automations need attention' notification."""
+        Args:
+            count: The number of automations needing attention.
+
+        Returns:
+            True only if the notifier reported the notification as delivered.
+            A notifier that cannot deliver (no toast backend, a dead
+            notification daemon) returns False from its ``show``; that answer is
+            now propagated instead of discarded.
+        """
         if not self._notifier:
-            return
+            return False
         noun = "automation" if count == 1 else "automations"
         try:
-            self._notifier.show(
+            delivered = self._notifier.show(
                 "Automations need attention",
                 f"{count} {noun} need attention",
                 urgency="critical",
@@ -169,6 +249,14 @@ class HostedPoller:
             )
         except Exception as e:
             print(f"Failed to show needs-attention notification: {e}")
+            return False
+        if not delivered:
+            print(
+                f"needs-attention notification was NOT delivered ({count} {noun} "
+                "need attention); retrying on the next poll"
+            )
+            return False
+        return True
 
     def _default_click(self) -> None:
         """Fallback click handler (cloud-lane browser open)."""
@@ -208,12 +296,18 @@ class HostedPoller:
 def route_break_click(
     config: TrayConfig,
     ipc_client: object | None = None,
-) -> None:
+) -> bool:
     """Route a break/needs-attention click by deployment lane.
 
     Args:
         config: Tray configuration (provides lane + hosted_url).
         ipc_client: Optional IPC client used for the byoc local-teach route.
+
+    Returns:
+        True if the click was routed somewhere the user can see. False means
+        neither route worked and NOTHING opened -- the user clicked and the
+        screen did not change, so the caller must say so rather than assume the
+        click landed.
     """
     # PHI stays local on the byoc lane: open the desktop teach view over IPC,
     # and fall through to the hosted dashboard only if the desktop is
@@ -221,7 +315,12 @@ def route_break_click(
     if config.deployment_lane == "byoc" and ipc_client is not None:
         try:
             ipc_client.send_open_teach()
-            return
+            return True
         except Exception as e:
             print(f"Failed to route byoc break click to desktop: {e}")
-    webbrowser.open(f"{config.hosted_url.rstrip('/')}/dashboard")
+    # webbrowser.open returns False when it could not find or start a browser.
+    # Discarding that made a dead click indistinguishable from a served one.
+    opened = webbrowser.open(f"{config.hosted_url.rstrip('/')}/dashboard")
+    if not opened:
+        print("Could not open the hosted dashboard: no usable browser")
+    return bool(opened)

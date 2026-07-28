@@ -1,8 +1,10 @@
 """Tests for the main TrayApplication."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from openadapt_tray.config import TrayConfig
+from openadapt_tray.config import ConfigLoadError, TrayConfig
+from openadapt_tray.platform.base import DialogUnavailableError
 from openadapt_tray.state import TrayState
 
 
@@ -239,3 +241,131 @@ class TestQuit:
         with patch.object(app, "stop_recording") as mock_stop:
             app.quit()
             mock_stop.assert_called_once()
+
+
+class TestUnreadableConfigIsReported:
+    """Running on settings the user never chose must not look like a clean start."""
+
+    @patch("openadapt_tray.app.pystray")
+    @patch("openadapt_tray.app.get_platform_handler")
+    def test_run_tells_the_user_the_settings_could_not_be_read(
+        self, mock_platform, mock_pystray
+    ):
+        from openadapt_tray.app import TrayApplication
+
+        mock_platform.return_value = MagicMock()
+        mock_pystray.Icon.return_value = MagicMock()
+
+        error = ConfigLoadError(Path("/tmp/tray.json"), ValueError("bad json"))
+        with patch.object(
+            TrayConfig, "load_or_defaults", return_value=(TrayConfig(), error)
+        ):
+            app = TrayApplication()
+        app.notifications = MagicMock()
+        app.hotkeys = MagicMock()
+        app.ipc = MagicMock()
+        app.hosted = MagicMock()
+
+        app.run()
+
+        app.notifications.show.assert_called_once()
+        title = app.notifications.show.call_args[0][0]
+        assert "settings" in title.lower()
+
+    @patch("openadapt_tray.app.pystray")
+    @patch("openadapt_tray.app.get_platform_handler")
+    def test_a_clean_load_says_nothing(self, mock_platform, mock_pystray):
+        from openadapt_tray.app import TrayApplication
+
+        mock_platform.return_value = MagicMock()
+        mock_pystray.Icon.return_value = MagicMock()
+
+        with patch.object(
+            TrayConfig, "load_or_defaults", return_value=(TrayConfig(), None)
+        ):
+            app = TrayApplication()
+        app.notifications = MagicMock()
+        app.hotkeys = MagicMock()
+        app.ipc = MagicMock()
+        app.hosted = MagicMock()
+
+        app.run()
+
+        app.notifications.show.assert_not_called()
+
+
+class TestStartRecordingWhenNoDialogCanBeShown:
+    """"The prompt never appeared" used to be indistinguishable from "cancelled"."""
+
+    def _app(self, mock_platform, mock_pystray):
+        from openadapt_tray.app import TrayApplication
+
+        mock_pystray.Icon.return_value = MagicMock()
+        app = TrayApplication(config=TrayConfig(use_native_dialogs=True))
+        app.notifications = MagicMock()
+        return app
+
+    @patch("openadapt_tray.app.pystray")
+    @patch("openadapt_tray.app.get_platform_handler")
+    def test_unavailable_dialog_still_starts_the_recording(
+        self, mock_platform, mock_pystray
+    ):
+        platform = MagicMock()
+        platform.prompt_input.side_effect = DialogUnavailableError("no display")
+        mock_platform.return_value = platform
+
+        app = self._app(mock_platform, mock_pystray)
+        with patch.object(app, "_dispatch_start_recording"):
+            app.start_recording()
+
+        assert app.state.current.state == TrayState.RECORDING_STARTING
+        # And the user is told why no naming prompt appeared.
+        app.notifications.show.assert_called_once()
+
+    @patch("openadapt_tray.app.pystray")
+    @patch("openadapt_tray.app.get_platform_handler")
+    def test_a_real_cancel_still_cancels(self, mock_platform, mock_pystray):
+        platform = MagicMock()
+        platform.prompt_input.return_value = None  # the user pressed Cancel
+        mock_platform.return_value = platform
+
+        app = self._app(mock_platform, mock_pystray)
+        with patch.object(app, "_dispatch_start_recording"):
+            app.start_recording()
+
+        assert app.state.current.state == TrayState.IDLE
+        app.notifications.show.assert_not_called()
+
+
+class TestNeedsAttentionClickReportsDeadEnds:
+    @patch("openadapt_tray.app.pystray")
+    @patch("openadapt_tray.app.get_platform_handler")
+    def test_click_that_opened_nothing_tells_the_user(
+        self, mock_platform, mock_pystray
+    ):
+        from openadapt_tray.app import TrayApplication
+
+        mock_platform.return_value = MagicMock()
+        mock_pystray.Icon.return_value = MagicMock()
+        app = TrayApplication(config=TrayConfig())
+        app.notifications = MagicMock()
+
+        with patch("openadapt_tray.app.route_break_click", return_value=False):
+            assert app.open_needs_attention() is False
+        app.notifications.show.assert_called_once()
+
+    @patch("openadapt_tray.app.pystray")
+    @patch("openadapt_tray.app.get_platform_handler")
+    def test_click_that_opened_something_stays_quiet(
+        self, mock_platform, mock_pystray
+    ):
+        from openadapt_tray.app import TrayApplication
+
+        mock_platform.return_value = MagicMock()
+        mock_pystray.Icon.return_value = MagicMock()
+        app = TrayApplication(config=TrayConfig())
+        app.notifications = MagicMock()
+
+        with patch("openadapt_tray.app.route_break_click", return_value=True):
+            assert app.open_needs_attention() is True
+        app.notifications.show.assert_not_called()

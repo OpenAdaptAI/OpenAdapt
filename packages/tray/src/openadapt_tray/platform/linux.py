@@ -6,10 +6,15 @@ import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from openadapt_tray.platform.base import PlatformHandler
+from openadapt_tray.platform.base import DialogUnavailableError, PlatformHandler
 
 if TYPE_CHECKING:
     from openadapt_tray.config import TrayConfig
+
+# zenity and kdialog both use exit 1 for "the user said no / cancelled". Any
+# other non-zero exit (zenity uses 255) is the TOOL failing -- no display, a
+# broken GTK, a timeout -- which must not be read as a user's answer.
+DIALOG_DECLINED_EXIT = 1
 
 
 class LinuxHandler(PlatformHandler):
@@ -27,7 +32,11 @@ class LinuxHandler(PlatformHandler):
             message: Prompt message.
 
         Returns:
-            User input string, or None if cancelled.
+            User input string, or None if the user cancelled.
+
+        Raises:
+            DialogUnavailableError: zenity, kdialog and tkinter all failed to
+                show a dialog.
         """
         # Try zenity first (GNOME)
         try:
@@ -45,7 +54,12 @@ class LinuxHandler(PlatformHandler):
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-            return None
+            if result.returncode == DIALOG_DECLINED_EXIT:
+                return None  # The user cancelled. That is an answer.
+            # zenity ran but could not show anything (no display, exit 255).
+            # This used to return None, i.e. it was reported as the user
+            # cancelling, and it also skipped the kdialog/tkinter fallbacks.
+            print(f"zenity could not show a dialog (exit {result.returncode})")
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -68,7 +82,9 @@ class LinuxHandler(PlatformHandler):
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-            return None
+            if result.returncode == DIALOG_DECLINED_EXIT:
+                return None  # The user cancelled.
+            print(f"kdialog could not show a dialog (exit {result.returncode})")
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -85,8 +101,9 @@ class LinuxHandler(PlatformHandler):
             root.destroy()
             return result
         except Exception as e:
-            print(f"Error with tkinter: {e}")
-            return None
+            raise DialogUnavailableError(
+                f"no input dialog available (zenity, kdialog, tkinter): {e}"
+            ) from e
 
     def confirm_dialog(self, title: str, message: str) -> bool:
         """Show confirmation dialog using zenity or kdialog.
@@ -96,7 +113,11 @@ class LinuxHandler(PlatformHandler):
             message: Confirmation message.
 
         Returns:
-            True if user clicked OK.
+            True if the user clicked OK, False if the user declined.
+
+        Raises:
+            DialogUnavailableError: zenity, kdialog and tkinter all failed to
+                show a dialog, so the user was never asked.
         """
         # Try zenity first
         try:
@@ -111,7 +132,11 @@ class LinuxHandler(PlatformHandler):
                 timeout=60,
                 check=False,  # returncode is inspected directly below
             )
-            return result.returncode == 0
+            if result.returncode in (0, DIALOG_DECLINED_EXIT):
+                return result.returncode == 0
+            # zenity ran but showed nothing. Reporting that as "the user said
+            # no" is a guess dressed up as an answer.
+            print(f"zenity could not show a dialog (exit {result.returncode})")
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -131,7 +156,9 @@ class LinuxHandler(PlatformHandler):
                 timeout=60,
                 check=False,  # returncode is inspected directly below
             )
-            return result.returncode == 0
+            if result.returncode in (0, DIALOG_DECLINED_EXIT):
+                return result.returncode == 0
+            print(f"kdialog could not show a dialog (exit {result.returncode})")
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -146,10 +173,11 @@ class LinuxHandler(PlatformHandler):
             root.withdraw()
             result = messagebox.askokcancel(title, message)
             root.destroy()
-            return result
+            return bool(result)
         except Exception as e:
-            print(f"Error with tkinter: {e}")
-            return False
+            raise DialogUnavailableError(
+                f"no confirmation dialog available (zenity, kdialog, tkinter): {e}"
+            ) from e
 
     def open_settings_dialog(self, config: "TrayConfig") -> None:
         """Open settings in default browser.

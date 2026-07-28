@@ -13,6 +13,7 @@ from pystray import MenuItem as Item
 if TYPE_CHECKING:
     from openadapt_tray.app import TrayApplication
 
+from openadapt_tray.platform.base import DialogUnavailableError
 from openadapt_tray.state import TrayState
 
 
@@ -132,7 +133,16 @@ class MenuBuilder:
         Returns:
             Menu item with captures submenu.
         """
-        captures = self._get_recent_captures()
+        try:
+            captures = self._get_recent_captures()
+        except OSError as e:
+            # "We could not look" must not render as "there is nothing there".
+            # An unreadable captures directory now says so in the menu.
+            print(f"Could not read the captures directory: {e}")
+            return Item(
+                "Recent Captures",
+                Menu(Item("Could not read captures", None, enabled=False)),
+            )
 
         if not captures:
             return Item(
@@ -160,41 +170,45 @@ class MenuBuilder:
     def _get_recent_captures(self) -> list[CaptureInfo]:
         """Get list of recent captures.
 
+        An empty list means the directory was read and held no captures. It
+        never means the directory could not be read -- that raises, so the
+        caller can render the two outcomes differently.
+
         Returns:
-            List of CaptureInfo objects.
+            List of CaptureInfo objects, newest first (at most 10).
+
+        Raises:
+            OSError: The captures directory exists but could not be listed or
+                stat'ed (permissions, a dead mount, a broken symlink).
         """
-        try:
-            captures_dir = self.app.config.get_captures_path()
-            if not captures_dir.exists():
-                return []
-
-            captures = []
-            for d in sorted(
-                captures_dir.iterdir(),
-                key=lambda x: x.stat().st_mtime,
-                reverse=True,
-            ):
-                if d.is_dir():
-                    # Check for metadata.json (formal capture)
-                    # or just any directory (simpler check)
-                    # Displayed to the user, so render in LOCAL time --
-                    # parse the epoch as UTC and convert, rather than
-                    # relying on an implicit naive-local conversion.
-                    mtime = datetime.fromtimestamp(
-                        d.stat().st_mtime, tz=timezone.utc
-                    ).astimezone()
-                    captures.append(
-                        CaptureInfo(
-                            name=d.name,
-                            path=str(d),
-                            timestamp=mtime.strftime("%Y-%m-%d %H:%M"),
-                        )
-                    )
-
-            return captures[:10]  # Limit to 10 most recent
-        except Exception as e:
-            print(f"Error getting captures: {e}")
+        captures_dir = self.app.config.get_captures_path()
+        if not captures_dir.exists():
             return []
+
+        captures = []
+        for d in sorted(
+            captures_dir.iterdir(),
+            key=lambda x: x.stat().st_mtime,
+            reverse=True,
+        ):
+            if d.is_dir():
+                # Check for metadata.json (formal capture)
+                # or just any directory (simpler check)
+                # Displayed to the user, so render in LOCAL time --
+                # parse the epoch as UTC and convert, rather than
+                # relying on an implicit naive-local conversion.
+                mtime = datetime.fromtimestamp(
+                    d.stat().st_mtime, tz=timezone.utc
+                ).astimezone()
+                captures.append(
+                    CaptureInfo(
+                        name=d.name,
+                        path=str(d),
+                        timestamp=mtime.strftime("%Y-%m-%d %H:%M"),
+                    )
+                )
+
+        return captures[:10]  # Limit to 10 most recent
 
     def _open_desktop_app(self) -> None:
         """Open (or focus) the local desktop app cockpit."""
@@ -223,14 +237,26 @@ class MenuBuilder:
             path: Path to capture directory.
         """
         try:
-            # Try using openadapt CLI first
-            subprocess.run(
+            # Try using openadapt CLI first.
+            result = subprocess.run(
                 ["openadapt", "visualize", path],
-                check=False,
+                check=False,  # returncode is inspected directly below
                 capture_output=True,
             )
         except FileNotFoundError:
-            # Fallback: open in file browser
+            # No CLI at all — fall back to the file browser.
+            self._open_in_file_browser(path)
+            return
+
+        # A CLI that exists but failed used to be indistinguishable from one
+        # that worked: the exit status was never read, so "View" did nothing at
+        # all and said nothing about it. Fall back the same way a missing CLI
+        # does.
+        if result.returncode != 0:
+            print(
+                f"openadapt visualize failed (exit {result.returncode}): "
+                f"{result.stderr}"
+            )
             self._open_in_file_browser(path)
 
     def _delete_capture(self, path: str, name: str) -> None:
@@ -240,10 +266,24 @@ class MenuBuilder:
             path: Path to capture directory.
             name: Capture name for display.
         """
-        if self.app.platform.confirm_dialog(
-            "Delete Capture",
-            f"Are you sure you want to delete this capture?\n\n{name}",
-        ):
+        try:
+            confirmed = self.app.platform.confirm_dialog(
+                "Delete Capture",
+                f"Are you sure you want to delete this capture?\n\n{name}",
+            )
+        except DialogUnavailableError as e:
+            # Not asking is not the same as being told no. Deleting nothing is
+            # still the right action here, but the user gets told why their
+            # click did nothing instead of watching it vanish.
+            print(f"Could not show the delete confirmation: {e}")
+            self.app.notifications.show(
+                "Could not confirm deletion",
+                f"No confirmation dialog could be shown, so '{name}' was NOT "
+                "deleted.",
+            )
+            return
+
+        if confirmed:
             try:
                 shutil.rmtree(path)
                 self.app.notifications.show(

@@ -7,6 +7,16 @@ if TYPE_CHECKING:
     from openadapt_tray.config import TrayConfig
 
 
+class DialogUnavailableError(RuntimeError):
+    """No dialog could be shown to the user at all.
+
+    Distinct from a dialog the user answered. "The user declined" and "we never
+    managed to ask" used to be the same ``False``, and "the user cancelled" and
+    "the prompt never appeared" used to be the same ``None`` -- so a click on
+    Delete or Start Recording could do nothing at all, silently, forever.
+    """
+
+
 class PlatformHandler(ABC):
     """Abstract base class for platform-specific functionality."""
 
@@ -26,7 +36,12 @@ class PlatformHandler(ABC):
             message: Prompt message.
 
         Returns:
-            User input string, or None if cancelled.
+            User input string, or None if the user cancelled. ``None`` means
+            the user was asked and declined to answer -- never that we failed
+            to ask.
+
+        Raises:
+            DialogUnavailableError: No dialog mechanism could be shown.
         """
 
     @abstractmethod
@@ -38,7 +53,11 @@ class PlatformHandler(ABC):
             message: Confirmation message.
 
         Returns:
-            True if user confirmed, False otherwise.
+            True if the user confirmed, False if the user declined. Both
+            answers mean the user was actually asked.
+
+        Raises:
+            DialogUnavailableError: No dialog mechanism could be shown.
         """
 
     @abstractmethod

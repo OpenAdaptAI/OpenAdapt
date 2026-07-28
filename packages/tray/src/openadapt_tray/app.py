@@ -16,13 +16,14 @@ import webbrowser
 
 import pystray
 
-from openadapt_tray.config import TrayConfig
+from openadapt_tray.config import ConfigLoadError, TrayConfig
 from openadapt_tray.hosted import CountResult, HostedPoller, route_break_click
 from openadapt_tray.icons import IconManager
 from openadapt_tray.ipc import IPCClient, IPCMessageType
 from openadapt_tray.menu import MenuBuilder
 from openadapt_tray.notifications import NotificationManager
 from openadapt_tray.platform import get_platform_handler
+from openadapt_tray.platform.base import DialogUnavailableError
 from openadapt_tray.shortcuts import HotkeyManager
 from openadapt_tray.state import (
     LANE_BYOC,
@@ -46,7 +47,15 @@ class TrayApplication:
         Args:
             config: Optional configuration. If None, loads from file or defaults.
         """
-        self.config = config or TrayConfig.load()
+        # An unreadable tray.json must not quietly become "default settings" --
+        # the default lane is "cloud", and a byoc install silently moved onto
+        # the hosted route is exactly the kind of wrong-but-confident state the
+        # tray exists to expose. Keep the error and tell the user in run().
+        self._config_error: ConfigLoadError | None = None
+        if config is not None:
+            self.config = config
+        else:
+            self.config, self._config_error = TrayConfig.load_or_defaults()
         self.state = StateManager()
         self.platform = get_platform_handler()
 
@@ -254,12 +263,24 @@ class TrayApplication:
 
         # Prompt for name if not provided
         if name is None and self.config.use_native_dialogs:
-            name = self.platform.prompt_input(
-                "New Recording",
-                "Enter a name for this capture:",
-            )
-            if not name:
-                return  # User cancelled
+            try:
+                name = self.platform.prompt_input(
+                    "New Recording",
+                    "Enter a name for this capture:",
+                )
+            except DialogUnavailableError as e:
+                # The user asked to record and the prompt never appeared. This
+                # used to look identical to "the user cancelled", so the click
+                # did nothing and said nothing. Honour the click with a default
+                # name and say why there was no prompt.
+                print(f"Could not show the capture-name dialog: {e}")
+                self.notifications.show(
+                    "No naming dialog available",
+                    "Recording started with a default name.",
+                )
+            else:
+                if not name:
+                    return  # User cancelled
 
         # Use default name if still not set
         if not name:
@@ -327,12 +348,24 @@ class TrayApplication:
         """Open the hosted cloud dashboard in the system browser."""
         webbrowser.open(self.config.hosted_url)
 
-    def open_needs_attention(self) -> None:
-        """Route a needs-attention click by deployment lane (§3c)."""
-        route_break_click(
+    def open_needs_attention(self) -> bool:
+        """Route a needs-attention click by deployment lane (§3c).
+
+        Returns:
+            True if something opened. When nothing opened the user is told,
+            rather than being left in front of an unchanged screen.
+        """
+        routed = route_break_click(
             self.config,
             ipc_client=self.ipc if self.ipc.is_connected() else None,
         )
+        if not routed:
+            self.notifications.show(
+                "Could not open needs-attention",
+                "Neither the desktop app nor a browser could be opened. "
+                f"Open {self.config.hosted_url.rstrip('/')}/dashboard manually.",
+            )
+        return routed
 
     def login(self) -> None:
         """Start the hosted login flow.
@@ -355,6 +388,17 @@ class TrayApplication:
         """Ask the desktop to resume the upload/sync queue."""
         if self.ipc.is_connected():
             self.ipc.send_resume_sync()
+
+    def _report_config_error(self) -> None:
+        """Tell the user when the tray is running on defaults it did not choose."""
+        if self._config_error is None:
+            return
+        self.notifications.show(
+            "Settings could not be read",
+            f"{self._config_error} — running on default settings "
+            f"(lane: {self.config.deployment_lane}).",
+            urgency="critical",
+        )
 
     # --- hosted poller callbacks --------------------------------------------
 
@@ -457,6 +501,9 @@ class TrayApplication:
 
     def run(self) -> None:
         """Run the application."""
+        # Say it out loud before anything relies on the settings.
+        self._report_config_error()
+
         # Start hotkey listener
         self.hotkeys.start()
 

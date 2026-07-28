@@ -5,26 +5,25 @@ Automatically find and rename screenshots from Desktop to docs/screenshots/.
 Usage: Just take screenshots with Cmd+Shift+4, then run this script.
 """
 
-import os
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from datetime import datetime, timedelta
 
 
 def find_recent_screenshots(minutes=30):
     """Find screenshots from Desktop taken in last N minutes."""
     desktop = Path.home() / "Desktop"
-    cutoff = datetime.now() - timedelta(minutes=minutes)
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=minutes)
 
     screenshots = []
     for file in desktop.glob("Screen Shot *.png"):
-        mtime = datetime.fromtimestamp(file.stat().st_mtime)
+        mtime = datetime.fromtimestamp(file.stat().st_mtime, tz=timezone.utc)
         if mtime > cutoff:
             screenshots.append(file)
 
     # Also check for Screenshot (macOS Ventura+)
     for file in desktop.glob("Screenshot *.png"):
-        mtime = datetime.fromtimestamp(file.stat().st_mtime)
+        mtime = datetime.fromtimestamp(file.stat().st_mtime, tz=timezone.utc)
         if mtime > cutoff:
             screenshots.append(file)
 
@@ -50,11 +49,13 @@ def rename_and_move_screenshots(screenshots, target_dir):
 
     print(f"\nFound {len(screenshots)} recent screenshots:")
     for i, screenshot in enumerate(screenshots, 1):
-        mtime = datetime.fromtimestamp(screenshot.stat().st_mtime)
+        mtime = datetime.fromtimestamp(
+            screenshot.stat().st_mtime, tz=timezone.utc
+        ).astimezone()
         time_str = mtime.strftime("%H:%M:%S")
         print(f"  {i}. {screenshot.name} (taken at {time_str})")
 
-    print(f"\nWill rename them to:")
+    print("\nWill rename them to:")
     for i, name in enumerate(names[:len(screenshots)], 1):
         print(f"  {i}. {name}")
 

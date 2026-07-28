@@ -1,9 +1,12 @@
 """Tests for configuration management."""
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
-from openadapt_tray.config import TrayConfig
+import pytest
+
+from openadapt_tray.config import ConfigLoadError, TrayConfig
 from openadapt_tray.shortcuts import HotkeyConfig
 
 
@@ -173,12 +176,53 @@ class TestTrayConfig:
             assert config.dashboard_port == 8080
             assert config.show_notifications is True
 
-    def test_load_invalid_json_returns_defaults(self, tmp_path):
-        """Test that loading invalid JSON returns defaults."""
+    def test_load_invalid_json_raises(self, tmp_path):
+        """An unreadable config file must NOT be reported as "no preferences".
+
+        This used to return defaults with only a printed warning. The default
+        ``deployment_lane`` is ``"cloud"``, so a byoc install whose tray.json
+        went bad was silently moved onto the hosted break-click route -- a
+        failure rendered as a perfectly ordinary successful startup.
+        """
+        config_file = tmp_path / "tray.json"
+        config_file.write_text("invalid json {{{")
+
+        with patch.object(
+            TrayConfig, "config_path", return_value=config_file
+        ), pytest.raises(ConfigLoadError) as excinfo:
+            TrayConfig.load()
+
+        assert excinfo.value.path == config_file
+
+    def test_load_or_defaults_reports_the_error_alongside_the_defaults(
+        self, tmp_path
+    ):
+        """``load_or_defaults`` hands back BOTH, so the caller cannot miss it."""
         config_file = tmp_path / "tray.json"
         config_file.write_text("invalid json {{{")
 
         with patch.object(TrayConfig, "config_path", return_value=config_file):
-            config = TrayConfig.load()
+            config, error = TrayConfig.load_or_defaults()
 
-            assert config.dashboard_port == 8080
+        assert isinstance(error, ConfigLoadError)
+        assert config.dashboard_port == 8080
+
+    def test_load_or_defaults_has_no_error_on_a_clean_load(self, tmp_path):
+        config_file = tmp_path / "tray.json"
+        config_file.write_text(json.dumps({"dashboard_port": 9100}))
+
+        with patch.object(TrayConfig, "config_path", return_value=config_file):
+            config, error = TrayConfig.load_or_defaults()
+
+        assert error is None
+        assert config.dashboard_port == 9100
+
+    def test_load_or_defaults_has_no_error_when_no_file_exists(self, tmp_path):
+        """A missing file is not a failure -- defaults are the right answer."""
+        config_file = tmp_path / "nonexistent" / "tray.json"
+
+        with patch.object(TrayConfig, "config_path", return_value=config_file):
+            config, error = TrayConfig.load_or_defaults()
+
+        assert error is None
+        assert config.dashboard_port == 8080
