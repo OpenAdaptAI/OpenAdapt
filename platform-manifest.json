@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.0.0",
-  "generated_at": "2026-07-28T01:41:01+00:00",
+  "generated_at": "2026-07-28T06:17:23+00:00",
   "release_channel": "beta",
   "components": {
     "launcher": {
@@ -46,21 +46,21 @@
     },
     "capture": {
       "package": "openadapt-capture",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "source": "pypi",
       "requires_python": ">=3.10",
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_capture-1.2.1-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/8d/f9/fc2a6ee1f7dfec55ad97bc0cdf30ec630394283d2742a841e7ec4b70ea1b/openadapt_capture-1.2.1-py3-none-any.whl",
-          "sha256": "2149c87ed2a7aebeb429de3cf13bde874b98d86ab2dadff6d6444b37e93475a2"
+          "filename": "openadapt_capture-1.2.2-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/48/11/d737d8125155f98695e2331c8d16084869946d39fb97a52e694c1ef80e3e/openadapt_capture-1.2.2-py3-none-any.whl",
+          "sha256": "550fffe50990fa8431d332bdd5fe4755976d83baa7ad62553f50ad9e4ddcd1ae"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_capture-1.2.1.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/23/a6/4f9f3b7f928299f168feb6e004ab67ca5818e938f6262103dde636c100e8/openadapt_capture-1.2.1.tar.gz",
-          "sha256": "e8b9322f339ff45ffea2f58a6c89209a6c1af4fd3ea53551fbcb1e6276cf2cbe"
+          "filename": "openadapt_capture-1.2.2.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/19/ff/fdba52fe9ca72c3d3acca72d3382d4bb12870aa134a8958ea4c8bec00d59/openadapt_capture-1.2.2.tar.gz",
+          "sha256": "6f4298d3daadf9cced8994207e34b3116a79209ef792e98f778a0770e2f3406c"
         }
       ]
     },
