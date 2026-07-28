@@ -1,0 +1,417 @@
+{
+  "_comment": "GENERATED FILE -- DO NOT EDIT BY HAND. Rendered by OpenAdaptAI/openadapt-internal:scripts/render_public_policy.py from the canonical private manifest OpenAdaptAI/openadapt-internal:source-policy.yaml. Edit the rule there and re-render; a CI job in that private repository compares this file against the canonical manifest daily. The CI guards that read this file FAIL CLOSED when it is missing, unparseable, or incomplete.",
+  "crown_jewel_categories": [
+    "control_plane",
+    "deployment_thresholds",
+    "enterprise_productionized",
+    "grown_corpus",
+    "oracle_recipes",
+    "real_emr_datasets",
+    "tuned_adversary_params"
+  ],
+  "enforcement": {
+    "built_artifacts": {
+      "path_prefixes": [
+        "docs/validation/adversary_corpus",
+        "openadapt_flow/validation/adversary_corpus"
+      ]
+    },
+    "content_signature_parts": [
+      [
+        "OPENADAPT-CORPUS",
+        "-PRIVATE-DO-NOT-PACKAGE"
+      ]
+    ],
+    "disclosed_private_repositories": [
+      "openadapt-cloud",
+      "openadapt-corpus",
+      "openadapt-internal"
+    ],
+    "path_tokens": [
+      "adversary_corpus",
+      "cerner",
+      "client_fixture",
+      "control_plane",
+      "customer_fixture",
+      "customer_recipe",
+      "deployment_corpus",
+      "deployment_thresholds",
+      "effect_oracle_recipe",
+      "enterprise_productionized",
+      "epic_hyperspace",
+      "grown_corpus",
+      "held_out_corpus",
+      "identity_roc",
+      "meditech",
+      "millennium_recipe",
+      "openadapt-cloud",
+      "openadapt-corpus",
+      "openadapt-internal",
+      "oracle_recipe",
+      "paid_agent_evidence",
+      "pixel_verify_cert",
+      "powerchart",
+      "real_emr",
+      "tuned_adversary"
+    ],
+    "private_path_segments": [
+      ".private",
+      "private"
+    ],
+    "repository_tree": {
+      "content_patterns": [
+        "powerchart",
+        "cerner\\s+millennium",
+        "epic\\s+hyperspace",
+        "openadapt[_-]corpus[/:]",
+        "deployment[_-]derived\\s+threshold\\s*=",
+        "oracle[_-]recipe[_-]id\\s*[:=]"
+      ]
+    }
+  },
+  "generated_from": "OpenAdaptAI/openadapt-internal:source-policy.yaml",
+  "policy_digest": "sha256:09e5092a6f84cbad0b588a9aec65cc7d26492dced2ddce26ca288a3ff81992c9",
+  "policy_last_updated": "2026-07-28",
+  "policy_version": 1,
+  "public_repositories": {
+    ".github": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/.github"
+    },
+    "OmniMCP": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/OmniMCP"
+    },
+    "OpenAdapt": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/OpenAdapt"
+    },
+    "OpenSanitizer": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/OpenSanitizer"
+    },
+    "PydanticPrompt": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/PydanticPrompt"
+    },
+    "openadapt-agent": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-agent"
+    },
+    "openadapt-blog": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-blog"
+    },
+    "openadapt-capture": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-capture"
+    },
+    "openadapt-consilium": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-consilium"
+    },
+    "openadapt-console": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-console"
+    },
+    "openadapt-crier": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-crier"
+    },
+    "openadapt-desktop": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-desktop"
+    },
+    "openadapt-evals": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-evals"
+    },
+    "openadapt-flow": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-flow"
+    },
+    "openadapt-grounding": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-grounding"
+    },
+    "openadapt-herald": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-herald"
+    },
+    "openadapt-ml": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-ml"
+    },
+    "openadapt-ops": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-ops"
+    },
+    "openadapt-privacy": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-privacy"
+    },
+    "openadapt-retrieval": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-retrieval"
+    },
+    "openadapt-telemetry": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-telemetry"
+    },
+    "openadapt-tray": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-tray"
+    },
+    "openadapt-types": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-types"
+    },
+    "openadapt-viewer": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-viewer"
+    },
+    "openadapt-web": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-web"
+    },
+    "openadapt-wright": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/openadapt-wright"
+    }
+  },
+  "schema_version": 1
+}
