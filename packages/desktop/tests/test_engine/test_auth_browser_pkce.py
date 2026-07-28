@@ -49,22 +49,65 @@ class TestLoopbackReceiver:
         assert receiver.state == "s1"
 
 
+def _configured(**kwargs) -> BrowserPkceProvider:
+    """A provider whose Supabase project is configured, as in a wired deployment."""
+    kwargs.setdefault("supabase_url", "https://project.supabase.co")
+    kwargs.setdefault("supabase_anon_key", "anon_key")
+    return BrowserPkceProvider(**kwargs)
+
+
 class TestIsAvailable:
     def test_headless_env_false(self, monkeypatch) -> None:
         monkeypatch.setenv("OPENADAPT_HEADLESS", "1")
-        assert BrowserPkceProvider().is_available() is False
+        assert _configured().is_available() is False
 
     def test_linux_without_display_false(self, monkeypatch) -> None:
         monkeypatch.delenv("OPENADAPT_HEADLESS", raising=False)
         monkeypatch.setattr("engine.auth.browser_pkce.sys.platform", "linux")
         monkeypatch.delenv("DISPLAY", raising=False)
         monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-        assert BrowserPkceProvider().is_available() is False
+        assert _configured().is_available() is False
 
-    def test_macos_true(self, monkeypatch) -> None:
+    def test_macos_true_when_configured(self, monkeypatch) -> None:
         monkeypatch.delenv("OPENADAPT_HEADLESS", raising=False)
         monkeypatch.setattr("engine.auth.browser_pkce.sys.platform", "darwin")
-        assert BrowserPkceProvider().is_available() is True
+        assert _configured().is_available() is True
+
+    def test_unconfigured_is_unavailable_even_on_a_desktop(self, monkeypatch) -> None:
+        """An unconfigured provider must not lead the chain and stall the login.
+
+        Without a Supabase project the exchange cannot succeed, but it is only
+        attempted after the loopback wait -- so reporting available here would
+        open a browser tab and block for the full timeout before falling back
+        to token paste. Regression guard for that stall.
+        """
+        monkeypatch.delenv("OPENADAPT_HEADLESS", raising=False)
+        monkeypatch.delenv("OPENADAPT_SUPABASE_URL", raising=False)
+        monkeypatch.delenv("OPENADAPT_SUPABASE_ANON_KEY", raising=False)
+        monkeypatch.setattr("engine.auth.browser_pkce.sys.platform", "darwin")
+        assert BrowserPkceProvider().is_available() is False
+
+    def test_partial_configuration_is_unavailable(self, monkeypatch) -> None:
+        monkeypatch.delenv("OPENADAPT_HEADLESS", raising=False)
+        monkeypatch.setattr("engine.auth.browser_pkce.sys.platform", "darwin")
+        url_only = BrowserPkceProvider(
+            supabase_url="https://project.supabase.co", supabase_anon_key=""
+        )
+        key_only = BrowserPkceProvider(supabase_url="", supabase_anon_key="anon_key")
+        assert url_only.is_available() is False
+        assert key_only.is_available() is False
+
+    def test_unconfigured_provider_never_opens_a_browser(self, monkeypatch) -> None:
+        """The stall is user-visible as a stray tab; assert none is opened."""
+        monkeypatch.delenv("OPENADAPT_HEADLESS", raising=False)
+        monkeypatch.delenv("OPENADAPT_SUPABASE_URL", raising=False)
+        monkeypatch.delenv("OPENADAPT_SUPABASE_ANON_KEY", raising=False)
+        monkeypatch.setattr("engine.auth.browser_pkce.sys.platform", "darwin")
+        opened: list[str] = []
+        provider = BrowserPkceProvider(open_browser=opened.append)
+        with pytest.raises(RuntimeError, match="unavailable"):
+            provider.login()
+        assert opened == []
 
 
 class TestLogin:
@@ -84,7 +127,7 @@ class TestLogin:
 
             threading.Thread(target=_deliver, daemon=True).start()
 
-        provider = BrowserPkceProvider(host="https://app.openadapt.ai", open_browser=_open_browser)
+        provider = _configured(host="https://app.openadapt.ai", open_browser=_open_browser)
         provider._exchange_code = lambda code, verifier, redirect_uri: {  # type: ignore[assignment]
             "access_token": "supabase_access",
             "refresh_token": "supabase_refresh",

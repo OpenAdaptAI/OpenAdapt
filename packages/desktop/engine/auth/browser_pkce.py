@@ -17,6 +17,31 @@ Flow (spec section 3a):
 ``is_available()`` is False on a headless server (no browser / no loopback), so
 the UI falls back to :class:`~engine.auth.paste.PasteTokenProvider`.
 
+NOT WIRED END TO END -- do not enable this provider by setting the Supabase
+environment variables alone. Steps 2-4 above each depend on a hosted contract
+that ``app.openadapt.ai`` does not implement today:
+
+* ``GET /login`` reads only ``checkout_session_id`` and ``next`` (clamped to a
+  same-origin ``/dashboard`` destination). It ignores ``redirect_to``,
+  ``code_challenge``, ``code_challenge_method`` and ``state``, so the browser
+  never navigates to the loopback listener and step 3 cannot happen.
+* The Supabase ``uri_allow_list`` is rewritten on every production deploy and
+  contains no loopback entry, so Supabase would reject a ``127.0.0.1`` redirect
+  even if the page forwarded one.
+* ``POST /api/ingest-tokens`` authenticates the browser session cookie and
+  requires a ``name`` field. It rejects a ``Authorization: Bearer <supabase
+  access token>`` with 401, so step 4 cannot mint.
+
+Because ``_exchange_code`` is only reached AFTER the loopback wait, leaving the
+provider enabled makes ``login`` open a browser tab and then block for the full
+``timeout`` before failing over to token paste. ``is_available()`` therefore
+requires the Supabase configuration up front: the provider reports unavailable
+rather than costing the operator a silent multi-minute stall. Restoring it is a
+hosted-contract change, not a client change -- see the three bullets above.
+
+The working, shipped path to a credential is the one-time pairing flow
+(:mod:`engine.auth.pairing`), which the hosted control plane does implement.
+
 Reconciliation note: the shared store (:mod:`engine.auth.store`) keys ONE active
 credential per host and ``auth_header()`` returns exactly one bearer. We
 therefore fold the Supabase session and the minted ingest token into a single
@@ -161,7 +186,17 @@ class BrowserPkceProvider:
         webbrowser.open(url)
 
     def is_available(self) -> bool:
-        """False on a headless box (no browser / no display)."""
+        """False on a headless box, and False while the flow is unconfigured.
+
+        The Supabase check is deliberately first. ``_exchange_code`` cannot run
+        without a project URL and anon key, but it is only reached after the
+        loopback wait -- so an unconfigured provider would open a browser tab
+        and stall for the whole ``timeout`` before failing over to token paste.
+        Reporting unavailable up front keeps ``login`` responsive and keeps the
+        provider chain honest about what it can actually complete.
+        """
+        if not (self._supabase_url and self._supabase_anon_key):
+            return False
         if os.environ.get("OPENADAPT_HEADLESS", "").strip():
             return False
         if sys.platform.startswith("linux"):
