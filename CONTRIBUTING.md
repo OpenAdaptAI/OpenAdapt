@@ -66,6 +66,11 @@ What this means for contributions to the public repos:
   proprietary system identifiers derived from real deployments (for example,
   automation content tied to a specific customer's EHR configuration). CI
   runs `scripts/check_source_boundary.py` to reject that class of content.
+  That script keeps no denylist of its own: it reads
+  [`source-policy.public.json`](source-policy.public.json), a generated file
+  rendered from OpenAdapt's canonical source-availability manifest. Do not edit
+  the generated file by hand; a rule changes at its source, and the guard fails
+  closed if the file is missing or incomplete.
 - Do not contribute deployment-derived corpora, tuned adversary parameters,
   thresholds, oracle or connector recipes, or datasets tied to real systems
   of record. Synthetic, reproducible fixtures are welcome.

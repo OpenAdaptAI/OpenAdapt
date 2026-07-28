@@ -130,5 +130,16 @@ jobs:
         with:
           python-version: '3.12'
 
+      # The guard reads its rules from source-policy.public.json (rendered from
+      # the canonical private manifest) and fails closed when that file is
+      # missing or incomplete. Stdlib only: no dependency install.
       - name: Check open-core source boundary
         run: python scripts/check_source_boundary.py
+
+      # Prove the guard still blocks what it blocked before the rules moved out
+      # of the script, and that it fails closed without them.
+      - name: Prove the boundary guard fails when it should
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: |
+          python -m pip install --quiet 'pytest>=8.0.0'
+          python -m pytest tests/test_source_boundary.py -q

@@ -7,94 +7,72 @@ content tied to a real customer deployment of an EHR (Cerner PowerChart)
 reached a public core surface and had to be excised by hand after review
 caught it. Application-specific recipes, customer fixtures, and proprietary
 system identifiers derived from real deployments are exactly the class of
-content the open-core boundary keeps private (see the workspace
-source-policy.yaml: grown corpora, tuned adversary parameters,
-deployment-derived thresholds, oracle/connector recipes, and real-EMR-tied
-datasets are crown jewels). This check makes that class of leak a CI failure
-instead of a code-review coin flip.
+content the open-core boundary keeps private (grown corpora, tuned adversary
+parameters, deployment-derived thresholds, oracle/connector recipes, and
+real-EMR-tied datasets are crown jewels). This check makes that class of leak
+a CI failure instead of a code-review coin flip.
 
-It complements, and deliberately overlaps with, the packaging-time guard in
-openadapt-flow's scripts/check_release_consistency.py (which inspects built
-wheels/sdists). This script inspects the REPOSITORY TREE, so the leak is
-caught at PR time in any public core repo, not only when an artifact is
-built.
+Where the rules come from
+-------------------------
+This script owns no denylist. Every token, pattern, and signature it enforces
+is read from `source-policy.public.json` in this repository, which is RENDERED
+from the canonical source-availability manifest
+`OpenAdaptAI/openadapt-internal:source-policy.yaml`. That manifest is private
+and a public CI job must never be able to read it, so the publishable subset of
+it travels outward as a generated file instead. To change a rule, change the
+canonical manifest and re-render; a job in the private repository compares this
+copy against the canonical one daily and fails while they disagree.
+
+The script therefore FAILS CLOSED. A missing, unparseable, or incomplete
+`source-policy.public.json` exits 2 and stops the build. A guard that passes
+because it found no rules is worse than the hardcoded list it replaced, because
+everyone believes it ran.
 
 Two kinds of matching, so a rename cannot dodge the check:
 
-* Path tokens: any tracked file whose path contains a denylisted token fails.
-* Content signatures: any tracked text file whose contents match a
-  denylisted pattern fails.
+* Path tokens and private path segments: any tracked file whose path contains a
+  denylisted token, or lies under a private segment, fails.
+* Content signatures and patterns: any tracked text file whose contents match a
+  denylisted regular expression, or carry a private-artifact banner, fails.
 
-Files that legitimately DISCUSS the boundary (this script, policy docs,
-contributor docs) are covered by the allowlist below.
+It complements, and deliberately overlaps with, the packaging-time guard in
+openadapt-flow's scripts/check_release_consistency.py (which inspects built
+wheels/sdists and reads the same rendered policy). This script inspects the
+REPOSITORY TREE, so the leak is caught at PR time in any public core repo, not
+only when an artifact is built.
+
+Files that legitimately DISCUSS the boundary (this script, the rendered policy
+itself, policy docs, contributor docs) are covered by the allowlist below. That
+allowlist is repository-local knowledge -- which files here are about the
+boundary -- and is deliberately not part of the shared policy.
 
 Usage:
-    python scripts/check_source_boundary.py [--root PATH]
+    python scripts/check_source_boundary.py [--root PATH] [--repo NAME]
 
 --root defaults to this repository. Point it at another checkout to run the
-same gate in that repo's CI without vendoring a divergent copy.
+same gate in that repo's CI without vendoring a divergent copy; the rules are
+always read from THIS checkout, never from the tree being scanned.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[1]
-
-# Path fragments that indicate private-boundary or deployment-specific
-# content. Lowercase; matched case-insensitively against the full repo-
-# relative path.
-DENYLISTED_PATH_TOKENS = (
-    # Proprietary systems of record: per-system recipes/fixtures stay private.
-    "powerchart",
-    "cerner",
-    "millennium_recipe",
-    "epic_hyperspace",
-    "meditech",
-    # Customer/deployment-derived material.
-    "customer_fixture",
-    "customer_recipe",
-    "client_fixture",
-    "deployment_corpus",
-    "deployment_thresholds",
-    "real_emr",
-    # Crown-jewel categories from source-policy.yaml.
-    "grown_corpus",
-    "tuned_adversary",
-    "adversary_corpus",
-    "identity_roc",
-    "held_out_corpus",
-    "oracle_recipe",
-    "effect_oracle_recipe",
-    "pixel_verify_cert",
-    "enterprise_productionized",
-    "paid_agent_evidence",
-    # The private repos themselves must never be vendored into a public one.
-    "openadapt-corpus",
-    "openadapt-cloud",
-    "openadapt-internal",
-)
-
-# Content signatures for text files. Case-insensitive regular expressions.
-DENYLISTED_CONTENT_PATTERNS = (
-    # Proprietary EHR surfaces showing up inside code, fixtures, or recipes.
-    r"powerchart",
-    r"cerner\s+millennium",
-    r"epic\s+hyperspace",
-    # Markers our private artifacts carry.
-    r"openadapt[_-]corpus[/:]",
-    r"deployment[_-]derived\s+threshold\s*=",
-    r"oracle[_-]recipe[_-]id\s*[:=]",
-)
+POLICY_PATH = DEFAULT_ROOT / "source-policy.public.json"
+POLICY_SCHEMA_VERSION = 1
 
 # Repo-relative paths (exact file or directory prefix) that may mention the
 # denylisted terms because they document or enforce the boundary itself.
 ALLOWLISTED_PATHS = (
     "scripts/check_source_boundary.py",
+    "source-policy.public.json",
+    "tests/test_source_boundary.py",
     "docs/platform-manifest.md",
     "CONTRIBUTING.md",
     "TRADEMARKS.md",
@@ -124,6 +102,108 @@ SKIP_CONTENT_SUFFIXES = {
 MAX_CONTENT_BYTES = 5 * 1024 * 1024
 
 
+class PolicyError(RuntimeError):
+    """The rendered policy is missing, unparseable, or incomplete."""
+
+
+def _require_strings(
+    container: dict, key: str, *, where: str, lower: bool = True
+) -> list[str]:
+    value = container.get(key)
+    if not isinstance(value, list) or not value:
+        raise PolicyError(f"{where}.{key} must be a non-empty list")
+    items = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise PolicyError(f"{where}.{key} must contain non-empty strings")
+        items.append(item.lower() if lower else item)
+    return items
+
+
+class SourcePolicy:
+    """The subset of the rendered manifest this guard enforces."""
+
+    def __init__(self, document: dict) -> None:
+        if document.get("schema_version") != POLICY_SCHEMA_VERSION:
+            raise PolicyError(
+                f"schema_version is {document.get('schema_version')!r}, expected "
+                f"{POLICY_SCHEMA_VERSION}; this guard refuses to enforce an "
+                "unknown policy schema"
+            )
+        enforcement = document.get("enforcement")
+        if not isinstance(enforcement, dict):
+            raise PolicyError("enforcement: block is missing")
+
+        self.path_tokens = tuple(
+            _require_strings(enforcement, "path_tokens", where="enforcement")
+        )
+        self.private_path_segments = frozenset(
+            _require_strings(enforcement, "private_path_segments", where="enforcement")
+        )
+
+        tree = enforcement.get("repository_tree")
+        if not isinstance(tree, dict):
+            raise PolicyError("enforcement.repository_tree: block is missing")
+        patterns = _require_strings(
+            tree, "content_patterns", where="enforcement.repository_tree", lower=False
+        )
+        try:
+            self.content_regex = re.compile(
+                "|".join(f"(?:{pattern})" for pattern in patterns), re.IGNORECASE
+            )
+        except re.error as exc:
+            raise PolicyError(
+                f"enforcement.repository_tree.content_patterns is not valid: {exc}"
+            ) from exc
+
+        # Signatures arrive as PARTS and are joined here on purpose: a whole
+        # banner written literally into the policy file would make this guard
+        # fail on its own rule file.
+        signature_parts = enforcement.get("content_signature_parts")
+        if not isinstance(signature_parts, list) or not signature_parts:
+            raise PolicyError(
+                "enforcement.content_signature_parts must be a non-empty list"
+            )
+        signatures = []
+        for entry in signature_parts:
+            if not isinstance(entry, list) or not entry:
+                raise PolicyError(
+                    "enforcement.content_signature_parts entries must be "
+                    "non-empty lists of parts"
+                )
+            joined = "".join(str(part) for part in entry)
+            if not joined:
+                raise PolicyError("a content signature is empty")
+            signatures.append(joined)
+        self.content_signatures = tuple(signatures)
+
+        repositories = document.get("public_repositories")
+        if not isinstance(repositories, dict) or not repositories:
+            raise PolicyError("public_repositories: must be a non-empty mapping")
+        self.public_repositories = repositories
+        self.policy_digest = str(document.get("policy_digest", "unknown"))
+        self.policy_last_updated = str(document.get("policy_last_updated", "unknown"))
+
+
+def load_policy(path: Path = POLICY_PATH) -> SourcePolicy:
+    """Load the rendered policy, or raise so the caller can fail closed."""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise PolicyError(
+            f"cannot read the rendered source policy {path}: {exc}. It is rendered "
+            "from OpenAdaptAI/openadapt-internal:source-policy.yaml and must be "
+            "committed in this repository"
+        ) from exc
+    try:
+        document = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise PolicyError(f"{path} is not valid JSON: {exc}") from exc
+    if not isinstance(document, dict):
+        raise PolicyError(f"{path} did not parse to an object")
+    return SourcePolicy(document)
+
+
 def _tracked_files(root: Path) -> list[str]:
     result = subprocess.run(
         ["git", "ls-files", "-z"],
@@ -134,6 +214,25 @@ def _tracked_files(root: Path) -> list[str]:
     return [p for p in result.stdout.decode().split("\0") if p]
 
 
+def _repository_name(root: Path) -> str:
+    """Name of the scanned repository, used to look up its classification."""
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=root,
+            capture_output=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError):
+        return root.name
+    url = result.stdout.decode().strip()
+    if not url:
+        return root.name
+    # Match on the repository NAME rather than owner/name so a fork running the
+    # same CI is checked rather than rejected.
+    return url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git") or root.name
+
+
 def _is_allowlisted(path: str) -> bool:
     return any(
         path == allowed or path.startswith(allowed.rstrip("/") + "/")
@@ -141,38 +240,33 @@ def _is_allowlisted(path: str) -> bool:
     )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--root",
-        type=Path,
-        default=DEFAULT_ROOT,
-        help="Repository checkout to scan (default: this repository).",
-    )
-    args = parser.parse_args()
-    root = args.root.resolve()
-
-    try:
-        tracked = _tracked_files(root)
-    except subprocess.CalledProcessError as exc:
-        print(f"FATAL: git ls-files failed in {root}: {exc}", file=sys.stderr)
-        return 2
-
-    content_regex = re.compile(
-        "|".join(f"(?:{p})" for p in DENYLISTED_CONTENT_PATTERNS), re.IGNORECASE
-    )
-
+def scan(root: Path, policy: SourcePolicy) -> list[str]:
+    """Return every boundary violation among the tracked files under `root`."""
     violations: list[str] = []
-    for rel_path in tracked:
+    for rel_path in _tracked_files(root):
         if _is_allowlisted(rel_path):
             continue
         lower = rel_path.lower()
-        for token in DENYLISTED_PATH_TOKENS:
-            if token in lower:
+        matched_token = next(
+            (token for token in policy.path_tokens if token in lower), None
+        )
+        if matched_token is not None:
+            violations.append(
+                f"{rel_path}: path contains denylisted token {matched_token!r}"
+            )
+        else:
+            segment = next(
+                (
+                    part
+                    for part in lower.split("/")
+                    if part in policy.private_path_segments
+                ),
+                None,
+            )
+            if segment is not None:
                 violations.append(
-                    f"{rel_path}: path contains denylisted token {token!r}"
+                    f"{rel_path}: path lies under private segment {segment!r}"
                 )
-                break
 
         full_path = root / rel_path
         if full_path.suffix.lower() in SKIP_CONTENT_SUFFIXES or not full_path.is_file():
@@ -183,13 +277,73 @@ def main() -> int:
             text = full_path.read_text(errors="ignore")
         except OSError:
             continue
-        match = content_regex.search(text)
+        signature = next(
+            (sig for sig in policy.content_signatures if sig in text), None
+        )
+        if signature is not None:
+            violations.append(
+                f"{rel_path}: content carries the private-artifact banner"
+            )
+            continue
+        match = policy.content_regex.search(text)
         if match:
             line = text.count("\n", 0, match.start()) + 1
             violations.append(
                 f"{rel_path}:{line}: content matches denylisted pattern "
                 f"{match.group(0)!r}"
             )
+    return violations
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=DEFAULT_ROOT,
+        help="Repository checkout to scan (default: this repository).",
+    )
+    parser.add_argument(
+        "--repo",
+        default=None,
+        help=(
+            "Repository name to look up in the policy (default: derived from the "
+            "scanned checkout's origin remote)."
+        ),
+    )
+    parser.add_argument(
+        "--policy",
+        type=Path,
+        default=POLICY_PATH,
+        help="Rendered policy to enforce (default: the copy in this repository).",
+    )
+    args = parser.parse_args()
+    root = args.root.resolve()
+
+    # Fail closed: no rules, no run.
+    try:
+        policy = load_policy(args.policy)
+    except PolicyError as exc:
+        print(f"FATAL: {exc}", file=sys.stderr)
+        return 2
+
+    name = args.repo or _repository_name(root)
+    if name not in policy.public_repositories:
+        print(
+            f"FATAL: {name!r} is not classified as a public repository in the "
+            "source-availability manifest. Either it has no entry (add one to "
+            "OpenAdaptAI/openadapt-internal:source-policy.yaml in the same change "
+            "that creates the repository) or it is private, in which case this "
+            "public-tree guard does not apply.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        violations = scan(root, policy)
+    except subprocess.CalledProcessError as exc:
+        print(f"FATAL: git ls-files failed in {root}: {exc}", file=sys.stderr)
+        return 2
 
     if violations:
         print(
@@ -203,7 +357,10 @@ def main() -> int:
             print(f"ERROR: {violation}", file=sys.stderr)
         return 1
 
-    print(f"OK: no boundary violations across {len(tracked)} tracked files.")
+    print(
+        f"OK: no boundary violations in {name} "
+        f"(policy {policy.policy_digest}, updated {policy.policy_last_updated})."
+    )
     return 0
 
 
