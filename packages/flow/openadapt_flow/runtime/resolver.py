@@ -450,6 +450,7 @@ def resolve(
     template_png: Optional[bytes] = None,
     viewport: Optional[tuple[int, int]] = None,
     structural: Optional[Any] = None,
+    allow_target_ocr: bool = True,
 ) -> Optional[tuple[Resolution, Region]]:
     """Walk the resolution ladder for ``anchor`` against a live frame.
 
@@ -473,6 +474,11 @@ def resolve(
             structural rung runs FIRST; a successful locate short-circuits the
             visual rungs. None (pixel-only substrate) or a failed locate falls
             through to the visual ladder unchanged.
+        allow_target_ocr: Whether the target's own OCR text can resolve this
+            observation. A focused option control can render the current value
+            both in the field and in its open menu. Its post-focus observation
+            sets this false and requires a template or independent landmarks
+            instead of treating that expected duplicate as a target ambiguity.
 
     Returns:
         ``(resolution, matched_region)`` on success, where ``matched_region``
@@ -588,7 +594,7 @@ def resolve(
     # when old fixed-offset landmark geometry has gone stale. Landmarks are
     # therefore used to disambiguate observed repeated target candidates, not
     # to veto a uniquely observed target merely for moving independently.
-    if anchor.ocr_text:
+    if anchor.ocr_text and allow_target_ocr:
         search_region = pad_region(anchor.region, anchor.search_pad, viewport)
         ocr_regions: tuple[Region | None, ...] = (search_region, None)
         find_candidates = getattr(vision, "find_text_candidates", None)

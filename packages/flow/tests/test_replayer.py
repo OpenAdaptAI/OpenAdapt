@@ -1875,6 +1875,54 @@ def test_remote_selection_verifies_committed_value_in_live_resolved_region(
     assert report.results[0].input_verified is True
 
 
+def test_remote_selection_post_focus_uses_landmarks_not_duplicated_value(
+    bundle, run_dir
+):
+    vision = FakeVision()
+    match = Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+    # Initial resolve and pre-click revalidation use the closed field template.
+    # Focus changes that template, so both local and global template rungs miss;
+    # the final settled-frame check uses the template again after commit.
+    vision.template_results = [match, match, None, None, match]
+    vision.text_results = {
+        "Field label": Match(point=(70, 105), region=(45, 95, 50, 20), confidence=0.98),
+        # An open select repeats this value in both its field and popup. The
+        # post-focus pass must not use it; independent geometry proves the field.
+        "Unassigned": Match(point=(110, 125), region=(85, 115, 50, 20), confidence=1.0),
+    }
+    workflow = _remote_selection_workflow()
+    step = workflow.steps[0]
+    assert step.anchor is not None
+    step.anchor = step.anchor.model_copy(
+        update={
+            "ocr_text": "Unassigned",
+            "landmarks": [
+                Landmark(
+                    relation="left_of",
+                    ocr_text="Field label",
+                    distance_px=40,
+                    dx_px=40,
+                    dy_px=0,
+                )
+            ],
+        }
+    )
+    backend = SelectRemoteBackend(selected_value="Massachusetts")
+
+    report = Replayer(backend, vision=vision).run(
+        workflow,
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert backend.select_calls == [("Massachusetts", "Enter")]
+    assert "Field label" in vision.text_calls
+    assert "Unassigned" not in vision.text_calls
+    assert report.results[0].input_verified is True
+
+
 def test_remote_selection_refuses_incompatible_live_field_geometry(bundle, run_dir):
     vision = FakeVision()
     vision.template_results = [

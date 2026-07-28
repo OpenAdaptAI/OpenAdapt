@@ -4593,7 +4593,18 @@ class Replayer:
             )
 
         fresh_resolution, fresh_region, error = self._resolve_step(
-            step, fresh_png, bundle_dir, workflow
+            step,
+            fresh_png,
+            bundle_dir,
+            workflow,
+            # Opening an opaque select control can repeat its current value in
+            # the option popup. That text is valid target evidence before the
+            # focusing click, but it is no longer unique afterward. The second
+            # phase therefore requires the retained template or independent
+            # relational landmarks. Ambiguous or absent context still halts.
+            allow_target_ocr=not (
+                arm_keyboard and step.action is ActionKind.SELECT_OPTION
+            ),
         )
         if error is not None:
             if self.governed_authorization is not None:
@@ -4714,6 +4725,7 @@ class Replayer:
         workflow: Workflow,
         *,
         allow_grounder: bool = True,
+        allow_target_ocr: bool = True,
     ) -> tuple[Optional[Resolution], Optional[Region], Optional[str]]:
         """Resolve the step's anchor, applying the irreversible risk gate.
 
@@ -4769,6 +4781,7 @@ class Replayer:
             template_png=template_png,
             viewport=self.backend.viewport,
             structural=structural,
+            allow_target_ocr=allow_target_ocr,
         )
         if resolved is None:
             return (
