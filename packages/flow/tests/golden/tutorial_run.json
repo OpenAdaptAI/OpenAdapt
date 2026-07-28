@@ -1,0 +1,168 @@
+{
+  "effect_journal": [
+    {
+      "approved_unverified": false,
+      "attempt_state": "delivered",
+      "collateral_reconciliation_actions": 0,
+      "consequential": true,
+      "effect_verified": true,
+      "intended_effect_contract_hashes": [
+        "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b",
+        "sha256:d267875f80a7e3d05ada9dbae3d761c300ed2c3526bb97266507ec8855d3c053"
+      ],
+      "observed_effect": "present",
+      "step_id": "step_005",
+      "verification_performed": true
+    }
+  ],
+  "effect_tier": 1,
+  "effects_confirmed": 2,
+  "effects_required": 2,
+  "est_model_cost_usd": 0.0,
+  "execution_outcome": "VERIFIED",
+  "execution_profile": "standard",
+  "governed_minimum_effect_tier": 3,
+  "governed_policy_name": "clinical-write",
+  "halt": null,
+  "heal_count": 0,
+  "identity_applicable_steps": 5,
+  "identity_armed_steps": 5,
+  "model_calls": 0,
+  "passed_contracts": {
+    "authorization": 1,
+    "effect": 2,
+    "identity": 5,
+    "postcondition": 8
+  },
+  "production_eligible": true,
+  "required_contracts": {
+    "authorization": 1,
+    "effect": 2,
+    "identity": 5,
+    "postcondition": 8
+  },
+  "rung_counts": {
+    "structural": 5
+  },
+  "schema": 1,
+  "step_count": 6,
+  "steps": [
+    {
+      "actuation": "dom",
+      "delivery_status": "delivered",
+      "effect_evidence": [],
+      "healed": false,
+      "identity_mode": "structured",
+      "identity_status": "verified",
+      "intent": "click 'Open'",
+      "interstitial_actions": 0,
+      "ok": true,
+      "postconditions_ok": true,
+      "resolution_rung": "structural",
+      "risk": "reversible",
+      "safety_halt": false,
+      "skipped": false,
+      "step_id": "step_000"
+    },
+    {
+      "actuation": "dom",
+      "delivery_status": "delivered",
+      "effect_evidence": [],
+      "healed": false,
+      "identity_mode": "structured",
+      "identity_status": "verified",
+      "intent": "click 'New Encounter'",
+      "interstitial_actions": 0,
+      "ok": true,
+      "postconditions_ok": true,
+      "resolution_rung": "structural",
+      "risk": "reversible",
+      "safety_halt": false,
+      "skipped": false,
+      "step_id": "step_001"
+    },
+    {
+      "actuation": "dom",
+      "delivery_status": "delivered",
+      "effect_evidence": [],
+      "healed": false,
+      "identity_mode": "structured",
+      "identity_status": "verified",
+      "intent": "click 'Triage'",
+      "interstitial_actions": 0,
+      "ok": true,
+      "postconditions_ok": true,
+      "resolution_rung": "structural",
+      "risk": "reversible",
+      "safety_halt": false,
+      "skipped": false,
+      "step_id": "step_002"
+    },
+    {
+      "actuation": "dom",
+      "delivery_status": "delivered",
+      "effect_evidence": [],
+      "healed": false,
+      "identity_mode": "structured",
+      "identity_status": "verified",
+      "intent": "click recorded visual target",
+      "interstitial_actions": 0,
+      "ok": true,
+      "postconditions_ok": true,
+      "resolution_rung": "structural",
+      "risk": "reversible",
+      "safety_halt": false,
+      "skipped": false,
+      "step_id": "step_003"
+    },
+    {
+      "actuation": null,
+      "delivery_status": null,
+      "effect_evidence": [],
+      "healed": false,
+      "identity_mode": null,
+      "identity_status": null,
+      "intent": "type <note>",
+      "interstitial_actions": 0,
+      "ok": true,
+      "postconditions_ok": true,
+      "resolution_rung": null,
+      "risk": "reversible",
+      "safety_halt": false,
+      "skipped": false,
+      "step_id": "step_004"
+    },
+    {
+      "actuation": "dom",
+      "delivery_status": "delivered",
+      "effect_evidence": [
+        {
+          "substrate": "rest",
+          "verdict": "confirmed",
+          "verification_tier": 1
+        },
+        {
+          "substrate": "rest",
+          "verdict": "confirmed",
+          "verification_tier": 1
+        }
+      ],
+      "healed": false,
+      "identity_mode": "structured",
+      "identity_status": "verified",
+      "intent": "click 'Save Encounter'",
+      "interstitial_actions": 0,
+      "ok": true,
+      "postconditions_ok": true,
+      "resolution_rung": "structural",
+      "risk": "irreversible",
+      "safety_halt": false,
+      "skipped": false,
+      "step_id": "step_005"
+    }
+  ],
+  "success": true,
+  "system_of_record_records": 1,
+  "transaction_billable": true,
+  "transaction_outcome": "VERIFIED"
+}

@@ -174,7 +174,7 @@ softens one:
 | Adapter result | Meaning | Transaction outcome |
 |---|---|---|
 | `confirmed` | effect present, correct, fresh | (step proceeds; run-level `VERIFIED` is decided by the run classifier) |
-| `refuted` | affirmatively ABSENT (observed count zero) | `HALTED_BEFORE_EFFECT` |
+| `refuted` | affirmatively ABSENT (observed count zero) | `HALTED_BEFORE_EFFECT` (this step; run-level `HALTED_BEFORE_EFFECT` is decided by the run classifier, which additionally requires absence for EVERY declared effect of EVERY consequential step) |
 | `conflicting` | a write LANDED but is duplicated / wrong-valued / collateral | `RECONCILIATION_REQUIRED` |
 | `unavailable` | system of record unreachable / credential failure | `RECONCILIATION_REQUIRED` |
 | `stale` | data read but outside the declared freshness window | `RECONCILIATION_REQUIRED` |

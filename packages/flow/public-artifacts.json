@@ -89,7 +89,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "1595e748c2d3109c1963aa89f243d07d2d7b8da27ef69a3d9488c62ed7e677dd"
+      "sha256": "a08139d37b3324f4683e5e342d1174b6782912f9a3b60adb6792dff2dc79d81d"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
@@ -5738,6 +5738,10 @@
     {
       "path": "tests/fixtures/theme-region-stable-overhalt-v1.16.1.json",
       "sha256": "4bf055e6c11f837ed6daa4a5b89ab28dd431a7eccd2ce3044758ba260eed52cd"
+    },
+    {
+      "path": "tests/golden/tutorial_run.json",
+      "sha256": "97fabcb1661a90d4f89ab977559ad76fd4abecf469ec7c29f89a261a0f8c4151"
     }
   ]
 }

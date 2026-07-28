@@ -17,7 +17,11 @@ bundled application:
   weakened to get here;
 * ``report-run`` still refuses a non-``VERIFIED`` run;
 * the verification is not vacuous: when the backend silently drops or mangles
-  the write, the same bundle does NOT verify.
+  the write, the same bundle does NOT verify;
+* the run still reaches ``VERIFIED`` *the same way* -- pinned field by field
+  against ``tests/golden/tutorial_run.json`` (see :mod:`tutorial_golden`),
+  because the outcome alone cannot tell a healthy run from one that got there
+  on a weaker rung, without an identity gate, or against a different contract.
 """
 
 from __future__ import annotations
@@ -42,6 +46,8 @@ from openadapt_flow.tutorial import (
     run_tutorial_workflow,
 )
 
+from .tutorial_golden import compare_or_update, golden_shape
+
 
 @pytest.fixture(scope="module")
 def free_path(tmp_path_factory: pytest.TempPathFactory) -> TutorialResult:
@@ -54,6 +60,27 @@ def _report(run_dir: Path) -> RunReport:
     return RunReport.model_validate_json(
         (run_dir / "report.json").read_text(encoding="utf-8")
     )
+
+
+def test_the_free_path_still_reaches_verified_the_same_way(
+    free_path: TutorialResult,
+) -> None:
+    """The golden task: pin the mechanism, not only the verdict.
+
+    Every other assertion in this module checks that the run ENDED well.  None
+    of them notices a run that ends well for a different reason -- the
+    structural rung silently degrading to OCR or geometry, an actuation path
+    leaving the DOM, the save losing its ``irreversible`` classification and
+    with it the identity gate, a heal firing on an undrifted screen, or the
+    mined effect contract changing shape under a ``VERIFIED`` that no longer
+    means what it meant.  Each of those is a real regression in the core loop
+    that leaves ``execution_outcome == "VERIFIED"`` exactly where it was.
+
+    This assertion costs nothing extra to run: it reads the report the
+    module-scoped ``free_path`` fixture already produced.
+    """
+
+    compare_or_update(golden_shape(free_path, _report(free_path.run_dir)))
 
 
 def test_free_path_terminates_verified_with_independent_effect_evidence(

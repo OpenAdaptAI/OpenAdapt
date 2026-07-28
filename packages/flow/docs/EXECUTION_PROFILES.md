@@ -72,12 +72,24 @@ produces an artifact whose plaintext value is a secret carrier for no
 evidentiary gain, and the demonstration proves exactly as much without it.
 
 The result is checkable rather than asserted: run the same bundle against an
-injected backend fault and it does not verify. With `?fault=optimistic` (the
-screen says Saved, the server rejected the write) the run is
-`HALTED` / `HALTED_BEFORE_EFFECT` with nothing persisted; with `?fault=partial`
-(the row lands with the note dropped) it is `HALTED` / `RECONCILIATION_REQUIRED`,
-because something landed and absence may not be claimed. Both are pinned in
-`tests/e2e/test_free_path_e2e.py`.
+injected backend fault and it does not verify. Both injected faults terminate
+`HALTED` / `RECONCILIATION_REQUIRED`, and both are pinned in
+`tests/e2e/test_free_path_e2e.py`:
+
+- `?fault=partial` — the row lands with the note dropped. Something landed, so
+  absence may not be claimed.
+- `?fault=optimistic` — the screen says Saved and the server rejected the
+  write. The store really is empty, and the run still does not say so. The save
+  step declares two mined effects; the retained verifier established absence for
+  one of them, and `HALTED_BEFORE_EFFECT` requires absence for **every**
+  declared effect of **every** consequential step (see "Absence requires
+  positive evidence" below). The test reads the empty store out of band to prove
+  the point; the runtime never held that evidence, so it reports the weaker true
+  outcome rather than the stronger convenient one.
+
+The second case is the taxonomy working, not a gap in it. `HALTED_BEFORE_EFFECT`
+tells an operator there is nothing to reconcile, and this run cannot support that
+sentence from what it observed.
 
 Reports retain the legacy `success` field for compatibility and add
 `execution_profile`, `execution_outcome`, and `production_eligible`. Production
