@@ -153,4 +153,6 @@ jobs:
         run: uv build
 
       - name: Verify release archive boundaries
-        run: python scripts/verify_distribution.py dist/*
+        run: |
+          python scripts/verify_distribution.py dist/*
+          python scripts/check_source_boundary.py --require-dist

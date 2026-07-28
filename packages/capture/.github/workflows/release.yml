@@ -142,6 +142,7 @@ jobs:
           rm -rf dist
           uv build --wheel --sdist
           python scripts/verify_distribution.py dist/*
+          python scripts/check_source_boundary.py --require-dist
 
       - name: Publish to PyPI
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
