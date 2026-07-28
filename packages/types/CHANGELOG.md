@@ -1,6 +1,45 @@
 # CHANGELOG
 
 
+## v0.6.4 (2026-07-28)
+
+### Bug Fixes
+
+- Report an unparseable action as FAIL, not as a completed task
+  ([#16](https://github.com/OpenAdaptAI/openadapt-types/pull/16),
+  [`e3bdcea`](https://github.com/OpenAdaptAI/openadapt-types/commit/e3bdcea95779159c10a9a1eaaf157787e67cb5d5))
+
+`ActionType.DONE` is a successful terminal outcome: a runner that sees it ends the episode as
+  complete. Every parse and conversion failure in this package produced exactly that value, so "the
+  model said it finished" and "we could not read the model's output at all" were the same Action.
+
+- `openadapt_types/parsing.py`: the `_done()` helper behind all 19 failure paths now returns
+  `Action(type=ActionType.FAIL)` carrying the reason in `reasoning` and in `raw[PARSE_ERROR_KEY]`.
+  This also repairs `parse_action`, which used `type != DONE` as its own success test and so
+  re-parsed a legitimate `{"type": "done"}` as DSL before returning it.
+
+- `openadapt_types/_compat.py`: `from_benchmark_action`, `from_ml_action` and
+  `from_omnimcp_action_decision` defaulted a missing type to `"done"` and mapped every unrecognized
+  type to `DONE` with no log at all. An unconvertible record became a successful terminal step in
+  converted training data. They now return FAIL with `raw[UNCONVERTIBLE_ACTION_KEY]` and the source
+  dict.
+
+- `openadapt_types/computer_state.py`: `get_children` returned `[]` both for a node with no children
+  and for a node_id that is not in the state. An unknown node now raises KeyError.
+
+- `openadapt_types/__init__.py`: `__version__` was the literal "0.1.0" against a package on 0.6.3.
+  It is now read from installed distribution metadata.
+
+Existing tests that asserted the DONE-on-failure behaviour are updated to assert FAIL; they
+  enshrined the defect. `tests/test_no_false_success.py` adds the direct regressions, and every
+  production change was reverted individually to confirm the matching test fails against pre-fix
+  code.
+
+Claude-Session: https://claude.ai/code/session_01NyCHrzA1psrKMFfroYbzaM
+
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+
+
 ## v0.6.3 (2026-07-28)
 
 ### Bug Fixes
