@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import re
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Literal, Optional, Sequence, cast
@@ -983,6 +984,83 @@ def _field_label_from_ocr(
     return best[2] if best is not None else None
 
 
+def _exact_left_field_label_landmark(
+    lines: list[OcrLine],
+    target_region: Region,
+    click: Point,
+    *,
+    exclude_texts: tuple[str, ...] = (),
+    reference_date: Optional[date] = None,
+) -> Optional[tuple[str, Landmark]]:
+    """Return one unique, row-aligned label left of an opaque field.
+
+    An open native select can repeat its current option in the closed field,
+    popup, and suggestion list. The option text is then not target identity.
+    Pixel-only recordings need an independent relation that survives the open
+    menu. This function mines only a label whose normalized OCR text occurs
+    exactly once in the recorded frame, whose box is left of and vertically
+    aligned with the qualified field region, and whose text is stable and
+    passes the configured exclusions, volatility classification, and identifier
+    heuristic. It records an exact normalized OCR match and the exact
+    label-center-to-click offset. There is no fuzzy fallback in this contract.
+    """
+
+    rx, ry, rw, rh = (int(value) for value in target_region)
+    if rw <= 0 or rh <= 0:
+        return None
+    recognized = [line for line in lines if normalize_text(line.text)]
+    counts = Counter(normalize_text(line.text) for line in recognized)
+    candidates: list[tuple[float, float, str, Landmark]] = []
+    for line in recognized:
+        if line.confidence < MIN_OCR_CONFIDENCE:
+            continue
+        text = " ".join(line.text.split())
+        normalized = normalize_text(text)
+        if counts[normalized] != 1 or len(text) > LABEL_OCR_MAX_CHARS:
+            continue
+        if _contains_excluded(text, exclude_texts):
+            continue
+        if volatility.classify_text(text, reference_date=reference_date):
+            continue
+        if _text_carries_phi(text):
+            continue
+        lx, ly, lw, lh = (int(value) for value in line.region)
+        if lw <= 0 or lh <= 0 or lx + lw > rx:
+            continue
+        if not ly <= click[1] <= ly + lh:
+            continue
+        gap = float(rx - (lx + lw))
+        if gap > LABEL_OCR_MAX_LEFT_GAP_PX:
+            continue
+        center = (lx + lw // 2, ly + lh // 2)
+        dx = int(click[0] - center[0])
+        dy = int(click[1] - center[1])
+        if dx <= 0:
+            continue
+        candidates.append(
+            (
+                gap,
+                abs(float(dy)),
+                text,
+                Landmark(
+                    relation="left_of",
+                    ocr_text=text,
+                    distance_px=int(round(math.hypot(dx, dy))),
+                    match_mode="exact",
+                    dx_px=dx,
+                    dy_px=dy,
+                ),
+            )
+        )
+    if not candidates:
+        return None
+    _gap, _vertical_delta, text, landmark = min(
+        candidates,
+        key=lambda candidate: (candidate[1], candidate[0], candidate[2].casefold()),
+    )
+    return text, landmark
+
+
 def _identity_unarmed_reason(
     frame_lines: list[OcrLine],
     *,
@@ -1944,6 +2022,35 @@ def compile_recording(
                         key_after, demonstrated, selection_region
                     )
                 ):
+                    selected_anchor = previous_anchor.model_copy(deep=True)
+                    selected_field_label = step.field_label
+                    exact_label = _exact_left_field_label_landmark(
+                        cached_lines(
+                            int(type_event["i"]),
+                            "before",
+                            type_before,
+                        ),
+                        selected_anchor.region,
+                        selected_anchor.click_point,
+                        exclude_texts=exclude_texts,
+                        reference_date=reference_date,
+                    )
+                    if exact_label is not None:
+                        selected_field_label, label_landmark = exact_label
+                        retained_landmarks = [
+                            landmark
+                            for landmark in selected_anchor.landmarks
+                            if normalize_text(landmark.ocr_text)
+                            != normalize_text(label_landmark.ocr_text)
+                        ]
+                        selected_anchor = selected_anchor.model_copy(
+                            update={
+                                "landmarks": [
+                                    label_landmark,
+                                    *retained_landmarks,
+                                ]
+                            }
+                        )
                     merged_event = dict(type_event)
                     for name, value in key_event.items():
                         if name.endswith("_after"):
@@ -1958,7 +2065,8 @@ def compile_recording(
                             ),
                             "selection_commit_key": commit,
                             "selection_region": selection_region,
-                            "anchor": previous_anchor.model_copy(deep=True),
+                            "anchor": selected_anchor,
+                            "field_label": selected_field_label,
                             "identity_armed": previous.identity_armed,
                             "identity_unarmed_reason": (
                                 previous.identity_unarmed_reason

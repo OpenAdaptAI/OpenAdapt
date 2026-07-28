@@ -187,6 +187,40 @@ def test_find_text_preserves_unique_success(monkeypatch) -> None:
     assert result.region == (100, 100, 60, 20)
 
 
+def test_find_text_exact_label_refuses_low_ocr_confidence(monkeypatch) -> None:
+    lines = [OcrLine(text="Title:", region=(100, 100, 60, 20), confidence=0.49)]
+    monkeypatch.setattr(ocr_module, "ocr", lambda *_args, **_kwargs: lines)
+
+    assert (
+        find_text(
+            b"synthetic",
+            "Title:",
+            min_ratio=1.0,
+            min_ocr_confidence=0.5,
+            raise_on_ambiguity=True,
+        )
+        is None
+    )
+    assert find_text(b"synthetic", "Title:", min_ratio=1.0) is not None
+
+
+def test_find_text_exact_label_refuses_low_confidence_duplicate(monkeypatch) -> None:
+    lines = [
+        OcrLine(text="Title:", region=(100, 100, 60, 20), confidence=0.9),
+        OcrLine(text="Title:", region=(100, 200, 60, 20), confidence=0.49),
+    ]
+    monkeypatch.setattr(ocr_module, "ocr", lambda *_args, **_kwargs: lines)
+
+    with pytest.raises(AmbiguousOcrMatchError):
+        find_text(
+            b"synthetic",
+            "Title:",
+            min_ratio=1.0,
+            min_ocr_confidence=0.5,
+            raise_on_ambiguity=True,
+        )
+
+
 def test_resolver_uses_local_ocr_before_global_and_short_circuits() -> None:
     """A unique local label wins without consulting the full frame."""
     local_region = (40, 50, 170, 112)

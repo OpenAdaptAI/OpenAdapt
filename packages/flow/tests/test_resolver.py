@@ -19,6 +19,7 @@ from openadapt_flow.runtime.resolver import (
     png_size,
     resolve,
 )
+from openadapt_flow.vision.ocr import AmbiguousOcrMatchError
 
 VIEWPORT = (300, 200)
 
@@ -312,6 +313,82 @@ def test_geometry_rung_single_landmark(screen):
     # Matched region is anchor-region-sized, centered on the estimate.
     assert matched == (115, 40, 50, 20)
     assert resolution.confidence == pytest.approx(0.7 * 0.9)
+
+
+def test_exact_field_label_resolves_open_select_and_duplicate_label_refuses(screen):
+    anchor = Anchor(
+        template="templates/select.png",
+        region=(100, 90, 80, 30),
+        click_point=(140, 105),
+        ocr_text="Unassigned",
+        landmarks=[
+            Landmark(
+                relation="left_of",
+                ocr_text="Title:",
+                distance_px=90,
+                match_mode="exact",
+                dx_px=90,
+                dy_px=0,
+            )
+        ],
+    )
+
+    class OpenSelectVision(FakeVision):
+        def __init__(self, *, duplicate_label: bool = False):
+            super().__init__()
+            self.duplicate_label = duplicate_label
+            self.minimum_ratios: list[float] = []
+            self.minimum_ocr_confidences: list[float] = []
+
+        def find_text(
+            self,
+            screen_png,
+            text,
+            *,
+            region=None,
+            min_ratio=0.8,
+            min_ocr_confidence=0.0,
+            raise_on_ambiguity=False,
+        ):
+            del screen_png, region
+            assert text == "Title:"  # repeated option text is disabled post-focus
+            assert raise_on_ambiguity is True
+            self.minimum_ratios.append(min_ratio)
+            self.minimum_ocr_confidences.append(min_ocr_confidence)
+            if self.duplicate_label:
+                raise AmbiguousOcrMatchError("two exact Title labels")
+            return Match(
+                point=(50, 105),
+                region=(25, 95, 50, 20),
+                confidence=1.0,
+            )
+
+    unique = OpenSelectVision()
+    unique.template_results = [None, None]
+    resolution, _matched = resolve(
+        anchor,
+        screen,
+        unique,
+        template_png=b"closed-field-template",
+        viewport=VIEWPORT,
+        allow_target_ocr=False,
+    )
+    assert resolution.rung == "geometry"
+    assert resolution.point == (140, 105)
+    assert unique.minimum_ratios == [1.0]
+    assert unique.minimum_ocr_confidences == [0.5]
+
+    duplicate = OpenSelectVision(duplicate_label=True)
+    duplicate.template_results = [None, None]
+    with pytest.raises(AmbiguousOcrMatchError, match="did not uniquely establish"):
+        resolve(
+            anchor,
+            screen,
+            duplicate,
+            template_png=b"closed-field-template",
+            viewport=VIEWPORT,
+            allow_target_ocr=False,
+        )
 
 
 def test_geometry_rung_averages_multiple_landmarks(screen):

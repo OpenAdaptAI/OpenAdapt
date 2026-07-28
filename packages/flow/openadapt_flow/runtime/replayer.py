@@ -5213,6 +5213,7 @@ class Replayer:
                 # re-run target/identity before typing; the focusing click
                 # consumed the first one-shot remote lease.
                 if self._step_needs_consequential_revalidation(step, workflow):
+                    focused_field_point = field_point
                     (
                         refreshed,
                         refreshed_region,
@@ -5232,6 +5233,24 @@ class Replayer:
                     if remote_error is not None:
                         return remote_error
                     if refreshed is not None:
+                        if (
+                            step.action is ActionKind.SELECT_OPTION
+                            and focused_field_point is not None
+                            and step.anchor is not None
+                            and not self._selection_target_continuous(
+                                step.anchor.region,
+                                focused_field_point,
+                                refreshed.point,
+                            )
+                        ):
+                            self._cancel_guarded_keyboard()
+                            result.safety_halt = True
+                            result.failure_category = "safety_halt"
+                            return (
+                                f"Step '{step.id}' ({step.intent}) re-resolved "
+                                "to a different field after focus; refusing "
+                                "option selection"
+                            )
                         resolution = refreshed
                         result.resolution = refreshed
                         field_point = refreshed.point
@@ -7188,6 +7207,26 @@ class Replayer:
         return (
             0.75 <= live_w / qualified_w <= 1.25
             and 0.75 <= live_h / qualified_h <= 1.25
+        )
+
+    @staticmethod
+    def _selection_target_continuous(
+        qualified: Region,
+        focused: Point,
+        refreshed: Point,
+    ) -> bool:
+        """Require both select phases to name the same focused field.
+
+        Reuse the selection contract's 25% size tolerance for point drift.
+        This permits small OCR/template jitter but refuses a second control.
+        """
+
+        _, _, qualified_w, qualified_h = qualified
+        if qualified_w <= 0 or qualified_h <= 0:
+            return False
+        return (
+            abs(refreshed[0] - focused[0]) <= qualified_w * 0.25
+            and abs(refreshed[1] - focused[1]) <= qualified_h * 0.25
         )
 
     @staticmethod

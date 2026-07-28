@@ -42,7 +42,8 @@ import time
 from typing import Any, Optional
 
 from openadapt_flow.backend import StructuralResolutionRefused
-from openadapt_flow.ir import Anchor, Point, Region, Resolution, Rung
+from openadapt_flow.ir import Anchor, Landmark, Point, Region, Resolution, Rung
+from openadapt_flow.vision.match import Match
 from openadapt_flow.vision.ocr import (
     AmbiguousOcrMatchError,
     ContradictoryOcrEvidenceError,
@@ -75,6 +76,7 @@ TEMPLATE_THRESHOLD = 0.985
 # (they fall through to the geometry rung) while true labels, which OCR
 # reads near-verbatim, still match at ≈ 1.0.
 OCR_MIN_RATIO = 0.9
+EXACT_LANDMARK_MIN_OCR_CONFIDENCE = 0.5
 
 # The global template rung must not accept a match that contradicts the
 # anchor's landmarks by more than this many pixels. Repeated-widget UIs (an
@@ -85,6 +87,28 @@ OCR_MIN_RATIO = 0.9
 # label is NOT discriminative when the same label repeats — so any global match
 # whose position all located landmarks contradict falls through to ocr/geometry.
 GLOBAL_LANDMARK_TOLERANCE_PX = 40
+
+
+def _landmark_min_ratio(landmark: Landmark) -> float:
+    """Use exact normalized OCR for compiler-qualified field labels."""
+
+    return 1.0 if landmark.match_mode == "exact" else OCR_MIN_RATIO
+
+
+def _find_landmark_text(
+    vision: Any,
+    screen_png: bytes,
+    landmark: Landmark,
+) -> Optional[Match]:
+    """Locate a landmark with the compiler's exact-label confidence floor."""
+
+    kwargs: dict[str, Any] = {
+        "min_ratio": _landmark_min_ratio(landmark),
+        "raise_on_ambiguity": True,
+    }
+    if landmark.match_mode == "exact":
+        kwargs["min_ocr_confidence"] = EXACT_LANDMARK_MIN_OCR_CONFIDENCE
+    return vision.find_text(screen_png, landmark.ocr_text, **kwargs)
 
 
 def is_below_ocr(rung: Rung) -> bool:
@@ -226,12 +250,7 @@ def _landmarks_contradict(
         if landmark.dx_px is None or landmark.dy_px is None:
             continue
         try:
-            match = vision.find_text(
-                screen_png,
-                landmark.ocr_text,
-                min_ratio=OCR_MIN_RATIO,
-                raise_on_ambiguity=True,
-            )
+            match = _find_landmark_text(vision, screen_png, landmark)
         except AmbiguousOcrMatchError:
             # A repeated/generic landmark cannot corroborate or contradict a
             # candidate.  It abstains while any independent unique landmark
@@ -311,12 +330,7 @@ def _select_ocr_candidate(
         if landmark.dx_px is None or landmark.dy_px is None:
             continue
         try:
-            match = vision.find_text(
-                screen_png,
-                landmark.ocr_text,
-                min_ratio=OCR_MIN_RATIO,
-                raise_on_ambiguity=True,
-            )
+            match = _find_landmark_text(vision, screen_png, landmark)
         except AmbiguousOcrMatchError:
             # A repeated context label supplies no unique relation.
             continue
@@ -652,12 +666,7 @@ def resolve(
     ambiguous_landmark = False
     for landmark in anchor.landmarks:
         try:
-            lm_match = vision.find_text(
-                screen_png,
-                landmark.ocr_text,
-                min_ratio=OCR_MIN_RATIO,
-                raise_on_ambiguity=True,
-            )
+            lm_match = _find_landmark_text(vision, screen_png, landmark)
         except AmbiguousOcrMatchError:
             # An ambiguous landmark contributes no coordinate.  Other unique
             # landmarks remain independently usable under the existing

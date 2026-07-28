@@ -16,9 +16,10 @@ import numpy as np
 import pytest
 
 from openadapt_flow.compiler import compile_recording, render_workflow_py
-from openadapt_flow.ir import ActionKind, PostconditionKind, Workflow
+from openadapt_flow.compiler.compile import _exact_left_field_label_landmark
+from openadapt_flow.ir import ActionKind, Landmark, PostconditionKind, Workflow
 from openadapt_flow.runtime.identity_template import token_in_template
-from openadapt_flow.vision.ocr import normalize_text
+from openadapt_flow.vision.ocr import OcrLine, normalize_text
 
 VIEWPORT = (1280, 800)
 NOTE_VALUE = "confidential follow up note"
@@ -176,7 +177,7 @@ class TestCompileRecording:
         ]
 
     def test_remote_typeahead_and_commit_compile_as_one_verified_selection(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         recording = tmp_path / "recording"
         (recording / "frames").mkdir(parents=True)
@@ -233,6 +234,19 @@ class TestCompileRecording:
         )
         original_click = uncollapsed.steps[0]
 
+        exact_label = Landmark(
+            relation="left_of",
+            ocr_text="Title:",
+            distance_px=686,
+            match_mode="exact",
+            dx_px=686,
+            dy_px=0,
+        )
+        monkeypatch.setattr(
+            "openadapt_flow.compiler.compile._exact_left_field_label_landmark",
+            lambda *args, **kwargs: ("Title:", exact_label),
+        )
+
         workflow = compile_recording(
             recording,
             tmp_path / "bundle",
@@ -252,7 +266,17 @@ class TestCompileRecording:
             240,
             64,
         )
-        assert selected.anchor == original_click.anchor
+        assert selected.field_label == "Title:"
+        assert selected.anchor is not None and original_click.anchor is not None
+        assert selected.anchor.landmarks[0] == exact_label
+        serialized = json.loads((tmp_path / "bundle" / "workflow.json").read_text())
+        assert serialized["steps"][0]["anchor"]["landmarks"][0]["match_mode"] == "exact"
+        assert (
+            selected.anchor.model_copy(
+                update={"landmarks": original_click.anchor.landmarks}
+            )
+            == original_click.anchor
+        )
         assert selected.identity_armed == original_click.identity_armed
         assert (
             selected.identity_unarmed_reason == original_click.identity_unarmed_reason
@@ -353,6 +377,125 @@ class TestCompileRecording:
             ActionKind.TYPE,
             ActionKind.KEY,
         ]
+
+    def test_opaque_select_label_requires_unique_exact_aligned_text(self) -> None:
+        target_region = (300, 200, 160, 40)
+        click = (340, 220)
+        title = OcrLine(text="Title:", region=(80, 210, 20, 20), confidence=1.0)
+        repeated_options = [
+            OcrLine(
+                text="Unassigned",
+                region=(310, 200 + index * 24, 100, 18),
+                confidence=1.0,
+            )
+            for index in range(8)
+        ]
+        duplicated_context = [
+            OcrLine(
+                text="Birth First Name",
+                region=(120, 205, 150, 20),
+                confidence=1.0,
+            ),
+            OcrLine(
+                text="Birth First Name",
+                region=(120, 305, 150, 20),
+                confidence=1.0,
+            ),
+            OcrLine(text="Middle N", region=(190, 210, 80, 20), confidence=1.0),
+            OcrLine(text="Middle N", region=(190, 310, 80, 20), confidence=1.0),
+        ]
+
+        mined = _exact_left_field_label_landmark(
+            [title, *repeated_options, *duplicated_context],
+            target_region,
+            click,
+        )
+
+        assert mined is not None
+        label, landmark = mined
+        assert label == "Title:"
+        assert landmark.relation == "left_of"
+        assert landmark.match_mode == "exact"
+        assert landmark.dx_px == click[0] - (title.region[0] + title.region[2] // 2)
+
+        padding_label = OcrLine(
+            text="Compact label",
+            region=(270, 210, 20, 20),
+            confidence=1.0,
+        )
+        padded = _exact_left_field_label_landmark(
+            [padding_label, *repeated_options],
+            target_region,
+            click,
+        )
+        assert padded is not None
+        assert padded[0] == "Compact label"
+
+        duplicate_title = title.model_copy(update={"region": (80, 310, 20, 20)})
+        boundary_alternative = OcrLine(
+            text="Name:",
+            region=(90, 230, 20, 20),
+            confidence=1.0,
+        )
+        assert (
+            _exact_left_field_label_landmark(
+                [
+                    title,
+                    duplicate_title,
+                    boundary_alternative,
+                    *repeated_options,
+                    *duplicated_context,
+                ],
+                target_region,
+                click,
+            )
+            is None
+        )
+
+        low_confidence_duplicate = title.model_copy(
+            update={"region": (80, 310, 20, 20), "confidence": 0.49}
+        )
+        assert (
+            _exact_left_field_label_landmark(
+                [
+                    title,
+                    low_confidence_duplicate,
+                    *repeated_options,
+                    *duplicated_context,
+                ],
+                target_region,
+                click,
+            )
+            is None
+        )
+
+        far_sidebar_label = OcrLine(
+            text="Remote heading",
+            region=(0, 210, 60, 20),
+            confidence=1.0,
+        )
+        assert (
+            _exact_left_field_label_landmark(
+                [far_sidebar_label, *repeated_options],
+                target_region,
+                click,
+            )
+            is None
+        )
+
+        adjacent_row_label = OcrLine(
+            text="Adjacent row",
+            region=(260, 180, 30, 21),
+            confidence=1.0,
+        )
+        assert (
+            _exact_left_field_label_landmark(
+                [adjacent_row_label, *repeated_options],
+                target_region,
+                click,
+            )
+            is None
+        )
 
     def test_target_surface_cannot_contradict_recorded_surface(
         self, tmp_path: Path

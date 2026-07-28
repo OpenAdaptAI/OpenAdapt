@@ -19,6 +19,7 @@ from openadapt_flow.ir import (
     TEMPLATE_AAD,
     ActionKind,
     Anchor,
+    Landmark,
     LoopSpec,
     Predicate,
     PredicateKind,
@@ -398,6 +399,59 @@ def test_sealed_empty_defaults_do_not_implicitly_cross_schema_versions():
     step = _step_payloads(rendered, "linear")[0]
     assert "selection_commit_key" in step
     assert "selection_region" in step
+
+
+def test_legacy_landmark_without_match_mode_keeps_digest_and_loads_fuzzy(tmp_path):
+    bundle = _write_bundle_dir(tmp_path)
+    workflow = Workflow(name="legacy-landmark", steps=[click_step()])
+    anchor = workflow.steps[0].anchor
+    assert anchor is not None
+    anchor.landmarks = [
+        Landmark(
+            relation="left_of",
+            ocr_text="Field label",
+            distance_px=80,
+            dx_px=80,
+            dy_px=0,
+        )
+    ]
+    workflow.save(bundle)
+    saved_digest = workflow.manifest.content_digest
+    raw = json.loads((bundle / "workflow.json").read_text())
+    assert "match_mode" not in raw["steps"][0]["anchor"]["landmarks"][0]
+
+    loaded = Workflow.load(bundle, verify_integrity=True)
+
+    assert loaded.manifest.content_digest == saved_digest
+    assert loaded.steps[0].anchor.landmarks[0].match_mode == "fuzzy"
+    rendered = loaded.model_dump(mode="json", exclude={"manifest"})
+    assert "match_mode" not in rendered["steps"][0]["anchor"]["landmarks"][0]
+
+
+def test_exact_landmark_survives_sealed_digest_verification(tmp_path):
+    bundle = _write_bundle_dir(tmp_path)
+    workflow = Workflow(name="exact-landmark", steps=[click_step()])
+    anchor = workflow.steps[0].anchor
+    assert anchor is not None
+    anchor.landmarks = [
+        Landmark(
+            relation="left_of",
+            ocr_text="Title:",
+            distance_px=80,
+            match_mode="exact",
+            dx_px=80,
+            dy_px=0,
+        )
+    ]
+    workflow.save(bundle)
+    saved_digest = workflow.manifest.content_digest
+
+    loaded = Workflow.load(bundle, verify_integrity=True)
+
+    assert loaded.manifest.content_digest == saved_digest
+    assert loaded.steps[0].anchor.landmarks[0].match_mode == "exact"
+    raw = json.loads((bundle / "workflow.json").read_text())
+    assert raw["steps"][0]["anchor"]["landmarks"][0]["match_mode"] == "exact"
 
 
 def test_digest_changes_when_content_changes(tmp_path):

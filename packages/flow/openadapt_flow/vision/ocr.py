@@ -224,6 +224,7 @@ def find_text(
     *,
     region: Region | None = None,
     min_ratio: float = 0.8,
+    min_ocr_confidence: float = 0.0,
     raise_on_ambiguity: bool = False,
 ) -> Match | None:
     """Locate a text label on screen via OCR plus fuzzy matching.
@@ -240,6 +241,9 @@ def find_text(
         text: Target text to find.
         region: Optional ``(x, y, w, h)`` sub-region to search within.
         min_ratio: Minimum similarity ratio in ``[0, 1]`` to accept.
+        min_ocr_confidence: Minimum OCR-engine confidence to accept. The
+            compatibility default keeps historical generic lookup behavior;
+            compiler-qualified exact labels opt into a stricter floor.
         raise_on_ambiguity: Raise :class:`AmbiguousOcrMatchError` instead of
             selecting the best line when multiple lines qualify. Target
             resolution enables this so ambiguity cannot be mistaken for a miss
@@ -249,17 +253,25 @@ def find_text(
         A :class:`Match` centered on the best qualifying line's bounding box,
         or ``None`` if no line is similar enough.
     """
+    exact_confidence_contract = (
+        raise_on_ambiguity and min_ratio == 1.0 and min_ocr_confidence > 0.0
+    )
     qualifying = _qualifying_text_lines(
         screen_png,
         text,
         region=region,
         min_ratio=min_ratio,
+        min_ocr_confidence=(0.0 if exact_confidence_contract else min_ocr_confidence),
     )
     if len(qualifying) > 1:
         if raise_on_ambiguity:
             raise AmbiguousOcrMatchError(
                 f"{len(qualifying)} OCR lines qualify for target text"
             )
+    if exact_confidence_contract:
+        qualifying = [
+            item for item in qualifying if item[1].confidence >= min_ocr_confidence
+        ]
     if not qualifying:
         return None
     ratio, line = max(qualifying, key=lambda item: item[0])
@@ -273,6 +285,7 @@ def find_text_candidates(
     *,
     region: Region | None = None,
     min_ratio: float = 0.8,
+    min_ocr_confidence: float = 0.0,
 ) -> list[Match]:
     """Return every OCR line that qualifies for ``text``.
 
@@ -291,6 +304,7 @@ def find_text_candidates(
         text,
         region=region,
         min_ratio=min_ratio,
+        min_ocr_confidence=min_ocr_confidence,
     ):
         x, y, w, h = line.region
         matches.append(
@@ -309,6 +323,7 @@ def _qualifying_text_lines(
     *,
     region: Region | None,
     min_ratio: float,
+    min_ocr_confidence: float,
 ) -> list[tuple[float, OcrLine]]:
     """Return qualifying ``(similarity, line)`` pairs without selecting one."""
     target = normalize_text(text)
@@ -316,6 +331,8 @@ def _qualifying_text_lines(
         return []
     qualifying: list[tuple[float, OcrLine]] = []
     for line in ocr(screen_png, region=region):
+        if line.confidence < min_ocr_confidence:
+            continue
         ratio = difflib.SequenceMatcher(None, normalize_text(line.text), target).ratio()
         if ratio >= min_ratio:
             qualifying.append((ratio, line))

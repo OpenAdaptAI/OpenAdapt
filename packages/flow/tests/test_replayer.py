@@ -111,9 +111,10 @@ class FakeVision:
         *,
         region=None,
         min_ratio=0.8,
+        min_ocr_confidence=0.0,
         raise_on_ambiguity=False,
     ):
-        del raise_on_ambiguity
+        del min_ocr_confidence, raise_on_ambiguity
         self.text_calls.append(text)
         result = self.text_results.get(text)
         if isinstance(result, list):
@@ -1921,6 +1922,49 @@ def test_remote_selection_post_focus_uses_landmarks_not_duplicated_value(
     assert "Field label" in vision.text_calls
     assert "Unassigned" not in vision.text_calls
     assert report.results[0].input_verified is True
+
+
+def test_remote_selection_refuses_shifted_exact_label_after_focus(bundle, run_dir):
+    vision = FakeVision()
+    field = Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+    vision.template_results = [field, field, None, None]
+    vision.text_results = {
+        "Field label": Match(
+            point=(170, 105),
+            region=(145, 95, 50, 20),
+            confidence=1.0,
+        )
+    }
+    workflow = _remote_selection_workflow()
+    step = workflow.steps[0]
+    assert step.anchor is not None
+    step.anchor = step.anchor.model_copy(
+        update={
+            "ocr_text": "Unassigned",
+            "landmarks": [
+                Landmark(
+                    relation="left_of",
+                    ocr_text="Field label",
+                    distance_px=40,
+                    match_mode="exact",
+                    dx_px=40,
+                    dy_px=0,
+                )
+            ],
+        }
+    )
+    backend = SelectRemoteBackend(selected_value="Massachusetts")
+
+    report = Replayer(backend, vision=vision).run(
+        workflow,
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.select_calls == []
+    assert "different field after focus" in (report.results[0].error or "")
 
 
 def test_remote_selection_refuses_incompatible_live_field_geometry(bundle, run_dir):

@@ -102,6 +102,14 @@ class Landmark(BaseModel):
     relation: Literal["left_of", "right_of", "above", "below"]
     ocr_text: str
     distance_px: int
+    match_mode: Literal["fuzzy", "exact"] = Field(
+        default="fuzzy",
+        description=(
+            "OCR comparison mode for this retained relation. Compiler-mined "
+            "generic context remains fuzzy; a qualified opaque-field label "
+            "uses exact normalized text so a near label cannot authorize input."
+        ),
+    )
     dx_px: Optional[int] = Field(
         default=None,
         description="Exact x offset landmark center -> target click point",
@@ -110,6 +118,20 @@ class Landmark(BaseModel):
         default=None,
         description="Exact y offset landmark center -> target click point",
     )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep legacy fuzzy landmarks byte-semantically unchanged.
+
+        The package supports Pydantic 2.5, before ``Field(exclude_if=...)``.
+        This v2-compatible serializer omits the additive default while keeping
+        an explicit exact-label contract inside new bundle digests.
+        """
+
+        data: dict[str, Any] = handler(self)
+        if self.match_mode == "fuzzy":
+            data.pop("match_mode", None)
+        return data
 
 
 class StructuralLocator(BaseModel):
