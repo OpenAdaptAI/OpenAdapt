@@ -38,6 +38,14 @@ from PIL import Image
 from openadapt_privacy.base import ScrubbingProvider
 
 
+class UnscrubbedScreenshot(RuntimeError):
+    """Image redaction was requested but the pixels were never scrubbed.
+
+    Raised instead of returning a Screenshot that looks scrubbed while still
+    pointing at unredacted image bytes on disk.
+    """
+
+
 @dataclass
 class Action:
     """Represents a single user action in a recording.
@@ -111,22 +119,45 @@ class Screenshot:
     def scrub(self, scrubber: ScrubbingProvider) -> "Screenshot":
         """Return a new Screenshot with PII/PHI scrubbed from the image.
 
+        `path` is dropped on the returned Screenshot because the file it names
+        holds the original, unredacted bytes. Only `image` carries scrubbed
+        pixels; a scrubbed Screenshot must not name an unscrubbed file.
+
         Args:
             scrubber: The scrubbing provider to use.
 
         Returns:
             New Screenshot instance with scrubbed image.
+
+        Raises:
+            UnscrubbedScreenshot: If this Screenshot names image data on disk
+                that was never loaded. Nothing could be redacted, and returning
+                a Screenshot that still names the original file would report an
+                unscrubbed image as scrubbed.
         """
-        scrubbed_image = None
-        if self.image is not None:
-            scrubbed_image = scrubber.scrub_image(self.image)
+        if self.image is None:
+            if self.path is not None:
+                raise UnscrubbedScreenshot(
+                    f"Screenshot {self.id} names image data at {self.path!r} that was not "
+                    "loaded, so no redaction was attempted. Load Screenshot.image before "
+                    "scrubbing, or pass scrub_images=False to state explicitly that image "
+                    "redaction is out of scope."
+                )
+            # No pixels and no file: there is genuinely nothing to redact.
+            return Screenshot(
+                id=self.id,
+                action_id=self.action_id,
+                timestamp=self.timestamp,
+                image=None,
+                path=None,
+            )
 
         return Screenshot(
             id=self.id,
             action_id=self.action_id,
             timestamp=self.timestamp,
-            image=scrubbed_image,
-            path=self.path,
+            image=scrubber.scrub_image(self.image),
+            path=None,
         )
 
 

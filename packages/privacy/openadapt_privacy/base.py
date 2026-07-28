@@ -6,12 +6,29 @@ PII/PHI scrubbing providers.
 
 from __future__ import annotations
 
+import importlib
 from typing import Any, List
 
 from PIL import Image
 from pydantic import BaseModel
 
 from openadapt_privacy.config import config
+
+# Provider modules that must be imported before the subclass registry is read.
+# ``ScrubbingProvider.__subclasses__()`` only sees classes whose module has been
+# imported, so enumerating it without importing these first makes "no provider
+# was ever imported" indistinguishable from "no provider supports this
+# modality" - both were reported as an empty list.
+_BUILTIN_PROVIDER_MODULES = ("openadapt_privacy.providers.presidio",)
+
+
+class ScrubbingProviderUnavailable(RuntimeError):
+    """No scrubbing provider could be loaded, so no scrub was attempted.
+
+    This is deliberately distinct from "no loaded provider supports the
+    requested modality". A caller must never read a provider load failure as an
+    empty capability set and continue with unscrubbed data.
+    """
 
 
 class Modality:
@@ -313,18 +330,40 @@ class ScrubbingProviderFactory:
     def get_for_modality(modality: str) -> List[ScrubbingProvider]:
         """Get all scrubbing providers that support a given modality.
 
+        The built-in provider modules are imported first, so an empty result
+        means "every available provider was inspected and none supports this
+        modality" - never "no provider module happened to be imported yet".
+
         Args:
             modality: The modality type (e.g., Modality.TEXT).
 
         Returns:
-            List of provider instances that support the modality.
-        """
-        scrubbing_providers = ScrubbingProvider.__subclasses__()
+            List of provider instances that support the modality. An empty list
+            means the providers were inspected and none supports `modality`.
 
+        Raises:
+            ScrubbingProviderUnavailable: If a built-in provider module could
+                not be imported and no other provider supports the modality.
+                The caller must halt rather than proceed with unscrubbed data.
+        """
+        load_errors: dict[str, ImportError] = {}
+        for module_path in _BUILTIN_PROVIDER_MODULES:
+            try:
+                importlib.import_module(module_path)
+            except ImportError as exc:
+                load_errors[module_path] = exc
+
+        instances = [provider() for provider in ScrubbingProvider.__subclasses__()]
         filtered_providers = [
-            provider()
-            for provider in scrubbing_providers
-            if modality in provider().capabilities
+            instance for instance in instances if modality in instance.capabilities
         ]
+
+        if not filtered_providers and load_errors:
+            detail = "; ".join(f"{path}: {exc}" for path, exc in load_errors.items())
+            raise ScrubbingProviderUnavailable(
+                f"No scrubbing provider is available for modality {modality!r} because a "
+                f"built-in provider module failed to import ({detail}). No scrub was "
+                "attempted; do not treat this as 'nothing to scrub'."
+            )
 
         return filtered_providers
