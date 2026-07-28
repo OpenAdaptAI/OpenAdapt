@@ -1,10 +1,11 @@
 {
   "$defs": {
     "HumanDecisionAction": {
-      "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.",
+      "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.\n\n``reject`` and ``escalate`` are deliberately separate members rather than\ntwo labels on one action, because they do opposite things to the run.\n``escalate`` *parks* it: the durable pause stays intact and a qualified\ncolleague can still continue it. ``reject`` *terminates* it: the operator\nlooked at the live application and is asserting that this run must not\nproceed at all. Collapsing the two would leave the recorded answer\ndistribution unable to distinguish \"I don't know\" from \"stop\", which is the\nonly reason a disagreement action is worth its cost.\n\n``reject`` is scoped to one run. It is not a claim that the saved workflow\nis wrong; that assertion changes future runs and belongs to ``teach``,\nwhich carries the demonstration and requalification gate such authority\nrequires.",
       "enum": [
         "verify_and_resume",
         "skip",
+        "reject",
         "teach",
         "escalate"
       ],
@@ -255,7 +256,7 @@
       "items": {
         "$ref": "#/$defs/HumanDecisionAction"
       },
-      "maxItems": 4,
+      "maxItems": 5,
       "minItems": 1,
       "title": "Allowed Actions",
       "type": "array"

@@ -1,10 +1,11 @@
 {
   "$defs": {
     "HumanDecisionAction": {
-      "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.",
+      "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.\n\n``reject`` and ``escalate`` are deliberately separate members rather than\ntwo labels on one action, because they do opposite things to the run.\n``escalate`` *parks* it: the durable pause stays intact and a qualified\ncolleague can still continue it. ``reject`` *terminates* it: the operator\nlooked at the live application and is asserting that this run must not\nproceed at all. Collapsing the two would leave the recorded answer\ndistribution unable to distinguish \"I don't know\" from \"stop\", which is the\nonly reason a disagreement action is worth its cost.\n\n``reject`` is scoped to one run. It is not a claim that the saved workflow\nis wrong; that assertion changes future runs and belongs to ``teach``,\nwhich carries the demonstration and requalification gate such authority\nrequires.",
       "enum": [
         "verify_and_resume",
         "skip",
+        "reject",
         "teach",
         "escalate"
       ],
@@ -22,13 +23,14 @@
         "expired",
         "delivery_uncertain",
         "demonstration_requested",
-        "escalation_recorded"
+        "escalation_recorded",
+        "rejected_by_operator"
       ],
       "title": "HumanDecisionReceiptReason",
       "type": "string"
     },
     "HumanDecisionReceiptState": {
-      "description": "Terminal outcome of one attended decision, as the runtime reports it.\n\n``ACCEPTED_PENDING_RUNNER`` and ``DELIVERY_UNCERTAIN`` are the two\nnon-success outcomes a phone must be able to show. ``DELIVERY_UNCERTAIN``\nis the \"may have been sent\" state: it exists so that losing the network\nafter a tap can be reported honestly instead of collapsing into either a\nsuccess or a refusal.\n\n``DEMONSTRATION_REQUESTED`` and ``ESCALATED`` are separate terminal states\nrather than variants of ``ACCEPTED_PENDING_RUNNER``: a ``teach`` or\n``escalate`` decision is durably recorded and returns immediately without\nany runner continuation pending, so folding them into \"accepted, pending\"\nwould tell an operator to wait for something that is never coming.",
+      "description": "Terminal outcome of one attended decision, as the runtime reports it.\n\n``ACCEPTED_PENDING_RUNNER`` and ``DELIVERY_UNCERTAIN`` are the two\nnon-success outcomes a phone must be able to show. ``DELIVERY_UNCERTAIN``\nis the \"may have been sent\" state: it exists so that losing the network\nafter a tap can be reported honestly instead of collapsing into either a\nsuccess or a refusal.\n\n``DEMONSTRATION_REQUESTED`` and ``ESCALATED`` are separate terminal states\nrather than variants of ``ACCEPTED_PENDING_RUNNER``: a ``teach`` or\n``escalate`` decision is durably recorded and returns immediately without\nany runner continuation pending, so folding them into \"accepted, pending\"\nwould tell an operator to wait for something that is never coming.\n\n``REJECTED`` is the outcome of a ``reject`` decision and is distinct from\nboth of those and from ``HALTED``. ``ESCALATED`` and\n``DEMONSTRATION_REQUESTED`` leave the run paused and resumable;\n``REJECTED`` ends it. ``HALTED`` is the engine's own verdict after it acted\non an answer, whereas ``REJECTED`` records that a human ended the run\nwithout the engine attempting anything further. A consumer that collapsed\nthem would tell the operator the machine stopped when in fact they did.",
       "enum": [
         "accepted_pending_runner",
         "completed",
@@ -37,7 +39,8 @@
         "expired",
         "delivery_uncertain",
         "demonstration_requested",
-        "escalated"
+        "escalated",
+        "rejected"
       ],
       "title": "HumanDecisionReceiptState",
       "type": "string"

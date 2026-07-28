@@ -323,6 +323,7 @@ ENGINE_TERMINAL_OUTCOMES: tuple[tuple[str, str, str], ...] = (
     ("halted", "halted", "continuation_halted"),
     ("needs_demonstration", "demonstration_requested", "demonstration_requested"),
     ("escalated", "escalated", "escalation_recorded"),
+    ("rejected", "rejected", "rejected_by_operator"),
     ("<admission>", "expired", "expired"),
 )
 
@@ -349,7 +350,11 @@ def test_receipt_represents_every_real_engine_terminal_outcome(
             "reason_code": reason_code,
             "report_success": state == "completed",
             "action": (
-                "skip" if reason_code == "skipped_and_resumed" else "verify_and_resume"
+                "skip"
+                if reason_code == "skipped_and_resumed"
+                else "reject"
+                if reason_code == "rejected_by_operator"
+                else "verify_and_resume"
             ),
         }
     )
@@ -370,6 +375,7 @@ def test_receipt_reason_code_is_closed_and_never_free_text() -> None:
         "delivery_uncertain",
         "demonstration_requested",
         "escalation_recorded",
+        "rejected_by_operator",
     }
 
     for prose in (
@@ -550,6 +556,7 @@ def test_receipt_action_reuses_the_portable_task_vocabulary() -> None:
     assert {action.value for action in HumanDecisionAction} == {
         "verify_and_resume",
         "skip",
+        "reject",
         "teach",
         "escalate",
     }
@@ -714,3 +721,57 @@ def test_the_producers_real_wire_payload_validates_unchanged() -> None:
         if field.is_required()
     }
     assert required <= supplied
+
+
+def test_a_task_can_advertise_the_complete_action_vocabulary() -> None:
+    """``max_length`` bounds the vocabulary, never the offer.
+
+    A pause that is skippable, re-verifiable, rejectable, teachable, and
+    escalatable is a legitimate pause. When ``reject`` was added, a bound left
+    at four would have silently made the most permissive pause unrepresentable
+    -- a refusal to issue the task at all, in the exact case the operator has
+    the most choice.
+    """
+    fields = _task_fields()
+    fields["allowed_actions"] = tuple(HumanDecisionAction)
+    task = sign_human_decision_task_hmac(key=b"k" * 32, fields=fields)
+    assert len(task.allowed_actions) == len(HumanDecisionAction) == 5
+    assert task.verify_hmac(b"k" * 32)
+
+
+def test_rejected_is_terminal_and_distinct_from_escalated() -> None:
+    """Parking a run and ending it must not project to the same receipt.
+
+    ``escalate`` leaves the durable pause intact for a colleague; ``reject``
+    ends the run. A consumer reads the pair to decide whether to tell the
+    operator that someone will pick this up, and the two answers are opposite.
+    Neither is a success, and neither may carry ``report_success``.
+    """
+    rejected = HumanDecisionReceiptV1.model_validate(
+        {
+            **_receipt_fields(),
+            "action": HumanDecisionAction.REJECT,
+            "state": HumanDecisionReceiptState.REJECTED,
+            "reason_code": HumanDecisionReceiptReason.REJECTED_BY_OPERATOR,
+            "report_success": None,
+        }
+    )
+    assert rejected.state is not HumanDecisionReceiptState.ESCALATED
+    assert rejected.state is not HumanDecisionReceiptState.HALTED
+    assert not rejected.succeeded
+
+    for state in (
+        HumanDecisionReceiptState.ESCALATED,
+        HumanDecisionReceiptState.HALTED,
+        HumanDecisionReceiptState.COMPLETED,
+    ):
+        with pytest.raises(ValidationError, match="is not a cause of state"):
+            HumanDecisionReceiptV1.model_validate(
+                {
+                    **_receipt_fields(),
+                    "action": HumanDecisionAction.REJECT,
+                    "state": state,
+                    "reason_code": HumanDecisionReceiptReason.REJECTED_BY_OPERATOR,
+                    "report_success": None,
+                }
+            )

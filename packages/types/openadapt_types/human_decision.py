@@ -140,10 +140,25 @@ class HumanDecisionAction(str, Enum):
     ``verify_and_resume`` maps to Flow's attended ``continue`` operation. It
     means that the operator prepared the live state for fresh revalidation; it
     never authorizes blind repetition of a prior action.
+
+    ``reject`` and ``escalate`` are deliberately separate members rather than
+    two labels on one action, because they do opposite things to the run.
+    ``escalate`` *parks* it: the durable pause stays intact and a qualified
+    colleague can still continue it. ``reject`` *terminates* it: the operator
+    looked at the live application and is asserting that this run must not
+    proceed at all. Collapsing the two would leave the recorded answer
+    distribution unable to distinguish "I don't know" from "stop", which is the
+    only reason a disagreement action is worth its cost.
+
+    ``reject`` is scoped to one run. It is not a claim that the saved workflow
+    is wrong; that assertion changes future runs and belongs to ``teach``,
+    which carries the demonstration and requalification gate such authority
+    requires.
     """
 
     VERIFY_AND_RESUME = "verify_and_resume"
     SKIP = "skip"
+    REJECT = "reject"
     TEACH = "teach"
     ESCALATE = "escalate"
 
@@ -279,7 +294,11 @@ class HumanDecisionTaskV1(_StrictContract):
     substrate: HumanDecisionSubstrate = HumanDecisionSubstrate.UNKNOWN
     question: HumanDecisionQuestionV1
     evidence: HumanDecisionEvidenceSummaryV1
-    allowed_actions: tuple[HumanDecisionAction, ...] = Field(min_length=1, max_length=4)
+    #: Upper bound is the size of the closed vocabulary, not a policy: a pause
+    #: can legitimately offer every member at once. Widening it is what a new
+    #: member costs, and it is why a consumer must re-validate against the
+    #: current schema rather than a cached copy.
+    allowed_actions: tuple[HumanDecisionAction, ...] = Field(min_length=1, max_length=5)
     required_authn: HumanDecisionRequiredAuthn
     created_at: StrictStr = Field(
         min_length=20, max_length=40, pattern=_TIMESTAMP_PATTERN
@@ -372,6 +391,14 @@ class HumanDecisionReceiptState(str, Enum):
     ``escalate`` decision is durably recorded and returns immediately without
     any runner continuation pending, so folding them into "accepted, pending"
     would tell an operator to wait for something that is never coming.
+
+    ``REJECTED`` is the outcome of a ``reject`` decision and is distinct from
+    both of those and from ``HALTED``. ``ESCALATED`` and
+    ``DEMONSTRATION_REQUESTED`` leave the run paused and resumable;
+    ``REJECTED`` ends it. ``HALTED`` is the engine's own verdict after it acted
+    on an answer, whereas ``REJECTED`` records that a human ended the run
+    without the engine attempting anything further. A consumer that collapsed
+    them would tell the operator the machine stopped when in fact they did.
     """
 
     ACCEPTED_PENDING_RUNNER = "accepted_pending_runner"
@@ -382,6 +409,7 @@ class HumanDecisionReceiptState(str, Enum):
     DELIVERY_UNCERTAIN = "delivery_uncertain"
     DEMONSTRATION_REQUESTED = "demonstration_requested"
     ESCALATED = "escalated"
+    REJECTED = "rejected"
 
 
 class HumanDecisionReceiptReason(str, Enum):
@@ -402,6 +430,14 @@ class HumanDecisionReceiptReason(str, Enum):
     DELIVERY_UNCERTAIN = "delivery_uncertain"
     DEMONSTRATION_REQUESTED = "demonstration_requested"
     ESCALATION_RECORDED = "escalation_recorded"
+    #: The only cause of ``REJECTED``. It is a single closed member on purpose:
+    #: a *reason* taxonomy for disagreement would be more informative, but
+    #: there is no evidence yet for what its members should be -- the reject
+    #: rate is the data needed to design them -- and a wrong taxonomy is worse
+    #: than none. Adding members later is additive here and does not reopen a
+    #: free-text hole, which is why the cause is an enum from the start rather
+    #: than a string that a later change could widen.
+    REJECTED_BY_OPERATOR = "rejected_by_operator"
 
 
 #: Which causes each terminal state may carry.
@@ -440,6 +476,9 @@ HUMAN_DECISION_RECEIPT_REASONS: Mapping[
     ),
     HumanDecisionReceiptState.ESCALATED: frozenset(
         {HumanDecisionReceiptReason.ESCALATION_RECORDED}
+    ),
+    HumanDecisionReceiptState.REJECTED: frozenset(
+        {HumanDecisionReceiptReason.REJECTED_BY_OPERATOR}
     ),
 }
 
