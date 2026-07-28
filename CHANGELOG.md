@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v1.10.2 (2026-07-28)
+
+### Bug Fixes
+
+- Refuse launcher capture before readiness
+  ([#1070](https://github.com/OpenAdaptAI/OpenAdapt/pull/1070),
+  [`2591825`](https://github.com/OpenAdaptAI/OpenAdapt/commit/259182559924ad497cb6524825246d18ae696336))
+
+### Chores
+
+- Gitignore .private/ ([#1066](https://github.com/OpenAdaptAI/OpenAdapt/pull/1066),
+  [`5eaa43f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5eaa43f7cb7ccbc3a98f4fd719acd90d9ff9bea4))
+
+- Refresh Capture platform manifest ([#1071](https://github.com/OpenAdaptAI/OpenAdapt/pull/1071),
+  [`4597f6e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4597f6e2527c14ab8bf758f163dba47f78a04281))
+
+- **ci**: Derive the source-boundary guard from the policy manifest
+  ([#1069](https://github.com/OpenAdaptAI/OpenAdapt/pull/1069),
+  [`52a8a24`](https://github.com/OpenAdaptAI/OpenAdapt/commit/52a8a24e73512b5a0390782b6b87754bce3ae048))
+
+- **release**: Reconcile platform manifest
+  ([`160d66b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/160d66befbcb7d496ffa261cc8cab730c97c7c3b))
+
+### Documentation
+
+- Stop telling readers that status.json fixes itself
+  ([#1068](https://github.com/OpenAdaptAI/OpenAdapt/pull/1068),
+  [`3771129`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3771129902b77ace644660720fa1f88458a58f31))
+
+
 ## v1.10.1 (2026-07-28)
 
 ### Bug Fixes
