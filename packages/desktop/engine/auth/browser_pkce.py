@@ -1,52 +1,37 @@
-"""BrowserPkceProvider -- v1 "click Login" for interactive desktop users.
+"""BrowserPkceProvider -- "click Login" for interactive desktop users.
 
-Flow (spec section 3a):
-    1. Generate a PKCE verifier/challenge and bind an ephemeral loopback
-       listener on ``127.0.0.1:<port>`` at path ``/callback``.
-    2. Open the hosted login page in the SYSTEM browser (so Google / magic-link
-       "just work" with zero forked auth), passing the loopback redirect URI +
-       PKCE challenge.
-    3. The browser redirects back to the loopback with ``?code=…``; the listener
-       captures it and serves a minimal "you can close this tab" page.
-    4. Exchange the code for a Supabase session via PKCE (using the code
-       verifier), then MINT an ingest token via the hosted API.
-    5. Store a single active credential whose bearer ``token`` is the minted
-       ingest token (so the headless push / count path always has a bearer),
-       carrying the Supabase ``refresh_token`` so the session can be renewed.
+An RFC 8252 native-app login. The desktop cannot keep a client secret, so it
+uses the SYSTEM browser (where Google and magic-link sign-in already work) plus
+an ephemeral loopback listener, and binds the exchange with S256 PKCE.
 
-``is_available()`` is False on a headless server (no browser / no loopback), so
-the UI falls back to :class:`~engine.auth.paste.PasteTokenProvider`.
+Flow:
+    1. Generate a PKCE verifier/challenge and bind a listener on
+       ``127.0.0.1:<ephemeral port>`` that serves ONLY ``/callback``.
+    2. Open ``{host}/login`` in the system browser, passing the loopback
+       redirect URI, the challenge, and an opaque ``state``.
+    3. The user signs in normally. OpenAdapt's own authenticated
+       ``/auth/loopback`` page then redirects to the listener with
+       ``?code=oap_...&state=...``.
+    4. The listener validates ``state`` and redeems the code through the
+       EXISTING pairing path (:func:`engine.auth.pairing.claim_pairing`),
+       sending the verifier. Cloud consumes the one-use code, checks the PKCE
+       binding, and mints a user/org-bound ingest credential.
+    5. That path stages, independently validates, atomically promotes, and
+       confirms the credential in the OS keychain, rolling back on any failure.
 
-NOT WIRED END TO END -- do not enable this provider by setting the Supabase
-environment variables alone. Steps 2-4 above each depend on a hosted contract
-that ``app.openadapt.ai`` does not implement today:
+Why the redirect comes from our own page rather than from Supabase: Supabase's
+``uri_allow_list`` is rewritten by ``scripts/setup-supabase.mjs`` on every
+deploy, and RFC 8252 section 7.3 requires the authorization server to accept an
+arbitrary loopback port -- a promise that allow-list glob grammar cannot make.
+Routing the redirect through an authenticated OpenAdapt page keeps Supabase
+configuration untouched and reuses the hardened pairing redemption whole. It
+also means browser login introduces NO new credential format: the ``code`` is
+an ``oap_`` pairing secret, and the result is the same ``oai_ingest_...``
+credential every other path produces.
 
-* ``GET /login`` reads only ``checkout_session_id`` and ``next`` (clamped to a
-  same-origin ``/dashboard`` destination). It ignores ``redirect_to``,
-  ``code_challenge``, ``code_challenge_method`` and ``state``, so the browser
-  never navigates to the loopback listener and step 3 cannot happen.
-* The Supabase ``uri_allow_list`` is rewritten on every production deploy and
-  contains no loopback entry, so Supabase would reject a ``127.0.0.1`` redirect
-  even if the page forwarded one.
-* ``POST /api/ingest-tokens`` authenticates the browser session cookie and
-  requires a ``name`` field. It rejects a ``Authorization: Bearer <supabase
-  access token>`` with 401, so step 4 cannot mint.
-
-Because ``_exchange_code`` is only reached AFTER the loopback wait, leaving the
-provider enabled makes ``login`` open a browser tab and then block for the full
-``timeout`` before failing over to token paste. ``is_available()`` therefore
-requires the Supabase configuration up front: the provider reports unavailable
-rather than costing the operator a silent multi-minute stall. Restoring it is a
-hosted-contract change, not a client change -- see the three bullets above.
-
-The working, shipped path to a credential is the one-time pairing flow
-(:mod:`engine.auth.pairing`), which the hosted control plane does implement.
-
-Reconciliation note: the shared store (:mod:`engine.auth.store`) keys ONE active
-credential per host and ``auth_header()`` returns exactly one bearer. We
-therefore fold the Supabase session and the minted ingest token into a single
-stored ``Credential`` (``kind="ingest_token"``, ``token`` = ingest token,
-``refresh_token`` = Supabase refresh) rather than two competing entries.
+``is_available()`` is False on a headless box (no browser, no user at the
+keyboard) and False when no OS keychain can hold the result, so the UI falls
+back to :class:`~engine.auth.paste.PasteTokenProvider`.
 """
 
 from __future__ import annotations
@@ -60,22 +45,26 @@ import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import httpx
 from loguru import logger
 
+from engine.auth.pairing import (
+    PAIRING_SECRET_RE,
+    PairingError,
+    _validate_destination,
+    claim_pairing,
+)
 from engine.auth.provider import Credential
-from engine.auth.store import DEFAULT_HOST, store_credential
+from engine.auth.store import DEFAULT_HOST, load_credential, secure_store_available
 
 # Hosted login page opened in the system browser.
 LOGIN_PATH = "/login"
-# Path the loopback listener serves for the OAuth redirect.
+# The ONLY path the loopback listener serves.
 CALLBACK_PATH = "/callback"
-# Hosted endpoint that mints an ingest token from an authenticated session.
-MINT_PATH = "/api/ingest-tokens"
 
-# Supabase project config (coordinator-provisioned). Absent in CI/tests.
-SUPABASE_URL_ENV = "OPENADAPT_SUPABASE_URL"
-SUPABASE_ANON_KEY_ENV = "OPENADAPT_SUPABASE_ANON_KEY"
+# How long to wait for the browser round trip. The user can complete a magic
+# link and then explicitly choose Connect before Cloud mints the five-minute
+# pairing code. No server secret exists during this wait.
+DEFAULT_TIMEOUT_S = 300.0
 
 _CALLBACK_HTML = (
     b"<!doctype html><html><head><meta charset='utf-8'>"
@@ -87,6 +76,26 @@ _CALLBACK_HTML = (
     b"</body></html>"
 )
 
+_ERROR_HTML = (
+    b"<!doctype html><html><head><meta charset='utf-8'>"
+    b"<title>OpenAdapt login failed</title></head>"
+    b"<body style='font-family:system-ui;text-align:center;padding-top:3rem'>"
+    b"<h2>Sign-in did not complete.</h2>"
+    b"<p>Return to OpenAdapt for the reason.</p>"
+    b"</body></html>"
+)
+
+
+def _write_callback_body(stream, body: bytes, event: threading.Event) -> None:
+    """Signal callback completion even when the browser closes before reading."""
+    try:
+        stream.write(body)
+    finally:
+        # The callback parameters were already retained. A browser disconnect
+        # during this courtesy page must not make login wait for the full
+        # timeout or discard a valid one-use code.
+        event.set()
+
 
 def generate_pkce_pair() -> tuple[str, str]:
     """Return ``(code_verifier, code_challenge)`` for the S256 PKCE method."""
@@ -97,11 +106,17 @@ def generate_pkce_pair() -> tuple[str, str]:
 
 
 class _LoopbackReceiver:
-    """Ephemeral 127.0.0.1 listener that captures the OAuth ``code``."""
+    """Ephemeral 127.0.0.1 listener that captures one authorization code.
+
+    Binds ``127.0.0.1`` explicitly -- never ``0.0.0.0`` -- so nothing outside
+    this machine can reach it, and takes an ephemeral port because RFC 8252
+    section 7.3 requires the client to choose one at request time.
+    """
 
     def __init__(self) -> None:
         self.code: str | None = None
         self.state: str | None = None
+        self.error_code: str | None = None
         self.error: str | None = None
         self._event = threading.Event()
         parent = self
@@ -112,21 +127,58 @@ class _LoopbackReceiver:
 
             def do_GET(self) -> None:  # noqa: N802 - stdlib naming
                 parsed = urllib.parse.urlparse(self.path)
-                if parsed.path.rstrip("/") not in ("", CALLBACK_PATH.rstrip("/")):
+                # Exactly one path. A scan of the ephemeral port finds nothing
+                # else, and no other route can deliver a code.
+                if parsed.path != CALLBACK_PATH:
                     self.send_response(404)
                     self.end_headers()
                     return
-                params = urllib.parse.parse_qs(parsed.query)
-                parent.code = (params.get("code") or [None])[0]
-                parent.state = (params.get("state") or [None])[0]
-                parent.error = (params.get("error") or [None])[0]
+                params = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+
+                def single(key: str) -> str | None:
+                    values = params.get(key) or []
+                    return values[0] if len(values) == 1 else None
+
+                # First delivery wins. A later request cannot overwrite a
+                # captured code with a different one.
+                if not parent._event.is_set():
+                    parent.state = single("state")
+                    code = single("code")
+                    error_code = single("error")
+                    description = single("error_description")
+                    repeated = any(len(values) != 1 for values in params.values())
+                    success_shape = set(params) == {"code", "state"}
+                    error_shape = set(params) in (
+                        {"error", "state"},
+                        {"error", "error_description", "state"},
+                    )
+                    safe_description = description is None or (
+                        len(description) <= 256
+                        and not any(ord(char) < 32 or ord(char) == 127 for char in description)
+                    )
+                    if repeated or not safe_description:
+                        parent.error = "The login callback was malformed."
+                    elif success_shape and code is not None:
+                        parent.code = code
+                    elif error_shape and error_code is not None:
+                        parent.error_code = error_code
+                        parent.error = description or error_code
+                    else:
+                        parent.error = "The login callback was malformed."
+                failed = parent.error is not None or parent.code is None
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Referrer-Policy", "no-referrer")
                 self.end_headers()
-                self.wfile.write(_CALLBACK_HTML)
-                parent._event.set()
+                _write_callback_body(
+                    self.wfile,
+                    _ERROR_HTML if failed else _CALLBACK_HTML,
+                    parent._event,
+                )
 
         self._server = HTTPServer(("127.0.0.1", 0), Handler)
+        self._thread: threading.Thread | None = None
 
     @property
     def port(self) -> int:
@@ -136,20 +188,34 @@ class _LoopbackReceiver:
     def redirect_uri(self) -> str:
         return f"http://127.0.0.1:{self.port}{CALLBACK_PATH}"
 
+    def __enter__(self) -> "_LoopbackReceiver":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
     def serve_until_code(self, timeout: float) -> None:
-        thread = threading.Thread(target=self._server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            self._event.wait(timeout=timeout)
-        finally:
-            self._server.shutdown()
-            self._server.server_close()
+        """Serve until a callback arrives or ``timeout`` elapses."""
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        self._event.wait(timeout=timeout)
 
     def close(self) -> None:
+        """Tear the listener down. Safe to call twice, and on any exit path."""
+        # HTTPServer.shutdown() deadlocks when serve_forever() never started,
+        # for example when the browser launcher itself raises.
+        if self._thread is not None:
+            try:
+                self._server.shutdown()
+            except Exception:  # pragma: no cover - defensive stdlib boundary
+                pass
         try:
             self._server.server_close()
-        except Exception:
+        except Exception:  # pragma: no cover - already closed
             pass
+        if self._thread is not None:
+            self._thread.join(timeout=5.0)
+            self._thread = None
 
 
 class BrowserPkceProvider:
@@ -158,8 +224,6 @@ class BrowserPkceProvider:
     Args:
         host: Hosted base URL.
         open_browser: Callable that opens a URL in the system browser.
-        supabase_url: Supabase project URL (defaults to the ``OPENADAPT_SUPABASE_URL`` env).
-        supabase_anon_key: Supabase anon key (defaults to the env var).
         timeout: Seconds to wait for the browser redirect.
     """
 
@@ -169,36 +233,49 @@ class BrowserPkceProvider:
         self,
         host: str = DEFAULT_HOST,
         open_browser=None,
-        supabase_url: str | None = None,
-        supabase_anon_key: str | None = None,
-        timeout: float = 180.0,
+        timeout: float = DEFAULT_TIMEOUT_S,
     ) -> None:
-        self.host = host.rstrip("/")
+        raw_host = host.rstrip("/")
+        kind = self._kind_for_host(raw_host)
+        try:
+            self.host = _validate_destination(raw_host, kind)
+            self._host_is_valid = True
+        except PairingError:
+            # Retain the safe, secret-free input only so `is_available()` can
+            # refuse it. No login URL or claim uses an invalid destination.
+            self.host = raw_host
+            self._host_is_valid = False
+        self._uses_system_browser = open_browser is None
         self._open_browser = open_browser or self._default_open_browser
-        self._supabase_url = (supabase_url or os.environ.get(SUPABASE_URL_ENV, "")).rstrip("/")
-        self._supabase_anon_key = supabase_anon_key or os.environ.get(SUPABASE_ANON_KEY_ENV, "")
         self._timeout = timeout
 
     @staticmethod
     def _default_open_browser(url: str) -> None:
         import webbrowser
 
-        webbrowser.open(url)
+        if not webbrowser.open(url):
+            raise RuntimeError("OpenAdapt could not open the system browser.")
 
     def is_available(self) -> bool:
-        """False on a headless box, and False while the flow is unconfigured.
+        """False on a headless box, and False without a usable OS keychain.
 
-        The Supabase check is deliberately first. ``_exchange_code`` cannot run
-        without a project URL and anon key, but it is only reached after the
-        loopback wait -- so an unconfigured provider would open a browser tab
-        and stall for the whole ``timeout`` before failing over to token paste.
-        Reporting unavailable up front keeps ``login`` responsive and keeps the
-        provider chain honest about what it can actually complete.
+        The keychain check is not cosmetic: this flow spends a one-use server
+        secret, so it must refuse BEFORE claiming when the resulting credential
+        could not be stored securely.
         """
-        if not (self._supabase_url and self._supabase_anon_key):
-            return False
         if os.environ.get("OPENADAPT_HEADLESS", "").strip():
             return False
+        if not self._host_is_valid:
+            return False
+        if not secure_store_available():
+            return False
+        if self._uses_system_browser:
+            import webbrowser
+
+            try:
+                webbrowser.get()
+            except webbrowser.Error:
+                return False
         if sys.platform.startswith("linux"):
             # No X11 / Wayland display -> no system browser to drive.
             return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
@@ -206,55 +283,81 @@ class BrowserPkceProvider:
         return True
 
     def login(self) -> Credential:
-        """Run the browser-PKCE flow and store the resulting credential.
+        """Run the browser login and return the stored credential.
 
         Returns:
-            The stored ``Credential`` (bearer = minted ingest token).
+            The stored ``Credential`` (bearer = the minted ingest token).
 
         Raises:
-            RuntimeError: If the flow cannot complete (headless, denied, timeout,
-                or a code/token/mint failure).
+            RuntimeError: If the flow cannot complete (headless, denied,
+                timeout, state mismatch, or a claim failure).
         """
         if not self.is_available():
-            raise RuntimeError(
-                "Browser login is unavailable on this machine; use token paste."
-            )
+            raise RuntimeError("Browser login is unavailable on this machine; use token paste.")
 
         verifier, challenge = generate_pkce_pair()
         state = secrets.token_urlsafe(24)
-        receiver = _LoopbackReceiver()
 
-        auth_url = self._build_login_url(receiver.redirect_uri, challenge, state)
-        logger.info("Opening system browser for hosted login")
-        self._open_browser(auth_url)
+        # `with` rather than a caller-side try/finally: the listener is closed
+        # on success, on failure, and on an exception raised inside the block.
+        with _LoopbackReceiver() as receiver:
+            auth_url = self._build_login_url(receiver.redirect_uri, challenge, state)
+            logger.info("Opening the system browser to sign in to {host}", host=self.host)
+            self._open_browser(auth_url)
+            receiver.serve_until_code(self._timeout)
+            code = receiver.code
+            received_state = receiver.state
+            error_code = receiver.error_code
+            error = receiver.error
 
-        receiver.serve_until_code(self._timeout)
-
-        if receiver.error:
-            raise RuntimeError(f"Login was denied: {receiver.error}")
-        if not receiver.code:
-            raise RuntimeError("Timed out waiting for the browser login to complete.")
-        if receiver.state and receiver.state != state:
+        # Every delivered callback, including a user refusal, must bind the
+        # exact request. A missing state never degrades into an accepted error.
+        if (code is not None or error is not None) and not secrets.compare_digest(
+            received_state or "", state
+        ):
             raise RuntimeError("Login state mismatch (possible CSRF); aborting.")
+        if error:
+            if error_code not in {"access_denied", "server_error"}:
+                raise RuntimeError("Login failed because the callback was malformed.")
+            raise RuntimeError(f"Login was denied: {error}")
+        if not code:
+            raise RuntimeError(
+                "Timed out waiting for the browser login to complete. "
+                "Finish sign-in and choose Connect, then try again. "
+                "You can also paste an ingest token."
+            )
+        # This is our one-use pairing grant, not a Supabase authorization code
+        # and not either runner-local portal credential. Refuse the confusion
+        # before any network claim can spend or disclose it.
+        if not PAIRING_SECRET_RE.fullmatch(code):
+            raise RuntimeError("Login returned an invalid OpenAdapt pairing code.")
 
-        session = self._exchange_code(receiver.code, verifier, receiver.redirect_uri)
-        access_token = session["access_token"]
-        refresh_token = session.get("refresh_token")
-        expires_at = session.get("expires_at")
+        try:
+            claim_pairing(
+                self.host,
+                code,
+                code_verifier=verifier,
+                destination_kind=self._destination_kind(),
+            )
+        except PairingError as exc:
+            raise RuntimeError(f"Login failed: {exc}") from exc
 
-        ingest_token, org_id = self._mint_ingest_token(access_token)
-
-        cred: Credential = {
-            "kind": "ingest_token",
-            "token": ingest_token,
-            "refresh_token": refresh_token,
-            "org_id": org_id,
-            "host": self.host,
-            "expires_at": expires_at,
-        }
-        store_credential(cred)
-        logger.info("Browser login complete; ingest token stored for {host}", host=self.host)
+        cred = load_credential(self.host)
+        if cred is None:
+            raise RuntimeError(
+                "Login completed but the credential could not be read back from the keychain."
+            )
+        logger.info("Browser login complete; credential stored for {host}", host=self.host)
         return cred
+
+    def _destination_kind(self) -> str | None:
+        """Classify the host for the pairing destination policy."""
+        return self._kind_for_host(self.host)
+
+    @staticmethod
+    def _kind_for_host(host: str) -> str | None:
+        hostname = urllib.parse.urlparse(host).hostname
+        return "local" if hostname in {"localhost", "127.0.0.1", "::1"} else None
 
     def _build_login_url(self, redirect_uri: str, challenge: str, state: str) -> str:
         """Build the hosted login URL carrying the loopback redirect + PKCE."""
@@ -267,57 +370,3 @@ class BrowserPkceProvider:
             }
         )
         return f"{self.host}{LOGIN_PATH}?{query}"
-
-    def _exchange_code(self, code: str, verifier: str, redirect_uri: str) -> dict:
-        """Exchange the auth code for a Supabase session via PKCE.
-
-        Raises:
-            RuntimeError: If Supabase is not configured or the exchange fails.
-        """
-        if not (self._supabase_url and self._supabase_anon_key):
-            raise RuntimeError(
-                "Supabase is not configured "
-                f"(set {SUPABASE_URL_ENV} / {SUPABASE_ANON_KEY_ENV}); "
-                "browser login is unavailable."
-            )
-        url = f"{self._supabase_url}/auth/v1/token"
-        try:
-            resp = httpx.post(
-                url,
-                params={"grant_type": "pkce"},
-                headers={"apikey": self._supabase_anon_key},
-                json={"auth_code": code, "code_verifier": verifier, "redirect_to": redirect_uri},
-                timeout=30.0,
-            )
-        except httpx.HTTPError as exc:
-            raise RuntimeError(f"Token exchange failed: {exc}") from exc
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Token exchange rejected ({resp.status_code}).")
-        return resp.json()
-
-    def _mint_ingest_token(self, access_token: str) -> tuple[str, str | None]:
-        """Mint an ingest token from an authenticated Supabase session.
-
-        Returns:
-            ``(ingest_token, org_id)``.
-
-        Raises:
-            RuntimeError: If minting fails.
-        """
-        url = f"{self.host}{MINT_PATH}"
-        try:
-            resp = httpx.post(
-                url,
-                headers={"Authorization": f"Bearer {access_token}"},
-                json={"label": "desktop"},
-                timeout=30.0,
-            )
-        except httpx.HTTPError as exc:
-            raise RuntimeError(f"Could not mint an ingest token: {exc}") from exc
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Ingest-token mint rejected ({resp.status_code}).")
-        body = resp.json()
-        token = body.get("token") or body.get("ingest_token")
-        if not token:
-            raise RuntimeError("Mint response did not include an ingest token.")
-        return token, body.get("org_id")

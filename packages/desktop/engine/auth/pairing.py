@@ -4,6 +4,12 @@ Only ``openadapt://connect`` is accepted.  The URI is parsed again inside the
 Python engine even though the Tauri shell validates it first, so neither IPC
 nor an operating-system protocol invocation can become a general command,
 browser-navigation, or arbitrary-network surface.
+
+The same claim -> validate -> promote -> confirm -> rollback path also redeems
+the authorization code delivered to the RFC 8252 loopback listener in
+:mod:`engine.auth.browser_pkce`. That code IS an ``oap_`` pairing secret, so
+browser login adds a way to OBTAIN one rather than a second protocol: see
+:func:`claim_pairing`.
 """
 
 from __future__ import annotations
@@ -16,6 +22,11 @@ from uuid import UUID
 
 import httpx
 
+from engine.auth.lifetime import (
+    CredentialContractError,
+    parse_credential_lifetime,
+    valid_ingest_token,
+)
 from engine.auth.provider import Credential
 from engine.auth.store import (
     DEFAULT_HOST,
@@ -30,7 +41,8 @@ from engine.auth.store import (
 )
 
 PAIRING_SECRET_RE = re.compile(r"^oap_[A-Za-z0-9_-]{43}$")
-INGEST_TOKEN_RE = re.compile(r"^oai_ingest_[A-Za-z0-9_-]{32,}$")
+# RFC 7636 code verifier: 43-128 unreserved characters.
+PKCE_VERIFIER_RE = re.compile(r"^[A-Za-z0-9\-._~]{43,128}$")
 ALLOWED_FIELDS = frozenset({"pairing", "host", "destination_kind"})
 ALLOWED_DESTINATIONS = frozenset({"openadapt-managed", "local"})
 API_TIMEOUT_S = 8.0
@@ -72,9 +84,7 @@ def _origin(raw: str) -> str:
 def _validate_destination(host: str, destination_kind: str | None) -> str:
     origin = _origin(host)
     managed_origin = _origin(DEFAULT_HOST)
-    kind = destination_kind or (
-        "openadapt-managed" if origin == managed_origin else None
-    )
+    kind = destination_kind or ("openadapt-managed" if origin == managed_origin else None)
     if kind not in ALLOWED_DESTINATIONS:
         raise PairingError("Connect link has an unsupported destination")
     if kind == "openadapt-managed":
@@ -125,6 +135,19 @@ def parse_connect_uri(uri: str) -> dict[str, str]:
     return result
 
 
+def credential_expires_at(body: Any) -> float | None:
+    """Read the credential deadline Cloud reports, or None when it reports none.
+
+    Cloud is the authority on when a credential dies; this value is stored so
+    the local surfaces can WARN early. It is never used to decide that a
+    credential is still good -- every request is checked server-side.
+    """
+    try:
+        return cast(float | None, parse_credential_lifetime(body)["expires_at_timestamp"])
+    except CredentialContractError:
+        return None
+
+
 def _safe_device_name() -> str:
     value = re.sub(r"[\x00-\x1f\x7f]", "", socket.gethostname()).strip()[:80]
     return value or "this computer"
@@ -158,9 +181,7 @@ def _stage_identity(stage: dict) -> tuple[str, str, str, str, Credential]:
     state = stage.get("state")
     credential = stage.get("credential")
     try:
-        canonical_pairing_id = (
-            str(UUID(pairing_id)) if isinstance(pairing_id, str) else None
-        )
+        canonical_pairing_id = str(UUID(pairing_id)) if isinstance(pairing_id, str) else None
     except ValueError:
         canonical_pairing_id = None
     if (
@@ -169,36 +190,30 @@ def _stage_identity(stage: dict) -> tuple[str, str, str, str, Credential]:
         or canonical_pairing_id != pairing_id
         or not isinstance(device_name, str)
         or not 1 <= len(device_name) <= 80
-        or state not in {
+        or state
+        not in {
             "claimed",
             "canonical_written",
             "confirm_ambiguous",
             "abort_acknowledged",
         }
         or not isinstance(credential, dict)
-        or set(credential)
-        != {"kind", "token", "refresh_token", "org_id", "host", "expires_at"}
+        or set(credential) != {"kind", "token", "refresh_token", "org_id", "host", "expires_at"}
         or credential.get("kind") != "ingest_token"
         or credential.get("refresh_token") is not None
         or credential.get("org_id") is not None
-        or credential.get("expires_at") is not None
-        or not isinstance(credential.get("token"), str)
-        or not INGEST_TOKEN_RE.fullmatch(credential["token"])
+        # Cloud now returns a deadline with the credential. Accept a number or
+        # None, but nothing else: a corrupt value must not reach the keychain.
+        or not isinstance(credential.get("expires_at"), (int, float, type(None)))
+        or isinstance(credential.get("expires_at"), bool)
+        or not valid_ingest_token(credential.get("token"))
         or not isinstance(credential.get("host"), str)
     ):
-        raise PairingError(
-            "Desktop found an invalid pairing recovery record in the keychain"
-        )
+        raise PairingError("Desktop found an invalid pairing recovery record in the keychain")
     host = credential["host"]
-    destination = (
-        "openadapt-managed"
-        if _origin(host) == _origin(DEFAULT_HOST)
-        else "local"
-    )
+    destination = "openadapt-managed" if _origin(host) == _origin(DEFAULT_HOST) else "local"
     if _validate_destination(host, destination) != host:
-        raise PairingError(
-            "Desktop found an invalid pairing recovery record in the keychain"
-        )
+        raise PairingError("Desktop found an invalid pairing recovery record in the keychain")
     return pairing_id, host, credential["token"], state, cast(Credential, credential)
 
 
@@ -271,7 +286,7 @@ def _fail_staged_pairing(stage: dict, message: str) -> NoReturn:
 
 
 def _finish_staged_pairing(stage: dict) -> dict[str, Any]:
-    pairing_id, host, token, state, _ = _stage_identity(stage)
+    pairing_id, host, token, state, credential = _stage_identity(stage)
     device_name = cast(str, stage["device_name"])
     if state == "abort_acknowledged":
         if restore_pairing_stage(pairing_id) and clear_pairing_stage(pairing_id):
@@ -298,6 +313,24 @@ def _finish_staged_pairing(stage: dict) -> dict[str, Any]:
         _fail_staged_pairing(
             stage,
             f"Cloud could not verify the new credential ({validation.status_code}).",
+        )
+    try:
+        validation_lifetime = parse_credential_lifetime(
+            validation.json(),
+            headers=validation.headers,
+            require_headers=True,
+            require_fresh=True,
+            require_no_store=True,
+        )
+    except (AttributeError, TypeError, ValueError, CredentialContractError):
+        _fail_staged_pairing(
+            stage,
+            "Cloud returned an incomplete credential lifetime contract.",
+        )
+    if validation_lifetime["expires_at_timestamp"] != credential["expires_at"]:
+        _fail_staged_pairing(
+            stage,
+            "Cloud returned a different credential deadline during validation.",
         )
 
     if not commit_pairing_stage(pairing_id):
@@ -342,7 +375,48 @@ def recover_pending_pairing() -> dict[str, Any] | None:
 def connect_uri(uri: str) -> dict[str, Any]:
     """Claim, stage, verify, commit, and confirm one Desktop pairing URI."""
     request = parse_connect_uri(uri)
-    host = request["host"]
+    return claim_pairing(
+        request["host"],
+        request["pairing"],
+        destination_kind=request.get("destination_kind"),
+    )
+
+
+def claim_pairing(
+    host: str,
+    pairing_secret: str,
+    code_verifier: str | None = None,
+    destination_kind: str | None = None,
+) -> dict[str, Any]:
+    """Claim, stage, verify, commit, and confirm one pairing secret.
+
+    This is the single redemption path. A deep link supplies the secret through
+    ``openadapt://connect``; the RFC 8252 loopback listener in
+    :mod:`engine.auth.browser_pkce` receives the same kind of secret as an
+    authorization ``code`` and supplies the PKCE ``code_verifier`` that Cloud
+    bound to it. Everything after the claim -- durable staging, independent
+    validation, atomic keychain promotion, idempotent confirmation, and
+    acknowledged rollback -- is identical either way.
+
+    Args:
+        host: The Cloud origin, already validated by the caller.
+        pairing_secret: A one-use ``oap_`` secret.
+        code_verifier: The PKCE verifier for a loopback grant, or None for a
+            deep-link pairing that carries no challenge.
+
+    Returns:
+        The paired result dictionary.
+
+    Raises:
+        PairingError: On any failure, with the prior connection preserved.
+    """
+    if not PAIRING_SECRET_RE.fullmatch(str(pairing_secret)):
+        raise PairingError("Pairing code is malformed")
+    if code_verifier is not None and not PKCE_VERIFIER_RE.fullmatch(code_verifier):
+        raise PairingError("Login proof is malformed")
+    # Re-validated here, not only at the caller: every entry point to this
+    # redemption path must prove its destination before a secret is spent.
+    host = _validate_destination(host, destination_kind)
     if not secure_store_available():
         raise PairingError(
             "Secure pairing needs an unlocked operating-system keychain. "
@@ -354,15 +428,19 @@ def connect_uri(uri: str) -> dict[str, Any]:
         return recovered
     previous = snapshot_pairing_canonical(host)
     if previous is None:
-        raise PairingError(
-            "Desktop could not safely snapshot the current keychain connection"
-        )
+        raise PairingError("Desktop could not safely snapshot the current keychain connection")
 
     device_name = _safe_device_name()
+    payload: dict[str, Any] = {
+        "pairing_secret": pairing_secret,
+        "device_name": device_name,
+    }
+    if code_verifier is not None:
+        payload["code_verifier"] = code_verifier
     try:
         claim = httpx.post(
             f"{host}/api/local-bridge/pairings/claim",
-            json={"pairing_secret": request["pairing"], "device_name": device_name},
+            json=payload,
             timeout=API_TIMEOUT_S,
             follow_redirects=False,
         )
@@ -372,14 +450,22 @@ def connect_uri(uri: str) -> dict[str, Any]:
         raise PairingError("Pairing code expired, was cancelled, or was already used")
     if claim.status_code >= 400:
         raise PairingError(f"Pairing failed ({claim.status_code})")
+    if claim.status_code != 201:
+        raise PairingError("Pairing response used an unexpected success status")
     try:
         body = claim.json()
-        token = str(body["ingest_token"])
-        pairing_id = str(UUID(str(body["pairing_id"])))
-    except (KeyError, TypeError, ValueError) as exc:
-        raise PairingError("Pairing response did not contain a valid credential") from exc
-    if not INGEST_TOKEN_RE.fullmatch(token):
-        raise PairingError("Pairing response contained a malformed credential")
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise PairingError("Pairing response was not valid JSON") from exc
+    try:
+        token, pairing_id, expiry = _validated_claim(body, claim.headers)
+    except PairingError:
+        rollback = _claim_abort_coordinates(body)
+        if rollback and _abort_claim(host, rollback[0], rollback[1]):
+            raise PairingError(
+                "Cloud rolled back a pairing response that did not match the "
+                "Desktop credential contract. Your previous connection is unchanged."
+            ) from None
+        raise
 
     credential: Credential = {
         "kind": "ingest_token",
@@ -387,7 +473,7 @@ def connect_uri(uri: str) -> dict[str, Any]:
         "refresh_token": None,
         "org_id": None,
         "host": host,
-        "expires_at": None,
+        "expires_at": expiry,
     }
     if not stage_pairing_credential(
         pairing_id,
@@ -412,3 +498,57 @@ def connect_uri(uri: str) -> dict[str, Any]:
             "Desktop could not recover the newly staged credential from the keychain"
         )
     return _finish_staged_pairing(stage)
+
+
+def _canonical_uuid(value: Any) -> str:
+    if not isinstance(value, str):
+        raise PairingError("Pairing response did not contain a valid credential")
+    try:
+        canonical = str(UUID(value))
+    except ValueError as exc:
+        raise PairingError("Pairing response did not contain a valid credential") from exc
+    if canonical != value:
+        raise PairingError("Pairing response did not contain a valid credential")
+    return canonical
+
+
+def _validated_claim(body: Any, headers: Any) -> tuple[str, str, float]:
+    """Validate the complete Cloud 201 response before staging its bearer."""
+    expected = {
+        "paired",
+        "pairing_id",
+        "ingest_token_id",
+        "ingest_token",
+        "credential",
+    }
+    if not isinstance(body, dict) or set(body) != expected or body.get("paired") is not True:
+        raise PairingError("Pairing response did not match the credential contract")
+    pairing_id = _canonical_uuid(body.get("pairing_id"))
+    _canonical_uuid(body.get("ingest_token_id"))
+    token = body.get("ingest_token")
+    if not valid_ingest_token(token):
+        raise PairingError("Pairing response contained a malformed credential")
+    try:
+        lifetime = parse_credential_lifetime(
+            body,
+            headers=headers,
+            require_fresh=True,
+            require_no_store=True,
+        )
+    except CredentialContractError as exc:
+        raise PairingError("Pairing response contained an invalid credential lifetime") from exc
+    expiry = lifetime["expires_at_timestamp"]
+    if not isinstance(expiry, float):
+        raise PairingError("Pairing response contained an invalid credential lifetime")
+    return token, pairing_id, expiry
+
+
+def _claim_abort_coordinates(body: Any) -> tuple[str, str] | None:
+    """Salvage only the exact values needed to revoke a malformed 201."""
+    if not isinstance(body, dict) or not valid_ingest_token(body.get("ingest_token")):
+        return None
+    try:
+        pairing_id = _canonical_uuid(body.get("pairing_id"))
+    except PairingError:
+        return None
+    return pairing_id, cast(str, body["ingest_token"])

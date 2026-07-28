@@ -262,6 +262,43 @@ def cmd_login(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     engine.audit.log("hosted_login", host=cred["host"], kind=cred["kind"])
 
 
+def cmd_credential(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Show the server-authoritative credential lifetime without its bearer."""
+    from engine.auth.rotation import credential_status, expiry_warning
+
+    host = getattr(args, "host", None) or engine.config.hosted_host
+    status = credential_status(host)
+    if status is None:
+        print("Credential status is unavailable. Sign in again if Cloud rejects requests.")
+        return
+    warning = expiry_warning(status)
+    if warning:
+        print(warning)
+        return
+    days = status.get("expires_in_days")
+    if isinstance(days, int):
+        print(f"This connection expires in {days} days. OpenAdapt warns at 14 days.")
+    else:
+        print("This connection has no server-reported expiry date.")
+
+
+def cmd_rotate(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Renew the stored Cloud credential through the seven-day overlap."""
+    from engine.auth.rotation import RotationError, rotate_credential
+
+    host = getattr(args, "host", None) or engine.config.hosted_host
+    try:
+        credential = rotate_credential(host)
+    except RotationError as exc:
+        print(f"Credential renewal failed: {exc}")
+        sys.exit(1)
+    print(
+        "Credential renewed. The old credential remains valid for at most "
+        "seven days while this computer uses the replacement."
+    )
+    engine.audit.log("hosted_credential_rotated", host=credential["host"])
+
+
 def cmd_push(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """Zip a recording/bundle directory and push it to /api/ingest."""
     from engine import hosted
@@ -711,6 +748,8 @@ _COMMANDS = {
     "dismiss": cmd_dismiss,
     "upload": cmd_upload,
     "login": cmd_login,
+    "credential": cmd_credential,
+    "rotate": cmd_rotate,
     "push": cmd_push,
     "compile": cmd_compile,
     "replay": cmd_replay,
@@ -774,6 +813,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--host", default=None, help="Hosted base URL")
     p.add_argument("--provider", default=None, choices=["paste", "browser_pkce"],
                    help="Force an auth provider")
+
+    # credential lifetime / rotation
+    p = subparsers.add_parser("credential", help="Show Cloud credential lifetime")
+    p.add_argument("--host", default=None, help="Hosted base URL")
+    p = subparsers.add_parser("rotate", help="Renew the stored Cloud credential")
+    p.add_argument("--host", default=None, help="Hosted base URL")
 
     # push
     p = subparsers.add_parser("push", help="Push a recording/bundle to /api/ingest")

@@ -64,11 +64,17 @@ def fake_keyring(monkeypatch) -> FakeKeyring:
 class FakeResponse:
     """Minimal httpx.Response stand-in for monkeypatched requests."""
 
-    def __init__(self, status_code: int = 200, json_body: dict | None = None,
-                 text: str = "") -> None:
+    def __init__(
+        self,
+        status_code: int = 200,
+        json_body: dict | None = None,
+        text: str = "",
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = status_code
         self._json = json_body if json_body is not None else {}
         self.text = text
+        self.headers = headers or {}
 
     def json(self) -> dict:
         return self._json

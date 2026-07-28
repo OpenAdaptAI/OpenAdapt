@@ -21,6 +21,11 @@ import os
 import httpx
 from loguru import logger
 
+from engine.auth.lifetime import (
+    CredentialContractError,
+    parse_credential_lifetime,
+    valid_ingest_token,
+)
 from engine.auth.provider import Credential
 from engine.auth.store import (
     DEFAULT_HOST,
@@ -92,7 +97,13 @@ class PasteTokenProvider:
         if not token:
             raise TokenValidationError("No ingest token provided.")
 
-        org_id = self._validate(token)
+        if not valid_ingest_token(token):
+            raise TokenValidationError(
+                "Expected an OpenAdapt Cloud ingest token that starts with "
+                "oai_ingest_. A pairing code or portal credential cannot be used here."
+            )
+
+        org_id, expires_at = self._validate(token)
 
         cred: Credential = {
             "kind": "ingest_token",
@@ -100,7 +111,7 @@ class PasteTokenProvider:
             "refresh_token": None,
             "org_id": org_id,
             "host": self.host,
-            "expires_at": None,
+            "expires_at": expires_at,
         }
         store_credential(cred)
         logger.info("Stored ingest token for {host}", host=self.host)
@@ -114,8 +125,8 @@ class PasteTokenProvider:
         except (EOFError, KeyboardInterrupt):
             return ""
 
-    def _validate(self, token: str) -> str | None:
-        """Validate a token via the count endpoint; return org_id if exposed.
+    def _validate(self, token: str) -> tuple[str | None, float | None]:
+        """Validate a token and retain its Cloud-reported deadline when present.
 
         Raises:
             TokenValidationError: on any non-2xx / network failure.
@@ -130,11 +141,25 @@ class PasteTokenProvider:
         if resp.status_code == 401:
             raise TokenValidationError("Ingest token was rejected (401).")
         if resp.status_code >= 400:
-            raise TokenValidationError(
-                f"Token validation failed ({resp.status_code})."
-            )
+            raise TokenValidationError(f"Token validation failed ({resp.status_code}).")
         try:
             body = resp.json()
         except ValueError:
             body = {}
-        return body.get("org_id")
+        expires_at: float | None = None
+        if isinstance(body, dict) and "credential" in body:
+            try:
+                lifetime = parse_credential_lifetime(
+                    body,
+                    headers=resp.headers,
+                    require_headers=True,
+                    require_no_store=True,
+                )
+                expires_at = lifetime["expires_at_timestamp"]
+            except (AttributeError, CredentialContractError):
+                # A working bearer remains a valid fallback when an older Cloud
+                # does not yet supply the additive warning contract. Never
+                # convert a malformed warning into a claim that expiry is safe.
+                expires_at = None
+        org_id = body.get("org_id") if isinstance(body, dict) else None
+        return org_id if isinstance(org_id, str) else None, expires_at

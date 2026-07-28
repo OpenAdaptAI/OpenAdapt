@@ -70,7 +70,7 @@ export type StepState =
 
 export interface AuthStatus {
   authenticated: boolean;
-  kind?: "ingest_token" | "supabase_session";
+  kind?: "ingest_token";
   host?: string;
   org_id?: string | null;
 }

@@ -69,6 +69,37 @@ class TestLoginDispatch:
         auth.login(prefer="paste")
         assert called == ["paste"]
 
+    def test_available_browser_failure_does_not_overwrite_recovery_with_paste(
+        self, monkeypatch
+    ) -> None:
+        called = []
+
+        class _Browser:
+            name = "browser_pkce"
+
+            def is_available(self):
+                return True
+
+            def login(self):
+                called.append("browser")
+                raise RuntimeError("retained one-use credential needs recovery")
+
+        class _Paste:
+            name = "paste"
+
+            def is_available(self):
+                return True
+
+            def login(self):
+                called.append("paste")
+                return {}
+
+        monkeypatch.setattr(auth, "available_providers", lambda host="": [_Browser(), _Paste()])
+
+        with pytest.raises(RuntimeError, match="needs recovery"):
+            auth.login()
+        assert called == ["browser"]
+
     def test_no_provider_raises(self, monkeypatch) -> None:
         class _Unavailable:
             name = "browser_pkce"

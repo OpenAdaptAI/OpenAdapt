@@ -131,6 +131,45 @@ class TestCLI:
         assert "Logged in" in captured.out
         assert "org_5" in captured.out
 
+    def test_credential_command_surfaces_the_14_day_warning(
+        self, cli_config: EngineConfig, capsys
+    ) -> None:
+        status = {
+            "expires_at": "2026-08-10T00:00:00+00:00",
+            "expires_at_timestamp": 1786320000.0,
+            "expires_in_days": 14,
+            "expiring_soon": True,
+            "legacy_non_expiring": False,
+            "warning_days": 14,
+        }
+        with (
+            patch("engine.cli.EngineConfig", return_value=cli_config),
+            patch("engine.auth.rotation.credential_status", return_value=status),
+        ):
+            main(["credential"])
+        assert "expires in 14 days" in capsys.readouterr().out
+
+    def test_rotate_command_reports_the_overlap_without_printing_the_token(
+        self, cli_config: EngineConfig, capsys
+    ) -> None:
+        token = "oai_ingest_" + "S" * 43
+        credential = {
+            "kind": "ingest_token",
+            "token": token,
+            "refresh_token": None,
+            "org_id": "org_5",
+            "host": "https://app.openadapt.ai",
+            "expires_at": 1793016000.0,
+        }
+        with (
+            patch("engine.cli.EngineConfig", return_value=cli_config),
+            patch("engine.auth.rotation.rotate_credential", return_value=credential),
+        ):
+            main(["rotate"])
+        output = capsys.readouterr().out
+        assert "old credential remains valid for at most seven days" in output
+        assert token not in output
+
     def test_push_success(self, cli_config: EngineConfig, capsys) -> None:
         """push should print the returned workflow id + dashboard URL."""
         result = {"success": True, "workflow_id": "wf_2",

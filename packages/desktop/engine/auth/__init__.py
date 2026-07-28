@@ -72,14 +72,16 @@ def login(host: str = DEFAULT_HOST, prefer: str | None = None) -> Credential:
     if prefer:
         providers = [p for p in providers if p.name == prefer] or providers
 
-    last_error: Exception | None = None
     for provider in providers:
         if not provider.is_available():
             continue
         try:
             return provider.login()
-        except Exception as exc:  # try the next provider (e.g. browser -> paste)
-            last_error = exc
-    if last_error:
-        raise RuntimeError(f"Login failed: {last_error}") from last_error
+        except Exception as exc:
+            # An available provider can fail after it receives or stages a
+            # one-use credential. Starting another provider in the same call
+            # could overwrite its retained recovery state. Token paste remains
+            # the fallback when browser login is unavailable, and the operator
+            # can select it explicitly after a completed browser failure.
+            raise RuntimeError(f"Login failed: {exc}") from exc
     raise RuntimeError("No auth provider is available on this machine.")

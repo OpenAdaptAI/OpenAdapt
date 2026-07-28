@@ -28,22 +28,20 @@ class Credential(TypedDict):
     """A stored-ready hosted credential.
 
     Both providers write this exact shape via
-    :func:`engine.auth.store.store_credential`. The ``kind`` discriminates
-    between a bare ingest token (the machine/push path) and a full Supabase
-    session (the interactive browser path, which additionally mints an ingest
-    token so the headless push/count path always has a bearer token).
+    :func:`engine.auth.store.store_credential`. Both browser pairing and token
+    paste produce the same Cloud ingest credential. A Supabase authorization
+    code or session is never a Desktop bearer.
 
     Attributes:
-        kind: ``"ingest_token"`` for an ``oai_ingest_…`` token, or
-            ``"supabase_session"`` for a Supabase access token.
-        token: The ingest token (``oai_ingest_…``) OR the Supabase access token.
-        refresh_token: Supabase refresh token (Supabase sessions only), else None.
+        kind: Always ``"ingest_token"``.
+        token: The ingest token (``oai_ingest_…``).
+        refresh_token: Reserved compatibility field. Always None.
         org_id: The organization the token resolves to, if known.
         host: The hosted base URL, e.g. ``https://app.openadapt.ai``.
         expires_at: POSIX timestamp when the credential expires, or None.
     """
 
-    kind: Literal["ingest_token", "supabase_session"]
+    kind: Literal["ingest_token"]
     token: str
     refresh_token: str | None
     org_id: str | None

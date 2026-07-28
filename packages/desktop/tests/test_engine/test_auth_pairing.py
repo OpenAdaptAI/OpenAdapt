@@ -9,21 +9,65 @@ import pytest
 from engine.auth import pairing, store
 
 SECRET = "oap_" + "A" * 43
-TOKEN = "oai_ingest_" + "B" * 32
-OLD_TOKEN = "oai_ingest_" + "C" * 32
-OTHER_TOKEN = "oai_ingest_" + "D" * 32
+TOKEN = "oai_ingest_" + "B" * 43
+OLD_TOKEN = "oai_ingest_" + "C" * 43
+OTHER_TOKEN = "oai_ingest_" + "D" * 43
 HOST = "https://app.openadapt.ai"
 OTHER_HOST = "https://previous.example"
 VALID_URI = f"openadapt://connect?pairing={SECRET}&host=https%3A%2F%2Fapp.openadapt.ai"
+EXPIRES_AT = "2026-10-26T12:00:00+00:00"
+EXPIRES_TS = 1793016000.0
 
 
 class _Response:
-    def __init__(self, status_code: int, body: dict) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        body: dict,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = status_code
         self._body = body
+        self.headers = headers or {}
 
     def json(self) -> dict:
         return self._body
+
+
+def _credential_lifetime() -> dict:
+    return {
+        "expires_at": EXPIRES_AT,
+        "expires_in_days": 90,
+        "expiring_soon": False,
+        "legacy_non_expiring": False,
+        "warning_days": 14,
+    }
+
+
+def _claim_response(pairing_id: str) -> _Response:
+    return _Response(
+        201,
+        {
+            "paired": True,
+            "pairing_id": pairing_id,
+            "ingest_token_id": str(uuid4()),
+            "ingest_token": TOKEN,
+            "credential": _credential_lifetime(),
+        },
+        {"cache-control": "no-store", "referrer-policy": "no-referrer"},
+    )
+
+
+def _validation_response(status: int = 200) -> _Response:
+    return _Response(
+        status,
+        {"count": 0, "credential": _credential_lifetime()},
+        {
+            "cache-control": "no-store",
+            "x-openadapt-credential-warning-days": "14",
+            "x-openadapt-credential-expires-in-days": "90",
+        },
+    )
 
 
 def test_parser_accepts_only_the_fixed_connect_action() -> None:
@@ -123,7 +167,7 @@ def test_connect_claims_stores_verifies_and_confirms_without_returning_token(
             events.append("claim")
             assert json == {"pairing_secret": SECRET, "device_name": "test-device"}
             assert headers is None
-            return _Response(200, {"ingest_token": TOKEN, "pairing_id": pairing_id})
+            return _claim_response(pairing_id)
         assert not url.endswith("/abort")
         events.append("confirm")
         assert url.endswith("/confirm")
@@ -143,7 +187,7 @@ def test_connect_claims_stores_verifies_and_confirms_without_returning_token(
         events.append("validate")
         assert url == f"{HOST}/api/needs-attention/count"
         assert headers == {"Authorization": f"Bearer {TOKEN}"}
-        return _Response(200, {"count": 0})
+        return _validation_response()
 
     def _commit(value):
         events.append("commit")
@@ -167,7 +211,7 @@ def test_connect_claims_stores_verifies_and_confirms_without_returning_token(
     assert result["authenticated"] is True
     assert result["host"] == HOST
     assert "token" not in result
-    assert store.load_credential(HOST) == _credential(HOST, TOKEN)
+    assert store.load_credential(HOST) == _credential(HOST, TOKEN, EXPIRES_TS)
     assert store.load_pairing_stage() is None
     assert events == [
         "snapshot",
@@ -180,14 +224,14 @@ def test_connect_claims_stores_verifies_and_confirms_without_returning_token(
     ]
 
 
-def _credential(host: str, token: str) -> dict:
+def _credential(host: str, token: str, expires_at: float | None = None) -> dict:
     return {
         "kind": "ingest_token",
         "token": token,
         "refresh_token": None,
         "org_id": None,
         "host": host,
-        "expires_at": None,
+        "expires_at": expires_at,
     }
 
 
@@ -202,7 +246,7 @@ def test_rejected_verification_aborts_new_claim_without_touching_prior_state(
     def _post(url, *, json, headers=None, **kwargs):
         posts.append((url, json, headers or {}))
         if url.endswith("/claim"):
-            return _Response(200, {"ingest_token": TOKEN, "pairing_id": pairing_id})
+            return _claim_response(pairing_id)
         assert url.endswith("/abort")
         return _Response(200, {"revoked": True})
 
@@ -239,7 +283,7 @@ def test_confirm_ambiguity_preserves_new_canonical_and_recovers_idempotently(
     def _post(url, *, json, headers=None, **kwargs):
         endpoints.append(url.rsplit("/", 1)[-1])
         if url.endswith("/claim"):
-            return _Response(200, {"ingest_token": TOKEN, "pairing_id": pairing_id})
+            return _claim_response(pairing_id)
         if url.endswith("/confirm"):
             if confirm_ambiguous:
                 return _Response(503, {})
@@ -248,11 +292,11 @@ def test_confirm_ambiguity_preserves_new_canonical_and_recovers_idempotently(
 
     monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
     monkeypatch.setattr(pairing.httpx, "post", _post)
-    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _Response(200, {}))
+    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _validation_response())
 
     with pytest.raises(pairing.PairingError, match="confirmation.*uncertain"):
         pairing.connect_uri(VALID_URI)
-    assert store.load_credential(HOST) == _credential(HOST, TOKEN)
+    assert store.load_credential(HOST) == _credential(HOST, TOKEN, EXPIRES_TS)
     assert store.active_host() == HOST
     assert store.load_pairing_stage()["state"] == "confirm_ambiguous"
     assert endpoints == ["claim", "confirm", "confirm"]
@@ -260,7 +304,7 @@ def test_confirm_ambiguity_preserves_new_canonical_and_recovers_idempotently(
     confirm_ambiguous = False
     recovered = pairing.recover_pending_pairing()
     assert recovered is not None and recovered["authenticated"] is True
-    assert store.load_credential(HOST) == _credential(HOST, TOKEN)
+    assert store.load_credential(HOST) == _credential(HOST, TOKEN, EXPIRES_TS)
     assert store.load_pairing_stage() is None
     assert endpoints[-1] == "confirm"
 
@@ -274,7 +318,7 @@ def test_crash_after_canonical_write_recovers_without_a_second_claim(
     assert previous is not None
     assert store.stage_pairing_credential(
         pairing_id,
-        _credential(HOST, TOKEN),
+        _credential(HOST, TOKEN, EXPIRES_TS),
         previous,
         "crash-device",
     )
@@ -293,13 +337,13 @@ def test_crash_after_canonical_write_recovers_without_a_second_claim(
         return _Response(200, {"connected": True})
 
     monkeypatch.setattr(pairing.httpx, "post", _post)
-    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _Response(200, {}))
+    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _validation_response())
 
     recovered = pairing.recover_pending_pairing()
     assert recovered is not None
     assert recovered["device_name"] == "crash-device"
     assert posts == ["confirm"]
-    assert store.load_credential(HOST) == _credential(HOST, TOKEN)
+    assert store.load_credential(HOST) == _credential(HOST, TOKEN, EXPIRES_TS)
     assert store.load_pairing_stage() is None
 
 
@@ -315,14 +359,14 @@ def test_definitive_confirm_failure_aborts_and_restores_exact_prior_state(
         endpoint = url.rsplit("/", 1)[-1]
         endpoints.append(endpoint)
         if endpoint == "claim":
-            return _Response(200, {"ingest_token": TOKEN, "pairing_id": pairing_id})
+            return _claim_response(pairing_id)
         if endpoint == "confirm":
             return _Response(409, {})
         return _Response(200, {"revoked": True})
 
     monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
     monkeypatch.setattr(pairing.httpx, "post", _post)
-    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _Response(200, {}))
+    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _validation_response())
 
     with pytest.raises(pairing.PairingError, match="previous Desktop connection is unchanged"):
         pairing.connect_uri(VALID_URI)
@@ -341,16 +385,16 @@ def test_abort_409_never_blindly_restores_over_possibly_confirmed_token(
 
     def _post(url, **kwargs):
         if url.endswith("/claim"):
-            return _Response(200, {"ingest_token": TOKEN, "pairing_id": pairing_id})
+            return _claim_response(pairing_id)
         return _Response(409, {})
 
     monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
     monkeypatch.setattr(pairing.httpx, "post", _post)
-    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _Response(200, {}))
+    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _validation_response())
 
     with pytest.raises(pairing.PairingError, match="preserved.*safe recovery"):
         pairing.connect_uri(VALID_URI)
-    assert store.load_credential(HOST) == _credential(HOST, TOKEN)
+    assert store.load_credential(HOST) == _credential(HOST, TOKEN, EXPIRES_TS)
     assert store.active_host() == HOST
     assert store.load_pairing_stage() is not None
 
@@ -375,13 +419,13 @@ def test_keychain_commit_failure_restores_prior_state_and_attempts_abort(
     def _post(url, *, json, headers=None, **kwargs):
         endpoints.append(url.rsplit("/", 1)[-1])
         if url.endswith("/claim"):
-            return _Response(200, {"ingest_token": TOKEN, "pairing_id": pairing_id})
+            return _claim_response(pairing_id)
         assert url.endswith("/abort")
         return _Response(200, {"revoked": True})
 
     monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
     monkeypatch.setattr(pairing.httpx, "post", _post)
-    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _Response(200, {}))
+    monkeypatch.setattr(pairing.httpx, "get", lambda *args, **kwargs: _validation_response())
 
     with pytest.raises(pairing.PairingError, match="atomically write"):
         pairing.connect_uri(VALID_URI)
@@ -390,3 +434,116 @@ def test_keychain_commit_failure_restores_prior_state_and_attempts_abort(
     assert store.active_host() == OTHER_HOST
     assert store.load_pairing_stage() is None
     assert endpoints == ["claim", "abort"]
+
+
+def test_pkce_claim_sends_the_exact_verifier_and_maps_410(monkeypatch) -> None:
+    verifier = "V" * 43
+    requests: list[dict] = []
+
+    def _post(url, *, json, headers=None, **kwargs):
+        requests.append(json)
+        assert url == f"{HOST}/api/local-bridge/pairings/claim"
+        assert headers is None
+        return _Response(410, {})
+
+    monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
+    monkeypatch.setattr(pairing, "_safe_device_name", lambda: "test-device")
+    monkeypatch.setattr(pairing.httpx, "post", _post)
+
+    with pytest.raises(pairing.PairingError, match="expired.*already used"):
+        pairing.claim_pairing(HOST, SECRET, code_verifier=verifier)
+    assert requests == [
+        {
+            "pairing_secret": SECRET,
+            "device_name": "test-device",
+            "code_verifier": verifier,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "wrong_role",
+    [
+        "supabase_authorization_code",
+        "oai_ingest_" + "A" * 43,
+        "oapp_" + "A" * 43,
+        "oaps_" + "A" * 43,
+    ],
+)
+def test_claim_rejects_every_non_pairing_credential_before_network(wrong_role, monkeypatch) -> None:
+    monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
+    monkeypatch.setattr(
+        pairing.httpx,
+        "post",
+        lambda *a, **k: pytest.fail("wrong credential role reached the claim route"),
+    )
+    with pytest.raises(pairing.PairingError, match="malformed"):
+        pairing.claim_pairing(HOST, wrong_role, code_verifier="V" * 43)
+
+
+def test_malformed_201_is_aborted_when_the_rollback_identity_is_available(
+    monkeypatch,
+) -> None:
+    pairing_id = str(uuid4())
+    endpoints: list[str] = []
+    malformed = _claim_response(pairing_id)._body
+    malformed.pop("ingest_token_id")
+
+    def _post(url, **kwargs):
+        endpoints.append(url.rsplit("/", 1)[-1])
+        if url.endswith("/claim"):
+            return _Response(201, malformed)
+        assert kwargs["headers"] == {"Authorization": f"Bearer {TOKEN}"}
+        return _Response(200, {"revoked": True})
+
+    monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
+    monkeypatch.setattr(pairing.httpx, "post", _post)
+    with pytest.raises(pairing.PairingError, match="rolled back.*previous connection"):
+        pairing.claim_pairing(HOST, SECRET)
+    assert endpoints == ["claim", "abort"]
+    assert store.load_credential(HOST) is None
+    assert store.load_pairing_stage() is None
+
+
+def test_claim_without_no_store_is_aborted(monkeypatch) -> None:
+    pairing_id = str(uuid4())
+    endpoints: list[str] = []
+    claim = _claim_response(pairing_id)
+    claim.headers = {}
+
+    def _post(url, **kwargs):
+        endpoints.append(url.rsplit("/", 1)[-1])
+        if url.endswith("/claim"):
+            return claim
+        return _Response(200, {"revoked": True})
+
+    monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
+    monkeypatch.setattr(pairing.httpx, "post", _post)
+    with pytest.raises(pairing.PairingError, match="rolled back"):
+        pairing.claim_pairing(HOST, SECRET)
+    assert endpoints == ["claim", "abort"]
+    assert store.load_credential(HOST) is None
+
+
+def test_validation_requires_matching_14_day_headers_and_rolls_back(monkeypatch) -> None:
+    pairing_id = str(uuid4())
+    endpoints: list[str] = []
+
+    def _post(url, **kwargs):
+        endpoints.append(url.rsplit("/", 1)[-1])
+        if url.endswith("/claim"):
+            return _claim_response(pairing_id)
+        if url.endswith("/abort"):
+            return _Response(200, {"revoked": True})
+        raise AssertionError("a malformed validation must not confirm")
+
+    invalid_headers = _validation_response()
+    invalid_headers.headers["x-openadapt-credential-warning-days"] = "30"
+    monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
+    monkeypatch.setattr(pairing.httpx, "post", _post)
+    monkeypatch.setattr(pairing.httpx, "get", lambda *a, **k: invalid_headers)
+
+    with pytest.raises(pairing.PairingError, match="lifetime contract"):
+        pairing.claim_pairing(HOST, SECRET)
+    assert endpoints == ["claim", "abort"]
+    assert store.load_credential(HOST) is None
