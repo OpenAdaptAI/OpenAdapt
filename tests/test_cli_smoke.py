@@ -255,6 +255,44 @@ def test_top_level_help_leads_with_flow():
     assert flow_idx < capture_idx, "flow should be listed before capture"
 
 
+def test_capture_start_refuses_when_recorder_never_becomes_ready(monkeypatch):
+    """The compatibility command must not label failed startup as saved."""
+    from types import SimpleNamespace
+
+    state = {}
+
+    class NeverReadyRecorder:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            state["exited"] = True
+            return False
+
+        def wait_for_ready(self):
+            return False
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openadapt_capture",
+        SimpleNamespace(Recorder=NeverReadyRecorder),
+    )
+
+    result = CliRunner().invoke(
+        cli_main,
+        ["capture", "start", "--name", "failed-capture", "--no-video"],
+    )
+
+    assert result.exit_code != 0
+    assert state == {"exited": True}
+    assert "did not become ready" in result.output
+    assert "Recording..." not in result.output
+    assert "Capture saved" not in result.output
+
+
 def test_flow_help_lists_verbs():
     """`openadapt flow --help` lists every mounted verb (no flow install
     needed — click renders help before importing openadapt-flow)."""

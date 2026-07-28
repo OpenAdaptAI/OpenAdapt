@@ -442,7 +442,10 @@ def capture_start(name: str, video: bool, audio: bool):
             capture_video=video,
             capture_audio=audio,
         ) as recorder:
-            recorder.wait_for_ready()
+            if not recorder.wait_for_ready():
+                raise click.ClickException(
+                    "Capture did not become ready. No successful capture was saved."
+                )
             click.echo("Recording...")
             try:
                 while recorder.is_recording:
