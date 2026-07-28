@@ -492,10 +492,13 @@ a note) with a distinct note value each run and the same OCR success
 check on both arms: 20 compiled replays against 10 runs of a
 claude-sonnet-5 computer-use agent, measured on 2026-07-08 from a
 pre-v0.2.0 source checkout declaring openadapt-flow 0.1.0. Compiled went
-20/20 at 39.2s (p50)
+19/20 at 39.2s (p50)
 with zero model calls; the agent went 10/10 at 70.4s (p50), about $0.55
 per run at list price ($5.52 total for the 10 runs, with prompt caching
-and hard cost caps enforced in the harness). It is a shared public demo
+and hard cost caps enforced in the harness). The corrected OCR check requires
+the note in a saved Patient Messages row; it rejects one compiled run where the
+note remained in the unsaved entry form. This is screen-row evidence, not a
+system-of-record read. It is a shared public demo
 that other users mutate and that resets daily, so it is not CI-reproducible,
 and the sample is small. Correctness alone (no agent arm, 5/5 fresh browsers,
 zero model calls, closed-loop scrolling) is in

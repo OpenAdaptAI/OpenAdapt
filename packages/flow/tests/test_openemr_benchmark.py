@@ -1,12 +1,13 @@
 """Unit tests for the OpenEMR benchmark pieces (no network anywhere).
 
-The Anthropic client and backend are faked, the orchestrator's run helpers
-are monkeypatched, and ``verify_note_saved`` runs real OCR on synthetic
-cv2-rendered screenshots — the same testing style as ``test_benchmark.py``.
+The Anthropic client and backend are faked, and the orchestrator's run helpers
+are monkeypatched. Saved-note tests use exact OCR text and geometry so font and
+OCR differences between operating systems cannot change the row contract.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -14,6 +15,7 @@ from typing import Any
 import cv2
 import numpy as np
 
+import openadapt_flow.benchmark.verify as benchmark_verify
 from openadapt_flow.benchmark import agent_baseline, openemr_benchmark
 from openadapt_flow.benchmark.agent_baseline import (
     openemr_task_prompt,
@@ -27,6 +29,7 @@ from openadapt_flow.benchmark.openemr_benchmark import (
     write_openemr_outputs,
 )
 from openadapt_flow.benchmark.verify import verify_note_saved
+from openadapt_flow.vision import OcrLine
 
 NOTE = "Insurance card copied and coverage verified by phone."
 
@@ -60,48 +63,125 @@ def make_screen(*lines: str, thickness: int = 2) -> bytes:
 
 
 class TestVerifyNoteSaved:
-    def test_note_embedded_in_message_row_passes(self) -> None:
-        # OpenEMR shows the note inside a longer list line (timestamp +
-        # "(admin to admin)" prefix). Rendered at thickness=1 (thin strokes,
-        # like real anti-aliased browser text) rather than the helper's
-        # bold thickness=2 default: rapidocr's angle classifier mis-detects
-        # the BOLD cv2-Hershey render of this long, digit-prefixed line as
-        # 180°-rotated and flips it, garbling the OCR. That is a synthetic-
-        # render artifact of the blocky bold font — it does NOT occur on the
-        # real browser-rendered OpenEMR row (which verifies at 100%). The row
-        # content, the note, and the criterion below are all unchanged; only
-        # the incidental stroke weight is thinned so OCR reads the frame the
-        # verifier actually faces in production.
-        screen = make_screen(
-            "Patient Messages",
-            f"2026-07-08 (admin to admin) {NOTE}",
-            thickness=1,
+    @staticmethod
+    def _patch_ocr(monkeypatch: Any, lines: list[OcrLine]) -> None:
+        monkeypatch.setattr(benchmark_verify, "ocr", lambda _png: lines)
+        monkeypatch.setattr(benchmark_verify, "upscale_png", lambda png: png)
+
+    @staticmethod
+    def _table(*rows: OcrLine) -> list[OcrLine]:
+        return [
+            OcrLine(text="Content", region=(420, 420, 70, 20), confidence=1.0),
+            OcrLine(text="Status", region=(900, 420, 60, 20), confidence=1.0),
+            *rows,
+        ]
+
+    def test_note_embedded_in_message_row_passes(self, monkeypatch: Any) -> None:
+        self._patch_ocr(
+            monkeypatch,
+            self._table(
+                OcrLine(
+                    text=f"2026-07-08 (admin to admin) {NOTE}",
+                    region=(330, 480, 550, 20),
+                    confidence=1.0,
+                ),
+                OcrLine(text="New", region=(900, 480, 40, 20), confidence=1.0),
+            ),
         )
+        screen = BLANK_PNG
         verdict = verify_note_saved(screen, NOTE)
         assert verdict.success
         assert verdict.longest_run >= 16
 
-    def test_wrapped_fragment_passes(self) -> None:
-        # A wrapped note where OCR only captured one distinctive fragment
-        # of at least 16 contiguous characters still counts.
-        screen = make_screen("coverage verified by")
-        verdict = verify_note_saved(screen, NOTE)
+    def test_wrapped_fragment_passes(self, monkeypatch: Any) -> None:
+        # A continuation line can sit below the row's status line.
+        self._patch_ocr(
+            monkeypatch,
+            self._table(
+                OcrLine(
+                    text="coverage verified by",
+                    region=(420, 505, 180, 20),
+                    confidence=1.0,
+                ),
+                OcrLine(text="New", region=(900, 480, 40, 20), confidence=1.0),
+            ),
+        )
+        verdict = verify_note_saved(BLANK_PNG, NOTE)
         assert verdict.success
         assert verdict.longest_run >= 16
+
+    def test_status_merged_onto_content_line_passes(self, monkeypatch: Any) -> None:
+        # RapidOCR can merge the adjacent New cell onto a long content line.
+        self._patch_ocr(
+            monkeypatch,
+            self._table(
+                OcrLine(
+                    text="2026-07-08 (admin to admin) "
+                    "Travel vaccine consult booked beforeNew",
+                    region=(330, 480, 610, 20),
+                    confidence=1.0,
+                ),
+            ),
+        )
+        verdict = verify_note_saved(
+            BLANK_PNG,
+            "Travel vaccine consult booked before the June trip.",
+        )
+        assert verdict.success
+        assert verdict.longest_run >= 16
+
+    def test_note_in_unsaved_entry_form_fails(self, monkeypatch: Any) -> None:
+        # The exact note is visible in the textarea, but no saved row contains
+        # it. This is the retained compiled_019 false-success shape.
+        self._patch_ocr(
+            monkeypatch,
+            [
+                OcrLine(
+                    text="Patient Message",
+                    region=(420, 280, 160, 20),
+                    confidence=1.0,
+                ),
+                OcrLine(text=NOTE, region=(460, 340, 440, 20), confidence=1.0),
+                OcrLine(
+                    text="Save as new message",
+                    region=(460, 380, 180, 20),
+                    confidence=1.0,
+                ),
+                *self._table(
+                    OcrLine(
+                        text="A different saved message.",
+                        region=(420, 480, 240, 20),
+                        confidence=1.0,
+                    ),
+                    OcrLine(text="New", region=(900, 480, 40, 20), confidence=1.0),
+                ),
+            ],
+        )
+        verdict = verify_note_saved(BLANK_PNG, NOTE)
+        assert not verdict.success
+        assert verdict.longest_run < 16
 
     def test_blank_screen_fails(self) -> None:
         verdict = verify_note_saved(BLANK_PNG, NOTE)
         assert not verdict.success
         assert verdict.longest_run < 16
 
-    def test_wrong_note_fails(self) -> None:
+    def test_wrong_note_fails(self, monkeypatch: Any) -> None:
         # A different run's note visible on screen must not satisfy this
         # run's check (contiguous-run criterion, dissimilar note texts).
-        screen = make_screen(
-            "2026-07-08 (admin to admin) "
-            "Dermatology biopsy site healing cleanly, no drainage.",
+        self._patch_ocr(
+            monkeypatch,
+            self._table(
+                OcrLine(
+                    text="2026-07-08 (admin to admin) "
+                    "Dermatology biopsy site healing cleanly, no drainage.",
+                    region=(330, 480, 550, 20),
+                    confidence=1.0,
+                ),
+                OcrLine(text="New", region=(900, 480, 40, 20), confidence=1.0),
+            ),
         )
-        verdict = verify_note_saved(screen, NOTE)
+        verdict = verify_note_saved(BLANK_PNG, NOTE)
         assert not verdict.success
 
     def test_empty_note_fails(self) -> None:
@@ -331,6 +411,22 @@ class TestOpenemrOrchestrator:
         assert a["cost_usd_total"] == 5.0
         assert results["model"] == agent_baseline.MODEL
         assert results["target"].startswith("https://demo.openemr.io")
+        assert results["success_contract"]["kind"] == "screen_saved_message_row"
+
+    def test_committed_result_preserves_oracle_adjudication(self) -> None:
+        path = Path(__file__).resolve().parents[1] / "benchmark/openemr/results.json"
+        results = json.loads(path.read_text())
+        compiled = results["arms"]["compiled"]
+        agent = results["arms"]["agent"]
+        assert (compiled["success_count"], compiled["n"]) == (19, 20)
+        assert (agent["success_count"], agent["n"]) == (10, 10)
+        assert compiled["wall_s_p50"] == 39.170917561999886
+        assert agent["wall_s_p50"] == 70.44607112499943
+        assert results["oracle_adjudication"]["denominators_changed"] is False
+        corrected = results["runs"]["compiled"][19]
+        assert corrected["success"] is False
+        assert corrected["legacy_screen_success"] is True
+        assert corrected["i"] == 19
 
     def test_markdown_names_anchor_and_caveats(self) -> None:
         md = render_openemr_markdown(self.make_results())
@@ -362,7 +458,7 @@ class TestOpenemrOrchestrator:
         results = aggregate_openemr_results(compiled, [agent_row(i) for i in range(10)])
         results["pace_s"] = 30.0
         md = render_openemr_markdown(results)
-        assert "100% (20/20)" in md  # headline unchanged
+        assert f"100% ({len(compiled)}/{len(compiled)})" in md
         assert "self-flagged" in md
         assert "compiled run 20" in md
         assert "step_017" in md
@@ -372,8 +468,6 @@ class TestOpenemrOrchestrator:
         assert "self-flagged" not in render_openemr_markdown(self.make_results())
 
     def test_write_outputs(self, tmp_path: Path) -> None:
-        import json
-
         write_openemr_outputs(self.make_results(), tmp_path)
         loaded = json.loads((tmp_path / "results.json").read_text())
         assert loaded["arms"]["agent"]["success_count"] == 8

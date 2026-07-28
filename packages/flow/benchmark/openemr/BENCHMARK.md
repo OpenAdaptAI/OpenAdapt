@@ -17,7 +17,7 @@ BOTH arms), save.
 | | compiled replay | computer-use agent |
 |---|---|---|
 | runs | 20 | 10 |
-| success rate | 100% (20/20) | 100% (10/10) |
+| success rate | 95% (19/20) | 100% (10/10) |
 | latency p50 | 39.2 s | 70.4 s |
 | latency p95 | 41.0 s | 82.6 s |
 | model cost / run | $0 | $0.5522 |
@@ -35,13 +35,7 @@ Failed runs, reported honestly:
 
 Compiled arm:
 
-- none
-
-Compiled runs that self-flagged, also reported honestly (success is judged by the arm-independent OCR check both arms share, not the replayer's self-report):
-
-- compiled run 20: postconditions flagged expected-screen drift at step_017 and the replayer aborted; the arm-independent OCR check verified the note saved (matched 100%)
-
-On a shared instance every run — ours and other visitors' — grows the message list, so a postcondition can drift after the action lands. The self-flag is the point: the replayer detects the drift and halts instead of improvising.
+- compiled run 20: saved-row oracle failed; replayer halted at step_017 — The legacy whole-frame OCR verifier matched the note in the unsaved entry textarea. The retained final frame has no saved row for this note.
 
 Agent arm:
 
@@ -76,15 +70,17 @@ below.
   target patient, the exact note text — not steps or coordinates. Every
   executed action returns a settled screenshot.
 - **Same success criterion, implemented once.** After each run, the final
-  screenshot is checked by `verify_note_saved` (OCR): a contiguous run of
-  at least 16 characters of the run's note must appear in the frame's
-  OCR text (whitespace-squashed; retried at 2x resolution when the raw
-  frame does not pass, because rapidocr drops dense table lines at
-  1280x800). Neither arm's self-reported success is used.
+  screenshot is checked by `verify_note_saved` (OCR). A contiguous run of
+  at least 16 characters of the run's note must appear in a saved Patient
+  Messages `Content` row aligned with its `New` status. The same note in the
+  unsaved entry form does not pass. OCR is whitespace-squashed and retried at
+  2x resolution when the raw frame does not pass. Neither arm's self-reported
+  success is used. This is screen-row evidence, not an out-of-band read of the
+  OpenEMR system of record.
 - **Distinct, mutually dissimilar note per run in BOTH arms** (no two
   notes share a 16-character squashed substring — unit-tested), so
-  success proves parameter substitution against live state and one run's
-  note cannot satisfy another run's check.
+  a saved-row success proves parameter substitution in the visible message
+  list and one run's note cannot satisfy another run's check.
 - **Pacing.** Runs are spaced ~30s apart as
   public-demo courtesy; the pacing gap is excluded from latency.
 - **Latency** is wall-clock around the replay / agent loop only.
@@ -133,15 +129,13 @@ below.
 - **The compiled arm needs a demonstration first.** The one-time
   record + compile step (about a minute of human demonstration) is the
   price of the fast replays; the agent needs only the prompt.
-- **OCR verification on dense EMR text under-counts.** rapidocr sometimes
-  drops the exact table line containing the note (a known limitation
-  documented in
-  [docs/showcase-openemr/FINDINGS.md](../../docs/showcase-openemr/FINDINGS.md)),
-  so a "failed" verification can be a measurement miss with the note
-  plainly visible in the final screenshot. The check errs conservative
-  and is identical for both arms. Every run's final screenshot is saved
-  to `benchmark/openemr/finals/` (local only, not committed) so failed
-  verdicts can be audited against what was actually on screen.
+- **The success oracle is bounded screen evidence.** rapidocr can drop dense
+  table lines and cause an over-halt. The legacy whole-frame check could also
+  accept note text in the unsaved form; retained compiled run 20 exposed that
+  false success. The corrected check requires saved-row context. All 30 final
+  frames were replayed under it: only compiled run 20 changed. Every final
+  screenshot stays in `benchmark/openemr/finals/` (local only, not committed)
+  for audit. This check does not read the OpenEMR system of record.
 - Single machine (macOS-15.7.3-arm64-arm-64bit).
 
 ## Reproduce

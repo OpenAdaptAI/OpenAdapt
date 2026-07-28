@@ -309,7 +309,7 @@
 
 ### `openemr-field-benchmark` — validating — opt-in / infra-gated or field test
 
-> On the real third-party OpenEMR public demo, compiled replay went 20/20 versus 10/10 for a computer-use agent, faster and with zero model calls. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build.
+> On the real third-party OpenEMR public demo, compiled replay went 19/20 versus 10/10 for a computer-use agent, faster and with zero model calls. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build.
 
 - Reproducibility: **field**
 - Surfaces: README.md, docs, website
@@ -317,11 +317,13 @@
 
 | Backing evidence | Kind | Gating / CI stage | Strength | Proves |
 |---|---|---|---|---|
-| `tests/test_openemr_benchmark.py` | test | ci (required PR gate (test)) | supported | The CI-reproducible half: the note-saved verifier and the intent-not-coordinates task prompt that both benchmark arms use. |
-| `benchmark/openemr/BENCHMARK.md` | benchmark | artifact (doc/benchmark) | roadmap | The field-test numbers, methodology, and cost caps for the 20-vs-10 head-to-head run. |
+| `tests/test_openemr_benchmark.py` | test | ci (required PR gate (test)) | supported | The CI-reproducible half: the saved-message-row verifier, its unsaved-entry-form rejection, and the intent-not-coordinates task prompt that both benchmark arms use. |
+| `tests/test_openemr_retained_finals.py` | test | opt-in (OPENADAPT_OPENEMR_FINALS_DIR) | validating | When the local-only retained final frames are mounted, the guard replays all 30 with the current verifier and requires 19/20 compiled, 10/10 agent, and exactly one corrected legacy false success. |
+| `benchmark/openemr/BENCHMARK.md` | benchmark | artifact (doc/benchmark) | roadmap | The corrected field-test numbers, saved-row screen-oracle contract, methodology, and cost caps for the 20-vs-10 head-to-head run. |
 | `docs/showcase-openemr/FINDINGS.md` | doc | artifact (doc/benchmark) | roadmap | The correctness-only field findings (fresh browsers, zero model calls, closed-loop scrolling). |
 
 **Caveats (honest limits):**
 
+- The historical result uses OCR evidence from a visible saved message row. It does not use an out-of-band OpenEMR system-of-record read.
 - FIELD TEST, NOT CI-reproducible: the head-to-head ran against a SHARED public demo that other users mutate and that resets daily; the sample is small (10 agent runs). Only the verifier + task-prompt units run in CI. `reproducibility: field` forbids ever labeling this `supported`.
 

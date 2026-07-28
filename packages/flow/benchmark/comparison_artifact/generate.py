@@ -7,8 +7,9 @@ figures out as a self-contained, theme-aware HTML page:
 
 - ``benchmark/openemr/results.json`` — the LEAD result: the same task run
   against a real third-party application (the official OpenEMR public demo),
-  20 compiled replays vs 10 ``claude-sonnet-5`` computer-use agent runs, both
-  100%. This is a field result, not CI-reproducible (shared public instance).
+  20 compiled replays vs 10 ``claude-sonnet-5`` computer-use agent runs. The
+  corrected saved-row oracle counts 19/20 and 10/10. This is a field result,
+  not CI-reproducible (shared public instance).
 - ``benchmark/results.json`` — the CI-reproducible MockMed anchor: 100 compiled
   vs 20 agent on the bundled demo clinic, both 100%, same orchestrator and same
   arm-independent OCR success check.
@@ -32,8 +33,8 @@ It emits, into ``benchmark/comparison_artifact/``:
   their provenance), so the page is verifiable without eyeballing it.
 
 The page leads with the honest wedge: compiled replay is model-free, ~$0/run,
-and faster, at *parity* success on these tasks — with the small-n, shared-demo,
-and not-a-capability-claim caveats stated up front, not buried.
+and faster on these trials. It reports each arm's measured success and states
+the small-n, shared-demo, and not-a-capability-claim caveats up front.
 """
 
 from __future__ import annotations
@@ -139,8 +140,8 @@ def load_openemr(path: Path = OPENEMR_RESULTS) -> Benchmark:
     model = str(d.get("model", "claude-sonnet-5"))
     compiled = _arm_from_json("compiled", arms["compiled"], "0 model calls")
     agent = _arm_from_json("agent", arms["agent"], model)
-    # A single compiled run self-flagged expected-screen drift and aborted; the
-    # arm-independent OCR check confirmed the write landed. Report it honestly.
+    # A single compiled run self-flagged expected-screen drift and aborted. The
+    # corrected saved-row OCR check also rejects that run. Report both signals.
     self_flag = None
     for run in d.get("runs", {}).get("compiled", []):
         if run.get("replayer_success") is False:
@@ -166,6 +167,8 @@ def load_openemr(path: Path = OPENEMR_RESULTS) -> Benchmark:
             "cost_caps_usd": d.get("cost_caps_usd"),
             "pricing_note": (d.get("pricing_usd_per_mtok") or {}).get("note"),
             "compiled_self_flag": self_flag,
+            "success_contract": d.get("success_contract"),
+            "oracle_adjudication": d.get("oracle_adjudication"),
         },
     )
 
@@ -425,10 +428,10 @@ def _stat_tiles(b: Benchmark) -> str:
     speed = _speedup(b)
     tiles = [
         (
-            "success — parity",
+            "measured success",
             f"{b.compiled.success_count}/{b.compiled.n} &middot; "
             f"{b.agent.success_count}/{b.agent.n}",
-            "compiled &middot; agent — both pass the same arm-independent OCR check",
+            "compiled &middot; agent — same arm-independent screen contract",
             "ok",
         ),
         (
@@ -484,14 +487,21 @@ def _self_flag_note(b: Benchmark) -> str:
     sf = b.extras.get("compiled_self_flag")
     if not sf:
         return ""
+    run_number = int(sf.get("i", -1)) + 1
+    if sf.get("success") is False:
+        return (
+            '<p class="honest-inline">One compiled run (#{i}) self-flagged '
+            'expected-screen drift at <code>{step}</code> and aborted. The '
+            'corrected saved-row OCR check also rejects it: the retained final '
+            'frame shows the note in the unsaved entry form, not in a saved '
+            'message row. It counts as a failure.</p>'
+        ).format(i=_e(run_number), step=_e(sf.get("first_failure_step")))
     return (
         '<p class="honest-inline">One compiled run (#{i}) self-flagged '
-        'expected-screen drift at <code>{step}</code> and aborted — yet the '
-        'arm-independent OCR check confirmed the note saved, so it counts as a '
-        'success. On a shared instance the message list grows under every '
-        "visitor, so a postcondition can drift <em>after</em> the write lands; "
-        'the self-flag halting instead of improvising is the point.</p>'
-    ).format(i=_e(sf.get("i")), step=_e(sf.get("first_failure_step")))
+        'expected-screen drift at <code>{step}</code> and aborted, while the '
+        'saved-row OCR check accepted its final frame. It counts according to '
+        'that shared screen contract.</p>'
+    ).format(i=_e(run_number), step=_e(sf.get("first_failure_step")))
 
 
 def _drift_note(b: Benchmark) -> str:
@@ -594,18 +604,17 @@ def _caveats(oe: Benchmark, mm: Benchmark) -> list[tuple[str, str]]:
             "in the source data rather than hidden.",
         ),
         (
-            "Success is one OCR check on both arms — and it errs conservative.",
-            "A run passes only if the run's own note text is read back out of the "
-            "final screenshot by OCR, identically for compiled and agent. On dense "
-            "EMR text the OCR sometimes drops the exact line it is looking for, so "
-            "a 'failed' verification can be a measurement miss with the note "
-            "plainly on screen. The check is identical for both arms, so it cannot "
-            "favour one — but it under-counts rather than over-counts success.",
+            "Success is corrected saved-row screen evidence, not a record read.",
+            "The legacy whole-frame OCR check accepted one compiled run whose note "
+            "was still in the unsaved entry form. The corrected contract requires "
+            "the note in a saved Patient Messages row, and replay of all 30 retained "
+            "final frames changes only that run. OCR can still miss dense text. This "
+            "field result does not read the OpenEMR system of record out of band.",
         ),
         (
-            "This measures cost and latency at PARITY success — not capability.",
-            "Both arms passed every task here, so the story is purely how much "
-            "cheaper and faster the compiled path is at the same outcome. It is "
+            "This measures bounded outcomes, cost, and latency — not capability.",
+            "The OpenEMR outcomes are 19/20 and 10/10 under one corrected screen "
+            "contract. The result shows the measured cost and latency difference. It is "
             "NOT a claim that compiled replay is more capable, more robust to novel "
             "situations, or a substitute for an agent on a task it has never seen. "
             "MockMed is also a deliberately simple app; harder surfaces would slow "
@@ -617,7 +626,7 @@ def _caveats(oe: Benchmark, mm: Benchmark) -> list[tuple[str, str]]:
 def render_html(oe: Benchmark, mm: Benchmark) -> str:
     speed_oe = _speedup(oe)
     headline = (
-        f"Same task, same success ({oe.compiled.success_count}/{oe.compiled.n} "
+        f"Same task, measured success ({oe.compiled.success_count}/{oe.compiled.n} "
         f"vs {oe.agent.success_count}/{oe.agent.n}) &mdash; compiled replay costs "
         f"{fmt_usd(oe.compiled.cost_per_run)} and runs {speed_oe:.1f}&times; faster "
         f"than the {oe.model} agent"
@@ -642,7 +651,8 @@ def render_html(oe: Benchmark, mm: Benchmark) -> str:
     <p class="sub">One clinical task, two ways to automate it, one success check.
       The wedge in one line: for a task you have already demonstrated, a compiled
       replay is <strong>model-free</strong>, <strong>~$0 per run</strong>, and
-      <strong>faster</strong> &mdash; at <strong>parity</strong> success. Generated
+      <strong>faster</strong> on these measured trials. Each arm's success is
+      reported separately. Generated
       straight from the repo's real benchmark <code>results.json</code> files; no
       number here is hand-typed.</p>
     <div class="headline ok">{headline}</div>
@@ -671,8 +681,8 @@ def render_html(oe: Benchmark, mm: Benchmark) -> str:
     <ul>
       {caveats}
     </ul>
-    <p class="foot">Bottom line: at parity success on these tasks, the compiled path
-      removes the model from the loop &mdash; {fmt_usd(oe.compiled.cost_per_run)} and
+    <p class="foot">Bottom line: on these measured trials, the compiled path removes
+      the model from the loop &mdash; {fmt_usd(oe.compiled.cost_per_run)} and
       {speed_oe:.1f}&times; faster on the real EMR, and a tighter, reproducible
       version of the same gap on MockMed. That is a cost/latency result on known
       tasks, disclosed with its limits &mdash; not a general capability claim.</p>

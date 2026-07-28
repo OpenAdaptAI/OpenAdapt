@@ -4,7 +4,8 @@ Public API (see DESIGN.md "Vision API"):
 
 - :class:`Match`, :func:`find_template`, :func:`find_structural_template`
 - :class:`OcrLine`, :func:`ocr`, :func:`find_text`,
-  :func:`find_text_candidates`, :func:`text_present`, :func:`upscale_png`
+  :func:`find_text_candidates`, :func:`normalize_text`,
+  :func:`text_present`, :func:`upscale_png`
 - :func:`phash_png`, :func:`phash_distance`
 - :func:`pixels_changed`
 - :func:`wait_settled`, :func:`wait_settled_result`, :class:`SettleResult`
@@ -24,6 +25,7 @@ from openadapt_flow.vision.ocr import (
     OcrResolutionRefused,
     find_text,
     find_text_candidates,
+    normalize_text,
     ocr,
     text_present,
     upscale_png,
@@ -45,6 +47,7 @@ __all__ = [
     "find_template",
     "find_text",
     "find_text_candidates",
+    "normalize_text",
     "ocr",
     "phash_distance",
     "phash_png",

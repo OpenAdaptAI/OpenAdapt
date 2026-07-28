@@ -2,8 +2,8 @@
 
 A self-contained, theme-aware HTML page that packages the core wedge in one
 place: for a task you have **already demonstrated**, a compiled replay is
-**model-free**, **~$0 per run**, and **faster** than a computer-use agent — at
-**parity** success on these tasks.
+**model-free**, **~$0 per run**, and **faster** than a computer-use agent. The
+artifact reports the measured success of each arm; it does not assume parity.
 
 It is **generated from the repo's real benchmark results**, not hand-typed. The
 generator reads the two existing `results.json` files and lays their figures out
@@ -34,7 +34,7 @@ Leads with the **real third-party result** (OpenEMR public demo, an 18-step
 add-patient-note workflow on a live EMR), then the **CI-reproducible anchor**
 (MockMed, the bundled demo clinic). For each benchmark:
 
-- **Success parity** — both arms pass the same arm-independent OCR check.
+- **Measured success** — both arms use the same arm-independent OCR contract.
 - **Measured model API cost** — `$0` for compiled vs `$/run` for the agent, as
   an inline-SVG bar chart plus an explicitly limited arithmetic projection.
 - **Latency** — p50/p95 wall-clock for both arms as grouped inline-SVG bars.
@@ -45,9 +45,8 @@ labels) — no screenshots, no external assets, no base64 needed.
 It ends with an **honest "Read before quoting these numbers"** panel (mirroring
 the gallery's "What still slips" tone): small N and wide error bars; the lead is
 a field result on a shared, daily-resetting public demo (not CI-reproducible);
-list-price costs with hard caps; the single OCR success check that errs
-conservative on both arms; and the fact that this measures cost/latency at
-**parity** success — **not** a general capability claim.
+list-price costs with hard caps; the corrected saved-row OCR contract; and the
+fact that this is **not** a general capability claim.
 
 ## Regenerate
 

@@ -630,7 +630,7 @@ claims:
   # -------------------------------- OpenEMR head-to-head (field, not CI-reprod.)
   - id: openemr-field-benchmark
     claim: >-
-      On the real third-party OpenEMR public demo, compiled replay went 20/20
+      On the real third-party OpenEMR public demo, compiled replay went 19/20
       versus 10/10 for a computer-use agent, faster and with zero model calls.
       Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build.
     surfaces: [README.md, docs, website]
@@ -639,19 +639,29 @@ claims:
     evidence:
       - path: tests/test_openemr_benchmark.py
         proves: >-
-          The CI-reproducible half: the note-saved verifier and the
-          intent-not-coordinates task prompt that both benchmark arms use.
+          The CI-reproducible half: the saved-message-row verifier, its
+          unsaved-entry-form rejection, and the intent-not-coordinates task
+          prompt that both benchmark arms use.
+      - path: tests/test_openemr_retained_finals.py
+        kind: test
+        proves: >-
+          When the local-only retained final frames are mounted, the guard
+          replays all 30 with the current verifier and requires 19/20 compiled,
+          10/10 agent, and exactly one corrected legacy false success.
       - path: benchmark/openemr/BENCHMARK.md
         kind: benchmark
         proves: >-
-          The field-test numbers, methodology, and cost caps for the 20-vs-10
-          head-to-head run.
+          The corrected field-test numbers, saved-row screen-oracle contract,
+          methodology, and cost caps for the 20-vs-10 head-to-head run.
       - path: docs/showcase-openemr/FINDINGS.md
         kind: doc
         proves: >-
           The correctness-only field findings (fresh browsers, zero model
           calls, closed-loop scrolling).
     caveats:
+      - >-
+        The historical result uses OCR evidence from a visible saved message
+        row. It does not use an out-of-band OpenEMR system-of-record read.
       - >-
         FIELD TEST, NOT CI-reproducible: the head-to-head ran against a SHARED
         public demo that other users mutate and that resets daily; the sample

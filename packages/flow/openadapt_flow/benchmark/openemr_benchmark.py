@@ -185,6 +185,16 @@ def aggregate_openemr_results(
             "the chart, scroll the dashboard to the Messages card, open "
             "Patient Messages, add a parameterized note, save"
         ),
+        "success_contract": {
+            "kind": "screen_saved_message_row",
+            "note_min_contiguous_squashed_chars": 16,
+            "requires": [
+                "Patient Messages Content and Status headers",
+                "note fragment in the Content column below the headers",
+                "an aligned New status for the same saved row",
+            ],
+            "rejects": "note text visible only in the unsaved entry form",
+        },
         "target": DEMO_URL,
         "workflow_steps": 18,
         "model": agent_baseline.MODEL,
@@ -227,6 +237,29 @@ def render_openemr_markdown(results: dict[str, Any]) -> str:
     total_cap = caps.get("total", MAX_TOTAL_COST_USD)
     note = results.get("agent_arm_note")
     note_block = f"\n> **Agent arm disclosure:** {note}\n" if note else ""
+    flow = results.get("flow") or {}
+    artifact = results.get("artifact_provenance") or {}
+    flow_version = flow.get("flow_version")
+    engine_line = (
+        f" Engine: a pre-`v0.2.0` source checkout declaring\n"
+        f"openadapt-flow {flow_version}."
+        if flow_version
+        else ""
+    )
+    provenance_block = (
+        f"**Measured on Flow {flow_version}, {date}.** The measurement used a "
+        "pre-`v0.2.0`\n"
+        "development source checkout; its exact runtime HEAD was not retained. "
+        "The rows\n"
+        "were first committed in "
+        f"`{str(artifact.get('first_committed_in', 'unknown'))[:8]}` after parent "
+        f"`{str(artifact.get('parent_before_artifact_commit', 'unknown'))[:8]}`; "
+        "those two SHAs\n"
+        "describe artifact history, not the runtime used for the measurement. "
+        "Not\nre-measured on a later release.\n"
+        if flow_version and artifact
+        else ""
+    )
     agent_errors = [r for r in results["runs"]["agent"] if not r["success"]]
     failure_lines = (
         "".join(
@@ -243,16 +276,23 @@ def render_openemr_markdown(results: dict[str, Any]) -> str:
     compiled_failures = [r for r in results["runs"]["compiled"] if not r["success"]]
     compiled_failure_lines = (
         "".join(
-            f"- compiled run {r['i'] + 1}: "
-            + (
-                r["error"]
-                if r.get("error")
-                else f"{r.get('actions', '?')} steps executed, "
-                f"replayer_success={r.get('replayer_success')}, "
-                f"first_failure={r.get('first_failure')}, "
-                f"OCR matched {r.get('matched_ratio', 0):.0%} of the note"
+            (
+                f"- compiled run {r['i'] + 1}: saved-row oracle failed; "
+                f"replayer halted at "
+                f"{(r.get('first_failure') or {}).get('step', '?')} — "
+                f"{r['oracle_correction']}\n"
+                if r.get("oracle_correction")
+                else f"- compiled run {r['i'] + 1}: "
+                + (
+                    r["error"]
+                    if r.get("error")
+                    else f"{r.get('actions', '?')} steps executed, "
+                    f"replayer_success={r.get('replayer_success')}, "
+                    f"first_failure={r.get('first_failure')}, "
+                    f"OCR matched {r.get('matched_ratio', 0):.0%} of the note"
+                )
+                + "\n"
             )
-            + "\n"
             for r in compiled_failures
         )
         or "- none\n"
@@ -283,7 +323,7 @@ def render_openemr_markdown(results: dict[str, Any]) -> str:
     )
     return f"""# Benchmark: compiled replay vs. computer-use agent — OpenEMR (real app)
 
-Date: {date}. Same head-to-head as the [MockMed benchmark](../BENCHMARK.md),
+Date: {date}.{engine_line} Same head-to-head as the [MockMed benchmark](../BENCHMARK.md),
 run against a real third-party application: the official OpenEMR public
 demo (`{results["target"]}`, fake patients only, instance resets daily).
 One task, two ways to automate it, one success check.
@@ -311,6 +351,7 @@ BOTH arms), save.
 {a["cache_creation_input_tokens_total"]:,} / \
 {a["cache_read_input_tokens_total"]:,} |
 {note_block}
+{provenance_block}
 Failed runs, reported honestly:
 
 Compiled arm:
@@ -348,15 +389,17 @@ below.
   target patient, the exact note text — not steps or coordinates. Every
   executed action returns a settled screenshot.
 - **Same success criterion, implemented once.** After each run, the final
-  screenshot is checked by `verify_note_saved` (OCR): a contiguous run of
-  at least 16 characters of the run's note must appear in the frame's
-  OCR text (whitespace-squashed; retried at 2x resolution when the raw
-  frame does not pass, because rapidocr drops dense table lines at
-  1280x800). Neither arm's self-reported success is used.
+  screenshot is checked by `verify_note_saved` (OCR). A contiguous run of
+  at least 16 characters of the run's note must appear in a saved Patient
+  Messages `Content` row aligned with its `New` status. The same note in the
+  unsaved entry form does not pass. OCR is whitespace-squashed and retried at
+  2x resolution when the raw frame does not pass. Neither arm's self-reported
+  success is used. This is screen-row evidence, not an out-of-band read of the
+  OpenEMR system of record.
 - **Distinct, mutually dissimilar note per run in BOTH arms** (no two
   notes share a 16-character squashed substring — unit-tested), so
-  success proves parameter substitution against live state and one run's
-  note cannot satisfy another run's check.
+  a saved-row success proves parameter substitution in the visible message
+  list and one run's note cannot satisfy another run's check.
 - **Pacing.** Runs are spaced ~{results.get("pace_s", 30):.0f}s apart as
   public-demo courtesy; the pacing gap is excluded from latency.
 - **Latency** is wall-clock around the replay / agent loop only.
@@ -405,15 +448,13 @@ below.
 - **The compiled arm needs a demonstration first.** The one-time
   record + compile step (about a minute of human demonstration) is the
   price of the fast replays; the agent needs only the prompt.
-- **OCR verification on dense EMR text under-counts.** rapidocr sometimes
-  drops the exact table line containing the note (a known limitation
-  documented in
-  [docs/showcase-openemr/FINDINGS.md](../../docs/showcase-openemr/FINDINGS.md)),
-  so a "failed" verification can be a measurement miss with the note
-  plainly visible in the final screenshot. The check errs conservative
-  and is identical for both arms. Every run's final screenshot is saved
-  to `benchmark/openemr/finals/` (local only, not committed) so failed
-  verdicts can be audited against what was actually on screen.
+- **The success oracle is bounded screen evidence.** rapidocr can drop dense
+  table lines and cause an over-halt. The legacy whole-frame check could also
+  accept note text in the unsaved form; retained compiled run 20 exposed that
+  false success. The corrected check requires saved-row context. All 30 final
+  frames were replayed under it: only compiled run 20 changed. Every final
+  screenshot stays in `benchmark/openemr/finals/` (local only, not committed)
+  for audit. This check does not read the OpenEMR system of record.
 - Single machine ({results["platform"]}).
 
 ## Reproduce

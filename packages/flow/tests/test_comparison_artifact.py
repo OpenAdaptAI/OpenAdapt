@@ -42,7 +42,8 @@ def test_openemr_figures_match_source_exactly() -> None:
     # The lead result's shape: compiled is free, agent is not.
     assert b.compiled.cost_per_run == 0.0
     assert b.agent.cost_per_run > 0.0
-    assert b.compiled.success_count == b.compiled.n == 20
+    assert b.compiled.n == 20
+    assert b.compiled.success_count == 19
     assert b.agent.success_count == b.agent.n == 10
 
 
@@ -103,7 +104,7 @@ def test_build_emits_html_and_json_with_real_figures(tmp_path) -> None:
 
     # The real OpenEMR headline figures must appear verbatim in the page.
     for needle in (
-        f"{oe.compiled.success_count}/{oe.compiled.n}",  # 20/20
+        f"{oe.compiled.success_count}/{oe.compiled.n}",  # 19/20
         f"{oe.agent.success_count}/{oe.agent.n}",  # 10/10
         gen.fmt_s(oe.compiled.p50_s),  # 39.2 s
         gen.fmt_s(oe.agent.p50_s),  # 70.4 s

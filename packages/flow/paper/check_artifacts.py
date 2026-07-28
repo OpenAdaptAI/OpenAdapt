@@ -77,7 +77,7 @@ def main() -> None:
                 )
 
     require_equal(openemr["compiled"]["n"], 20, "OpenEMR compiled n")
-    require_equal(openemr["compiled"]["success_count"], 20, "OpenEMR compiled success")
+    require_equal(openemr["compiled"]["success_count"], 19, "OpenEMR compiled success")
     require_close(openemr["compiled"]["wall_s_p50"], 39.2, "OpenEMR compiled p50")
     require_equal(openemr["agent"]["n"], 10, "OpenEMR agent n")
     require_equal(openemr["agent"]["success_count"], 10, "OpenEMR agent success")

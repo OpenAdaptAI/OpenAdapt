@@ -17,7 +17,30 @@
     "parent_before_artifact_commit": "099eac0759440a86eceef38530797e8d5b765a15",
     "note": "These SHAs identify when the retained rows entered repository history; neither is attributed as the exact runtime HEAD."
   },
+  "oracle_adjudication": {
+    "corrected_at": "2026-07-28",
+    "contract": "The final screenshot must show a contiguous note fragment of at least 16 squashed characters inside a saved Patient Messages Content row aligned with its New status. Note text in the unsaved entry form is not saved-row evidence.",
+    "retained_final_path": "benchmark/openemr/finals/compiled_019.png",
+    "retained_final_sha256": "8c504ba15bab9cdca8b5987dd1d1ab7b0ba7ae77f67fac5e93ba8481492ae18f",
+    "old_behavior": "The legacy verifier accepted the requested note anywhere in full-frame OCR and returned success for compiled run 20.",
+    "new_behavior": "The saved-row verifier rejects compiled run 20 because the note remains in the open textarea and the Save as new message button remains visible; no saved row contains the note.",
+    "changed_runs": [
+      "compiled:19"
+    ],
+    "denominators_changed": false,
+    "latency_aggregates_changed": false
+  },
   "task": "OpenEMR public demo: log in, search the demo patient, open the chart, scroll the dashboard to the Messages card, open Patient Messages, add a parameterized note, save",
+  "success_contract": {
+    "kind": "screen_saved_message_row",
+    "note_min_contiguous_squashed_chars": 16,
+    "requires": [
+      "Patient Messages Content and Status headers",
+      "note fragment in the Content column below the headers",
+      "an aligned New status for the same saved row"
+    ],
+    "rejects": "note text visible only in the unsaved entry form"
+  },
   "target": "https://demo.openemr.io/openemr/index.php",
   "workflow_steps": 18,
   "model": "claude-sonnet-5",
@@ -35,8 +58,8 @@
   "arms": {
     "compiled": {
       "n": 20,
-      "success_count": 20,
-      "success_rate": 1.0,
+      "success_count": 19,
+      "success_rate": 0.95,
       "wall_s_p50": 39.170917561999886,
       "wall_s_p95": 41.04867044315233,
       "wall_s_mean": 39.51734407485037,
@@ -449,7 +472,7 @@
       {
         "arm": "compiled",
         "wall_s": 43.10221470899705,
-        "success": true,
+        "success": false,
         "replayer_success": false,
         "heal_count": 1,
         "actions": 18,
@@ -464,8 +487,10 @@
         "cache_read_input_tokens": 0,
         "cost_usd": 0.0,
         "error": null,
-        "matched_ratio": 1.0,
-        "longest_run": 47,
+        "matched_ratio": 0.0,
+        "longest_run": 0,
+        "legacy_screen_success": true,
+        "oracle_correction": "The legacy whole-frame OCR verifier matched the note in the unsaved entry textarea. The retained final frame has no saved row for this note.",
         "i": 19,
         "note": "Orthopedic pillow suggestion discussed for neck pain."
       }

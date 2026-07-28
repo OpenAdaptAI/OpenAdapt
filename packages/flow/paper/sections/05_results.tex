@@ -200,10 +200,10 @@ O2C recon  & phantom write-back    & 200 without persist  & CU* & H \\
 
 \paragraph{Compiled replay removes per-run reasoning on demonstrated tasks.}
 Table~\ref{tab:comparison} shows that, on these two already-demonstrated tasks,
-compiled replay completed every measured run with lower median latency and no
-model calls. The unequal, small samples do not establish superior reliability.
-The correct inference is narrower: repeated reasoning was unnecessary for the
-healthy executions measured here.
+compiled replay completed 19 of 20 OpenEMR runs and every measured MockMed run
+with lower median latency and no model calls. The unequal, small samples do not
+establish superior reliability. The correct inference is narrower: repeated
+reasoning was unnecessary for the healthy executions measured here.
 
 \begin{table}[t]
 \centering
@@ -215,7 +215,7 @@ exclude authoring and operations.}
 \toprule
 Task & Arm & Success & $n$ & Median (s) & Model cost/run \\
 \midrule
-OpenEMR & Compiled & 20/20 & 20 & 39.2 & \$0.00 \\
+OpenEMR & Compiled & 19/20 & 20 & 39.2 & \$0.00 \\
 OpenEMR & Agent & 10/10 & 10 & 70.4 & \$0.55 \\
 MockMed & Compiled & 100/100 & 100 & 4.9 & \$0.00 \\
 MockMed & Agent & 20/20 & 20 & 37.5 & \$0.27 \\
@@ -224,10 +224,10 @@ MockMed & Agent & 20/20 & 20 & 37.5 & \$0.27 \\
 \end{table}
 
 \paragraph{Repair under drift: the compiler heals what breaks the agent's day.}
-The comparison above is the healthy path. To exercise the ``govern every
-repair'' half of the thesis, we forced the MockMed interface to re-render with a
-dark palette, invalidating every recorded template crop. As a single observation
-per arm, compiled replay self-healed in 9.7\,s with 8 target repairs and zero
+The comparison above uses nominal interface conditions. To exercise the
+``govern every repair'' half of the thesis, we forced the MockMed interface to
+re-render with a dark palette, invalidating every recorded template crop. As a
+single observation per arm, compiled replay self-healed in 9.7\,s with 8 target repairs and zero
 model calls, while the same computer-use agent under the same drift took 87.4\,s
 and \$0.63 across 24 model calls. One run is not a reliability claim, but it
 shows the mechanism working end to end: the resolution ladder re-resolved changed

@@ -927,7 +927,7 @@
     },
     {
       "id": "openemr-field-benchmark",
-      "claim": "On the real third-party OpenEMR public demo, compiled replay went 20/20 versus 10/10 for a computer-use agent, faster and with zero model calls. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build.",
+      "claim": "On the real third-party OpenEMR public demo, compiled replay went 19/20 versus 10/10 for a computer-use agent, faster and with zero model calls. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build.",
       "tier": "validating",
       "reproducibility": "field",
       "surfaces": [
@@ -937,6 +937,7 @@
       ],
       "strongest_evidence": "supported",
       "caveats": [
+        "The historical result uses OCR evidence from a visible saved message row. It does not use an out-of-band OpenEMR system-of-record read.",
         "FIELD TEST, NOT CI-reproducible: the head-to-head ran against a SHARED public demo that other users mutate and that resets daily; the sample is small (10 agent runs). Only the verifier + task-prompt units run in CI. `reproducibility: field` forbids ever labeling this `supported`."
       ],
       "evidence": [
@@ -949,7 +950,18 @@
           "node": null,
           "node_found": null,
           "junit_status": null,
-          "proves": "The CI-reproducible half: the note-saved verifier and the intent-not-coordinates task prompt that both benchmark arms use."
+          "proves": "The CI-reproducible half: the saved-message-row verifier, its unsaved-entry-form rejection, and the intent-not-coordinates task prompt that both benchmark arms use."
+        },
+        {
+          "path": "tests/test_openemr_retained_finals.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "validating",
+          "gating": "opt-in (OPENADAPT_OPENEMR_FINALS_DIR)",
+          "node": null,
+          "node_found": null,
+          "junit_status": null,
+          "proves": "When the local-only retained final frames are mounted, the guard replays all 30 with the current verifier and requires 19/20 compiled, 10/10 agent, and exactly one corrected legacy false success."
         },
         {
           "path": "benchmark/openemr/BENCHMARK.md",
@@ -960,7 +972,7 @@
           "node": null,
           "node_found": null,
           "junit_status": null,
-          "proves": "The field-test numbers, methodology, and cost caps for the 20-vs-10 head-to-head run."
+          "proves": "The corrected field-test numbers, saved-row screen-oracle contract, methodology, and cost caps for the 20-vs-10 head-to-head run."
         },
         {
           "path": "docs/showcase-openemr/FINDINGS.md",
