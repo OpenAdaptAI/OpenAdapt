@@ -185,7 +185,6 @@ class TrayApplication:
         """
         if state.state == self._last_notified_tray_state:
             return
-        self._last_notified_tray_state = state.state
 
         messages = {
             TrayState.RECORDING: (
@@ -200,13 +199,18 @@ class TrayApplication:
             TrayState.ERROR: ("Error", state.error_message or "An error occurred"),
         }
 
-        if state.state in messages:
-            title, body = messages[state.state]
-            self.notifications.show(
-                title,
-                body,
-                duration_ms=self.config.notification_duration_ms,
-            )
+        if state.state not in messages:
+            self._last_notified_tray_state = state.state
+            return
+
+        title, body = messages[state.state]
+        delivered = self.notifications.show(
+            title,
+            body,
+            duration_ms=self.config.notification_duration_ms,
+        )
+        if delivered:
+            self._last_notified_tray_state = state.state
 
     def _toggle_recording(self) -> None:
         """Toggle recording state."""

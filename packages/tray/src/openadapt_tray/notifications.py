@@ -11,8 +11,11 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+_DELIVERY_CONFIRMATION_TIMEOUT_SECONDS = 5
+
 try:
     from desktop_notifier import Button, DesktopNotifier, ReplyField, Urgency
+
     DESKTOP_NOTIFIER_AVAILABLE = True
 except ImportError:
     DESKTOP_NOTIFIER_AVAILABLE = False
@@ -71,21 +74,23 @@ class NotificationManager:
         # On macOS, check if running from app bundle
         if sys.platform == "darwin":
             # Check both APP_BUNDLE env var and actual bundle structure
-            is_app_bundle = (
-                os.environ.get('APP_BUNDLE') or
-                'Contents/MacOS' in str(Path(__file__).resolve())
+            is_app_bundle = os.environ.get("APP_BUNDLE") or "Contents/MacOS" in str(
+                Path(__file__).resolve()
             )
             if not is_app_bundle:
                 # Not in app bundle - try desktop-notifier anyway, fall back if it fails
                 try:
                     from desktop_notifier.macos import CocoaNotificationCenter
+
                     # Try to initialize to see if it works
                     CocoaNotificationCenter()
                     print("desktop-notifier initialized successfully")
                     return "desktop-notifier"
                 except Exception as e:
                     # If desktop-notifier can't initialize, use AppleScript
-                    print(f"desktop-notifier not available ({e}), using AppleScript for notifications")
+                    print(
+                        f"desktop-notifier not available ({e}), using AppleScript for notifications"
+                    )
                     return "macos"
 
         # Use desktop-notifier on all platforms
@@ -188,11 +193,24 @@ class NotificationManager:
         if reply_field:
             reply_field_object = ReplyField(title=reply_field, button_title="Send")
 
-        # Show notification asynchronously
+        # Show the notification and confirm that the backend accepted it. A queued
+        # coroutine is not delivery: callers use this result to decide whether a
+        # failed notification must be retried.
         try:
             if self._loop.is_running():
-                # If loop is already running, schedule the coroutine
-                asyncio.run_coroutine_threadsafe(
+                try:
+                    running_loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    running_loop = None
+
+                if running_loop is self._loop:
+                    print(
+                        "desktop-notifier sync API cannot confirm delivery from "
+                        "its running event-loop thread"
+                    )
+                    return False
+
+                future = asyncio.run_coroutine_threadsafe(
                     self._notifier.send(
                         title=title,
                         message=body,
@@ -202,10 +220,14 @@ class NotificationManager:
                         reply_field=reply_field_object,
                         on_clicked=on_clicked,
                     ),
-                    self._loop
+                    self._loop,
                 )
+                try:
+                    future.result(timeout=_DELIVERY_CONFIRMATION_TIMEOUT_SECONDS)
+                except Exception:
+                    future.cancel()
+                    raise
             else:
-                # Run in the event loop
                 self._loop.run_until_complete(
                     self._notifier.send(
                         title=title,

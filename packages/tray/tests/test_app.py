@@ -12,9 +12,10 @@ def _make_test_app():
     """Build an app without platform or tray side effects."""
     from openadapt_tray.app import TrayApplication
 
-    with patch("openadapt_tray.app.get_platform_handler") as platform, patch(
-        "openadapt_tray.app.pystray"
-    ) as pystray:
+    with (
+        patch("openadapt_tray.app.get_platform_handler") as platform,
+        patch("openadapt_tray.app.pystray") as pystray,
+    ):
         platform.return_value = MagicMock()
         pystray.Icon.return_value = MagicMock()
         return TrayApplication(config=TrayConfig())
@@ -225,6 +226,34 @@ class TestStateNotifications:
 
         mock_show.assert_not_called()
 
+    def test_failed_notification_is_retried(self):
+        app = _make_test_app()
+        with patch.object(app.notifications, "show", return_value=False) as show:
+            app.state.transition(TrayState.RECORDING, current_capture="test")
+            app._show_state_notification(app.state.current)
+
+        assert show.call_count == 2
+        assert app._last_notified_tray_state == TrayState.IDLE
+
+    def test_delivered_notification_is_not_repeated(self):
+        app = _make_test_app()
+        with patch.object(app.notifications, "show", return_value=True) as show:
+            app.state.transition(TrayState.RECORDING, current_capture="test")
+            app._show_state_notification(app.state.current)
+
+        show.assert_called_once()
+        assert app._last_notified_tray_state == TrayState.RECORDING
+
+    def test_unmessaged_transition_resets_notification_deduplication(self):
+        app = _make_test_app()
+        with patch.object(app.notifications, "show", return_value=False) as show:
+            app.state.transition(TrayState.RECORDING, current_capture="test")
+            app.state.transition(TrayState.RECORDING_STOPPING)
+            app.state.transition(TrayState.IDLE)
+
+        assert show.call_count == 2
+        assert show.call_args.args[0] == "Recording Stopped"
+
 
 class TestQuit:
     """Tests for application quit functionality."""
@@ -328,7 +357,7 @@ class TestUnreadableConfigIsReported:
 
 
 class TestStartRecordingWhenNoDialogCanBeShown:
-    """"The prompt never appeared" used to be indistinguishable from "cancelled"."""
+    """ "The prompt never appeared" used to be indistinguishable from "cancelled"."""
 
     def _app(self, mock_platform, mock_pystray):
         from openadapt_tray.app import TrayApplication
@@ -389,9 +418,7 @@ class TestNeedsAttentionClickReportsDeadEnds:
 
     @patch("openadapt_tray.app.pystray")
     @patch("openadapt_tray.app.get_platform_handler")
-    def test_click_that_opened_something_stays_quiet(
-        self, mock_platform, mock_pystray
-    ):
+    def test_click_that_opened_something_stays_quiet(self, mock_platform, mock_pystray):
         from openadapt_tray.app import TrayApplication
 
         mock_platform.return_value = MagicMock()

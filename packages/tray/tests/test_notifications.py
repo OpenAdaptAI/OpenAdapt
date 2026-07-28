@@ -63,3 +63,63 @@ class TestShowLinux:
             assert manager._show_linux("t", "b", None) is True
             run.return_value = subprocess.CompletedProcess([], 1, b"", b"")
             assert manager._show_linux("t", "b", None) is False
+
+
+class TestDesktopNotifierDelivery:
+    def _manager(self):
+        manager = _manager()
+        manager._notifier = MagicMock()
+        manager._notifier.send.return_value = MagicMock()
+        manager._loop = MagicMock()
+        manager._loop.is_running.return_value = True
+        return manager
+
+    @patch("openadapt_tray.notifications.asyncio.run_coroutine_threadsafe")
+    @patch("openadapt_tray.notifications.asyncio.get_running_loop")
+    @patch("openadapt_tray.notifications.Urgency", create=True)
+    def test_running_loop_backend_failure_is_not_delivery(
+        self, _urgency, get_running_loop, run_coroutine_threadsafe
+    ):
+        manager = self._manager()
+        get_running_loop.side_effect = RuntimeError("no loop in caller thread")
+        future = run_coroutine_threadsafe.return_value
+        future.result.side_effect = RuntimeError("notification daemon rejected request")
+
+        assert (
+            manager._show_desktop_notifier("t", "b", None, None, "normal", None, None)
+            is False
+        )
+
+        future.cancel.assert_called_once()
+
+    @patch("openadapt_tray.notifications.asyncio.run_coroutine_threadsafe")
+    @patch("openadapt_tray.notifications.asyncio.get_running_loop")
+    @patch("openadapt_tray.notifications.Urgency", create=True)
+    def test_running_loop_waits_for_backend_confirmation(
+        self, _urgency, get_running_loop, run_coroutine_threadsafe
+    ):
+        manager = self._manager()
+        get_running_loop.side_effect = RuntimeError("no loop in caller thread")
+
+        assert (
+            manager._show_desktop_notifier("t", "b", None, None, "normal", None, None)
+            is True
+        )
+
+        run_coroutine_threadsafe.return_value.result.assert_called_once_with(timeout=5)
+
+    @patch("openadapt_tray.notifications.asyncio.run_coroutine_threadsafe")
+    @patch("openadapt_tray.notifications.asyncio.get_running_loop")
+    @patch("openadapt_tray.notifications.Urgency", create=True)
+    def test_sync_api_refuses_unconfirmed_delivery_on_its_event_loop(
+        self, _urgency, get_running_loop, run_coroutine_threadsafe
+    ):
+        manager = self._manager()
+        get_running_loop.return_value = manager._loop
+
+        assert (
+            manager._show_desktop_notifier("t", "b", None, None, "normal", None, None)
+            is False
+        )
+
+        run_coroutine_threadsafe.assert_not_called()
