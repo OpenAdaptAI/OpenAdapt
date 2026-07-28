@@ -17,6 +17,12 @@ Scrubbed copy format (Section 5.4):
         review_status.json     User approvals/rejections
 
 The scrub_manifest.json enables the review UI to show exactly what changed.
+
+Scrubbing is fail-closed, like every other gate in this engine. When the
+requested level cannot actually run, the scrubber raises
+:class:`ScrubbingUnavailableError` rather than copying the input through and
+reporting zero redactions. An empty redaction list means the scrubber ran and
+found nothing; it never means the scrubber was absent.
 """
 
 from __future__ import annotations
@@ -47,6 +53,37 @@ class ScrubLevel(enum.Enum):
     ENHANCED = "enhanced"
 
 
+# A probe string carrying one entity every Presidio configuration recognises.
+# Scrubbing it proves the recognizer pipeline actually loads, which importing
+# the provider class does NOT: `openadapt_privacy.providers.presidio` imports
+# fine without Presidio/spaCy installed and only fails when asked to work.
+_PROVIDER_PROBE_TEXT = "Contact probe@example.com"
+
+
+class ScrubbingUnavailableError(RuntimeError):
+    """The requested scrub level could not be applied on this machine.
+
+    Raised instead of copying the input through unredacted and returning an
+    empty redaction list. "The scrubber ran and found no PII" and "the
+    scrubber could not run" must never be the same observable result: the
+    first clears a capture for review and egress, the second must not.
+
+    A capture whose scrub raises this never reaches ``SCRUBBED``, so it stays
+    blocked from every outbound path by the review state machine.
+    """
+
+    def __init__(self, level: ScrubLevel, cause: BaseException) -> None:
+        super().__init__(
+            f"{level.value} scrubbing is unavailable on this machine "
+            f"({type(cause).__name__}: {cause}). Nothing was scrubbed and no "
+            "scrubbed copy was produced. Install the openadapt-privacy "
+            "Presidio extras, or re-run at the 'basic' level and accept that "
+            "screenshots are copied without image redaction."
+        )
+        self.level = level
+        self.cause = cause
+
+
 class Scrubber:
     """Orchestrates PII scrubbing of capture sessions.
 
@@ -74,9 +111,17 @@ class Scrubber:
 
         Raises:
             FileNotFoundError: If the capture directory does not exist.
+            ScrubbingUnavailableError: If the requested level needs Presidio
+                and Presidio cannot run here. Raised BEFORE anything is
+                written, so a failed scrub never leaves a partial
+                ``.scrubbed/`` directory that reads as a completed one.
         """
         if not capture_path.exists():
             raise FileNotFoundError(f"Capture directory not found: {capture_path}")
+
+        # Preflight: prove the provider works before creating any output.
+        if self.level != ScrubLevel.BASIC:
+            self._require_provider()
 
         scrubbed_path = capture_path.parent / (capture_path.name + ".scrubbed")
         scrubbed_path.mkdir(parents=True, exist_ok=True)
@@ -127,6 +172,30 @@ class Scrubber:
 
         return scrubbed_path
 
+    def _require_provider(self):  # noqa: ANN202 - provider type is optional dep
+        """Return a Presidio provider PROVEN able to run, or refuse.
+
+        Importing the provider is not evidence that it works: the module
+        imports cleanly without Presidio/spaCy and only raises when asked to
+        scrub. So construct it and scrub a probe string before trusting it.
+
+        Raises:
+            ScrubbingUnavailableError: If the provider cannot be imported,
+                constructed, or exercised.
+        """
+        if self._provider is None:
+            try:
+                from openadapt_privacy.providers.presidio import (
+                    PresidioScrubbingProvider,
+                )
+
+                provider = PresidioScrubbingProvider()
+                provider.scrub_text(_PROVIDER_PROBE_TEXT)
+            except Exception as exc:
+                raise ScrubbingUnavailableError(self.level, exc) from exc
+            self._provider = provider
+        return self._provider
+
     def scrub_text(self, text: str) -> tuple[str, list[dict]]:
         """Scrub PII from a text string.
 
@@ -135,6 +204,10 @@ class Scrubber:
 
         Returns:
             Tuple of (scrubbed text, list of redaction records).
+
+        Raises:
+            ScrubbingUnavailableError: At standard/enhanced level, when
+                Presidio cannot run here.
         """
         if self.level == ScrubLevel.BASIC:
             return self._scrub_text_regex(text)
@@ -150,28 +223,30 @@ class Scrubber:
 
         Returns:
             List of redacted region records.
+
+        Raises:
+            ScrubbingUnavailableError: At standard/enhanced level, when image
+                redaction could not run. ``output_path`` is left absent: an
+                unredacted screenshot must never appear inside a ``.scrubbed/``
+                directory, and an empty redaction list must only ever mean
+                "redaction ran and changed nothing".
         """
         if self.level == ScrubLevel.BASIC:
-            # Basic level: no image scrubbing, just copy
+            # Basic level: no image scrubbing, just copy. Declared by the
+            # level the caller chose and recorded in the scrub manifest.
             shutil.copy2(image_path, output_path)
             return []
 
-        # Standard/Enhanced: try openadapt-privacy
+        provider = self._require_provider()
         try:
-            from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
-
-            if self._provider is None:
-                self._provider = PresidioScrubbingProvider()
-
             from PIL import Image
+
             img = Image.open(image_path)
-            scrubbed_img = self._provider.scrub_image(img)
+            scrubbed_img = provider.scrub_image(img)
             scrubbed_img.save(output_path)
-            return [{"type": "image_scrub", "path": str(output_path)}]
-        except ImportError:
-            # Fallback: copy without scrubbing
-            shutil.copy2(image_path, output_path)
-            return []
+        except Exception as exc:
+            raise ScrubbingUnavailableError(self.level, exc) from exc
+        return [{"type": "image_scrub", "path": str(output_path)}]
 
     def _scrub_text_regex(self, text: str) -> tuple[str, list[dict]]:
         """Scrub PII using regex patterns only (basic level).
@@ -212,23 +287,24 @@ class Scrubber:
 
         Returns:
             Tuple of (scrubbed text, list of redaction records).
+
+        Raises:
+            ScrubbingUnavailableError: If Presidio cannot run here. It does
+                NOT silently fall back to the regex pass: the manifest records
+                the level the caller asked for, so a regex result labelled
+                ``enhanced`` would overstate what was checked.
         """
+        provider = self._require_provider()
         try:
-            from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
-
-            if self._provider is None:
-                self._provider = PresidioScrubbingProvider()
-
-            scrubbed = self._provider.scrub_text(text)
-            # Build redaction records by diffing original vs scrubbed
-            redactions: list[dict] = []
-            if scrubbed != text:
-                redactions.append({
-                    "entity": "PRESIDIO_DETECTED",
-                    "original_length": len(text),
-                    "scrubbed_length": len(scrubbed),
-                })
-            return scrubbed, redactions
-        except ImportError:
-            # Fallback to regex if presidio not available
-            return self._scrub_text_regex(text)
+            scrubbed = provider.scrub_text(text)
+        except Exception as exc:
+            raise ScrubbingUnavailableError(self.level, exc) from exc
+        # Build redaction records by diffing original vs scrubbed
+        redactions: list[dict] = []
+        if scrubbed != text:
+            redactions.append({
+                "entity": "PRESIDIO_DETECTED",
+                "original_length": len(text),
+                "scrubbed_length": len(scrubbed),
+            })
+        return scrubbed, redactions

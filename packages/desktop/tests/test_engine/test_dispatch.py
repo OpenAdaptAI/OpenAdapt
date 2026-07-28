@@ -1415,3 +1415,38 @@ class TestMisc:
             "get_pending_reviews",
         }
         assert expected.issubset(set(disp.commands))
+
+
+class TestScrubCaptureRefusal:
+    """A scrub that could not run must not advance the egress gate."""
+
+    def test_unavailable_scrubber_reports_failure_and_holds_state(
+        self, deps, tmp_path: Path, monkeypatch,
+    ) -> None:
+        """Missing Presidio -> ok False, capture stays CAPTURED, no scrubbed copy.
+
+        Before this was fixed the scrubber copied every screenshot through
+        unredacted, reported zero redactions, and the capture advanced to
+        SCRUBBED -- one operator approval away from leaving the machine.
+        """
+        import sys
+
+        disp, db, _events = deps
+        capture_dir = tmp_path / "cap-enhanced"
+        (capture_dir / "screenshots").mkdir(parents=True)
+        from PIL import Image
+
+        Image.new("RGB", (8, 8), "white").save(capture_dir / "screenshots" / "0001.png")
+        db.insert_capture("capE", str(capture_dir), "2026-07-27T09:00:00Z")
+
+        # The shipped default: openadapt-privacy is installed, Presidio is not.
+        monkeypatch.setitem(sys.modules, "openadapt_privacy.providers.presidio", None)
+
+        result = disp.dispatch("scrub_capture", {"capture_id": "capE", "level": "enhanced"})
+
+        assert result["ok"] is False
+        assert "unavailable" in result["error"]
+        assert "scrubbed_path" not in result
+        row = db.get_capture("capE")
+        assert row["review_status"] == "captured"
+        assert not row["scrubbed_path"]

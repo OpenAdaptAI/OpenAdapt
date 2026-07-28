@@ -2,11 +2,128 @@
 
 from __future__ import annotations
 
+import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
 
-from engine.scrubber import Scrubber, ScrubLevel
+from engine.scrubber import Scrubber, ScrubbingUnavailableError, ScrubLevel
+
+_PRESIDIO_MODULE = "openadapt_privacy.providers.presidio"
+
+
+def _png(path: Path) -> Path:
+    """Write the smallest valid PNG PIL will open."""
+    from PIL import Image
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (8, 8), "white").save(path)
+    return path
+
+
+def _capture_with_screenshot(root: Path) -> Path:
+    """A capture directory holding one screenshot."""
+    capture = root / "2026-07-27_09-00-00_pii"
+    (capture / "screenshots").mkdir(parents=True)
+    _png(capture / "screenshots" / "0001.png")
+    (capture / "meta.json").write_text(json.dumps({"task_description": "a@b.com"}))
+    return capture
+
+
+def _break_presidio(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the Presidio provider unimportable, as on a stock install.
+
+    ``openadapt-privacy`` is a hard dependency but Presidio and spaCy are not,
+    so this is the shipped default rather than an exotic environment.
+    """
+    monkeypatch.setitem(sys.modules, _PRESIDIO_MODULE, None)
+
+
+def _presidio_that_cannot_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provider that imports and constructs but fails when asked to work.
+
+    This is the real observed shape: the module imports without spaCy and only
+    raises ``ModuleNotFoundError`` (an ``ImportError``) from ``scrub_*``.
+    """
+
+    class _Provider:
+        def scrub_text(self, text: str) -> str:
+            raise ModuleNotFoundError("No module named 'spacy'")
+
+        def scrub_image(self, image: object) -> object:
+            raise ModuleNotFoundError("No module named 'spacy'")
+
+    module = types.ModuleType(_PRESIDIO_MODULE)
+    module.PresidioScrubbingProvider = _Provider  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, _PRESIDIO_MODULE, module)
+
+
+class TestScrubUnavailableIsNotCleanResult:
+    """"Could not scrub" must never look like "scrubbed and found nothing"."""
+
+    @pytest.mark.parametrize("level", [ScrubLevel.STANDARD, ScrubLevel.ENHANCED])
+    def test_scrub_image_refuses_and_writes_no_output(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, level: ScrubLevel,
+    ) -> None:
+        """No provider -> refuse, and leave no unredacted file behind."""
+        _break_presidio(monkeypatch)
+        source = _png(tmp_path / "in" / "shot.png")
+        output = tmp_path / "out" / "shot.png"
+        output.parent.mkdir()
+
+        with pytest.raises(ScrubbingUnavailableError):
+            Scrubber(level=level).scrub_image(source, output)
+
+        assert not output.exists(), (
+            "an unredacted screenshot was copied into the scrubbed output"
+        )
+
+    def test_scrub_image_refuses_when_provider_cannot_run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Importable-but-broken Presidio refuses too, not just a missing one."""
+        _presidio_that_cannot_run(monkeypatch)
+        source = _png(tmp_path / "in" / "shot.png")
+        output = tmp_path / "out" / "shot.png"
+        output.parent.mkdir()
+
+        with pytest.raises(ScrubbingUnavailableError):
+            Scrubber(level=ScrubLevel.ENHANCED).scrub_image(source, output)
+
+        assert not output.exists()
+
+    def test_scrub_capture_refuses_before_writing_anything(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A refused scrub leaves no directory that reads as a completed one."""
+        _break_presidio(monkeypatch)
+        capture = _capture_with_screenshot(tmp_path)
+
+        with pytest.raises(ScrubbingUnavailableError):
+            Scrubber(level=ScrubLevel.ENHANCED).scrub_capture(capture)
+
+        scrubbed = capture.parent / (capture.name + ".scrubbed")
+        assert not (scrubbed / "scrub_manifest.json").exists(), (
+            "a manifest reporting zero redactions was written for a scrub "
+            "that never ran"
+        )
+        assert not (scrubbed / "review_status.json").exists()
+        assert not (scrubbed / "screenshots" / "0001.png").exists()
+
+    def test_scrub_text_does_not_silently_downgrade_to_regex(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Enhanced text scrubbing refuses rather than returning regex output.
+
+        A regex result labelled ``enhanced`` in the manifest overstates what
+        was checked: it never looked for names, locations, or dates.
+        """
+        _break_presidio(monkeypatch)
+
+        with pytest.raises(ScrubbingUnavailableError):
+            Scrubber(level=ScrubLevel.ENHANCED).scrub_text("Jane Doe, a@b.com")
 
 
 class TestScrubber:

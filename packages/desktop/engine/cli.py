@@ -157,7 +157,7 @@ def cmd_info(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
 def cmd_scrub(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """Scrub PII from a capture."""
     from engine.review import ReviewStatus, transition_status
-    from engine.scrubber import Scrubber, ScrubLevel
+    from engine.scrubber import Scrubber, ScrubbingUnavailableError, ScrubLevel
 
     cap = engine.db.get_capture(args.capture_id)
     if not cap:
@@ -165,7 +165,13 @@ def cmd_scrub(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
         sys.exit(1)
 
     scrubber = Scrubber(level=ScrubLevel(args.level))
-    scrubbed_path = scrubber.scrub_capture(Path(cap["capture_path"]))
+    try:
+        scrubbed_path = scrubber.scrub_capture(Path(cap["capture_path"]))
+    except ScrubbingUnavailableError as exc:
+        # Exit non-zero and leave the capture in CAPTURED: an operator script
+        # must not read "scrubbed" from a scrub that never happened.
+        print(f"Scrub refused: {exc}")
+        sys.exit(1)
 
     transition_status(
         args.capture_id,

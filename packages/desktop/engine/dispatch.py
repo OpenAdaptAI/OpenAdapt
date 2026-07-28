@@ -2299,7 +2299,7 @@ class EngineDispatcher:
     def scrub_capture(self, **params: Any) -> dict:
         """Scrub PII from a capture and advance its review state."""
         from engine.review import ReviewStatus, transition_status
-        from engine.scrubber import Scrubber, ScrubLevel
+        from engine.scrubber import Scrubber, ScrubbingUnavailableError, ScrubLevel
 
         capture_id = params.get("capture_id")
         capture = capture_id and self.services.db.get_capture(capture_id)
@@ -2308,7 +2308,16 @@ class EngineDispatcher:
         capture_id = str(capture_id)
         level = params.get("level", "basic")
         scrubber = Scrubber(level=ScrubLevel(level))
-        scrubbed = scrubber.scrub_capture(Path(capture["capture_path"]))
+        try:
+            scrubbed = scrubber.scrub_capture(Path(capture["capture_path"]))
+        except ScrubbingUnavailableError as exc:
+            # The scrub could not run. The capture stays CAPTURED, which the
+            # review state machine already blocks from every egress path.
+            logger.warning("scrub_capture refused for {c}: {e}", c=capture_id, e=exc)
+            self.services.audit.log(
+                "scrub_refused", capture_id=capture_id, level=level, reason=str(exc)
+            )
+            return {"ok": False, "error": str(exc)}
         transition_status(
             capture_id,
             ReviewStatus.CAPTURED,
