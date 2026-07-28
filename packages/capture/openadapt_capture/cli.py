@@ -101,7 +101,9 @@ def record(
         send_profile=send_profile,
         window=window,
     ) as recorder:
-        recorder.wait_for_ready()
+        if not recorder.wait_for_ready():
+            print("Recording did not become ready. No successful capture was saved.")
+            raise SystemExit(1)
         try:
             while recorder.is_recording:
                 time.sleep(1)
