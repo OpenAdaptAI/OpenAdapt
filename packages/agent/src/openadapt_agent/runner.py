@@ -8,7 +8,8 @@ encryption, integrity pinning) apply exactly as they would from a terminal.
 
 Exit-code contract of ``openadapt-flow run``:
 
-- ``0``  — run executed and every step verified: **success**.
+- ``0``  — run reached a normal terminal state. The persisted
+  ``execution_outcome`` decides whether the result is verified.
 - ``1``  — run executed and stopped: **halt** (evidence in the run
   directory's ``report.json`` / ``REPORT.md``, including the structured
   ``halt`` observation when present).
@@ -38,10 +39,22 @@ __all__ = [
     "RunOutcome",
     "RunnerConfig",
     "classify_outcome",
+    "classify_report_status",
     "default_flow_cli",
     "is_safe_run_id",
+    "public_outcome_message",
     "public_report_summary",
 ]
+
+_PRECISE_EXECUTION_OUTCOMES = frozenset(
+    {
+        "VERIFIED",
+        "COMPLETED_UNVERIFIED",
+        "HALTED",
+        "FAILED",
+        "ROLLED_BACK",
+    }
+)
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _TAIL_CHARS = 4000
@@ -62,6 +75,21 @@ _PUBLIC_MESSAGES = {
         "protected local logs and run evidence."
     ),
 }
+
+
+def public_outcome_message(status: str, execution_outcome: Optional[str]) -> str:
+    """Return fixed public copy for one classified terminal result."""
+    if status == "halt" and execution_outcome == "COMPLETED_UNVERIFIED":
+        return (
+            "The run completed, but its persisted evidence did not prove "
+            "verified success. Review it locally before any retry."
+        )
+    if status == "halt" and execution_outcome == "ROLLED_BACK":
+        return (
+            "The configured compensating action completed. Review the local "
+            "evidence before further action."
+        )
+    return _PUBLIC_MESSAGES.get(status, _PUBLIC_MESSAGES["error"])
 
 
 def default_flow_cli() -> tuple[str, ...]:
@@ -105,6 +133,7 @@ class RunOutcome:
     summary: dict = field(default_factory=dict)
     stdout_tail: str = ""
     stderr_tail: str = ""
+    execution_outcome: Optional[str] = None
 
     def to_dict(self, *, include_protected: bool = False) -> dict:
         """Project an MCP-safe result; raw local evidence is explicit opt-in."""
@@ -114,12 +143,11 @@ class RunOutcome:
             "success": self.status == "success",
             "workflow_id": self.workflow,
             "run_id": self.run_id,
-            "message": _PUBLIC_MESSAGES.get(
-                self.status,
-                _PUBLIC_MESSAGES["error"],
-            ),
+            "message": public_outcome_message(self.status, self.execution_outcome),
             "summary": _sanitize_public_summary(self.summary),
         }
+        if self.execution_outcome is not None:
+            result["execution_outcome"] = self.execution_outcome
         if include_protected:
             result["protected"] = {
                 "workflow": self.workflow,
@@ -159,8 +187,10 @@ def _sanitize_public_summary(values: dict) -> dict:
     return summary
 
 
-def public_report_summary(report: dict) -> dict:
+def public_report_summary(report: object) -> dict:
     """Return count/boolean metrics only; never report labels or text."""
+    if not isinstance(report, dict):
+        return {}
     results = report.get("results")
     results = results if isinstance(results, list) else []
     summary: dict[str, int | float | bool] = {
@@ -185,14 +215,19 @@ def public_report_summary(report: dict) -> dict:
     return _sanitize_public_summary(summary)
 
 
-def _report_summary(report: dict) -> dict:
+def _report_summary(report: object) -> dict:
     return {
         **public_report_summary(report),
     }
 
 
 def _failing_step(report: dict) -> Optional[dict]:
-    for result in report.get("results") or []:
+    results = report.get("results")
+    if not isinstance(results, list):
+        return None
+    for result in results:
+        if not isinstance(result, dict):
+            continue
         if not result.get("ok") and not result.get("skipped"):
             return {
                 "step_id": result.get("step_id"),
@@ -203,10 +238,73 @@ def _failing_step(report: dict) -> Optional[dict]:
     return None
 
 
+def classify_report_status(report: object) -> tuple[str, Optional[str]]:
+    """Classify a persisted Flow report without weakening precise outcomes.
+
+    Flow versions before the precise outcome contract exposed only the legacy
+    ``success`` flag. New reports are authoritative through
+    ``execution_outcome``: only ``VERIFIED`` can become agent-facing success.
+    In particular, Demo can intentionally retain ``success=true`` while its
+    precise outcome is ``COMPLETED_UNVERIFIED``.
+    """
+
+    if not isinstance(report, dict):
+        return "error", None
+
+    precise = report.get("execution_outcome")
+    if precise is None:
+        success = report.get("success")
+        if success is True:
+            return "success", None
+        if success is False:
+            return "halt", None
+        return "error", None
+    if not isinstance(precise, str) or precise not in _PRECISE_EXECUTION_OUTCOMES:
+        return "error", None
+
+    success = report.get("success")
+    if not isinstance(success, bool):
+        return "error", precise
+
+    profile = report.get("execution_profile")
+    if profile is not None and profile not in {"demo", "standard", "regulated"}:
+        return "error", precise
+
+    production_eligible = report.get("production_eligible")
+    if production_eligible is not None and not isinstance(production_eligible, bool):
+        return "error", precise
+    if production_eligible is True and (
+        precise != "VERIFIED" or profile not in {"standard", "regulated"}
+    ):
+        return "error", precise
+
+    envelope = report.get("outcome_envelope")
+    if envelope is not None:
+        if not isinstance(envelope, dict) or envelope.get("outcome") != precise:
+            return "error", precise
+        for report_key, envelope_key in (
+            ("execution_profile", "profile"),
+            ("production_eligible", "production_eligible"),
+            ("execution_completed", "execution_completed"),
+            ("model_calls", "model_calls"),
+            ("external_network_calls", "external_network_calls"),
+        ):
+            if report_key in report and envelope.get(envelope_key) != report.get(report_key):
+                return "error", precise
+
+    if precise == "VERIFIED":
+        return ("success" if success is True else "error"), precise
+    if precise in {"HALTED", "FAILED", "ROLLED_BACK"} and success is True:
+        return "error", precise
+    if precise == "FAILED":
+        return "error", precise
+    return "halt", precise
+
+
 def classify_outcome(
     workflow: str,
     exit_code: int,
-    report: Optional[dict],
+    report: object | None,
     *,
     run_id: Optional[str] = None,
     run_dir: Optional[str] = None,
@@ -218,8 +316,10 @@ def classify_outcome(
 
     Pure function (no I/O) so the mapping is unit-testable. The invariant:
     ``status == "success"`` requires BOTH exit code 0 AND a persisted
-    report whose ``success`` flag is true — anything else surfaces as a
-    halt, refusal, or error while protected evidence remains local.
+    report that has a verified terminal outcome. Legacy reports require a true
+    ``success`` flag. Precise reports require ``execution_outcome=VERIFIED``
+    and a consistent true legacy flag. Anything else surfaces as a halt,
+    refusal, or error while protected evidence remains local.
     """
     outcome = RunOutcome(
         status="error",
@@ -251,24 +351,44 @@ def classify_outcome(
                 "evidence."
             )
             return outcome
-        if report.get("success") is True:
+        report_status, precise_outcome = classify_report_status(report)
+        outcome.execution_outcome = precise_outcome
+        if report_status == "success":
             outcome.status = "success"
             outcome.summary = _report_summary(report)
             outcome.detail = "Run completed; every executed step verified."
             return outcome
-        # Exit 0 with a non-success report: trust the report, not the code.
-        outcome.status = "halt"
+        # Exit 0 with a non-success report: trust the report, not the code. A
+        # Demo completion can carry the legacy success flag while its precise
+        # evidence outcome is explicitly COMPLETED_UNVERIFIED.
+        outcome.status = report_status
         outcome.summary = _report_summary(report)
-        outcome.halt = report.get("halt")
-        outcome.detail = (
-            "Process exited 0 but the persisted run report does not mark the "
-            "run successful; treating as a halt (never fabricating success)."
-        )
+        outcome.halt = report.get("halt") if isinstance(report, dict) else None
+        if precise_outcome == "COMPLETED_UNVERIFIED":
+            outcome.detail = (
+                "Execution completed, but the persisted evidence did not prove "
+                "VERIFIED success; review the local run before any retry."
+            )
+        elif report_status == "error":
+            outcome.detail = (
+                "Process exited 0, but the persisted report has no consistent "
+                "verified terminal outcome."
+            )
+        else:
+            outcome.detail = (
+                "Process exited 0 but the persisted run report does not mark the "
+                "run as VERIFIED; treating it as a halt."
+            )
         return outcome
 
     # Any other nonzero exit (canonically 1): the run executed and stopped.
-    outcome.status = "halt"
     if report is not None:
+        report_status, precise_outcome = classify_report_status(report)
+        outcome.execution_outcome = precise_outcome
+        outcome.status = "error" if report_status in {"success", "error"} else "halt"
+    else:
+        outcome.status = "halt"
+    if isinstance(report, dict):
         outcome.summary = _report_summary(report)
         outcome.halt = report.get("halt")
         failing = _failing_step(report)

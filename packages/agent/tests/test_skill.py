@@ -41,7 +41,7 @@ def test_appendix_names_the_mcp_tool_and_params(bundle_dir, tmp_path):
     assert "every declared parameter is required" in text
     assert "Follow-up in 2 weeks" not in text.split("## Invoking via MCP", 1)[1]
     # Honesty requirements: halt is never success; refusal executes nothing.
-    assert "NOT a success" in text
+    assert "None is a verified success" in text
     assert "NOTHING was executed" in text
     assert "continue_attention" in text
     assert "never performs that completed action again" in text

@@ -8,7 +8,12 @@ import pytest
 from conftest import FlowCliStub
 
 import openadapt_agent.runner as runner_mod
-from openadapt_agent.runner import FlowRunner, RunnerConfig, classify_outcome
+from openadapt_agent.runner import (
+    FlowRunner,
+    RunnerConfig,
+    classify_outcome,
+    classify_report_status,
+)
 from openadapt_agent.runner import RunOutcome
 
 
@@ -57,6 +62,137 @@ def test_exit_zero_with_failed_report_is_never_success(
     outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
     assert outcome.status == "halt"
     assert outcome.to_dict()["success"] is False
+
+
+def test_demo_completed_unverified_is_never_agent_success(
+    monkeypatch, runner_config, bundle_dir, success_report
+):
+    success_report.update(
+        {
+            "execution_profile": "demo",
+            "execution_outcome": "COMPLETED_UNVERIFIED",
+            "production_eligible": False,
+        }
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+
+    assert outcome.status == "halt"
+    assert outcome.execution_outcome == "COMPLETED_UNVERIFIED"
+    assert outcome.to_dict()["success"] is False
+    assert outcome.to_dict()["execution_outcome"] == "COMPLETED_UNVERIFIED"
+    assert "completed" in outcome.to_dict()["message"]
+    assert "stopped safely" not in outcome.to_dict()["message"]
+    assert "did not prove VERIFIED success" in outcome.detail
+
+
+def test_precise_verified_requires_consistent_legacy_success(
+    monkeypatch, runner_config, bundle_dir, success_report
+):
+    success_report.update(
+        {
+            "success": False,
+            "execution_profile": "standard",
+            "execution_outcome": "VERIFIED",
+            "production_eligible": True,
+        }
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+
+    assert outcome.status == "error"
+    assert outcome.to_dict()["success"] is False
+
+
+def test_precise_failed_report_maps_to_error_even_on_exit_zero(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    halt_report["execution_outcome"] = "FAILED"
+    stub = FlowCliStub(exit_code=0, report=halt_report)
+
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+
+    assert outcome.status == "error"
+    assert outcome.execution_outcome == "FAILED"
+    assert outcome.to_dict()["success"] is False
+
+
+def test_legacy_report_without_boolean_success_is_error():
+    outcome = classify_outcome("w", 0, {"results": []})
+
+    assert outcome.status == "error"
+    assert outcome.to_dict()["success"] is False
+
+
+def test_non_object_report_fails_closed_without_an_exception():
+    outcome = classify_outcome("w", 0, ["not", "a", "report"])
+
+    assert outcome.status == "error"
+    assert outcome.execution_outcome is None
+    assert outcome.to_dict()["success"] is False
+
+
+@pytest.mark.parametrize(
+    ("report", "expected_outcome"),
+    [
+        ({"success": True, "execution_outcome": "HALTED"}, "HALTED"),
+        ({"success": True, "execution_outcome": "FAILED"}, "FAILED"),
+        ({"success": True, "execution_outcome": "ROLLED_BACK"}, "ROLLED_BACK"),
+        ({"success": "yes", "execution_outcome": "VERIFIED"}, "VERIFIED"),
+        (
+            {
+                "success": True,
+                "execution_outcome": "VERIFIED",
+                "execution_profile": "standard",
+                "production_eligible": True,
+                "outcome_envelope": {
+                    "outcome": "HALTED",
+                    "profile": "standard",
+                    "production_eligible": True,
+                },
+            },
+            "VERIFIED",
+        ),
+    ],
+)
+def test_inconsistent_precise_report_is_visible_error(report, expected_outcome):
+    status, outcome = classify_report_status(report)
+
+    assert status == "error"
+    assert outcome == expected_outcome
+
+
+def test_precise_completed_unverified_accepts_demo_and_production_shapes():
+    demo = {
+        "success": True,
+        "execution_profile": "demo",
+        "execution_outcome": "COMPLETED_UNVERIFIED",
+        "production_eligible": False,
+    }
+    standard = {
+        "success": False,
+        "execution_profile": "standard",
+        "execution_outcome": "COMPLETED_UNVERIFIED",
+        "production_eligible": False,
+    }
+
+    assert classify_report_status(demo) == ("halt", "COMPLETED_UNVERIFIED")
+    assert classify_report_status(standard) == ("halt", "COMPLETED_UNVERIFIED")
+
+
+def test_inconsistent_precise_outcome_uses_the_public_error_message():
+    outcome = RunOutcome(
+        status="error",
+        workflow="workflow_" + "a" * 24,
+        execution_outcome="COMPLETED_UNVERIFIED",
+    )
+
+    public = outcome.to_dict()
+    assert public["success"] is False
+    assert "trustworthy terminal result" in public["message"]
+    assert "completed" not in public["message"]
 
 
 def test_exit_zero_without_report_is_error(monkeypatch, runner_config, bundle_dir):

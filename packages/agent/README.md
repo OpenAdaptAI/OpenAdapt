@@ -184,8 +184,8 @@ Every `run_workflow_<opaque-id>` call returns one of these outcomes:
 
 | `status` | Meaning |
 | --- | --- |
-| `success` | The process exited successfully and the persisted report confirms the workflow completed and verified. |
-| `halt` | Execution stopped instead of guessing. The workflow is not complete; protected evidence remains local. |
+| `success` | The process exited successfully and the persisted report records `execution_outcome: VERIFIED`. Legacy reports must record `success: true`. |
+| `halt` | Execution halted, completed without sufficient verification, or completed a rollback. It is not a verified success; protected evidence remains local. |
 | `refused` | A governed admission gate refused the bundle before execution. Nothing ran. |
 | `timeout` | The process exceeded its deadline. The target may be partially executed and must be inspected before retrying. |
 | `error` | The CLI, report, or other execution infrastructure was inconsistent. |

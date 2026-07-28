@@ -148,7 +148,74 @@ def test_run_success_and_report_roundtrip_are_phi_safe(
     assert fetched["summary"]["steps_ok"] == 2
     assert "protected" not in fetched
     assert secret not in json.dumps(fetched)
+
+
+def test_get_run_report_never_turns_demo_completion_into_verified_success(
+    bundles_root,
+    runner_config,
+    success_report,
+):
+    run_id = "run-" + "a" * 24
+    run_dir = runner_config.runs_dir / run_id
+    run_dir.mkdir(parents=True)
+    success_report.update(
+        {
+            "execution_profile": "demo",
+            "execution_outcome": "COMPLETED_UNVERIFIED",
+            "production_eligible": False,
+        }
+    )
+    (run_dir / "report.json").write_text(json.dumps(success_report))
+    bridge = make_bridge(bundles_root, runner_config)
+
+    fetched = bridge.dispatch("get_run_report", {"run_id": run_id})
+
+    assert fetched["status"] == "halt"
+    assert fetched["success"] is False
+    assert fetched["execution_outcome"] == "COMPLETED_UNVERIFIED"
+    assert "completed" in fetched["message"]
+    assert "did not complete" not in fetched["message"]
     assert str(runner_config.runs_dir) not in json.dumps(fetched)
+
+
+def test_run_and_report_lookup_use_the_same_public_outcome_message(
+    monkeypatch,
+    bundles_root,
+    runner_config,
+    success_report,
+):
+    success_report.update(
+        {
+            "execution_profile": "demo",
+            "execution_outcome": "COMPLETED_UNVERIFIED",
+            "production_eligible": False,
+        }
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    bridge = make_bridge(bundles_root, runner_config, allow_run=True)
+
+    result = bridge.dispatch(run_tool(bridge), {"note": "custom note"})
+    fetched = bridge.dispatch("get_run_report", {"run_id": result["run_id"]})
+
+    assert result["status"] == fetched["status"] == "halt"
+    assert result["success"] is fetched["success"] is False
+    assert result["execution_outcome"] == fetched["execution_outcome"]
+    assert result["message"] == fetched["message"]
+
+
+def test_get_run_report_rejects_non_object_json(
+    bundles_root,
+    runner_config,
+):
+    run_id = "run-" + "c" * 24
+    run_dir = runner_config.runs_dir / run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "report.json").write_text('["not", "a", "report"]')
+    bridge = make_bridge(bundles_root, runner_config)
+
+    with pytest.raises(BridgeError, match="trustworthy terminal structure"):
+        bridge.dispatch("get_run_report", {"run_id": run_id})
 
 
 def test_run_halt_returns_safe_card_not_raw_evidence(

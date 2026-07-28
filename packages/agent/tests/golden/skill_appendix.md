@@ -22,15 +22,16 @@ when the operator started the server with `--allow-run`.
 
 A run has exactly one of these outcomes — report it faithfully:
 
-- **success** — exit code 0 AND `report.json` marks the run successful.
-  Only then may you tell the user the workflow completed.
-- **halt** (exit code 1 / MCP status `halt`) — the run executed and
-  STOPPED at an unhandled state. This is the system working as designed
-  (halt instead of guessing), but it is NOT a success: the workflow's
-  effect did not fully happen. Protected evidence remains in the local
-  OpenAdapt operator experience; default MCP results contain only opaque
-  IDs, fixed messages, and count/boolean metrics. Surface the halt to the
-  user; do not retry blindly and never claim success.
+- **success** — exit code 0 AND a precise `report.json` records
+  `execution_outcome: VERIFIED` with a consistent success flag. A legacy
+  report without the precise field must record `success: true`. Only then may
+  you tell the user the workflow completed.
+- **halt** (MCP status `halt`) — `execution_outcome` says whether the run
+  halted, completed without sufficient verification, or completed a rollback.
+  None is a verified success. Protected evidence remains in the local
+  OpenAdapt operator experience; default MCP results contain only opaque IDs,
+  fixed messages, and count/boolean metrics. Surface the exact outcome to the
+  user; do not infer the business effect or retry blindly.
 - **governed refusal** (exit code 2 / MCP status `refused`, `openadapt-flow
   run` only) — an admission gate refused the bundle before execution;
   NOTHING was executed. The printed coverage report names the failing

@@ -101,10 +101,14 @@ Python environment. The command uses Flow's fail-closed `run` verb, so
 its certification, identity, effects, encryption, integrity, and egress
 gates remain authoritative.
 
-The bridge reports success only when both conditions hold:
+For a precise Flow report, the bridge reports success only when all conditions hold:
 
 1. Flow exits with code 0.
-2. The persisted report has `success: true`.
+2. The persisted report has `execution_outcome: VERIFIED`.
+3. The persisted report has a consistent `success: true` value.
+
+For a legacy report without `execution_outcome`, the bridge preserves the
+compatible rule: exit code 0 plus `success: true`.
 
 Exit 1 is a halt. Exit 2 is a governed refusal before execution. A
 timeout is explicitly uncertain rather than a rollback. Report evidence

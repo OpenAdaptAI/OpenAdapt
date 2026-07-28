@@ -41,7 +41,9 @@ from openadapt_agent.bundles import (
 from openadapt_agent.runner import (
     FlowRunner,
     RunnerConfig,
+    classify_report_status,
     is_safe_run_id,
+    public_outcome_message,
     public_report_summary,
 )
 
@@ -399,26 +401,19 @@ class AgentBridge:
         except (OSError, json.JSONDecodeError) as exc:
             _LOG.exception("protected local report could not be read")
             raise BridgeError("the local report could not be read safely") from exc
-        success = report.get("success")
-        status = "success" if success is True else ("halt" if success is False else "error")
-        messages = {
-            "success": "The persisted local report confirms success.",
-            "halt": (
-                "The persisted local report confirms the run did not complete. "
-                "Review protected evidence in the local operator experience."
-            ),
-            "error": (
-                "The persisted local report has no trustworthy terminal status. Review it locally."
-            ),
-        }
+        if not isinstance(report, dict):
+            raise BridgeError("the local report has no trustworthy terminal structure")
+        status, execution_outcome = classify_report_status(report)
         result = {
             "schema_version": 1,
             "run_id": run_id,
             "status": status,
             "success": status == "success",
-            "message": messages[status],
+            "message": public_outcome_message(status, execution_outcome),
             "summary": public_report_summary(report),
         }
+        if execution_outcome is not None:
+            result["execution_outcome"] = execution_outcome
         if self.allow_protected_export:
             result["protected"] = {
                 "run_dir": str(run_dir),
