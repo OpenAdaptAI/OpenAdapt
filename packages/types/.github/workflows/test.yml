@@ -19,3 +19,7 @@ jobs:
           version: "0.11.29"
       - run: uv sync --locked --extra dev
       - run: uv run pytest
+      - name: Build and verify the public distribution boundary
+        run: |
+          uv build
+          python scripts/check_source_boundary.py --require-dist
