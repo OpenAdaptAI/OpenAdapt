@@ -16,7 +16,7 @@ import zipfile
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path, PurePosixPath
-from typing import cast
+from typing import NamedTuple, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "openadapt-flow"
@@ -40,22 +40,123 @@ AGPL_CONTENT_SIGNATURES = (
 # public-demo evidence, and bounded aggregates remain public. This mirrors the
 # AGPL boundary above: both a path-token check and a content-signature check, so
 # a rename cannot smuggle a private artifact in.
-PRIVATE_DISTRIBUTION_PATH_TOKENS = (
-    "openadapt-corpus",
-    "adversary_corpus",
-    "identity_roc",
-    "grown_corpus",
-    "tuned_adversary",
-    "deployment_corpus",
-    "deployment_thresholds",
-    "effect_oracle_recipe",
-    "held_out_corpus",
-    "oracle_recipe",
-    "pixel_verify_cert",
-    "real_emr",
-    "enterprise_productionized",
-    "control_plane",
-    "paid_agent_evidence",
+#
+# WHERE THESE RULES COME FROM. The source-availability rules below are not
+# written here. They are read from source-policy.public.json, a generated file
+# rendered from the canonical manifest
+# OpenAdaptAI/openadapt-internal:source-policy.yaml. That manifest is private
+# and this guard runs in a public repository, so the publishable subset travels
+# outward as a generated file rather than the guard reaching inward. A job in
+# the private repository re-renders daily and fails while this copy disagrees.
+#
+# FAIL CLOSED. If source-policy.public.json is missing, unparseable, or
+# incomplete, loading raises SourcePolicyError and every entry point in this
+# module stops. A release guard that passes because it found no rules is worse
+# than a hardcoded list, because everyone believes it ran.
+SOURCE_POLICY_PATH = ROOT / "source-policy.public.json"
+SOURCE_POLICY_SCHEMA_VERSION = 1
+
+
+class SourcePolicyError(RuntimeError):
+    """The rendered source-availability policy is missing or unusable."""
+
+
+def _policy_strings(container: dict, key: str, *, where: str) -> list[str]:
+    value = container.get(key)
+    if not isinstance(value, list) or not value:
+        raise SourcePolicyError(f"{where}.{key} must be a non-empty list")
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise SourcePolicyError(f"{where}.{key} must contain non-empty strings")
+    return [item.lower() for item in value]
+
+
+class SourcePolicy(NamedTuple):
+    """The subset of the rendered manifest this release guard enforces."""
+
+    path_tokens: tuple[str, ...]
+    path_prefixes: tuple[str, ...]
+    path_segments: frozenset[str]
+    content_signatures: tuple[bytes, ...]
+    crown_jewel_categories: frozenset[str]
+    policy_digest: str
+
+
+def load_source_policy(path: Path = SOURCE_POLICY_PATH) -> SourcePolicy:
+    """Return the rendered policy, or raise so the caller fails closed."""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SourcePolicyError(
+            f"cannot read the rendered source policy {path}: {exc}. It is rendered "
+            "from OpenAdaptAI/openadapt-internal:source-policy.yaml and must be "
+            "committed in this repository"
+        ) from exc
+    try:
+        document = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SourcePolicyError(f"{path} is not valid JSON: {exc}") from exc
+    if not isinstance(document, dict):
+        raise SourcePolicyError(f"{path} did not parse to an object")
+    if document.get("schema_version") != SOURCE_POLICY_SCHEMA_VERSION:
+        raise SourcePolicyError(
+            f"{path}: schema_version is {document.get('schema_version')!r}, expected "
+            f"{SOURCE_POLICY_SCHEMA_VERSION}; refusing to enforce an unknown schema"
+        )
+    enforcement = document.get("enforcement")
+    if not isinstance(enforcement, dict):
+        raise SourcePolicyError(f"{path}: enforcement block is missing")
+    artifacts = enforcement.get("built_artifacts")
+    if not isinstance(artifacts, dict):
+        raise SourcePolicyError(f"{path}: enforcement.built_artifacts is missing")
+    categories = document.get("crown_jewel_categories")
+    if not isinstance(categories, list) or not categories:
+        raise SourcePolicyError(f"{path}: crown_jewel_categories must be non-empty")
+    if not all(isinstance(name, str) and name.strip() for name in categories):
+        raise SourcePolicyError(f"{path}: crown_jewel_categories must be strings")
+
+    signature_parts = enforcement.get("content_signature_parts")
+    if not isinstance(signature_parts, list) or not signature_parts:
+        raise SourcePolicyError(
+            f"{path}: enforcement.content_signature_parts must be a non-empty list"
+        )
+    signatures: list[bytes] = []
+    for entry in signature_parts:
+        if not isinstance(entry, list) or not entry:
+            raise SourcePolicyError(
+                f"{path}: content_signature_parts entries must be non-empty lists"
+            )
+        joined = "".join(str(part) for part in entry)
+        if not joined:
+            raise SourcePolicyError(f"{path}: a content signature is empty")
+        signatures.append(joined.encode("ascii"))
+
+    return SourcePolicy(
+        path_tokens=tuple(
+            _policy_strings(enforcement, "path_tokens", where="enforcement")
+        ),
+        path_prefixes=tuple(
+            _policy_strings(
+                artifacts, "path_prefixes", where="enforcement.built_artifacts"
+            )
+        ),
+        path_segments=frozenset(
+            _policy_strings(enforcement, "private_path_segments", where="enforcement")
+        ),
+        content_signatures=tuple(signatures),
+        crown_jewel_categories=frozenset(str(name) for name in categories),
+        policy_digest=str(document.get("policy_digest", "unknown")),
+    )
+
+
+SOURCE_POLICY = load_source_policy()
+
+# Repository-local packaging conventions. These are this repository's own build
+# layout (per-arm driver scripts, raw per-run rows, detailed cost ledgers), not
+# organization-wide policy, so they stay here rather than in the shared
+# manifest. The policy-derived tokens above bind every repository; these bind
+# openadapt-flow.
+REPOSITORY_LOCAL_PRIVATE_PATH_TOKENS = (
     "agent-arm/",
     "rows.jsonl",
     "cost_ledger",
@@ -63,7 +164,11 @@ PRIVATE_DISTRIBUTION_PATH_TOKENS = (
     "openemr_agent_arm.py",
     "openimis_agent_arm.py",
 )
-PRIVATE_DISTRIBUTION_PATH_SEGMENTS = frozenset({"private", ".private"})
+PRIVATE_DISTRIBUTION_PATH_TOKENS = tuple(
+    dict.fromkeys(SOURCE_POLICY.path_tokens + REPOSITORY_LOCAL_PRIVATE_PATH_TOKENS)
+)
+PRIVATE_DISTRIBUTION_PATH_PREFIXES = SOURCE_POLICY.path_prefixes
+PRIVATE_DISTRIBUTION_PATH_SEGMENTS = SOURCE_POLICY.path_segments
 PRIVATE_DISTRIBUTION_EXACT_PATHS = frozenset(
     {
         "tests/test_identity_corpus_rates.py",
@@ -167,9 +272,10 @@ PUBLIC_SOURCE_ROOT_IGNORED_DIRECTORIES = frozenset(
     }
 )
 PUBLIC_SOURCE_ANYWHERE_IGNORED_DIRECTORIES = frozenset({"__pycache__"})
-# Assembled from parts so this guard (which ships in the sdist) does not itself
-# trip the content scan; every private-corpus artifact carries the full banner.
-PRIVATE_CORPUS_CONTENT_SIGNATURES = (b"OPENADAPT-CORPUS" + b"-PRIVATE-DO-NOT-PACKAGE",)
+# Assembled from parts so neither this guard nor the rendered policy file (both
+# of which ship in the sdist) trips the content scan; every private-corpus
+# artifact carries the full banner. The parts come from the manifest.
+PRIVATE_CORPUS_CONTENT_SIGNATURES = SOURCE_POLICY.content_signatures
 
 # Positive inventory for files that can carry data, evidence, static payloads,
 # models, or deployment-shaped configuration.  Ordinary Python/Markdown/TeX
@@ -237,17 +343,10 @@ PUBLIC_ARTIFACT_INVENTORY_EXEMPT_PATHS = frozenset(
         "pyproject.toml",
     }
 )
-PUBLIC_SOURCE_FORBIDDEN_CATEGORIES = frozenset(
-    {
-        "control_plane",
-        "deployment_thresholds",
-        "enterprise_productionized",
-        "grown_corpus",
-        "oracle_recipes",
-        "real_emr_datasets",
-        "tuned_adversary_params",
-    }
-)
+# The crown-jewel artifact categories, recorded in the reviewed public artifact
+# inventory so a reader can see which classes of content the inventory exists to
+# keep out. Derived from the manifest, not restated here.
+PUBLIC_SOURCE_FORBIDDEN_CATEGORIES = SOURCE_POLICY.crown_jewel_categories
 
 LENDING_PUBLIC_EVIDENCE_PATH = "benchmark/lending_fault_model/swer_results.json"
 LENDING_PUBLIC_EVIDENCE_ARMS = (
@@ -367,6 +466,10 @@ def _private_distribution_hits(members: set[str], signature_hits: set[str]) -> s
         if member.lower() in PRIVATE_DISTRIBUTION_EXACT_PATHS
         or _has_private_path_segment(member)
         or any(token in member.lower() for token in PRIVATE_DISTRIBUTION_PATH_TOKENS)
+        or any(
+            member.lower().startswith(prefix)
+            for prefix in PRIVATE_DISTRIBUTION_PATH_PREFIXES
+        )
     }
     hits.update(signature_hits)
     return hits

@@ -5732,6 +5732,10 @@
       "sha256": "cd150996fcad1bde5dc1535da8eaad46bf0881b74a540ab520cd84d8710a74bc"
     },
     {
+      "path": "source-policy.public.json",
+      "sha256": "ed13dab92b33d9915078f388c4307518e808529a57992854f6822bc85a441a9d"
+    },
+    {
       "path": "tests/fixtures/runtime-validation-canonical-vector.json",
       "sha256": "18c43a710752ce5a930f5db30d4f3af4b5224d7025c5f5b07a0b3bc6ba4e15c9"
     },
