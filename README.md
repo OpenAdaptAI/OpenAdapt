@@ -94,7 +94,9 @@ python -m pip install "openadapt[privacy]"          # PII/PHI scrubbing
 For the visual authoring and review experience, install
 [OpenAdapt Desktop](https://openadapt.ai/download).
 
-![OpenAdapt Desktop showing a completed compiled workflow with all 11 steps verified, an 8.2 second run, and no model calls](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/desktop-replay-verified.png)
+![Synthetic OpenAdapt Desktop PR #93 preview of a verified six-step workflow and its evidence contract](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/desktop-replay-verified.png)
+
+*Image provenance: headless synthetic fixture from Desktop PR #93 commit `1f50259ffb052776742b284a493eb9c735caa122`; no live run, engine sidecar, account, customer data, or physical input. SHA-256: `5616f0b0812a5e366f58e448689600e16eeab234aaf92ec6d49133efa0be33ee`. The final release hash will be updated after Desktop 0.15.*
 
 ## What makes it different
 
