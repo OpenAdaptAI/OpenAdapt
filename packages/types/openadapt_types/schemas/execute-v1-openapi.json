@@ -1,0 +1,1062 @@
+{
+  "components": {
+    "schemas": {
+      "EffectStrengthV1": {
+        "description": "The required strength of proof for a consequential effect.\n\nThe members are named so a future protocol version can add a strength\nwithout changing the meaning of a numeric value.",
+        "enum": [
+          "independent_system_of_record",
+          "independent_session",
+          "persisted_state_reacquisition",
+          "immediate_screen_confirmation"
+        ],
+        "title": "EffectStrengthV1",
+        "type": "string"
+      },
+      "ExecuteAcceptedV1": {
+        "additionalProperties": false,
+        "properties": {
+          "execution_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "openadapt.execute-accepted/v1",
+            "default": "openadapt.execute-accepted/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "const": "queued",
+            "default": "queued",
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "execution_id"
+        ],
+        "title": "ExecuteAcceptedV1",
+        "type": "object"
+      },
+      "ExecuteAuthorizationContextV1": {
+        "additionalProperties": false,
+        "description": "Opaque authorization references from the caller's own system.",
+        "properties": {
+          "actor_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "authorization_reference": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Authorization Reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor_id",
+          "authorization_reference"
+        ],
+        "title": "ExecuteAuthorizationContextV1",
+        "type": "object"
+      },
+      "ExecuteDecisionRequiredWebhookV1": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/HumanDecisionTaskV1"
+          },
+          "delivery_attempt": {
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Delivery Attempt",
+            "type": "integer"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "execution.decision_required",
+            "default": "execution.decision_required",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "execution_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "issued_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "issuer_key_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Issuer Key Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "openadapt.execute-webhook/v1",
+            "default": "openadapt.execute-webhook/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "delivery_attempt",
+          "issued_at",
+          "issuer_key_id",
+          "signature",
+          "execution_id",
+          "decision"
+        ],
+        "title": "ExecuteDecisionRequiredWebhookV1",
+        "type": "object"
+      },
+      "ExecuteEvidenceContractV1": {
+        "additionalProperties": false,
+        "description": "Boolean contract results. Evidence bytes remain in the declared boundary.",
+        "properties": {
+          "authorization_passed": {
+            "title": "Authorization Passed",
+            "type": "boolean"
+          },
+          "effect_passed": {
+            "title": "Effect Passed",
+            "type": "boolean"
+          },
+          "external_network_used": {
+            "title": "External Network Used",
+            "type": "boolean"
+          },
+          "identity_passed": {
+            "title": "Identity Passed",
+            "type": "boolean"
+          },
+          "minimum_effect_strength": {
+            "$ref": "#/components/schemas/EffectStrengthV1"
+          },
+          "model_used": {
+            "title": "Model Used",
+            "type": "boolean"
+          },
+          "observed_effect_strength": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectStrengthV1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "postcondition_passed": {
+            "title": "Postcondition Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "authorization_passed",
+          "identity_passed",
+          "postcondition_passed",
+          "effect_passed",
+          "minimum_effect_strength",
+          "model_used",
+          "external_network_used"
+        ],
+        "title": "ExecuteEvidenceContractV1",
+        "type": "object"
+      },
+      "ExecuteEvidenceReceiptV1": {
+        "additionalProperties": false,
+        "description": "A portable receipt that identifies evidence without carrying it.",
+        "properties": {
+          "compensation_effect_verified": {
+            "default": false,
+            "title": "Compensation Effect Verified",
+            "type": "boolean"
+          },
+          "contracts": {
+            "$ref": "#/components/schemas/ExecuteEvidenceContractV1"
+          },
+          "delivery_uncertain": {
+            "title": "Delivery Uncertain",
+            "type": "boolean"
+          },
+          "evidence_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Evidence Digest",
+            "type": "string"
+          },
+          "execution_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "issued_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ExecuteTerminalOutcomeV1"
+          },
+          "receipt_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "openadapt.execute-evidence-receipt/v1",
+            "default": "openadapt.execute-evidence-receipt/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "workflow_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Workflow Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "receipt_id",
+          "execution_id",
+          "workflow_digest",
+          "outcome",
+          "contracts",
+          "delivery_uncertain",
+          "evidence_digest",
+          "issued_at"
+        ],
+        "title": "ExecuteEvidenceReceiptV1",
+        "type": "object"
+      },
+      "ExecuteLifecycleStateV1": {
+        "enum": [
+          "queued",
+          "running",
+          "decision_required",
+          "waiting_for_reconciliation",
+          "terminal"
+        ],
+        "title": "ExecuteLifecycleStateV1",
+        "type": "string"
+      },
+      "ExecuteRequestV1": {
+        "additionalProperties": false,
+        "properties": {
+          "authorization_context": {
+            "$ref": "#/components/schemas/ExecuteAuthorizationContextV1"
+          },
+          "effect_strength_schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Effect Strength Schema Version",
+            "type": "string"
+          },
+          "environment_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "minimum_effect_strength": {
+            "$ref": "#/components/schemas/EffectStrengthV1"
+          },
+          "parameters": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Parameters",
+            "type": "object"
+          },
+          "qualification_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Qualification Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "openadapt.execute-request/v1",
+            "default": "openadapt.execute-request/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "workflow_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Workflow Digest",
+            "type": "string"
+          },
+          "workflow_version": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Workflow Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualification_id",
+          "workflow_version",
+          "workflow_digest",
+          "environment_id",
+          "idempotency_key",
+          "authorization_context",
+          "minimum_effect_strength"
+        ],
+        "title": "ExecuteRequestV1",
+        "type": "object"
+      },
+      "ExecuteStateChangedWebhookV1": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery_attempt": {
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Delivery Attempt",
+            "type": "integer"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "execution.state_changed",
+            "default": "execution.state_changed",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ExecuteStatusV1"
+          },
+          "issued_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "issuer_key_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Issuer Key Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "openadapt.execute-webhook/v1",
+            "default": "openadapt.execute-webhook/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "delivery_attempt",
+          "issued_at",
+          "issuer_key_id",
+          "signature",
+          "execution"
+        ],
+        "title": "ExecuteStateChangedWebhookV1",
+        "type": "object"
+      },
+      "ExecuteStatusV1": {
+        "additionalProperties": false,
+        "description": "The current public lifecycle view of an execution resource.",
+        "properties": {
+          "evidence_receipt_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Evidence Receipt Id"
+          },
+          "execution_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "openadapt.execute-status/v1",
+            "default": "openadapt.execute-status/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExecuteLifecycleStateV1"
+          },
+          "terminal_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecuteTerminalOutcomeV1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "updated_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "execution_id",
+          "state",
+          "updated_at"
+        ],
+        "title": "ExecuteStatusV1",
+        "type": "object"
+      },
+      "ExecuteTerminalOutcomeV1": {
+        "enum": [
+          "verified",
+          "halted_before_effect",
+          "reconciliation_required",
+          "rejected_policy",
+          "failed_platform",
+          "rolled_back_verified"
+        ],
+        "title": "ExecuteTerminalOutcomeV1",
+        "type": "string"
+      },
+      "ExecuteTerminalWebhookV1": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery_attempt": {
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Delivery Attempt",
+            "type": "integer"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "execution.terminal",
+            "default": "execution.terminal",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "issued_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "issuer_key_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Issuer Key Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ExecuteEvidenceReceiptV1"
+          },
+          "schema_version": {
+            "const": "openadapt.execute-webhook/v1",
+            "default": "openadapt.execute-webhook/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "delivery_attempt",
+          "issued_at",
+          "issuer_key_id",
+          "signature",
+          "receipt"
+        ],
+        "title": "ExecuteTerminalWebhookV1",
+        "type": "object"
+      },
+      "HumanDecisionAction": {
+        "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.\n\n``reject`` and ``escalate`` are deliberately separate members rather than\ntwo labels on one action, because they do opposite things to the run.\n``escalate`` *parks* it: the durable pause stays intact and a qualified\ncolleague can still continue it. ``reject`` *terminates* it: the operator\nlooked at the live application and is asserting that this run must not\nproceed at all. Collapsing the two would leave the recorded answer\ndistribution unable to distinguish \"I don't know\" from \"stop\", which is the\nonly reason a disagreement action is worth its cost.\n\n``reject`` is scoped to one run. It is not a claim that the saved workflow\nis wrong; that assertion changes future runs and belongs to ``teach``,\nwhich carries the demonstration and requalification gate such authority\nrequires.\n\n``reconcile`` asks the runner to re-establish the business effect after an\nuncertain delivery. It is intentionally distinct from\n``verify_and_resume``: reconciliation may prove that the original action\nalready succeeded, and therefore must never imply permission to dispatch\nthat action again.",
+        "enum": [
+          "verify_and_resume",
+          "skip",
+          "reject",
+          "teach",
+          "escalate",
+          "reconcile"
+        ],
+        "title": "HumanDecisionAction",
+        "type": "string"
+      },
+      "HumanDecisionDeliveryState": {
+        "enum": [
+          "not_delivered",
+          "delivered",
+          "unknown"
+        ],
+        "title": "HumanDecisionDeliveryState",
+        "type": "string"
+      },
+      "HumanDecisionEvidenceSummaryV1": {
+        "additionalProperties": false,
+        "properties": {
+          "effect_confirmed_count": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effect Confirmed Count"
+          },
+          "effect_required_count": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effect Required Count"
+          },
+          "frame_available_locally": {
+            "default": false,
+            "title": "Frame Available Locally",
+            "type": "boolean"
+          },
+          "identity_confirmed_count": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Identity Confirmed Count"
+          },
+          "identity_required_count": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Identity Required Count"
+          },
+          "minimum_effect_tier": {
+            "anyOf": [
+              {
+                "maximum": 4,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Minimum Effect Tier"
+          },
+          "observed_effect_tier": {
+            "anyOf": [
+              {
+                "maximum": 4,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed Effect Tier"
+          },
+          "sensitive_evidence_local_only": {
+            "const": true,
+            "default": true,
+            "title": "Sensitive Evidence Local Only",
+            "type": "boolean"
+          }
+        },
+        "title": "HumanDecisionEvidenceSummaryV1",
+        "type": "object"
+      },
+      "HumanDecisionQuestionTemplate": {
+        "enum": [
+          "confirm_identity",
+          "confirm_persisted_effect",
+          "resolve_ambiguity",
+          "complete_human_step",
+          "review_uncertain_delivery",
+          "review_halt"
+        ],
+        "title": "HumanDecisionQuestionTemplate",
+        "type": "string"
+      },
+      "HumanDecisionQuestionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "safe_slots": {
+            "$ref": "#/components/schemas/HumanDecisionSafeSlotsV1"
+          },
+          "template": {
+            "$ref": "#/components/schemas/HumanDecisionQuestionTemplate"
+          }
+        },
+        "required": [
+          "template"
+        ],
+        "title": "HumanDecisionQuestionV1",
+        "type": "object"
+      },
+      "HumanDecisionRequiredAuthn": {
+        "enum": [
+          "local_session",
+          "aal2",
+          "webauthn"
+        ],
+        "title": "HumanDecisionRequiredAuthn",
+        "type": "string"
+      },
+      "HumanDecisionRiskClass": {
+        "enum": [
+          "read_only",
+          "state_changing",
+          "consequential",
+          "irreversible",
+          "unknown"
+        ],
+        "title": "HumanDecisionRiskClass",
+        "type": "string"
+      },
+      "HumanDecisionSafeSlotsV1": {
+        "additionalProperties": false,
+        "description": "Bounded numeric context safe to relay outside the evidence boundary.",
+        "properties": {
+          "candidate_count": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Candidate Count"
+          },
+          "confirmed_signal_count": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confirmed Signal Count"
+          },
+          "required_signal_count": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Required Signal Count"
+          }
+        },
+        "title": "HumanDecisionSafeSlotsV1",
+        "type": "object"
+      },
+      "HumanDecisionSubstrate": {
+        "enum": [
+          "browser",
+          "windows",
+          "macos",
+          "linux",
+          "rdp",
+          "citrix",
+          "mixed",
+          "unknown"
+        ],
+        "title": "HumanDecisionSubstrate",
+        "type": "string"
+      },
+      "HumanDecisionTaskKind": {
+        "enum": [
+          "identity",
+          "effect",
+          "ambiguity",
+          "human_step",
+          "delivery_uncertain",
+          "halt",
+          "operator_review"
+        ],
+        "title": "HumanDecisionTaskKind",
+        "type": "string"
+      },
+      "HumanDecisionTaskV1": {
+        "additionalProperties": false,
+        "description": "A signed, PHI-free projection of one exact attended runtime pause.",
+        "properties": {
+          "allowed_actions": {
+            "items": {
+              "$ref": "#/components/schemas/HumanDecisionAction"
+            },
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Allowed Actions",
+            "type": "array"
+          },
+          "bundle_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Bundle Digest",
+            "type": "string"
+          },
+          "capability_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Capability Digest",
+            "type": "string"
+          },
+          "created_at": {
+            "maxLength": 40,
+            "minLength": 20,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivery_state": {
+            "$ref": "#/components/schemas/HumanDecisionDeliveryState"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/HumanDecisionEvidenceSummaryV1"
+          },
+          "expires_at": {
+            "maxLength": 40,
+            "minLength": 20,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "issuer_key_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Issuer Key Id",
+            "type": "string"
+          },
+          "nonce": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Nonce",
+            "type": "string"
+          },
+          "pause_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Pause Id",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/HumanDecisionQuestionV1"
+          },
+          "required_authn": {
+            "$ref": "#/components/schemas/HumanDecisionRequiredAuthn"
+          },
+          "risk_class": {
+            "$ref": "#/components/schemas/HumanDecisionRiskClass",
+            "default": "unknown"
+          },
+          "run_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Runner Id"
+          },
+          "schema_version": {
+            "const": "openadapt.human-decision-task/v1",
+            "default": "openadapt.human-decision-task/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          },
+          "signature_algorithm": {
+            "const": "hmac-sha256",
+            "default": "hmac-sha256",
+            "title": "Signature Algorithm",
+            "type": "string"
+          },
+          "substrate": {
+            "$ref": "#/components/schemas/HumanDecisionSubstrate",
+            "default": "unknown"
+          },
+          "task_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_kind": {
+            "$ref": "#/components/schemas/HumanDecisionTaskKind"
+          },
+          "task_revision": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Task Revision",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "task_id",
+          "run_id",
+          "pause_id",
+          "capability_digest",
+          "bundle_digest",
+          "task_kind",
+          "delivery_state",
+          "question",
+          "evidence",
+          "allowed_actions",
+          "required_authn",
+          "created_at",
+          "expires_at",
+          "nonce",
+          "issuer_key_id",
+          "signature"
+        ],
+        "title": "HumanDecisionTaskV1",
+        "type": "object"
+      },
+      "JsonValue": {}
+    }
+  },
+  "info": {
+    "description": "Versioned async execution contract. Customer-specific connectors, evidence bytes, and Cloud implementation details are out of scope.",
+    "title": "OpenAdapt Execute API",
+    "version": "1.0.0"
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/executions": {
+      "post": {
+        "operationId": "createExecution",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequestV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecuteAcceptedV1"
+                }
+              }
+            },
+            "description": "Execution accepted for durable processing."
+          }
+        }
+      }
+    },
+    "/v1/executions/{execution_id}": {
+      "get": {
+        "operationId": "getExecution",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecuteStatusV1"
+                }
+              }
+            },
+            "description": "Current lifecycle state."
+          }
+        }
+      }
+    },
+    "/v1/executions/{execution_id}/receipt": {
+      "get": {
+        "operationId": "getExecutionReceipt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecuteEvidenceReceiptV1"
+                }
+              }
+            },
+            "description": "Terminal receipt with evidence identifiers."
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "executionDecisionRequired": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteDecisionRequiredWebhookV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Accepted by endpoint."
+          }
+        }
+      }
+    },
+    "executionStateChanged": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteStateChangedWebhookV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Accepted by endpoint."
+          }
+        }
+      }
+    },
+    "executionTerminal": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteTerminalWebhookV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Accepted by endpoint."
+          }
+        }
+      }
+    }
+  },
+  "x-openadapt-schema": "openadapt.execute-openapi/v1"
+}

@@ -154,6 +154,12 @@ class HumanDecisionAction(str, Enum):
     is wrong; that assertion changes future runs and belongs to ``teach``,
     which carries the demonstration and requalification gate such authority
     requires.
+
+    ``reconcile`` asks the runner to re-establish the business effect after an
+    uncertain delivery. It is intentionally distinct from
+    ``verify_and_resume``: reconciliation may prove that the original action
+    already succeeded, and therefore must never imply permission to dispatch
+    that action again.
     """
 
     VERIFY_AND_RESUME = "verify_and_resume"
@@ -161,6 +167,7 @@ class HumanDecisionAction(str, Enum):
     REJECT = "reject"
     TEACH = "teach"
     ESCALATE = "escalate"
+    RECONCILE = "reconcile"
 
 
 class HumanDecisionDeliveryState(str, Enum):
@@ -298,7 +305,7 @@ class HumanDecisionTaskV1(_StrictContract):
     #: can legitimately offer every member at once. Widening it is what a new
     #: member costs, and it is why a consumer must re-validate against the
     #: current schema rather than a cached copy.
-    allowed_actions: tuple[HumanDecisionAction, ...] = Field(min_length=1, max_length=5)
+    allowed_actions: tuple[HumanDecisionAction, ...] = Field(min_length=1, max_length=6)
     required_authn: HumanDecisionRequiredAuthn
     created_at: StrictStr = Field(
         min_length=20, max_length=40, pattern=_TIMESTAMP_PATTERN
@@ -315,6 +322,13 @@ class HumanDecisionTaskV1(_StrictContract):
     def _validate_envelope(self) -> "HumanDecisionTaskV1":
         if len(set(self.allowed_actions)) != len(self.allowed_actions):
             raise ValueError("allowed_actions must be unique")
+        if (
+            HumanDecisionAction.RECONCILE in self.allowed_actions
+            and self.delivery_state is HumanDecisionDeliveryState.NOT_DELIVERED
+        ):
+            raise ValueError(
+                "reconcile requires a delivered or delivery-uncertain action"
+            )
         created_at = _parse_timestamp(self.created_at, "created_at")
         expires_at = _parse_timestamp(self.expires_at, "expires_at")
         if expires_at <= created_at:
@@ -424,6 +438,7 @@ class HumanDecisionReceiptReason(str, Enum):
     PENDING_RUNNER = "pending_runner"
     VERIFIED_AND_RESUMED = "verified_and_resumed"
     SKIPPED_AND_RESUMED = "skipped_and_resumed"
+    RECONCILED_AND_RESUMED = "reconciled_and_resumed"
     CONTINUATION_HALTED = "continuation_halted"
     REVALIDATION_REFUSED = "revalidation_refused"
     EXPIRED = "expired"
@@ -459,6 +474,7 @@ HUMAN_DECISION_RECEIPT_REASONS: Mapping[
         {
             HumanDecisionReceiptReason.VERIFIED_AND_RESUMED,
             HumanDecisionReceiptReason.SKIPPED_AND_RESUMED,
+            HumanDecisionReceiptReason.RECONCILED_AND_RESUMED,
         }
     ),
     HumanDecisionReceiptState.REFUSED: frozenset(
@@ -509,6 +525,9 @@ class HumanDecisionReceiptV1(_StrictContract):
     The digests are one-way commitments, not content: they let a consumer bind
     this receipt to the exact capability, request, decision record, and
     transition receipt it came from without ever receiving those payloads.
+    A completed receipt requires ``report_success=true`` and a transition
+    receipt digest. A producer cannot use a success-shaped state without the
+    corresponding transition commitment.
 
     ``signature`` is optional because a runtime that returns a receipt over an
     authenticated loopback connection is already inside its own trust boundary
@@ -546,12 +565,38 @@ class HumanDecisionReceiptV1(_StrictContract):
                 f"reason_code {self.reason_code.value!r} is not a cause of state "
                 f"{self.state.value!r}"
             )
-        if (
-            self.report_success
-            and self.state not in HUMAN_DECISION_RECEIPT_SUCCESS_STATES
-        ):
+        is_success = self.state in HUMAN_DECISION_RECEIPT_SUCCESS_STATES
+        if self.report_success and not is_success:
             raise ValueError(
                 f"report_success cannot be true for state {self.state.value!r}"
+            )
+        if is_success and self.report_success is not True:
+            raise ValueError("a completed receipt requires report_success=true")
+        if is_success and self.transition_receipt_digest is None:
+            raise ValueError("a completed receipt requires a transition receipt digest")
+        completed_action = {
+            HumanDecisionReceiptReason.VERIFIED_AND_RESUMED: (
+                HumanDecisionAction.VERIFY_AND_RESUME
+            ),
+            HumanDecisionReceiptReason.SKIPPED_AND_RESUMED: HumanDecisionAction.SKIP,
+            HumanDecisionReceiptReason.RECONCILED_AND_RESUMED: (
+                HumanDecisionAction.RECONCILE
+            ),
+        }
+        expected_action = completed_action.get(self.reason_code)
+        if expected_action is not None and self.action is not expected_action:
+            raise ValueError(
+                f"reason_code {self.reason_code.value!r} requires action "
+                f"{expected_action.value!r}"
+            )
+        terminal_action = {
+            HumanDecisionReceiptState.DEMONSTRATION_REQUESTED: HumanDecisionAction.TEACH,
+            HumanDecisionReceiptState.ESCALATED: HumanDecisionAction.ESCALATE,
+            HumanDecisionReceiptState.REJECTED: HumanDecisionAction.REJECT,
+        }.get(self.state)
+        if terminal_action is not None and self.action is not terminal_action:
+            raise ValueError(
+                f"state {self.state.value!r} requires action {terminal_action.value!r}"
             )
         _parse_timestamp(self.decided_at, "decided_at")
         return self
@@ -560,7 +605,10 @@ class HumanDecisionReceiptV1(_StrictContract):
     def succeeded(self) -> bool:
         """Whether this receipt reports a successful workflow continuation."""
 
-        return self.state in HUMAN_DECISION_RECEIPT_SUCCESS_STATES
+        return (
+            self.state in HUMAN_DECISION_RECEIPT_SUCCESS_STATES
+            and self.report_success is True
+        )
 
     def unsigned_payload(self) -> dict[str, Any]:
         """Return the deterministic language-agnostic signed payload."""

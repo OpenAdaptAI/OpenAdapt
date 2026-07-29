@@ -18,6 +18,7 @@ from openadapt_types import (
     RunnerCapabilityManifestV1,
     match_runner_capabilities,
 )
+from openadapt_types.execute_openapi import execute_openapi_document
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "openadapt_types" / "schemas"
@@ -201,6 +202,10 @@ def main() -> int:
     )
     (SCHEMA_DIR / "runner-capability-negative-v1.vector.json").write_text(
         json.dumps(negative_match_vectors(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (SCHEMA_DIR / "execute-v1-openapi.json").write_text(
+        json.dumps(execute_openapi_document(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     return 0

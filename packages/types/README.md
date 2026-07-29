@@ -60,6 +60,9 @@ Documentation for the whole stack lives at
 | `FailureRecord` | Classified failure for dataset pipelines |
 | `ControlOverlayFrameV1` / `ControlOverlayTimelineV1` | PHI-safe execution overlay state bound to exact evidence media |
 | `ControlOverlayFrameV2` / `ControlOverlayTimelineV2` | Exact, privacy-safe target geometry for sibling overlays and media composition |
+| `ExecuteRequestV1` / `ExecuteStatusV1` | Async qualified-execution request and lifecycle contracts |
+| `ExecuteEvidenceReceiptV1` | Outcome receipt with contract proof and evidence identifiers |
+| `EffectStrengthV1` | Named effect-proof strength for consequential execution |
 
 ## Quick start
 
@@ -182,6 +185,12 @@ renderers map the normalized rectangle through their actual content box.
 If multiple runtime states land in one decoded media frame, the producer must
 coalesce them deterministically; it must not invent extra media frames or
 approximate their timing.
+
+`openadapt_types/schemas/execute-v1-openapi.json` is the public OpenAdapt
+Execute v1 contract. It defines asynchronous execution submission, lifecycle
+status, terminal evidence receipts, and signed decision and terminal webhooks.
+It keeps `waiting_for_reconciliation` as a lifecycle state and
+`reconciliation_required` as a terminal outcome.
 
 ## Design principles
 

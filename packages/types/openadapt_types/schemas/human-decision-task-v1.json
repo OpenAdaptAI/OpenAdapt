@@ -1,13 +1,14 @@
 {
   "$defs": {
     "HumanDecisionAction": {
-      "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.\n\n``reject`` and ``escalate`` are deliberately separate members rather than\ntwo labels on one action, because they do opposite things to the run.\n``escalate`` *parks* it: the durable pause stays intact and a qualified\ncolleague can still continue it. ``reject`` *terminates* it: the operator\nlooked at the live application and is asserting that this run must not\nproceed at all. Collapsing the two would leave the recorded answer\ndistribution unable to distinguish \"I don't know\" from \"stop\", which is the\nonly reason a disagreement action is worth its cost.\n\n``reject`` is scoped to one run. It is not a claim that the saved workflow\nis wrong; that assertion changes future runs and belongs to ``teach``,\nwhich carries the demonstration and requalification gate such authority\nrequires.",
+      "description": "Portable action names; the runtime remains authoritative.\n\n``verify_and_resume`` maps to Flow's attended ``continue`` operation. It\nmeans that the operator prepared the live state for fresh revalidation; it\nnever authorizes blind repetition of a prior action.\n\n``reject`` and ``escalate`` are deliberately separate members rather than\ntwo labels on one action, because they do opposite things to the run.\n``escalate`` *parks* it: the durable pause stays intact and a qualified\ncolleague can still continue it. ``reject`` *terminates* it: the operator\nlooked at the live application and is asserting that this run must not\nproceed at all. Collapsing the two would leave the recorded answer\ndistribution unable to distinguish \"I don't know\" from \"stop\", which is the\nonly reason a disagreement action is worth its cost.\n\n``reject`` is scoped to one run. It is not a claim that the saved workflow\nis wrong; that assertion changes future runs and belongs to ``teach``,\nwhich carries the demonstration and requalification gate such authority\nrequires.\n\n``reconcile`` asks the runner to re-establish the business effect after an\nuncertain delivery. It is intentionally distinct from\n``verify_and_resume``: reconciliation may prove that the original action\nalready succeeded, and therefore must never imply permission to dispatch\nthat action again.",
       "enum": [
         "verify_and_resume",
         "skip",
         "reject",
         "teach",
-        "escalate"
+        "escalate",
+        "reconcile"
       ],
       "title": "HumanDecisionAction",
       "type": "string"
@@ -256,7 +257,7 @@
       "items": {
         "$ref": "#/$defs/HumanDecisionAction"
       },
-      "maxItems": 5,
+      "maxItems": 6,
       "minItems": 1,
       "title": "Allowed Actions",
       "type": "array"
