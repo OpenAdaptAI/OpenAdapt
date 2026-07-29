@@ -234,16 +234,16 @@
 
 ### `substrate-runtime-validation-supported` — supported — CI-proven today
 
-> Runtime-validation v2 binds the successful run's resolved target kind (`web|windows|macos|linux|rdp|citrix`) into the signed operator attestation while preserving the same exact artifact, compiler, parameter-schema, strict-lint, policy, risk, report, and opaque environment bindings. Web retains its exact HTTPS/host boundary; native and remote execution emits no app, window, host, readiness, or backend-hint values to Cloud.
+> Runtime-validation v3 binds Standard and Regulated hosted activation to the exact governed authorization template reproduced from the sealed qualification. It also binds the successful run's resolved target kind (`web|windows|macos|linux|rdp|citrix`), artifact, compiler, parameter schema, strict lint, policy, risk, report, and opaque environment. Web retains its exact HTTPS/host boundary. Native and remote execution emits no app, window, host, readiness, or backend-hint values to Cloud. Local verification retains signed v1 and v2 compatibility.
 
 - Surfaces: README.md, docs, website
 - Strongest evidence strength: **supported** (tier is `supported`)
 
 | Backing evidence | Kind | Gating / CI stage | Strength | Proves |
 |---|---|---|---|---|
-| `tests/test_runtime_validation.py` | test | ci (required PR gate (test)) | supported | Required CI exercises all six target kinds, validates v2 against its closed JSON Schema, refuses target-kind mismatch or missing report provenance, preserves web URL/host checks, keeps native/remote execution empty, verifies the canonical HMAC vector, and retains signed v1 web compatibility. |
+| `tests/test_runtime_validation.py` | test | ci (required PR gate (test)) | supported | Required CI exercises all six target kinds, validates v3 against its closed JSON Schema, refuses a Standard or Regulated activation without an exact template, binds the template SHA to the HMAC, preserves web URL/host checks, keeps native/remote execution empty, verifies the canonical HMAC vector, and retains signed v1/v2 compatibility. |
 | `tests/test_cli_new_commands.py` | test | ci (required PR gate (test)) | supported | Required CI carries the resolved web, Windows, and Citrix backend token through durable resume into the new run report rather than trusting an upload-time relabel. |
-| `schemas/runtime-validation-attestation-v2.json` | doc | artifact (doc/benchmark) | roadmap | The public closed envelope requires target_kind and conditionally permits the browser execution fields only for web. |
+| `schemas/runtime-validation-attestation-v3.json` | doc | artifact (doc/benchmark) | roadmap | The public closed envelope requires target_kind and the governed authorization template SHA, and conditionally permits browser execution fields only for web. |
 
 **Caveats (honest limits):**
 

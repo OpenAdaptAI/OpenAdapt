@@ -686,6 +686,7 @@ class QualificationCertification(BaseModel):
     case_evidence_contract_sha256: Optional[str] = Field(
         default=None, pattern=r"^[a-f0-9]{64}$"
     )
+    execution_profile: Literal["standard", "regulated"] = "standard"
     certified_at: str = Field(default_factory=_now)
 
 
@@ -1209,6 +1210,7 @@ def _invalidate_certification(workflow: "Workflow") -> None:
     provenance.certification_status = None
     provenance.certified_at = None
     provenance.expires_at = None
+    provenance.governed_authorization_template = None
 
 
 def _touch(project: QualificationProject, previous_digest: str) -> None:
@@ -4439,6 +4441,7 @@ def certify_project(
     policy: "Policy",
     evidence_root: Path | str,
     transition_predicate_vision: Any | None = None,
+    execution_profile: Literal["standard", "regulated"] = "standard",
 ) -> QualificationReport:
     """Evaluate and persist the exact qualification decision in memory."""
 
@@ -4463,13 +4466,139 @@ def certify_project(
             passed=report.passed,
             report_sha256=report.report_sha256(),
             case_evidence_contract_sha256=_case_evidence_contract_sha256(project),
+            execution_profile=execution_profile,
         )
+    # A failed campaign must remove any template from an earlier accepted
+    # campaign.  Manifest provenance is outside the bundle content digest, so
+    # retaining that template would leave stale production authority attached
+    # to a newly failed qualification decision.
+    if not report.passed and workflow.manifest is not None:
+        workflow.manifest.provenance.governed_authorization_template = None
     workflow.stamp_certification(
         policy_name=policy.name,
         passed=report.passed,
         status="certified" if report.passed else "failed",
     )
     return report
+
+
+def _authorization_parameter_contract(
+    workflow: "Workflow",
+) -> tuple[tuple[Any, ...], str]:
+    """Return value-free parameter metadata and its exact contract digest."""
+
+    from openadapt_flow.bundle_validation import (
+        build_runtime_parameter_schema,
+        compute_parameter_schema_digest,
+    )
+    from openadapt_flow.ir import GovernedAuthorizationParameter
+
+    records: list[GovernedAuthorizationParameter] = []
+    for parameter in build_runtime_parameter_schema(workflow):
+        name = parameter["name"]
+        spec = workflow.param_specs.get(name)
+        choice_values = parameter["choices"]
+        choices_bytes = json.dumps(
+            choice_values, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        records.append(
+            GovernedAuthorizationParameter(
+                name=name,
+                type=parameter["type"],
+                required=parameter["required"],
+                secret=parameter["secret"],
+                has_default=(
+                    name in workflow.params
+                    or (spec is not None and spec.example is not None)
+                ),
+                choices_count=len(spec.choices) if spec is not None else 0,
+                choices_sha256=hashlib.sha256(choices_bytes).hexdigest(),
+            )
+        )
+    return tuple(records), compute_parameter_schema_digest(workflow)
+
+
+def build_governed_authorization_template(
+    workflow: "Workflow",
+) -> "Any":
+    """Build the value-free template for an accepted production certification."""
+
+    from openadapt_flow.execution_profiles import (
+        ExecutionProfile,
+        qualified_effect_requirements,
+    )
+    from openadapt_flow.ir import GovernedAuthorizationTemplate
+
+    project = workflow.qualification
+    certification = project.last_certification if project is not None else None
+    manifest = workflow.manifest
+    if project is None or certification is None or not certification.passed:
+        raise QualificationError(
+            "governed authorization template requires certification"
+        )
+    if manifest is None or not manifest.content_digest:
+        raise QualificationError(
+            "governed authorization template requires a sealed bundle"
+        )
+    if certification.policy_contract_sha256 is None:
+        raise QualificationError(
+            "governed authorization template requires policy digest"
+        )
+    if certification.case_evidence_contract_sha256 is None:
+        raise QualificationError(
+            "governed authorization template requires case evidence digest"
+        )
+    from openadapt_flow.policy import Policy
+
+    try:
+        certified_policy = Policy.model_validate(certification.policy_contract)
+    except ValueError as exc:
+        raise QualificationError(
+            "governed authorization template requires a valid certification policy"
+        ) from exc
+    if not current_certification_matches(workflow, policy=certified_policy):
+        raise QualificationError(
+            "governed authorization template requires a current certification"
+        )
+    profile = ExecutionProfile(certification.execution_profile)
+    requirements = qualified_effect_requirements(workflow, profile)
+    required_actions, required_identity = qualification_action_requirements(workflow)
+    if not required_actions:
+        raise QualificationError("governed authorization template requires actions")
+    identity_payload = {
+        "required_identity_step_ids": sorted(required_identity),
+        "identity_policies": {
+            step_id: project.identity_policies[step_id].model_dump(mode="json")
+            for step_id in sorted(project.identity_policies)
+        },
+    }
+    identity_digest = hashlib.sha256(
+        json.dumps(
+            identity_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+    ).hexdigest()
+    parameters, parameter_digest = _authorization_parameter_contract(workflow)
+    return GovernedAuthorizationTemplate.create(
+        bundle_content_digest=manifest.content_digest,
+        workflow_contract_sha256=certification.workflow_contract_sha256,
+        qualification_project_id=project.project_id,
+        qualification_project_revision=project.revision,
+        qualification_project_contract_sha256=project.contract_sha256(),
+        qualification_environment_contract_sha256=project.environment.contract_sha256(),
+        qualification_report_sha256=certification.report_sha256,
+        qualification_case_evidence_contract_sha256=(
+            certification.case_evidence_contract_sha256
+        ),
+        policy_name=certification.policy_name,
+        policy_contract_sha256=certification.policy_contract_sha256,
+        execution_profile=profile.value,
+        minimum_effect_tier=int(project.minimum_effect_tier),
+        qualified_effect_requirements=requirements,
+        required_identity_step_ids=tuple(sorted(required_identity)),
+        identity_contract_sha256=identity_digest,
+        parameters=parameters,
+        parameter_contract_sha256=parameter_digest,
+    )
 
 
 def current_certification_matches(
@@ -4598,6 +4727,19 @@ def save_qualified_workflow(
         raise QualificationError(
             "sealed asset inventory changed after the qualification campaign"
         )
+    if certification is not None and certification.passed:
+        template = build_governed_authorization_template(workflow)
+        assert workflow.manifest is not None
+        initial_digest = workflow.manifest.content_digest
+        workflow.manifest.provenance.governed_authorization_template = template
+        if workflow.encrypted:
+            workflow.save(bundle_dir, encrypt=True, key=key)
+        else:
+            workflow.save(bundle_dir, encrypt=False)
+        if workflow.manifest.content_digest != initial_digest:
+            raise QualificationError(
+                "governed authorization template changed the bundle content digest"
+            )
     return path
 
 

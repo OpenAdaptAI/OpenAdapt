@@ -21,6 +21,11 @@ from PIL import Image, ImageDraw
 
 from openadapt_flow import vision as vision_module
 from openadapt_flow.__main__ import main
+from openadapt_flow.bundle_validation import (
+    BundleIntegrityError,
+    build_runtime_parameter_schema,
+    compute_parameter_schema_digest,
+)
 from openadapt_flow.execution_profiles import (
     ExecutionProfile,
     build_outcome_envelope,
@@ -34,6 +39,8 @@ from openadapt_flow.ir import (
     ApiIdentityBinding,
     BundleManifest,
     EffectVerificationEvidence,
+    GovernedAuthorizationParameter,
+    GovernedAuthorizationTemplate,
     IdentityCheck,
     Postcondition,
     PostconditionKind,
@@ -2334,6 +2341,11 @@ def test_full_campaign_certifies_through_existing_policy_and_round_trips(
         workflow_contract_sha256(loaded)
     )
     assert loaded.manifest is not None
+    template = loaded.manifest.provenance.governed_authorization_template
+    assert template is not None
+    assert template.bundle_content_digest == loaded.manifest.content_digest
+    assert template.template_sha256 == template.computed_sha256()
+    assert template.execution_profile == "standard"
     policy = load_policy("clinical-write")
     policy_digest = policy_contract_sha256(policy)
     authorization = GovernedRunAuthorization(
@@ -2359,6 +2371,270 @@ def test_full_campaign_certifies_through_existing_policy_and_round_trips(
         ).validate_workflow(loaded)
         or ""
     )
+
+
+def test_governed_authorization_template_is_strict_and_value_free(
+    tmp_path: Path,
+) -> None:
+    workflow = _workflow()
+    workflow.params["hidden_value"] = "Jane Sample 1980-01-15"
+    workflow.params["secret_token"] = "super-secret-token"
+    workflow.secret_params.append("secret_token")
+    workflow.secret_params.append("secret_only")
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+    assert certify_project(
+        workflow, policy=load_policy("clinical-write"), evidence_root=evidence_root
+    ).passed
+    from openadapt_flow.qualification import save_qualified_workflow
+
+    save_qualified_workflow(workflow, bundle)
+    loaded = Workflow.load(bundle)
+    assert loaded.manifest is not None
+    template = loaded.manifest.provenance.governed_authorization_template
+    assert template is not None
+    rendered = template.model_dump_json()
+    assert "Jane Sample" not in rendered
+    assert "super-secret-token" not in rendered
+    parameters = {parameter.name: parameter for parameter in template.parameters}
+    assert parameters["hidden_value"].has_default is True
+    assert parameters["hidden_value"].type.value == "string"
+    assert parameters["hidden_value"].required is False
+    assert parameters["secret_token"].secret is True
+    assert parameters["secret_token"].has_default is True
+    assert parameters["secret_only"].secret is True
+    assert parameters["secret_only"].has_default is False
+    payload = template.model_dump(mode="json")
+    with pytest.raises(ValueError, match="hash"):
+        GovernedAuthorizationTemplate.model_validate(
+            {**payload, "policy_name": "mutated"}
+        )
+    with pytest.raises(ValueError):
+        GovernedAuthorizationTemplate.model_validate({**payload, "unknown": True})
+
+
+def test_governed_authorization_template_rejects_manifest_replacement(
+    tmp_path: Path,
+) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+    assert certify_project(
+        workflow, policy=load_policy("clinical-write"), evidence_root=evidence_root
+    ).passed
+    from openadapt_flow.qualification import save_qualified_workflow
+
+    save_qualified_workflow(workflow, bundle)
+    raw = json.loads((bundle / "workflow.json").read_text())
+    template = GovernedAuthorizationTemplate.model_validate(
+        raw["manifest"]["provenance"]["governed_authorization_template"]
+    )
+    replacement = GovernedAuthorizationTemplate.create(
+        **{
+            key: getattr(template, key)
+            for key in type(template).model_fields
+            if key not in {"template_sha256", "minimum_effect_tier"}
+        },
+        minimum_effect_tier=1,
+    )
+    raw["manifest"]["provenance"]["governed_authorization_template"] = (
+        replacement.model_dump(mode="json")
+    )
+    (bundle / "workflow.json").write_text(json.dumps(raw))
+
+    with pytest.raises(BundleIntegrityError, match="does not match"):
+        Workflow.load(bundle)
+
+
+def test_failed_requalification_clears_governed_authorization_template(
+    tmp_path: Path,
+) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+    policy = load_policy("clinical-write")
+    assert certify_project(workflow, policy=policy, evidence_root=evidence_root).passed
+    from openadapt_flow.qualification import save_qualified_workflow
+
+    save_qualified_workflow(workflow, bundle)
+    assert workflow.manifest is not None
+    assert workflow.manifest.provenance.governed_authorization_template is not None
+    assert workflow.qualification is not None
+    for case in workflow.qualification.cases:
+        case.results = []
+
+    assert not certify_project(
+        workflow, policy=policy, evidence_root=evidence_root
+    ).passed
+    assert workflow.manifest.provenance.governed_authorization_template is None
+
+
+def test_governed_authorization_template_uses_canonical_legacy_parameter_schema(
+    tmp_path: Path,
+) -> None:
+    workflow = _workflow()
+    workflow.params["legacy_value"] = "example"
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+    assert certify_project(
+        workflow, policy=load_policy("clinical-write"), evidence_root=evidence_root
+    ).passed
+    from openadapt_flow.qualification import (
+        build_governed_authorization_template,
+    )
+
+    template = build_governed_authorization_template(workflow)
+    canonical = {
+        item["name"]: item for item in build_runtime_parameter_schema(workflow)
+    }
+    legacy = next(item for item in template.parameters if item.name == "legacy_value")
+    assert legacy.required is canonical["legacy_value"]["required"] is False
+    assert legacy.secret is canonical["legacy_value"]["secret"] is False
+    assert legacy.type.value == canonical["legacy_value"]["type"]
+    assert template.parameter_contract_sha256 == compute_parameter_schema_digest(
+        workflow
+    )
+
+
+def test_governed_authorization_template_fixed_vector() -> None:
+    template = GovernedAuthorizationTemplate.create(
+        bundle_content_digest="1" * 64,
+        workflow_contract_sha256="2" * 64,
+        qualification_project_id="project-1",
+        qualification_project_revision=1,
+        qualification_project_contract_sha256="3" * 64,
+        qualification_environment_contract_sha256="4" * 64,
+        qualification_report_sha256="5" * 64,
+        qualification_case_evidence_contract_sha256="6" * 64,
+        policy_name="clinical-write",
+        policy_contract_sha256="7" * 64,
+        execution_profile="standard",
+        minimum_effect_tier=3,
+        required_identity_step_ids=("step-1",),
+        identity_contract_sha256="8" * 64,
+        parameters=(
+            GovernedAuthorizationParameter(
+                name="customer_id",
+                type="string",
+                required=True,
+                secret=False,
+                has_default=True,
+                choices_count=0,
+                choices_sha256="9" * 64,
+            ),
+        ),
+        parameter_contract_sha256="a" * 64,
+    )
+    assert (
+        template.template_sha256
+        == "f9c605a8cbb575332bf53015a6c89b35a6dbd8390774730415bef8595d1afcd5"
+    )
+
+
+@pytest.mark.parametrize("name", ("", "x" * 129))
+def test_governed_authorization_template_parameter_name_bounds(name: str) -> None:
+    with pytest.raises(ValueError):
+        GovernedAuthorizationParameter(
+            name=name,
+            type="string",
+            required=True,
+            secret=False,
+            has_default=False,
+            choices_count=0,
+            choices_sha256="0" * 64,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("qualification_project_id", "invalid project id"),
+        ("qualification_project_id", "x" * 129),
+        ("policy_name", ""),
+        ("policy_name", "x" * 129),
+    ),
+)
+def test_governed_authorization_template_project_and_policy_bounds(
+    field: str,
+    value: str,
+) -> None:
+    values: dict[str, Any] = {
+        "bundle_content_digest": "1" * 64,
+        "workflow_contract_sha256": "2" * 64,
+        "qualification_project_id": "project-1",
+        "qualification_project_revision": 1,
+        "qualification_project_contract_sha256": "3" * 64,
+        "qualification_environment_contract_sha256": "4" * 64,
+        "qualification_report_sha256": "5" * 64,
+        "qualification_case_evidence_contract_sha256": "6" * 64,
+        "policy_name": "clinical-write",
+        "policy_contract_sha256": "7" * 64,
+        "execution_profile": "standard",
+        "minimum_effect_tier": 3,
+        "identity_contract_sha256": "8" * 64,
+        "parameter_contract_sha256": "a" * 64,
+    }
+    values[field] = value
+    with pytest.raises(ValueError):
+        GovernedAuthorizationTemplate.create(**values)
+
+
+def test_governed_authorization_template_survives_encrypted_save_without_digest_change(
+    tmp_path: Path,
+) -> None:
+    key = "qualification-template-test-key"
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
+    workflow.save(bundle, encrypt=True, key=key)
+    workflow = Workflow.load(bundle, key=key)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+    assert certify_project(
+        workflow,
+        policy=load_policy("clinical-write"),
+        evidence_root=evidence_root,
+        execution_profile="regulated",
+    ).passed
+    from openadapt_flow.qualification import save_qualified_workflow
+
+    save_qualified_workflow(workflow, bundle, key=key)
+    loaded = Workflow.load(bundle, key=key)
+    assert loaded.manifest is not None
+    template = loaded.manifest.provenance.governed_authorization_template
+    assert template is not None
+    assert template.execution_profile == "regulated"
+    digest = loaded.manifest.content_digest
+    loaded.save(bundle, encrypt=True, key=key)
+    reloaded = Workflow.load(bundle, key=key)
+    assert reloaded.manifest is not None
+    assert reloaded.manifest.content_digest == digest
 
 
 def test_persisted_certification_is_recomputed_and_policy_digest_bound(

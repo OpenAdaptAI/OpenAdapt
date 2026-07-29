@@ -589,7 +589,7 @@
     },
     {
       "path": "claims.yaml",
-      "sha256": "1a185fc7d9c377a3ca984d9144089057532d1c9a6536e4ca8d6f4f617ad498b4"
+      "sha256": "49bca1226de596cfb23f3af99e79014f4b2e6b58fdda8edf91638852b25426e2"
     },
     {
       "path": "deploy/on-prem/docker-compose.yml",
@@ -1797,7 +1797,7 @@
     },
     {
       "path": "docs/verification.json",
-      "sha256": "520cf27d3a531092579b2e456ed61d449a6173f3ca52d0f4fd91763a068f8f2f"
+      "sha256": "a6dd22a344b684b2f034d5aa7c2105378dc9d9903bd75bc6093067943790c818"
     },
     {
       "path": "openadapt_flow/console/static/console.css",
@@ -5720,6 +5720,10 @@
       "sha256": "7aaa25f172842d87560db40cf6e233fb2742710cdde4a0b0126ddb734a327d62"
     },
     {
+      "path": "schemas/runtime-validation-attestation-v3.json",
+      "sha256": "67bcafde91d6332cd3f6ff0eff12a739d9fdce1759a755491cd0aff8e82634f8"
+    },
+    {
       "path": "schemas/sanitization-ingest-v1.json",
       "sha256": "3c906fe51d4c6836878ded4194693562d2829df29aedafb423744031e51bf029"
     },
@@ -5737,7 +5741,7 @@
     },
     {
       "path": "tests/fixtures/runtime-validation-canonical-vector.json",
-      "sha256": "18c43a710752ce5a930f5db30d4f3af4b5224d7025c5f5b07a0b3bc6ba4e15c9"
+      "sha256": "a238b23846705f081603c7fe8a66ee16a88281ad21acfd0d047052716a49b912"
     },
     {
       "path": "tests/fixtures/theme-region-stable-overhalt-v1.16.1.json",

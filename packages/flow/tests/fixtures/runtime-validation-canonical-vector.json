@@ -13,6 +13,7 @@
       "entry_url": "https://app.example/login",
       "target_origin": "https://app.example"
     },
+    "governed_authorization_template_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "parameter_schema_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "parameters": [
       {
@@ -23,9 +24,9 @@
         "type": "entity_ref"
       }
     ],
-    "schema": "openadapt.runtime-validation/v2",
+    "schema": "openadapt.runtime-validation/v3",
     "target_kind": "web"
   },
-  "canonical": "{\"certification\":{\"evidence_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"passed\":true,\"policy\":\"clinical-write\",\"risk_class\":\"consequential\"},\"challenge_id\":\"challenge-α\",\"execution\":{\"allowed_hosts\":[\"app.example\",\"cdn.example\"],\"entry_url\":\"https://app.example/login\",\"target_origin\":\"https://app.example\"},\"parameter_schema_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"parameters\":[{\"choices\":[],\"name\":\"patient_id\",\"required\":true,\"secret\":false,\"type\":\"entity_ref\"}],\"schema\":\"openadapt.runtime-validation/v2\",\"target_kind\":\"web\"}",
-  "signature": "a6001dbcb4f4521e4899672ad80abcc8f29d9c2a434d3c7201dc78663e1ca8a1"
+  "canonical": "{\"certification\":{\"evidence_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"passed\":true,\"policy\":\"clinical-write\",\"risk_class\":\"consequential\"},\"challenge_id\":\"challenge-α\",\"execution\":{\"allowed_hosts\":[\"app.example\",\"cdn.example\"],\"entry_url\":\"https://app.example/login\",\"target_origin\":\"https://app.example\"},\"governed_authorization_template_sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"parameter_schema_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"parameters\":[{\"choices\":[],\"name\":\"patient_id\",\"required\":true,\"secret\":false,\"type\":\"entity_ref\"}],\"schema\":\"openadapt.runtime-validation/v3\",\"target_kind\":\"web\"}",
+  "signature": "3b934c324cdcfa15ae4a166815a125e2414f4473544062b4338f1503fac08e1a"
 }

@@ -429,6 +429,9 @@ def build_manifest(workflow: "Workflow", bundle_dir: Path | str) -> BundleManife
         certification_invalidation_reason=(
             prior_prov.certification_invalidation_reason if prior_prov else None
         ),
+        governed_authorization_template=(
+            prior_prov.governed_authorization_template if prior_prov else None
+        ),
     )
     return BundleManifest(
         content_digest=digest,

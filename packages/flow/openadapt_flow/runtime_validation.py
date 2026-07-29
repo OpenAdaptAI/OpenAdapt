@@ -54,7 +54,8 @@ from openadapt_flow.sanitized_artifact import (
 )
 from openadapt_flow.traversal import iter_workflow_steps
 
-SCHEMA = "openadapt.runtime-validation/v2"
+SCHEMA = "openadapt.runtime-validation/v3"
+V2_SCHEMA = "openadapt.runtime-validation/v2"
 LEGACY_SCHEMA = "openadapt.runtime-validation/v1"
 TARGET_KINDS = ("web", "windows", "macos", "linux", "rdp", "citrix")
 RISK_CLASSES = ("low", "consequential")
@@ -568,12 +569,32 @@ def create_runtime_validation_attestation(
             "Native/remote run report must not carry browser origin or entry URL"
         )
 
+    # A production hosted activation must bind the sealed, independently
+    # reproducible qualification authority.  ``Workflow.load`` already rejects
+    # a template that does not reproduce from the exact sealed certification.
+    # Demo validation remains v2 so existing local tutorial workflows retain a
+    # compatible, explicitly non-production path.
+    execution_profile = report.execution_profile
+    template = provenance.governed_authorization_template
+    governed_template_sha256: Optional[str] = None
+    if execution_profile in ("standard", "regulated"):
+        if template is None:
+            raise RuntimeValidationError(
+                "Standard and Regulated hosted activation requires an exact "
+                "governed authorization template"
+            )
+        if template.execution_profile != execution_profile:
+            raise RuntimeValidationError(
+                "Governed authorization template profile does not match the run report"
+            )
+        governed_template_sha256 = template.template_sha256
+
     compiler_version = provenance.compiler_version or __version__
     lint_evidence = lint_report.model_dump(mode="json")
     certification_evidence = certification.model_dump(mode="json")
 
     payload: dict[str, Any] = {
-        "schema": SCHEMA,
+        "schema": SCHEMA if governed_template_sha256 is not None else V2_SCHEMA,
         "target_kind": target_kind,
         "challenge_id": challenge["challenge_id"],
         "nonce": challenge["nonce"],
@@ -605,18 +626,24 @@ def create_runtime_validation_attestation(
             "validated_at": datetime.now(timezone.utc).isoformat(),
         },
     }
+    if governed_template_sha256 is not None:
+        payload["governed_authorization_template_sha256"] = governed_template_sha256
     payload["signature"] = _signature(payload, resolved_token)
     return payload
 
 
 def verify_runtime_validation_attestation(
-    attestation: dict[str, Any], *, bundle_sha256: str, token: str
+    attestation: dict[str, Any],
+    *,
+    bundle_sha256: str,
+    token: str,
+    expected_governed_authorization_template_sha256: Optional[str] = None,
 ) -> None:
     """Verify local signature and exact-bundle binding before upload."""
     schema = attestation.get("schema")
-    if schema not in (SCHEMA, LEGACY_SCHEMA):
+    if schema not in (SCHEMA, V2_SCHEMA, LEGACY_SCHEMA):
         raise RuntimeValidationError("Unsupported runtime-validation schema")
-    if schema == SCHEMA:
+    if schema in (SCHEMA, V2_SCHEMA):
         target_kind = attestation.get("target_kind")
         execution = attestation.get("execution")
         if target_kind not in TARGET_KINDS:
@@ -632,6 +659,31 @@ def verify_runtime_validation_attestation(
             raise RuntimeValidationError(
                 "Native/remote runtime validation execution must be PHI-safe and empty"
             )
+    template_sha256 = attestation.get("governed_authorization_template_sha256")
+    if schema == SCHEMA:
+        if not isinstance(template_sha256, str) or not re.fullmatch(
+            r"[a-f0-9]{64}", template_sha256
+        ):
+            raise RuntimeValidationError(
+                "Runtime validation governed authorization template is invalid"
+            )
+    elif template_sha256 is not None:
+        raise RuntimeValidationError(
+            "Legacy runtime validation must not carry a governed authorization template"
+        )
+    if expected_governed_authorization_template_sha256 is not None and not re.fullmatch(
+        r"[a-f0-9]{64}", expected_governed_authorization_template_sha256
+    ):
+        raise RuntimeValidationError(
+            "Expected governed authorization template is invalid"
+        )
+    if (
+        expected_governed_authorization_template_sha256 is not None
+        and template_sha256 != expected_governed_authorization_template_sha256
+    ):
+        raise RuntimeValidationError(
+            "Runtime validation is bound to a different governed authorization template"
+        )
     if attestation.get("bundle_sha256") != bundle_sha256:
         raise RuntimeValidationError(
             "Runtime validation is bound to a different approved bundle"

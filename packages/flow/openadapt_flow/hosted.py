@@ -1266,6 +1266,9 @@ def push(
                 "validation."
             )
         from openadapt_flow.runtime_validation import (
+            SCHEMA as RUNTIME_VALIDATION_SCHEMA,
+        )
+        from openadapt_flow.runtime_validation import (
             RuntimeValidationError,
             load_runtime_validation_attestation,
             verify_runtime_validation_attestation,
@@ -1277,10 +1280,33 @@ def push(
                 if isinstance(validation_attestation, dict)
                 else load_runtime_validation_attestation(Path(validation_attestation))
             )
+            expected_template_sha256: Optional[str] = None
+            if attestation.get("schema") == RUNTIME_VALIDATION_SCHEMA:
+                # Re-load the exact reviewed directory.  This independently
+                # reproduces a persisted governed template from the sealed
+                # certification before the archive leaves this machine.
+                from openadapt_flow.ir import Workflow
+
+                workflow = Workflow.load(src)
+                provenance = workflow.manifest.provenance if workflow.manifest else None
+                template = (
+                    provenance.governed_authorization_template
+                    if provenance is not None
+                    else None
+                )
+                if template is None:
+                    raise RuntimeValidationError(
+                        "Hosted production attestation requires an exact governed "
+                        "authorization template"
+                    )
+                expected_template_sha256 = template.template_sha256
             verify_runtime_validation_attestation(
                 attestation,
                 bundle_sha256=approval["approved_derivative_sha256"],
                 token=resolved_token,
+                expected_governed_authorization_template_sha256=(
+                    expected_template_sha256
+                ),
             )
         except RuntimeValidationError as exc:
             raise HostedError(f"Runtime validation is not uploadable: {exc}") from exc

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import jsonschema
@@ -19,6 +20,7 @@ from openadapt_flow.runtime.authorization import (
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.runtime_validation import (
     LEGACY_SCHEMA,
+    SCHEMA,
     RuntimeValidationError,
     _canonical_bytes,
     _signature,
@@ -50,7 +52,7 @@ def _privacy():
 
 
 def _approved_artifacts(
-    tmp_path: Path, *, target_kind: str = "web"
+    tmp_path: Path, *, target_kind: str = "web", execution_profile: str | None = None
 ) -> tuple[Path, Path, Path]:
     recording = tmp_path / "recording"
     recording.mkdir()
@@ -76,7 +78,7 @@ def _approved_artifacts(
         bundle_content_digest=workflow.manifest.content_digest,
         runtime_inputs_digest=runtime_inputs_digest(workflow, None, None),
         admitted_policy_name="permissive",
-        execution_profile="standard",
+        execution_profile=execution_profile or "standard",
         minimum_effect_tier=3,
     )
     report = Replayer(
@@ -95,6 +97,14 @@ def _approved_artifacts(
     )
     assert report.success is True
     assert report.execution_outcome == "VERIFIED"
+    if execution_profile is None:
+        # This fixture represents a pre-profile v2-compatible report.  It keeps
+        # the target/substrate test surface independent from production
+        # qualification; the production v3 path has dedicated tests below.
+        report.execution_profile = None
+        report.production_eligible = False
+        report.outcome_envelope = None
+        report.save(run_dir)
     return recording_derivative, bundle_derivative, run_dir
 
 
@@ -167,6 +177,81 @@ def test_cross_language_canonicalization_golden_vector():
     )
     assert _canonical_bytes(fixture["value"]).decode("utf-8") == fixture["canonical"]
     assert _signature(fixture["value"], fixture["token"]) == fixture["signature"]
+
+
+def test_governed_standard_attestation_binds_exact_template_sha256(
+    tmp_path, monkeypatch
+):
+    """A Standard hosted attestation signs the sealed-template identity."""
+    from openadapt_flow import runtime_validation
+
+    recording, bundle, run_dir = _approved_artifacts(
+        tmp_path, execution_profile="standard"
+    )
+    workflow = Workflow.load(bundle)
+    assert workflow.manifest is not None
+    expected = "c" * 64
+    workflow.manifest.provenance.governed_authorization_template = SimpleNamespace(
+        execution_profile="standard", template_sha256=expected
+    )
+    # The production path calls the real Workflow.load(), which independently
+    # reproduces this template.  This unit binds the resulting exact value into
+    # the attestation payload without duplicating the qualification campaign.
+    monkeypatch.setattr(runtime_validation.Workflow, "load", lambda _path: workflow)
+
+    value = create_runtime_validation_attestation(
+        recording_derivative=recording,
+        bundle_derivative=bundle,
+        run_dir=run_dir,
+        policy_source="permissive",
+        risk_class="low",
+        environment="qualified-standard-web",
+        target_url=_TARGET_URL,
+        host=hosted.DEFAULT_HOST,
+        token="oai_ingest_test",
+        challenge=_challenge(),
+    )
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "schemas/runtime-validation-attestation-v3.json"
+        ).read_text()
+    )
+    jsonschema.Draft202012Validator(schema).validate(value)
+    assert value["schema"] == SCHEMA
+    assert value["governed_authorization_template_sha256"] == expected
+    verify_runtime_validation_attestation(
+        value,
+        bundle_sha256=value["bundle_sha256"],
+        token="oai_ingest_test",
+        expected_governed_authorization_template_sha256=expected,
+    )
+    with pytest.raises(RuntimeValidationError, match="different governed"):
+        verify_runtime_validation_attestation(
+            value,
+            bundle_sha256=value["bundle_sha256"],
+            token="oai_ingest_test",
+            expected_governed_authorization_template_sha256="d" * 64,
+        )
+
+
+def test_standard_attestation_refuses_missing_governed_template(tmp_path):
+    recording, bundle, run_dir = _approved_artifacts(
+        tmp_path, execution_profile="standard"
+    )
+    with pytest.raises(RuntimeValidationError, match="requires an exact governed"):
+        create_runtime_validation_attestation(
+            recording_derivative=recording,
+            bundle_derivative=bundle,
+            run_dir=run_dir,
+            policy_source="permissive",
+            risk_class="low",
+            environment="qualified-standard-web",
+            target_url=_TARGET_URL,
+            host=hosted.DEFAULT_HOST,
+            token="oai_ingest_test",
+            challenge=_challenge(),
+        )
 
 
 @pytest.mark.parametrize("target_kind", ["windows", "macos", "linux", "rdp", "citrix"])
@@ -277,16 +362,6 @@ def test_attestation_refuses_completed_unverified_as_runtime_evidence(tmp_path):
     report.execution_completed = True
     report.production_eligible = False
     report.success = True
-    assert report.outcome_envelope is not None
-    report.outcome_envelope = type(report.outcome_envelope).model_validate(
-        {
-            **report.outcome_envelope.model_dump(),
-            "outcome": "COMPLETED_UNVERIFIED",
-            "profile": "demo",
-            "production_eligible": False,
-            "execution_completed": True,
-        }
-    )
     report.save(run_dir)
 
     with pytest.raises(RuntimeValidationError, match="requires a VERIFIED"):
@@ -625,6 +700,22 @@ def test_bundle_push_requires_and_sends_validation_attestation(tmp_path, monkeyp
         "d3ecf64d-0d25-4df7-9264-77bf7d266d77"
     )
     assert json.loads(captured["data"]["validation_attestation"]) == value
+
+
+def test_bundle_push_reloads_the_exact_template_for_v3(tmp_path, monkeypatch):
+    """A v3 envelope cannot name a template absent from the uploaded bundle."""
+    token = "oai_ingest_test"
+    value, bundle = _attestation(tmp_path, token)
+    value["schema"] = SCHEMA
+    value["governed_authorization_template_sha256"] = "c" * 64
+    value["signature"] = _signature(value, token)
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *args, **kwargs: pytest.fail("must refuse before network"),
+    )
+    with pytest.raises(hosted.HostedError, match="requires an exact governed"):
+        hosted.push(bundle, kind="bundle", token=token, validation_attestation=value)
 
 
 def test_failed_or_wrong_workflow_report_cannot_attest(tmp_path):
