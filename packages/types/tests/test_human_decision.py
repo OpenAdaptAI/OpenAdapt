@@ -13,9 +13,11 @@ from openadapt_types import (
     HUMAN_DECISION_RECEIPT_SUCCESS_STATES,
     HumanDecisionAction,
     HumanDecisionDeliveryState,
+    HumanDecisionEntityFallback,
     HumanDecisionEvidenceSummaryV1,
     HumanDecisionQuestionTemplate,
     HumanDecisionQuestionV1,
+    HumanDecisionQualifiedEntityV1,
     HumanDecisionReceiptReason,
     HumanDecisionReceiptState,
     HumanDecisionReceiptV1,
@@ -23,8 +25,10 @@ from openadapt_types import (
     HumanDecisionSafeSlotsV1,
     HumanDecisionTaskKind,
     HumanDecisionTaskV1,
+    HumanDecisionTaskV2,
     sign_human_decision_receipt_hmac,
     sign_human_decision_task_hmac,
+    sign_human_decision_task_v2_hmac,
 )
 
 
@@ -62,6 +66,20 @@ def _task_fields() -> dict[str, object]:
     }
 
 
+def _v2_task_fields() -> dict[str, object]:
+    return {
+        **_task_fields(),
+        "qualification_project_id": "project_12345678",
+        "qualification_revision_id": "revision_12345678",
+        "qualification_contract_digest": "sha256:" + "c" * 64,
+        "qualification_step_id": "step_12345678",
+        "entity": HumanDecisionQualifiedEntityV1(
+            label="service record",
+            fallback=HumanDecisionEntityFallback.RECORD,
+        ),
+    }
+
+
 def test_signed_task_detects_any_tamper_without_becoming_authority() -> None:
     key = b"k" * 32
     task = sign_human_decision_task_hmac(key=key, fields=_task_fields())
@@ -95,6 +113,155 @@ def test_packaged_schema_matches_the_strict_language_agnostic_contract() -> None
     assert "screenshot" not in json.dumps(schema).lower()
     packaged = files("openadapt_types.schemas").joinpath(
         "human-decision-task-v1.json"
+    )
+    assert json.loads(packaged.read_text()) == schema
+
+
+def test_v2_binds_the_qualified_label_to_one_exact_qualified_step() -> None:
+    key = b"k" * 32
+    task = sign_human_decision_task_v2_hmac(key=key, fields=_v2_task_fields())
+
+    assert task.verify_hmac(key)
+    assert task.entity.label == "service record"
+    assert task.entity.fallback is HumanDecisionEntityFallback.RECORD
+
+    # These bindings and the label itself are all signed.  A receiver must not
+    # treat a label approved for one contract revision or step as approved for
+    # another.
+    for field, value in (
+        ("qualification_project_id", "project_87654321"),
+        ("qualification_revision_id", "revision_87654321"),
+        ("qualification_contract_digest", "sha256:" + "d" * 64),
+        ("qualification_step_id", "step_87654321"),
+        (
+            "entity",
+            HumanDecisionQualifiedEntityV1(
+                label="service item", fallback=HumanDecisionEntityFallback.ITEM
+            ),
+        ),
+    ):
+        assert not task.model_copy(update={field: value}).verify_hmac(key)
+
+
+def test_v2_uses_a_distinct_schema_and_signature_domain_from_v1() -> None:
+    key = b"k" * 32
+    v1 = sign_human_decision_task_hmac(key=key, fields=_task_fields())
+    v2 = sign_human_decision_task_v2_hmac(key=key, fields=_v2_task_fields())
+
+    assert v1.schema_version == "openadapt.human-decision-task/v1"
+    assert v2.schema_version == "openadapt.human-decision-task/v2"
+    v1_domain_signature = "hmac-sha256:" + hmac.new(
+        key,
+        b"openadapt.human-decision-task/v1\x00" + v2.canonical_unsigned_bytes(),
+        hashlib.sha256,
+    ).hexdigest()
+    assert v2.signature != v1_domain_signature
+
+
+# V2 has its own frozen cross-language vector.  It pins the new schema,
+# qualification bindings, label, fallback, canonicalization, and V2 domain.
+V2_CANONICAL_VECTOR_DIGEST = (
+    "sha256:a811546096b8d6b259a05a0a49c3edc391e4030c4aa474224d723b158ad26fae"
+)
+V2_CANONICAL_VECTOR_SIGNATURE = (
+    "hmac-sha256:0bc2b10d8b4b2b70eee93dae3903aea4d238552e2c8a95c3e2aa74da9812935e"
+)
+
+
+def test_v2_canonical_vector_is_stable_for_other_languages() -> None:
+    task = sign_human_decision_task_v2_hmac(key=b"k" * 32, fields=_v2_task_fields())
+
+    assert task.digest == V2_CANONICAL_VECTOR_DIGEST
+    assert task.signature == V2_CANONICAL_VECTOR_SIGNATURE
+
+
+def test_v2_task_revision_stays_inside_the_shared_javascript_range() -> None:
+    maximum = 2_147_483_647
+    accepted = sign_human_decision_task_v2_hmac(
+        key=b"k" * 32,
+        fields={**_v2_task_fields(), "task_revision": maximum},
+    )
+    assert accepted.task_revision == maximum
+
+    with pytest.raises(ValidationError):
+        sign_human_decision_task_v2_hmac(
+            key=b"k" * 32,
+            fields={**_v2_task_fields(), "task_revision": maximum + 1},
+        )
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    ["2026-07-26T12:00:00.1234567Z", "2026-07-26T12:00:00.123456789Z"],
+)
+def test_v2_refuses_timestamp_precision_python_cannot_compare(timestamp: str) -> None:
+    with pytest.raises(ValidationError):
+        sign_human_decision_task_v2_hmac(
+            key=b"k" * 32,
+            fields={**_v2_task_fields(), "created_at": timestamp},
+        )
+
+
+def test_v2_compares_microsecond_timestamps_without_truncation() -> None:
+    fields = {
+        **_v2_task_fields(),
+        "created_at": "2026-07-26T12:00:00.123456Z",
+        "expires_at": "2026-07-26T12:00:00.123457Z",
+    }
+    accepted = sign_human_decision_task_v2_hmac(key=b"k" * 32, fields=fields)
+    assert accepted.created_at == fields["created_at"]
+
+    with pytest.raises(ValidationError, match="expires_at must be after created_at"):
+        sign_human_decision_task_v2_hmac(
+            key=b"k" * 32,
+            fields={
+                **fields,
+                "created_at": "2026-07-26T12:00:00.123457Z",
+                "expires_at": "2026-07-26T12:00:00.123456Z",
+            },
+        )
+
+
+def test_v2_round_trips_and_refuses_runtime_evidence_or_unknown_fields() -> None:
+    task = sign_human_decision_task_v2_hmac(key=b"k" * 32, fields=_v2_task_fields())
+    payload = task.model_dump(mode="json")
+    assert HumanDecisionTaskV2.model_validate_json(task.model_dump_json()) == task
+
+    for field, value in {
+        "screenshot": "data:image/png;base64,secret",
+        "ocr_text": "Jane Doe",
+        "parameter_value": "0093211",
+        "model_inference": "patient",
+    }.items():
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            HumanDecisionTaskV2.model_validate({**payload, field: value})
+
+    with pytest.raises(ValidationError):
+        HumanDecisionTaskV2.model_validate(
+            {
+                **payload,
+                "entity": {**payload["entity"], "source": "ocr"},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "label",
+    ["Jane Doe", "patient: 0093211", "record\nname", "", "résumé"],
+)
+def test_v2_entity_label_is_not_a_free_text_or_identifier_channel(label: str) -> None:
+    fields = _v2_task_fields()
+    fields["entity"] = {"label": label, "fallback": "record"}
+    with pytest.raises(ValidationError):
+        sign_human_decision_task_v2_hmac(key=b"k" * 32, fields=fields)
+
+
+def test_packaged_v2_schema_matches_the_strict_language_agnostic_contract() -> None:
+    schema = HumanDecisionTaskV2.model_json_schema()
+    assert schema["additionalProperties"] is False
+    assert unconstrained_string_paths(schema) == []
+    packaged = files("openadapt_types.schemas").joinpath(
+        "human-decision-task-v2.json"
     )
     assert json.loads(packaged.read_text()) == schema
 

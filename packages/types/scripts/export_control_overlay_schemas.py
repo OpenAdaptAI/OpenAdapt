@@ -15,6 +15,7 @@ from openadapt_types import (
     ExecutionRequirementsV1,
     HumanDecisionReceiptV1,
     HumanDecisionTaskV1,
+    HumanDecisionTaskV2,
     RunnerCapabilityManifestV1,
     match_runner_capabilities,
 )
@@ -28,6 +29,7 @@ SCHEMAS = {
     "control-overlay-frame-v2.json": ControlOverlayFrameV2,
     "control-overlay-timeline-v2.json": ControlOverlayTimelineV2,
     "human-decision-task-v1.json": HumanDecisionTaskV1,
+    "human-decision-task-v2.json": HumanDecisionTaskV2,
     "human-decision-receipt-v1.json": HumanDecisionReceiptV1,
     "runner-capability-manifest-v1.json": RunnerCapabilityManifestV1,
     "execution-requirements-v1.json": ExecutionRequirementsV1,

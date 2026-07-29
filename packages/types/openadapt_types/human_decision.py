@@ -2,10 +2,12 @@
 
 Two models close one round trip:
 
-* :class:`HumanDecisionTaskV1` — the question. A portable projection of an
-  existing runtime pause. It is not an execution capability: a consumer must
-  still present the runtime's separately issued capability, satisfy its
-  authentication policy, and pass fresh revalidation before actuation.
+* :class:`HumanDecisionTaskV1` and :class:`HumanDecisionTaskV2` — portable
+  projections of an existing runtime pause. V2 additionally binds a safe
+  qualification-approved entity label to its exact qualified step. Neither is
+  an execution capability: a consumer must still present the runtime's
+  separately issued capability, satisfy its authentication policy, and pass
+  fresh revalidation before actuation.
 * :class:`HumanDecisionReceiptV1` — the answer's terminal outcome. The only
   decision result that may cross to a phone, a tray, or an authenticated
   remote relay.
@@ -15,8 +17,8 @@ not belong in either contract.
 
 Cloud-safe by construction
 --------------------------
-There is exactly one task model and exactly one receipt model, and both are the
-Cloud-safe ones; there is no "local extension" variant that a producer could
+There are two versioned task models and one receipt model, and all are
+Cloud-safe; there is no "local extension" variant that a producer could
 accidentally relay. Every string-typed field is a ``Literal``, an ``Enum``
 member, or carries an explicit ``pattern``, and every model forbids unknown
 fields. Raw values, OCR text, screenshots, and operator prose therefore have no
@@ -53,12 +55,14 @@ rules verbatim, with its own domain separator:
    ``ensure_ascii=True``). The canonical form is therefore pure ASCII, and a
    consumer never has to agree on a Unicode normalization form.
 5. Encode the result as UTF-8.
-6. Prepend the domain separator ``b"openadapt.human-decision-task/v1\\x00"``
-   before computing the HMAC, so a signature over this contract can never be
-   replayed as a signature over a different OpenAdapt payload. The receipt's
-   separator is ``b"openadapt.human-decision-receipt/v1\\x00"``, so a task
-   signature can never be replayed as a receipt signature either. The digests
-   in :attr:`HumanDecisionTaskV1.digest` and
+6. Prepend the version-matched domain separator (for example,
+   ``b"openadapt.human-decision-task/v1\\x00"`` or
+   ``b"openadapt.human-decision-task/v2\\x00"``) before computing the HMAC,
+   so a signature over this contract can never be replayed as a signature over
+   a different OpenAdapt payload or task version. The receipt's separator is
+   ``b"openadapt.human-decision-receipt/v1\\x00"``, so a task signature can
+   never be replayed as a receipt signature either. The digests in
+   :attr:`HumanDecisionTaskV1.digest`, :attr:`HumanDecisionTaskV2.digest`, and
    :attr:`HumanDecisionReceiptV1.digest` are taken over the canonical bytes
    *without* the domain separator.
 
@@ -96,8 +100,10 @@ from pydantic import (
 )
 
 HUMAN_DECISION_TASK_SCHEMA = "openadapt.human-decision-task/v1"
+HUMAN_DECISION_TASK_V2_SCHEMA = "openadapt.human-decision-task/v2"
 HUMAN_DECISION_RECEIPT_SCHEMA = "openadapt.human-decision-receipt/v1"
 _SIGNING_DOMAIN = b"openadapt.human-decision-task/v1\x00"
+_V2_SIGNING_DOMAIN = b"openadapt.human-decision-task/v2\x00"
 _RECEIPT_SIGNING_DOMAIN = b"openadapt.human-decision-receipt/v1\x00"
 _OPAQUE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
 _SHA256_PATTERN = r"^sha256:[0-9a-f]{64}$"
@@ -109,6 +115,17 @@ _SIGNATURE_PATTERN = r"^hmac-sha256:[0-9a-f]{64}$"
 _TIMESTAMP_PATTERN = (
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$"
 )
+# Python's datetime parser preserves at most microseconds.  V2 does not accept
+# precision it cannot compare faithfully.  V1 retains its established wire
+# contract and pattern unchanged.
+_V2_TIMESTAMP_PATTERN = (
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$"
+)
+# A qualified label is presentation metadata selected when a workflow is
+# qualified.  It is not an observation, an identifier, or a runtime-derived
+# value.  Keep the alphabet deliberately small so the shared contract cannot
+# become a general-purpose text channel.
+_QUALIFIED_ENTITY_LABEL_PATTERN = r"^[a-z][a-z0-9]*(?:[ _-][a-z0-9]+){0,3}$"
 
 
 class _StrictContract(BaseModel):
@@ -199,6 +216,29 @@ class HumanDecisionRequiredAuthn(str, Enum):
     LOCAL_SESSION = "local_session"
     AAL2 = "aal2"
     WEBAUTHN = "webauthn"
+
+
+class HumanDecisionEntityFallback(str, Enum):
+    """Domain-neutral text used when a consumer cannot render the label."""
+
+    RECORD = "record"
+    ITEM = "item"
+
+
+class HumanDecisionQualifiedEntityV1(_StrictContract):
+    """A label approved by the bound qualification contract.
+
+    The producer must read this value from the exact qualified contract.  This
+    type intentionally has no observation, screenshot, OCR, parameter, or
+    model-input field, so those sources cannot cross the decision boundary.
+    """
+
+    label: StrictStr = Field(
+        min_length=1,
+        max_length=63,
+        pattern=_QUALIFIED_ENTITY_LABEL_PATTERN,
+    )
+    fallback: HumanDecisionEntityFallback
 
 
 class HumanDecisionSafeSlotsV1(_StrictContract):
@@ -355,6 +395,40 @@ class HumanDecisionTaskV1(_StrictContract):
         return hmac.compare_digest(expected, self.signature)
 
 
+class HumanDecisionTaskV2(HumanDecisionTaskV1):
+    """V2 task with qualification-bound, safe entity presentation metadata.
+
+    V2 is a separate signed wire format.  It does not alter V1 canonical
+    bytes, validation, schema ID, or signing domain.
+    """
+
+    schema_version: Literal["openadapt.human-decision-task/v2"] = (
+        HUMAN_DECISION_TASK_V2_SCHEMA
+    )
+    # Cloud's JavaScript reader accepts signed revisions only through this
+    # maximum.  V2 must not sign a value that an existing consumer cannot
+    # round-trip; V1 remains unchanged for byte compatibility.
+    task_revision: StrictInt = Field(default=1, ge=1, le=2_147_483_647)
+    created_at: StrictStr = Field(
+        min_length=20, max_length=40, pattern=_V2_TIMESTAMP_PATTERN
+    )
+    expires_at: StrictStr = Field(
+        min_length=20, max_length=40, pattern=_V2_TIMESTAMP_PATTERN
+    )
+    qualification_project_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
+    qualification_revision_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
+    qualification_contract_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    qualification_step_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
+    entity: HumanDecisionQualifiedEntityV1
+
+    def verify_hmac(self, key: bytes) -> bool:
+        """Verify V2 only under its distinct domain separator."""
+
+        _validate_hmac_key(key)
+        expected = _hmac_signature(key, self.unsigned_payload(), _V2_SIGNING_DOMAIN)
+        return hmac.compare_digest(expected, self.signature)
+
+
 def _validate_hmac_key(key: bytes) -> None:
     if not isinstance(key, bytes) or len(key) < 32:
         raise ValueError("human decision HMAC key must contain at least 32 bytes")
@@ -388,6 +462,24 @@ def sign_human_decision_task_hmac(
     )
     canonical_unsigned = validated.unsigned_payload()
     signature = _hmac_signature(key, canonical_unsigned, _SIGNING_DOMAIN)
+    return validated.model_copy(update={"signature": signature})
+
+
+def sign_human_decision_task_v2_hmac(
+    *, key: bytes, fields: Mapping[str, Any]
+) -> HumanDecisionTaskV2:
+    """Validate and sign a qualification-bound task using the V2 profile."""
+
+    _validate_hmac_key(key)
+    if "signature" in fields:
+        raise ValueError("fields must not contain a signature")
+    unsigned = dict(fields)
+    unsigned.setdefault("schema_version", HUMAN_DECISION_TASK_V2_SCHEMA)
+    unsigned.setdefault("signature_algorithm", "hmac-sha256")
+    validated = HumanDecisionTaskV2.model_validate(
+        {**unsigned, "signature": "hmac-sha256:" + "0" * 64}
+    )
+    signature = _hmac_signature(key, validated.unsigned_payload(), _V2_SIGNING_DOMAIN)
     return validated.model_copy(update={"signature": signature})
 
 
