@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.8.0 (2026-07-29)
+
+### Features
+
+- Add qualified entity decision task v2
+  ([#22](https://github.com/OpenAdaptAI/openadapt-types/pull/22),
+  [`d6e6e11`](https://github.com/OpenAdaptAI/openadapt-types/commit/d6e6e1110ba4f830a37976e819bad0cf824f55de))
+
+Add a versioned signed task contract for qualification-approved entity labels. Preserve V1 bytes,
+  bind the qualification project and exact step, keep a neutral fallback, and use a strict
+  cross-language timestamp and action contract.
+
+
 ## v0.7.0 (2026-07-29)
 
 ### Chores
