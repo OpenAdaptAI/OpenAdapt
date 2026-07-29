@@ -452,8 +452,22 @@ def test_portable_and_engine_action_vocabularies_translate_without_a_gap():
     exactly where an "outside allowed_actions" check can pass while admitting
     something the task never authorized, so pin both directions.
     """
-    engine_actions = {"continue", "skip", "reject", "teach", "escalate"}
-    portable_actions = {"verify_and_resume", "skip", "reject", "teach", "escalate"}
+    engine_actions = {
+        "continue",
+        "skip",
+        "reject",
+        "teach",
+        "escalate",
+        "reconcile",
+    }
+    portable_actions = {
+        "verify_and_resume",
+        "skip",
+        "reject",
+        "teach",
+        "escalate",
+        "reconcile",
+    }
     assert set(human_decisions._ACTION_MAP) == engine_actions
     assert set(human_decisions._ACTION_MAP.values()) == portable_actions
     # Injective: no two engine actions may collapse onto one portable name.
@@ -782,6 +796,7 @@ def test_the_terminal_receipt_cannot_represent_protected_content(tmp_path):
         status="completed",
         message=f"{HUMAN_INTENT} at {tmp_path}",
         report_success=True,
+        transition_receipt_digest="sha256:" + "d" * 64,
     )
     receipt = decision_receipt(decision)
     # Every exported field is an opaque id, a digest, a closed enum, or a
@@ -823,6 +838,7 @@ def test_no_receipt_field_can_carry_free_text():
         "capability_digest": "sha256:" + "b" * 64,
         "request_digest": "sha256:" + "c" * 64,
         "decision_digest": "sha256:" + "d" * 64,
+        "transition_receipt_digest": "sha256:" + "e" * 64,
         "action": "verify_and_resume",
         "state": "completed",
         "reason_code": "verified_and_resumed",
@@ -853,6 +869,11 @@ def test_every_engine_terminal_state_projects_to_a_permitted_receipt_pair():
 
     from openadapt_flow.runtime.durable.attended import AttendedDecision
 
+    action_for_status = {
+        "needs_demonstration": "teach",
+        "escalated": "escalate",
+        "rejected": "reject",
+    }
     for status, (state, reason) in human_decisions._RECEIPT_STATE.items():
         assert reason in HUMAN_DECISION_RECEIPT_REASONS[state], status
         decision = AttendedDecision(
@@ -860,11 +881,14 @@ def test_every_engine_terminal_state_projects_to_a_permitted_receipt_pair():
             capability_digest="sha256:" + "b" * 64,
             request_digest="sha256:" + "c" * 64,
             idempotency_key="pair-table-key-0001",
-            action="continue",
+            action=action_for_status.get(status, "continue"),
             operator="front-desk",
             status=status,
             message="engine text that must not be exported",
             report_success=True if state == "completed" else None,
+            transition_receipt_digest=(
+                "sha256:" + "d" * 64 if state == "completed" else None
+            ),
         )
         receipt = decision_receipt(decision)
         assert receipt.state.value == state
@@ -880,6 +904,7 @@ def test_every_engine_terminal_state_projects_to_a_permitted_receipt_pair():
         status="completed",
         message="skipped",
         report_success=True,
+        transition_receipt_digest="sha256:" + "d" * 64,
     )
     assert decision_receipt(skipped).reason_code.value == "skipped_and_resumed"
 

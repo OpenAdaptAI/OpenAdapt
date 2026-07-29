@@ -234,6 +234,19 @@ class RunCheckpoint(BaseModel):
     #: HMAC-authenticated pause capability that supplied source identity for a
     #: human-attended checkpoint. Empty on ordinary runtime checkpoints.
     attended_capability_digest: Optional[str] = None
+    #: Immutable reconciliation binding for an uncertain delivery that was
+    #: independently proven before this checkpoint committed.  It lets a
+    #: crashed process reconstruct the signed reconciliation receipt from the
+    #: durable transition without delivering the source action again.
+    attended_reconciliation_request_digest: Optional[str] = None
+    attended_reconciliation_expected_transition_digest: Optional[str] = None
+    attended_reconciliation_delivery_state: Optional[
+        Literal["delivered", "unknown"]
+    ] = None
+    attended_reconciliation_effect_contract_hashes: list[str] = Field(
+        default_factory=list
+    )
+    attended_reconciliation_at: Optional[str] = None
     created_at: str = Field(default_factory=_now)
 
 

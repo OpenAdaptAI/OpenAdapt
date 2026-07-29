@@ -159,6 +159,7 @@ _ENGINE_DISPOSITION: dict[str, str] = {
     "reject": "rejected_by_operator",
     "teach": "teach_requested",
     "escalate": "cannot_complete",
+    "reconcile": "reconciliation_requested",
 }
 
 _ENGINE_ACTIONS = frozenset(_ENGINE_DISPOSITION)

@@ -1974,6 +1974,37 @@ class DurableAuthority:
                 return "refused", False
             return None
 
+    def prove_completed_pause(
+        self,
+        manifest: Any,
+        *,
+        source_pause_binding: str,
+    ) -> bool:
+        """Prove a terminal completion without reviving a dead executor lease."""
+
+        with self._transaction() as connection:
+            record = self._read(connection)
+            if record is None or not self._identity_matches(record, manifest):
+                raise DurableAuthorityBusy("durable authority identity changed")
+            if record.phase != "completed":
+                return False
+            report_path = self.run_dir / "report.json"
+            try:
+                report_sha256 = (
+                    "sha256:" + hashlib.sha256(report_path.read_bytes()).hexdigest()
+                )
+            except OSError:
+                return False
+            return bool(
+                record.pause_binding_sha256 == source_pause_binding
+                and record.attempt_phase == "none"
+                and not record.attempt_id
+                and self.store.read_pending() is None
+                and record.progress_digest == self.store.continuation_state_digest()
+                and record.report_sha256 == report_sha256
+                and record.terminal_projection_state == "settled"
+            )
+
     def attest_executor_outcome(
         self,
         manifest: Any,

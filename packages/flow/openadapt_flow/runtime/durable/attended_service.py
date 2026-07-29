@@ -45,10 +45,11 @@ class AttendedExecutorTimeout(RuntimeError):
 
 @dataclass(frozen=True)
 class _AttendedExecutorCommand:
-    action: Literal["continue", "skip"]
+    action: Literal["continue", "skip", "reconcile"]
     run_dir: Path
     capability: AttendedPauseCapability
     approval: ApprovalRecord
+    request_digest: Optional[str]
     continuation_token: ContinuationToken
     future: Future[AttendedExecutionResult]
 
@@ -157,19 +158,31 @@ class _ThreadOwnedAttendedExecutor:
                         current = None
                         continue
                     try:
-                        method = (
-                            executor.continue_run
-                            if command.action == "continue"
-                            else executor.skip_run
-                        )
                         with activate_continuation_token(command.continuation_token):
-                            command.future.set_result(
-                                method(
+                            if command.action == "continue":
+                                result = executor.continue_run(
                                     command.run_dir,
                                     command.capability,
                                     command.approval,
                                 )
-                            )
+                            elif command.action == "skip":
+                                result = executor.skip_run(
+                                    command.run_dir,
+                                    command.capability,
+                                    command.approval,
+                                )
+                            else:
+                                if command.request_digest is None:
+                                    raise AttendedActionRefused(
+                                        "the reconciliation command has no exact request binding"
+                                    )
+                                result = executor.reconcile_run(
+                                    command.run_dir,
+                                    command.capability,
+                                    command.approval,
+                                    command.request_digest,
+                                )
+                            command.future.set_result(result)
                     except Exception as exc:
                         command.future.set_exception(exc)
                     finally:
@@ -185,10 +198,11 @@ class _ThreadOwnedAttendedExecutor:
 
     def _submit(
         self,
-        action: Literal["continue", "skip"],
+        action: Literal["continue", "skip", "reconcile"],
         run_dir: Path,
         capability: AttendedPauseCapability,
         approval: ApprovalRecord,
+        request_digest: Optional[str] = None,
     ) -> AttendedExecutionResult:
         future: Future[AttendedExecutionResult] = Future()
         continuation_token = current_continuation_token()
@@ -201,6 +215,7 @@ class _ThreadOwnedAttendedExecutor:
             run_dir=run_dir,
             capability=capability,
             approval=approval,
+            request_digest=request_digest,
             continuation_token=continuation_token,
             future=future,
         )
@@ -246,6 +261,21 @@ class _ThreadOwnedAttendedExecutor:
         approval: ApprovalRecord,
     ) -> AttendedExecutionResult:
         return self._submit("skip", run_dir, capability, approval)
+
+    def reconcile_run(
+        self,
+        run_dir: Path,
+        capability: AttendedPauseCapability,
+        approval: ApprovalRecord,
+        request_digest: str,
+    ) -> AttendedExecutionResult:
+        return self._submit(
+            "reconcile",
+            run_dir,
+            capability,
+            approval,
+            request_digest=request_digest,
+        )
 
 
 @contextmanager

@@ -120,6 +120,7 @@ _ACTION_MAP = {
     "reject": "reject",
     "teach": "teach",
     "escalate": "escalate",
+    "reconcile": "reconcile",
 }
 _SUBSTRATE_MAP = {
     "web": "browser",
@@ -175,6 +176,8 @@ def decision_receipt(decision: AttendedDecision) -> HumanDecisionReceiptV1:
     state, reason_code = _RECEIPT_STATE[decision.status]
     if decision.status == "completed" and decision.action == "skip":
         reason_code = "skipped_and_resumed"
+    if decision.status == "completed" and decision.action == "reconcile":
+        reason_code = "reconciled_and_resumed"
     return HumanDecisionReceiptV1(
         task_id=f"task_{decision.pause_id}",
         pause_id=decision.pause_id,

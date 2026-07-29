@@ -667,6 +667,37 @@ jobs:
           # the installed distribution (checked outside the source tree).
           cd /tmp && /tmp/clean/bin/python -c "import importlib.util as u; import openadapt_flow.benchmark.reliability; forbidden = ('openadapt_flow.benchmark.reliability_corpus', 'openadapt_flow.validation.adversary_corpus', 'openadapt_flow.validation.adversary_corpus_v2', 'openadapt_flow.validation.adversary_corpus_v3', 'openadapt_flow.validation.identity_roc'); missing = [name for name in forbidden if u.find_spec(name) is not None]; assert not missing, missing; print('source-boundary carve OK')"
 
+      # This must use the built wheel and the released shared schema, not either
+      # editable checkout. The reconcile action crosses this package boundary:
+      # Flow maps its durable action to the portable Types enum and receipt.
+      - name: Install the attended reconciliation boundary in a clean venv
+        run: |
+          set -euo pipefail
+          WHEEL="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          test -n "$WHEEL"
+          python -m venv /tmp/attended-reconcile
+          /tmp/attended-reconcile/bin/pip install "${WHEEL}[console]"
+          cd /tmp && /tmp/attended-reconcile/bin/python - <<'PY'
+          from openadapt_types import HumanDecisionAction, HumanDecisionReceiptReason
+          from openadapt_flow.runtime.durable.attended import AttendedActionRequest
+
+          assert HumanDecisionAction.RECONCILE.value == "reconcile"
+          assert (
+              HumanDecisionReceiptReason.RECONCILED_AND_RESUMED.value
+              == "reconciled_and_resumed"
+          )
+          request = AttendedActionRequest.model_validate(
+              {
+                  "capability_digest": "sha256:" + "0" * 64,
+                  "idempotency_key": "installed-reconcile-boundary-01",
+                  "action": "reconcile",
+                  "disposition": "reconciliation_requested",
+              }
+          )
+          assert request.action == "reconcile"
+          print("installed attended reconciliation boundary OK")
+          PY
+
       - name: Install production extras and verify spaCy runtime imports
         run: |
           WHEEL="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"

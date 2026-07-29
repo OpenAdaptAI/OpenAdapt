@@ -50,7 +50,9 @@ class ContinuationLeaseRecord(BaseModel):
     attempt_id: str
     run_id: str
     pause_binding_sha256: str
-    operation: Literal["resume", "continue", "skip", "reject", "teach", "escalate"]
+    operation: Literal[
+        "resume", "continue", "skip", "reject", "teach", "escalate", "reconcile"
+    ]
     owner_nonce_sha256: str
     phase: Literal[
         "validating",
@@ -162,7 +164,9 @@ class ContinuationCoordinator:
     def lease(
         self,
         *,
-        operation: Literal["resume", "continue", "skip", "reject", "teach", "escalate"],
+        operation: Literal[
+            "resume", "continue", "skip", "reject", "teach", "escalate", "reconcile"
+        ],
         ttl_s: float = 15 * 60.0,
         now: Optional[datetime] = None,
         wait_s: float = 0.0,
@@ -182,7 +186,7 @@ class ContinuationCoordinator:
             and current.pause_binding_sha256 == binding
         ):
             active_record = self._validate_owned(current)
-            if active_record.operation not in {"continue", "skip"}:
+            if active_record.operation not in {"continue", "skip", "reconcile"}:
                 raise ContinuationBusy(
                     "a direct continuation cannot recursively resume itself"
                 )
@@ -490,6 +494,21 @@ class ContinuationCoordinator:
                 attempt_id=token.attempt_id,
                 owner_nonce_sha256=self._nonce_digest(token.owner_nonce),
                 source_pause_binding=source_pause_binding,
+            )
+        except StateDiverged as exc:
+            raise ContinuationBusy(str(exc)) from exc
+
+    def prove_completed_pause(self, *, source_pause_binding: str) -> bool:
+        """Prove an already terminal completion after an executor crash."""
+
+        manifest = self.store.read_manifest()
+        if manifest is None:
+            raise ContinuationBusy(
+                "the durable manifest disappeared before terminal recovery"
+            )
+        try:
+            return self.authority.prove_completed_pause(
+                manifest, source_pause_binding=source_pause_binding
             )
         except StateDiverged as exc:
             raise ContinuationBusy(str(exc)) from exc
