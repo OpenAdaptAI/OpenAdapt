@@ -1,6 +1,26 @@
 # CHANGELOG
 
 
+## v0.7.0 (2026-07-29)
+
+### Chores
+
+- **release**: Enforce source policy on archives
+  ([#17](https://github.com/OpenAdaptAI/openadapt-types/pull/17),
+  [`08059cd`](https://github.com/OpenAdaptAI/openadapt-types/commit/08059cdb8fc1401188418f68dddc6678e0c73858))
+
+### Features
+
+- Add runner capability contract
+  ([`955d3b2`](https://github.com/OpenAdaptAI/openadapt-types/commit/955d3b2eb3069593b86a630a35ab2a786f851e9a))
+
+- Coordinate Types 0.7 contracts
+  ([`5b71bb2`](https://github.com/OpenAdaptAI/openadapt-types/commit/5b71bb232039fbd2d155abb09831330395580b38))
+
+Add the portable attended-reconciliation and Execute v1 contracts. Regenerate the public schemas and
+  keep the source boundary intact.
+
+
 ## v0.6.4 (2026-07-28)
 
 ### Bug Fixes
