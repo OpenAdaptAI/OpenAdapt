@@ -8,6 +8,10 @@ blind retry after uncertain delivery), and the billing/success flags.
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -21,7 +25,12 @@ from openadapt_flow.ir import (
     StepResult,
     Workflow,
 )
-from openadapt_flow.runtime.actuators import ActuationStatus, ApiActuationResult
+from openadapt_flow.runtime.actuators import (
+    ActuationStatus,
+    ApiActuationResult,
+    ApiActuator,
+    ApiHaltKind,
+)
 from openadapt_flow.runtime.effects import Verdict
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -31,6 +40,7 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.transaction import (
+    DuplicateActuation,
     IdempotencyLedger,
     TransactionOutcome,
     build_effect_journal,
@@ -844,7 +854,15 @@ class _PathActuator:
 
     def actuate(self, binding, params):
         del binding, params
-        return ApiActuationResult(status=self.status, reason=self.status.value)
+        return ApiActuationResult(
+            status=self.status,
+            halt_kind=(
+                ApiHaltKind.DELIVERY_UNCERTAIN
+                if self.status is ActuationStatus.HALT
+                else None
+            ),
+            reason=self.status.value,
+        )
 
 
 class _FailingPathVerifier(_PathVerifier):
@@ -868,6 +886,49 @@ class _RaisingPathActuator:
         raise RuntimeError("actuator failed")
 
 
+class _LegacyUntypedHaltActuator:
+    """A pre-halt-kind deployment actuator that may have sent the request."""
+
+    class Result:
+        status = ActuationStatus.HALT
+        reason = "legacy untyped halt"
+
+    def actuate(self, binding, params):
+        del binding, params
+        return self.Result()
+
+
+class _MalformedResultActuator:
+    """A deployment actuator that returned no typed status after its call."""
+
+    class Result:
+        reason = "missing status"
+
+    def actuate(self, binding, params):
+        del binding, params
+        return self.Result()
+
+
+class _DuckUnavailableActuator:
+    """An untrusted adapter result that falsely claims pre-delivery safety."""
+
+    class Result:
+        status = ActuationStatus.UNAVAILABLE
+        reason = "untrusted unavailable"
+
+    def actuate(self, binding, params):
+        del binding, params
+        return self.Result()
+
+
+class _OutcomeProjectionFailingLedger(IdempotencyLedger):
+    """Reserve durably, then fail only the terminal outcome projection."""
+
+    def record_outcome(self, key, outcome, *, run_id):
+        del key, outcome, run_id
+        raise OSError("ledger outcome store unavailable")
+
+
 def _path_effect(name: str) -> Effect:
     return Effect(
         kind=EffectKind.RECORD_WRITTEN,
@@ -876,7 +937,9 @@ def _path_effect(name: str) -> Effect:
     )
 
 
-def _api_or_gui_workflow() -> tuple[Workflow, Effect, Effect]:
+def _api_or_gui_workflow(
+    *, on_unavailable: str = "gui"
+) -> tuple[Workflow, Effect, Effect]:
     gui_effect = _path_effect("gui")
     api_effect = _path_effect("api")
     workflow = Workflow(
@@ -892,11 +955,209 @@ def _api_or_gui_workflow() -> tuple[Workflow, Effect, Effect]:
                     method="POST",
                     url_template="/save",
                     effects=[api_effect],
+                    on_unavailable=on_unavailable,
                 ),
             )
         ],
     )
     return workflow, gui_effect, api_effect
+
+
+def test_api_only_binding_without_actuator_halts_before_gui_delivery(tmp_path):
+    workflow, _gui_effect, _api_effect = _api_or_gui_workflow(on_unavailable="halt")
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        effect_verifier=_PathVerifier(),
+    ).run(workflow, bundle_dir=tmp_path / "bundle", run_dir=tmp_path / "run")
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is False
+    assert result.actuation is None
+    assert result.safety_halt is True
+    assert result.safety_refusal_evidence is not None
+    assert result.safety_refusal_evidence.stage == "api_admission"
+    assert result.safety_refusal_evidence.code == "api_path_unavailable"
+    assert backend.actions == []
+
+
+@pytest.mark.parametrize(
+    "actuator",
+    [
+        _PathActuator(ActuationStatus.UNAVAILABLE),
+        ApiActuator(),
+    ],
+)
+def test_api_only_pre_delivery_unavailable_never_falls_through_to_gui(
+    tmp_path, actuator
+):
+    workflow, _gui_effect, _api_effect = _api_or_gui_workflow(on_unavailable="halt")
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        effect_verifier=_PathVerifier(),
+        api_actuator=actuator,
+    ).run(workflow, bundle_dir=tmp_path / "bundle", run_dir=tmp_path / "run")
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is False
+    assert result.safety_halt is True
+    assert result.safety_refusal_evidence is not None
+    assert result.safety_refusal_evidence.code == "api_path_unavailable"
+    assert backend.actions == []
+
+
+def test_api_only_attempted_halt_never_falls_through_to_gui(tmp_path):
+    workflow, _gui_effect, _api_effect = _api_or_gui_workflow(on_unavailable="halt")
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        effect_verifier=_PathVerifier(),
+        api_actuator=_PathActuator(ActuationStatus.HALT),
+    ).run(workflow, bundle_dir=tmp_path / "bundle", run_dir=tmp_path / "run")
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is True
+    assert result.actuation == "api"
+    assert result.safety_refusal_evidence is None
+    assert backend.actions == []
+
+
+@pytest.mark.parametrize(
+    "actuator",
+    [_LegacyUntypedHaltActuator(), _MalformedResultActuator()],
+)
+def test_invalid_api_result_collects_evidence_and_stays_halted(tmp_path, actuator):
+    workflow, _gui_effect, _api_effect = _api_or_gui_workflow(on_unavailable="halt")
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        effect_verifier=_PathVerifier(),
+        api_actuator=actuator,
+    ).run(workflow, bundle_dir=tmp_path / "bundle", run_dir=tmp_path / "run")
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is True
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.verification_attempted is True
+    assert result.delivery_uncertainty.resolved_by_contract is False
+    assert result.effect_verified is True
+    assert result.actuation == "api"
+    assert result.safety_halt is True
+    assert "protocol error" in " ".join(result.effect_results).lower()
+    assert backend.actions == []
+
+
+def test_duck_typed_unavailable_never_falls_through_to_gui(tmp_path):
+    """Only a revalidated ApiActuationResult can prove request non-delivery."""
+
+    workflow, _gui_effect, _api_effect = _api_or_gui_workflow(on_unavailable="gui")
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        effect_verifier=_PathVerifier(),
+        api_actuator=_DuckUnavailableActuator(),
+    ).run(workflow, bundle_dir=tmp_path / "bundle", run_dir=tmp_path / "run")
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is True
+    assert result.actuation == "api"
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.verification_attempted is True
+    assert result.delivery_uncertainty.resolved_by_contract is False
+    assert result.effect_verified is True
+    assert backend.actions == []
+
+
+def test_ledger_projection_failure_keeps_report_and_suppresses_replay(tmp_path):
+    """A post-action ledger failure cannot erase evidence or re-send a write."""
+
+    workflow, _gui_effect, _api_effect = _api_or_gui_workflow()
+    ledger = _OutcomeProjectionFailingLedger(tmp_path / "ledger.sqlite")
+    backend = FakeBackend()
+    run_dir = tmp_path / "run"
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        effect_verifier=_PathVerifier(),
+        api_actuator=_PathActuator(ActuationStatus.UNAVAILABLE),
+        idempotency_ledger=ledger,
+    ).run(
+        workflow,
+        bundle_dir=tmp_path / "bundle",
+        run_dir=run_dir,
+        idempotency_key="projection-failure-key",
+    )
+
+    # The GUI action happened once, but the retained terminal report is never
+    # a success after the ledger projection failed.
+    assert backend.actions == [("press", "Enter")]
+    assert report.success is False
+    assert report.execution_outcome == "FAILED"
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+    persisted = RunReport.model_validate_json((run_dir / "report.json").read_text())
+    assert persisted.success is False
+    assert persisted.execution_outcome == "FAILED"
+    assert persisted.transaction_outcome == "RECONCILIATION_REQUIRED"
+    failure = persisted.results[-1]
+    assert failure.step_id == "<idempotency>"
+    assert failure.failure_category == "runtime_failure"
+    assert ledger.lookup("projection-failure-key")["outcome"] is None
+
+    replay_backend = FakeBackend()
+    replay = Replayer(
+        replay_backend,
+        vision=FakeVision(),
+        effect_verifier=_PathVerifier(),
+        api_actuator=_PathActuator(ActuationStatus.UNAVAILABLE),
+        idempotency_ledger=ledger,
+    ).run(
+        workflow,
+        bundle_dir=tmp_path / "bundle",
+        run_dir=tmp_path / "retry",
+        idempotency_key="projection-failure-key",
+    )
+    assert replay.idempotent_replay is True
+    assert replay_backend.actions == []
+
+
+def test_terminal_ledger_projection_rejects_a_missing_transaction_outcome(tmp_path):
+    """Every terminal ledger call requires an exact outcome taxonomy."""
+
+    ledger = IdempotencyLedger(tmp_path / "ledger.sqlite")
+    ledger.reserve("missing-outcome-key", run_id="owned-run")
+    replayer = Replayer(
+        FakeBackend(),
+        vision=FakeVision(),
+        idempotency_ledger=ledger,
+    )
+    replayer._run_id = "owned-run"  # noqa: SLF001 - exact ownership boundary
+    replayer._idempotency_reservation_owned = True  # noqa: SLF001
+    report = RunReport(
+        workflow_name="missing-outcome",
+        started_at="2026-07-29T00:00:00Z",
+        idempotency_key="missing-outcome-key",
+    )
+
+    with pytest.raises(RuntimeError, match="terminal transaction outcome is missing"):
+        replayer._record_idempotency_outcome(report)  # noqa: SLF001
+
+    assert ledger.lookup("missing-outcome-key")["outcome"] is None
 
 
 @pytest.mark.parametrize(
@@ -1038,6 +1299,232 @@ def test_different_keys_do_not_suppress(tmp_path):
     report = _simple_click_run(other, ledger, tmp_path / "run2", bundle, "b")
     assert report.idempotent_replay is False
     assert other.actions == [("click", 110, 105, False)]
+
+
+def test_two_ledger_instances_cannot_replace_the_first_owner(tmp_path):
+    path = tmp_path / "ledger.sqlite"
+    first = IdempotencyLedger(path)
+    second = IdempotencyLedger(path)
+
+    first.reserve("same-key", run_id="first-owner")
+    with pytest.raises(DuplicateActuation, match="first-owner"):
+        second.reserve("same-key", run_id="second-owner")
+
+    record = second.lookup("same-key")
+    assert record == first.lookup("same-key")
+    assert record is not None
+    assert record["run_id"] == "first-owner"
+
+
+def test_claim_prevents_key_reuse_after_same_path_database_rollback(tmp_path):
+    path = tmp_path / "ledger.sqlite"
+    ledger = IdempotencyLedger(path)
+    before_reservation = tmp_path / "before-reservation.sqlite"
+    shutil.copyfile(path, before_reservation)
+
+    ledger.reserve("write-42", run_id="first-owner")
+    # Simulate an external SQLite rollback. The database no longer knows the
+    # key, but the immutable claim beside it must still prevent re-actuation.
+    shutil.copyfile(before_reservation, path)
+
+    rolled_back = IdempotencyLedger(path)
+    with pytest.raises(DuplicateActuation, match="first-owner"):
+        rolled_back.reserve("write-42", run_id="second-owner")
+    with pytest.raises(RuntimeError, match="claim/database ownership mismatch"):
+        rolled_back.lookup("write-42")
+
+
+def test_record_outcome_requires_the_reservation_owner(tmp_path):
+    ledger = IdempotencyLedger(tmp_path / "ledger.sqlite")
+    ledger.reserve("write-42", run_id="owner")
+
+    with pytest.raises(RuntimeError, match="owner mismatch"):
+        ledger.record_outcome("write-42", "VERIFIED", run_id="other")
+    with pytest.raises(RuntimeError, match="has no reservation"):
+        ledger.record_outcome("missing", "VERIFIED", run_id="owner")
+    assert ledger.lookup("write-42")["outcome"] is None
+
+    ledger.record_outcome("write-42", "VERIFIED", run_id="owner")
+    assert ledger.lookup("write-42")["outcome"] == "VERIFIED"
+
+
+@pytest.mark.parametrize("path", [None, "ledger.sqlite"])
+def test_terminal_outcome_is_valid_write_once_and_owner_idempotent(tmp_path, path):
+    ledger = IdempotencyLedger(None if path is None else tmp_path / path)
+    ledger.reserve("write-42", run_id="owner")
+
+    # A pre-terminal no-op remains safe for callers that finalize conditionally.
+    ledger.record_outcome("write-42", None, run_id="owner")
+    with pytest.raises(ValueError, match="TransactionOutcome"):
+        ledger.record_outcome("write-42", "not-a-terminal-outcome", run_id="owner")
+
+    ledger.record_outcome("write-42", TransactionOutcome.VERIFIED, run_id="owner")
+    # The owner can repeat the same terminal report after a retrying caller
+    # loses its acknowledgment, but cannot change or clear it.
+    ledger.record_outcome("write-42", "VERIFIED", run_id="owner")
+    with pytest.raises(RuntimeError, match="write-once"):
+        ledger.record_outcome("write-42", "FAILED_PLATFORM", run_id="owner")
+    with pytest.raises(RuntimeError, match="write-once"):
+        ledger.record_outcome("write-42", None, run_id="owner")
+    assert ledger.lookup("write-42")["outcome"] == "VERIFIED"
+
+
+def test_ledger_rejects_ancestor_and_managed_path_symlinks(tmp_path):
+    real_parent = tmp_path / "real"
+    real_parent.mkdir()
+    linked_parent = tmp_path / "linked"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    with pytest.raises(RuntimeError, match="must not traverse a symlink"):
+        IdempotencyLedger(linked_parent / "ledger.sqlite")
+
+    path = tmp_path / "legacy.json"
+    path.write_text("{}", encoding="utf-8")
+    migration_lock = path.with_name(f"{path.name}.migration.lock")
+    migration_lock.symlink_to(tmp_path / "elsewhere")
+    with pytest.raises(RuntimeError, match="must not be a symlink"):
+        IdempotencyLedger(path)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX dir_fd")
+def test_ledger_refuses_ancestor_replacement_before_claim_creation(tmp_path):
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    ledger = IdempotencyLedger(managed / "ledger.sqlite")
+
+    moved = tmp_path / "managed-original"
+    managed.rename(moved)
+    managed.mkdir()
+
+    with pytest.raises(RuntimeError, match="parent changed"):
+        ledger.reserve("write-42", run_id="owner")
+
+    # The redirected pathname gains no claim.  The retained descriptor pins
+    # the original directory, and the runtime refuses before it can create a
+    # reservation in either location.
+    assert not list(managed.glob("*.claims/*"))
+    assert not list(moved.glob("*.claims/*"))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX dir_fd")
+def test_ledger_refuses_ancestor_replacement_during_json_migration(
+    tmp_path, monkeypatch
+):
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    path = managed / "ledger.json"
+    path.write_text(
+        json.dumps(
+            {
+                "legacy-key": {
+                    "run_id": "owner",
+                    "reserved_at": "2026-07-28T00:00:00+00:00",
+                    "outcome": "VERIFIED",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    original = IdempotencyLedger._create_migration_tempfile
+
+    def replace_parent(self):
+        result = original(self)
+        managed.rename(tmp_path / "managed-original")
+        managed.mkdir()
+        return result
+
+    monkeypatch.setattr(IdempotencyLedger, "_create_migration_tempfile", replace_parent)
+    with pytest.raises(RuntimeError, match="parent changed"):
+        IdempotencyLedger(path)
+
+    # No replacement projection or claim appears under the redirected path.
+    assert not path.exists()
+    assert not list(managed.glob("*.claims/*"))
+
+
+def test_stale_unlocked_migration_lock_recovers_safely(tmp_path):
+    path = tmp_path / "ledger.json"
+    path.write_text("{}", encoding="utf-8")
+    # Advisory locks release when a process dies. A leftover file must not
+    # force a caller to discard the legacy ledger or treat it as empty.
+    path.with_name(f"{path.name}.migration.lock").write_text("stale", encoding="utf-8")
+
+    ledger = IdempotencyLedger(path)
+    assert path.read_bytes().startswith(b"SQLite format 3\x00")
+    assert ledger.lookup("missing") is None
+
+
+def test_cross_process_reservation_has_one_durable_owner(tmp_path):
+    path = tmp_path / "ledger.sqlite"
+    ready = tmp_path / "ready"
+    script = """
+import sys
+import time
+from pathlib import Path
+from openadapt_flow.transaction import DuplicateActuation, IdempotencyLedger
+
+ledger = IdempotencyLedger(Path(sys.argv[1]))
+ready = Path(sys.argv[2])
+while not ready.exists():
+    time.sleep(0.005)
+try:
+    ledger.reserve("shared-key", run_id=sys.argv[3])
+except DuplicateActuation:
+    print("duplicate", flush=True)
+else:
+    print("owner", flush=True)
+"""
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", script, str(path), str(ready), owner],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        for owner in ("process-a", "process-b")
+    ]
+    ready.touch()
+    results = [process.communicate(timeout=20) for process in processes]
+
+    assert [process.returncode for process in processes] == [0, 0]
+    assert sorted(stdout.strip() for stdout, _stderr in results) == [
+        "duplicate",
+        "owner",
+    ]
+    record = IdempotencyLedger(path).lookup("shared-key")
+    assert record is not None
+    assert record["run_id"] in {"process-a", "process-b"}
+
+
+def test_legacy_json_projection_migrates_once_and_stays_path_bound(tmp_path):
+    path = tmp_path / "ledger.json"
+    path.write_text(
+        json.dumps(
+            {
+                "legacy-key": {
+                    "run_id": "legacy-owner",
+                    "reserved_at": "2026-07-28T00:00:00+00:00",
+                    "outcome": "VERIFIED",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ledger = IdempotencyLedger(path)
+    assert path.read_bytes().startswith(b"SQLite format 3\x00")
+    assert ledger.lookup("legacy-key") == {
+        "run_id": "legacy-owner",
+        "reserved_at": "2026-07-28T00:00:00+00:00",
+        "outcome": "VERIFIED",
+    }
+    with pytest.raises(DuplicateActuation, match="legacy-owner"):
+        ledger.reserve("legacy-key", run_id="replacement")
+
+    copied = tmp_path / "copied-ledger.sqlite"
+    shutil.copyfile(path, copied)
+    with pytest.raises(RuntimeError, match="owner/schema mismatch"):
+        IdempotencyLedger(copied)
 
 
 # -- no blind retry after uncertain delivery (builds on #250) ----------------

@@ -6,7 +6,12 @@ from openadapt_flow.backend import ActionDeliveryUncertain
 from openadapt_flow.execution_profiles import ExecutionOutcome, ExecutionProfile
 from openadapt_flow.ir import ActionKind
 from openadapt_flow.run_gate import build_runtime_authorization
-from openadapt_flow.runtime.durable import ApprovalRecord, ApprovalRequired, resume
+from openadapt_flow.runtime.durable import (
+    ApprovalRequired,
+    CheckpointStore,
+    issue_resume_approval,
+    resume,
+)
 from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 from openadapt_flow.runtime.effects import EffectState, EffectVerdict, Verdict
 from openadapt_flow.runtime.replayer import Replayer
@@ -80,6 +85,14 @@ class _UncertainAfterWriteBackend(FakeBackend):
         )
 
 
+class _UntypedFailureAfterWriteBackend(_UncertainAfterWriteBackend):
+    def act_guarded_coordinate(self, *args, **kwargs):
+        try:
+            return super().act_guarded_coordinate(*args, **kwargs)
+        except ActionDeliveryUncertain as exc:
+            raise ConnectionResetError("synthetic record data") from exc
+
+
 def _click_workflow():
     workflow = _key_workflow(
         "uncertain-delivery",
@@ -134,6 +147,41 @@ def test_uncertain_delivery_is_verified_only_by_complete_independent_contract(
     assert result.delivery_uncertainty.postconditions_confirmed is True
     assert result.delivery_uncertainty.effects_confirmed is True
     assert result.delivery_uncertainty.resolved_by_contract is True
+
+
+def test_untyped_post_dispatch_failure_uses_the_same_effect_reconciliation(
+    tmp_path,
+) -> None:
+    workflow, bundle = _sealed(tmp_path, _click_workflow(), encrypted=False)
+    store: list[dict[str, str]] = []
+    verifier = _StoreVerifier(store, Verdict.CONFIRMED)
+    gate = _gate(
+        workflow,
+        bundle,
+        ExecutionProfile.STANDARD,
+        verifier=verifier,
+        durable=True,
+    )
+    backend = _UntypedFailureAfterWriteBackend(store)
+    vision = _ReadyVision()
+    vision.text_results["Saved"] = object()
+
+    report = Replayer(
+        backend,
+        vision=vision,
+        effect_verifier=verifier,
+        governed_authorization=build_runtime_authorization(workflow, gate),
+        durable=True,
+        require_settled=True,
+    ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "run")
+
+    assert report.execution_outcome == ExecutionOutcome.VERIFIED.value
+    assert backend.actuation_count == 1
+    assert verifier.verify_calls == 1
+    result = report.results[0]
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.cause_type == "ConnectionResetError"
+    assert "synthetic record data" not in str(report.model_dump(mode="json"))
 
 
 def test_refuted_uncertain_delivery_halts_without_a_second_actuation(tmp_path) -> None:
@@ -236,10 +284,18 @@ def test_durable_resume_cannot_reenter_uncertain_step_without_explicit_retry(
         durable=True,
         require_settled=True,
     )
-    ordinary_approval = ApprovalRecord(
+    durable_store = CheckpointStore(run_dir)
+    manifest = durable_store.read_manifest()
+    pending = durable_store.read_pending()
+    assert manifest is not None and pending is not None
+    ordinary_approval = issue_resume_approval(
+        pending,
         approver="operator@example.com",
         resolution="resume after review",
         bundle_version=bundle_version(bundle),
+        run_id=manifest.run_id,
+        workflow_name=manifest.workflow_name,
+        run_dir=run_dir,
     )
 
     try:

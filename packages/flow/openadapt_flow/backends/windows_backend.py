@@ -40,7 +40,7 @@ import re
 import struct
 import warnings
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -267,6 +267,7 @@ class WindowsBackend:
             )
 
         self._session = session if session is not None else requests.Session()
+        self._qualification_input_guard: Optional[Callable[[], None]] = None
         if self._tls and self._pin_fingerprint:
             from openadapt_flow.backends.win_agent.tls import pinned_session
 
@@ -393,6 +394,8 @@ class WindowsBackend:
                 "press": "physical_press",
                 "scroll": "physical_scroll",
             }.get(action, "win_agent_action")
+        if self._qualification_input_guard is not None:
+            self._qualification_input_guard()
         try:
             response = self._session.post(
                 f"{self.server_url}{path}",
@@ -405,6 +408,7 @@ class WindowsBackend:
                 native=False,
                 cause_type=type(exc).__name__,
             ) from exc
+
         if response.status_code != 200:
             if response.status_code == 404:
                 raise _TypedRouteUnavailable(
@@ -470,6 +474,13 @@ class WindowsBackend:
                 cause_type="InvalidPayload",
             )
         return data
+
+    def set_qualification_input_guard(
+        self, guard: Optional[Callable[[], None]]
+    ) -> None:
+        """Install or clear the run-scoped qualification input guard."""
+
+        self._qualification_input_guard = guard
 
     @staticmethod
     def _validate_physical_receipt(payload: dict, operation: str) -> None:

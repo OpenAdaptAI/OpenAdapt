@@ -54,6 +54,10 @@ from openadapt_flow.runtime.durable.checkpoint import (  # noqa: E402
     RunCheckpoint,
     RunManifest,
 )
+from openadapt_flow.runtime.durable.continuation import (  # noqa: E402
+    ContinuationToken,
+    activate_continuation_token,
+)
 from openadapt_flow.runtime.effects import Effect, EffectKind  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -61,6 +65,15 @@ from openadapt_flow.runtime.effects import Effect, EffectKind  # noqa: E402
 # ---------------------------------------------------------------------------
 
 _PNG = b"\x89PNG\r\n\x1a\nfake-crop-bytes"
+
+
+def _owner_token(label: str) -> ContinuationToken:
+    return ContinuationToken(
+        attempt_id=f"attempt-{label}",
+        run_id=f"run-{label}",
+        pause_binding_sha256=f"sha256:{label}",
+        owner_nonce=f"nonce-{label}",
+    )
 
 
 def _armed_click(step_id: str, *, risk: str = "reversible", effects=()) -> Step:
@@ -1768,21 +1781,24 @@ def test_attended_console_owns_one_backend_and_closes_it(monkeypatch):
     )
     monkeypatch.setattr(
         "openadapt_flow.runtime.durable.attended_service.execute_attended_action",
-        lambda _run_dir, _request, *, operator, executor, key: executor.continue_run(
-            Path("run"),
-            SimpleNamespace(step_id=f"step-for-{operator}"),
-            SimpleNamespace(),
+        lambda _run_dir, _request, *, operator, decided_by, executor, key: (
+            executor.continue_run(
+                Path("run"),
+                SimpleNamespace(step_id=f"step-for-{operator}"),
+                SimpleNamespace(),
+            )
         ),
     )
 
     with cli._attended_service_from_args(args) as service:
         assert service is not None
         owner_thread = service._owner.owner_thread_id
-        result = service.execute(
-            Path("run"),
-            SimpleNamespace(),
-            operator="staff",
-        )
+        with activate_continuation_token(_owner_token("console-backend")):
+            result = service.execute(
+                Path("run"),
+                SimpleNamespace(),
+                operator="staff",
+            )
         assert result.status == "completed"
         assert built == [backend]
         assert [item["backend"] for item in configured] == [backend]
@@ -1927,19 +1943,22 @@ def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
     )
     monkeypatch.setattr(
         "openadapt_flow.runtime.durable.attended_service.execute_attended_action",
-        lambda _run_dir, _request, *, operator, executor, key: executor.continue_run(
-            Path("run"),
-            SimpleNamespace(step_id=f"step-for-{operator}"),
-            SimpleNamespace(),
+        lambda _run_dir, _request, *, operator, decided_by, executor, key: (
+            executor.continue_run(
+                Path("run"),
+                SimpleNamespace(step_id=f"step-for-{operator}"),
+                SimpleNamespace(),
+            )
         ),
     )
 
     with cli._attended_service_from_args(args) as service:
-        result = service.execute(
-            Path("run"),
-            SimpleNamespace(),
-            operator="staff",
-        )
+        with activate_continuation_token(_owner_token("console-browser")):
+            result = service.execute(
+                Path("run"),
+                SimpleNamespace(),
+                operator="staff",
+            )
         owner_thread = service._owner.owner_thread_id
     assert result.status == "completed"
     assert owner_thread is not None
@@ -2022,11 +2041,12 @@ def test_thread_owned_attended_executor_serializes_concurrent_calls():
     results: dict[str, AttendedExecutionResult] = {}
 
     def submit(name: str) -> None:
-        results[name] = owner.continue_run(
-            Path(name),
-            SimpleNamespace(step_id=name),
-            SimpleNamespace(),
-        )
+        with activate_continuation_token(_owner_token(name)):
+            results[name] = owner.continue_run(
+                Path(name),
+                SimpleNamespace(step_id=name),
+                SimpleNamespace(),
+            )
 
     with _ThreadOwnedAttendedExecutor(
         factory,
@@ -2092,16 +2112,17 @@ def test_thread_owned_attended_executor_refuses_timed_out_queued_call():
 
     def submit_first() -> None:
         try:
-            first_outcomes.append(
-                owner.continue_run(
-                    Path("first"),
-                    SimpleNamespace(
-                        step_id="first",
-                        expected_next_transition="after-first",
-                    ),
-                    SimpleNamespace(),
+            with activate_continuation_token(_owner_token("first-timeout")):
+                first_outcomes.append(
+                    owner.continue_run(
+                        Path("first"),
+                        SimpleNamespace(
+                            step_id="first",
+                            expected_next_transition="after-first",
+                        ),
+                        SimpleNamespace(),
+                    )
                 )
-            )
         except BaseException as exc:
             first_outcomes.append(exc)
 
@@ -2114,14 +2135,15 @@ def test_thread_owned_attended_executor_refuses_timed_out_queued_call():
         first = threading.Thread(target=submit_first)
         first.start()
         assert first_started.wait(timeout=2)
-        queued = owner.continue_run(
-            Path("second"),
-            SimpleNamespace(
-                step_id="second",
-                expected_next_transition="after-second",
-            ),
-            SimpleNamespace(),
-        )
+        with activate_continuation_token(_owner_token("second-timeout")):
+            queued = owner.continue_run(
+                Path("second"),
+                SimpleNamespace(
+                    step_id="second",
+                    expected_next_transition="after-second",
+                ),
+                SimpleNamespace(),
+            )
         assert queued.status == "refused"
         assert queued.report_success is False
         assert queued.resumed_from == "second"
@@ -2165,17 +2187,18 @@ def test_thread_owned_attended_executor_propagates_action_failure_and_recovers()
         action_timeout_s=300,
         shutdown_timeout_s=30,
     ) as owner:
-        with pytest.raises(ValueError, match="live verification failed"):
-            owner.continue_run(
+        with activate_continuation_token(_owner_token("failure-recovery")):
+            with pytest.raises(ValueError, match="live verification failed"):
+                owner.continue_run(
+                    Path("run"),
+                    SimpleNamespace(step_id="step-1"),
+                    SimpleNamespace(),
+                )
+            result = owner.skip_run(
                 Path("run"),
                 SimpleNamespace(step_id="step-1"),
                 SimpleNamespace(),
             )
-        result = owner.skip_run(
-            Path("run"),
-            SimpleNamespace(step_id="step-1"),
-            SimpleNamespace(),
-        )
     assert result.status == "completed"
 
 
@@ -2212,14 +2235,15 @@ def test_thread_owned_attended_executor_timeout_is_not_a_refusal_receipt():
         action_timeout_s=0.02,
         shutdown_timeout_s=2,
     ) as owner:
-        with pytest.raises(
-            AttendedExecutorTimeout, match="did not return a terminal receipt"
-        ):
-            owner.continue_run(
-                Path("run"),
-                SimpleNamespace(step_id="step-1"),
-                SimpleNamespace(),
-            )
+        with activate_continuation_token(_owner_token("terminal-timeout")):
+            with pytest.raises(
+                AttendedExecutorTimeout, match="did not return a terminal receipt"
+            ):
+                owner.continue_run(
+                    Path("run"),
+                    SimpleNamespace(step_id="step-1"),
+                    SimpleNamespace(),
+                )
         release.set()
 
 
@@ -2260,8 +2284,11 @@ def test_public_attended_action_service_contract_is_stable():
         "run_dir",
         "request",
         "operator",
+        "decided_by",
     ]
     assert execute.parameters["operator"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert execute.parameters["decided_by"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert execute.parameters["decided_by"].default == "unknown"
 
     service = AttendedActionService(DeploymentConfig())
     assert not hasattr(service, "continue_run")

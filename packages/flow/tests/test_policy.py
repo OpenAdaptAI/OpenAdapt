@@ -11,6 +11,7 @@ from openadapt_flow.ir import (
     ActionKind,
     Anchor,
     ApiBinding,
+    ApiIdentityBinding,
     Postcondition,
     PostconditionKind,
     Step,
@@ -21,6 +22,7 @@ from openadapt_flow.policy import (
     Policy,
     builtin_policy_names,
     evaluate_policy,
+    executable_actuation_paths,
     is_identity_armed,
     is_vacuous,
     lint_workflow,
@@ -30,6 +32,60 @@ from openadapt_flow.policy import (
 from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
 
 _PC = [Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Saved OK")]
+
+
+def test_api_unavailable_policy_defaults_to_gui_and_can_declare_api_only() -> None:
+    effect = Effect(kind=EffectKind.RECORD_WRITTEN, match={"id": "1"})
+    step = Step(
+        id="save",
+        intent="save",
+        action=ActionKind.KEY,
+        effects=[effect],
+        api_binding=ApiBinding(url_template="/save", effects=[effect]),
+    )
+
+    assert step.api_binding is not None
+    assert step.api_binding.on_unavailable == "gui"
+    assert executable_actuation_paths(step) == ("gui", "api")
+
+    payload = step.api_binding.model_dump(mode="json")
+    payload["on_unavailable"] = "halt"
+    step.api_binding = ApiBinding.model_validate(payload)
+    assert executable_actuation_paths(step) == ("api",)
+
+
+def test_strict_policy_accepts_api_only_identity_effect_without_gui_contracts() -> None:
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"record_id": ValueExpr(param="record_id")},
+        idempotency_key=ValueExpr(param="record_id"),
+        risk="irreversible",
+    )
+    step = Step(
+        id="save",
+        intent="save",
+        action=ActionKind.KEY,
+        key="Enter",
+        risk="irreversible",
+        api_binding=ApiBinding(
+            url_template="/records/{record_id}",
+            on_unavailable="halt",
+            effects=[effect],
+            identity=[
+                ApiIdentityBinding(
+                    key="record_id",
+                    param="record_id",
+                    effect_field="record_id",
+                    request_pointers=["/url/record_id"],
+                )
+            ],
+        ),
+    )
+    workflow = Workflow(name="api-only", params={"record_id": "r1"}, steps=[step])
+
+    report = evaluate_policy(workflow, load_policy("clinical-write"))
+
+    assert report.passed, report.render()
 
 
 def _click(
@@ -174,6 +230,11 @@ class TestCertify:
         assert step.anchor is not None
         step.anchor.identifier_crop = "templates/identifiers/step_000.png"
         assert is_identity_armed(step)
+
+    def test_identity_audit_flag_cannot_replace_retained_evidence(self):
+        step = _click("step_000", "click 'Remote row'", armed=False)
+        step.identity_armed = True
+        assert not is_identity_armed(step)
 
     def test_strict_fails_bundle_with_unarmed_clicks(self):
         report = evaluate_policy(_gappy_workflow(), STRICT)

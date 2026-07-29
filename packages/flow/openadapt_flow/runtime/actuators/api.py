@@ -15,27 +15,27 @@ classifies every attempt into exactly one of three fail-safe outcomes
 (:class:`ActuationStatus`), keyed on *whether the request could have reached
 the server*:
 
-- :attr:`ActuationStatus.UNAVAILABLE` -- the request was **never sent** (the
-  TCP connection was never established: connection refused, DNS failure,
-  connect-timeout) or the binding could not even be built (a param the URL/body
-  needs was not supplied). Nothing was written, so it is SAFE for the caller to
-  fall through to the GUI ladder for this step. This is the "reachable
-  ApiBinding" gate: an unreachable endpoint simply is not actuated.
+- :attr:`ActuationStatus.UNAVAILABLE` -- the request was **proven not to have
+  started** because OpenAdapt could not construct it (for example, a required
+  parameter or API base URL was absent). Nothing was written. The binding's
+  configured unavailability policy can therefore use GUI fallback or halt
+  without risking a duplicate write.
 - :attr:`ActuationStatus.ACTUATED` -- the request was sent and the server
   returned success (2xx, or an explicitly-allowed status). The write was
   performed; the caller MUST now confirm it with the EffectVerifier and MUST
   skip the GUI (never re-do the write).
 - :attr:`ActuationStatus.HALT` -- the request WAS sent but its outcome is
   unknown or a rejection (read-timeout after the bytes went out, a non-2xx
-  response, any post-send transport error). The write MAY have landed, so the
-  caller must NEITHER accept it as success NOR GUI-write it again -- it HALTs
-  (the same refuse-rather-than-guess posture as the EffectVerifier's
-  INDETERMINATE verdict).
+  response, any post-send transport error). The write MAY have landed. The
+  caller must NEITHER retry it NOR GUI-write it. The caller must continue to
+  the configured postcondition and independent-effect checks, then report
+  success only if that complete contract proves the intended effect.
 
-The connect-phase / read-phase split is exact in ``requests``:
-``ConnectTimeout`` subclasses ``ConnectionError`` (nothing sent -> UNAVAILABLE)
-while ``ReadTimeout`` does not (bytes sent -> HALT), so catching
-``ConnectionError`` before ``Timeout`` gives the right classification.
+After ``session.request()`` begins, a transport exception cannot prove that a
+server did not receive the request. In particular, ``ConnectionError`` can
+represent a response loss after a committed write. All such exceptions HALT.
+Only OpenAdapt's typed before-request construction failures produce
+``UNAVAILABLE``.
 
 Import-light: ``requests`` is imported lazily so importing this module (and the
 runtime package) stays cheap and model-free.
@@ -46,7 +46,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from openadapt_flow.ir import ApiBinding
 
@@ -58,16 +58,31 @@ class ActuationStatus(str, Enum):
     #: caller confirms it with the EffectVerifier and SKIPS the GUI.
     ACTUATED = "actuated"
     #: The request was never sent (endpoint unreachable, or the binding could
-    #: not be built) -> nothing was written; SAFE to fall through to the GUI
-    #: ladder for this step.
+    #: not be built) -> nothing was written; apply the binding's configured
+    #: GUI-fallback or halt policy.
     UNAVAILABLE = "unavailable"
     #: The request WAS sent but its outcome is unknown or a rejection -> the
-    #: write may have landed; HALT (never accept, never GUI-write it again).
+    #: write may have landed; verify the complete contract without retry or GUI
+    #: fallback, then halt if the contract cannot prove the intended effect.
     HALT = "halt"
+
+
+class ApiHaltKind(str, Enum):
+    """Why an attempted API request must halt."""
+
+    #: No response proved the business outcome. The request can have reached
+    #: the server, so the runtime must verify without retrying.
+    DELIVERY_UNCERTAIN = "delivery_uncertain"
+    #: The server returned a status outside the binding's accepted contract.
+    #: The runtime can collect effect evidence, but the rejected response
+    #: prevents this attempt from becoming a successful run.
+    RESPONSE_REJECTED = "response_rejected"
 
 
 class ApiActuationResult(BaseModel):
     """Outcome of one :meth:`ApiActuator.actuate` call."""
+
+    model_config = ConfigDict(frozen=True)
 
     status: ActuationStatus
     substrate: str = "rest"
@@ -77,8 +92,20 @@ class ApiActuationResult(BaseModel):
     reason: str = ""
     #: HTTP status code when a response was received; None otherwise.
     http_status: Optional[int] = None
+    #: Required classification for a HALT result. It separates response loss
+    #: from an explicit server rejection so the runtime cannot accept a weak
+    #: screen signal after a rejected request.
+    halt_kind: Optional[ApiHaltKind] = None
     #: ``"METHOD url_template"`` (unsubstituted) for the audit line.
     request_summary: str = ""
+
+    @model_validator(mode="after")
+    def _validate_halt_kind(self) -> "ApiActuationResult":
+        if self.status is ActuationStatus.HALT and self.halt_kind is None:
+            raise ValueError("HALT API results require halt_kind")
+        if self.status is not ActuationStatus.HALT and self.halt_kind is not None:
+            raise ValueError("halt_kind is valid only for HALT API results")
+        return self
 
     @property
     def actuated(self) -> bool:
@@ -86,8 +113,10 @@ class ApiActuationResult(BaseModel):
 
     @property
     def should_fall_through(self) -> bool:
-        """True when the caller may safely fall through to the GUI ladder
-        (the request was never sent, so nothing was written)."""
+        """True when no request was sent and GUI fallback is physically safe.
+
+        The binding can still require a fail-closed halt instead.
+        """
         return self.status is ActuationStatus.UNAVAILABLE
 
     @property
@@ -109,8 +138,8 @@ def _fill(template: str, params: dict[str, str]) -> str:
 
     Raises :class:`_MissingParam` when the template references a key that is
     not in ``params`` -- the binding cannot be built, so the actuator reports
-    UNAVAILABLE (a before-send problem: nothing is written, GUI fallback is
-    safe) rather than sending a half-formed request.
+    UNAVAILABLE (a before-send problem: nothing is written) rather than sending
+    a half-formed request. The caller applies the binding's fallback policy.
     """
     return template.format_map(_StrictMap(params))
 
@@ -177,9 +206,10 @@ class ApiActuator:
         """Perform ``binding``'s write, substituting ``params``; classify safely.
 
         Returns an :class:`ApiActuationResult` whose :attr:`status` tells the
-        caller exactly one safe next move: confirm-and-skip-GUI (ACTUATED),
-        fall-through-to-GUI (UNAVAILABLE, nothing was written), or HALT
-        (attempted, outcome unknown -- never double-write). Never raises.
+        caller the delivery state for one safe next move: confirm-and-skip-GUI
+        (ACTUATED), apply the binding's configured pre-delivery unavailability
+        policy (UNAVAILABLE), or verify-without-retry (HALT: attempted, outcome
+        unknown -- never double-write). Never raises.
         """
         summary = f"{binding.method} {binding.url_template}"
 
@@ -195,12 +225,23 @@ class ApiActuator:
                 substrate=self.substrate,
                 reason=(
                     f"binding for {summary} references param {exc} not supplied "
-                    "by the run -- API tier unavailable, falling through to GUI"
+                    "by the run -- request not sent; API tier unavailable"
+                ),
+                request_summary=summary,
+            )
+        if not url.startswith(("http://", "https://")):
+            return ApiActuationResult(
+                status=ActuationStatus.UNAVAILABLE,
+                substrate=self.substrate,
+                reason=(
+                    f"no API base URL is configured for relative endpoint "
+                    f"{binding.url_template!r} -- request not sent, API tier "
+                    "unavailable"
                 ),
                 request_summary=summary,
             )
 
-        import requests  # lazy; hierarchy: ConnectTimeout is a ConnectionError
+        import requests  # lazy
 
         timeout = binding.timeout_s or self.default_timeout_s
         try:
@@ -212,27 +253,21 @@ class ApiActuator:
                 headers=headers or None,
                 timeout=timeout,
             )
-        except requests.exceptions.ConnectionError as exc:
-            # Connection never established (refused / DNS / connect-timeout):
-            # the request was NEVER sent, so nothing was written -> it is safe
-            # to fall through to the GUI ladder for this step.
-            return ApiActuationResult(
-                status=ActuationStatus.UNAVAILABLE,
-                substrate=self.substrate,
-                reason=(
-                    f"endpoint unreachable ({type(exc).__name__}) -- request "
-                    "not sent, API tier unavailable, falling through to GUI"
-                ),
-                request_summary=summary,
-            )
-        except requests.exceptions.Timeout as exc:
-            # Read-timeout: the bytes WENT OUT and the server may have processed
-            # the write. Outcome unknown -> HALT (never GUI-write it again).
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+        ) as exc:
+            # Once ``session.request`` began, neither requests nor this adapter
+            # can prove that no byte reached the server.  A connection reset,
+            # DNS/proxy error, or timeout can follow a committed write whose
+            # response was lost.  Treat every transport exception as uncertain
+            # delivery; GUI fallback would risk a duplicate write.
             return ApiActuationResult(
                 status=ActuationStatus.HALT,
                 substrate=self.substrate,
+                halt_kind=ApiHaltKind.DELIVERY_UNCERTAIN,
                 reason=(
-                    f"request sent but timed out awaiting the response "
+                    f"request transport failed after dispatch began "
                     f"({type(exc).__name__}) -- the write may have landed; HALT "
                     "(never double-write via the GUI)"
                 ),
@@ -244,6 +279,7 @@ class ApiActuator:
             return ApiActuationResult(
                 status=ActuationStatus.HALT,
                 substrate=self.substrate,
+                halt_kind=ApiHaltKind.DELIVERY_UNCERTAIN,
                 reason=(
                     f"request failed after being sent ({type(exc).__name__}) -- "
                     "outcome unknown; HALT (never double-write via the GUI)"
@@ -269,6 +305,7 @@ class ApiActuator:
         return ApiActuationResult(
             status=ActuationStatus.HALT,
             substrate=self.substrate,
+            halt_kind=ApiHaltKind.RESPONSE_REJECTED,
             reason=(
                 f"{summary} returned {resp.status_code} (not success) -- the "
                 "write was attempted; HALT (never double-write via the GUI)"

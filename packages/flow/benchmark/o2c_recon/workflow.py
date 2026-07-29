@@ -240,9 +240,9 @@ def _steps(arm: str, billing_base: str) -> dict[str, Step]:
             action=ActionKind.KEY,
             key="Enter",
             risk="irreversible",
-            identity_armed=governed,
-            effects=effects("enter_adjustment"),
+            effects=[] if governed else effects("enter_adjustment"),
             api_binding=ApiBinding(
+                on_unavailable="halt" if governed else "gui",
                 method="POST",
                 url_template="/ui/adjustment/new",
                 body_template={
@@ -267,9 +267,9 @@ def _steps(arm: str, billing_base: str) -> dict[str, Step]:
             action=ActionKind.KEY,
             key="Enter",
             risk="irreversible",
-            identity_armed=governed,
-            effects=effects("mark_reconciled"),
+            effects=[] if governed else effects("mark_reconciled"),
             api_binding=ApiBinding(
+                on_unavailable="halt" if governed else "gui",
                 method="POST",
                 url_template="/api/reconcile/mark",
                 body_template={
@@ -291,9 +291,9 @@ def _steps(arm: str, billing_base: str) -> dict[str, Step]:
             action=ActionKind.KEY,
             key="Enter",
             risk="irreversible",
-            identity_armed=governed,
-            effects=effects("writeback_row"),
+            effects=[] if governed else effects("writeback_row"),
             api_binding=ApiBinding(
+                on_unavailable="halt" if governed else "gui",
                 method="POST",
                 url_template=f"{billing_base}/api/workbook/writeback",
                 body_template={
@@ -315,9 +315,9 @@ def _steps(arm: str, billing_base: str) -> dict[str, Step]:
             action=ActionKind.KEY,
             key="Enter",
             risk="irreversible",
-            identity_armed=governed,
-            effects=effects("writeback_summary"),
+            effects=[] if governed else effects("writeback_summary"),
             api_binding=ApiBinding(
+                on_unavailable="halt" if governed else "gui",
                 method="POST",
                 url_template=f"{billing_base}/api/workbook/writeback",
                 body_template={

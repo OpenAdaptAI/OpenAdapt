@@ -46,6 +46,12 @@ from openadapt_flow.runner.config import (
     TrustedBundle,
     load_runner_config,
 )
+from openadapt_flow.runner.dispatch_envelope import (
+    ManagedDispatchEnvelope,
+    ManagedDispatchEnvelopeError,
+    read_managed_dispatch_envelope,
+    write_managed_dispatch_envelope,
+)
 from openadapt_flow.runner.lease import (
     CompletionDisposition,
     LeaseError,
@@ -75,6 +81,8 @@ __all__ = [
     "DispatchParseError",
     "EvidenceOutbox",
     "LeaseError",
+    "ManagedDispatchEnvelope",
+    "ManagedDispatchEnvelopeError",
     "LeasePhase",
     "LeaseTracker",
     "LeasedDispatch",
@@ -93,7 +101,9 @@ __all__ = [
     "build_run_argv",
     "load_runner_config",
     "map_control_verb",
+    "read_managed_dispatch_envelope",
     "parse_dispatch",
     "server_reclaim_outcome",
     "verify_dispatch",
+    "write_managed_dispatch_envelope",
 ]

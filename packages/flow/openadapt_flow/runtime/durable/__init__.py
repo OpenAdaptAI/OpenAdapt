@@ -32,7 +32,9 @@ from openadapt_flow.runtime.durable.approval import (  # noqa: F401
     PauseExpired,
     ResumeRefused,
     StateDiverged,
+    approval_pause_digest,
     enforce_resume_authorization,
+    issue_resume_approval,
 )
 from openadapt_flow.runtime.durable.attended import (  # noqa: F401
     AttendedActionRefused,
@@ -107,7 +109,9 @@ __all__ = [
     "TransitionObservation",
     "execute_attended_action",
     "issue_attended_capability",
+    "approval_pause_digest",
     "enforce_resume_authorization",
+    "issue_resume_approval",
     "DurableRun",
     "classify_halt",
     "resumed_step_results",

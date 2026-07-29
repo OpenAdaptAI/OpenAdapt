@@ -27,9 +27,8 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
-
 from openadapt_types import HumanDecisionReceiptV1
+from pydantic import ValidationError
 
 from openadapt_flow.console import data, human_decisions
 from openadapt_flow.console.app import create_app
@@ -138,11 +137,17 @@ class _Service:
     def __init__(self, executor):
         self.executor = executor
         self.calls = 0
+        self.deciders = []
 
-    def execute(self, run_dir, request, *, operator):
+    def execute(self, run_dir, request, *, operator, decided_by="unknown"):
         self.calls += 1
+        self.deciders.append(decided_by)
         return execute_attended_action(
-            run_dir, request, operator=operator, executor=self.executor
+            run_dir,
+            request,
+            operator=operator,
+            decided_by=decided_by,
+            executor=self.executor,
         )
 
 
@@ -494,27 +499,19 @@ def test_two_operators_cannot_both_decide_the_same_task(tmp_path, monkeypatch):
     _wf, bundles, runs, _bundle, run, _capability = _halt(tmp_path)
     second_result: dict[str, object] = {}
     holder: dict[str, object] = {}
+    _backend, bound = _completed_live_session()
 
     class _ConcurrentExecutor:
         """Runs while the first decision holds the single-flight lease."""
 
         def continue_run(self, run_dir, capability, approval):
-            from openadapt_flow.runtime.durable.attended import (
-                AttendedExecutionResult,
-            )
-
             client = holder["client"]
             item = holder["item"]
             detail = holder["detail"]
             other = _post(client, item, _decision(detail, key="second-operator-key-01"))
             second_result["status"] = other.status_code
             second_result["detail"] = other.json().get("detail")
-            return AttendedExecutionResult(
-                status="completed",
-                message="verified",
-                report_success=True,
-                next_transition=capability.expected_next_transition,
-            )
+            return bound.continue_run(run_dir, capability, approval)
 
         def skip_run(self, run_dir, capability, approval):
             return self.continue_run(run_dir, capability, approval)
@@ -528,7 +525,7 @@ def test_two_operators_cannot_both_decide_the_same_task(tmp_path, monkeypatch):
     assert first.status_code == 200
     assert first.json()["state"] == "completed"
     assert second_result["status"] == 409
-    assert "already in progress" in str(second_result["detail"])
+    assert "may have crossed the delivery boundary" in str(second_result["detail"])
 
 
 def test_a_task_that_becomes_stale_while_open_refuses(tmp_path, monkeypatch):
@@ -608,13 +605,10 @@ def test_uncertain_delivery_is_reported_as_uncertain_and_survives_a_fresh_key(
     assert receipt.reason_code == "delivery_uncertain"
     assert receipt.report_success is None
 
-    statuses = [
-        entry["status"]
-        for entry in json.loads((run / "attended_decisions.json").read_text())[
-            "decisions"
-        ]
-    ]
+    journal = json.loads((run / "attended_decisions.json").read_text())["decisions"]
+    statuses = [entry["status"] for entry in journal]
     assert statuses == ["prepared", "delivery_started", "delivery_uncertain"]
+    assert {entry["decided_by"] for entry in journal} == {"human"}
 
     # A fresh idempotency key must not launder the uncertainty away.
     fresh = _post(client, item, _decision(detail, key="uncertain-key-000002"))
@@ -646,14 +640,20 @@ def test_a_pause_that_had_not_been_delivered_becomes_uncertain_after_a_lost_answ
         RunManifest,
     )
 
-    store.write_manifest(
-        RunManifest(
-            run_id="run-not-delivered",
-            workflow_name=workflow.name,
-            bundle_dir=str(bundle),
-            params={},
-        )
+    manifest = RunManifest(
+        run_id="run-not-delivered",
+        namespace_id="namespace-run-not-delivered",
+        canonical_run_dir=str(run.resolve()),
+        workflow_name=workflow.name,
+        bundle_dir=str(bundle),
+        params={},
     )
+    store.write_fresh_manifest(manifest)
+    from openadapt_flow.runtime.durable.approval import approval_pause_digest
+    from openadapt_flow.runtime.durable.authority import DurableAuthority
+
+    authority = DurableAuthority(run, store)
+    authority_digest = authority.validate(manifest).progress_digest
     result = StepResult(
         step_id="human",
         intent=HUMAN_INTENT,
@@ -661,6 +661,7 @@ def test_a_pause_that_had_not_been_delivered_becomes_uncertain_after_a_lost_answ
         error="could not resolve the intended target",
     )
     pending = PendingEscalation(
+        run_id="run-not-delivered",
         workflow_name=workflow.name,
         step_index=0,
         step_id="human",
@@ -678,6 +679,12 @@ def test_a_pause_that_had_not_been_delivered_becomes_uncertain_after_a_lost_answ
     ).save(run)
     capability = issue_attended_capability(
         run, store=store, pending=pending, workflow=workflow, result=result
+    )
+    authority.advance(
+        manifest,
+        expected_progress_digest=authority_digest,
+        phase="paused",
+        pause_binding_sha256=approval_pause_digest(pending),
     )
     assert capability.delivery_state == "not_delivered"
 
@@ -1372,6 +1379,17 @@ def test_reject_is_withheld_where_a_write_may_already_have_landed(
             ),
             operator="front-desk",
         )
+
+    # The uncertain delivery blocks every new actuation, but it must not block
+    # the safe path that preserves the pause and asks another operator to
+    # reconcile it.
+    escalated = _post(
+        client,
+        item,
+        _decision(detail, action="escalate", key="escalate-uncertain-http-1"),
+    )
+    assert escalated.status_code == 200
+    assert escalated.json()["state"] == "escalated"
     assert data._load_report(run)[0].canceled is False
     assert CheckpointStore(run).read_pending().status == "pending"
 

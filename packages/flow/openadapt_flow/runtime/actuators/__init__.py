@@ -29,10 +29,12 @@ from openadapt_flow.runtime.actuators.api import (  # noqa: F401
     ActuationStatus,
     ApiActuationResult,
     ApiActuator,
+    ApiHaltKind,
 )
 
 __all__ = [
     "ApiActuator",
     "ApiActuationResult",
+    "ApiHaltKind",
     "ActuationStatus",
 ]

@@ -242,7 +242,7 @@ def test_customer_controlled_callback_carries_exact_outcome_envelope():
             "required_contracts": {
                 "authorization": 1,
                 "identity": 1,
-                "postcondition": 1,
+                "postcondition": 0,
                 "effect": 1,
             },
             "passed_contracts": {

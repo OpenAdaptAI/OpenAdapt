@@ -30,6 +30,11 @@ from openadapt_flow.runtime.durable.attended import (
     BoundAttendedExecutor,
     execute_attended_action,
 )
+from openadapt_flow.runtime.durable.continuation import (
+    ContinuationToken,
+    activate_continuation_token,
+    current_continuation_token,
+)
 
 _VIEWPORT = {"width": 1280, "height": 800}
 
@@ -44,6 +49,7 @@ class _AttendedExecutorCommand:
     run_dir: Path
     capability: AttendedPauseCapability
     approval: ApprovalRecord
+    continuation_token: ContinuationToken
     future: Future[AttendedExecutionResult]
 
 
@@ -156,13 +162,14 @@ class _ThreadOwnedAttendedExecutor:
                             if command.action == "continue"
                             else executor.skip_run
                         )
-                        command.future.set_result(
-                            method(
-                                command.run_dir,
-                                command.capability,
-                                command.approval,
+                        with activate_continuation_token(command.continuation_token):
+                            command.future.set_result(
+                                method(
+                                    command.run_dir,
+                                    command.capability,
+                                    command.approval,
+                                )
                             )
-                        )
                     except Exception as exc:
                         command.future.set_exception(exc)
                     finally:
@@ -184,11 +191,17 @@ class _ThreadOwnedAttendedExecutor:
         approval: ApprovalRecord,
     ) -> AttendedExecutionResult:
         future: Future[AttendedExecutionResult] = Future()
+        continuation_token = current_continuation_token()
+        if continuation_token is None:
+            raise AttendedActionRefused(
+                "the attended owner-thread command has no continuation authority"
+            )
         command = _AttendedExecutorCommand(
             action=action,
             run_dir=run_dir,
             capability=capability,
             approval=approval,
+            continuation_token=continuation_token,
             future=future,
         )
         with self._state_lock:
@@ -353,14 +366,16 @@ class AttendedActionService:
         request: AttendedActionRequest,
         *,
         operator: str,
+        decided_by: Literal["human", "automation", "unknown"] = "unknown",
     ) -> AttendedDecision:
-        """Admit and execute one exact attended decision on the live session."""
+        """Admit one decision and preserve trusted caller provenance."""
         if not self._entered:
             raise RuntimeError("attended action service is not open")
         return execute_attended_action(
             run_dir,
             request,
             operator=operator,
+            decided_by=decided_by,
             executor=self._owner,
             key=self._key,
         )

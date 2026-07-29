@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import secrets
 from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Final, Iterator, Literal, Optional
 
 from pydantic import (
@@ -37,6 +39,8 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
+
+from openadapt_flow.qualification_faults import FaultMutationReceipt
 
 if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
@@ -519,9 +523,10 @@ class ApiBinding(BaseModel):
 
     ADDITIVE and back-compatible: the field is optional and defaults absent, so a
     bundle carrying no binding replays EXACTLY as today (GUI actuation). A binding
-    present with no actuator configured also falls through to the GUI ladder --
-    the API tier is an OPTIMIZATION whose safe fallback is the GUI, never a gate
-    that can block a runnable step.
+    also defaults to GUI fallback when the API tier is unavailable before
+    delivery. A workflow can instead set ``on_unavailable="halt"`` to declare an
+    API-only action. That mode refuses before GUI resolution or input rather than
+    inventing a second, unqualified actuation path.
 
     Fields are REST/JSON-first but shaped so a FHIR / MCP / tool binding fits the
     same model (``kind`` selects the substrate; a FHIR resource POST, an MCP tool
@@ -534,6 +539,15 @@ class ApiBinding(BaseModel):
     kind: Literal["rest", "fhir", "mcp", "tool"] = Field(
         default="rest",
         description="Substrate: 'rest'/'fhir' HTTP, or an 'mcp'/'tool' call",
+    )
+    on_unavailable: Literal["gui", "halt"] = Field(
+        default="gui",
+        description=(
+            "Pre-delivery API-unavailability policy. 'gui' preserves the "
+            "back-compatible GUI fallback; 'halt' declares this step API-only "
+            "and refuses without GUI input when no actuator is configured or "
+            "the actuator proves that no request was sent."
+        ),
     )
     method: str = Field(
         default="POST",
@@ -720,6 +734,20 @@ class Guard(BaseModel):
 
 
 Predicate.model_rebuild()  # resolve the self-referential `operands`
+
+
+def predicate_contract_sha256(predicate: Optional[Predicate]) -> str:
+    """Return the canonical contract digest for one program transition guard."""
+
+    payload: dict[str, Any]
+    if predicate is None:
+        payload = {"kind": "unconditional"}
+    else:
+        payload = predicate.model_dump(mode="json")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(canonical).hexdigest()
 
 
 class Interstitial(BaseModel):
@@ -1880,6 +1908,46 @@ class Resolution(BaseModel):
     confidence: float
     elapsed_ms: float
     structural_handle: Optional[StructuralHandle] = None
+    visual_evidence: Optional["VisualResolutionEvidence"] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.visual_evidence is None:
+            data.pop("visual_evidence", None)
+        return data
+
+
+class VisualResolutionEvidence(BaseModel):
+    """Exact retained inputs for an independently reproducible visual resolve.
+
+    A visual result in a JSON report is only a claim.  Qualification uses this
+    record to load the exact frame and compiled template from the signed case
+    evidence, re-run the shipped deterministic resolver, and compare its rung,
+    point, confidence, and matched region.  The evidence remains local to the
+    qualification boundary; the portable bundle carries only its hashes.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    frame_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    frame_inventory_ref: str = Field(min_length=1, max_length=512)
+    template_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    template_inventory_ref: str = Field(min_length=1, max_length=512)
+    evaluator_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    anchor_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    matched_region: Region
+    allow_target_ocr: bool = True
+
+    @field_validator("frame_inventory_ref", "template_inventory_ref")
+    @classmethod
+    def _relative_only(cls, value: str) -> str:
+        if "\\" in value:
+            raise ValueError("resolution evidence path must use POSIX separators")
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("resolution evidence path must be run-relative")
+        return path.as_posix()
 
 
 class ActionDeliveryReceipt(BaseModel):
@@ -1891,13 +1959,47 @@ class ActionDeliveryReceipt(BaseModel):
     responsibility. ``outcome_verified`` is therefore fixed False here.
     """
 
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     status: Literal["delivered"] = "delivered"
     receipt_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
     operation: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
     native: bool
     target_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    destination_fingerprint: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        description=(
+            "DRAG only: fingerprint of the independently resolved destination. "
+            "The source remains target_fingerprint."
+        ),
+    )
+    selection_value_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        description=(
+            "SELECT_OPTION only: SHA-256 of the exact option text dispatched "
+            "without retaining the possibly sensitive value."
+        ),
+    )
+    selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
+        default=None,
+        description="SELECT_OPTION only: exact key dispatched after the value.",
+    )
     delivered_at: str = Field(min_length=20, max_length=64)
     outcome_verified: Literal[False] = False
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        for field in (
+            "destination_fingerprint",
+            "selection_value_sha256",
+            "selection_commit_key",
+        ):
+            if data.get(field) is None:
+                data.pop(field, None)
+        return data
 
 
 class ActionDeliveryUncertainty(BaseModel):
@@ -1925,6 +2027,37 @@ class ActionDeliveryUncertainty(BaseModel):
     resolved_by_contract: bool = False
 
 
+class FreshActuationEvent(BaseModel):
+    """PHI-free evidence for one pre-input actuation-frame mismatch.
+
+    The runtime records only the number and geometry of changed pixels.  It
+    does not retain the rejected frame or its pixel values.  ``retried`` is
+    true only when no earlier input edge crossed for this workflow step and a
+    bounded reacquisition remained available.
+    """
+
+    attempt: int = Field(ge=1)
+    operation: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    changed_pixel_count: int = Field(ge=1)
+    changed_bbox: Region
+    frame_size: tuple[int, int]
+    target_intersection: Optional[bool] = None
+    identity_intersection: Optional[bool] = None
+    retried: bool
+
+    @model_validator(mode="after")
+    def _valid_geometry(self) -> "FreshActuationEvent":
+        frame_width, frame_height = self.frame_size
+        x, y, width, height = self.changed_bbox
+        if frame_width <= 0 or frame_height <= 0:
+            raise ValueError("fresh-actuation frame size must be positive")
+        if x < 0 or y < 0 or width <= 0 or height <= 0:
+            raise ValueError("fresh-actuation bounding box must be positive")
+        if x + width > frame_width or y + height > frame_height:
+            raise ValueError("fresh-actuation bounding box exceeds the frame")
+        return self
+
+
 class IdentitySignalEvidence(BaseModel):
     """PHI-free audit evidence for one qualified identity signal."""
 
@@ -1949,6 +2082,37 @@ class IdentitySignalEvidence(BaseModel):
         "api_request_effect_binding",
     ]
     match: Literal["exact", "normalized"]
+
+
+class PixelIdentityEvidence(BaseModel):
+    """Content-addressed local proof behind a pixel identity verdict.
+
+    The report retains only hashes and run-relative inventory references. The
+    identifier pixels remain inside the customer-controlled run directory.
+    Certification re-reads these exact bytes and runs the same evaluator again.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    recorded_crop_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    live_crop_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    recorded_crop_inventory_ref: str
+    live_crop_inventory_ref: str
+    evaluator_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def _inventory_is_content_addressed(self) -> "PixelIdentityEvidence":
+        expected_recorded = f"private/identity-crops/{self.recorded_crop_sha256}.png"
+        expected_live = f"private/identity-crops/{self.live_crop_sha256}.png"
+        if self.recorded_crop_inventory_ref != expected_recorded:
+            raise ValueError(
+                "recorded pixel identity inventory reference is not content-addressed"
+            )
+        if self.live_crop_inventory_ref != expected_live:
+            raise ValueError(
+                "live pixel identity inventory reference is not content-addressed"
+            )
+        return self
 
 
 class IdentityCheck(BaseModel):
@@ -2002,6 +2166,13 @@ class IdentityCheck(BaseModel):
     signal_evidence: list[IdentitySignalEvidence] = Field(default_factory=list)
     quorum_required: Optional[int] = Field(default=None, ge=1)
     quorum_verified: Optional[int] = Field(default=None, ge=0)
+    pixel_evidence: Optional[PixelIdentityEvidence] = Field(
+        default=None,
+        description=(
+            "Hashes and local inventory references for the exact crops behind "
+            "a pixel verdict. Crop pixels never enter the report."
+        ),
+    )
 
 
 class HealEvent(BaseModel):
@@ -2039,6 +2210,218 @@ class InterstitialActionResult(BaseModel):
     error: Optional[str] = None
 
 
+class ProgramExecutionScopeFrame(BaseModel):
+    """PHI-free control scope for one action in a program run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    graph_id: str = Field(min_length=1, max_length=128)
+    loop_state_id: Optional[str] = Field(default=None, max_length=128)
+    relation: Optional[str] = Field(default=None, max_length=128)
+    row_index: Optional[int] = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _loop_scope_is_complete(self) -> "ProgramExecutionScopeFrame":
+        loop_values = (self.loop_state_id, self.relation, self.row_index)
+        if any(value is not None for value in loop_values) and not all(
+            value is not None for value in loop_values
+        ):
+            raise ValueError("program loop scope is incomplete")
+        return self
+
+
+class ProgramGuardAssetEvidence(BaseModel):
+    """One content-addressed bundle asset used by a transition predicate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_ref: str = Field(min_length=1, max_length=512)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    inventory_ref: str = Field(min_length=1, max_length=512)
+
+    @model_validator(mode="after")
+    def _asset_ref_is_content_addressed(self) -> "ProgramGuardAssetEvidence":
+        expected = f"private/program-transition-assets/{self.sha256}.bin"
+        if self.inventory_ref != expected:
+            raise ValueError(
+                "transition guard asset reference is not content-addressed"
+            )
+        return self
+
+
+class ProgramTransitionEvidence(BaseModel):
+    """Exact ordered evidence for one evaluated program transition.
+
+    A decision emits one row for each transition evaluated before the first
+    match. The final row is the selected transition. Frame-backed rows bind to
+    a content-addressed private frame inside the local run directory. The
+    report carries only the digest and inventory reference, not the pixels.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    decision_index: int = Field(ge=0)
+    graph_id: str = Field(min_length=1, max_length=128)
+    state_id: str = Field(min_length=1, max_length=128)
+    program_scope: list[ProgramExecutionScopeFrame] = Field(min_length=1)
+    transition_index: int = Field(ge=0)
+    guard_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    guard_verdict: bool
+    selected: bool
+    selected_target: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    guard_evidence_kind: Literal["unconditional", "parameters", "frame"]
+    observed_frame_sha256: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    observed_frame_inventory_ref: Optional[str] = None
+    observed_viewport: Optional[tuple[int, int]] = None
+    observed_context_sha256: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    observed_context_inventory_ref: Optional[str] = None
+    guard_evaluator_contract_sha256: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    guard_assets: list[ProgramGuardAssetEvidence] = Field(default_factory=list)
+    governed_runtime_inputs_digest: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+
+    @model_validator(mode="after")
+    def _evidence_is_exact_and_content_addressed(self) -> "ProgramTransitionEvidence":
+        if self.selected != self.guard_verdict:
+            raise ValueError("a transition decision must stop at its first true guard")
+        if self.selected and self.selected_target is None:
+            raise ValueError("a selected transition requires its target")
+        has_frame_digest = self.observed_frame_sha256 is not None
+        has_frame_ref = self.observed_frame_inventory_ref is not None
+        if has_frame_digest != has_frame_ref:
+            raise ValueError(
+                "transition frame digest and inventory reference must appear together"
+            )
+        if self.guard_evidence_kind == "frame" and not has_frame_digest:
+            raise ValueError("frame-backed guard evidence requires an exact frame")
+        if self.guard_evidence_kind != "frame" and has_frame_digest:
+            raise ValueError(
+                "non-visual guard evidence must not claim an observed frame"
+            )
+        if self.observed_frame_sha256 is not None:
+            expected = f"private/program-transitions/{self.observed_frame_sha256}.png"
+            if self.observed_frame_inventory_ref != expected:
+                raise ValueError(
+                    "transition frame inventory reference is not content-addressed"
+                )
+        if self.guard_evidence_kind == "frame":
+            if self.observed_viewport is None or any(
+                value <= 0 for value in self.observed_viewport
+            ):
+                raise ValueError("frame-backed guard evidence requires a viewport")
+            if self.guard_evaluator_contract_sha256 is None:
+                raise ValueError("frame-backed guard evidence requires an evaluator")
+            if (
+                self.observed_context_sha256 is None
+                or self.observed_context_inventory_ref is None
+            ):
+                raise ValueError(
+                    "frame-backed guard evidence requires exact observation context"
+                )
+            expected_context = (
+                "private/program-transition-observations/"
+                f"{self.observed_context_sha256}.json"
+            )
+            if self.observed_context_inventory_ref != expected_context:
+                raise ValueError(
+                    "transition observation context is not content-addressed"
+                )
+            if len({item.source_ref for item in self.guard_assets}) != len(
+                self.guard_assets
+            ):
+                raise ValueError("transition guard asset references must be unique")
+        elif (
+            self.observed_viewport is not None
+            or self.observed_context_sha256 is not None
+            or self.observed_context_inventory_ref is not None
+            or self.guard_evaluator_contract_sha256 is not None
+            or self.guard_assets
+        ):
+            raise ValueError(
+                "non-visual guard evidence must not claim visual evaluator inputs"
+            )
+        return self
+
+
+class ProgramExceptionEvidence(BaseModel):
+    """Exact typed evidence for one program exception edge.
+
+    The classifier recomputes non-action failures from the workflow and the
+    governed runtime inputs.  An action failure binds the typed runtime-failure
+    category and the exact retained error digest.  Both forms disambiguate an
+    exception handler from a normal transition with the same target state.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    decision_index: int = Field(ge=0)
+    graph_id: str = Field(min_length=1, max_length=128)
+    state_id: str = Field(min_length=1, max_length=128)
+    program_scope: list[ProgramExecutionScopeFrame] = Field(min_length=1)
+    target_state_id: str = Field(min_length=1, max_length=128)
+    failure_kind: Literal[
+        "action_failure",
+        "branch_without_transition",
+        "missing_subflow",
+        "missing_loop_body",
+        "loop_bound_exceeded",
+    ]
+    error_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    action_failure_category: Optional[Literal["runtime_failure"]] = None
+    governed_runtime_inputs_digest: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+
+    @model_validator(mode="after")
+    def _typed_cause_matches_edge(self) -> "ProgramExceptionEvidence":
+        action = self.failure_kind == "action_failure"
+        if action != bool(self.error_sha256 and self.action_failure_category):
+            raise ValueError(
+                "action exception evidence requires one exact typed error cause"
+            )
+        return self
+
+
+class AttendedProgramTransitionEvidence(BaseModel):
+    """A signed attended transition consumed without evaluating its guard again."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    decision_index: int = Field(ge=0)
+    graph_id: str = Field(min_length=1, max_length=128)
+    state_id: str = Field(min_length=1, max_length=128)
+    program_scope: list[ProgramExecutionScopeFrame] = Field(min_length=1)
+    target_state_id: Optional[str] = Field(default=None, max_length=128)
+    action: Literal["continue", "skip"]
+    receipt_pause_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    receipt_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    receipt_inventory_ref: str = Field(min_length=1, max_length=512)
+    control_frames_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    control_frames_inventory_ref: str = Field(min_length=1, max_length=512)
+    governed_runtime_inputs_digest: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+
+    @model_validator(mode="after")
+    def _receipt_ref_is_exact(self) -> "AttendedProgramTransitionEvidence":
+        expected = f".attended_program_receipts/{self.receipt_pause_id}.json"
+        if self.receipt_inventory_ref != expected:
+            raise ValueError("attended transition receipt reference is not exact")
+        expected_frames = (
+            f"private/program-transition-controls/{self.control_frames_sha256}.json"
+        )
+        if self.control_frames_inventory_ref != expected_frames:
+            raise ValueError("attended transition control reference is not exact")
+        return self
+
+
 class EffectVerificationEvidence(BaseModel):
     """Structured evidence behind one effect-verification decision."""
 
@@ -2060,6 +2443,41 @@ class EffectVerificationEvidence(BaseModel):
     #: or reconciled effect). Additive; defaults to the fail-safe "unknown" so an
     #: evidence record that predates this field never asserts "no effect".
     observed_effect: Literal["present", "absent", "conflicting", "unknown"] = "unknown"
+
+
+class QualifiedEffectRequirement(BaseModel):
+    """One exact qualified effect-strength requirement admitted for a run."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    step_id: str
+    actuation_path: Literal["gui", "api"]
+    effect_index: int = Field(ge=0)
+    effect_contract_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    minimum_tier: int = Field(ge=1, le=4)
+
+
+class SafetyRefusalEvidence(BaseModel):
+    """Typed detector output for one fail-closed pre-action refusal."""
+
+    stage: Literal[
+        "target_resolution",
+        "identity_verification",
+        "actuation_revalidation",
+        "api_admission",
+        "effect_strength",
+        "effect_verifier",
+    ]
+    code: Literal[
+        "target_ambiguous",
+        "identity_conflict",
+        "identity_unverifiable",
+        "actuation_observation_changed",
+        "api_path_unavailable",
+        "effect_strength_insufficient",
+        "effect_verifier_missing",
+    ]
+    detector_input_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class StepResult(BaseModel):
@@ -2112,7 +2530,12 @@ class StepResult(BaseModel):
     #: learning evidence but is not itself proof that a failure was a governed
     #: safety halt.
     failure_category: Optional[
-        Literal["governed_refusal", "safety_halt", "runtime_failure"]
+        Literal[
+            "governed_refusal",
+            "safety_halt",
+            "runtime_failure",
+            "continuation_preempted",
+        ]
     ] = None
     # One stable, NON-secret-bearing SHA-256 digest per verified effect, taken
     # AFTER the effect's ValueExpr contract was bound to THIS run's params
@@ -2126,22 +2549,38 @@ class StepResult(BaseModel):
     # resolution ladder (the default). Diagnostic/audit — lets an operator see
     # which steps ran on the deterministic API tier vs the visual floor.
     actuation: Optional[str] = None
+    program_scope: list[ProgramExecutionScopeFrame] = Field(default_factory=list)
     # OS/UIA action-delivery evidence only. It deliberately cannot satisfy a
     # postcondition or system-of-record effect; those independent verdicts are
     # recorded in ``postconditions_ok`` / ``effect_verified``.
     delivery_receipt: Optional[ActionDeliveryReceipt] = None
     # Explicit state-machine proof of whether this workflow step crossed an
-    # action-delivery boundary. ``False`` is written when a live step begins,
-    # then changed to ``True`` immediately before the backend/API is invoked.
-    # ``None`` means a legacy or synthesized result did not retain this fact;
-    # callers must treat that as unknown rather than infer non-delivery from a
-    # failure category or error string.
+    # action-delivery boundary. ``False`` is written when a live step begins.
+    # A typed fresh-frame mismatch keeps it false only when the backend proves
+    # no input edge occurred. Successful delivery, uncertain delivery, and an
+    # untyped backend exception all change it to True. ``None`` means a legacy
+    # or synthesized result did not retain this fact; callers must treat that
+    # as unknown rather than infer non-delivery from a failure category or
+    # error string.
     delivery_attempted: Optional[bool] = None
+    # Bounded, PHI-free diagnostics for pre-input actuation-frame mismatches.
+    # No rejected screenshot or pixel value is retained. A terminal mismatch
+    # is present with ``retried=False``.
+    fresh_actuation_events: list[FreshActuationEvent] = Field(default_factory=list)
     # The action API raised after delivery may have begun.  This is neither a
     # receipt nor an ordinary backend failure: the runtime never retries and
     # can proceed only when the complete independent outcome contract proves
     # what happened.
     delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
+    safety_refusal_evidence: Optional[SafetyRefusalEvidence] = None
+    starting_state_settled: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Retained result of the bounded pre-action settling check. None "
+            "means no settling observation was made; it must not be treated "
+            "as proof that settled-state detection ran."
+        ),
+    )
     # Drift-oracle: postconditions that deterministically FAILED but were
     # confirmed by the optional on-prem VLM state-verifier under render drift
     # (recorded for audit; empty unless an appliance is configured).
@@ -2217,6 +2656,124 @@ OutcomeEvidenceClass = Literal[
 ]
 
 
+PostconditionEvidenceKind = Literal[
+    "explicit_predicate",
+    "intrinsic_input_readback",
+]
+
+
+def postcondition_step_contract_sha256(
+    *,
+    workflow_contract_sha256: str,
+    step_index: int,
+    action_kind: ActionKind | str,
+) -> str:
+    """Bind a step position and action to an exact workflow contract."""
+
+    action = action_kind.value if isinstance(action_kind, ActionKind) else action_kind
+    payload = {
+        "domain": "openadapt.postcondition-step/v1",
+        "workflow_contract_sha256": workflow_contract_sha256,
+        "step_index": step_index,
+        "action_kind": action,
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def postcondition_contract_sha256(
+    *,
+    workflow_contract_sha256: str,
+    step_contract_sha256: str,
+    action_kind: ActionKind | str,
+    contract_kind: PostconditionEvidenceKind,
+    contract_index: int,
+) -> str:
+    """Bind one predicate/readback position without retaining its content."""
+
+    action = action_kind.value if isinstance(action_kind, ActionKind) else action_kind
+    payload = {
+        "domain": "openadapt.postcondition-contract/v1",
+        "workflow_contract_sha256": workflow_contract_sha256,
+        "step_contract_sha256": step_contract_sha256,
+        "action_kind": action,
+        "actuation_path": "gui",
+        "contract_kind": contract_kind,
+        "contract_index": contract_index,
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+class PostconditionContractEvidence(BaseModel):
+    """PHI-free proof for one postcondition contract on one result.
+
+    ``result_index`` binds the proof to the exact retained result occurrence,
+    including repeated executions of the same program step.  The two digests
+    bind it to the executable workflow and exact step contract without placing
+    the step id, predicate text, typed value, or other record-bearing content in
+    the control-plane envelope.
+
+    An explicit predicate and intrinsic TYPE/SELECT_OPTION readback are
+    intentionally different contract kinds.  A successful input readback can
+    therefore never be counted as proof for a CLICK predicate.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    result_index: int = Field(ge=0)
+    workflow_contract_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    step_index: int = Field(ge=0)
+    step_contract_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    action_kind: ActionKind
+    actuation_path: Literal["gui"] = "gui"
+    contract_kind: PostconditionEvidenceKind
+    contract_index: int = Field(ge=0)
+    contract_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    verdict: Literal["passed", "refuted", "unverifiable"]
+
+    @model_validator(mode="after")
+    def _validate_contract_kind(self) -> "PostconditionContractEvidence":
+        if self.contract_kind == "intrinsic_input_readback":
+            if self.action_kind not in {ActionKind.TYPE, ActionKind.SELECT_OPTION}:
+                raise ValueError(
+                    "intrinsic input readback is valid only for TYPE or SELECT_OPTION"
+                )
+            if self.contract_index != 0:
+                raise ValueError("intrinsic input readback uses contract index zero")
+        expected_step = postcondition_step_contract_sha256(
+            workflow_contract_sha256=self.workflow_contract_sha256,
+            step_index=self.step_index,
+            action_kind=self.action_kind,
+        )
+        if self.step_contract_sha256 != expected_step:
+            raise ValueError(
+                "postcondition evidence step digest does not match its binding"
+            )
+        expected_contract = postcondition_contract_sha256(
+            workflow_contract_sha256=self.workflow_contract_sha256,
+            step_contract_sha256=self.step_contract_sha256,
+            action_kind=self.action_kind,
+            contract_kind=self.contract_kind,
+            contract_index=self.contract_index,
+        )
+        if self.contract_sha256 != expected_contract:
+            raise ValueError(
+                "postcondition evidence contract digest does not match its binding"
+            )
+        return self
+
+
 class ExecutionOutcomeEnvelope(BaseModel):
     """Versioned, PHI-free execution result shared with control planes.
 
@@ -2236,12 +2793,28 @@ class ExecutionOutcomeEnvelope(BaseModel):
     ]
     profile: Optional[Literal["demo", "standard", "regulated"]] = None
     production_eligible: bool = False
+    qualification_evidence_only: bool = False
     execution_completed: bool = False
     required_contracts: OutcomeContractCounts = Field(
         default_factory=OutcomeContractCounts
     )
     passed_contracts: OutcomeContractCounts = Field(
         default_factory=OutcomeContractCounts
+    )
+    workflow_contract_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[a-f0-9]{64}$",
+        description=(
+            "Exact executable workflow contract that owns the retained "
+            "postcondition evidence."
+        ),
+    )
+    postcondition_evidence: list[PostconditionContractEvidence] = Field(
+        default_factory=list,
+        description=(
+            "One typed, result-bound record for every required explicit or "
+            "intrinsic GUI postcondition contract."
+        ),
     )
     evidence_classes: list[OutcomeEvidenceClass] = Field(default_factory=list)
     model_calls: int = Field(default=0, ge=0)
@@ -2263,13 +2836,59 @@ class ExecutionOutcomeEnvelope(BaseModel):
             )
         if len(self.evidence_classes) != len(set(self.evidence_classes)):
             raise ValueError("evidence classes must be unique")
+        postcondition_evidence = self.postcondition_evidence
+        if len(postcondition_evidence) != required["postcondition"]:
+            raise ValueError(
+                "postcondition evidence cardinality must equal the required "
+                "postcondition count"
+            )
+        passed_postconditions = sum(
+            item.verdict == "passed" for item in postcondition_evidence
+        )
+        if passed_postconditions != passed["postcondition"]:
+            raise ValueError(
+                "passed postcondition evidence must equal the passed "
+                "postcondition count"
+            )
+        if postcondition_evidence and self.workflow_contract_sha256 is None:
+            raise ValueError(
+                "postcondition evidence requires an exact workflow contract"
+            )
+        if any(
+            item.workflow_contract_sha256 != self.workflow_contract_sha256
+            for item in postcondition_evidence
+        ):
+            raise ValueError(
+                "postcondition evidence must bind the envelope workflow contract"
+            )
+        evidence_keys = [
+            (item.result_index, item.contract_kind, item.contract_index)
+            for item in postcondition_evidence
+        ]
+        if len(evidence_keys) != len(set(evidence_keys)):
+            raise ValueError("postcondition evidence contract keys must be unique")
+        result_contracts = [
+            (item.result_index, item.contract_sha256) for item in postcondition_evidence
+        ]
+        if len(result_contracts) != len(set(result_contracts)):
+            raise ValueError(
+                "postcondition evidence contract digests must be unique per result"
+            )
+        has_postcondition_class = "postcondition" in self.evidence_classes
+        if has_postcondition_class != bool(passed["postcondition"]):
+            raise ValueError(
+                "postcondition evidence class and passed contract count disagree"
+            )
         if self.outcome == "VERIFIED":
             if passed != required:
                 raise ValueError("VERIFIED requires every declared contract to pass")
             if self.profile not in {"standard", "regulated"}:
                 raise ValueError("VERIFIED requires a Standard or Regulated profile")
-            if not self.production_eligible:
-                raise ValueError("VERIFIED must be production eligible")
+            if not self.production_eligible and not self.qualification_evidence_only:
+                raise ValueError(
+                    "VERIFIED must be production eligible or bound to a "
+                    "qualification-only run"
+                )
             if required["authorization"] < 1 or passed["authorization"] < 1:
                 raise ValueError(
                     "VERIFIED requires a passed governed authorization contract"
@@ -2278,6 +2897,8 @@ class ExecutionOutcomeEnvelope(BaseModel):
             raise ValueError(
                 "only VERIFIED Standard or Regulated runs are production eligible"
             )
+        if self.production_eligible and self.qualification_evidence_only:
+            raise ValueError("qualification-only evidence cannot authorize production")
         has_compensation = "compensation" in self.evidence_classes
         if has_compensation != (self.compensation_actions > 0):
             raise ValueError(
@@ -2293,6 +2914,19 @@ class ExecutionOutcomeEnvelope(BaseModel):
                 "completed compensating actions require the ROLLED_BACK outcome"
             )
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit the additive qualification marker on ordinary run envelopes."""
+
+        data: dict[str, Any] = handler(self)
+        if not self.qualification_evidence_only:
+            data.pop("qualification_evidence_only", None)
+        if self.workflow_contract_sha256 is None:
+            data.pop("workflow_contract_sha256", None)
+        if not self.postcondition_evidence:
+            data.pop("postcondition_evidence", None)
+        return data
 
 
 class EffectJournalEntry(BaseModel):
@@ -2501,6 +3135,14 @@ class RunReport(BaseModel):
         ),
     )
     bundle_content_digest: Optional[str] = Field(default=None, pattern="^[a-f0-9]{64}$")
+    workflow_contract_sha256: Optional[str] = Field(
+        default=None,
+        pattern="^[a-f0-9]{64}$",
+        description=(
+            "Exact executable workflow semantics and sealed visual-asset hashes "
+            "observed by the runtime before execution."
+        ),
+    )
     source_recording_sha256: Optional[str] = Field(
         default=None, pattern="^[a-f0-9]{64}$"
     )
@@ -2518,7 +3160,79 @@ class RunReport(BaseModel):
         default=None, pattern="^[a-f0-9]{64}$"
     )
     governed_minimum_effect_tier: Optional[int] = Field(default=None, ge=1, le=4)
+    governed_qualified_effect_requirements: list[QualifiedEffectRequirement] = Field(
+        default_factory=list
+    )
     governed_runtime_inputs_digest: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    run_id_sha256: Optional[str] = Field(
+        default=None,
+        pattern="^[a-f0-9]{64}$",
+        description=(
+            "One-way binding to the exact runtime identity used by resolved "
+            "effect contracts; the raw run identity is never retained here."
+        ),
+    )
+    governed_qualification_project_id: Optional[str] = None
+    governed_qualification_project_revision: Optional[int] = Field(default=None, ge=1)
+    governed_qualification_project_contract_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    governed_qualification_campaign_id_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    governed_qualification_case_id_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    governed_qualification_case_input_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    governed_qualification_run_id_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    governed_qualification_case_kind: Optional[
+        Literal[
+            "representative",
+            "ambiguity",
+            "wrong_identity",
+            "stale_identity",
+            "weak_effect",
+            "missing_effect",
+        ]
+    ] = None
+    governed_qualification_case_action_paths: dict[str, Literal["gui", "api"]] = Field(
+        default_factory=dict
+    )
+    governed_qualification_fault_driver_id: Optional[str] = None
+    governed_qualification_fault_driver_contract_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    governed_qualification_fault_driver_key_id: Optional[str] = None
+    governed_qualification_fault_step_id_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_evidence_only: bool = False
+    qualification_fault_mutations: list[FaultMutationReceipt] = Field(
+        default_factory=list
+    )
+    observed_application_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    observed_application_version_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    observed_session_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    observed_environment_digest: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    observed_environment_binding_sha256: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_environment_observer_id: Optional[str] = None
+    qualification_environment_observer_contract_sha256: Optional[str] = Field(
         default=None, pattern="^[a-f0-9]{64}$"
     )
     governed_authorized_effect_contracts: dict[str, list[str]] = Field(
@@ -2537,6 +3251,28 @@ class RunReport(BaseModel):
     # additive and empty/None on a linear run.
     terminal_outcome: Optional[str] = None
     visited_states: list[str] = Field(default_factory=list)
+    program_transition_evidence: list[ProgramTransitionEvidence] = Field(
+        default_factory=list,
+        description=(
+            "Ordered guard evaluations retained by the program runtime. "
+            "Frame-backed evidence refers to private local run artifacts."
+        ),
+    )
+    program_exception_evidence: list[ProgramExceptionEvidence] = Field(
+        default_factory=list,
+        description=(
+            "Ordered non-action exception edges whose causes can be recomputed "
+            "from the workflow and governed runtime inputs."
+        ),
+    )
+    attended_program_transition_evidence: list[AttendedProgramTransitionEvidence] = (
+        Field(
+            default_factory=list,
+            description=(
+                "Ordered signed attended transitions consumed during durable resume."
+            ),
+        )
+    )
     # The structured HALT record (see HaltObservation): populated by
     # Replayer.run when the run stops on an unhandled state, so the halt->learn
     # loop can lift it into the trace corpus. None on a successful run (and on
@@ -2572,6 +3308,16 @@ class RunReport(BaseModel):
         mutable from the local report that produced it.
         """
 
+        expected_qualification_only = bool(self.governed_qualification_case_id_sha256)
+        if "qualification_evidence_only" not in self.model_fields_set:
+            # Normalize reports written before the typed marker existed from
+            # their already-retained qualification-case binding.
+            self.qualification_evidence_only = expected_qualification_only
+        elif self.qualification_evidence_only != expected_qualification_only:
+            raise ValueError(
+                "qualification-only status does not match the typed case binding"
+            )
+
         envelope = self.outcome_envelope
         if envelope is None:
             return self
@@ -2583,6 +3329,11 @@ class RunReport(BaseModel):
             raise ValueError(
                 "production eligibility does not match its evidence envelope"
             )
+        if (
+            "qualification_evidence_only" in envelope.model_fields_set
+            and envelope.qualification_evidence_only != self.qualification_evidence_only
+        ):
+            raise ValueError("qualification-only status does not match the run report")
         if self.execution_completed is None or (
             self.execution_completed != envelope.execution_completed
         ):
@@ -2612,11 +3363,43 @@ class RunReport(BaseModel):
             raise ValueError("ROLLED_BACK is a non-success outcome")
         return self
 
-    def save(self, run_dir: Path | str) -> Path:
+    def save(
+        self,
+        run_dir: Path | str,
+        *,
+        filename: str = "report.json",
+    ) -> Path:
         run = Path(run_dir)
         run.mkdir(parents=True, exist_ok=True)
-        path = run / "report.json"
-        path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+        if Path(filename).name != filename:
+            raise ValueError("report filename must be one local file name")
+        path = run / filename
+        payload = self.model_dump_json(indent=2).encode("utf-8")
+        temporary = run / (f".{filename}.{os.getpid()}.{secrets.token_hex(8)}.tmp")
+        descriptor = os.open(
+            temporary,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+            0o600,
+        )
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+            try:
+                directory = os.open(run, os.O_RDONLY)
+            except OSError:
+                directory = None
+            if directory is not None:
+                try:
+                    os.fsync(directory)
+                except OSError:
+                    pass
+                finally:
+                    os.close(directory)
+        finally:
+            temporary.unlink(missing_ok=True)
         return path
 
 

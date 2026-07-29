@@ -214,8 +214,6 @@ class RunReceipt(BaseModel):
             raise ValueError(
                 "VERIFIED receipt requires exactly one governed authorization"
             )
-        if self.postconditions_required < 1:
-            raise ValueError("VERIFIED receipt requires postcondition evidence")
         if self.identity_armed != self.identity_applicable:
             raise ValueError("VERIFIED receipt requires complete identity arming")
         if self.steps_ok != self.steps_total:
@@ -324,6 +322,120 @@ def _over_halt_count(report: Any) -> int:
     return count
 
 
+def _validate_retained_postcondition_contracts(
+    report: RunReport,
+    envelope: Any,
+) -> None:
+    """Require exact result-bound proof for every postcondition count.
+
+    The outcome envelope is not permitted to turn aggregate result booleans
+    into an arbitrary count.  Each count must have one typed contract record
+    bound to the workflow, the exact result occurrence, the GUI path, and the
+    action kind.  Explicit predicates and intrinsic input readback remain
+    separate so a TYPE success cannot prove a CLICK postcondition.
+    """
+
+    required = envelope.required_contracts
+    passed = envelope.passed_contracts
+    workflow_contract = report.workflow_contract_sha256
+    if (
+        workflow_contract is None
+        or envelope.workflow_contract_sha256 != workflow_contract
+    ):
+        raise ReceiptError(
+            "VERIFIED receipt requires exact workflow-bound postcondition evidence"
+        )
+
+    evidence = list(envelope.postcondition_evidence)
+    if len(evidence) != int(required.postcondition):
+        raise ReceiptError(
+            "retained postcondition evidence cardinality does not equal the "
+            "VERIFIED envelope"
+        )
+    if sum(item.verdict == "passed" for item in evidence) != int(passed.postcondition):
+        raise ReceiptError(
+            "retained passed postcondition evidence does not equal the "
+            "VERIFIED envelope"
+        )
+    if any(item.verdict != "passed" for item in evidence):
+        raise ReceiptError(
+            "VERIFIED receipt found refuted or unverifiable postcondition evidence"
+        )
+
+    evidence_by_result: dict[int, list[Any]] = {}
+    for item in evidence:
+        if item.result_index >= len(report.results):
+            raise ReceiptError(
+                "retained postcondition evidence references a missing result"
+            )
+        result = report.results[item.result_index]
+        if result.skipped or result.exception_handled:
+            raise ReceiptError(
+                "retained postcondition evidence references a non-executed result"
+            )
+        if result.actuation == "api":
+            raise ReceiptError(
+                "API actuation cannot retain a GUI postcondition contract"
+            )
+        evidence_by_result.setdefault(item.result_index, []).append(item)
+
+    for result_index, result in enumerate(report.results):
+        retained = evidence_by_result.get(result_index, [])
+        explicit = [
+            item for item in retained if item.contract_kind == "explicit_predicate"
+        ]
+        intrinsic = [
+            item
+            for item in retained
+            if item.contract_kind == "intrinsic_input_readback"
+        ]
+
+        if retained:
+            if len({item.step_contract_sha256 for item in retained}) != 1:
+                raise ReceiptError(
+                    "one result retained multiple postcondition step contracts"
+                )
+            if len({item.action_kind for item in retained}) != 1:
+                raise ReceiptError(
+                    "one result retained multiple postcondition action kinds"
+                )
+        if sorted(item.contract_index for item in explicit) != list(
+            range(len(explicit))
+        ):
+            raise ReceiptError(
+                "explicit postcondition contract indices are not exact and contiguous"
+            )
+
+        if result.actuation == "api":
+            if (
+                retained
+                or result.postconditions_ok is not None
+                or result.input_verified is not None
+            ):
+                raise ReceiptError(
+                    "API actuation retained GUI-only postcondition evidence"
+                )
+            continue
+
+        if (result.postconditions_ok is True) != bool(explicit):
+            raise ReceiptError(
+                "explicit postcondition evidence does not match its result"
+            )
+        if (result.input_verified is True) != (len(intrinsic) == 1):
+            raise ReceiptError(
+                "intrinsic input postcondition evidence does not match its result"
+            )
+        if len(intrinsic) > 1:
+            raise ReceiptError(
+                "one result retained duplicate intrinsic input postconditions"
+            )
+        if result.effect_contract_hashes and not retained:
+            raise ReceiptError(
+                "every effect-bearing GUI result requires its own exact "
+                "postcondition proof"
+            )
+
+
 def build_receipt(report: Any) -> RunReceipt:
     """Build a production-provenance receipt from a retained run report.
 
@@ -394,6 +506,7 @@ def _build_receipt(
         and getattr(report, "transaction_platform_fault", None) is False
         and envelope is not None
         and bundle_digest is not None
+        and getattr(report, "workflow_contract_sha256", None) is not None
         and getattr(report, "governed_authorization_id", None)
         and getattr(report, "governed_runtime_inputs_digest", None)
         and getattr(report, "governed_policy_contract_sha256", None)
@@ -506,20 +619,13 @@ def _build_receipt(
         or result.safety_halt
         or result.failure_category is not None
         or result.postconditions_ok is False
+        or result.input_verified is False
         for result in report.results
     ):
         raise ReceiptError(
             "VERIFIED receipt found a failed, halted, or refuted retained step"
         )
-    postcondition_results = sum(
-        result.postconditions_ok is True for result in report.results
-    )
-    if int(required.postcondition) > 0 and postcondition_results == 0:
-        raise ReceiptError("VERIFIED receipt requires retained postcondition evidence")
-    if int(required.postcondition) < postcondition_results:
-        raise ReceiptError(
-            "retained postcondition evidence exceeds the VERIFIED envelope"
-        )
+    _validate_retained_postcondition_contracts(report, envelope)
 
     declared_effects: Counter[str] = Counter()
     confirmed_effects: Counter[str] = Counter()
@@ -620,7 +726,11 @@ def _build_receipt(
         )
     if any(
         result.step_id not in required_identity_ids
-        or result.postconditions_ok is not True
+        or (
+            result.actuation != "api"
+            and result.postconditions_ok is not True
+            and result.input_verified is not True
+        )
         for result in effect_results
     ):
         raise ReceiptError(

@@ -35,6 +35,10 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerifier,
     Verdict,
 )
+from openadapt_flow.verification import (
+    EffectContractMutationError,
+    verify_effect_without_mutation,
+)
 
 
 class ReconciliationTask(BaseModel):
@@ -282,7 +286,22 @@ def reconcile_or_escalate(
             kind="compensation_failed",
         )
 
-    reverified = verifier.verify(effect, before, context=context)
+    try:
+        reverified = verify_effect_without_mutation(
+            verifier,
+            effect,
+            before,
+            context=context,
+        )
+    except EffectContractMutationError:
+        return _escalate(
+            effect,
+            verdict,
+            "effect verifier changed the resolved contract during compensation "
+            "re-verification; escalate",
+            actions_taken=len(action.deleted_records),
+            kind="compensation_failed",
+        )
     if reverified.confirmed:
         return CompensationResult(
             outcome=CompensationOutcome.RECONCILED,

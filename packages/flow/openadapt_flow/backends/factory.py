@@ -192,6 +192,10 @@ def _build_rdp_backend(
             window_title=cfg.rdp_window_title,
             max_frame_age_s=cfg.rdp_max_frame_age_s,
             readiness_probe=readiness_probe,
+            application_marker=cfg.rdp_application_marker,
+            application_version_marker=cfg.rdp_application_version_marker,
+            environment_marker=cfg.rdp_environment_marker,
+            session_marker=cfg.rdp_session_marker,
         )
 
     if rdp_transport is not None or has_host:
@@ -212,6 +216,10 @@ def _build_rdp_backend(
             transport,
             max_frame_age_s=cfg.rdp_max_frame_age_s,
             readiness_probe=readiness_probe,
+            application_marker=cfg.rdp_application_marker,
+            application_version_marker=cfg.rdp_application_version_marker,
+            environment_marker=cfg.rdp_environment_marker,
+            session_marker=cfg.rdp_session_marker,
         )
 
     if window_client is not None or has_window:
@@ -224,6 +232,10 @@ def _build_rdp_backend(
             kwargs["title_substr"] = cfg.rdp_window_title
         kwargs["max_frame_age_s"] = cfg.rdp_max_frame_age_s
         kwargs["readiness_probe"] = readiness_probe
+        kwargs["application_marker"] = cfg.rdp_application_marker
+        kwargs["application_version_marker"] = cfg.rdp_application_version_marker
+        kwargs["environment_marker"] = cfg.rdp_environment_marker
+        kwargs["session_marker"] = cfg.rdp_session_marker
         return RemoteDisplayBackend(window_client, **kwargs)
 
     raise ValueError(

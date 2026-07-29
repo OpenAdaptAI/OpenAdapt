@@ -69,6 +69,12 @@ def _resolve_wheel(pattern: str) -> Path:
     return matches[0]
 
 
+def _wheel_install_spec(wheel: Path, *, install_browser: bool) -> str:
+    """Install the optional browser runtime only for a browser lifecycle."""
+
+    return f"{wheel}[browser]" if install_browser else str(wheel)
+
+
 def _venv_python(root: Path) -> Path:
     return root / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
@@ -254,7 +260,13 @@ def run_lifecycle(
 
     try:
         _run(
-            [str(python), "-m", "pip", "install", str(wheel)],
+            [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                _wheel_install_spec(wheel, install_browser=install_browser),
+            ],
             cwd=artifacts,
             env=env,
             log=logs / "01-install.log",

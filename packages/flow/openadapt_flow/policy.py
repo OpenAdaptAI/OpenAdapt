@@ -81,13 +81,13 @@ def is_identity_applicable(step: Step) -> bool:
 def is_identity_armed(step: Step) -> bool:
     """True when the step's pre-click identity check will actually run.
 
-    Prefers the compiler-written ``identity_armed`` audit flag; falls back to
-    the ground truth the replayer keys on (structured/context identity,
-    identity template, or identifier crop) for bundles compiled before that
-    flag existed.
+    The compiler-written ``identity_armed`` field is an audit flag, not the
+    identity evidence. An explicit false remains a refusal. Otherwise require
+    the ground truth the replayer uses: structured/context identity, an
+    identity template, or an identifier crop.
     """
-    if step.identity_armed is not None:
-        return step.identity_armed
+    if step.identity_armed is False:
+        return False
     a = step.anchor
     return a is not None and bool(
         a.context_text
@@ -134,6 +134,8 @@ def is_vacuous(step: Step) -> bool:
     excluded from static visual postconditions. Other effect-expecting actions
     still require an authored or compiler-mined postcondition.
     """
+    if not path_requires_gui_contracts(step):
+        return False
     if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
         return False
     return expects_effect(step) and not step.expect
@@ -147,6 +149,27 @@ def has_screen_postcondition(step: Step) -> bool:
     return bool(step.expect)
 
 
+def has_postcondition_contract(
+    step: Step,
+    *,
+    actuation_path: EffectPath = "gui",
+) -> bool:
+    """Whether replay can prove the immediate result of this exact action.
+
+    Typed input and option selection have intrinsic GUI read-back contracts.
+    An API path cannot borrow that GUI evidence.  Its exact independently read
+    effect contract is the target-state contract until a response-contract
+    schema is declared and retained explicitly.
+    """
+
+    if actuation_path == "api":
+        return bool(step.api_binding is not None and step.api_binding.effects)
+    return bool(step.expect) or step.action in {
+        ActionKind.TYPE,
+        ActionKind.SELECT_OPTION,
+    }
+
+
 def has_system_effect(step: Step) -> bool:
     """True when the step declares at least one SYSTEM-OF-RECORD effect
     (``step.effects``) — a typed contract verified against the real system of
@@ -158,6 +181,24 @@ def has_system_effect(step: Step) -> bool:
 
 
 EffectPath = Literal["gui", "api"]
+
+
+def executable_actuation_paths(step: Step) -> tuple[EffectPath, ...]:
+    """Return the exact actuation paths that this step can execute.
+
+    This is the canonical path projection used by admission, qualification,
+    policy, and reporting. An absent API binding means GUI-only. The default
+    API binding remains dual-path because a proven pre-delivery ``UNAVAILABLE``
+    result falls through to GUI. ``on_unavailable='halt'`` removes that GUI
+    fallback and makes the binding API-only.
+    """
+
+    binding = step.api_binding
+    if binding is None:
+        return ("gui",)
+    if binding.on_unavailable == "halt":
+        return ("api",)
+    return ("gui", "api")
 
 
 @dataclass(frozen=True)
@@ -187,14 +228,23 @@ class StepSafetyProjection:
 def iter_effect_paths(step: Step) -> Iterable[tuple[EffectPath, list["Effect"]]]:
     """Yield every executable actuation path and its own effect contracts.
 
-    An API binding is an optional top rung: ``UNAVAILABLE`` falls through to
-    GUI actuation.  The two paths are therefore independently load-bearing;
-    one path's effects never cover the other path.
+    A default API binding is an optional top rung: ``UNAVAILABLE`` falls through
+    to GUI actuation. An API-only binding halts instead. Each executable path is
+    independently load-bearing; one path's effects never cover another path.
     """
 
-    yield "gui", list(step.effects)
-    if step.api_binding is not None:
-        yield "api", list(step.api_binding.effects)
+    for path in executable_actuation_paths(step):
+        if path == "api":
+            assert step.api_binding is not None
+            yield path, list(step.api_binding.effects)
+        else:
+            yield path, list(step.effects)
+
+
+def path_requires_gui_contracts(step: Step) -> bool:
+    """Whether this step can deliver input through the GUI path."""
+
+    return "gui" in executable_actuation_paths(step)
 
 
 def missing_effect_paths(step: Step) -> list[EffectPath]:
@@ -392,6 +442,7 @@ def step_tags(
     *,
     require_current_certification: bool = False,
     certifying_policy: Optional["Policy"] = None,
+    certifying_policy_sha256: Optional[str] = None,
 ) -> set[str]:
     """Semantic tags a policy's ``require_*`` lists can match against (as an
     alternative to raw keywords).
@@ -424,6 +475,7 @@ def step_tags(
         workflow,
         require_current_certification=require_current_certification,
         certifying_policy=certifying_policy,
+        certifying_policy_sha256=certifying_policy_sha256,
     )
     if effective_risk == "irreversible":
         tags.update(("irreversible", "write"))
@@ -712,7 +764,13 @@ def evaluate_policy(
                 )
             )
 
-        if policy.prohibit_unarmed_clicks and is_identity_applicable(step):
+        executable_paths = executable_actuation_paths(step)
+
+        if (
+            policy.prohibit_unarmed_clicks
+            and "gui" in executable_paths
+            and is_identity_applicable(step)
+        ):
             if not is_identity_armed(step):
                 violations.append(
                     Violation(
@@ -749,15 +807,24 @@ def evaluate_policy(
             require_current_certification=require_current_risk_certification,
             certifying_policy=policy,
         ):
-            if not (is_identity_applicable(step) and is_identity_armed(step)):
+            missing_identity_paths = []
+            if "gui" in executable_paths and not (
+                is_identity_applicable(step) and is_identity_armed(step)
+            ):
+                missing_identity_paths.append("gui")
+            if "api" in executable_paths and (
+                step.api_binding is None or not step.api_binding.identity
+            ):
+                missing_identity_paths.append("api")
+            if missing_identity_paths:
                 violations.append(
                     Violation(
                         rule="require_identity_for",
                         step_id=step.id,
                         reason=(
-                            "step matches require_identity_for but is not "
-                            "identity-armed (no verified target identity "
-                            "before it acts)"
+                            "step matches require_identity_for but has no exact "
+                            "identity contract for executable path(s): "
+                            + ", ".join(missing_identity_paths)
                         ),
                     )
                 )
@@ -773,7 +840,7 @@ def evaluate_policy(
             require_current_certification=require_current_risk_certification,
             certifying_policy=policy,
         ):
-            if not has_screen_postcondition(step):
+            if "gui" in executable_paths and not has_screen_postcondition(step):
                 violations.append(
                     Violation(
                         rule="require_screen_postconditions_for",
@@ -793,7 +860,7 @@ def evaluate_policy(
             require_current_certification=require_current_risk_certification,
             certifying_policy=policy,
         ):
-            if not has_screen_postcondition(step):
+            if "gui" in executable_paths and not has_screen_postcondition(step):
                 violations.append(
                     Violation(
                         rule="require_effect_verification_for",

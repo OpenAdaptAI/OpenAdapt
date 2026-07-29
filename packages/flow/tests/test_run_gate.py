@@ -23,6 +23,7 @@ from openadapt_flow.ir import (
     ActionKind,
     Anchor,
     ApiBinding,
+    ApiIdentityBinding,
     BackendHints,
     Interstitial,
     Postcondition,
@@ -54,7 +55,7 @@ from openadapt_flow.run_gate import (
     evaluate_run_gate,
     is_consequential,
 )
-from openadapt_flow.runtime.effects import Effect, EffectKind
+from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
 
 _KEY = "correct horse battery staple"
 _PC = [Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Saved OK")]
@@ -549,6 +550,42 @@ def test_binding_only_effect_cannot_cover_gui_fallback_at_admission(tmp_path):
     gate = report.gate(GATE_EFFECT)
     assert gate is not None and not gate.passed
     assert "GUI" in gate.detail
+
+
+def test_api_only_binding_needs_no_fake_gui_identity_effect_or_postcondition(
+    tmp_path,
+):
+    wf = _good_workflow("api_only_exact")
+    write = wf.steps[1]
+    api_effects = list(write.effects)
+    api_effects[0].match["patient_id"] = ValueExpr(param="record_id")
+    api_effects[0].idempotency_key = ValueExpr(param="record_id")
+    wf.params["record_id"] = "p1"
+    write.effects = []
+    write.expect = []
+    write.anchor = None
+    write.identity_armed = False
+    write.api_binding = ApiBinding(
+        url_template="/api/encounter",
+        body_template={"patient_id": "{record_id}"},
+        on_unavailable="halt",
+        effects=api_effects,
+        identity=[
+            ApiIdentityBinding(
+                key="record_id",
+                param="record_id",
+                effect_field="patient_id",
+                request_pointers=["/body/patient_id"],
+            )
+        ],
+    )
+    wf, bundle = _seal(wf, tmp_path)
+
+    report = _run(wf, bundle, verifier=True)
+
+    assert report.gate(GATE_IDENTITY).passed
+    assert report.gate(GATE_EFFECT).passed
+    assert report.gate(GATE_CERTIFICATION).passed
 
 
 # ---------------------------------------------------------------------------

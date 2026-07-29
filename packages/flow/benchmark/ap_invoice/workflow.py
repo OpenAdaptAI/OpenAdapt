@@ -375,14 +375,14 @@ def _steps(arm: str, mailer_base: str, adjacent_invoice: str) -> dict[str, Step]
     ) -> Step:
         path_effects = effects(step_id)
         binding.effects = [effect.model_copy(deep=True) for effect in path_effects]
+        binding.on_unavailable = "halt" if governed else "gui"
         return Step(
             id=step_id,
             intent=intent,
             action=ActionKind.KEY,
             key="Enter",
             risk="irreversible",
-            identity_armed=governed,
-            effects=path_effects,
+            effects=[] if governed else path_effects,
             api_binding=binding,
         )
 

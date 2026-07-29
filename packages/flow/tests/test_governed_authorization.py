@@ -7,8 +7,10 @@ import pytest
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    ApiBinding,
     Guard,
     Interstitial,
+    LoopSpec,
     Postcondition,
     PostconditionKind,
     Predicate,
@@ -20,18 +22,25 @@ from openadapt_flow.ir import (
     Transition,
     Workflow,
 )
+from openadapt_flow.runtime.actuators import ActuationStatus, ApiActuationResult
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     UnverifiedWriteApproval,
     runtime_inputs_digest,
 )
 from openadapt_flow.runtime.durable import (
-    ApprovalRecord,
     CheckpointStore,
     bundle_version,
+    issue_resume_approval,
     resume,
 )
-from openadapt_flow.runtime.effects import Effect, EffectKind
+from openadapt_flow.runtime.effects import (
+    Effect,
+    EffectKind,
+    EffectState,
+    EffectVerdict,
+    Verdict,
+)
 from openadapt_flow.runtime.replayer import Replayer
 from tests.test_replayer import (
     FakeBackend,
@@ -52,6 +61,22 @@ def _seal(tmp_path, workflow: Workflow) -> tuple[Workflow, object]:
     (bundle / "templates" / "identity.png").write_bytes(make_png((80, 20)))
     workflow.save(bundle)
     return Workflow.load(bundle), bundle
+
+
+def _resume_approval(run_dir, bundle, resolution: str):
+    store = CheckpointStore(run_dir)
+    manifest = store.read_manifest()
+    pending = store.read_pending()
+    assert manifest is not None and pending is not None
+    return issue_resume_approval(
+        pending,
+        approver="operator@example.com",
+        resolution=resolution,
+        bundle_version=bundle_version(bundle),
+        run_id=manifest.run_id,
+        workflow_name=manifest.workflow_name,
+        run_dir=run_dir,
+    )
 
 
 class _MutatingVision(FakeVision):
@@ -109,6 +134,61 @@ def test_in_memory_semantic_mutation_halts_before_action(tmp_path):
     assert backend.actions == []
     assert report.results[0].step_id == "<authorization>"
     assert "in-memory workflow semantics" in (report.results[0].error or "")
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("runtime_inputs_digest", "0" * 64),
+        ("required_identity_step_ids", ()),
+        ("minimum_effect_tier", 1),
+        ("unverified_write_approvals", ()),
+    ],
+)
+def test_callback_cannot_change_the_admitted_authorization(
+    tmp_path, field, replacement
+):
+    effect = Effect(kind=EffectKind.RECORD_WRITTEN, match={"id": "1"})
+    step = context_click_step("Jane Sample 1980-01-15 MRN 123")
+    step.effects = [effect]
+    workflow, bundle = _seal(
+        tmp_path, Workflow(name=f"authorization-{field}", steps=[step])
+    )
+    authorization = _authorization(workflow, required=(step.id,)).model_copy(
+        update={
+            "minimum_effect_tier": 4,
+            "unverified_write_approvals": (
+                UnverifiedWriteApproval(
+                    step_id=step.id,
+                    effect_contract_hashes=(effect.contract_hash(),),
+                ),
+            ),
+        }
+    )
+
+    class MutatingBackend(FakeBackend):
+        mutated = False
+
+        def screenshot(self):
+            if not self.mutated:
+                self.mutated = True
+                object.__setattr__(authorization, field, replacement)
+            return super().screenshot()
+
+    backend = MutatingBackend()
+    vision = resolving_vision()
+    vision.ocr_lines = [OcrLine("Jane Sample 1980-01-15 MRN 123")]
+    report = Replayer(
+        backend,
+        vision=vision,
+        governed_authorization=authorization,
+    ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "run")
+
+    assert report.success is False
+    assert backend.actions == []
+    assert "authorization changed after run admission" in (
+        report.results[0].error or ""
+    )
 
 
 def test_bundle_asset_mismatch_halts_before_action(tmp_path):
@@ -461,10 +541,10 @@ def test_transition_halt_checkpoints_already_performed_write(tmp_path):
     resumed = resume(
         run_dir,
         Replayer(resumed_backend, vision=resumed_vision, poll_interval_s=0.0),
-        approval=ApprovalRecord(
-            approver="operator@example.com",
-            resolution="continue after guarded transition halt",
-            bundle_version=bundle_version(bundle),
+        approval=_resume_approval(
+            run_dir,
+            bundle,
+            "continue after guarded transition halt",
         ),
     )
     assert resumed.success is True
@@ -530,6 +610,347 @@ def test_parameter_and_worklist_changes_are_refused(tmp_path):
     assert "different runtime parameters or worklists" in (
         report.results[0].error or ""
     )
+
+
+def _governed_loop_workflow() -> Workflow:
+    body = ProgramGraph(
+        entry="type-row",
+        states={
+            "type-row": State(
+                id="type-row",
+                kind=StateKind.ACTION,
+                step=Step(
+                    id="type-row",
+                    intent="type the authorized row value",
+                    action=ActionKind.TYPE,
+                    param="patient",
+                ),
+                transitions=[Transition(target="body-done")],
+            ),
+            "body-done": State(
+                id="body-done",
+                kind=StateKind.TERMINAL,
+                outcome="success",
+            ),
+        },
+    )
+    program = ProgramGraph(
+        entry="loop",
+        states={
+            "loop": State(
+                id="loop",
+                kind=StateKind.LOOP,
+                loop=LoopSpec(relation="queue", body="body", var="patient"),
+                transitions=[Transition(target="done")],
+            ),
+            "done": State(id="done", kind=StateKind.TERMINAL, outcome="success"),
+        },
+    )
+    return Workflow(
+        name="governed-loop",
+        params={"tenant": "alpha"},
+        program=program,
+        subflows={"body": body},
+    )
+
+
+def test_governed_program_loop_authorizes_each_active_row_once(tmp_path):
+    workflow, bundle = _seal(tmp_path, _governed_loop_workflow())
+    worklists = {"queue": [{"patient": "A"}, {"patient": "B"}]}
+    authorization = _authorization(workflow, worklists=worklists)
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        governed_authorization=authorization,
+    ).run(
+        workflow,
+        worklists=worklists,
+        bundle_dir=bundle,
+        run_dir=tmp_path / "governed-loop-run",
+    )
+
+    assert report.success is True
+    assert backend.actions == [("type", "A"), ("type", "B")]
+
+
+def test_governed_program_loop_refuses_late_iteration_param_mutation(tmp_path):
+    class LateIterationMutationReplayer(Replayer):
+        def _act(self, step, resolution, params, **kwargs):
+            params["patient"] = "B"
+            return super()._act(step, resolution, params, **kwargs)
+
+    workflow, bundle = _seal(tmp_path, _governed_loop_workflow())
+    worklists = {"queue": [{"patient": "A"}]}
+    authorization = _authorization(workflow, worklists=worklists)
+    backend = FakeBackend()
+
+    report = LateIterationMutationReplayer(
+        backend,
+        vision=FakeVision(),
+        governed_authorization=authorization,
+    ).run(
+        workflow,
+        worklists=worklists,
+        bundle_dir=bundle,
+        run_dir=tmp_path / "mutated-loop-run",
+    )
+
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].delivery_attempted is False
+    assert report.results[0].safety_halt is True
+    assert "parameters no longer derive" in (report.results[0].error or "")
+
+
+def test_governed_program_loop_refuses_a_tampered_cursor_copy(tmp_path):
+    class CursorMutationReplayer(Replayer):
+        def _act(self, step, resolution, params, **kwargs):
+            cursor = self._frame_stack[-1]["loop"]
+            assert cursor is not None
+            cursor.rows[cursor.row_index]["patient"] = "B"
+            params["patient"] = "B"
+            return super()._act(step, resolution, params, **kwargs)
+
+    workflow, bundle = _seal(tmp_path, _governed_loop_workflow())
+    worklists = {"queue": [{"patient": "A"}]}
+    authorization = _authorization(workflow, worklists=worklists)
+    backend = FakeBackend()
+
+    report = CursorMutationReplayer(
+        backend,
+        vision=FakeVision(),
+        governed_authorization=authorization,
+    ).run(
+        workflow,
+        worklists=worklists,
+        bundle_dir=bundle,
+        run_dir=tmp_path / "tampered-loop-cursor-run",
+    )
+
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].delivery_attempted is False
+    assert report.results[0].safety_halt is True
+    assert "cursor no longer matches its authorized worklist" in (
+        report.results[0].error or ""
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("leaf_state", "leaf_graph", "parent_state", "malformed_cursor"),
+)
+def test_governed_program_refuses_a_tampered_active_frame_path(tmp_path, mutation):
+    class FrameMutationReplayer(Replayer):
+        def _act(self, step, resolution, params, **kwargs):
+            if mutation == "leaf_state":
+                self._frame_stack[-1]["state_id"] = "body-done"
+            elif mutation == "leaf_graph":
+                self._frame_stack[-1]["graph_id"] = "missing-body"
+            elif mutation == "parent_state":
+                self._frame_stack[0]["state_id"] = "done"
+            else:
+                self._frame_stack[-1]["loop"] = object()
+            return super()._act(step, resolution, params, **kwargs)
+
+    workflow, bundle = _seal(tmp_path, _governed_loop_workflow())
+    worklists = {"queue": [{"patient": "A"}]}
+    authorization = _authorization(workflow, worklists=worklists)
+    backend = FakeBackend()
+    run_dir = tmp_path / f"tampered-{mutation}-run"
+
+    report = FrameMutationReplayer(
+        backend,
+        vision=FakeVision(),
+        governed_authorization=authorization,
+        durable=True,
+    ).run(
+        workflow,
+        worklists=worklists,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].delivery_attempted is False
+    assert report.results[0].safety_halt is True
+    assert "program" in (report.results[0].error or "")
+    assert CheckpointStore(run_dir).program_checkpoints() == []
+
+
+def test_demo_program_refuses_a_tampered_active_frame_path(tmp_path):
+    class FrameMutationReplayer(Replayer):
+        def _act(self, step, resolution, params, **kwargs):
+            self._frame_stack[-1]["state_id"] = "body-done"
+            return super()._act(step, resolution, params, **kwargs)
+
+    workflow, bundle = _seal(tmp_path, _governed_loop_workflow())
+    backend = FakeBackend()
+
+    report = FrameMutationReplayer(backend, vision=FakeVision()).run(
+        workflow,
+        worklists={"queue": [{"patient": "A"}]},
+        bundle_dir=bundle,
+        run_dir=tmp_path / "tampered-demo-frame-run",
+    )
+
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].delivery_attempted is False
+    assert report.results[0].safety_halt is True
+    assert "leaf frame" in (report.results[0].error or "")
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_error"),
+    (
+        ("frame", "leaf frame"),
+        ("api_binding", "workflow semantics"),
+    ),
+)
+def test_program_api_actuation_rechecks_program_after_overlay_callback(
+    tmp_path, mutation, expected_error
+):
+    class ConfirmingVerifier:
+        substrate = "test"
+
+        def __init__(self):
+            self.verify_calls = 0
+
+        def capture_pre_state(self):
+            return EffectState(substrate=self.substrate, reachable=True)
+
+        def verify(self, effect, before):
+            del before
+            self.verify_calls += 1
+            return EffectVerdict(
+                verdict=Verdict.CONFIRMED,
+                kind=effect.kind,
+                substrate=self.substrate,
+            )
+
+    class RecordingActuator:
+        def __init__(self):
+            self.calls = 0
+
+        def actuate(self, binding, params):
+            del binding, params
+            self.calls += 1
+            return ApiActuationResult(
+                status=ActuationStatus.ACTUATED,
+                reason="synthetic actuation",
+            )
+
+    class OverlayMutationReplayer(Replayer):
+        mutated = False
+
+        def _emit_control_overlay_phase(self, phase, **kwargs):
+            if phase == "executing" and self._frame_stack and not self.mutated:
+                self.mutated = True
+                if mutation == "frame":
+                    self._frame_stack[-1]["state_id"] = "done"
+                else:
+                    step = workflow.program.states["write"].step
+                    assert step is not None and step.api_binding is not None
+                    step.api_binding.url_template = "/wrong-record"
+            return super()._emit_control_overlay_phase(phase, **kwargs)
+
+    effect = Effect(kind=EffectKind.RECORD_WRITTEN, match={"record": "A"})
+    api_step = Step(
+        id="api-write",
+        intent="write through the API",
+        action=ActionKind.KEY,
+        key="Enter",
+        api_binding=ApiBinding(
+            method="POST",
+            url_template="/records",
+            effects=[effect],
+        ),
+    )
+    workflow, bundle = _seal(
+        tmp_path,
+        Workflow(
+            name="program-api-frame",
+            program=ProgramGraph(
+                entry="write",
+                states={
+                    "write": State(
+                        id="write",
+                        kind=StateKind.ACTION,
+                        step=api_step,
+                        transitions=[Transition(target="done")],
+                    ),
+                    "done": State(
+                        id="done", kind=StateKind.TERMINAL, outcome="success"
+                    ),
+                },
+            ),
+        ),
+    )
+    actuator = RecordingActuator()
+    verifier = ConfirmingVerifier()
+
+    report = OverlayMutationReplayer(
+        FakeBackend(),
+        vision=FakeVision(),
+        effect_verifier=verifier,
+        api_actuator=actuator,
+    ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "program-api-frame-run")
+
+    assert report.success is False
+    assert report.results[0].delivery_attempted is False
+    assert report.results[0].safety_halt is True
+    assert expected_error in (report.results[0].error or "")
+    assert actuator.calls == 0
+    assert verifier.verify_calls == 0
+
+
+def test_program_interstitial_dismissal_rechecks_frame_after_detection(tmp_path):
+    class DetectionMutationReplayer(Replayer):
+        mutated = False
+
+        def _predicate_holds(self, predicate, *args, **kwargs):
+            if predicate.text == "release note" and not self.mutated:
+                self.mutated = True
+                self._frame_stack[-1]["state_id"] = "body-done"
+            return super()._predicate_holds(predicate, *args, **kwargs)
+
+    workflow = _governed_loop_workflow()
+    workflow.interstitials = [
+        Interstitial(
+            name="release note",
+            detect=Predicate(kind=PredicateKind.TEXT_PRESENT, text="release note"),
+            dismiss_key="Escape",
+            risk="reversible",
+            consequential=False,
+            clearance=Predicate(
+                kind=PredicateKind.TEXT_ABSENT,
+                text="release note",
+            ),
+        )
+    ]
+    workflow, bundle = _seal(tmp_path, workflow)
+    vision = FakeVision()
+    vision.text_results = {
+        "release note": Match(point=(10, 10), region=(0, 0, 5, 5), confidence=1.0)
+    }
+    backend = FakeBackend()
+
+    report = DetectionMutationReplayer(backend, vision=vision).run(
+        workflow,
+        worklists={"queue": [{"patient": "A"}]},
+        bundle_dir=bundle,
+        run_dir=tmp_path / "program-interstitial-frame-run",
+    )
+
+    assert report.success is False
+    assert report.results[0].delivery_attempted is False
+    assert report.results[0].safety_halt is True
+    assert "leaf frame" in (report.results[0].error or "")
+    assert backend.actions == []
 
 
 def test_program_exception_handler_cannot_catch_governed_identity_halt(tmp_path):
@@ -718,13 +1139,16 @@ def test_durable_resume_restores_governed_authorization(tmp_path):
     resumed_backend = FakeBackend()
     resumed_vision = resolving_vision()
     resumed_vision.ocr_lines = []
+    resumed_vision.text_results = {
+        "Saved": Match(point=(1, 1), region=(0, 0, 2, 2), confidence=0.99)
+    }
     resumed = resume(
         run_dir,
         Replayer(resumed_backend, vision=resumed_vision, poll_interval_s=0.0),
-        approval=ApprovalRecord(
-            approver="operator@example.com",
-            resolution="continue exact governed run",
-            bundle_version=bundle_version(bundle),
+        approval=_resume_approval(
+            run_dir,
+            bundle,
+            "continue exact governed run",
         ),
     )
 

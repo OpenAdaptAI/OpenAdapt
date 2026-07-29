@@ -43,6 +43,13 @@ class _FakeTextScrubber:
         return text
 
 
+class _IncompleteTextScrubber:
+    """Models an installed optional package whose external model is absent."""
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        raise RuntimeError("required NLP model is unavailable")
+
+
 class _FakeImageScrubber:
     """Returns a solid-black image (stand-in for Presidio box redaction)."""
 
@@ -97,6 +104,26 @@ def test_scrub_text_and_params_with_injected_scrubber():
     )
     scrubbed = privacy.scrub_params({"patient": "Jane Doe", "note": "ok"})
     assert scrubbed == {"patient": "<PERSON>", "note": "ok"}
+
+
+def test_auto_mode_treats_incomplete_optional_provider_as_unavailable(monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "auto")
+    privacy.set_text_scrubber(_IncompleteTextScrubber())
+
+    assert privacy.scrub_text("Synthetic follow-up") == "Synthetic follow-up"
+    privacy.set_text_scrubber(_IncompleteTextScrubber())
+    assert privacy.scrub_params({"note": "Synthetic follow-up"}) == {
+        "note": "Synthetic follow-up"
+    }
+    assert privacy.text_scrubbing_enabled() is False
+
+
+def test_on_mode_fails_closed_for_incomplete_optional_provider(monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "on")
+    privacy.set_text_scrubber(_IncompleteTextScrubber())
+
+    with pytest.raises(privacy.PrivacyNotAvailable, match="could not scrub text"):
+        privacy.scrub_text("patient data")
 
 
 # -- REPORT.md text scrubbing ------------------------------------------------

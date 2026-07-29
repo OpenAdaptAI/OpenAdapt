@@ -38,7 +38,10 @@ from openadapt_flow.runtime.durable.checkpoint import (
     RunCheckpoint,
     RunManifest,
 )
-from openadapt_flow.runtime.durable.program_checkpoint import ProgramCheckpoint
+from openadapt_flow.runtime.durable.program_checkpoint import (
+    GraphFrame,
+    ProgramCheckpoint,
+)
 
 KEY = "correct horse battery staple"
 WRONG = "Tr0ub4dor&3"
@@ -361,6 +364,7 @@ def test_program_checkpoint_encrypted_round_trip(tmp_path):
             workflow_name="w",
             seq=0,
             verified_state_id="state-a",
+            frames=[GraphFrame(graph_id="__program__", state_id="state-a")],
             bound_params={"patient": "MRN-99"},
         )
     )

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.ir import (
         ActionDeliveryReceipt,
+        Point,
         StructuralHandle,
         StructuralLocator,
     )
@@ -56,6 +57,48 @@ class ActionDeliveryUncertain(RuntimeError):
         self.native = native
         self.target_fingerprint = target_fingerprint
         self.cause_type = cause_type
+
+
+class FreshActuationRequired(RuntimeError):
+    """The observed surface changed before the first input edge.
+
+    This exception is the narrow, retryable counterpart to
+    :class:`ActionDeliveryUncertain`.  A backend may raise it only after it has
+    proved that the current gesture emitted no input edge.  The runtime can
+    then acquire a new frame and repeat target and identity resolution without
+    risking a duplicate action.
+
+    The diagnostic fields describe only pixel geometry and counts.  They never
+    retain the rejected frame or any pixel values.
+    """
+
+    def __init__(
+        self,
+        *,
+        operation: str,
+        changed_pixel_count: int,
+        changed_bbox: Optional[tuple[int, int, int, int]],
+        frame_size: tuple[int, int],
+    ) -> None:
+        super().__init__(
+            "surface changed before input because frame content changed; "
+            "acquire a fresh actuation frame"
+        )
+        if changed_pixel_count < 1:
+            raise ValueError("fresh-actuation mismatch must change at least one pixel")
+        if frame_size[0] <= 0 or frame_size[1] <= 0:
+            raise ValueError("fresh-actuation frame size must be positive")
+        if changed_bbox is None:
+            raise ValueError("fresh-actuation mismatch requires a bounding box")
+        x, y, width, height = changed_bbox
+        if x < 0 or y < 0 or width <= 0 or height <= 0:
+            raise ValueError("fresh-actuation bounding box must be positive")
+        if x + width > frame_size[0] or y + height > frame_size[1]:
+            raise ValueError("fresh-actuation bounding box exceeds the frame")
+        self.operation = operation
+        self.changed_pixel_count = changed_pixel_count
+        self.changed_bbox = changed_bbox
+        self.frame_size = frame_size
 
 
 @runtime_checkable
@@ -457,6 +500,22 @@ class SelectOptionBackend(Protocol):
 
 
 @runtime_checkable
+class GuardedSelectOptionBackend(Protocol):
+    """Exact option selection bound to a fresh target/frame observation."""
+
+    def select_option_guarded(
+        self,
+        text: str,
+        commit_key: str,
+        *,
+        target_point: "Point",
+        expected_frame_sha256: str,
+    ) -> "ActionDeliveryReceipt":
+        """Deliver text+commit and return a typed delivery-only receipt."""
+        ...
+
+
+@runtime_checkable
 class RemoteActuationBackend(Protocol):
     """Optional two-phase actuation seam for opaque remote surfaces.
 
@@ -475,6 +534,22 @@ class RemoteActuationBackend(Protocol):
 
     def acquire_actuation_frame(self) -> bytes:
         """Acquire focus/readiness and return the freshly leased PNG frame."""
+        ...
+
+
+@runtime_checkable
+class FreshActuationReacquisitionBackend(Protocol):
+    """Reset one proved zero-input invalidation for bounded reacquisition.
+
+    The runtime calls this seam only after :class:`FreshActuationRequired`.
+    Implementations must refuse every lease state except the typed invalidated
+    state.  The reset grants no actuation authority; the runtime must repeat
+    its complete fresh-frame, target, identity, and authorization checks before
+    another delivery attempt.
+    """
+
+    def reset_fresh_actuation_state(self) -> None:
+        """Clear one typed invalidation so a complete fresh lease can be made."""
         ...
 
 
@@ -506,6 +581,43 @@ class RichPointerActionBackend(Protocol):
 @runtime_checkable
 class GuardedDragActionBackend(Protocol):
     """Consume a pre-identity coordinate lease for one exact drag."""
+
+    def drag_guarded(
+        self,
+        x: int,
+        y: int,
+        end_x: int,
+        end_y: int,
+        *,
+        expected_frame_sha256: str,
+    ) -> "ActionDeliveryReceipt": ...
+
+
+@runtime_checkable
+class GuardedRemotePointerActionBackend(Protocol):
+    """Consume one exact remote frame lease for a pointer gesture.
+
+    The receipt proves which freshly observed frame and point received the
+    input. It does not prove the workflow outcome. Postconditions and effect
+    verification remain authoritative.
+    """
+
+    def click_guarded(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> "ActionDeliveryReceipt": ...
+
+    def right_click_guarded(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+    ) -> "ActionDeliveryReceipt": ...
 
     def drag_guarded(
         self,

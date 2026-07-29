@@ -30,6 +30,8 @@ import pytest
 
 from benchmark.ap_invoice import ground_truth
 from benchmark.ap_invoice.run import ARMS, SCENARIOS, run_benchmark
+from benchmark.ap_invoice.workflow import build_workflow
+from openadapt_flow.traversal import iter_workflow_steps
 
 
 @pytest.fixture(scope="module")
@@ -39,6 +41,23 @@ def results() -> dict:
 
 def _rows(results: dict, arm: str, scenario: str) -> list[dict]:
     return [r for r in results["runs"] if r["arm"] == arm and r["scenario"] == scenario]
+
+
+def test_governed_fixture_declares_api_only_actions() -> None:
+    workflow = build_workflow(
+        "governed",
+        mailer_base="http://mailer.invalid",
+        adjacent_invoice="INV-ADJACENT",
+        processed=1,
+    )
+    for step in iter_workflow_steps(workflow):
+        assert step.api_binding is not None
+        assert step.api_binding.on_unavailable == "halt"
+        assert step.api_binding.effects
+        assert step.effects == []
+        assert step.identity_armed is not True
+        assert step.anchor is None
+        assert step.expect == []
 
 
 def test_every_scenario_ran_under_both_arms(results):

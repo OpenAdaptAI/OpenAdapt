@@ -58,7 +58,7 @@ import argparse
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Iterator, Literal, Optional, Sequence, cast
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -514,6 +514,11 @@ def _configured_replayer(
     use_structural: bool,
     pixel_verify_enabled: bool = False,
     governed_authorization=None,
+    delivery_authority_kind: Literal[
+        "customer_local", "cloud_runner"
+    ] = "customer_local",
+    remote_delivery_run_id: Optional[str] = None,
+    managed_dispatch_binding=None,
     runtime_config=None,
 ):
     """Wire the grounding, verification, and actuation layers into a Replayer.
@@ -547,6 +552,9 @@ def _configured_replayer(
         use_structural=use_structural,
         pixel_verify_enabled=pixel_verify_enabled,
         governed_authorization=governed_authorization,
+        delivery_authority_kind=delivery_authority_kind,
+        remote_delivery_run_id=remote_delivery_run_id,
+        managed_dispatch_binding=managed_dispatch_binding,
         runtime_config=runtime_config,
         checkpoint_key=checkpoint_key,
     )
@@ -568,6 +576,11 @@ def _build_and_run_replayer(
     use_structural: bool,
     pixel_verify_enabled: bool = False,
     governed_authorization=None,
+    delivery_authority_kind: Literal[
+        "customer_local", "cloud_runner"
+    ] = "customer_local",
+    remote_delivery_run_id: Optional[str] = None,
+    managed_dispatch_binding=None,
     runtime_config=None,
     execution_target_kind: Optional["ExecutionTargetKind"] = None,
     surface_override: bool = False,
@@ -585,6 +598,9 @@ def _build_and_run_replayer(
         use_structural=use_structural,
         pixel_verify_enabled=pixel_verify_enabled,
         governed_authorization=governed_authorization,
+        delivery_authority_kind=delivery_authority_kind,
+        remote_delivery_run_id=remote_delivery_run_id,
+        managed_dispatch_binding=managed_dispatch_binding,
         runtime_config=runtime_config,
     ).run(
         workflow,
@@ -597,6 +613,9 @@ def _build_and_run_replayer(
         surface_override=surface_override,
         execution_origin=execution_origin,
         execution_entry_url=execution_entry_url,
+        run_id=remote_delivery_run_id
+        if delivery_authority_kind == "cloud_runner"
+        else None,
     )
 
 
@@ -642,6 +661,11 @@ def _replay_desktop(
     durable: bool,
     pixel_verify_enabled: bool = False,
     governed_authorization=None,
+    delivery_authority_kind: Literal[
+        "customer_local", "cloud_runner"
+    ] = "customer_local",
+    remote_delivery_run_id: Optional[str] = None,
+    managed_dispatch_binding=None,
     runtime_config=None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
@@ -681,6 +705,9 @@ def _replay_desktop(
             use_structural=True,
             pixel_verify_enabled=pixel_verify_enabled,
             governed_authorization=governed_authorization,
+            delivery_authority_kind=delivery_authority_kind,
+            remote_delivery_run_id=remote_delivery_run_id,
+            managed_dispatch_binding=managed_dispatch_binding,
             runtime_config=runtime_config,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
             surface_override=bool(getattr(args, "_surface_override", False)),
@@ -1167,6 +1194,11 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             durable=durable,
             pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
             governed_authorization=getattr(args, "_governed_run_authorization", None),
+            delivery_authority_kind=getattr(
+                args, "_delivery_authority_kind", "customer_local"
+            ),
+            remote_delivery_run_id=getattr(args, "_remote_delivery_run_id", None),
+            managed_dispatch_binding=getattr(args, "_managed_dispatch_binding", None),
             runtime_config=cfg.runtime,
         )
 
@@ -1235,6 +1267,15 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                     governed_authorization=getattr(
                         args, "_governed_run_authorization", None
                     ),
+                    delivery_authority_kind=getattr(
+                        args, "_delivery_authority_kind", "customer_local"
+                    ),
+                    remote_delivery_run_id=getattr(
+                        args, "_remote_delivery_run_id", None
+                    ),
+                    managed_dispatch_binding=getattr(
+                        args, "_managed_dispatch_binding", None
+                    ),
                     runtime_config=cfg.runtime,
                     execution_target_kind="web",
                     surface_override=bool(getattr(args, "_surface_override", False)),
@@ -1284,6 +1325,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
         build_runtime_authorization,
         evaluate_run_gate,
     )
+    from openadapt_flow.runner.dispatch_envelope import (
+        ManagedDispatchEnvelopeError,
+        read_managed_dispatch_envelope,
+    )
+    from openadapt_flow.runtime.authorization import runtime_inputs_digest
 
     bundle = Path(args.bundle)
     # Load the bundle first (decrypting if encrypted -- the key comes from
@@ -1369,21 +1415,83 @@ def _cmd_run(args: argparse.Namespace) -> int:
     )
     print(report.render())
 
-    if getattr(args, "dry_run", False) or getattr(args, "explain", False):
-        # Report-only: never execute, regardless of the verdict.
-        return 0 if report.passed else 2
     if not report.passed:
-        # Fail closed: refuse execution and exit nonzero.
+        # The local admission gate is always first. A dispatch envelope cannot
+        # turn a locally refused bundle into an admitted one.
         return 2
 
-    runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
-    runtime_worklists = _resolve_worklists(getattr(args, "worklist", None), workflow)
-    args._governed_run_authorization = build_runtime_authorization(
-        workflow,
-        report,
-        params=runtime_params,
-        worklists=runtime_worklists,
-    )
+    dispatch_file = getattr(args, "managed_dispatch_file", None)
+    if dispatch_file:
+        runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
+        runtime_worklists = _resolve_worklists(
+            getattr(args, "worklist", None), workflow
+        )
+        try:
+            managed_binding = read_managed_dispatch_envelope(Path(dispatch_file))
+            authorization = managed_binding.authorization
+        except ManagedDispatchEnvelopeError:
+            print(
+                "run REFUSED: managed dispatch binding is invalid. Nothing was executed."
+            )
+            return 2
+        local_authorization = build_runtime_authorization(
+            workflow,
+            report,
+            params=runtime_params,
+            worklists=runtime_worklists,
+        )
+        safety_fields = (
+            "bundle_content_digest",
+            "runtime_inputs_digest",
+            "admitted_policy_name",
+            "admitted_policy_contract_sha256",
+            "execution_profile",
+            "minimum_effect_tier",
+            "qualified_effect_requirements",
+            "required_identity_step_ids",
+            "unverified_write_approvals",
+        )
+        if (
+            selected_profile is None
+            or selected_profile.value not in {"standard", "regulated"}
+            or workflow.manifest is None
+            or any(
+                getattr(authorization, field) != getattr(local_authorization, field)
+                for field in safety_fields
+            )
+            or (
+                authorization.bundle_content_digest != workflow.manifest.content_digest
+                or authorization.validate_workflow(workflow) is not None
+                or runtime_inputs_digest(workflow, runtime_params, runtime_worklists)
+                != authorization.runtime_inputs_digest
+            )
+        ):
+            print(
+                "run REFUSED: managed dispatch does not match this exact run. Nothing was executed."
+            )
+            return 2
+        args._governed_run_authorization = authorization
+        args._managed_dispatch_binding = managed_binding
+        args._delivery_authority_kind = "cloud_runner"
+        args._remote_delivery_run_id = managed_binding.run_id
+
+    if getattr(args, "dry_run", False) or getattr(args, "explain", False):
+        # A managed dry run also validates its protected Cloud handoff above.
+        # Report-only: it never executes, regardless of the verdict.
+        return 0 if report.passed else 2
+    if not dispatch_file:
+        runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
+        runtime_worklists = _resolve_worklists(
+            getattr(args, "worklist", None), workflow
+        )
+        args._governed_run_authorization = build_runtime_authorization(
+            workflow,
+            report,
+            params=runtime_params,
+            worklists=runtime_worklists,
+        )
+        args._delivery_authority_kind = "customer_local"
+        args._remote_delivery_run_id = None
 
     # Admitted. A deployment run is not the drift-demo; force it off and delegate
     # to the shared replay executor (which reads all deployment wiring itself).
@@ -1424,6 +1532,32 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             "paused workflow cannot be identified safely. Nothing was executed."
         )
         return 3
+    managed_binding = None
+    if manifest.delivery_authority_kind == "cloud_runner":
+        from openadapt_flow.runner.dispatch_envelope import (
+            ManagedDispatchEnvelopeError,
+            read_managed_dispatch_envelope,
+        )
+
+        try:
+            managed_binding = read_managed_dispatch_envelope(
+                Path(getattr(args, "managed_dispatch_file", ""))
+            )
+        except (ManagedDispatchEnvelopeError, TypeError, ValueError):
+            print(
+                "Resume REFUSED: managed dispatch binding is invalid. Nothing was executed."
+            )
+            return 3
+        if (
+            managed_binding.run_id != manifest.remote_delivery_run_id
+            or managed_binding.authorization != manifest.governed_authorization
+            or managed_binding.binding_sha256
+            != manifest.managed_dispatch_binding_sha256
+        ):
+            print(
+                "Resume REFUSED: managed dispatch does not match this run. Nothing was executed."
+            )
+            return 3
     from openadapt_flow.ir import Workflow
 
     try:
@@ -1485,6 +1619,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             durable=True,  # resume forces durability so it can pause again
             checkpoint_key=ckpt_key,
             allow_model_grounding=allow_egress,
+            managed_dispatch_binding=managed_binding,
         )
         return resume(
             run_dir,
@@ -1564,7 +1699,11 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     import getpass
 
     from openadapt_flow import crypto
-    from openadapt_flow.runtime.durable.approval import ApprovalRecord
+    from openadapt_flow.runtime.durable.approval import (
+        ResumeRefused,
+        enforce_resume_authorization,
+        issue_resume_approval,
+    )
     from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
     from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 
@@ -1574,10 +1713,13 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     if pending is None:
         print(f"No pending escalation at {run_dir} — nothing to approve.")
         return 1
-    if store.read_approval() is not None:
-        print(f"Pending escalation at {run_dir} is already approved.")
-        return 0
-
+    manifest = store.read_manifest()
+    if manifest is None or not manifest.run_id:
+        print(
+            "The exact durable run manifest is unavailable. Start a fresh run "
+            "instead of approving an unbound pause."
+        )
+        return 1
     authorize_uncertain_retry = bool(getattr(args, "authorize_uncertain_retry", False))
     if pending.delivery_uncertainty is not None and not authorize_uncertain_retry:
         print(
@@ -1587,32 +1729,63 @@ def _cmd_approve(args: argparse.Namespace) -> int:
             "necessary, rerun approve with --authorize-uncertain-retry."
         )
         return 1
+    try:
+        store.validate_namespace(manifest)
+    except ResumeRefused as exc:
+        print(f"Approval refused: {exc}")
+        return 1
+    if pending.status == "rejected":
+        print("This durable pause was rejected and cannot be approved or resumed.")
+        return 1
 
     # The approver identity defaults to the invoking OS user (a resume with a
     # blank approver is refused by the durable library); --approver overrides.
     approver = args.approver or getpass.getuser()
-    manifest = store.read_manifest()
-    bundle_ver = ""
-    if manifest is not None:
+    try:
+        bundle_ver = bundle_version(manifest.bundle_dir)
+    except OSError:
+        print(
+            "The retained bundle is unavailable. Restore it before approving "
+            "this pause."
+        )
+        return 1
+    existing_approval = store.read_approval()
+    if pending.status == "approved" and existing_approval is not None:
         try:
-            bundle_ver = bundle_version(manifest.bundle_dir)
-        except OSError:
-            bundle_ver = ""
+            enforce_resume_authorization(
+                pending,
+                existing_approval,
+                bundle_version=bundle_ver,
+                run_id=manifest.run_id,
+                workflow_name=manifest.workflow_name,
+                run_dir=run_dir,
+            )
+        except ResumeRefused:
+            pass
+        else:
+            print(f"Pending escalation at {run_dir} is already approved.")
+            return 0
     resolution = args.resolution or (
         pending.proposed_options[0] if pending.proposed_options else "approved"
     )
-    store.write_approval(
-        ApprovalRecord(
-            approver=approver,
-            resolution=resolution,
-            bundle_version=bundle_ver,
-            workflow_name=pending.workflow_name,
-            run_dir=str(run_dir),
-            authorize_uncertain_retry=authorize_uncertain_retry,
-        )
+    approval = issue_resume_approval(
+        pending,
+        approver=approver,
+        resolution=resolution,
+        bundle_version=bundle_ver,
+        workflow_name=pending.workflow_name,
+        run_id=manifest.run_id,
+        run_dir=run_dir,
+        authorize_uncertain_retry=authorize_uncertain_retry,
     )
-    # Keep the pending status in sync for the audit trail.
-    store.write_pending(pending.model_copy(update={"status": "approved"}))
+    # Bind the exact authority and pause-state transition in one filesystem
+    # transaction. A concurrent resume cannot replace the retained approver or
+    # leave approval.json describing authority that the live attempt did not use.
+    store.commit_approval_transition(
+        expected_pending=pending,
+        approval=approval,
+        target_status="approved",
+    )
     print(
         f"Approved pending escalation at {run_dir} by {approver!r} "
         f"(step {pending.step_index} '{pending.step_id}': {pending.category}).\n"
@@ -3447,6 +3620,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="VERSION",
         help="Refuse unless the bundle's compiler version equals this",
     )
+    p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
         "--dry-run",
         "--explain",
@@ -3474,6 +3648,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument("run_dir", help="The paused run directory (holds checkpoints)")
+    p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
         "--url",
         default=None,

@@ -36,7 +36,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from PIL import Image, ImageGrab
 
@@ -268,6 +268,7 @@ class LinuxBackend:
         self._app = app.strip()
         self._window_title = window_title.strip()
         self._allow_physical_input = bool(allow_physical_input)
+        self._qualification_input_guard: Optional[Callable[[], None]] = None
         self._require_active_window_for_capture = bool(
             require_active_window_for_capture
         )
@@ -415,6 +416,17 @@ class LinuxBackend:
         """Workflow state requires an explicitly qualified AT-SPI marker."""
 
         return None
+
+    def set_qualification_input_guard(
+        self, guard: Optional[Callable[[], None]]
+    ) -> None:
+        """Install or clear the run-scoped qualification input guard."""
+
+        self._qualification_input_guard = guard
+
+    def _require_qualification_input_guard(self) -> None:
+        if self._qualification_input_guard is not None:
+            self._qualification_input_guard()
 
     def _global_point(
         self, x: int, y: int, *, require_active: bool = True
@@ -617,6 +629,7 @@ class LinuxBackend:
             elif "focus" in candidate.supported_operations:
                 operation = "focus"
         if operation is not None:
+            self._require_qualification_input_guard()
             concrete = self._client.perform_native(candidate, operation)
             if not concrete.startswith("atspi_"):
                 raise LinuxBackendError(
@@ -731,6 +744,7 @@ class LinuxBackend:
                 raise LinuxBackendError(
                     "Linux accessibility target changed before coordinate delivery"
                 )
+        self._require_qualification_input_guard()
         if not self._client.physical_click(global_x, global_y, double=double):
             raise LinuxBackendError("Linux guarded coordinate click was rejected")
         self._clear_focused_element()
@@ -798,6 +812,7 @@ class LinuxBackend:
         expected_frame_sha256: str,
     ) -> ActionDeliveryReceipt:
         focused, fingerprint = self._consume_guarded_keyboard(expected_frame_sha256)
+        self._require_qualification_input_guard()
         if text and not self._client.replace_text(focused, text):
             raise LinuxBackendError("Linux guarded text delivery was rejected")
         return _receipt(
@@ -818,6 +833,7 @@ class LinuxBackend:
                 "guarded Linux KEY delivery requires the explicitly qualified "
                 "physical-input fallback"
             )
+        self._require_qualification_input_guard()
         if not self._client.physical_press(key):
             raise LinuxBackendError(f"Linux guarded key delivery was rejected: {key!r}")
         self._clear_focused_element()
@@ -849,6 +865,7 @@ class LinuxBackend:
                 "exact Linux target window could not be focused for physical input"
             )
         x, y, width, height = fresh.bounds
+        self._require_qualification_input_guard()
         if not self._client.physical_click(
             x + width // 2, y + height // 2, double=double
         ):
@@ -868,6 +885,7 @@ class LinuxBackend:
                 "exact Linux target window could not be focused for coordinate input"
             )
         self._require_same_window(window, require_active=True)
+        self._require_qualification_input_guard()
         if not self._client.physical_click(global_x, global_y, double=double):
             raise LinuxBackendError("Linux coordinate click delivery was rejected")
         self._clear_focused_element()
@@ -889,6 +907,7 @@ class LinuxBackend:
                 raise LinuxBackendError(
                     "focused AT-SPI text target changed before editable-text delivery"
                 )
+            self._require_qualification_input_guard()
             if not self._client.replace_text(fresh, text):
                 raise LinuxBackendError(
                     "AT-SPI editable-text replacement was unavailable or rejected"
@@ -906,6 +925,7 @@ class LinuxBackend:
             raise LinuxBackendError(
                 "exact Linux target window could not be focused for text input"
             )
+        self._require_qualification_input_guard()
         if not self._client.physical_type_text(text):
             raise LinuxBackendError("Linux physical text delivery was rejected")
 
@@ -922,6 +942,7 @@ class LinuxBackend:
             raise LinuxBackendError(
                 "exact Linux target window could not be focused for key input"
             )
+        self._require_qualification_input_guard()
         if not self._client.physical_press(key):
             raise LinuxBackendError(f"Linux key delivery was rejected: {key!r}")
         self._clear_focused_element()
@@ -941,6 +962,7 @@ class LinuxBackend:
             raise LinuxBackendError(
                 "exact Linux target window could not be focused for scroll input"
             )
+        self._require_qualification_input_guard()
         if not self._client.physical_scroll(int(dx), int(dy)):
             raise LinuxBackendError("Linux scroll delivery was rejected")
 

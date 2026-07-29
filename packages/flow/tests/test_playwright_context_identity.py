@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from openadapt_flow.backend import ExecutionContextIdentityBackend
+import pytest
+
+from openadapt_flow.backend import (
+    ExecutionContextIdentityBackend,
+    StructuralResolutionRefused,
+)
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
 
@@ -29,6 +34,7 @@ class _Page:
         self.markers: dict[str, str | list[str]] = {}
         self.locator_calls: list[str] = []
         self.locator_error: Exception | None = None
+        self.mouse = _Mouse()
 
     def locator(self, selector: str) -> _MetaLocator:
         if self.locator_error is not None:
@@ -36,6 +42,30 @@ class _Page:
         self.locator_calls.append(selector)
         name = selector.removeprefix('head > meta[name="').removesuffix('"]')
         return _MetaLocator(self, name)
+
+    def evaluate(self, script: str, *args: object) -> object:
+        if "versions: Array.from" in script:
+            version = self.markers.get("openadapt-application-version")
+            session = self.markers.get("openadapt-session-identity")
+            environment = self.markers.get("openadapt-environment-identity")
+            return {
+                "href": self.url,
+                "versions": version if isinstance(version, list) else [version],
+                "sessions": session if isinstance(session, list) else [session],
+                "environments": (
+                    environment if isinstance(environment, list) else [environment]
+                ),
+            }
+        del args
+        return True
+
+
+class _Mouse:
+    def __init__(self) -> None:
+        self.clicks: list[tuple[int, int]] = []
+
+    def click(self, x: int, y: int) -> None:
+        self.clicks.append((x, y))
 
 
 def _backend(page: _Page) -> PlaywrightBackend:
@@ -166,3 +196,39 @@ def test_context_identity_read_errors_fail_closed() -> None:
 
     assert backend.session_identity() is None
     assert backend.workflow_state_identity() is None
+
+
+@pytest.mark.parametrize(
+    "changed_signal",
+    ["application", "version", "session", "environment"],
+)
+def test_qualification_environment_is_atomic_and_rechecked_before_input(
+    changed_signal: str,
+) -> None:
+    page = _Page()
+    page.markers["openadapt-application-version"] = "8.0.0.3"
+    page.markers["openadapt-session-identity"] = "a" * 64
+    page.markers["openadapt-environment-identity"] = "b" * 64
+    backend = _backend(page)
+
+    assert backend.qualification_environment_identity() == (
+        "https://app.example.test",
+        "8.0.0.3",
+        "a" * 64,
+        "b" * 64,
+    )
+    if changed_signal == "application":
+        page.url = "https://replacement.example.test/"
+    elif changed_signal == "version":
+        page.markers["openadapt-application-version"] = "8.0.0.4"
+    elif changed_signal == "session":
+        page.markers["openadapt-session-identity"] = "c" * 64
+    else:
+        page.markers["openadapt-environment-identity"] = "d" * 64
+
+    with pytest.raises(
+        StructuralResolutionRefused,
+        match="qualification browser environment changed before input",
+    ):
+        backend.click(3, 4)
+    assert page.mouse.clicks == []

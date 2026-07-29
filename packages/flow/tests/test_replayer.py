@@ -12,6 +12,7 @@ import json
 import pytest
 from PIL import Image
 
+from openadapt_flow.backend import ActionDeliveryUncertain, FreshActuationRequired
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     ActionKind,
@@ -24,11 +25,26 @@ from openadapt_flow.ir import (
     Step,
     Workflow,
 )
+from openadapt_flow.qualification import (
+    EnvironmentBoundary,
+    IdentityPolicy,
+    IdentitySignalPolicy,
+    init_project,
+    set_identity_policy,
+)
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     runtime_inputs_digest,
 )
+from openadapt_flow.runtime.effects import (
+    Effect,
+    EffectKind,
+    EffectState,
+    EffectVerdict,
+    Verdict,
+)
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
 from openadapt_flow.vision.ocr import AmbiguousOcrMatchError
 
 VIEWPORT = (300, 200)
@@ -72,6 +88,24 @@ class FakeVision:
         # per call); default True = "the typed text visibly landed".
         self.pixels_changed_results: list = []
         self.pixels_changed_calls: list = []
+
+    def program_predicate_contract(self):
+        """Bind the scripted outputs that can decide a Program transition."""
+
+        return {
+            "template_presence": [bool(item) for item in self.template_results],
+            "structural_template_presence": [
+                bool(item) for item in self.structural_template_results
+            ],
+            "text_presence": {
+                str(text): (
+                    [bool(item) for item in result]
+                    if isinstance(result, list)
+                    else bool(result)
+                )
+                for text, result in sorted(self.text_results.items())
+            },
+        }
 
     def find_template(
         self,
@@ -236,7 +270,7 @@ class FakeBackend:
         self.type_text(text)
         return ActionDeliveryReceipt(
             receipt_id="test-guarded-type",
-            operation="guarded_type",
+            operation="physical_type_text",
             native=False,
             delivered_at="2026-07-25T00:00:00+00:00",
         )
@@ -246,7 +280,7 @@ class FakeBackend:
         self.press(key)
         return ActionDeliveryReceipt(
             receipt_id="test-guarded-key",
-            operation="guarded_key",
+            operation="physical_press",
             native=False,
             delivered_at="2026-07-25T00:00:00+00:00",
         )
@@ -327,6 +361,105 @@ class RemoteLeaseBackend(FakeBackend):
         self.actions.append(("click", x, y, double))
         if self.raise_after_click:
             raise TimeoutError("delivery outcome uncertain")
+
+    def click_guarded(
+        self,
+        x,
+        y,
+        *,
+        expected_frame_sha256,
+        double=False,
+    ):
+        assert hashlib.sha256(self._frame).hexdigest() == expected_frame_sha256
+        self.click(x, y, double=double)
+        return ActionDeliveryReceipt(
+            receipt_id="test-remote-click",
+            operation="remote_double_click" if double else "remote_click",
+            native=False,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                (int(x), int(y)),
+            ),
+            delivered_at="2026-07-25T00:00:00+00:00",
+        )
+
+    def right_click_guarded(self, x, y, *, expected_frame_sha256):
+        assert hashlib.sha256(self._frame).hexdigest() == expected_frame_sha256
+        self.right_click(x, y)
+        return ActionDeliveryReceipt(
+            receipt_id="test-remote-right-click",
+            operation="remote_right_click",
+            native=False,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                (int(x), int(y)),
+            ),
+            delivered_at="2026-07-25T00:00:00+00:00",
+        )
+
+    def drag_guarded(
+        self,
+        x,
+        y,
+        end_x,
+        end_y,
+        *,
+        expected_frame_sha256,
+    ):
+        assert hashlib.sha256(self._frame).hexdigest() == expected_frame_sha256
+        self.drag(x, y, end_x, end_y)
+        return ActionDeliveryReceipt(
+            receipt_id="test-remote-drag",
+            operation="remote_drag",
+            native=False,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                (int(x), int(y)),
+            ),
+            destination_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                (int(end_x), int(end_y)),
+            ),
+            delivered_at="2026-07-25T00:00:00+00:00",
+        )
+
+
+class FreshMismatchRemoteBackend(RemoteLeaseBackend):
+    """Remote fake that proves a bounded number of zero-edge mismatches."""
+
+    def __init__(
+        self,
+        *,
+        frame: bytes,
+        mismatch_count: int,
+        changed_bbox=(105, 102, 3, 2),
+    ):
+        super().__init__(initial_frame=frame, fresh_frame=frame)
+        self.mismatch_count = mismatch_count
+        self.changed_bbox = changed_bbox
+        self.raise_uncertain_after_click = False
+        self.reset_count = 0
+
+    def reset_fresh_actuation_state(self) -> None:
+        self.reset_count += 1
+
+    def click(self, x, y, *, double=False):
+        self.click_attempts += 1
+        if self.mismatch_count:
+            self.mismatch_count -= 1
+            raise FreshActuationRequired(
+                operation="remote_click",
+                changed_pixel_count=self.changed_bbox[2] * self.changed_bbox[3],
+                changed_bbox=self.changed_bbox,
+                frame_size=self.viewport,
+            )
+        self.actions.append(("click", x, y, double))
+        if self.raise_uncertain_after_click:
+            raise ActionDeliveryUncertain(
+                operation="remote_click",
+                native=False,
+                cause_type="TimeoutError",
+            )
 
 
 def click_step(
@@ -416,6 +549,8 @@ def test_happy_path_click_then_param_type(bundle, run_dir):
     assert report.results[0].before_png == "steps/s1_before.png"
     assert report.results[0].after_png == "steps/s1_after.png"
     assert report.results[0].postconditions_ok is True
+    assert report.results[1].input_verified is True
+    assert report.results[1].postconditions_ok is None
     assert report.results[0].elapsed_ms > 0
 
 
@@ -622,7 +757,570 @@ def test_remote_post_delivery_timeout_is_never_retried(bundle, run_dir):
     )
 
     assert report.success is False
-    assert "delivery outcome uncertain" in report.results[0].error
+    result = report.results[0]
+    assert "Action delivery was uncertain and was not retried" in (result.error or "")
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.cause_type == "TimeoutError"
+    assert backend.acquire_count == 1
+    assert backend.click_attempts == 1
+    assert backend.actions == [("click", 110, 105, False)]
+
+
+def test_remote_preedge_frame_mismatch_reacquires_and_delivers_once(bundle, run_dir):
+    frame = make_png()
+    backend = FreshMismatchRemoteBackend(frame=frame, mismatch_count=1)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+    step = click_step(risk="irreversible")
+    assert step.anchor is not None
+    step.anchor = step.anchor.model_copy(update={"identifier_region": (0, 0, 10, 10)})
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is True
+    assert backend.acquire_count == 2
+    assert backend.click_attempts == 2
+    assert backend.reset_count == 1
+    assert backend.actions == [("click", 110, 105, False)]
+    assert result.delivery_attempted is True
+    assert [event.model_dump() for event in result.fresh_actuation_events] == [
+        {
+            "attempt": 1,
+            "operation": "remote_click",
+            "changed_pixel_count": 6,
+            "changed_bbox": (105, 102, 3, 2),
+            "frame_size": VIEWPORT,
+            "target_intersection": True,
+            "identity_intersection": False,
+            "retried": True,
+        }
+    ]
+
+
+def test_remote_repeated_preedge_mismatch_halts_without_delivery(bundle, run_dir):
+    frame = make_png()
+    backend = FreshMismatchRemoteBackend(frame=frame, mismatch_count=3)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(4)
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert report.transaction_outcome == "HALTED_BEFORE_EFFECT"
+    assert result.delivery_attempted is False
+    assert result.delivery_uncertainty is None
+    assert result.safety_halt is True
+    assert "surface changed before input" in result.error
+    assert "reacquisition limit was exhausted" in result.error
+    assert backend.acquire_count == 3
+    assert backend.click_attempts == 3
+    assert backend.reset_count == 2
+    assert backend.actions == []
+    assert [event.retried for event in result.fresh_actuation_events] == [
+        True,
+        True,
+        False,
+    ]
+
+
+def test_remote_preedge_retry_refuses_a_changed_target(bundle, run_dir):
+    frame = make_png()
+    backend = FreshMismatchRemoteBackend(frame=frame, mismatch_count=1)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(170, 125), region=(160, 120, 50, 20), confidence=0.95),
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is False
+    assert result.safety_halt is True
+    assert "target moved before actuation" in result.error
+    assert backend.acquire_count == 2
+    assert backend.click_attempts == 1
+    assert backend.actions == []
+    assert [event.retried for event in result.fresh_actuation_events] == [True]
+
+
+def test_remote_preedge_mismatch_without_full_revalidation_does_not_retry(
+    bundle, run_dir
+):
+    frame = make_png()
+    backend = FreshMismatchRemoteBackend(frame=frame, mismatch_count=1)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(
+            name="wf",
+            steps=[click_step(risk="reversible", ocr_text="Open details")],
+        ),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert backend.reset_count == 0
+    assert backend.click_attempts == 1
+    assert backend.actions == []
+    assert result.delivery_attempted is False
+    assert result.fresh_actuation_events[0].retried is False
+    assert "no complete consequential revalidation contract" in (result.error or "")
+
+
+def test_remote_preedge_diagnostic_uses_live_translated_identity_region(
+    bundle, run_dir
+):
+    frame = make_png()
+    backend = FreshMismatchRemoteBackend(
+        frame=frame,
+        mismatch_count=1,
+        changed_bbox=(152, 102, 2, 2),
+    )
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(170, 125), region=(160, 120, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+    step = click_step(risk="irreversible")
+    assert step.anchor is not None
+    step.anchor = step.anchor.model_copy(update={"identifier_region": (90, 80, 10, 10)})
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    event = report.results[0].fresh_actuation_events[0]
+    assert report.success is True
+    assert event.target_intersection is False
+    assert event.identity_intersection is True
+
+
+class _ChangingContextRemoteBackend(FreshMismatchRemoteBackend):
+    def __init__(self, *, source: str, expected: str, changed: str):
+        super().__init__(frame=make_png(), mismatch_count=1)
+        self.source = source
+        self.expected = expected
+        self.changed = changed
+        self.observations = 0
+
+    def _context_value(self, source: str):
+        if source != self.source:
+            return None
+        self.observations += 1
+        return self.expected if self.observations <= 2 else self.changed
+
+    def application_identity(self):
+        return self._context_value("application")
+
+    def session_identity(self):
+        return self._context_value("session")
+
+    def workflow_state_identity(self):
+        return self._context_value("workflow_state")
+
+
+@pytest.mark.parametrize(
+    ("source", "expected", "changed"),
+    [
+        ("application", "reference.application", "wrong.application"),
+        ("session", "a" * 64, "b" * 64),
+        ("workflow_state", "save.dialog.ready", "other.dialog.ready"),
+    ],
+)
+def test_remote_preedge_retry_refuses_changed_execution_context(
+    bundle, run_dir, source, expected, changed
+):
+    step = click_step(risk="irreversible")
+    workflow = Workflow(
+        name="context-retry",
+        surface="rdp",
+        execution_mode="external",
+        steps=[step],
+    )
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="rdp",
+            application="Reference application",
+            application_version="1",
+            environment_digest="a" * 64,
+            runtime_version="1.26.0",
+        ),
+    )
+    set_identity_policy(
+        workflow,
+        IdentityPolicy(
+            step_id=step.id,
+            signals=[
+                IdentitySignalPolicy(
+                    key=source,
+                    source=source,
+                    match="exact",
+                    expected_value=expected,
+                )
+            ],
+            quorum=1,
+        ),
+    )
+    backend = _ChangingContextRemoteBackend(
+        source=source,
+        expected=expected,
+        changed=changed,
+    )
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert backend.click_attempts == 1
+    assert backend.actions == []
+    assert result.identity is not None
+    assert result.identity.status == "mismatch"
+    assert "Identity signal quorum conflicted" in (result.error or "")
+
+
+class _WorklistMutatingVision(FakeVision):
+    def __init__(self, worklists):
+        super().__init__()
+        self.worklists = worklists
+        self.resolve_calls = 0
+
+    def find_template(self, *args, **kwargs):
+        match = super().find_template(*args, **kwargs)
+        self.resolve_calls += 1
+        if self.resolve_calls == 3:
+            self.worklists["cases"].append({"id": "2"})
+        return match
+
+
+def test_remote_preedge_retry_rechecks_runtime_inputs_after_observation(
+    bundle, run_dir
+):
+    worklists = {"cases": [{"id": "1"}]}
+    workflow = Workflow(
+        name="governed-retry",
+        steps=[click_step(risk="irreversible")],
+    )
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    assert workflow.manifest is not None
+    authorization = GovernedRunAuthorization(
+        bundle_content_digest=workflow.manifest.content_digest,
+        runtime_inputs_digest=runtime_inputs_digest(workflow, None, worklists),
+        admitted_policy_name="test",
+    )
+    backend = FreshMismatchRemoteBackend(frame=make_png(), mismatch_count=1)
+    vision = _WorklistMutatingVision(worklists)
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+
+    report = Replayer(
+        backend,
+        vision=vision,
+        governed_authorization=authorization,
+    ).run(
+        workflow,
+        worklists=worklists,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.click_attempts == 1
+    assert backend.actions == []
+    assert "authorization no longer matches the current runtime inputs" in (
+        report.results[0].error or ""
+    )
+
+
+class _LateWorklistMutatingTypeBackend(RemoteLeaseBackend):
+    """Mutate governed inputs after retry observation but before keyboard input."""
+
+    def __init__(self, worklists):
+        frame = make_png()
+        super().__init__(initial_frame=frame, fresh_frame=frame)
+        self.worklists = worklists
+        self.type_attempts = 0
+        self.reset_count = 0
+        self.mutated = False
+
+    def reset_fresh_actuation_state(self) -> None:
+        self.reset_count += 1
+
+    def type_text(self, text):
+        self.type_attempts += 1
+        if self.type_attempts == 1:
+            raise FreshActuationRequired(
+                operation="remote_type_text",
+                changed_pixel_count=1,
+                changed_bbox=(0, 0, 1, 1),
+                frame_size=self.viewport,
+            )
+        super().type_text(text)
+
+    def focused_text_value(self):
+        if self.type_attempts == 1 and not self.mutated:
+            self.worklists["cases"].append({"id": "late"})
+            self.mutated = True
+        return super().focused_text_value()
+
+
+def test_remote_preedge_retry_rechecks_inputs_at_keyboard_delivery_boundary(
+    bundle, run_dir
+):
+    worklists = {"cases": [{"id": "1"}]}
+    workflow = Workflow(
+        name="governed-type-retry",
+        surface="rdp",
+        execution_mode="external",
+        steps=[
+            Step(
+                id="type1",
+                intent="type governed value",
+                action=ActionKind.TYPE,
+                text="hello",
+                risk="irreversible",
+            )
+        ],
+    )
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    assert workflow.manifest is not None
+    authorization = GovernedRunAuthorization(
+        bundle_content_digest=workflow.manifest.content_digest,
+        runtime_inputs_digest=runtime_inputs_digest(workflow, None, worklists),
+        admitted_policy_name="test",
+    )
+    backend = _LateWorklistMutatingTypeBackend(worklists)
+
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        governed_authorization=authorization,
+    ).run(
+        workflow,
+        worklists=worklists,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert backend.type_attempts == 1
+    assert backend.actions == []
+    assert backend.reset_count == 1
+    assert result.delivery_attempted is False
+    assert [event.retried for event in result.fresh_actuation_events] == [True]
+    assert "authorization no longer matches the current runtime inputs" in (
+        result.error or ""
+    )
+
+
+class _LateVerificationMutatingTypeBackend(RemoteLeaseBackend):
+    def __init__(self, worklists):
+        frame = make_png()
+        super().__init__(initial_frame=frame, fresh_frame=frame)
+        self.worklists = worklists
+        self._type_accept_results = [False, True]
+        self.mutated = False
+
+    def focused_text_value(self):
+        if self.actions == [("type", "hello")] and not self.mutated:
+            self.worklists["cases"].append({"id": "late"})
+            self.mutated = True
+        return super().focused_text_value()
+
+
+def test_typed_recovery_refuses_inputs_changed_during_verification(bundle, run_dir):
+    worklists = {"cases": [{"id": "1"}]}
+    workflow = Workflow(
+        name="governed-type-recovery",
+        surface="rdp",
+        execution_mode="external",
+        steps=[
+            Step(
+                id="type1",
+                intent="type governed value",
+                action=ActionKind.TYPE,
+                text="hello",
+                risk="irreversible",
+            )
+        ],
+    )
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    assert workflow.manifest is not None
+    authorization = GovernedRunAuthorization(
+        bundle_content_digest=workflow.manifest.content_digest,
+        runtime_inputs_digest=runtime_inputs_digest(workflow, None, worklists),
+        admitted_policy_name="test",
+    )
+    backend = _LateVerificationMutatingTypeBackend(worklists)
+
+    report = Replayer(
+        backend,
+        vision=FakeVision(),
+        governed_authorization=authorization,
+    ).run(
+        workflow,
+        worklists=worklists,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert backend.actions == [("type", "hello")]
+    assert result.input_retried is True
+    assert result.input_verified is False
+    assert "authorization no longer matches the current runtime inputs" in (
+        result.error or ""
+    )
+
+
+class _CountingEffectVerifier:
+    substrate = "test-store"
+
+    def __init__(self):
+        self.pre_state_calls = 0
+
+    def capture_pre_state(self):
+        self.pre_state_calls += 1
+        return EffectState(substrate=self.substrate, reachable=True)
+
+    def verify(self, effect, before):
+        del before
+        return EffectVerdict(
+            verdict=Verdict.CONFIRMED,
+            kind=effect.kind,
+            substrate=self.substrate,
+        )
+
+
+def test_remote_preedge_retry_refreshes_effect_pre_state(bundle, run_dir):
+    backend = FreshMismatchRemoteBackend(frame=make_png(), mismatch_count=1)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+    step = click_step(risk="irreversible")
+    step.effects = [Effect(kind=EffectKind.RECORD_WRITTEN, match={"id": "1"})]
+    verifier = _CountingEffectVerifier()
+
+    report = Replayer(
+        backend,
+        vision=vision,
+        effect_verifier=verifier,
+    ).run(
+        Workflow(name="effect-retry", steps=[step]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert verifier.pre_state_calls == 2
+    assert backend.actions == [("click", 110, 105, False)]
+
+
+def test_remote_preedge_retry_refuses_a_changed_identity(bundle, run_dir):
+    frame = make_png()
+    backend = FreshMismatchRemoteBackend(frame=frame, mismatch_count=1)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+    vision.ocr_results = [
+        [OcrLine("Jane Sample Knee pain referral High")],
+        [OcrLine("Jane Sample Knee pain referral High")],
+        [OcrLine("Taylor Duplicate Knee pain referral High")],
+    ]
+    step = context_click_step(
+        "Jane Sample Knee pain referral High",
+        risk="irreversible",
+    )
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is False
+    assert result.safety_halt is True
+    assert result.identity is not None
+    assert result.identity.status == "mismatch"
+    assert "Identity check failed" in result.error
+    assert backend.acquire_count == 2
+    assert backend.click_attempts == 1
+    assert backend.actions == []
+
+
+def test_remote_uncertain_edge_never_enters_fresh_reacquisition(bundle, run_dir):
+    frame = make_png()
+    backend = FreshMismatchRemoteBackend(frame=frame, mismatch_count=0)
+    backend.raise_uncertain_after_click = True
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(2)
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is True
+    assert result.delivery_uncertainty is not None
+    assert result.fresh_actuation_events == []
     assert backend.acquire_count == 1
     assert backend.click_attempts == 1
     assert backend.actions == [("click", 110, 105, False)]
@@ -1237,6 +1935,29 @@ def test_closed_loop_scroll_budget_exhaustion_fails_loudly(bundle, run_dir):
     assert backend.actions == [("scroll", 0, -400), ("scroll", 0, -400)]
 
 
+def test_consequential_remote_scroll_reacquires_each_wheel_edge(bundle, run_dir):
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    step = scroll_step(dy=-400)
+    step.risk = "irreversible"
+    workflow = Workflow(
+        name="remote-scroll",
+        surface="rdp",
+        execution_mode="external",
+        steps=[step, click_step(step_id="target")],
+    )
+
+    report = Replayer(backend, vision=FakeVision()).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.actions == [("scroll", 0, -400), ("scroll", 0, -400)]
+    assert backend.acquire_count == 3  # outer preflight plus one per wheel edge
+
+
 def test_consecutive_scroll_steps_share_the_loop(bundle, run_dir):
     """A SCROLL step exhausting its own budget does NOT fail when the next
     step is another SCROLL step: that step inherits the loop (probe-first),
@@ -1826,6 +2547,47 @@ class SelectRemoteBackend(RemoteLeaseBackend):
         self.actions.append(("select_option", text, commit_key))
         self._text_value = self.selected_value
 
+    def select_option_guarded(
+        self,
+        text: str,
+        commit_key: str,
+        *,
+        target_point,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        self.select_option(text, commit_key)
+        return ActionDeliveryReceipt(
+            receipt_id="test-remote-select",
+            operation="remote_select_option",
+            native=False,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                target_point,
+            ),
+            selection_value_sha256=hashlib.sha256(text.encode()).hexdigest(),
+            selection_commit_key=commit_key,
+            delivered_at="2026-07-25T00:00:00+00:00",
+        )
+
+
+class FreshMismatchAfterFocusSelectBackend(SelectRemoteBackend):
+    """A selection whose focus click lands before a zero-keyboard mismatch."""
+
+    def __init__(self, *, changed_bbox=(110, 105, 1, 1)):
+        super().__init__(selected_value="Massachusetts")
+        self.select_attempts = 0
+        self.changed_bbox = changed_bbox
+
+    def select_option(self, text: str, commit_key: str) -> None:
+        del text, commit_key
+        self.select_attempts += 1
+        raise FreshActuationRequired(
+            operation="remote_select_option",
+            changed_pixel_count=1,
+            changed_bbox=self.changed_bbox,
+            frame_size=self.viewport,
+        )
+
 
 def _remote_selection_workflow(*, region=(100, 100, 50, 20)) -> Workflow:
     anchor = click_step().anchor
@@ -1852,6 +2614,119 @@ def _selection_matches(*, region=(100, 100, 50, 20), point=(110, 105)):
     return [Match(point=point, region=region, confidence=0.95) for _ in range(4)]
 
 
+@pytest.mark.parametrize("action", (ActionKind.TYPE, ActionKind.SELECT_OPTION))
+def test_post_focus_ocr_ambiguity_remains_a_no_keyboard_refusal(
+    bundle, run_dir, action
+):
+    class PostFocusOcrMutationReplayer(Replayer):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.revalidations = 0
+
+        def _revalidate_consequential_actuation(self, *args, **kwargs):
+            self.revalidations += 1
+            if self.revalidations == 2:
+                raise AmbiguousOcrMatchError("synthetic duplicate OCR lines")
+            return super()._revalidate_consequential_actuation(*args, **kwargs)
+
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    if action is ActionKind.SELECT_OPTION:
+        workflow = _remote_selection_workflow()
+        params = {"state": "Massachusetts"}
+        backend = SelectRemoteBackend(selected_value="Massachusetts")
+    else:
+        workflow = Workflow(
+            name="remote-type",
+            surface="rdp",
+            execution_mode="external",
+            steps=[
+                Step(
+                    id="t1",
+                    intent="type the governed value",
+                    action=ActionKind.TYPE,
+                    text="Massachusetts",
+                    anchor=click_step().anchor,
+                    risk="irreversible",
+                )
+            ],
+        )
+        params = {}
+        frame = make_png()
+        backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+
+    replayer = PostFocusOcrMutationReplayer(backend, vision=vision)
+    report = replayer.run(
+        workflow,
+        params=params,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert replayer.revalidations == 2
+    assert backend.actions == [("click", 110, 105, False)]
+    assert result.delivery_attempted is True
+    assert result.delivery_uncertainty is None
+    assert result.safety_halt is True
+    assert "synthetic duplicate OCR lines" in (result.error or "")
+    assert "no further action was admitted" in (result.error or "")
+    assert report.execution_outcome != "VERIFIED"
+    if isinstance(backend, SelectRemoteBackend):
+        assert backend.select_calls == []
+
+
+def test_post_focus_structural_refusal_reports_the_prior_input_edge(bundle, run_dir):
+    from openadapt_flow.backend import StructuralResolutionRefused
+
+    class PostFocusStructuralRefusalReplayer(Replayer):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.revalidations = 0
+
+        def _revalidate_consequential_actuation(self, *args, **kwargs):
+            self.revalidations += 1
+            if self.revalidations == 2:
+                raise StructuralResolutionRefused("synthetic stale structural target")
+            return super()._revalidate_consequential_actuation(*args, **kwargs)
+
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    workflow = Workflow(
+        name="remote-type",
+        surface="rdp",
+        execution_mode="external",
+        steps=[
+            Step(
+                id="t1",
+                intent="type the governed value",
+                action=ActionKind.TYPE,
+                text="Massachusetts",
+                anchor=click_step().anchor,
+                risk="irreversible",
+            )
+        ],
+    )
+
+    report = PostFocusStructuralRefusalReplayer(backend, vision=vision).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert backend.actions == [("click", 110, 105, False)]
+    assert result.delivery_attempted is True
+    assert result.safety_halt is True
+    assert "no further action was admitted after the earlier input edge" in (
+        result.error or ""
+    )
+
+
 def test_remote_selection_verifies_committed_value_in_live_resolved_region(
     bundle, run_dir
 ):
@@ -1874,6 +2749,64 @@ def test_remote_selection_verifies_committed_value_in_live_resolved_region(
         ("select_option", "Massachusetts", "Enter"),
     ]
     assert report.results[0].input_verified is True
+    assert report.results[0].actuation == "remote_guarded"
+    assert report.results[0].delivery_receipt is not None
+    assert report.results[0].delivery_receipt.operation == "remote_select_option"
+
+
+def test_remote_selection_does_not_retry_after_the_focus_input_edge(bundle, run_dir):
+    vision = FakeVision()
+    vision.template_results = _selection_matches()
+    backend = FreshMismatchAfterFocusSelectBackend()
+
+    report = Replayer(backend, vision=vision).run(
+        _remote_selection_workflow(),
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.delivery_attempted is True
+    assert result.delivery_uncertainty is None
+    assert backend.acquire_count == 2
+    assert backend.click_attempts == 1
+    assert backend.select_attempts == 1
+    assert backend.actions == [("click", 110, 105, False)]
+    assert len(result.fresh_actuation_events) == 1
+    assert result.fresh_actuation_events[0].retried is False
+    assert "an earlier input edge crossed" in (result.error or "")
+
+
+def test_remote_selection_mismatch_uses_post_focus_live_geometry(bundle, run_dir):
+    vision = FakeVision()
+    initial = Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+    shifted = Match(point=(118, 105), region=(108, 100, 50, 20), confidence=0.95)
+    vision.template_results = [initial, initial, shifted]
+    workflow = _remote_selection_workflow()
+    step = workflow.steps[0]
+    assert step.anchor is not None
+    step.anchor = step.anchor.model_copy(
+        update={"identifier_region": (145, 100, 5, 10)}
+    )
+    backend = FreshMismatchAfterFocusSelectBackend(changed_bbox=(154, 105, 2, 2))
+
+    report = Replayer(backend, vision=vision).run(
+        workflow,
+        params={"state": "Massachusetts"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert backend.actions == [("click", 110, 105, False)]
+    assert len(result.fresh_actuation_events) == 1
+    event = result.fresh_actuation_events[0]
+    assert event.retried is False
+    assert event.target_intersection is True
+    assert event.identity_intersection is True
 
 
 def test_remote_selection_post_focus_uses_landmarks_not_duplicated_value(

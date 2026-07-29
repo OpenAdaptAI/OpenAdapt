@@ -268,6 +268,122 @@ def test_playwright_refuses_invisible_context_change_before_delivery(
     assert actions == []
 
 
+@pytest.mark.parametrize(
+    "operation",
+    ["structural", "coordinate", "keyboard", "structural_drag", "coordinate_drag"],
+)
+def test_external_environment_guard_runs_at_each_final_browser_input_edge(
+    operation: str,
+) -> None:
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 800, "height": 400})
+        page.set_content(
+            """<!doctype html><html><body><table><tbody>
+            <tr data-openadapt-identity="record-1">
+            <td>MRN-1</td><td>Jane Sample</td><td>
+              <button id="button" onclick="window.actions.push('click')">Go</button>
+              <input id="input" aria-label="Value"
+                onkeydown="window.actions.push('key')">
+              <div id="source" draggable="true">Source</div>
+              <div id="destination">Destination</div>
+            </td></tr></tbody></table>
+            <script>window.actions = [];</script></body></html>"""
+        )
+        backend = PlaywrightBackend(page)
+
+        if operation == "structural":
+            locator = StructuralLocator(selector="#button", role="button", name="Go")
+            handle = backend.locate_structural(locator)
+            assert handle is not None
+
+            def invoke():
+                return backend.act_structural(locator, handle)
+        elif operation == "coordinate":
+            box = page.locator("#button").bounding_box()
+            assert box is not None
+            x, y = (
+                int(round(box["x"] + box["width"] / 2)),
+                int(round(box["y"] + box["height"] / 2)),
+            )
+            backend.arm_guarded_coordinate(x, y)
+
+            def invoke():
+                return backend.act_guarded_coordinate(
+                    x,
+                    y,
+                    expected_frame_sha256="0" * 64,
+                )
+        elif operation == "keyboard":
+            target = page.locator("#input")
+            target.focus()
+            box = target.bounding_box()
+            assert box is not None
+            x, y = (
+                int(round(box["x"] + box["width"] / 2)),
+                int(round(box["y"] + box["height"] / 2)),
+            )
+            backend.arm_guarded_keyboard(x, y)
+            expected = hashlib.sha256(backend.guarded_keyboard_frame()).hexdigest()
+
+            def invoke():
+                return backend.press_guarded("Enter", expected_frame_sha256=expected)
+        elif operation == "structural_drag":
+            source_locator = StructuralLocator(selector="#source")
+            destination_locator = StructuralLocator(selector="#destination")
+            source = backend.locate_structural(source_locator)
+            destination = backend.locate_structural(destination_locator)
+            assert source is not None and destination is not None
+
+            def invoke():
+                return backend.drag_structural_guarded(
+                    source_locator,
+                    source,
+                    destination_locator,
+                    destination,
+                )
+        else:
+            source_box = page.locator("#button").bounding_box()
+            destination_box = page.locator("#destination").bounding_box()
+            assert source_box is not None and destination_box is not None
+            x, y = (
+                int(round(source_box["x"] + source_box["width"] / 2)),
+                int(round(source_box["y"] + source_box["height"] / 2)),
+            )
+            end_x, end_y = (
+                int(destination_box["x"] + 2),
+                int(destination_box["y"] + 2),
+            )
+            expected = hashlib.sha256(backend.screenshot()).hexdigest()
+            backend.arm_guarded_coordinate(x, y)
+
+            def invoke():
+                return backend.drag_guarded(
+                    x,
+                    y,
+                    end_x,
+                    end_y,
+                    expected_frame_sha256=expected,
+                )
+
+        guard_calls = 0
+
+        def refuse_changed_environment() -> None:
+            nonlocal guard_calls
+            guard_calls += 1
+            raise StructuralResolutionRefused("external environment changed")
+
+        backend.set_qualification_input_guard(refuse_changed_environment)
+        with pytest.raises(StructuralResolutionRefused):
+            invoke()
+        assert guard_calls == 1
+        assert page.evaluate("window.actions") == []
+        browser.close()
+
+
 @pytest.mark.parametrize("mutation", ["clone_handler", "hidden_attribute"])
 def test_visual_fallback_refuses_pixel_identical_post_identity_mutation(
     tmp_path,
@@ -375,6 +491,51 @@ def test_playwright_visual_fallback_uses_identity_bound_dom_click(tmp_path) -> N
     assert report.results[0].actuation == "guarded_coordinate"
     assert report.results[0].delivery_receipt is not None
     assert clicked == 1
+
+
+def test_playwright_guarded_right_click_emits_typed_receipt() -> None:
+    """The browser emits the operation that qualification accepts."""
+
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 800, "height": 400})
+        page.set_content(
+            """<!doctype html><html><body>
+            <table><tbody><tr data-openadapt-identity="record-1">
+              <td>MRN-1</td><td>Jane Sample</td><td>
+                <button id="target"
+                  oncontextmenu="event.preventDefault(); window.opened += 1">
+                  Review
+                </button>
+              </td>
+            </tr></tbody></table>
+            <script>window.opened = 0;</script>
+            </body></html>"""
+        )
+        backend = PlaywrightBackend(page)
+        box = page.locator("#target").bounding_box()
+        assert box is not None
+        point = (
+            int(round(box["x"] + box["width"] / 2)),
+            int(round(box["y"] + box["height"] / 2)),
+        )
+        backend.arm_guarded_coordinate(*point)
+        expected_frame_sha256 = hashlib.sha256(backend.screenshot()).hexdigest()
+        receipt = backend.act_guarded_coordinate(
+            *point,
+            expected_frame_sha256=expected_frame_sha256,
+            button="right",
+        )
+        opened = page.evaluate("window.opened")
+        browser.close()
+
+    assert receipt.operation == "guarded_coordinate_right_click"
+    assert receipt.native is False
+    assert receipt.target_fingerprint is not None
+    assert opened == 1
 
 
 def test_structural_revalidation_replaces_stale_guard(tmp_path) -> None:

@@ -129,6 +129,7 @@ def _peaks_above(
 # normalized correlation degenerate.  Refuse that evidence and let the
 # caller's independent hash/semantic checks decide.
 STRUCTURAL_MIN_EDGE_PIXELS = 16
+DEFAULT_TEMPLATE_SCALES: tuple[float, ...] = (0.85, 1.0, 1.18)
 
 
 def _find_template_arrays(
@@ -136,7 +137,7 @@ def _find_template_arrays(
     template: np.ndarray,
     *,
     search_region: Region | None = None,
-    scales: tuple[float, ...] = (0.85, 1.0, 1.18),
+    scales: tuple[float, ...] = DEFAULT_TEMPLATE_SCALES,
     threshold: float = 0.82,
     prefer_near: Point | None = None,
 ) -> Match | None:
@@ -246,7 +247,7 @@ def find_template(
     template_png: bytes,
     *,
     search_region: Region | None = None,
-    scales: tuple[float, ...] = (0.85, 1.0, 1.18),
+    scales: tuple[float, ...] = DEFAULT_TEMPLATE_SCALES,
     threshold: float = 0.82,
     prefer_near: Point | None = None,
 ) -> Match | None:

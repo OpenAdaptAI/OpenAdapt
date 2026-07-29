@@ -124,6 +124,13 @@ class BackendConfig(BaseModel):
     #: unwired and is not suitable for a governed consequential RDP write.
     rdp_readiness_text: Optional[str] = None
     rdp_readiness_min_ratio: float = Field(default=0.85, ge=0.0, le=1.0)
+    #: PHI-free markers observed from a fresh remote frame for qualification.
+    #: They are compared with the project boundary; they are not copied into
+    #: run evidence as plaintext.
+    rdp_application_marker: Optional[str] = None
+    rdp_application_version_marker: Optional[str] = None
+    rdp_environment_marker: Optional[str] = None
+    rdp_session_marker: Optional[str] = None
 
     # -- rdp/citrix (local remote-display client window) ---------------------
     #: Exact case-insensitive owner-app name of the local client WINDOW to drive
@@ -670,9 +677,16 @@ def build_replayer(
     use_structural: bool,
     pixel_verify_enabled: bool = False,
     governed_authorization: Any = None,
+    delivery_authority_kind: Literal[
+        "customer_local", "cloud_runner"
+    ] = "customer_local",
+    remote_delivery_run_id: Optional[str] = None,
+    managed_dispatch_binding: Any = None,
     runtime_config: Optional["RuntimeSection"] = None,
     phi_mode: Optional[bool] = None,
     checkpoint_key: Optional[str] = None,
+    qualification_fault_driver: Any = None,
+    qualification_environment_observer: Any = None,
 ) -> Any:
     """Wire one deployment-qualified backend into the governed Replayer.
 
@@ -798,6 +812,22 @@ def build_replayer(
         require_settled = (
             require_settled or execution_profile_contract(profile_name).require_settled
         )
+    if (
+        qualification_environment_observer is None
+        and getattr(governed_authorization, "qualification_case_id", None) is not None
+    ):
+        # Real deployment construction must not omit the observer merely
+        # because a test or embedding caller did not inject one.  Backends
+        # with the atomic tuple4 contract use the public adapter.  A project
+        # that declares another observer id/contract still fails closed in the
+        # Replayer and must pass that environment-owned observer explicitly.
+        from openadapt_flow.qualification_environment import (
+            BackendQualificationEnvironmentObserver,
+        )
+
+        qualification_environment_observer = BackendQualificationEnvironmentObserver(
+            backend
+        )
     return Replayer(
         backend,
         grounder=grounder,
@@ -810,8 +840,13 @@ def build_replayer(
         use_structural=use_structural,
         pixel_verify_enabled=pixel_verify_enabled,
         governed_authorization=governed_authorization,
+        delivery_authority_kind=delivery_authority_kind,
+        remote_delivery_run_id=remote_delivery_run_id,
+        managed_dispatch_binding=managed_dispatch_binding,
         checkpoint_key=checkpoint_key,
         require_settled=require_settled,
+        qualification_fault_driver=qualification_fault_driver,
+        qualification_environment_observer=qualification_environment_observer,
     )
 
 

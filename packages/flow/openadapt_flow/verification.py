@@ -6,6 +6,43 @@ from enum import IntEnum
 from typing import Any, Optional
 
 
+class EffectContractMutationError(RuntimeError):
+    """An external verifier changed the effect contract it received."""
+
+
+def _isolated_effect(effect: Any) -> tuple[Any, Any]:
+    """Return a deep callback copy and its exact serializable semantics."""
+
+    copier = getattr(effect, "model_copy", None)
+    dumper = getattr(effect, "model_dump", None)
+    if not callable(copier) or not callable(dumper):
+        return effect, None
+    candidate = copier(deep=True)
+    return candidate, candidate.model_dump(mode="json")
+
+
+def verify_effect_without_mutation(
+    verifier: object,
+    effect: Any,
+    before: Any,
+    *,
+    context: Any = None,
+) -> Any:
+    """Call a verifier with an isolated effect and reject contract mutation."""
+
+    candidate, original = _isolated_effect(effect)
+    callback = getattr(verifier, "verify")
+    if context is None:
+        verdict = callback(candidate, before)
+    else:
+        verdict = callback(candidate, before, context=context)
+    if original is not None and candidate.model_dump(mode="json") != original:
+        raise EffectContractMutationError(
+            "effect verifier changed the resolved effect contract"
+        )
+    return verdict
+
+
 class VerificationTier(IntEnum):
     """Strength of evidence for a declared business effect.
 
@@ -30,9 +67,12 @@ def verifier_effect_tier(
 
     tier_for = getattr(verifier, "verification_tier_for", None)
     if callable(tier_for):
+        candidate, original = _isolated_effect(effect)
         try:
-            value = tier_for(effect)
+            value = tier_for(candidate)
         except (TypeError, ValueError):
+            return None
+        if original is not None and candidate.model_dump(mode="json") != original:
             return None
     else:
         value = getattr(verifier, "verification_tier", None)

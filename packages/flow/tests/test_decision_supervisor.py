@@ -46,8 +46,13 @@ from openadapt_flow.runtime.durable.attended import (
     AttendedActionBusy,
     AttendedActionRefused,
     AttendedActionStore,
+    AttendedDecision,
+    AttendedDecisionLog,
     AttendedRelayAcknowledgement,
+    attended_decision_payload,
 )
+from openadapt_flow.runtime.durable.authority import DurableAuthority
+from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 from openadapt_flow.runtime.replayer import Replayer
 from tests.test_attended_actions import _ResultExecutor
 from tests.test_decision_relay import (
@@ -309,6 +314,31 @@ def _assert_retained_recovery_refuses(
     assert not any(path.endswith("/ack") for path, _ in transport.calls)
 
 
+def _assert_retained_recovery_restores_authority(
+    runs: Path,
+    deployment: Any,
+    executor: Any,
+    relay_body: dict[str, Any],
+) -> None:
+    """A damaged local projection is rebuilt from the external journal."""
+
+    transport = _SequencedTransport(
+        polls=[(200, {"decision": relay_body})],
+        acknowledgements=[(200, {"accepted": True})],
+    )
+    relay = DecisionRelay(transport, token=TOKEN, deployment=deployment)
+    report = DecisionSupervisor(
+        runs, relay=relay, deployment=deployment, executor=executor
+    ).serve_once(wait_s=0.0)
+
+    assert report.acknowledged == "accepted"
+    assert report.reacknowledged is True
+    assert report.outcome is not None
+    assert report.outcome.status == "completed"
+    assert executor.calls == 1
+    assert [path.endswith("/ack") for path, _ in transport.calls].count(True) == 1
+
+
 def _read_decision_log(run: Path) -> dict[str, Any]:
     return json.loads(AttendedActionStore(run).decisions_path.read_text())
 
@@ -550,6 +580,71 @@ def test_a_lost_ack_survives_restart_without_a_second_action(
     assert retained[0].confirmed is True
 
 
+def test_v1_unicode_lost_ack_replays_from_external_authority(tmp_path):
+    """A v1 outcome survives restart without a local projection or redispatch."""
+    runs = tmp_path / "runs"
+    run, item = _halted_run(runs, tmp_path / "bundles", "v1-unicode")
+    deployment = _deployment()
+    executor = _ResultExecutor()
+    relay_body = _relayed_for(run, item, deployment)
+    relayed = RelayedDecision(
+        decision_id=str(relay_body["decision_id"]), relay=relay_body
+    )
+    binding = relayed.durable_binding()
+    store = AttendedActionStore(run)
+    capability = store.read()
+    legacy = AttendedDecision(
+        schema_version=1,
+        decision_id="0123456789abcdef0123456789abcdef",
+        pause_id=capability.pause_id,
+        capability_digest=binding.capability_digest,
+        request_digest="sha256:" + "b" * 64,
+        idempotency_key=binding.idempotency_key,
+        action=binding.action,
+        operator="José",
+        status="completed",
+        message="vérifié",
+        report_success=True,
+    )
+    record = store._relay_acknowledgement(binding, legacy)  # noqa: SLF001
+    assert record.retained_decision_digest == _plain_digest(
+        attended_decision_payload(legacy)
+    )
+    log = AttendedDecisionLog(
+        decisions=[legacy], relay_acknowledgements=[record]
+    ).model_dump_json(indent=2)
+    assert "decided_by" not in json.loads(log)["decisions"][0]
+    authority = DurableAuthority(run, CheckpointStore(run))
+    _snapshot, head = authority.read_attended_snapshot(
+        expected_run_id=capability.run_id
+    )
+    authority.append_attended_snapshot(
+        expected_run_id=capability.run_id,
+        expected_head_digest=head,
+        snapshot_json=log,
+    )
+    assert not store.decisions_path.exists()
+
+    transport = _SequencedTransport(
+        polls=[(200, {"decision": relay_body})],
+        acknowledgements=[(200, {"accepted": True})],
+    )
+    report = DecisionSupervisor(
+        runs,
+        relay=DecisionRelay(transport, token=TOKEN, deployment=deployment),
+        deployment=deployment,
+        executor=executor,
+    ).serve_once(wait_s=0.0)
+
+    assert report.reacknowledged is True
+    assert report.outcome == legacy
+    assert executor.calls == 0
+    assert store.decisions_path.is_file()
+    retained = store.relay_acknowledgement(binding)
+    assert retained is not None
+    assert retained[0].confirmed is True
+
+
 def test_lost_ack_recovery_refuses_a_changed_signed_or_idempotency_binding(tmp_path):
     """A repeated decision id cannot select an earlier local outcome."""
     runs = tmp_path / "runs"
@@ -603,8 +698,8 @@ def test_lost_ack_recovery_refuses_a_changed_signed_or_idempotency_binding(tmp_p
     )
 
 
-def test_recovery_refuses_an_outcome_and_plain_digest_changed_together(tmp_path):
-    """A plain SHA beside mutable JSON cannot replace the per-run HMAC."""
+def test_recovery_restores_an_outcome_and_plain_digest_changed_together(tmp_path):
+    """A local plain SHA cannot replace the external authenticated journal."""
     runs, run, deployment, executor, relay_body, _outcome = _journaled_lost_ack(
         tmp_path, "plain-digest-tamper"
     )
@@ -621,10 +716,10 @@ def test_recovery_refuses_an_outcome_and_plain_digest_changed_together(tmp_path)
     record["retained_decision_digest"] = _plain_digest(outcome)
     _write_decision_log(run, log)
 
-    _assert_retained_recovery_refuses(runs, deployment, executor, relay_body)
+    _assert_retained_recovery_restores_authority(runs, deployment, executor, relay_body)
 
 
-def test_recovery_refuses_a_fabricated_accepted_outcome(tmp_path):
+def test_recovery_restores_over_a_fabricated_accepted_outcome(tmp_path):
     runs, run, deployment, executor, relay_body, _outcome = _journaled_lost_ack(
         tmp_path, "fabricated-outcome"
     )
@@ -648,7 +743,7 @@ def test_recovery_refuses_a_fabricated_accepted_outcome(tmp_path):
     record["engine_ack_result"] = "accepted"
     _write_decision_log(run, log)
 
-    _assert_retained_recovery_refuses(runs, deployment, executor, relay_body)
+    _assert_retained_recovery_restores_authority(runs, deployment, executor, relay_body)
 
 
 @pytest.mark.parametrize(
@@ -662,12 +757,12 @@ def test_recovery_refuses_a_fabricated_accepted_outcome(tmp_path):
         ("event_sequence", None),
     ],
 )
-def test_recovery_refuses_a_mac_valid_changed_run_or_pause_binding(
+def test_recovery_restores_over_a_locally_resigned_run_or_pause_binding(
     tmp_path,
     field,
     changed,
 ):
-    """The record MAC is necessary but not sufficient execution evidence."""
+    """A local record MAC cannot replace the external journal authority."""
     runs, run, deployment, executor, relay_body, _outcome = _journaled_lost_ack(
         tmp_path, f"changed-{field}"
     )
@@ -680,7 +775,7 @@ def test_recovery_refuses_a_mac_valid_changed_run_or_pause_binding(
     )
     _write_decision_log(run, log)
 
-    _assert_retained_recovery_refuses(runs, deployment, executor, relay_body)
+    _assert_retained_recovery_restores_authority(runs, deployment, executor, relay_body)
 
 
 def test_recovery_refuses_a_replaced_per_run_key(tmp_path):
@@ -696,7 +791,7 @@ def test_recovery_refuses_a_replaced_per_run_key(tmp_path):
 
 
 @pytest.mark.parametrize("damage", ["truncate", "delete", "duplicate"])
-def test_recovery_refuses_a_damaged_or_missing_ack_record(tmp_path, damage):
+def test_recovery_restores_a_damaged_or_missing_local_ack_projection(tmp_path, damage):
     runs, run, deployment, executor, relay_body, _outcome = _journaled_lost_ack(
         tmp_path, f"record-{damage}"
     )
@@ -711,7 +806,7 @@ def test_recovery_refuses_a_damaged_or_missing_ack_record(tmp_path, damage):
             log["relay_acknowledgements"].append(dict(log["relay_acknowledgements"][0]))
         _write_decision_log(run, log)
 
-    _assert_retained_recovery_refuses(runs, deployment, executor, relay_body)
+    _assert_retained_recovery_restores_authority(runs, deployment, executor, relay_body)
 
 
 def test_recovery_refuses_when_the_signed_capability_is_missing(tmp_path):

@@ -267,6 +267,7 @@ def test_rdp_safety_config_threads_frame_age_and_readiness(monkeypatch) -> None:
     )
     assert backend._max_frame_age_s == 3.5
     assert backend._readiness_probe is not None
+    assert backend._application_marker is None
     assert backend._readiness_probe(b"png") is True
     assert seen == {"png": b"png", "expected": "Expected App", "min_ratio": 0.9}
 

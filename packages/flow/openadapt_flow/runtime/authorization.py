@@ -10,19 +10,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from openadapt_flow.ir import Interstitial, Step, Workflow
+from openadapt_flow.ir import Interstitial, QualifiedEffectRequirement, Step, Workflow
 from openadapt_flow.traversal import iter_workflow_steps
 
 _CONSUMED_IDS: set[str] = set()
 _CONSUMED_LOCK = threading.Lock()
+_QUALIFICATION_ID_RE = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 
 
 def effective_runtime_params(
@@ -37,14 +39,15 @@ def effective_runtime_params(
     return merged
 
 
-def runtime_inputs_digest(
+def runtime_inputs_bytes(
     workflow: Workflow,
     params: dict[str, str] | None,
     worklists: dict[str, list[dict[str, str]]] | None,
     *,
     interstitials: list[Interstitial] | None = None,
-) -> str:
-    """Hash the exact effective runtime inputs without persisting their values."""
+) -> bytes:
+    """Return the canonical exact bytes that a governed run authorizes."""
+
     payload: dict[str, object] = {
         "params": effective_runtime_params(workflow, params),
         "worklists": worklists or {},
@@ -60,7 +63,94 @@ def runtime_inputs_digest(
     canonical = json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return canonical.encode("utf-8")
+
+
+def parse_runtime_inputs_bytes(
+    value: bytes,
+    *,
+    workflow: Workflow,
+) -> tuple[dict[str, str], dict[str, list[dict[str, str]]]]:
+    """Parse bytes that this workflow's runtime serializer can emit exactly."""
+
+    try:
+        payload = json.loads(value.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("runtime-input artifact is not canonical JSON") from exc
+    if not isinstance(payload, dict) or set(payload).difference(
+        {"params", "worklists", "interstitials"}
+    ):
+        raise ValueError("runtime-input artifact has an invalid shape")
+    params = payload.get("params")
+    worklists = payload.get("worklists")
+    if not isinstance(params, dict) or any(
+        not isinstance(key, str) or not isinstance(item, str)
+        for key, item in params.items()
+    ):
+        raise ValueError("runtime-input artifact has invalid parameters")
+    if not isinstance(worklists, dict) or any(
+        not isinstance(name, str)
+        or not isinstance(rows, list)
+        or any(
+            not isinstance(row, dict)
+            or any(
+                not isinstance(key, str) or not isinstance(item, str)
+                for key, item in row.items()
+            )
+            for row in rows
+        )
+        for name, rows in worklists.items()
+    ):
+        raise ValueError("runtime-input artifact has invalid worklists")
+    interstitials = payload.get("interstitials")
+    if interstitials is not None and not isinstance(interstitials, list):
+        raise ValueError("runtime-input artifact has invalid interstitials")
+    validated_interstitials: list[Interstitial] = []
+    if interstitials is not None:
+        try:
+            validated_interstitials = [
+                Interstitial.model_validate(item) for item in interstitials
+            ]
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "runtime-input artifact has invalid interstitials"
+            ) from exc
+        if [
+            interstitial.model_dump(mode="json")
+            for interstitial in validated_interstitials
+        ] != interstitials:
+            raise ValueError("runtime-input artifact has non-canonical interstitials")
+    canonical_worklists = {
+        name: [dict(row) for row in rows] for name, rows in worklists.items()
+    }
+    canonical = runtime_inputs_bytes(
+        workflow,
+        dict(params),
+        canonical_worklists,
+        interstitials=(validated_interstitials if interstitials is not None else None),
+    )
+    if canonical != value:
+        raise ValueError("runtime-input artifact is not in canonical form")
+    return dict(params), canonical_worklists
+
+
+def runtime_inputs_digest(
+    workflow: Workflow,
+    params: dict[str, str] | None,
+    worklists: dict[str, list[dict[str, str]]] | None,
+    *,
+    interstitials: list[Interstitial] | None = None,
+) -> str:
+    """Hash the canonical exact runtime-input bytes without retaining values."""
+
+    return hashlib.sha256(
+        runtime_inputs_bytes(
+            workflow,
+            params,
+            worklists,
+            interstitials=interstitials,
+        )
+    ).hexdigest()
 
 
 def interstitial_declarations_digest(
@@ -124,11 +214,270 @@ class GovernedRunAuthorization(BaseModel):
     )
     execution_profile: Literal["demo", "standard", "regulated"] | None = None
     minimum_effect_tier: int | None = Field(default=None, ge=1, le=4)
+    qualified_effect_requirements: tuple[QualifiedEffectRequirement, ...] = Field(
+        default_factory=tuple
+    )
     required_identity_step_ids: tuple[str, ...] = Field(default_factory=tuple)
     unverified_write_approvals: tuple[UnverifiedWriteApproval, ...] = Field(
         default_factory=tuple
     )
     approval_source: str = "local-cli-explicit-flag"
+    qualification_project_id: str | None = None
+    qualification_project_revision: int | None = Field(default=None, ge=1)
+    qualification_project_contract_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_case_id: str | None = Field(
+        default=None, pattern=_QUALIFICATION_ID_RE
+    )
+    qualification_campaign_id_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_case_input_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_run_id_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_case_kind: (
+        Literal[
+            "representative",
+            "ambiguity",
+            "wrong_identity",
+            "stale_identity",
+            "weak_effect",
+            "missing_effect",
+        ]
+        | None
+    ) = None
+    qualification_case_action_paths: dict[str, Literal["gui", "api"]] = Field(
+        default_factory=dict
+    )
+    qualification_fault_driver_id: str | None = Field(
+        default=None, pattern=_QUALIFICATION_ID_RE
+    )
+    qualification_fault_driver_contract_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_fault_driver_key_id: str | None = Field(
+        default=None, pattern=_QUALIFICATION_ID_RE
+    )
+    qualification_fault_step_id_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+
+    @model_validator(mode="after")
+    def _qualification_binding_is_complete(self) -> "GovernedRunAuthorization":
+        requirement_refs = [
+            (item.step_id, item.actuation_path, item.effect_index)
+            for item in self.qualified_effect_requirements
+        ]
+        if len(requirement_refs) != len(set(requirement_refs)):
+            raise ValueError("qualified effect requirements must be unique")
+        if requirement_refs != sorted(requirement_refs):
+            raise ValueError("qualified effect requirements must be ordered")
+        values = (
+            self.qualification_project_id,
+            self.qualification_project_revision,
+            self.qualification_project_contract_sha256,
+            self.qualification_case_id,
+            self.qualification_campaign_id_sha256,
+            self.qualification_case_input_sha256,
+            self.qualification_run_id_sha256,
+        )
+        if any(value is not None for value in values) and not all(
+            value is not None for value in values
+        ):
+            raise ValueError("qualification-run authorization binding is incomplete")
+        if (
+            self.qualification_case_kind is not None
+            and self.qualification_case_id is None
+        ):
+            raise ValueError(
+                "qualification case kind requires a complete case authorization"
+            )
+        if self.qualification_case_id is None and self.qualification_case_action_paths:
+            raise ValueError(
+                "qualification action paths require a complete case authorization"
+            )
+        if self.qualification_case_kind is not None:
+            if not self.qualification_case_action_paths:
+                raise ValueError(
+                    "qualification cases require an exact actuation-path map"
+                )
+            if any(
+                re.fullmatch(_QUALIFICATION_ID_RE, step_id) is None
+                for step_id in self.qualification_case_action_paths
+            ):
+                raise ValueError(
+                    "qualification action paths contain an invalid step id"
+                )
+        driver_values = (
+            self.qualification_fault_driver_id,
+            self.qualification_fault_driver_contract_sha256,
+            self.qualification_fault_driver_key_id,
+            self.qualification_fault_step_id_sha256,
+        )
+        if any(value is not None for value in driver_values) and not all(
+            value is not None for value in driver_values
+        ):
+            raise ValueError("qualification fault-driver binding is incomplete")
+        if self.qualification_case_kind in {
+            "ambiguity",
+            "wrong_identity",
+            "stale_identity",
+            "weak_effect",
+            "missing_effect",
+        } and not all(value is not None for value in driver_values):
+            raise ValueError("qualification fault cases require a bound fault driver")
+        if (
+            self.qualification_case_kind
+            in {
+                "ambiguity",
+                "wrong_identity",
+                "stale_identity",
+                "weak_effect",
+                "missing_effect",
+            }
+            and not self.qualification_case_action_paths
+        ):
+            raise ValueError(
+                "qualification fault cases require a permitted actuation path"
+            )
+        if self.qualification_case_kind == "representative" and any(
+            value is not None for value in driver_values
+        ):
+            raise ValueError(
+                "representative qualification cases cannot bind a fault driver"
+            )
+        if self.qualification_case_id is not None and (
+            self.execution_profile != "standard"
+            or self.approval_source != "qualification-campaign"
+        ):
+            raise ValueError(
+                "qualification cases require the Standard profile and the "
+                "qualification-campaign approval source"
+            )
+        if (
+            self.qualification_case_id is not None
+            and self.qualification_case_input_sha256 != self.runtime_inputs_digest
+        ):
+            raise ValueError(
+                "qualification case input must be the exact governed runtime-input "
+                "digest"
+            )
+        return self
+
+    def _qualification_binding_error(self, workflow: Workflow) -> str | None:
+        if self.qualification_case_id is None:
+            return None
+        project = workflow.qualification
+        if project is None:
+            return "qualification-run authorization requires a qualification project"
+        if project.project_id != self.qualification_project_id:
+            return "qualification-run authorization project id changed"
+        if project.revision != self.qualification_project_revision:
+            return "qualification-run authorization project revision changed"
+        if project.contract_sha256() != self.qualification_project_contract_sha256:
+            return "qualification-run authorization project contract changed"
+        case = next(
+            (case for case in project.cases if case.id == self.qualification_case_id),
+            None,
+        )
+        if case is None:
+            return "qualification-run authorization references an unknown case"
+        if self.qualification_case_kind != case.kind.value:
+            return "qualification-run authorization kind does not match its case"
+        if case.runtime_input_sha256 is None:
+            return "qualification case has no approved runtime-input digest"
+        if self.qualification_case_input_sha256 != case.runtime_input_sha256:
+            return "qualification-run input does not match its case contract"
+
+        from openadapt_flow.qualification import qualification_action_requirements
+
+        try:
+            required_actions, required_identity = qualification_action_requirements(
+                workflow
+            )
+        except ValueError:
+            return "qualification action requirements are ambiguous"
+        missing_identity = sorted(
+            required_identity.difference(self.required_identity_step_ids)
+        )
+        if missing_identity:
+            return (
+                "qualification-run authorization omits required identity steps: "
+                + ", ".join(missing_identity)
+            )
+        case_action_paths = {
+            target.step_id: target.actuation_path for target in case.action_targets
+        }
+        if self.qualification_case_action_paths != case_action_paths:
+            return "qualification-run action paths do not match the case contract"
+        from openadapt_flow.policy import executable_actuation_paths
+        from openadapt_flow.traversal import iter_workflow_steps
+
+        workflow_steps = {step.id: step for step in iter_workflow_steps(workflow)}
+        for step_id, actuation_path in case_action_paths.items():
+            step = workflow_steps.get(step_id)
+            if step is None:
+                return "qualification case targets an unknown workflow action"
+            if actuation_path == "api" and step.api_binding is None:
+                return "qualification case targets a missing API actuation path"
+            if actuation_path not in executable_actuation_paths(step):
+                return "qualification case targets a non-executable actuation path"
+        if case.kind.value == "representative":
+            target_steps = set(case_action_paths)
+            if not target_steps:
+                return "representative qualification case has no required actions"
+            unknown_targets = sorted(target_steps.difference(workflow_steps))
+            if unknown_targets:
+                return (
+                    "representative case targets unknown workflow actions: "
+                    + ", ".join(unknown_targets)
+                )
+            if self.qualification_fault_step_id_sha256 is not None:
+                return "representative qualification case binds a fault target"
+        else:
+            target = case.resolved_fault_target()
+            if target is None:
+                return "qualification fault case has no target action"
+            target_id = target.step_id
+            if case_action_paths.get(target_id) != target.actuation_path:
+                return (
+                    "qualification fault target is outside its permitted action scope"
+                )
+            if target.actuation_path == "api" and case.kind.value not in {
+                "weak_effect",
+                "missing_effect",
+            }:
+                return (
+                    "API qualification fault paths support only weak-effect and "
+                    "missing-effect cases"
+                )
+            if target_id not in required_actions:
+                return "qualification fault case targets an unqualified action"
+            if case.kind.value in {"wrong_identity", "stale_identity"} and (
+                target_id not in required_identity
+            ):
+                return "identity fault case target is not consequential"
+            if (
+                self.qualification_fault_step_id_sha256
+                != hashlib.sha256(target_id.encode("utf-8")).hexdigest()
+            ):
+                return "qualification fault target does not match its case contract"
+        if self.qualification_fault_step_id_sha256 is not None:
+            from openadapt_flow.traversal import iter_workflow_steps
+
+            matching_steps = [
+                step
+                for step in iter_workflow_steps(workflow)
+                if hashlib.sha256(step.id.encode("utf-8")).hexdigest()
+                == self.qualification_fault_step_id_sha256
+            ]
+            if len(matching_steps) != 1:
+                return "qualification fault target step is missing or ambiguous"
+        return None
 
     def validate_workflow(self, workflow: Workflow) -> str | None:
         """Return a refusal reason when this capability does not fit ``workflow``."""
@@ -161,6 +510,10 @@ class GovernedRunAuthorization(BaseModel):
                 "in-memory workflow semantics"
             )
 
+        qualification_binding_error = self._qualification_binding_error(workflow)
+        if qualification_binding_error is not None:
+            return qualification_binding_error
+        qualification_campaign = self.qualification_case_id is not None
         production_qualification = (
             self.execution_profile in {"standard", "regulated"}
             and workflow.qualification is not None
@@ -168,6 +521,22 @@ class GovernedRunAuthorization(BaseModel):
         if production_qualification and self.admitted_policy_contract_sha256 is None:
             return "production qualification authorization has no exact policy digest"
         if production_qualification:
+            from openadapt_flow.execution_profiles import (
+                qualified_effect_requirements,
+            )
+
+            assert self.execution_profile is not None
+            try:
+                expected_requirements = qualified_effect_requirements(
+                    workflow, self.execution_profile
+                )
+            except ValueError:
+                return "workflow qualified effect requirements are invalid"
+            if self.qualified_effect_requirements != expected_requirements:
+                return (
+                    "governed run authorization qualified effect requirements changed"
+                )
+        if production_qualification and not qualification_campaign:
             assert self.admitted_policy_contract_sha256 is not None
             from openadapt_flow.qualification import current_certification_matches
 
@@ -347,4 +716,17 @@ class GovernedRunAuthorization(BaseModel):
             approval.step_id == step.id
             and sorted(approval.effect_contract_hashes) == expected
             for approval in self.unverified_write_approvals
+        )
+
+    def effect_requirements(
+        self,
+        step_id: str,
+        actuation_path: Literal["gui", "api"],
+    ) -> tuple[QualifiedEffectRequirement, ...]:
+        """Return the exact ordered requirements admitted for one path."""
+
+        return tuple(
+            item
+            for item in self.qualified_effect_requirements
+            if item.step_id == step_id and item.actuation_path == actuation_path
         )

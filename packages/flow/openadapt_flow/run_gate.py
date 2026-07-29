@@ -57,12 +57,20 @@ from openadapt_flow import crypto
 from openadapt_flow.deployment import DeploymentConfig
 from openadapt_flow.execution_profiles import (
     ExecutionProfileContract,
+    qualified_effect_requirements,
     required_effect_tier,
 )
-from openadapt_flow.ir import ActionKind, Interstitial, Step, Workflow
+from openadapt_flow.ir import (
+    Interstitial,
+    QualifiedEffectRequirement,
+    Step,
+    Workflow,
+)
 from openadapt_flow.policy import (
     Policy,
     all_effect_paths_covered,
+    executable_actuation_paths,
+    has_postcondition_contract,
     has_screen_postcondition,
     has_system_effect,
     has_unconfirmed_effect_binding,
@@ -70,6 +78,7 @@ from openadapt_flow.policy import (
     is_identity_armed,
     iter_effect_paths,
     missing_effect_paths,
+    path_requires_gui_contracts,
     policy_contract_sha256,
     project_step_safety,
     step_tags,
@@ -161,35 +170,31 @@ def must_be_identity_armed(
     *,
     require_current_risk_certification: bool = True,
     certifying_policy: Optional[Policy] = None,
+    certifying_policy_sha256: Optional[str] = None,
 ) -> bool:
     """Whether the pre-click identity check MUST be armed on ``step``.
 
-    The entity-sensitive / consequential surface: an identity-applicable step
-    (anchored click / double-click / TYPE) that either commits a write or lands
-    on a specific on-screen entity (the wrong-entity surface). These are the
-    steps that must never act without a verified target identity.
+    Every consequential action requires identity. An action without a target
+    identity contract is an identity-coverage defect, not an exemption. An
+    identity-applicable entity-navigation action also requires identity.
     """
-    if step.action in (ActionKind.KEY, ActionKind.HOTKEY) and is_consequential(
+    consequential = is_consequential(
         step,
         workflow,
         require_current_risk_certification=require_current_risk_certification,
         certifying_policy=certifying_policy,
-    ):
-        # A consequential keyboard submission with no retained anchor is an
-        # identity-coverage defect, not a reason to exempt the action.
+        certifying_policy_sha256=certifying_policy_sha256,
+    )
+    if consequential:
         return True
     if not is_identity_applicable(step):
         return False
-    return is_consequential(
-        step,
-        workflow,
-        require_current_risk_certification=require_current_risk_certification,
-        certifying_policy=certifying_policy,
-    ) or "entity_navigation" in step_tags(
+    return "entity_navigation" in step_tags(
         step,
         workflow,
         require_current_certification=require_current_risk_certification,
         certifying_policy=certifying_policy,
+        certifying_policy_sha256=certifying_policy_sha256,
     )
 
 
@@ -246,6 +251,9 @@ class RunGateReport(BaseModel):
     required_identity_step_ids: list[str] = Field(default_factory=list)
     effect_verifier_configured: bool = False
     minimum_effect_tier: Optional[int] = Field(default=None, ge=1, le=4)
+    qualified_effect_requirements: list[QualifiedEffectRequirement] = Field(
+        default_factory=list
+    )
     api_actuator_configured: bool = False
     unverified_write_approval_granted: bool = False
     admitted_interstitials_digest: Optional[str] = Field(
@@ -356,6 +364,15 @@ def evaluate_run_gate(
         if profile_contract is not None
         else None
     )
+    qualified_requirements: tuple[QualifiedEffectRequirement, ...] = ()
+    qualified_requirements_error: str | None = None
+    if profile_contract is not None:
+        try:
+            qualified_requirements = qualified_effect_requirements(
+                workflow, profile_contract.profile
+            )
+        except ValueError as exc:
+            qualified_requirements_error = str(exc)
     # Production admission requires the completed qualification campaign.
     # Demo and legacy qualification harnesses may bind a typed operator review
     # through this policy decision plus the exact sealed manifest.
@@ -381,6 +398,8 @@ def evaluate_run_gate(
         api_actuator,
         approval_available,
         minimum_effect_tier=minimum_effect_tier,
+        qualified_effect_requirements=qualified_requirements,
+        qualified_effect_requirements_error=qualified_requirements_error,
         require_approval=(
             profile_contract.require_approval_for_unverified_effects
             if profile_contract is not None
@@ -433,6 +452,11 @@ def evaluate_run_gate(
                 _gate_effect(
                     workflow,
                     steps,
+                    require_postconditions=(
+                        profile_contract.require_consequential_postconditions
+                        if profile_contract is not None
+                        else False
+                    ),
                     require_current_risk_certification=require_current_risk_cert,
                     certifying_policy=certifying_policy,
                 )
@@ -494,6 +518,7 @@ def evaluate_run_gate(
         minimum_effect_tier=(
             int(minimum_effect_tier) if minimum_effect_tier is not None else None
         ),
+        qualified_effect_requirements=list(qualified_requirements),
         api_actuator_configured=api_actuator is not None,
         unverified_write_approval_granted=(
             effect_verifier is None
@@ -634,7 +659,14 @@ def _gate_identity(
             certifying_policy=certifying_policy,
         )
     ]
-    unarmed = [s for s in must_arm if not is_identity_armed(s)]
+    unarmed = []
+    for step in must_arm:
+        paths = executable_actuation_paths(step)
+        if ("gui" in paths and not is_identity_armed(step)) or (
+            "api" in paths
+            and (step.api_binding is None or not step.api_binding.identity)
+        ):
+            unarmed.append(step)
     total = len(must_arm)
     if not unarmed:
         return _result(
@@ -655,16 +687,17 @@ def _gate_effect(
     workflow: Workflow,
     steps: list[Step],
     *,
+    require_postconditions: bool,
     require_current_risk_certification: bool,
     certifying_policy: Optional[Policy],
 ) -> GateResult:
-    """Gate 3: every consequential write DECLARES a (confirmed) effect contract.
+    """Gate 3: every consequential write declares outcome contracts.
 
     A write with no declared system-of-record effect would be verified by the
     SCREEN only; a write whose effect binding was not derivable from the demo
     (``needs_operator_confirmation``) carries a fabricated/unconfirmed contract.
-    Both are bundle-level defects and refuse here (they cannot be waived by
-    deployment approval -- gate 4 only covers a verifier that is missing).
+    Production profiles also require an immediate postcondition contract. These
+    are bundle-level defects and cannot be waived by deployment approval.
     """
     writes = [
         step
@@ -676,19 +709,31 @@ def _gate_effect(
             certifying_policy=certifying_policy,
         )
     ]
-    # ApiBinding is an optional top rung: an unavailable pre-dispatch API call
-    # falls through to GUI actuation.  Binding-local effects therefore cannot
-    # cover the GUI path; the canonical step effects must cover that fallback.
+    # Each executable path needs its own exact effect contract. API-only
+    # bindings omit GUI from the canonical path projection.
     screen_only = [s for s in writes if not all_effect_paths_covered(s)]
     unconfirmed = [s for s in writes if has_unconfirmed_effect_binding(s)]
-    offenders = sorted({s.id for s in screen_only} | {s.id for s in unconfirmed})
+    missing_postconditions = (
+        [
+            s
+            for s in writes
+            if path_requires_gui_contracts(s) and not has_postcondition_contract(s)
+        ]
+        if require_postconditions
+        else []
+    )
+    offenders = sorted(
+        {s.id for s in screen_only}
+        | {s.id for s in unconfirmed}
+        | {s.id for s in missing_postconditions}
+    )
     total = len(writes)
     if not offenders:
         return _result(
             GATE_EFFECT,
             True,
-            f"{total}/{total} consequential write(s) declare a confirmed "
-            "system-of-record effect contract",
+            f"{total}/{total} consequential write(s) declare the required "
+            "postcondition and confirmed system-of-record effect contracts",
         )
     parts = []
     if screen_only:
@@ -709,6 +754,10 @@ def _gate_effect(
             f"{len(unconfirmed)} carry an UNCONFIRMED effect binding "
             "(not derivable from the demonstration)"
         )
+    if missing_postconditions:
+        parts.append(
+            f"{len(missing_postconditions)} have no immediate postcondition contract"
+        )
     return _result(
         GATE_EFFECT,
         False,
@@ -726,6 +775,8 @@ def _gate_approval(
     approval_available: bool,
     *,
     minimum_effect_tier: Optional[VerificationTier] = None,
+    qualified_effect_requirements: tuple[QualifiedEffectRequirement, ...] = (),
+    qualified_effect_requirements_error: str | None = None,
     require_approval: bool = True,
     allow_approval: bool = True,
     require_current_risk_certification: bool,
@@ -738,6 +789,17 @@ def _gate_approval(
     unchecked). It is admitted ONLY under explicit operator approval; otherwise
     the run halts. Writes that DO have a verifier need nothing here.
     """
+    if qualified_effect_requirements_error is not None:
+        return _result(
+            GATE_APPROVAL,
+            False,
+            "qualified effect requirements are invalid: "
+            f"{qualified_effect_requirements_error}",
+        )
+    requirement_by_ref = {
+        (item.step_id, item.actuation_path, item.effect_index): item
+        for item in qualified_effect_requirements
+    }
     writes = [
         step
         for step in steps
@@ -753,18 +815,26 @@ def _gate_approval(
         weak: list[str] = []
         untyped: list[str] = []
         observed: list[VerificationTier] = []
+        required_observed: list[VerificationTier] = []
         for step in writes:
-            for _path, effects in iter_effect_paths(step):
-                for effect in effects:
+            for path, effects in iter_effect_paths(step):
+                for index, effect in enumerate(effects):
                     tier = verifier_effect_tier(effect_verifier, effect)
+                    requirement = requirement_by_ref.get((step.id, path, index))
+                    required_tier = (
+                        VerificationTier(requirement.minimum_tier)
+                        if requirement is not None
+                        else minimum_effect_tier
+                    )
                     if tier is None:
                         untyped.append(step.id)
-                    elif minimum_effect_tier is not None and not tier.satisfies(
-                        minimum_effect_tier
+                    elif required_tier is not None and not tier.satisfies(
+                        required_tier
                     ):
                         weak.append(step.id)
                         observed.append(tier)
-        if untyped and minimum_effect_tier is not None:
+                        required_observed.append(required_tier)
+        if untyped and (minimum_effect_tier is not None or requirement_by_ref):
             return _result(
                 GATE_APPROVAL,
                 False,
@@ -773,15 +843,19 @@ def _gate_approval(
                 sorted(set(untyped)),
             )
         if weak:
-            assert minimum_effect_tier is not None
             tiers = ", ".join(
                 sorted({tier.name.lower().replace("_", "-") for tier in observed})
+            )
+            required_names = ", ".join(
+                sorted(
+                    {tier.name.lower().replace("_", "-") for tier in required_observed}
+                )
             )
             return _result(
                 GATE_APPROVAL,
                 False,
                 f"{len(set(weak))} consequential write(s) have {tiers} evidence; "
-                f"this profile requires {minimum_effect_tier.name.lower().replace('_', '-')}",
+                f"their qualified effects require {required_names}",
                 sorted(set(weak)),
             )
         return _result(
@@ -1008,6 +1082,7 @@ def build_runtime_authorization(
         admitted_policy_contract_sha256=report.policy_contract_sha256,
         execution_profile=report.execution_profile,
         minimum_effect_tier=report.minimum_effect_tier,
+        qualified_effect_requirements=tuple(report.qualified_effect_requirements),
         required_identity_step_ids=tuple(report.required_identity_step_ids),
         unverified_write_approvals=tuple(approvals),
         approval_source=approval_source,

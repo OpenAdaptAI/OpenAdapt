@@ -8,6 +8,7 @@ from PIL import Image
 from openadapt_flow.backend import (
     Backend,
     ExecutionContextIdentityBackend,
+    FreshActuationRequired,
     IdentityBackend,
     StructuralActionBackend,
 )
@@ -94,6 +95,9 @@ class FakeMacClient:
         return self._ax_focused_pid
 
     def window_id_at_point(self, _x, _y):
+        return self._point_window_id
+
+    def window_at_point(self, _x, _y):
         return self._point_window_id
 
     def activate(self, pid):
@@ -226,10 +230,58 @@ def test_consequential_text_refuses_changed_frame_before_ax_delivery() -> None:
     target.arm_focused_element_lease(100, 100)
     client.capture_color = (50, 60, 70)
 
-    with pytest.raises(MacOSBackendError, match="frame content changed"):
+    with pytest.raises(FreshActuationRequired, match="frame content changed") as raised:
         target.type_text("must not land")
 
+    assert isinstance(raised.value, MacOSBackendError)
     assert not any(call[0] == "replace" for call in client.calls)
+
+
+def test_replayer_reacquires_macos_lease_after_zero_edge_change(tmp_path) -> None:
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_replayer import FakeVision, Match, click_step, make_png
+
+    class OneMismatchMacBackend(MacOSBackend):
+        def __init__(self, client):
+            super().__init__(
+                client,
+                app="TextEdit",
+                window_title="oa-trial",
+                settle_s=0,
+                foreground_settle_s=0,
+            )
+            self.click_attempts = 0
+
+        def click(self, x, y, *, double=False):
+            self.click_attempts += 1
+            if self.click_attempts == 1:
+                self._mac_client.capture_color = (50, 60, 70)
+            return super().click(x, y, double=double)
+
+    client = FakeMacClient()
+    target = OneMismatchMacBackend(client)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "btn.png").write_bytes(make_png((50, 20)))
+
+    report = Replayer(target, vision=vision).run(
+        Workflow(name="mac-retry", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=tmp_path / "run",
+    )
+
+    assert report.success is True, report
+    assert target.click_attempts == 2
+    assert len([call for call in client.calls if call[0] == "mouse"]) == 2
+    assert [event.retried for event in report.results[0].fresh_actuation_events] == [
+        True
+    ]
 
 
 def test_consequential_text_uses_same_focused_ax_element_as_actuation_frame() -> None:

@@ -13,8 +13,21 @@ import numpy as np
 import pytest
 
 from openadapt_flow.compiler import compile_recording
-from openadapt_flow.ir import ActionKind, Anchor, Step, StructuralLocator
-from openadapt_flow.risk import classify_step_risk, infer_step_risk, is_write_shaped
+from openadapt_flow.ir import (
+    ActionKind,
+    Anchor,
+    ApiBinding,
+    Postcondition,
+    PostconditionKind,
+    Step,
+    StructuralLocator,
+)
+from openadapt_flow.risk import (
+    ApplicationRiskRule,
+    classify_step_risk,
+    infer_step_risk,
+    is_write_shaped,
+)
 
 VIEWPORT = (1280, 800)
 
@@ -173,6 +186,107 @@ class TestHeuristic:
 
         step.anchor.structural.name = "Save"
         assert infer_step_risk(step).risk == "irreversible"
+
+    @pytest.mark.parametrize("kind", ["rest", "fhir", "mcp", "tool"])
+    def test_external_actuator_binding_is_consequential(self, kind: str) -> None:
+        step = _click_step("click Open", "Open")
+        step.api_binding = ApiBinding(
+            kind=kind,
+            method="POST" if kind in {"rest", "fhir"} else "invoke",
+            url_template="/bounded-operation",
+        )
+
+        inference = infer_step_risk(step)
+
+        assert inference.risk == "irreversible"
+        assert f"binding:{kind}" in inference.evidence
+        assert inference.requires_review is False
+
+    def test_clipboard_and_file_operations_are_governed(self) -> None:
+        sensitive = Step(
+            id="copy",
+            intent="copy patient member ID to clipboard",
+            action=ActionKind.HOTKEY,
+            key="c",
+            modifiers=["Control"],
+        )
+        unknown = Step(
+            id="copy-unknown",
+            intent="copy selected value",
+            action=ActionKind.HOTKEY,
+            key="c",
+            modifiers=["Control"],
+        )
+
+        assert infer_step_risk(sensitive).risk == "irreversible"
+        assert infer_step_risk(unknown).requires_review is True
+        assert infer_step_risk(_click_step("click Download", "Download")).risk == (
+            "irreversible"
+        )
+
+    def test_navigation_and_special_keys_require_review(self) -> None:
+        navigation = _click_step("click Open chart", "Open chart")
+        navigation.expect = [Postcondition(kind=PostconditionKind.URL_CHANGED)]
+        special_key = Step(
+            id="rename",
+            intent="press F2",
+            action=ActionKind.KEY,
+            key="F2",
+        )
+
+        assert infer_step_risk(navigation).requires_review is True
+        assert infer_step_risk(special_key).requires_review is True
+
+    def test_drag_destination_and_right_click_supply_risk_evidence(self) -> None:
+        drag = Step(
+            id="drag",
+            intent="drag recorded target to recorded destination",
+            action=ActionKind.DRAG,
+            drag_end_anchor=Anchor(
+                template="end.png",
+                region=(0, 0, 1, 1),
+                click_point=(0, 0),
+                structural=StructuralLocator(name="Delete"),
+            ),
+        )
+        right_click = _click_step("right-click Delete", "Delete")
+        right_click.action = ActionKind.RIGHT_CLICK
+
+        assert infer_step_risk(drag).risk == "irreversible"
+        assert infer_step_risk(right_click).risk == "irreversible"
+
+    def test_application_rule_resolves_ambiguous_control_but_not_builtin_write(
+        self,
+    ) -> None:
+        icon = Step(
+            id="icon",
+            intent="click recorded target",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="t.png",
+                region=(0, 0, 1, 1),
+                click_point=(0, 0),
+                structural=StructuralLocator(window_name="Accuro"),
+            ),
+        )
+        rule = ApplicationRiskRule(
+            rule_id="accuro.open_chart",
+            risk="reversible",
+            explanation="the configured icon opens the selected chart",
+            actions=(ActionKind.CLICK,),
+            window_names=("Accuro",),
+        )
+
+        inference = infer_step_risk(icon, application_rules=(rule,))
+
+        assert inference.risk == "reversible"
+        assert inference.requires_review is False
+        assert (
+            infer_step_risk(
+                _click_step("click Save", "Save"), application_rules=(rule,)
+            ).risk
+            == "irreversible"
+        )
 
 
 # --- end-to-end through the compiler ---------------------------------------

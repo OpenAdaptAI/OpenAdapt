@@ -32,14 +32,14 @@
     "authorization": 1,
     "effect": 2,
     "identity": 5,
-    "postcondition": 8
+    "postcondition": 9
   },
   "production_eligible": true,
   "required_contracts": {
     "authorization": 1,
     "effect": 2,
     "identity": 5,
-    "postcondition": 8
+    "postcondition": 9
   },
   "rung_counts": {
     "structural": 5
@@ -55,6 +55,7 @@
       "identity_mode": "structured",
       "identity_status": "verified",
       "intent": "click 'Open'",
+      "input_verified": null,
       "interstitial_actions": 0,
       "ok": true,
       "postconditions_ok": true,
@@ -72,6 +73,7 @@
       "identity_mode": "structured",
       "identity_status": "verified",
       "intent": "click 'New Encounter'",
+      "input_verified": null,
       "interstitial_actions": 0,
       "ok": true,
       "postconditions_ok": true,
@@ -89,6 +91,7 @@
       "identity_mode": "structured",
       "identity_status": "verified",
       "intent": "click 'Triage'",
+      "input_verified": null,
       "interstitial_actions": 0,
       "ok": true,
       "postconditions_ok": true,
@@ -106,6 +109,7 @@
       "identity_mode": "structured",
       "identity_status": "verified",
       "intent": "click recorded visual target",
+      "input_verified": null,
       "interstitial_actions": 0,
       "ok": true,
       "postconditions_ok": true,
@@ -123,9 +127,10 @@
       "identity_mode": null,
       "identity_status": null,
       "intent": "type <note>",
+      "input_verified": true,
       "interstitial_actions": 0,
       "ok": true,
-      "postconditions_ok": true,
+      "postconditions_ok": null,
       "resolution_rung": null,
       "risk": "reversible",
       "safety_halt": false,
@@ -151,6 +156,7 @@
       "identity_mode": "structured",
       "identity_status": "verified",
       "intent": "click 'Save Encounter'",
+      "input_verified": null,
       "interstitial_actions": 0,
       "ok": true,
       "postconditions_ok": true,

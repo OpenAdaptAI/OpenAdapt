@@ -224,7 +224,21 @@ def scrub_text(text: Optional[str]) -> Optional[str]:
     scrubber = get_text_scrubber()
     if scrubber is None:
         return text
-    return scrubber.scrub_text(text)
+    try:
+        return scrubber.scrub_text(text)
+    except Exception as exc:  # noqa: BLE001 - optional provider can be incomplete
+        # ``auto`` treats an unusable optional provider the same as an absent
+        # provider.  This includes a package whose external NLP model was not
+        # installed.  ``on`` remains fail-closed for regulated deployments.
+        global _text_scrubber
+        _text_scrubber = None
+        if scrub_mode() == "on":
+            raise PrivacyNotAvailable(
+                "OPENADAPT_FLOW_SCRUB=on but the privacy provider could not "
+                "scrub text. Install its required models or configure a "
+                "working provider before continuing."
+            ) from exc
+        return text
 
 
 def scrub_params(params: dict[str, str]) -> dict[str, str]:
@@ -232,7 +246,18 @@ def scrub_params(params: dict[str, str]) -> dict[str, str]:
     scrubber = get_text_scrubber()
     if scrubber is None:
         return params
-    return {key: scrubber.scrub_text(value) for key, value in params.items()}
+    try:
+        return {key: scrubber.scrub_text(value) for key, value in params.items()}
+    except Exception as exc:  # noqa: BLE001 - optional provider can be incomplete
+        global _text_scrubber
+        _text_scrubber = None
+        if scrub_mode() == "on":
+            raise PrivacyNotAvailable(
+                "OPENADAPT_FLOW_SCRUB=on but the privacy provider could not "
+                "scrub parameters. Install its required models or configure "
+                "a working provider before continuing."
+            ) from exc
+        return params
 
 
 def scrub_image_bytes(png: bytes, *, force: bool = False) -> bytes:

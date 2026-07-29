@@ -607,17 +607,21 @@ def create_app(
                     "the attention item is no longer current; reload the queue"
                 )
             request = human_decisions.admit_console_action(run_dir, item, payload)
+            # The authenticated interactive route attributes a human decider.
+            # This is route provenance, not proof of physical human presence.
             decision = (
                 attended_service.execute(
                     run_dir,
                     request,
                     operator=operator,
+                    decided_by="human",
                 )
                 if attended_service is not None
                 else execute_attended_action(
                     run_dir,
                     request,
                     operator=operator,
+                    decided_by="human",
                 )
             )
         except (AttendedActionRefused, ResumeRefused) as exc:

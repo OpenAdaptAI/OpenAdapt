@@ -29,6 +29,8 @@ import pytest
 
 from benchmark.o2c_recon import ground_truth
 from benchmark.o2c_recon.run import ARMS, SCENARIOS, run_benchmark
+from benchmark.o2c_recon.workflow import build_workflow
+from openadapt_flow.traversal import iter_workflow_steps
 
 
 @pytest.fixture(scope="module")
@@ -38,6 +40,22 @@ def results() -> dict:
 
 def _rows(results: dict, arm: str, scenario: str) -> list[dict]:
     return [r for r in results["runs"] if r["arm"] == arm and r["scenario"] == scenario]
+
+
+def test_governed_fixture_declares_api_only_actions() -> None:
+    workflow = build_workflow(
+        "governed",
+        billing_base="http://billing.invalid",
+        processed=1,
+    )
+    for step in iter_workflow_steps(workflow):
+        assert step.api_binding is not None
+        assert step.api_binding.on_unavailable == "halt"
+        assert step.api_binding.effects
+        assert step.effects == []
+        assert step.identity_armed is not True
+        assert step.anchor is None
+        assert step.expect == []
 
 
 def test_every_scenario_ran_under_both_arms(results):

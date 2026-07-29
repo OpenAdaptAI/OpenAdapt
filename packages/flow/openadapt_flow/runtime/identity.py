@@ -62,6 +62,8 @@ lazy so unit tests can fake the vision namespace.
 from __future__ import annotations
 
 import difflib
+import hashlib
+import json
 import re
 from collections import Counter
 from datetime import date
@@ -1730,6 +1732,39 @@ PIXEL_VERIFY_MAX_WINDOW = 0.040  # VERIFY: worst aligned window mean-abs-diff <=
 # battery does not already exercise; it only lets the tier certify a correct
 # record instead of deferring to (a possibly over-halting) OCR.
 PIXEL_VERIFY_ENABLED = False
+
+
+def pixel_identity_evaluator_contract_sha256() -> str:
+    """Return the exact PHI-free contract digest for the pixel evaluator."""
+
+    import cv2
+    import numpy as np
+
+    contract = {
+        "algorithm": "aligned_localized_pixel_identity_v1",
+        "opencv_version": cv2.__version__,
+        "numpy_version": np.__version__,
+        "canonical_height": PIXEL_SI_HEIGHT,
+        "window_fraction": PIXEL_WIN_FRAC,
+        "alignment": {
+            "motion": "translation",
+            "maximum_shift_fraction": PIXEL_ALIGN_MAX_SHIFT_FRAC,
+            "iterations": 50,
+            "epsilon": 1e-4,
+            "gaussian_filter_size": 5,
+            "warp_interpolation": "linear_inverse_map",
+            "warp_border": "replicate",
+        },
+        "thresholds": {
+            "drift_floor": PIXEL_DRIFT_FLOOR,
+            "mismatch_spike": PIXEL_MISMATCH_SPIKE,
+            "mismatch_uniqueness": PIXEL_MISMATCH_UNIQUENESS,
+            "verify_max_window": PIXEL_VERIFY_MAX_WINDOW,
+        },
+        "positive_verdict_enabled": True,
+    }
+    payload = json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
 
 
 class PixelIdentityDistance(NamedTuple):

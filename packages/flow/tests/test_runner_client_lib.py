@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -31,9 +33,16 @@ from openadapt_flow.runner.config import (
     RunnerConfigError,
     load_runner_config,
 )
+from openadapt_flow.runner.dispatch_envelope import (
+    ManagedDispatchEnvelope,
+    ManagedDispatchEnvelopeError,
+    read_managed_dispatch_envelope,
+    write_managed_dispatch_envelope,
+)
 from openadapt_flow.runner.outbox import EvidenceOutbox
 from openadapt_flow.runner.protocol import (
     DispatchParseError,
+    dispatch_binding_sha256,
     parse_dispatch,
 )
 from openadapt_flow.runner.verify import Refusal, RefusalCode, verify_dispatch
@@ -41,6 +50,7 @@ from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     runtime_inputs_digest,
 )
+from openadapt_flow.runtime.replayer import Replayer
 from tests.test_replayer import click_step, make_png
 
 # ---------------------------------------------------------------------------
@@ -118,7 +128,7 @@ def dispatch_payload(workflow: Workflow, **overrides) -> dict:
     authorization = overrides.pop("authorization", None) or mint_authorization(workflow)
     payload = {
         "job_kind": "governed_run",
-        "run_id": "run_1",
+        "run_id": "018f6c0a-4cce-4f47-8d71-c3d63bf1c001",
         "workflow_id": "wf_1",
         "bundle": {
             "version_id": None,
@@ -127,6 +137,9 @@ def dispatch_payload(workflow: Workflow, **overrides) -> dict:
         },
         "deployment_profile_id": "default",
         "authorization": authorization.model_dump(mode="json"),
+        "dispatch_binding_sha256": dispatch_binding_sha256(
+            "018f6c0a-4cce-4f47-8d71-c3d63bf1c001", authorization
+        ),
         "params": {"values": dict(PARAMS)},
         "expires_at": "2099-01-01T00:00:00Z",
     }
@@ -227,6 +240,45 @@ class TestProtocol:
         assert parsed.job_kind == "governed_run"
         assert parsed.bundle.url == "mock://bundles/never-fetched"
         assert parsed.authorization.admitted_policy_name == "clinical-write"
+        assert parsed.dispatch_binding_sha256 == dispatch_binding_sha256(
+            parsed.run_id, parsed.authorization
+        )
+
+    def test_dispatch_binding_known_vector(self):
+        authorization = GovernedRunAuthorization(
+            bundle_content_digest="a" * 64,
+            runtime_inputs_digest="b" * 64,
+            admitted_policy_name="test",
+            authorization_id="0123456789abcdef0123456789abcdef",
+            created_at="2026-07-29T00:00:00+00:00",
+        )
+        assert (
+            dispatch_binding_sha256(
+                "11111111-1111-4111-8111-111111111111", authorization
+            )
+            == "sha256:367411c4ff350c05d6dad465db3dd1f57e8d47d620d3c0f16b70adec0857047e"
+        )
+
+    def test_dispatch_binding_refuses_changed_run_or_authorization(self, sealed):
+        workflow, _ = sealed
+        payload = dispatch_payload(workflow)
+        changed_run = dict(payload, run_id="11111111-1111-4111-8111-111111111111")
+        with pytest.raises(DispatchParseError):
+            parse_dispatch(changed_run)
+        changed_auth = dict(payload)
+        changed_auth["authorization"] = dict(payload["authorization"])
+        changed_auth["authorization"]["admitted_policy_name"] = "different"
+        with pytest.raises(DispatchParseError):
+            parse_dispatch(changed_auth)
+
+    @pytest.mark.parametrize("binding", [None, "not-a-digest"])
+    def test_missing_or_malformed_dispatch_binding_refuses(self, sealed, binding):
+        workflow, _ = sealed
+        payload = dispatch_payload(workflow, dispatch_binding_sha256=binding)
+        if binding is None:
+            payload.pop("dispatch_binding_sha256")
+        with pytest.raises(DispatchParseError):
+            parse_dispatch(payload)
 
     def test_unknown_field_is_contract_drift(self, sealed):
         workflow, _ = sealed
@@ -916,7 +968,10 @@ class TestCommandMapping:
         assert not isinstance(verdict, Refusal)
         run_dir = tmp_path / "run"
         params_file = tmp_path / "params.json"
-        argv = commands.build_run_argv(verdict, run_dir, params_file)
+        dispatch_file = run_dir / "managed-dispatch.json"
+        argv = commands.build_run_argv(
+            verdict, run_dir, params_file, managed_dispatch_file=dispatch_file
+        )
         assert argv[2:4] == ["openadapt_flow", "run"]
         assert str(bundle) in argv
         assert "--pin-digest" in argv
@@ -924,6 +979,8 @@ class TestCommandMapping:
             workflow.manifest.content_digest
         )
         assert "--params-file" in argv
+        assert "--managed-dispatch-file" in argv
+        assert str(dispatch_file) in argv
         # not locally authorized => the escape hatches never appear
         assert "--approve-unverified-writes" not in argv
         assert "--allow-unencrypted" not in argv
@@ -932,6 +989,321 @@ class TestCommandMapping:
         argv = commands.build_resume_argv(tmp_path / "run")
         assert argv[2:4] == ["openadapt_flow", "resume"]
         assert "--require-approval" in argv
+
+    def test_managed_resume_passes_the_private_dispatch_file(self, tmp_path):
+        dispatch_file = tmp_path / "managed-dispatch.json"
+        argv = commands.build_resume_argv(
+            tmp_path / "run", managed_dispatch_file=dispatch_file
+        )
+        assert argv[argv.index("--managed-dispatch-file") + 1] == str(dispatch_file)
+
+    def test_managed_dispatch_envelope_is_private_and_exact(
+        self, sealed, config, tmp_path
+    ):
+        workflow, _ = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        path = write_managed_dispatch_envelope(
+            tmp_path / "dispatch.json",
+            verdict,
+        )
+        retained = read_managed_dispatch_envelope(path)
+        assert retained.run_id == "018f6c0a-4cce-4f47-8d71-c3d63bf1c001"
+        assert retained.authorization == verdict.payload.authorization
+        assert retained.binding_sha256 == verdict.payload.dispatch_binding_sha256
+        path.chmod(0o644)
+        with pytest.raises(ManagedDispatchEnvelopeError):
+            read_managed_dispatch_envelope(path)
+
+    def test_dispatch_model_cannot_mint_a_managed_binding(self, sealed, config):
+        workflow, _ = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        envelope = ManagedDispatchEnvelope(
+            run_id=verdict.payload.run_id,
+            bundle_content_digest=verdict.payload.authorization.bundle_content_digest,
+            runtime_inputs_digest=verdict.payload.authorization.runtime_inputs_digest,
+            authorization=verdict.payload.authorization,
+            dispatch_binding_sha256=verdict.payload.dispatch_binding_sha256,
+        )
+        assert not hasattr(envelope, "managed_binding")
+
+    def test_envelope_and_private_binding_refuse_mismatched_commitment(
+        self, sealed, config
+    ):
+        from openadapt_flow.runner.dispatch_envelope import (
+            _BINDING_FACTORY,
+            ManagedDispatchBinding,
+        )
+
+        workflow, _ = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        authorization = verdict.payload.authorization
+        with pytest.raises(ValueError, match="does not match authorization"):
+            ManagedDispatchEnvelope(
+                run_id=verdict.payload.run_id,
+                bundle_content_digest=authorization.bundle_content_digest,
+                runtime_inputs_digest=authorization.runtime_inputs_digest,
+                authorization=authorization,
+                dispatch_binding_sha256="sha256:" + "0" * 64,
+            )
+        with pytest.raises(ManagedDispatchEnvelopeError, match="does not match"):
+            ManagedDispatchBinding(
+                _BINDING_FACTORY,
+                run_id=verdict.payload.run_id,
+                authorization=authorization,
+                binding_sha256="sha256:" + "0" * 64,
+            )
+
+    def test_managed_binding_refuses_non_durable_replayer(
+        self, sealed, config, tmp_path
+    ):
+        workflow, _ = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        binding = read_managed_dispatch_envelope(
+            write_managed_dispatch_envelope(tmp_path / "dispatch.json", verdict)
+        )
+        backend = object()
+        with pytest.raises(ValueError, match="requires durable=True"):
+            Replayer(backend, managed_dispatch_binding=binding, durable=False)
+
+    def test_replayer_refuses_an_in_process_mutated_managed_binding(
+        self, sealed, config, tmp_path
+    ):
+        workflow, _ = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        binding = read_managed_dispatch_envelope(
+            write_managed_dispatch_envelope(tmp_path / "dispatch.json", verdict)
+        )
+        with pytest.raises(AttributeError, match="immutable"):
+            binding.authorization = verdict.payload.authorization
+        changed = verdict.payload.authorization.model_copy(
+            update={"admitted_policy_name": "changed"}
+        )
+        object.__setattr__(binding, "authorization", changed)
+        with pytest.raises(ValueError, match="does not match its authorization"):
+            Replayer(object(), managed_dispatch_binding=binding, durable=True)
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "durable",
+            "delivery_authority_kind",
+            "remote_delivery_run_id",
+            "governed_authorization",
+            "managed_dispatch_binding",
+        ],
+    )
+    def test_managed_replayer_refuses_public_state_mutation_before_run(
+        self, field, sealed, config, tmp_path
+    ):
+        workflow, bundle = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        binding = read_managed_dispatch_envelope(
+            write_managed_dispatch_envelope(tmp_path / "dispatch.json", verdict)
+        )
+        replayer = Replayer(object(), managed_dispatch_binding=binding, durable=True)
+        if field == "durable":
+            replayer.durable = False
+        elif field == "delivery_authority_kind":
+            replayer.delivery_authority_kind = "customer_local"
+        elif field == "remote_delivery_run_id":
+            replayer.remote_delivery_run_id = "11111111-1111-4111-8111-111111111111"
+        elif field == "governed_authorization":
+            replayer.governed_authorization = None
+        else:
+            replayer.managed_dispatch_binding = None
+        run_dir = tmp_path / f"run-{field}"
+        with pytest.raises(ValueError, match="managed dispatch"):
+            replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+        assert not run_dir.exists()
+
+    def test_managed_dispatch_envelope_refuses_nested_authorization_extra(
+        self, sealed, config, tmp_path
+    ):
+        workflow, _ = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        path = write_managed_dispatch_envelope(tmp_path / "dispatch.json", verdict)
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw["authorization"]["unverified_write_approvals"] = [
+            {
+                "step_id": workflow.steps[0].id,
+                "effect_contract_hashes": ["a" * 64],
+                "extra": True,
+            }
+        ]
+        path.write_text(json.dumps(raw), encoding="utf-8")
+        path.chmod(0o600)
+        with pytest.raises(ManagedDispatchEnvelopeError):
+            read_managed_dispatch_envelope(path)
+
+    def test_managed_dry_run_refuses_invalid_private_envelope(
+        self, sealed, monkeypatch, tmp_path
+    ):
+        """The hidden CLI handoff validates before it reports dry-run admission."""
+
+        import openadapt_flow.__main__ as cli
+
+        _workflow, bundle = sealed
+        envelope = tmp_path / "bad-dispatch.json"
+        envelope.write_text("{", encoding="utf-8")
+        envelope.chmod(0o600)
+        args = cli.build_parser().parse_args(
+            [
+                "run",
+                str(bundle),
+                "--profile",
+                "standard",
+                "--managed-dispatch-file",
+                str(envelope),
+                "--dry-run",
+            ]
+        )
+        config = SimpleNamespace(
+            runtime=SimpleNamespace(
+                profile="standard", require_durable=True, require_settled=True
+            ),
+            policy=SimpleNamespace(policy=None),
+        )
+        report = SimpleNamespace(passed=True, render=lambda: "admitted")
+        monkeypatch.setattr(
+            cli,
+            "_deployment_runtime",
+            lambda *_args, **_kwargs: (config, None, None, True, False),
+        )
+        monkeypatch.setattr(
+            cli, "_surface_selection_gate", lambda *_args, **_kwargs: None
+        )
+        monkeypatch.setattr(
+            cli, "_resolve_backend_config", lambda *_args, **_kwargs: object()
+        )
+        monkeypatch.setattr(
+            cli, "_enforce_surface_binding", lambda *_args, **_kwargs: None
+        )
+        monkeypatch.setattr(
+            cli, "_refuse_missing_citrix_readiness", lambda *_args, **_kwargs: False
+        )
+        import openadapt_flow.run_gate as run_gate
+
+        monkeypatch.setattr(
+            run_gate, "evaluate_run_gate", lambda *_args, **_kwargs: report
+        )
+        assert cli._cmd_run(args) == 2
+
+    def test_managed_cli_preserves_exact_cloud_authorization_and_refuses_weaker_one(
+        self, sealed, config, monkeypatch, tmp_path
+    ):
+        """The child consumes the Cloud capability, but only after equality."""
+
+        import openadapt_flow.__main__ as cli
+        import openadapt_flow.run_gate as run_gate
+
+        workflow, bundle = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        standard_authorization = verdict.payload.authorization.model_copy(
+            update={"execution_profile": "standard"}
+        )
+        managed_payload = verdict.payload.model_copy(
+            update={
+                "authorization": standard_authorization,
+                "dispatch_binding_sha256": dispatch_binding_sha256(
+                    verdict.payload.run_id, standard_authorization
+                ),
+            }
+        )
+        managed_verdict = replace(verdict, payload=managed_payload)
+        envelope = write_managed_dispatch_envelope(
+            tmp_path / "dispatch.json", managed_verdict
+        )
+        config_value = SimpleNamespace(
+            runtime=SimpleNamespace(
+                profile="standard", require_durable=True, require_settled=True
+            ),
+            policy=SimpleNamespace(policy=None),
+        )
+        report = SimpleNamespace(passed=True, render=lambda: "admitted")
+        monkeypatch.setattr(
+            cli,
+            "_deployment_runtime",
+            lambda *_args, **_kwargs: (config_value, None, None, True, False),
+        )
+        monkeypatch.setattr(
+            cli, "_surface_selection_gate", lambda *_args, **_kwargs: None
+        )
+        monkeypatch.setattr(
+            cli, "_resolve_backend_config", lambda *_args, **_kwargs: object()
+        )
+        monkeypatch.setattr(
+            cli, "_enforce_surface_binding", lambda *_args, **_kwargs: None
+        )
+        monkeypatch.setattr(
+            cli, "_refuse_missing_citrix_readiness", lambda *_args, **_kwargs: False
+        )
+        monkeypatch.setattr(
+            run_gate, "evaluate_run_gate", lambda *_args, **_kwargs: report
+        )
+        monkeypatch.setattr(
+            run_gate,
+            "build_runtime_authorization",
+            lambda *_args, **_kwargs: standard_authorization,
+        )
+        seen: list[object] = []
+        monkeypatch.setattr(
+            cli,
+            "_cmd_replay",
+            lambda args: seen.append(args._governed_run_authorization) or 0,
+        )
+        params_file = tmp_path / "params.json"
+        params_file.write_text(json.dumps(PARAMS), encoding="utf-8")
+        args = cli.build_parser().parse_args(
+            [
+                "run",
+                str(bundle),
+                "--profile",
+                "standard",
+                "--managed-dispatch-file",
+                str(envelope),
+                "--params-file",
+                str(params_file),
+            ]
+        )
+        assert cli._cmd_run(args) == 0
+        assert seen == [standard_authorization]
+        assert args._remote_delivery_run_id == managed_verdict.payload.run_id
+
+        weaker = standard_authorization.model_copy(update={"execution_profile": "demo"})
+        weak_payload = managed_payload.model_copy(
+            update={
+                "authorization": weaker,
+                "dispatch_binding_sha256": dispatch_binding_sha256(
+                    managed_payload.run_id, weaker
+                ),
+            }
+        )
+        weak_envelope = write_managed_dispatch_envelope(
+            tmp_path / "weak-dispatch.json",
+            replace(managed_verdict, payload=weak_payload),
+        )
+        args = cli.build_parser().parse_args(
+            [
+                "run",
+                str(bundle),
+                "--profile",
+                "standard",
+                "--managed-dispatch-file",
+                str(weak_envelope),
+                "--params-file",
+                str(params_file),
+            ]
+        )
+        assert cli._cmd_run(args) == 2
+        assert seen == [standard_authorization]
 
     @pytest.mark.parametrize("verb", ["pause", "approve", "rollback-to-version"])
     def test_control_verbs_without_honest_mapping_refuse(self, verb, tmp_path):

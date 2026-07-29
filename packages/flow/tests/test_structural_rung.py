@@ -38,6 +38,7 @@ from openadapt_flow.ir import (
     StructuralLocator,
     Workflow,
 )
+from openadapt_flow.runtime.effects import Effect, EffectKind, EffectState
 from openadapt_flow.runtime.resolver import RUNG_ORDER, is_below_ocr, resolve
 
 VIEWPORT = (300, 200)
@@ -550,6 +551,80 @@ def test_replayer_marks_structural_ambiguity_as_safety_halt(tmp_path) -> None:
     assert vision.template_calls == 0
 
 
+def test_replayer_preserves_pre_dispatch_structural_refusal(tmp_path) -> None:
+    from openadapt_flow.backend import StructuralResolutionRefused
+    from openadapt_flow.runtime.replayer import Replayer
+
+    fingerprint = "e" * 64
+
+    class RefusingBackend(_IdentityAndStructuralBackend):
+        def locate_structural(self, locator):
+            return StructuralHandle(
+                point=self._point,
+                region=(190, 120, 34, 26),
+                target_fingerprint=fingerprint,
+                supported_operations=["invoke"],
+            )
+
+        def act_structural(self, locator, handle, *, double=False):
+            del locator, handle, double
+            raise StructuralResolutionRefused(
+                "guarded target failed its pre-dispatch actionability trial"
+            )
+
+    class CountingVerifier:
+        substrate = "test"
+
+        def __init__(self):
+            self.verify_calls = 0
+
+        def capture_pre_state(self, context=None):
+            del context
+            return EffectState(substrate=self.substrate, reachable=True)
+
+        def verify(self, expected, before, context=None):
+            del expected, before, context
+            self.verify_calls += 1
+            raise AssertionError("a proved pre-dispatch refusal cannot verify effects")
+
+    vision = _FakeVision()
+    vision.wait_settled = lambda _backend: make_png()
+    verifier = CountingVerifier()
+    backend = RefusingBackend((207, 133), "")
+    step = Step(
+        id="s1",
+        intent="save",
+        action=ActionKind.CLICK,
+        anchor=_anchor(),
+        effects=[
+            Effect(
+                kind=EffectKind.RECORD_WRITTEN,
+                match={"record_id": "1"},
+            )
+        ],
+    )
+    report = Replayer(
+        backend,
+        vision=vision,
+        effect_verifier=verifier,
+        poll_interval_s=0.01,
+    ).run(
+        Workflow(name="wf", steps=[step]),
+        bundle_dir=tmp_path,
+        run_dir=tmp_path / "run-pre-dispatch",
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert result.safety_halt is True
+    assert result.delivery_attempted is False
+    assert result.delivery_uncertainty is None
+    assert result.effect_verified is None
+    assert verifier.verify_calls == 0
+    assert "Structural safety refusal" in (result.error or "")
+    assert backend.clicks == []
+
+
 def test_replayer_records_native_delivery_separately_from_outcome(tmp_path) -> None:
     from openadapt_flow.runtime.replayer import Replayer
 
@@ -597,6 +672,7 @@ def test_replayer_records_native_delivery_separately_from_outcome(tmp_path) -> N
         workflow=Workflow(name="wf", steps=[step]),
         step_index=0,
         bundle_dir=tmp_path,
+        run_dir=tmp_path / "run-native-delivery",
         before_png=make_png(),
         result=result,
     )

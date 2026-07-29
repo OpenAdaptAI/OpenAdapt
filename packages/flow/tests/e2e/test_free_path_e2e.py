@@ -83,6 +83,20 @@ def test_the_free_path_still_reaches_verified_the_same_way(
     compare_or_update(golden_shape(free_path, _report(free_path.run_dir)))
 
 
+def test_typed_note_uses_explicit_readback_not_a_fake_postcondition(
+    free_path: TutorialResult,
+) -> None:
+    """The typed note keeps its input proof separate from screen predicates."""
+
+    report = _report(free_path.run_dir)
+    typed_results = [
+        result for result in report.results if result.intent == "type <note>"
+    ]
+    assert len(typed_results) == 1
+    assert typed_results[0].input_verified is True
+    assert typed_results[0].postconditions_ok is None
+
+
 def test_free_path_terminates_verified_with_independent_effect_evidence(
     free_path: TutorialResult,
 ) -> None:

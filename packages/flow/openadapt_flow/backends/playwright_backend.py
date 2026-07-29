@@ -27,6 +27,10 @@ from openadapt_flow.ir import (
     StructuralHandle,
     StructuralLocator,
 )
+from openadapt_flow.runtime.resolver import (
+    structural_resolution_fingerprint,
+    visual_resolution_point_fingerprint,
+)
 
 VIEWPORT: tuple[int, int] = (1280, 800)
 
@@ -68,13 +72,17 @@ _TOKEN_ATTRIBUTE_PREFIX = "data-openadapt-actuation-"
 #
 #   <meta name="openadapt-session-identity" content="<64 lowercase hex>">
 #   <meta name="openadapt-workflow-state" content="eligibility.review">
+#   <meta name="openadapt-application-version" content="8.0.0.3">
 #
 # The session marker is an opaque digest. The workflow marker is a bounded,
 # lowercase machine token that the application author promises is PHI-free
 # (state names such as ``eligibility.review``, never record values).
 _SESSION_IDENTITY_META = "openadapt-session-identity"
+_ENVIRONMENT_IDENTITY_META = "openadapt-environment-identity"
 _WORKFLOW_STATE_IDENTITY_META = "openadapt-workflow-state"
+_APPLICATION_VERSION_META = "openadapt-application-version"
 _SESSION_IDENTITY_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_APPLICATION_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+/-]{0,127}$")
 _WORKFLOW_STATE_IDENTITY_PATTERN = re.compile(
     r"^[a-z0-9](?:[a-z0-9._:-]{0,126}[a-z0-9])?$"
 )
@@ -709,6 +717,8 @@ class PlaywrightBackend:
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         self._guarded_keyboard: Optional[_KeyboardGuard] = None
+        self._qualification_environment: Optional[tuple[str, str, str, str]] = None
+        self._qualification_input_guard: Optional[Callable[[], None]] = None
         self._presentation_viewport_loaded = False
         self._presentation_viewport: Optional[tuple[int, int, float]] = None
 
@@ -817,11 +827,13 @@ class PlaywrightBackend:
             guard.context[kind] = value
         return True
 
-    def _application_identity_value(self) -> Optional[str]:
-        """Observe the top-level origin without mutating any pending guard."""
+    @staticmethod
+    def _origin_from_url(current_url: object) -> Optional[str]:
+        """Normalize one observed browser URL to its exact origin."""
 
         try:
-            current_url = self.page.url
+            if not isinstance(current_url, str):
+                return None
             parts = urlsplit(current_url)
             scheme = parts.scheme.lower()
             hostname = parts.hostname
@@ -846,6 +858,93 @@ class PlaywrightBackend:
             return None
         return origin
 
+    def _application_identity_value(self) -> Optional[str]:
+        """Observe the top-level origin without mutating any pending guard."""
+
+        try:
+            current_url = self.page.url
+        except Exception:
+            return None
+        return self._origin_from_url(current_url)
+
+    def _qualification_environment_values(
+        self,
+    ) -> Optional[tuple[str, str, str, str]]:
+        """Read origin, version, and session in one top-level JS observation."""
+
+        try:
+            payload = self.page.evaluate(
+                """() => ({
+                    href: window.location.href,
+                    versions: Array.from(document.head.querySelectorAll(
+                        'meta[name="openadapt-application-version"]'
+                    ), node => node.getAttribute('content')),
+                    sessions: Array.from(document.head.querySelectorAll(
+                        'meta[name="openadapt-session-identity"]'
+                    ), node => node.getAttribute('content')),
+                    environments: Array.from(document.head.querySelectorAll(
+                        'meta[name="openadapt-environment-identity"]'
+                    ), node => node.getAttribute('content')),
+                })"""
+            )
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        origin = self._origin_from_url(payload.get("href"))
+        versions = payload.get("versions")
+        sessions = payload.get("sessions")
+        environments = payload.get("environments")
+        if (
+            origin is None
+            or not isinstance(versions, list)
+            or len(versions) != 1
+            or not isinstance(versions[0], str)
+            or _APPLICATION_VERSION_PATTERN.fullmatch(versions[0]) is None
+            or not isinstance(sessions, list)
+            or len(sessions) != 1
+            or not isinstance(sessions[0], str)
+            or _SESSION_IDENTITY_PATTERN.fullmatch(sessions[0]) is None
+            or not isinstance(environments, list)
+            or len(environments) != 1
+            or not isinstance(environments[0], str)
+            or _SESSION_IDENTITY_PATTERN.fullmatch(environments[0]) is None
+        ):
+            return None
+        return origin, versions[0], sessions[0], environments[0]
+
+    def qualification_environment_identity(
+        self,
+    ) -> Optional[tuple[str, str, str, str]]:
+        """Bind one atomic environment observation for qualification replay."""
+
+        observed = self._qualification_environment_values()
+        if observed is None:
+            return None
+        self._qualification_environment = observed
+        return observed
+
+    def _assert_qualification_environment_current(self) -> None:
+        """Refuse every input edge after a bound qualification context changes."""
+
+        if self._qualification_input_guard is not None:
+            self._qualification_input_guard()
+        expected = self._qualification_environment
+        if (
+            expected is not None
+            and self._qualification_environment_values() != expected
+        ):
+            raise StructuralResolutionRefused(
+                "qualification browser environment changed before input"
+            )
+
+    def set_qualification_input_guard(
+        self, guard: Optional[Callable[[], None]]
+    ) -> None:
+        """Install or clear the run-scoped qualification input guard."""
+
+        self._qualification_input_guard = guard
+
     def application_identity(self) -> Optional[str]:
         """Return and bind the live top-level browser origin.
 
@@ -858,6 +957,23 @@ class PlaywrightBackend:
         if origin is None:
             return None
         return origin if self._bind_context_identity("application", origin) else None
+
+    def application_version_identity(self) -> Optional[str]:
+        """Return an exact, application-owned version marker from ``<head>``."""
+
+        value = self._context_meta_content(_APPLICATION_VERSION_META)
+        observed = (
+            value
+            if value is not None and _APPLICATION_VERSION_PATTERN.fullmatch(value)
+            else None
+        )
+        if observed is None:
+            return None
+        return (
+            observed
+            if self._bind_context_identity("application_version", observed)
+            else None
+        )
 
     def _context_meta_content(self, name: str) -> Optional[str]:
         """Read one unambiguous live ``<head>`` context marker."""
@@ -920,6 +1036,10 @@ class PlaywrightBackend:
     ) -> bool:
         """Re-read every bound top-level identity immediately before input."""
 
+        if self._qualification_environment is not None and (
+            self._qualification_environment_values() != self._qualification_environment
+        ):
+            return False
         for kind, expected in guard.context.items():
             if kind == "application":
                 observed = self._application_identity_value()
@@ -928,6 +1048,14 @@ class PlaywrightBackend:
                 observed = (
                     value
                     if value is not None and _SESSION_IDENTITY_PATTERN.fullmatch(value)
+                    else None
+                )
+            elif kind == "application_version":
+                value = self._context_meta_content(_APPLICATION_VERSION_META)
+                observed = (
+                    value
+                    if value is not None
+                    and _APPLICATION_VERSION_PATTERN.fullmatch(value)
                     else None
                 )
             elif kind == "workflow_state":
@@ -1530,6 +1658,11 @@ class PlaywrightBackend:
                     "guarded DOM target or context changed after the "
                     "pre-dispatch actionability trial"
                 )
+            # This is the last no-input boundary.  The externally supplied
+            # qualification observer can cover context that the target page
+            # cannot declare (for example a browser inside a managed remote
+            # session), so the DOM guard alone is not sufficient.
+            self._assert_qualification_environment_current()
             try:
                 if double:
                     token_locator.dblclick(timeout=1000)
@@ -1637,6 +1770,7 @@ class PlaywrightBackend:
                 ) from exc
             source = current_token_locator(source_locator, source_guard)
             destination = current_token_locator(destination_locator, destination_guard)
+            self._assert_qualification_environment_current()
             try:
                 source.drag_to(destination, timeout=1000)
             except Exception as exc:
@@ -1662,7 +1796,14 @@ class PlaywrightBackend:
             receipt_id=f"playwright-{uuid.uuid4().hex}",
             operation="guarded_dom_drag",
             native=False,
-            target_fingerprint=source_fingerprint,
+            target_fingerprint=structural_resolution_fingerprint(
+                source_locator,
+                source_handle,
+            ),
+            destination_fingerprint=structural_resolution_fingerprint(
+                destination_locator,
+                destination_handle,
+            ),
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -1837,6 +1978,7 @@ class PlaywrightBackend:
                     "visual target, frame, record, or context changed after the "
                     "pre-dispatch actionability trial"
                 )
+            self._assert_qualification_environment_current()
             try:
                 if double:
                     token_locator.dblclick(position=position, timeout=1000)
@@ -1996,6 +2138,7 @@ class PlaywrightBackend:
                     "focused keyboard target, frame, record, or context changed "
                     "before delivery"
                 )
+            self._assert_qualification_environment_current()
             try:
                 deliver(token_locator)
             except Exception as exc:
@@ -2058,6 +2201,7 @@ class PlaywrightBackend:
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click (or double-click) at pixel coordinates via the mouse."""
+        self._assert_qualification_environment_current()
         if double:
             self.page.mouse.dblclick(x, y)
         else:
@@ -2066,6 +2210,7 @@ class PlaywrightBackend:
     def right_click(self, x: int, y: int) -> None:
         """Open the context menu at a resolved point."""
 
+        self._assert_qualification_environment_current()
         try:
             self.page.mouse.click(x, y, button="right")
         except Exception as exc:
@@ -2078,9 +2223,11 @@ class PlaywrightBackend:
     def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
         """Drag between two independently resolved points."""
 
+        self._assert_qualification_environment_current()
         self.page.mouse.move(x, y)
         down_attempted = False
         try:
+            self._assert_qualification_environment_current()
             down_attempted = True
             self.page.mouse.down(button="left")
             self.page.mouse.move(end_x, end_y)
@@ -2137,6 +2284,7 @@ class PlaywrightBackend:
             down_attempted = False
             try:
                 self.page.mouse.move(*point)
+                self._assert_qualification_environment_current()
                 down_attempted = True
                 self.page.mouse.down(button="left")
                 self.page.mouse.move(int(end_x), int(end_y))
@@ -2168,16 +2316,25 @@ class PlaywrightBackend:
             receipt_id=f"playwright-coordinate-{uuid.uuid4().hex}",
             operation="guarded_coordinate_drag",
             native=False,
-            target_fingerprint=pending.fingerprint,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                point,
+            ),
+            destination_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                (int(end_x), int(end_y)),
+            ),
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
     def type_text(self, text: str) -> None:
         """Type text into the currently focused element."""
+        self._assert_qualification_environment_current()
         self.page.keyboard.type(text)
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'Meta+a'``."""
+        self._assert_qualification_environment_current()
         self.page.keyboard.press(_normalize_chord(key))
 
     def scroll(self, dx: int, dy: int) -> None:
@@ -2188,6 +2345,7 @@ class PlaywrightBackend:
         as it does for a human — position the pointer first (a preceding
         click does this naturally during both record and replay).
         """
+        self._assert_qualification_environment_current()
         self.page.mouse.wheel(dx, dy)
 
     @classmethod

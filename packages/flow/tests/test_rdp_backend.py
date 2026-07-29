@@ -27,14 +27,17 @@ from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
     ExecutionContextIdentityBackend,
+    FreshActuationRequired,
     IdentityBackend,
     StructuralBackend,
+    StructuralResolutionRefused,
 )
 from openadapt_flow.backends.rdp_backend import (
     FreeRDPBackend,
     RDPTransport,
     normalize_chord,
 )
+from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
 
 VIEWPORT = (1280, 800)
 
@@ -372,6 +375,30 @@ def test_absent_rdp_application_marker_invalidates_actuation_lease() -> None:
     assert transport.pointer_events == []
 
 
+def test_rdp_qualification_environment_rechecks_version_on_actuation_frame() -> None:
+    transport = FakeRDPTransport(app_screens())
+    version_ok = {"value": True}
+    backend = FreeRDPBackend(
+        transport,
+        application_marker="Accuro",
+        application_marker_probe=lambda _png: True,
+        application_version_marker="8.0.0.3",
+        application_version_marker_probe=lambda _png: version_ok["value"],
+        environment_marker="clinic-rdp-environment",
+        environment_marker_probe=lambda _png: True,
+        session_marker="clinic-rdp-qualification",
+        session_marker_probe=lambda _png: True,
+    )
+    assert backend.qualification_environment_identity() is not None
+    version_ok["value"] = False
+
+    with pytest.raises(
+        RuntimeError, match="application, version, environment, or session"
+    ):
+        backend.acquire_actuation_frame()
+    assert transport.pointer_events == []
+
+
 def test_rdp_context_observation_is_bound_to_frame_then_refuses_mutated_input() -> None:
     transport = FakeRDPTransport(app_screens())
     backend = FreeRDPBackend(
@@ -385,8 +412,11 @@ def test_rdp_context_observation_is_bound_to_frame_then_refuses_mutated_input() 
     transport.screens[0] = changed
 
     assert backend.workflow_state_identity() == "Ready to submit"
-    with pytest.raises(RuntimeError, match="frame content changed"):
+    with pytest.raises(FreshActuationRequired) as raised:
         backend.click(*BUTTON_CENTER)
+    assert raised.value.changed_pixel_count == 1
+    assert raised.value.changed_bbox == (0, 0, 1, 1)
+    assert raised.value.frame_size == VIEWPORT
     assert transport.pointer_events == []
 
 
@@ -585,10 +615,34 @@ def test_bound_actuation_refuses_same_session_content_change_before_input() -> N
     changed.putpixel((0, 0), (244, 245, 245))
     transport.screens[0] = changed
 
-    with pytest.raises(RuntimeError, match="frame content changed"):
+    with pytest.raises(FreshActuationRequired) as raised:
         backend.click(*BUTTON_CENTER)
 
     assert transport.pointer_events == []
+    assert raised.value.operation == "rdp_click"
+    assert raised.value.changed_pixel_count == 1
+    assert raised.value.changed_bbox == (0, 0, 1, 1)
+    assert raised.value.frame_size == VIEWPORT
+
+
+def test_bound_actuation_can_reset_only_a_typed_zero_edge_invalidation() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(transport, readiness_probe=lambda _png: True)
+    with pytest.raises(RuntimeError, match="requires a typed invalidated lease"):
+        backend.reset_fresh_actuation_state()
+
+    backend.acquire_actuation_frame()
+    changed = transport.screens[0].copy()
+    changed.putpixel((0, 0), (244, 245, 245))
+    transport.screens[0] = changed
+    with pytest.raises(FreshActuationRequired):
+        backend.click(*BUTTON_CENTER)
+
+    backend.reset_fresh_actuation_state()
+    backend.acquire_actuation_frame()
+    backend.click(*BUTTON_CENTER)
+
+    assert len(transport.pointer_events) == 2
 
 
 def test_observation_invalidates_bound_actuation_before_input() -> None:
@@ -741,7 +795,7 @@ def test_bulk_text_revalidates_frame_after_restoring_outer_focus() -> None:
     backend.acquire_actuation_frame()
     transport.change_frame_on_focus = True
 
-    with pytest.raises(RuntimeError, match="frame content changed"):
+    with pytest.raises(FreshActuationRequired):
         backend.type_text("Massachusetts")
 
     assert transport.focus_calls == 1
@@ -803,6 +857,174 @@ def test_select_option_holds_one_focus_and_input_lease_through_commit() -> None:
     assert transport.key_events == [("enter", True), ("enter", False)]
 
 
+def test_guarded_select_option_returns_exact_delivery_receipt() -> None:
+    transport = _BulkTextTransport()
+    backend = FreeRDPBackend(transport)
+    frame = backend.acquire_actuation_frame()
+
+    receipt = backend.select_option_guarded(
+        "Massachusetts",
+        "Enter",
+        target_point=(40, 30),
+        expected_frame_sha256=hashlib.sha256(frame).hexdigest(),
+    )
+
+    assert receipt.operation == "rdp_select_option"
+    assert receipt.native is False
+    assert receipt.target_fingerprint is not None
+    assert (
+        receipt.selection_value_sha256 == hashlib.sha256(b"Massachusetts").hexdigest()
+    )
+    assert receipt.selection_commit_key == "Enter"
+    assert receipt.destination_fingerprint is None
+
+
+@pytest.mark.parametrize(
+    ("action", "operation", "destination"),
+    [
+        ("click", "rdp_click", None),
+        ("double_click", "rdp_double_click", None),
+        ("right_click", "rdp_right_click", None),
+        ("drag", "rdp_drag", (80, 60)),
+    ],
+)
+def test_guarded_pointer_actions_return_exact_delivery_receipts(
+    action: str,
+    operation: str,
+    destination: tuple[int, int] | None,
+) -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(transport)
+    frame = backend.acquire_actuation_frame()
+    frame_sha256 = hashlib.sha256(frame).hexdigest()
+    source = (40, 30)
+
+    if action == "click":
+        receipt = backend.click_guarded(*source, expected_frame_sha256=frame_sha256)
+    elif action == "double_click":
+        receipt = backend.click_guarded(
+            *source,
+            expected_frame_sha256=frame_sha256,
+            double=True,
+        )
+    elif action == "right_click":
+        receipt = backend.right_click_guarded(
+            *source,
+            expected_frame_sha256=frame_sha256,
+        )
+    else:
+        assert destination is not None
+        receipt = backend.drag_guarded(
+            *source,
+            *destination,
+            expected_frame_sha256=frame_sha256,
+        )
+
+    assert receipt.operation == operation
+    assert receipt.native is False
+    assert receipt.target_fingerprint == visual_resolution_point_fingerprint(
+        frame_sha256,
+        source,
+    )
+    assert receipt.destination_fingerprint == (
+        visual_resolution_point_fingerprint(frame_sha256, destination)
+        if destination is not None
+        else None
+    )
+
+
+@pytest.mark.parametrize("action", ["click", "double_click", "right_click", "drag"])
+@pytest.mark.parametrize("refusal", ["wrong_hash", "invalidated"])
+def test_guarded_pointer_actions_refuse_without_the_exact_live_lease(
+    action: str,
+    refusal: str,
+) -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(transport)
+    frame = backend.acquire_actuation_frame()
+    frame_sha256 = hashlib.sha256(frame).hexdigest()
+    if refusal == "wrong_hash":
+        frame_sha256 = "0" * 64
+    else:
+        backend.screenshot()
+
+    with pytest.raises(StructuralResolutionRefused, match="fresh-frame lease"):
+        if action == "click":
+            backend.click_guarded(40, 30, expected_frame_sha256=frame_sha256)
+        elif action == "double_click":
+            backend.click_guarded(
+                40,
+                30,
+                expected_frame_sha256=frame_sha256,
+                double=True,
+            )
+        elif action == "right_click":
+            backend.right_click_guarded(40, 30, expected_frame_sha256=frame_sha256)
+        else:
+            backend.drag_guarded(
+                40,
+                30,
+                80,
+                60,
+                expected_frame_sha256=frame_sha256,
+            )
+
+    assert transport.pointer_events == []
+
+
+@pytest.mark.parametrize(
+    ("action", "operation"),
+    [
+        ("click", "rdp_click"),
+        ("double_click", "rdp_double_click"),
+        ("right_click", "rdp_right_click"),
+        ("drag", "rdp_drag"),
+    ],
+)
+def test_guarded_pointer_actions_never_receipt_uncertain_transport_delivery(
+    action: str,
+    operation: str,
+) -> None:
+    transport = RaisingRDPTransport(app_screens())
+    backend = FreeRDPBackend(transport)
+    frame = backend.acquire_actuation_frame()
+    frame_sha256 = hashlib.sha256(frame).hexdigest()
+    transport.raise_on_pointer = True
+    receipt = None
+
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        if action == "click":
+            receipt = backend.click_guarded(
+                40,
+                30,
+                expected_frame_sha256=frame_sha256,
+            )
+        elif action == "double_click":
+            receipt = backend.click_guarded(
+                40,
+                30,
+                expected_frame_sha256=frame_sha256,
+                double=True,
+            )
+        elif action == "right_click":
+            receipt = backend.right_click_guarded(
+                40,
+                30,
+                expected_frame_sha256=frame_sha256,
+            )
+        else:
+            receipt = backend.drag_guarded(
+                40,
+                30,
+                80,
+                60,
+                expected_frame_sha256=frame_sha256,
+            )
+
+    assert raised.value.operation == operation
+    assert receipt is None
+
+
 def test_select_option_failure_after_text_is_uncertain_and_never_retries() -> None:
     class _CommitFailureTransport(_BulkTextTransport):
         def key(self, keysym_or_char: str, down: bool) -> None:
@@ -829,7 +1051,7 @@ def test_select_option_revalidates_frame_after_restoring_outer_focus() -> None:
     backend.acquire_actuation_frame()
     transport.change_frame_on_focus = True
 
-    with pytest.raises(RuntimeError, match="frame content changed"):
+    with pytest.raises(FreshActuationRequired):
         backend.select_option("Massachusetts", "Enter")
 
     assert transport.focus_calls == 1

@@ -58,6 +58,7 @@ from openadapt_flow.runtime.durable.attended import (
     AttendedActionStore,
     AttendedDecision,
     AttendedRelayBinding,
+    attended_decision_payload,
     execute_attended_action,
 )
 
@@ -179,7 +180,7 @@ def decision_receipt(decision: AttendedDecision) -> HumanDecisionReceiptV1:
         pause_id=decision.pause_id,
         capability_digest=decision.capability_digest,
         request_digest=decision.request_digest,
-        decision_digest=_sha256(decision.model_dump(mode="json")),
+        decision_digest=_sha256(attended_decision_payload(decision)),
         transition_receipt_digest=decision.transition_receipt_digest,
         action=_ACTION_MAP[decision.action],  # type: ignore[arg-type]
         state=state,  # type: ignore[arg-type]
@@ -749,10 +750,13 @@ def execute_remote_attended_action(
         deployment=deployment,
         principal=principal,
     )
+    # The AAL2 interactive route attributes a human decider. This is route
+    # provenance, not biometric or physical-presence evidence.
     return execute_attended_action(
         run_dir,
         engine_request,
         operator=principal.subject,
+        decided_by="human",
         executor=executor,
         relay_binding=relay_binding,
         key=key,

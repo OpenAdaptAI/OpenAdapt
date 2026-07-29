@@ -36,13 +36,24 @@ and ``find_text``. The ``structural`` argument is an optional object exposing
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import struct
 import time
 from typing import Any, Optional
 
 from openadapt_flow.backend import StructuralResolutionRefused
-from openadapt_flow.ir import Anchor, Landmark, Point, Region, Resolution, Rung
+from openadapt_flow.ir import (
+    Anchor,
+    Landmark,
+    Point,
+    Region,
+    Resolution,
+    Rung,
+    StructuralHandle,
+    StructuralLocator,
+)
 from openadapt_flow.vision.match import Match
 from openadapt_flow.vision.ocr import (
     AmbiguousOcrMatchError,
@@ -109,6 +120,85 @@ def _find_landmark_text(
     if landmark.match_mode == "exact":
         kwargs["min_ocr_confidence"] = EXACT_LANDMARK_MIN_OCR_CONFIDENCE
     return vision.find_text(screen_png, landmark.ocr_text, **kwargs)
+
+
+def visual_resolution_evaluator_contract_sha256() -> str:
+    """Return the stable contract digest for retained visual-resolution proof.
+
+    Qualification re-runs the resolver over exact retained inputs.  This digest
+    prevents evidence produced under a different rung order or threshold set
+    from being accepted as if the current evaluator produced it.
+    """
+
+    from openadapt_flow.vision.match import (
+        AMBIGUITY_SUSPICION_SCORE,
+        DEFAULT_TEMPLATE_SCALES,
+        LOCALITY_MIN_PX,
+        MAX_PEAKS,
+    )
+
+    payload = {
+        "contract": "openadapt.visual-resolution-evaluator.v1",
+        "rung_order": list(RUNG_ORDER),
+        "template_threshold": TEMPLATE_THRESHOLD,
+        "ocr_min_ratio": OCR_MIN_RATIO,
+        "exact_landmark_min_ratio": 1.0,
+        "exact_landmark_min_ocr_confidence": (EXACT_LANDMARK_MIN_OCR_CONFIDENCE),
+        "geometry_confidence_scale": _GEOMETRY_CONFIDENCE_SCALE,
+        "global_landmark_tolerance_px": GLOBAL_LANDMARK_TOLERANCE_PX,
+        "template_locality_min_px": LOCALITY_MIN_PX,
+        "template_max_peaks": MAX_PEAKS,
+        "template_ambiguity_suspicion_score": AMBIGUITY_SUSPICION_SCORE,
+        "template_scales": list(DEFAULT_TEMPLATE_SCALES),
+        "ambiguity": "unique-or-independent-retained-evidence",
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def visual_resolution_anchor_contract_sha256(
+    anchor: Anchor,
+    *,
+    template_sha256: str,
+    allow_target_ocr: bool,
+) -> str:
+    """Bind one visual proof to the exact compiled resolver inputs."""
+
+    payload = {
+        "contract": "openadapt.visual-resolution-input.v1",
+        "anchor": anchor.model_dump(mode="json"),
+        "template_sha256": template_sha256,
+        "allow_target_ocr": allow_target_ocr,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def visual_resolution_point_fingerprint(frame_sha256: str, point: Point) -> str:
+    """Bind a pixel-only resolved point to one exact frame."""
+
+    payload = (
+        f"openadapt.visual-resolution-point.v1\0{frame_sha256}:{point[0]}:{point[1]}"
+    )
+    return hashlib.sha256(payload.encode("ascii")).hexdigest()
+
+
+def structural_resolution_fingerprint(
+    locator: StructuralLocator,
+    handle: StructuralHandle,
+) -> str:
+    """Bind a structural receipt to its compiled locator and full observation."""
+
+    payload = {
+        "contract": "openadapt.structural-resolution.v1",
+        "locator": locator.model_dump(mode="json"),
+        "handle": handle.model_dump(mode="json"),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def is_below_ocr(rung: Rung) -> bool:

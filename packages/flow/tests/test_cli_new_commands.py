@@ -23,12 +23,15 @@ from openadapt_flow.__main__ import (
 )
 from openadapt_flow.compiler.induction import induce_program
 from openadapt_flow.ir import ActionKind, BackendHints, Step, Workflow
+from openadapt_flow.runtime.durable.approval import approval_pause_digest
+from openadapt_flow.runtime.durable.authority import DurableAuthority
 from openadapt_flow.runtime.durable.checkpoint import (
     CheckpointStore,
     PendingEscalation,
     RunCheckpoint,
     RunManifest,
 )
+from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 
 # ---------------------------------------------------------------------------
 # worklist loading + relation binding
@@ -169,6 +172,7 @@ def _paused_run(
 ) -> Path:
     run = tmp_path / "run"
     bundle = tmp_path / "b"
+    run_id = "cli-test-run"
     Workflow(
         name="w",
         backend_hints=backend_hints,
@@ -178,24 +182,43 @@ def _paused_run(
         ],
     ).save(bundle)
     store = CheckpointStore(run)
-    store.write_manifest(
-        RunManifest(workflow_name="w", bundle_dir=str(bundle), params={})
+    manifest = RunManifest(
+        run_id=run_id,
+        namespace_id=f"namespace-{run_id}",
+        canonical_run_dir=str(run.resolve()),
+        workflow_name="w",
+        bundle_dir=str(bundle),
+        params={},
     )
+    store.write_fresh_manifest(manifest)
+    authority = DurableAuthority(run, store)
+    active = authority.validate(manifest)
     if verified_first:
         store.write_checkpoint(
             RunCheckpoint(
-                workflow_name="w", step_index=0, step_id="s0", next_step_index=1
+                run_id=run_id,
+                bundle_version=bundle_version(bundle),
+                workflow_name="w",
+                step_index=0,
+                step_id="s0",
+                next_step_index=1,
             )
         )
-    store.write_pending(
-        PendingEscalation(
-            workflow_name="w",
-            step_index=1,
-            step_id="s1",
-            category="identity",
-            reason="boom",
-            resume_from_index=1,
-        )
+    pending = PendingEscalation(
+        run_id=run_id,
+        workflow_name="w",
+        step_index=1,
+        step_id="s1",
+        category="identity",
+        reason="boom",
+        resume_from_index=1,
+    )
+    store.write_pending(pending)
+    authority.advance(
+        manifest,
+        expected_progress_digest=active.progress_digest,
+        phase="paused",
+        pause_binding_sha256=approval_pause_digest(pending),
     )
     return run
 

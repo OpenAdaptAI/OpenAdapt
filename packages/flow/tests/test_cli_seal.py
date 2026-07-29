@@ -9,7 +9,14 @@ import pytest
 from openadapt_flow import bundle_sealing, crypto
 from openadapt_flow.__main__ import main
 from openadapt_flow.bundle_sealing import BundleSealingError, seal_bundle
-from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
+from openadapt_flow.ir import (
+    ActionKind,
+    Anchor,
+    Postcondition,
+    PostconditionKind,
+    Step,
+    Workflow,
+)
 from openadapt_flow.qualification import (
     EnvironmentBoundary,
     QualificationCertification,
@@ -38,6 +45,12 @@ def _source(tmp_path: Path) -> Path:
                     region=(10, 20, 30, 40),
                     click_point=(25, 40),
                 ),
+                expect=[
+                    Postcondition(
+                        kind=PostconditionKind.TEXT_PRESENT,
+                        text="Submitted",
+                    )
+                ],
             )
         ],
     ).save(bundle)

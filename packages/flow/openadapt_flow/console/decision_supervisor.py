@@ -290,8 +290,6 @@ class DecisionSupervisor:
         retained: list[tuple[Path, AttendedRelayAcknowledgement, AttendedDecision]] = []
         for run_dir in data._scan(self._runs_root, data._is_run_dir):
             store = AttendedActionStore(run_dir)
-            if not store.decisions_path.is_file():
-                continue
             try:
                 matched = store.relay_acknowledgement(binding)
             except AttendedActionRefused as exc:

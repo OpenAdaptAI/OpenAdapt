@@ -20,12 +20,15 @@ import pytest
 from PIL import Image
 
 from openadapt_flow.backend import (
+    ActionDeliveryUncertain,
     Backend,
     ExecutionContextIdentityBackend,
+    FreshActuationRequired,
     IdentityBackend,
     PreparedPointerActuationBackend,
     StructuralActionBackend,
     StructuralBackend,
+    StructuralResolutionRefused,
 )
 from openadapt_flow.backends.remote_display import (
     RemoteDisplayBackend,
@@ -34,6 +37,7 @@ from openadapt_flow.backends.remote_display import (
     _split_chord,
     resolve_mac_key,
 )
+from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
 
 
 class FakeClient:
@@ -212,6 +216,31 @@ def test_absent_application_marker_returns_none_and_invalidates_lease() -> None:
     assert not any(call[0] == "mouse" for call in client.calls)
 
 
+def test_qualification_environment_rechecks_version_on_actuation_frame() -> None:
+    client = FakeClient()
+    version_ok = {"value": True}
+    backend = RemoteDisplayBackend(
+        client=client,
+        settle_s=0.0,
+        application_marker="Accuro",
+        application_marker_probe=lambda _png: True,
+        application_version_marker="8.0.0.3",
+        application_version_marker_probe=lambda _png: version_ok["value"],
+        environment_marker="clinic-remote-environment",
+        environment_marker_probe=lambda _png: True,
+        session_marker="clinic-session-qualification",
+        session_marker_probe=lambda _png: True,
+    )
+    assert backend.qualification_environment_identity() is not None
+    version_ok["value"] = False
+
+    with pytest.raises(
+        RemoteDisplayError, match="application, version, environment, or session"
+    ):
+        backend.acquire_actuation_frame()
+    assert not any(call[0] == "mouse" for call in client.calls)
+
+
 def test_context_observation_refuses_mutated_frame_before_input() -> None:
     client = FakeClient()
     backend = RemoteDisplayBackend(
@@ -385,6 +414,174 @@ def test_rich_pointer_actions_share_the_remote_frame_lease() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("action", "operation", "destination"),
+    [
+        ("click", "remote_click", None),
+        ("double_click", "remote_double_click", None),
+        ("right_click", "remote_right_click", None),
+        ("drag", "remote_drag", (200, 150)),
+    ],
+)
+def test_guarded_pointer_actions_return_exact_delivery_receipts(
+    action: str,
+    operation: str,
+    destination: tuple[int, int] | None,
+) -> None:
+    backend, _client = _backend()
+    source = (100, 100)
+    backend.screenshot()
+    backend.prepare_pointer_actuation(*source)
+    frame = backend.acquire_actuation_frame()
+    frame_sha256 = hashlib.sha256(frame).hexdigest()
+
+    if action == "click":
+        receipt = backend.click_guarded(*source, expected_frame_sha256=frame_sha256)
+    elif action == "double_click":
+        receipt = backend.click_guarded(
+            *source,
+            expected_frame_sha256=frame_sha256,
+            double=True,
+        )
+    elif action == "right_click":
+        receipt = backend.right_click_guarded(
+            *source,
+            expected_frame_sha256=frame_sha256,
+        )
+    else:
+        assert destination is not None
+        receipt = backend.drag_guarded(
+            *source,
+            *destination,
+            expected_frame_sha256=frame_sha256,
+        )
+
+    assert receipt.operation == operation
+    assert receipt.native is False
+    assert receipt.target_fingerprint == visual_resolution_point_fingerprint(
+        frame_sha256,
+        source,
+    )
+    assert receipt.destination_fingerprint == (
+        visual_resolution_point_fingerprint(frame_sha256, destination)
+        if destination is not None
+        else None
+    )
+
+
+@pytest.mark.parametrize("action", ["click", "double_click", "right_click", "drag"])
+@pytest.mark.parametrize("refusal", ["wrong_hash", "invalidated"])
+def test_guarded_pointer_actions_refuse_without_the_exact_live_lease(
+    action: str,
+    refusal: str,
+) -> None:
+    backend, client = _backend()
+    backend.screenshot()
+    backend.prepare_pointer_actuation(100, 100)
+    frame = backend.acquire_actuation_frame()
+    frame_sha256 = hashlib.sha256(frame).hexdigest()
+    if refusal == "wrong_hash":
+        frame_sha256 = "0" * 64
+    else:
+        backend.screenshot()
+
+    with pytest.raises(StructuralResolutionRefused, match="fresh-frame lease"):
+        if action == "click":
+            backend.click_guarded(100, 100, expected_frame_sha256=frame_sha256)
+        elif action == "double_click":
+            backend.click_guarded(
+                100,
+                100,
+                expected_frame_sha256=frame_sha256,
+                double=True,
+            )
+        elif action == "right_click":
+            backend.right_click_guarded(
+                100,
+                100,
+                expected_frame_sha256=frame_sha256,
+            )
+        else:
+            backend.drag_guarded(
+                100,
+                100,
+                200,
+                150,
+                expected_frame_sha256=frame_sha256,
+            )
+
+    assert not any(call[0] == "mouse" for call in client.calls)
+
+
+@pytest.mark.parametrize(
+    ("action", "operation"),
+    [
+        ("click", "remote_click"),
+        ("double_click", "remote_double_click"),
+        ("right_click", "remote_right_click"),
+        ("drag", "remote_drag"),
+    ],
+)
+def test_guarded_pointer_actions_never_receipt_uncertain_delivery(
+    action: str,
+    operation: str,
+) -> None:
+    class FailingPointerClient(FakeClient):
+        fail_pointer = False
+
+        def mouse(self, x, y, *, button, down, click_count):
+            if self.fail_pointer:
+                raise RuntimeError("pointer transport failed")
+            super().mouse(
+                x,
+                y,
+                button=button,
+                down=down,
+                click_count=click_count,
+            )
+
+    client = FailingPointerClient()
+    backend = RemoteDisplayBackend(client=client, settle_s=0.0)
+    backend.screenshot()
+    backend.prepare_pointer_actuation(100, 100)
+    frame = backend.acquire_actuation_frame()
+    frame_sha256 = hashlib.sha256(frame).hexdigest()
+    client.fail_pointer = True
+    receipt = None
+
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        if action == "click":
+            receipt = backend.click_guarded(
+                100,
+                100,
+                expected_frame_sha256=frame_sha256,
+            )
+        elif action == "double_click":
+            receipt = backend.click_guarded(
+                100,
+                100,
+                expected_frame_sha256=frame_sha256,
+                double=True,
+            )
+        elif action == "right_click":
+            receipt = backend.right_click_guarded(
+                100,
+                100,
+                expected_frame_sha256=frame_sha256,
+            )
+        else:
+            receipt = backend.drag_guarded(
+                100,
+                100,
+                200,
+                150,
+                expected_frame_sha256=frame_sha256,
+            )
+
+    assert raised.value.operation == operation
+    assert receipt is None
+
+
 def test_click_refuses_point_outside_captured_frame() -> None:
     backend, client = _backend()
     backend.screenshot()
@@ -467,10 +664,68 @@ def test_bound_actuation_refuses_same_window_content_change_before_input() -> No
     # valid. Only the remote pixels changed after resolution.
     client.frame_color = (11, 22, 34)
 
-    with pytest.raises(RemoteDisplayError, match="frame content changed"):
+    with pytest.raises(FreshActuationRequired) as raised:
         backend.click(100, 100)
 
     assert not any(call[0] == "mouse" for call in client.calls)
+    assert raised.value.operation == "remote_click"
+    assert raised.value.changed_pixel_count == client.px[0] * client.px[1]
+    assert raised.value.changed_bbox == (0, 0, client.px[0], client.px[1])
+    assert raised.value.frame_size == client.px
+
+
+def test_replayer_reacquires_real_remote_display_lease_after_zero_edge_change(
+    tmp_path,
+) -> None:
+    from tests.test_replayer import FakeVision, Match, click_step, make_png
+
+    class OneMismatchBackend(RemoteDisplayBackend):
+        def __init__(self, *, client):
+            super().__init__(client=client, settle_s=0.0)
+            self.click_attempts = 0
+
+        def click(self, x, y, *, double=False):
+            self.click_attempts += 1
+            if self.click_attempts == 1:
+                self._client.frame_color = (11, 22, 34)
+            return super().click(x, y, double=double)
+
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime.replayer import Replayer
+
+    client = FakeClient(
+        window=WindowInfo(
+            window_id=1,
+            owner="Parallels Desktop",
+            title="Windows 11",
+            pid=99,
+            bounds=(0.0, 0.0, 300.0, 200.0),
+            on_screen=True,
+        ),
+        px=(300, 200),
+    )
+    backend = OneMismatchBackend(client=client)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "btn.png").write_bytes(make_png((50, 20)))
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="real-lease-retry", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=tmp_path / "run",
+    )
+
+    assert report.success is True
+    assert backend.click_attempts == 2
+    assert len([call for call in client.calls if call[0] == "mouse"]) == 2
+    assert [event.retried for event in report.results[0].fresh_actuation_events] == [
+        True
+    ]
 
 
 def test_bound_actuation_accepts_same_pixels_with_different_png_encoding() -> None:

@@ -34,15 +34,17 @@ healed bundle is written.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import os
 import re
 import time
 import uuid
+from copy import deepcopy
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, TypeVar, cast
 from urllib.parse import urlsplit
 
 from openadapt_flow.backend import (
@@ -50,9 +52,13 @@ from openadapt_flow.backend import (
     Backend,
     BrowserPresentationGeometryBackend,
     FocusedElementActuationLeaseBackend,
+    FreshActuationReacquisitionBackend,
+    FreshActuationRequired,
     GuardedCoordinateActionBackend,
     GuardedDragActionBackend,
     GuardedKeyboardActionBackend,
+    GuardedRemotePointerActionBackend,
+    GuardedSelectOptionBackend,
     PreparedPointerActuationBackend,
     RemoteActuationBackend,
     RichPointerActionBackend,
@@ -71,34 +77,62 @@ from openadapt_flow.ir import (
     ApiBinding,
     EffectVerificationEvidence,
     ExecutionTargetKind,
+    FreshActuationEvent,
     HaltObservation,
     IdentityCheck,
     IdentitySignalEvidence,
     Interstitial,
     InterstitialActionResult,
     LoopSpec,
+    PixelIdentityEvidence,
     Point,
+    Postcondition,
     PostconditionKind,
     Predicate,
     PredicateKind,
+    ProgramExceptionEvidence,
+    ProgramExecutionScopeFrame,
     ProgramGraph,
+    ProgramGuardAssetEvidence,
+    ProgramTransitionEvidence,
     Region,
     Resolution,
     RunReport,
+    SafetyRefusalEvidence,
     State,
     StateKind,
     Step,
     StepResult,
     UnarmedStep,
+    VisualResolutionEvidence,
     Workflow,
+    predicate_contract_sha256,
 )
 from openadapt_flow.privacy import scrub_image_bytes as _scrub_png
 from openadapt_flow.privacy import scrub_text as _scrub_phi
+from openadapt_flow.qualification_environment import (
+    BackendQualificationEnvironmentObserver,
+    QualificationEnvironmentObservation,
+    QualificationEnvironmentObserver,
+)
+from openadapt_flow.qualification_faults import (
+    FaultMutationReceipt,
+    QualificationFaultContext,
+    QualificationFaultDriver,
+    QualificationFaultGate,
+    QualificationFaultKind,
+    effect_verifier_input_sha256,
+    sha256_bytes,
+    verify_fault_mutation_receipt,
+)
 from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
-from openadapt_flow.runtime.authorization import GovernedRunAuthorization
+from openadapt_flow.runtime.authorization import (
+    GovernedRunAuthorization,
+    runtime_inputs_digest,
+)
 from openadapt_flow.runtime.durable.approval import StateDiverged
 from openadapt_flow.runtime.durable.program_checkpoint import (
     TOP_GRAPH_ID,
@@ -120,9 +154,33 @@ from openadapt_flow.runtime.effects import (
     EffectVerifier,
     reconcile_or_escalate,
 )
-from openadapt_flow.runtime.resolver import is_below_ocr, pad_region, resolve
-from openadapt_flow.verification import verifier_effect_tier
+from openadapt_flow.runtime.program_predicates import (
+    evaluate_program_predicate,
+    exact_png_size,
+    predicate_template_refs,
+    predicate_uses_frame,
+    program_predicate_evaluator_contract_sha256,
+)
+from openadapt_flow.runtime.resolver import (
+    is_below_ocr,
+    pad_region,
+    resolve,
+    visual_resolution_anchor_contract_sha256,
+    visual_resolution_evaluator_contract_sha256,
+)
+from openadapt_flow.verification import (
+    EffectContractMutationError,
+    verifier_effect_tier,
+    verify_effect_without_mutation,
+)
 from openadapt_flow.vision.ocr import OcrResolutionRefused
+
+_DeliveryResultT = TypeVar("_DeliveryResultT")
+_MAX_FRESH_ACTUATION_REACQUISITIONS = 2
+# Private module capability.  The public ``run`` API cannot mint a durable
+# continuation.  ``runtime.durable.resume`` imports this object only after it
+# has validated the pause, approval, bundle, checkpoint, and live state.
+_DURABLE_RESUME_AUTHORITY = object()
 
 if TYPE_CHECKING:
     from openadapt_flow.runtime.control_overlay import RuntimeControlOverlayEmitter
@@ -363,12 +421,21 @@ class Replayer:
         pixel_verify_enabled: bool = False,
         allow_model_grounding: bool = False,
         governed_authorization: Optional[GovernedRunAuthorization] = None,
+        delivery_authority_kind: Literal[
+            "customer_local", "cloud_runner"
+        ] = "customer_local",
+        remote_delivery_run_id: Optional[str] = None,
+        managed_dispatch_binding: Optional[Any] = None,
         governed_continuation: bool = False,
         require_settled: bool = False,
         settle_readiness_timeout_s: float = 10.0,
         interstitials: Optional[list[Interstitial]] = None,
         control_overlay: Optional["RuntimeControlOverlayEmitter"] = None,
         idempotency_ledger: Optional["IdempotencyLedger"] = None,
+        qualification_fault_driver: Optional[QualificationFaultDriver] = None,
+        qualification_environment_observer: Optional[
+            QualificationEnvironmentObserver
+        ] = None,
     ) -> None:
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
@@ -435,12 +502,76 @@ class Replayer:
         # behavior.  When present it carries exact identity/effect decisions
         # from the run gate into the shared executor instead of reducing them
         # to a boolean that could authorize a different workflow.
+        if (
+            delivery_authority_kind == "cloud_runner"
+            and managed_dispatch_binding is None
+        ):
+            raise ValueError(
+                "cloud_runner requires a verified internal managed dispatch binding"
+            )
+        if managed_dispatch_binding is not None:
+            from openadapt_flow.runner.dispatch_envelope import ManagedDispatchBinding
+            from openadapt_flow.runner.protocol import dispatch_binding_sha256
+
+            if not isinstance(managed_dispatch_binding, ManagedDispatchBinding):
+                raise ValueError("managed dispatch binding is invalid")
+            if not durable:
+                raise ValueError("managed dispatch binding requires durable=True")
+            if managed_dispatch_binding.binding_sha256 != dispatch_binding_sha256(
+                managed_dispatch_binding.run_id,
+                managed_dispatch_binding.authorization,
+            ):
+                raise ValueError(
+                    "managed dispatch binding does not match its authorization"
+                )
+            if governed_authorization not in (
+                None,
+                managed_dispatch_binding.authorization,
+            ) or remote_delivery_run_id not in (None, managed_dispatch_binding.run_id):
+                raise ValueError(
+                    "managed dispatch binding does not match public inputs"
+                )
+            governed_authorization = managed_dispatch_binding.authorization
+            delivery_authority_kind = "cloud_runner"
+            remote_delivery_run_id = managed_dispatch_binding.run_id
+        self.managed_dispatch_binding = managed_dispatch_binding
         self.governed_authorization = governed_authorization
+        self.delivery_authority_kind = delivery_authority_kind
+        self.remote_delivery_run_id = remote_delivery_run_id
+        self._managed_dispatch_snapshot: tuple[str, str, str] | None = None
+        if managed_dispatch_binding is not None:
+            self._managed_dispatch_snapshot = (
+                managed_dispatch_binding.run_id,
+                managed_dispatch_binding.binding_sha256,
+                json.dumps(
+                    managed_dispatch_binding.authorization.model_dump(mode="json"),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ),
+            )
         self.governed_continuation = governed_continuation
         self._governed_asset_snapshot: dict[str, bytes] = {}
         self._governed_asset_hashes: dict[str, str] = {}
         self._governed_plaintext_assets = False
         self._governed_asset_mutation: Optional[str] = None
+        self._governed_base_params: Optional[dict[str, str]] = None
+        self._active_runtime_worklists: Optional[dict[str, list[dict[str, str]]]] = None
+        self._active_delivery_resolution: Optional[Resolution] = None
+        self._active_delivery_region: Optional[Region] = None
+        self._current_graph_id: Optional[str] = None
+        self._execution_workflow_source: Optional[Workflow] = None
+        self._execution_workflow_snapshot: Optional[Workflow] = None
+        self._execution_snapshot_required = False
+        self._governed_authorization_source: Optional[GovernedRunAuthorization] = None
+        self._governed_authorization_snapshot_error: Optional[str] = None
+        self._durable_resume_secret = os.urandom(32)
+        self._durable_resume_admission: Optional[tuple[dict[str, Any], str]] = None
+        self._durable_resume_mode: Optional[Literal["linear", "program"]] = None
+        self._durable_linear_snapshot: tuple[Any, ...] = ()
+        self._durable_program_snapshot: tuple[ProgramCheckpoint, ...] = ()
+        self._durable_pending_snapshot: Optional[Any] = None
+        self._durable_continuation_guard: Optional[Any] = None
         # API/tool actuator -- the TOP of the capability ladder (RFC section 4
         # `api` tier). When set, a step carrying an `api_binding` has its write
         # performed via the API and confirmed by the effect_verifier, SKIPPING
@@ -485,6 +616,11 @@ class Replayer:
         # an empty default so a direct _execute_step call (tests) still resolves
         # effect contracts (a literal effect ignores it).
         self._run_id: str = ""
+        # ``True`` only after this runtime instance either creates an exact
+        # idempotency reservation or validates ownership of the reservation it
+        # resumes.  A refusal before reservation must never write a terminal
+        # outcome into an unrelated ledger record.
+        self._idempotency_reservation_owned = False
         # -- state-dependency robustness (docs/LIMITS.md "state dependency") ----
         # ``require_settled``: when True the step-entry readiness gate REFUSES to
         # act on a frame that never settled -- a still-loading / mid-transition
@@ -533,6 +669,269 @@ class Replayer:
         # key is SUPPRESSED before any actuation (never blind-retried). None
         # (default) leaves the run path byte-for-byte unchanged.
         self.idempotency_ledger = idempotency_ledger
+        self.qualification_fault_driver = qualification_fault_driver
+        self.qualification_environment_observer = qualification_environment_observer
+        self._qualification_fault_mutations: list[FaultMutationReceipt] = []
+        self._qualification_fault_public_key: Optional[str] = None
+        self._qualification_case_action_paths: dict[str, Literal["gui", "api"]] = {}
+        self._qualification_environment_call: Optional[
+            Callable[[], QualificationEnvironmentObservation]
+        ] = None
+        self._qualification_environment_bound: Optional[
+            QualificationEnvironmentObservation
+        ] = None
+
+    @staticmethod
+    def _canonical_resume_value(value: Any) -> Any:
+        """Return one deterministic JSON value for a resume admission field."""
+
+        if value is None:
+            return None
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            return model_dump(mode="json")
+        if isinstance(value, list):
+            return [Replayer._canonical_resume_value(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                str(key): Replayer._canonical_resume_value(item)
+                for key, item in value.items()
+            }
+        return value
+
+    def _durable_resume_payload(
+        self,
+        *,
+        mode: Literal["linear", "program"],
+        workflow: Workflow,
+        run_dir: Path,
+        bundle_dir: Path,
+        run_id: str,
+        params: dict[str, str],
+        worklists: dict[str, list[dict[str, str]]],
+        resume_from: Optional[int],
+        resume_program: Optional[ProgramCheckpoint],
+        durable_context: Optional[dict[str, Any]] = None,
+        authorizing_approval: Optional[Any] = None,
+    ) -> dict[str, Any]:
+        """Bind one continuation to the exact retained durable context."""
+
+        from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+        store = CheckpointStore(run_dir, key=self.checkpoint_key)
+        retained = durable_context or {
+            "manifest": store.read_manifest(),
+            "pending": store.read_pending(),
+            "approval": store.read_approval(),
+            "linear_checkpoints": store.checkpoints(),
+            "program_checkpoints": store.program_checkpoints(),
+            "auxiliary_digest": self._durable_auxiliary_digest(
+                run_dir, store.program_checkpoints()
+            ),
+        }
+        return {
+            "mode": mode,
+            "run_dir": str(Path(run_dir).resolve()),
+            "bundle_dir": str(Path(bundle_dir).resolve()),
+            "bundle_version": _bundle_version(Path(bundle_dir)),
+            "run_id": run_id,
+            "workflow_name": workflow.name,
+            "workflow": workflow.model_dump(mode="json"),
+            "params": dict(params),
+            "worklists": self._canonical_resume_value(worklists),
+            "resume_from": resume_from,
+            "resume_program": self._canonical_resume_value(resume_program),
+            "manifest": self._canonical_resume_value(retained["manifest"]),
+            "pending": self._canonical_resume_value(retained["pending"]),
+            "approval": self._canonical_resume_value(retained["approval"]),
+            "authorizing_approval": self._canonical_resume_value(authorizing_approval),
+            "linear_checkpoints": self._canonical_resume_value(
+                retained["linear_checkpoints"]
+            ),
+            "program_checkpoints": self._canonical_resume_value(
+                retained["program_checkpoints"]
+            ),
+            "auxiliary_digest": retained["auxiliary_digest"],
+        }
+
+    @staticmethod
+    def _durable_auxiliary_digest(
+        run_dir: Path,
+        program_checkpoints: list[ProgramCheckpoint],
+    ) -> str:
+        """Bind namespace, active capability, and every attended receipt."""
+
+        receipts_dir = Path(run_dir) / ".attended_program_receipts"
+        expected = {
+            f"{checkpoint.attended_transition.pause_id}.json"
+            for checkpoint in program_checkpoints
+            if checkpoint.attended_transition is not None
+        }
+        actual = (
+            {path.name for path in receipts_dir.glob("*.json")}
+            if receipts_dir.is_dir()
+            else set()
+        )
+        if actual != expected:
+            from openadapt_flow.runtime.durable.approval import StateDiverged
+
+            raise StateDiverged(
+                "attended program receipt inventory does not match checkpoints"
+            )
+        digest = hashlib.sha256()
+        paths = [
+            Path(run_dir) / ".durable_run.claim",
+            Path(run_dir) / "attended_capability.json",
+            Path(run_dir) / "attended_capability_history.json",
+            *[receipts_dir / name for name in sorted(actual)],
+        ]
+        for path in paths:
+            digest.update(path.name.encode("utf-8"))
+            digest.update(b"\0")
+            if path.is_file():
+                digest.update(path.read_bytes())
+            else:
+                digest.update(b"<missing>")
+            digest.update(b"\0")
+        return "sha256:" + digest.hexdigest()
+
+    def _admit_durable_resume(
+        self,
+        authority: object,
+        *,
+        mode: Literal["linear", "program"],
+        workflow: Workflow,
+        run_dir: Path,
+        bundle_dir: Path,
+        run_id: Optional[str],
+        params: dict[str, str],
+        worklists: dict[str, list[dict[str, str]]],
+        resume_from: Optional[int],
+        resume_program: Optional[ProgramCheckpoint],
+        durable_context: dict[str, Any],
+        authorizing_approval: Any,
+    ) -> str:
+        """Mint a single-use continuation after ``durable.resume`` admits it."""
+
+        if authority is not _DURABLE_RESUME_AUTHORITY:
+            raise PermissionError("durable resume authority is private")
+        if set(durable_context) != {
+            "manifest",
+            "pending",
+            "approval",
+            "linear_checkpoints",
+            "program_checkpoints",
+            "auxiliary_digest",
+        }:
+            raise PermissionError("durable resume context is incomplete")
+        effective_run_id = run_id or uuid.uuid4().hex
+        payload = self._durable_resume_payload(
+            mode=mode,
+            workflow=workflow,
+            run_dir=run_dir,
+            bundle_dir=bundle_dir,
+            run_id=effective_run_id,
+            params=params,
+            worklists=worklists,
+            resume_from=resume_from,
+            resume_program=resume_program,
+            durable_context=durable_context,
+            authorizing_approval=authorizing_approval,
+        )
+        approval_bundle_version = getattr(
+            authorizing_approval,
+            "bundle_version",
+            None,
+        )
+        if not isinstance(approval_bundle_version, str) or not hmac.compare_digest(
+            payload["bundle_version"],
+            approval_bundle_version,
+        ):
+            from openadapt_flow.runtime.durable.approval import ApprovalRequired
+
+            raise ApprovalRequired(
+                "the workflow bundle changed after resume approval; refusing "
+                "to mint continuation authority"
+            )
+        canonical = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        signature = hmac.new(
+            self._durable_resume_secret, canonical, hashlib.sha256
+        ).hexdigest()
+        self._durable_resume_admission = (payload, signature)
+        return effective_run_id
+
+    def _consume_durable_resume_admission(
+        self,
+        *,
+        workflow: Workflow,
+        run_dir: Path,
+        bundle_dir: Path,
+        run_id: str,
+        params: dict[str, str],
+        worklists: dict[str, list[dict[str, str]]],
+        resume_from: Optional[int],
+        resume_program: Optional[ProgramCheckpoint],
+    ) -> None:
+        """Consume and verify the exact resume context before any callback."""
+
+        from openadapt_flow.runtime.durable.approval import ApprovalRequired
+
+        admission = self._durable_resume_admission
+        self._durable_resume_admission = None
+        if admission is None:
+            raise ApprovalRequired(
+                "durable continuation must enter through the authenticated resume API"
+            )
+        admitted, signature = admission
+        canonical = json.dumps(
+            admitted, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        expected_signature = hmac.new(
+            self._durable_resume_secret, canonical, hashlib.sha256
+        ).hexdigest()
+        mode = admitted.get("mode")
+        if mode not in {"linear", "program"} or not hmac.compare_digest(
+            signature, expected_signature
+        ):
+            raise ApprovalRequired("durable continuation admission is invalid")
+        current = self._durable_resume_payload(
+            mode=mode,
+            workflow=workflow,
+            run_dir=run_dir,
+            bundle_dir=bundle_dir,
+            run_id=run_id,
+            params=params,
+            worklists=worklists,
+            resume_from=resume_from,
+            resume_program=resume_program,
+            authorizing_approval=admitted.get("authorizing_approval"),
+        )
+        if current != admitted:
+            raise ApprovalRequired(
+                "durable continuation context changed after approval"
+            )
+        from openadapt_flow.runtime.durable.checkpoint import RunCheckpoint
+
+        self._durable_resume_mode = mode
+        self._durable_linear_snapshot = tuple(
+            RunCheckpoint.model_validate(value).model_copy(deep=True)
+            for value in admitted["linear_checkpoints"]
+        )
+        self._durable_program_snapshot = tuple(
+            ProgramCheckpoint.model_validate(value).model_copy(deep=True)
+            for value in admitted["program_checkpoints"]
+        )
+        pending_value = admitted.get("pending")
+        if pending_value is None:
+            self._durable_pending_snapshot = None
+        else:
+            from openadapt_flow.runtime.durable.checkpoint import PendingEscalation
+
+            self._durable_pending_snapshot = PendingEscalation.model_validate(
+                pending_value
+            ).model_copy(deep=True)
 
     # -- public API ----------------------------------------------------------
 
@@ -638,9 +1037,12 @@ class Replayer:
             aborts at the first failed step; a program run ends at a terminal
             state (or an unhandled failure). ``success`` reflects that outcome.
         """
+        managed_refusal = self._managed_dispatch_refusal()
+        if managed_refusal is not None:
+            raise ValueError(managed_refusal)
         bundle_dir = Path(bundle_dir)
         run_dir = Path(run_dir)
-        (run_dir / "steps").mkdir(parents=True, exist_ok=True)
+        self._install_execution_snapshots(workflow)
         # Snapshot bundle declarations before authorization validation and
         # before the first backend/vision callback.  Execution uses only this
         # deep copy; the caller-owned workflow remains available solely for a
@@ -668,6 +1070,15 @@ class Replayer:
             if self.governed_authorization is not None
             else uuid.uuid4().hex
         )
+        self._idempotency_reservation_owned = False
+        self._qualification_fault_mutations = []
+        self._qualification_fault_public_key = None
+        self._qualification_case_action_paths = {}
+        self._qualification_environment_call = None
+        self._qualification_environment_bound = None
+        clear_guard = getattr(self.backend, "set_qualification_input_guard", None)
+        if callable(clear_guard):
+            clear_guard(None)
         # Parameter resolution (Workflow-program IR, Phase 1): recorded defaults
         # (``params`` dict) plus each TYPED ``param_specs`` example as a default,
         # with caller-supplied values overriding both. A v0 bundle (empty
@@ -679,10 +1090,108 @@ class Replayer:
                 merged.setdefault(pname, spec.example)
         merged.update(params or {})
         params = merged
+        self._outcome_worklists = deepcopy(worklists or {})
+
+        from openadapt_flow.qualification import workflow_contract_sha256
+
+        # Keep the admitted base parameter scope separate from row-derived
+        # program-loop bindings. Last-edge authorization hashes this base scope
+        # together with the caller-owned worklist, then proves the active
+        # iteration scope from the exact loop cursor below. Hashing ``params``
+        # inside a loop would count each row twice and reject valid runs.
+        self._governed_base_params = dict(params)
+        # Preserve the exact caller-owned worklist object for last-common-point
+        # authorization checks.  A callback that mutates it after admission
+        # must invalidate the authorization before any reacquired input edge.
+        self._active_runtime_worklists = worklists
+        durable_resume = (
+            resume_from is not None
+            or resume_program is not None
+            or self._durable_resume_admission is not None
+        )
+        if not durable_resume:
+            self._durable_resume_mode = None
+            self._durable_linear_snapshot = ()
+            self._durable_program_snapshot = ()
+            self._durable_pending_snapshot = None
+        if durable_resume:
+            self._consume_durable_resume_admission(
+                workflow=workflow,
+                run_dir=run_dir,
+                bundle_dir=bundle_dir,
+                run_id=self._run_id,
+                params=params,
+                worklists=worklists or {},
+                resume_from=resume_from,
+                resume_program=resume_program,
+            )
+
+        # All execution decisions consume the deep semantic snapshot. The
+        # caller-owned source remains available only for drift comparison.
+        if self._execution_workflow_snapshot is not None:
+            workflow = self._execution_workflow_snapshot
+
+        # Claim or validate the durable namespace before report output,
+        # screenshots, overlay callbacks, idempotency state, or any other
+        # execution side effect can touch the run directory. A fresh invocation
+        # must never overwrite an existing run's report before discovering that
+        # the directory is already owned.
+        durable_run = None
+        if self.durable:
+            from openadapt_flow.runtime.durable import DurableRun
+
+            durable_run = DurableRun(
+                run_dir,
+                run_id=self._run_id,
+                workflow_name=workflow.name,
+                bundle_dir=bundle_dir,
+                params=params,
+                worklists=worklists or {},
+                idempotency_key=idempotency_key,
+                save_healed_to=save_healed_to,
+                key=self.checkpoint_key,
+                governed_authorization=self.governed_authorization,
+                delivery_authority_kind=self.delivery_authority_kind,
+                remote_delivery_run_id=self.remote_delivery_run_id,
+                managed_dispatch_binding_sha256=(
+                    self.managed_dispatch_binding.binding_sha256
+                    if self.managed_dispatch_binding is not None
+                    else None
+                ),
+                screenshots_may_leave_box=(
+                    self._screenshots_may_leave_box or prior_screenshots_may_leave_box
+                ),
+                model_calls=prior_model_calls,
+                external_network_calls=prior_external_network_calls,
+                resume_existing=durable_resume,
+            )
+        self._durable_initial_delivery_guard = None
+        if (
+            durable_run is not None
+            and not durable_resume
+            and self.managed_dispatch_binding is not None
+        ):
+            from openadapt_flow.runtime.durable.authority import DurableAuthority
+
+            class _ManagedInitialDeliveryGuard:
+                def before_delivery(self_nonlocal) -> None:
+                    assert durable_run is not None
+                    DurableAuthority(
+                        run_dir, durable_run.store
+                    ).before_initial_delivery(
+                        durable_run._manifest  # noqa: SLF001 - exact retained manifest
+                    )
+
+            self._durable_initial_delivery_guard = _ManagedInitialDeliveryGuard()
+        (run_dir / "steps").mkdir(parents=True, exist_ok=True)
 
         report = RunReport(
             workflow_name=workflow.name,
-            started_at=datetime.now(timezone.utc).isoformat(),
+            started_at=(
+                durable_run.started_at
+                if durable_run is not None
+                else datetime.now(timezone.utc).isoformat()
+            ),
             execution_profile=(
                 self.governed_authorization.execution_profile
                 if self.governed_authorization is not None
@@ -696,12 +1205,14 @@ class Replayer:
             bundle_content_digest=(
                 workflow.manifest.content_digest if workflow.manifest else None
             ),
+            workflow_contract_sha256=workflow_contract_sha256(workflow),
             source_recording_sha256=(
                 workflow.manifest.provenance.source_recording_sha256
                 if workflow.manifest
                 else None
             ),
             parameter_schema_sha256=(compute_parameter_schema_digest(workflow)),
+            run_id_sha256=hashlib.sha256(self._run_id.encode("utf-8")).hexdigest(),
             params=params,
             model_calls=prior_model_calls,
             external_network_calls=prior_external_network_calls,
@@ -710,6 +1221,22 @@ class Replayer:
             ),
             idempotency_key=idempotency_key,
         )
+        snapshot_refusal = self._workflow_snapshot_refusal(workflow)
+        if snapshot_refusal is None:
+            snapshot_refusal = self._governed_authorization_snapshot_refusal()
+        if snapshot_refusal is not None:
+            report.results.append(
+                StepResult(
+                    step_id="<authorization>",
+                    intent="snapshot governed execution admission",
+                    ok=False,
+                    safety_halt=True,
+                    failure_category="governed_refusal",
+                    error=snapshot_refusal,
+                )
+            )
+            report.success = False
+            return self._finalize_report(report, workflow, run_dir)
         self._begin_control_overlay(report.execution_profile)
         # At-most-once idempotency (Section 3): a repeat under an already-seen
         # key is SUPPRESSED before any actuation. A durable RESUME carries the
@@ -718,10 +1245,20 @@ class Replayer:
         if (
             idempotency_key is not None
             and self.idempotency_ledger is not None
-            and resume_from is None
-            and resume_program is None
+            and not durable_resume
         ):
-            if self.idempotency_ledger.seen(idempotency_key):
+            from openadapt_flow.transaction import DuplicateActuation
+
+            try:
+                # One atomic reservation is the check. A separate ``seen``
+                # call would let two runtime processes both pass the check
+                # before either persisted ownership.
+                self.idempotency_ledger.reserve(
+                    idempotency_key,
+                    run_id=self._run_id,
+                )
+                self._idempotency_reservation_owned = True
+            except DuplicateActuation:
                 report.results.append(
                     StepResult(
                         step_id="<idempotency>",
@@ -738,9 +1275,42 @@ class Replayer:
                 report.idempotent_replay = True
                 report.success = False
                 return self._finalize_report(report, workflow, run_dir)
-            # Reserve BEFORE any actuation: if this run crashes after the write,
-            # a naive retry is blocked and must reconcile rather than double-act.
-            self.idempotency_ledger.reserve(idempotency_key, run_id=self._run_id)
+        elif (
+            idempotency_key is not None
+            and self.idempotency_ledger is not None
+            and durable_resume
+        ):
+            # A resumed durable leg did not create a new reservation.  It may
+            # project the final outcome only when the existing reservation is
+            # bound to this exact stable run identity.
+            reservation_error: Optional[str]
+            try:
+                existing = self.idempotency_ledger.lookup(idempotency_key)
+            except Exception as exc:  # noqa: BLE001 - durable ledger boundary
+                existing = None
+                reservation_error = type(exc).__name__
+            else:
+                reservation_error = None
+            if existing is None or existing.get("run_id") != self._run_id:
+                detail = (
+                    f" ({reservation_error})" if reservation_error is not None else ""
+                )
+                report.results.append(
+                    StepResult(
+                        step_id="<idempotency>",
+                        intent="validate durable idempotency reservation",
+                        ok=False,
+                        safety_halt=True,
+                        failure_category="governed_refusal",
+                        error=(
+                            "durable continuation has no exact owned idempotency "
+                            "reservation; refusing to resume before actuation" + detail
+                        ),
+                    )
+                )
+                report.success = False
+                return self._finalize_report(report, workflow, run_dir)
+            self._idempotency_reservation_owned = True
         if self.governed_authorization is not None:
             profile_refusal = self._profile_runtime_refusal(workflow)
             if profile_refusal is not None:
@@ -786,8 +1356,55 @@ class Replayer:
             report.governed_minimum_effect_tier = (
                 self.governed_authorization.minimum_effect_tier
             )
+            report.governed_qualified_effect_requirements = list(
+                self.governed_authorization.qualified_effect_requirements
+            )
             report.governed_runtime_inputs_digest = (
                 self.governed_authorization.runtime_inputs_digest
+            )
+            report.governed_qualification_project_id = (
+                self.governed_authorization.qualification_project_id
+            )
+            report.governed_qualification_project_revision = (
+                self.governed_authorization.qualification_project_revision
+            )
+            report.governed_qualification_project_contract_sha256 = (
+                self.governed_authorization.qualification_project_contract_sha256
+            )
+            report.governed_qualification_campaign_id_sha256 = (
+                self.governed_authorization.qualification_campaign_id_sha256
+            )
+            report.governed_qualification_case_id_sha256 = (
+                self._qualification_id_sha256(
+                    self.governed_authorization.qualification_case_id
+                )
+            )
+            report.governed_qualification_case_input_sha256 = (
+                self.governed_authorization.qualification_case_input_sha256
+            )
+            report.governed_qualification_run_id_sha256 = (
+                self.governed_authorization.qualification_run_id_sha256
+            )
+            report.governed_qualification_case_kind = (
+                self.governed_authorization.qualification_case_kind
+            )
+            self._qualification_case_action_paths = dict(
+                self.governed_authorization.qualification_case_action_paths
+            )
+            report.governed_qualification_case_action_paths = dict(
+                self._qualification_case_action_paths
+            )
+            report.governed_qualification_fault_driver_id = (
+                self.governed_authorization.qualification_fault_driver_id
+            )
+            report.governed_qualification_fault_driver_contract_sha256 = (
+                self.governed_authorization.qualification_fault_driver_contract_sha256
+            )
+            report.governed_qualification_fault_driver_key_id = (
+                self.governed_authorization.qualification_fault_driver_key_id
+            )
+            report.governed_qualification_fault_step_id_sha256 = (
+                self.governed_authorization.qualification_fault_step_id_sha256
             )
             report.required_identity_step_ids = list(
                 self.governed_authorization.required_identity_step_ids
@@ -808,6 +1425,36 @@ class Replayer:
                         ok=False,
                         failure_category="governed_refusal",
                         error=f"{refusal} — refusing to run; run aborted",
+                    )
+                )
+                report.success = False
+                return self._finalize_report(report, workflow, run_dir)
+            environment_refusal = self._observe_qualification_environment(
+                workflow,
+                report,
+                execution_target_kind=execution_target_kind,
+            )
+            if environment_refusal is not None:
+                report.results.append(
+                    StepResult(
+                        step_id="<qualification-environment>",
+                        intent="observe exact qualification environment",
+                        ok=False,
+                        failure_category="governed_refusal",
+                        error=environment_refusal,
+                    )
+                )
+                report.success = False
+                return self._finalize_report(report, workflow, run_dir)
+            driver_refusal = self._qualification_fault_driver_refusal(workflow)
+            if driver_refusal is not None:
+                report.results.append(
+                    StepResult(
+                        step_id="<qualification-fault-driver>",
+                        intent="bind the environment-owned fault driver",
+                        ok=False,
+                        failure_category="runtime_failure",
+                        error=driver_refusal,
                     )
                 )
                 report.success = False
@@ -846,31 +1493,16 @@ class Replayer:
             report.total_ms = (time.monotonic() - t_run) * 1000.0
             return self._finalize_report(report, workflow, run_dir)
 
-        durable_run = None
-        if self.durable:
-            from openadapt_flow.runtime.durable import DurableRun
-
-            durable_run = DurableRun(
-                run_dir,
-                run_id=self._run_id,
-                workflow_name=workflow.name,
-                bundle_dir=bundle_dir,
-                params=params,
-                worklists=worklists or {},
-                save_healed_to=save_healed_to,
-                key=self.checkpoint_key,
-                governed_authorization=self.governed_authorization,
-                screenshots_may_leave_box=(
-                    self._screenshots_may_leave_box or prior_screenshots_may_leave_box
-                ),
-                model_calls=prior_model_calls,
-                external_network_calls=prior_external_network_calls,
-            )
-        if resume_from:
+        if resume_from is not None:
             from openadapt_flow.runtime.durable import resumed_step_results
 
             resumed_results = resumed_step_results(
-                run_dir, workflow, resume_from, key=self.checkpoint_key
+                run_dir,
+                workflow,
+                resume_from,
+                key=self.checkpoint_key,
+                checkpoints=list(self._durable_linear_snapshot),
+                run_id=self._run_id,
             )
             report.results.extend(resumed_results)
             for result in resumed_results:
@@ -879,8 +1511,6 @@ class Replayer:
                 report.model_calls,
                 sum(self._result_model_calls(result) for result in resumed_results),
             )
-            if durable_run is not None:
-                durable_run.store.clear_pending()
 
         if workflow.program is not None:
             # Workflow-program IR, Phase 2: interpret the STATE MACHINE (loops /
@@ -903,7 +1533,7 @@ class Replayer:
             for step_index, step in enumerate(workflow.steps):
                 # Resume: never re-execute an already-verified step (no
                 # re-performed confirmed writes); its result was pre-loaded.
-                if resume_from and step_index < resume_from:
+                if resume_from is not None and step_index < resume_from:
                     continue
                 result = self._run_step(
                     step,
@@ -914,24 +1544,52 @@ class Replayer:
                     run_dir=run_dir,
                     new_crops=new_crops,
                 )
+                post_action_refusal = self._workflow_snapshot_refusal(workflow)
+                if post_action_refusal is None:
+                    post_action_refusal = (
+                        self._governed_authorization_snapshot_refusal()
+                    )
+                if post_action_refusal is not None:
+                    prior_error = (
+                        f"; earlier result: {result.error}" if result.error else ""
+                    )
+                    result.ok = False
+                    result.safety_halt = True
+                    result.failure_category = (
+                        "governed_refusal"
+                        if self.governed_authorization is not None
+                        else "safety_halt"
+                    )
+                    result.error = (
+                        f"{post_action_refusal}; the action result was checked, "
+                        f"but the workflow changed during delivery{prior_error}"
+                    )
                 report.results.append(result)
                 self._account_result(report, result)
                 if durable_run is not None:
                     self._sync_durable_audit(durable_run, report)
                     # Tier-3: verified step -> checkpoint; halt -> pending
                     # escalation (resumable from the last checkpoint).
-                    durable_run.record(
-                        step_index,
-                        step,
-                        result,
-                        params,
-                        workflow=workflow,
-                        transition_observation=(
-                            self._attended_transition_observation()
-                            if not result.ok
-                            else None
-                        ),
-                    )
+                    if post_action_refusal is None:
+                        durable_run.record(
+                            step_index,
+                            step,
+                            result,
+                            params,
+                            workflow=workflow,
+                            transition_observation=(
+                                self._attended_transition_observation()
+                                if not result.ok
+                                else None
+                            ),
+                        )
+                        if (
+                            self._durable_continuation_guard is not None
+                            and result.failure_category != "continuation_preempted"
+                        ):
+                            self._durable_continuation_guard.acknowledge_progress(
+                                terminal=not result.ok
+                            )
                 if not result.ok:
                     break
 
@@ -977,10 +1635,72 @@ class Replayer:
                         f"bundle stays ungoverned and non-promotable): {exc}"
                     )
 
-        return self._finalize_report(report, workflow, run_dir)
+        staged_durable_terminal = (
+            durable_resume and durable_run is not None and report.success
+        )
+        finalized = self._finalize_report(
+            report,
+            workflow,
+            run_dir,
+            persist=not staged_durable_terminal,
+            project_terminal=not staged_durable_terminal,
+        )
+        if staged_durable_terminal:
+            # Persist the terminal evidence before consuming the continuation
+            # pause. A crash can then leave either a restartable checkpoint or
+            # an exact successful report, never a cleared pause with only the
+            # stale pre-resume report.
+            if self._durable_continuation_guard is not None:
+                assert durable_run is not None
+                candidate = finalized.save(
+                    run_dir, filename=".report.terminal-candidate.json"
+                )
+                report_sha256 = self._durable_continuation_guard.prepare_terminal(
+                    candidate
+                )
+                durable_run.complete()
+                os.replace(candidate, run_dir / "report.json")
+                from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 
-    @staticmethod
-    def _stamp_execution_outcome(report: RunReport, workflow: Workflow) -> None:
+                CheckpointStore._fsync_directory(run_dir)
+                self._durable_continuation_guard.completed(report_sha256=report_sha256)
+                # Do not project before ``completed``. A crash or authority
+                # failure between projection and durable completion would make
+                # the ledger claim a terminal outcome while the pause remains
+                # restartable. ``pending`` keeps this completion
+                # non-attestable until the projection settles or one typed
+                # fail-closed report correction is bound.
+                try:
+                    self._record_idempotency_outcome(finalized)
+                except Exception as exc:  # noqa: BLE001 - durable ledger boundary
+                    self._mark_idempotency_projection_failure(
+                        finalized,
+                        workflow,
+                        run_dir,
+                        exc,
+                    )
+                    corrected = finalized.save(run_dir)
+                    self._durable_continuation_guard.correct_terminal_projection_failure(
+                        original_report_sha256=report_sha256,
+                        corrected_report_path=corrected,
+                    )
+                else:
+                    self._durable_continuation_guard.settle_terminal_projection(
+                        report_sha256=report_sha256
+                    )
+                self._emit_control_overlay_terminal(finalized.execution_outcome)
+            else:
+                # Authenticated durable continuation always installs the
+                # shared guard. Refuse to consume its pause if that admission
+                # invariant is ever lost.
+                raise RuntimeError(
+                    "durable continuation lost its terminal authority guard"
+                )
+        return finalized
+
+    def _stamp_execution_outcome(
+        self, report: RunReport, workflow: Workflow, run_dir: Path
+    ) -> None:
         """Apply the named profile's evidence contract before persistence."""
 
         if report.execution_profile is None:
@@ -991,6 +1711,9 @@ class Replayer:
             report,
             workflow,
             report.execution_profile,
+            runtime_worklists=self._outcome_worklists,
+            transition_evidence_root=run_dir,
+            transition_predicate_vision=self.vision,
         )
 
     def _begin_control_overlay(self, profile: Optional[str]) -> None:
@@ -1120,24 +1843,142 @@ class Replayer:
         report: RunReport,
         workflow: Workflow,
         run_dir: Path,
+        *,
+        persist: bool = True,
+        project_terminal: bool = True,
     ) -> RunReport:
         """Persist exact evidence first, then project its terminal outcome."""
 
-        self._stamp_execution_outcome(report, workflow)
-        # Record the terminal transaction outcome against the reserved key so a
-        # later duplicate (suppressed above) can surface what already happened.
-        # The suppressed replay itself never overwrites the original outcome.
+        report.qualification_fault_mutations = list(self._qualification_fault_mutations)
+        self._stamp_execution_outcome(report, workflow, run_dir)
+        if persist:
+            persisted_path = report.save(run_dir)
+            # The evidence file must exist before the terminal projection.  A
+            # projection error is a runtime failure, but it cannot erase the
+            # completed action evidence or make the same key available again.
+            durable_state = self._durable_terminal_state(run_dir)
+            if durable_state == "indeterminate":
+                self._mark_idempotency_projection_failure(
+                    report,
+                    workflow,
+                    run_dir,
+                    RuntimeError("durable terminal state is unavailable"),
+                    stage="durable terminal state persistence",
+                )
+                report.save(run_dir, filename=persisted_path.name)
+            elif durable_state != "restartable":
+                self._project_idempotency_outcome_after_persist(
+                    report,
+                    workflow,
+                    run_dir,
+                    persisted_path=persisted_path,
+                )
+        clear_guard = getattr(self.backend, "set_qualification_input_guard", None)
+        if callable(clear_guard):
+            clear_guard(None)
+        if project_terminal:
+            self._emit_control_overlay_terminal(report.execution_outcome)
+        return report
+
+    def _project_idempotency_outcome_after_persist(
+        self,
+        report: RunReport,
+        workflow: Workflow,
+        run_dir: Path,
+        *,
+        persisted_path: Path,
+    ) -> None:
+        """Project a durable report into the owned idempotency reservation.
+
+        The first save is the evidence boundary.  If the ledger cannot accept
+        the projection, retain that evidence and replace it with a typed,
+        fail-closed report.  The immutable reservation remains in force, so
+        the runtime never re-dispatches the action to recover from this error.
+        """
+
+        if not self._idempotency_reservation_owned:
+            return
+        try:
+            self._record_idempotency_outcome(report)
+        except Exception as exc:  # noqa: BLE001 - durable ledger boundary
+            self._mark_idempotency_projection_failure(report, workflow, run_dir, exc)
+            report.save(run_dir, filename=persisted_path.name)
+
+    def _durable_terminal_state(
+        self, run_dir: Path
+    ) -> Literal["not_durable", "restartable", "terminal", "indeterminate"]:
+        """Classify the durable state that controls terminal projection.
+
+        The idempotency reservation stays outcome-free across a restartable
+        durable halt. Only the logical terminal continuation writes its final
+        outcome. This prevents a write-once ledger from recording ``HALTED``
+        before a later approved resume can record ``VERIFIED``.
+        """
+
+        if not self.durable:
+            return "not_durable"
+        try:
+            from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+            pending = CheckpointStore(run_dir, key=self.checkpoint_key).read_pending()
+        except Exception:  # noqa: BLE001 - durable evidence boundary
+            return "indeterminate"
+        if pending is not None and pending.status in {
+            "pending",
+            "approved",
+            "continuing",
+        }:
+            return "restartable"
+        return "terminal"
+
+    def _mark_idempotency_projection_failure(
+        self,
+        report: RunReport,
+        workflow: Workflow,
+        run_dir: Path,
+        exc: Exception,
+        *,
+        stage: str = "terminal idempotency outcome persistence",
+    ) -> None:
+        """Turn a post-save ledger failure into one typed terminal failure."""
+
+        report.results.append(
+            StepResult(
+                step_id="<idempotency>",
+                intent="persist terminal idempotency outcome",
+                ok=False,
+                failure_category="runtime_failure",
+                error=(
+                    f"{stage} failed "
+                    f"({type(exc).__name__}); retained action evidence "
+                    "requires reconciliation and the action was not retried"
+                ),
+            )
+        )
+        # Do not preserve a successful or completed status when the exact
+        # terminal projection is unavailable. The transaction classifier will
+        # conservatively produce RECONCILIATION_REQUIRED if an action may have
+        # changed the business system.
+        report.success = False
+        report.execution_completed = False
+        self._stamp_execution_outcome(report, workflow, run_dir)
+
+    def _record_idempotency_outcome(self, report: RunReport) -> None:
+        """Commit a terminal outcome only into this run's owned reservation."""
+
         if (
-            self.idempotency_ledger is not None
+            self._idempotency_reservation_owned
+            and self.idempotency_ledger is not None
             and report.idempotency_key is not None
             and not report.idempotent_replay
         ):
+            if report.transaction_outcome is None:
+                raise RuntimeError("terminal transaction outcome is missing")
             self.idempotency_ledger.record_outcome(
-                report.idempotency_key, report.transaction_outcome
+                report.idempotency_key,
+                report.transaction_outcome,
+                run_id=self._run_id,
             )
-        report.save(run_dir)
-        self._emit_control_overlay_terminal(report.execution_outcome)
-        return report
 
     @staticmethod
     def _control_overlay_progress(
@@ -1418,20 +2259,63 @@ class Replayer:
         self._current_intent: str = ""
         self._current_params: dict[str, str] = dict(params)
         if durable_run is not None:
-            store = durable_run.store
-            # Continue the checkpoint sequence and the completed-effect ledger on
-            # a resume (the store already holds the pre-pause checkpoints).
-            self._program_seq = len(store.program_checkpoints())
-            self._completed_effect_keys = list(store.completed_effect_keys())
-            self._completed_effect_evidence = list(store.completed_effect_evidence())
-            self._completed_unverified_effect_keys = list(
-                store.completed_unverified_effect_keys()
-            )
             self._bundle_version = _bundle_version(bundle_dir)
-            if resume_checkpoint is not None:
-                resumed_results = self._resumed_program_results(
-                    store.program_checkpoints(), workflow
-                )
+            if self._durable_resume_mode == "program":
+                checkpoints = list(self._durable_program_snapshot)
+                pending_snapshot = self._durable_pending_snapshot
+                if (
+                    checkpoints
+                    and pending_snapshot is not None
+                    and pending_snapshot.program
+                    and len(checkpoints) > pending_snapshot.program_checkpoint_seq
+                ):
+                    durable_base_history = list(checkpoints[-1].transition_history)
+                elif pending_snapshot is not None and pending_snapshot.program:
+                    durable_base_history = list(pending_snapshot.program_history)
+                elif checkpoints:
+                    durable_base_history = list(checkpoints[-1].transition_history)
+                else:
+                    durable_base_history = []
+                successful_history = self._program_checkpoint_history(checkpoints)
+                if successful_history is None:
+                    raise _ProgramHalt(
+                        "halt",
+                        "durable program checkpoints have no exact successful "
+                        "execution trace",
+                        safety=True,
+                    )
+                report.visited_states.extend(successful_history)
+                for checkpoint in checkpoints:
+                    report.program_transition_evidence.extend(
+                        checkpoint.program_transition_evidence_delta
+                    )
+                    report.program_exception_evidence.extend(
+                        checkpoint.program_exception_evidence_delta
+                    )
+                    if checkpoint.attended_transition_evidence is not None:
+                        report.attended_program_transition_evidence.append(
+                            checkpoint.attended_transition_evidence
+                        )
+                self._program_history_boundary_index = len(successful_history)
+                self._program_durable_history = durable_base_history
+                self._program_history_parent_hash = _history_hash(durable_base_history)
+                self._program_seq = len(checkpoints)
+                self._completed_effect_keys = [
+                    key
+                    for checkpoint in checkpoints
+                    for key in checkpoint.new_effect_keys
+                ]
+                self._completed_effect_evidence = [
+                    evidence
+                    for checkpoint in checkpoints
+                    for evidence in checkpoint.new_effect_evidence
+                ]
+                self._completed_unverified_effect_keys = [
+                    key
+                    for checkpoint in checkpoints
+                    for key in checkpoint.new_unverified_effect_keys
+                ]
+                resumed_results = self._resumed_program_results(checkpoints, workflow)
                 report.results.extend(resumed_results)
                 for result in resumed_results:
                     self._account_result(report, result, account_model_calls=False)
@@ -1439,12 +2323,35 @@ class Replayer:
                     report.model_calls,
                     sum(self._result_model_calls(result) for result in resumed_results),
                 )
+            else:
+                # A fresh program run must not import state from its output
+                # directory. DurableRun owns a newly claimed empty namespace.
+                self._program_seq = 0
+                self._program_history_boundary_index = 0
+                self._program_durable_history = []
+                self._program_history_parent_hash = _history_hash([])
+                self._completed_effect_keys = []
+                self._completed_effect_evidence = []
+                self._completed_unverified_effect_keys = []
+            self._program_checkpoint_history_len = len(report.visited_states)
+            self._program_transition_evidence_checkpoint_len = len(
+                report.program_transition_evidence
+            )
+            self._program_exception_evidence_checkpoint_len = len(
+                report.program_exception_evidence
+            )
         else:
             self._program_seq = 0
+            self._program_history_boundary_index = 0
+            self._program_durable_history = []
+            self._program_history_parent_hash = _history_hash([])
             self._completed_effect_keys = []
             self._completed_effect_evidence = []
             self._completed_unverified_effect_keys = []
             self._bundle_version = ""
+            self._program_checkpoint_history_len = 0
+            self._program_transition_evidence_checkpoint_len = 0
+            self._program_exception_evidence_checkpoint_len = 0
         try:
             if resume_checkpoint is not None:
                 # RESTORE the interpreter state and continue from the pause.
@@ -1471,6 +2378,7 @@ class Replayer:
                     depth=0,
                 )
             self._raise_on_governed_asset_mutation()
+            self._raise_on_workflow_snapshot_mutation(workflow)
             report.success = True
             if report.terminal_outcome is None:
                 # Fell off the top graph with no explicit terminal: a clean,
@@ -1481,7 +2389,13 @@ class Replayer:
             report.terminal_outcome = halt.outcome
             # Durably PAUSE (never just die): capture WHERE we stopped so an
             # approved resume can RESTORE the interpreter from here.
-            if self._program_durable is not None:
+            # A caller callback can mutate the live workflow. Never persist a
+            # new resumable cursor under semantics that differ from the exact
+            # run-entry snapshot. The report still records the refusal.
+            if (
+                self._program_durable is not None
+                and self._workflow_snapshot_refusal(workflow) is None
+            ):
                 self._record_program_pause(halt, report, workflow=workflow)
             report.results.append(
                 StepResult(
@@ -1590,6 +2504,7 @@ class Replayer:
                     f"program references undefined state '{state_id}' — run aborted",
                 )
             report.visited_states.append(state.id)
+            self._current_graph_id = str(frame["graph_id"])
             self._current_state_id = state.id
             self._current_intent = (
                 state.step.intent if state.step is not None else state.id
@@ -1598,6 +2513,7 @@ class Replayer:
 
             if state.kind is StateKind.TERMINAL:
                 self._raise_on_governed_asset_mutation()
+                self._raise_on_workflow_snapshot_mutation(workflow)
                 outcome = state.outcome or "success"
                 report.terminal_outcome = outcome
                 if outcome == "success":
@@ -1656,12 +2572,23 @@ class Replayer:
             # A branch performs no action: it picks an outgoing edge purely by
             # guard (evaluated on the current frame). No matching edge is a
             # fail-safe HALT unless the state routes to an exception handler.
-            nxt = self._select_transition(state, params=params, bundle_dir=bundle_dir)
+            nxt = self._select_transition(
+                state,
+                workflow=workflow,
+                params=params,
+                bundle_dir=bundle_dir,
+                report=report,
+                run_dir=run_dir,
+                allow_unmatched=True,
+            )
             if nxt is None:
                 return self._on_state_failure(
                     state,
                     f"branch state '{state.id}' has no transitions to follow "
                     "— run aborted",
+                    failure_kind="branch_without_transition",
+                    report=report,
+                    workflow=workflow,
                 )
             return nxt
 
@@ -1685,6 +2612,9 @@ class Replayer:
                     state,
                     f"subflow_call state '{state.id}' names undefined subflow "
                     f"'{state.subflow}' — run aborted",
+                    failure_kind="missing_subflow",
+                    report=report,
+                    workflow=workflow,
                 )
             self._walk_graph(
                 sub,
@@ -1698,7 +2628,14 @@ class Replayer:
                 new_crops=new_crops,
                 depth=depth + 1,
             )
-            return self._select_transition(state, params=params, bundle_dir=bundle_dir)
+            return self._select_transition(
+                state,
+                workflow=workflow,
+                params=params,
+                bundle_dir=bundle_dir,
+                report=report,
+                run_dir=run_dir,
+            )
 
         raise _ProgramHalt(
             "halt", f"state '{state.id}' has unsupported kind {state.kind!r}"
@@ -1721,15 +2658,28 @@ class Replayer:
         ``on_exception`` (recorded as handled) or HALTs the run."""
         if state.step is None:
             raise _ProgramHalt("halt", f"action state '{state.id}' carries no step")
+        action_step = state.step
         # Idempotency (RFC §5): on a RESUME, an action whose declared effects were
         # ALL already CONFIRMED in the pre-pause leg is NOT re-executed -- a
         # confirmed consequential write is never re-performed. Keyed on the
         # resolved effect contract hashes recorded in the completed-effect ledger.
         if self._skip_completed_effect_state(state, params, report):
-            return self._select_transition(state, params=params, bundle_dir=bundle_dir)
+            return self._select_transition(
+                state,
+                workflow=workflow,
+                params=params,
+                bundle_dir=bundle_dir,
+                report=report,
+                run_dir=run_dir,
+            )
         ctx = self._build_graph_ctx(state, graph)
+        # Keep the exact validated interpreter cursor from before any backend,
+        # vision, overlay, or verifier callback. A callback can corrupt the
+        # mutable live frame stack. A refusal must still persist a safe resume
+        # cursor instead of serializing that corrupted state.
+        pre_action_frames = [self._frame_to_model(frame) for frame in self._frame_stack]
         result = self._run_step(
-            state.step,
+            action_step,
             workflow=workflow,
             step_index=0,
             params=params,
@@ -1738,6 +2688,40 @@ class Replayer:
             new_crops=new_crops,
             graph_ctx=ctx,
         )
+        # Report the exact cursor that was validated before callbacks. The live
+        # frame stack is mutable backend-facing state and can no longer be
+        # trusted after an action callback starts.
+        result.program_scope = self._program_scope_from_frames(pre_action_frames)
+        try:
+            post_action_refusal = self._active_program_frame_refusal(
+                workflow,
+                params,
+                action_step,
+                self._governed_base_params or {},
+            )
+        except Exception as exc:  # noqa: BLE001 - mutated interpreter boundary
+            post_action_refusal = (
+                "program frame validation failed closed after delivery "
+                f"({type(exc).__name__})"
+            )
+        if post_action_refusal is None:
+            post_action_refusal = self._workflow_snapshot_refusal(workflow)
+        if post_action_refusal is None:
+            post_action_refusal = self._governed_authorization_snapshot_refusal()
+        if post_action_refusal is not None:
+            prior_error = f"; earlier result: {result.error}" if result.error else ""
+            result.ok = False
+            result.safety_halt = True
+            result.failure_category = (
+                "governed_refusal"
+                if self.governed_authorization is not None
+                else "safety_halt"
+            )
+            result.error = (
+                f"{post_action_refusal}; the action result was checked, "
+                "but the program changed during delivery; no later state "
+                f"was executed{prior_error}"
+            )
         report.results.append(result)
         self._account_result(report, result)
         if self._program_durable is not None:
@@ -1746,21 +2730,46 @@ class Replayer:
         # click-to-focus heuristic. A SKIPPED step (guard on_unmet="skip") did
         # not act, so it leaves the previous action / click point untouched.
         if not result.skipped:
-            self._prev_action = state.step.action
+            self._prev_action = action_step.action
 
         if not result.ok:
             # A skipped guard is ok=True; only a genuine failure lands here.
             if state.on_exception is not None and not result.safety_halt:
                 result.exception_handled = True
+                if (
+                    result.failure_category != "runtime_failure"
+                    or result.error is None
+                    or not result.program_scope
+                ):
+                    raise _ProgramHalt(
+                        "halt",
+                        "handled action failure lacks an exact typed cause",
+                        safety=True,
+                    )
+                report.program_exception_evidence.append(
+                    ProgramExceptionEvidence(
+                        decision_index=self._next_program_decision_index(report),
+                        graph_id=result.program_scope[-1].graph_id,
+                        state_id=state.id,
+                        program_scope=list(result.program_scope),
+                        target_state_id=state.on_exception,
+                        failure_kind="action_failure",
+                        error_sha256=hashlib.sha256(
+                            result.error.encode("utf-8")
+                        ).hexdigest(),
+                        action_failure_category="runtime_failure",
+                        governed_runtime_inputs_digest=(
+                            report.governed_runtime_inputs_digest
+                        ),
+                    )
+                )
                 return state.on_exception  # graph try/except: route + continue
             halt = _ProgramHalt(
                 "halt",
                 result.error or f"action state '{state.id}' failed — run aborted",
                 safety=result.safety_halt,
             )
-            halt.program_frames = [
-                self._frame_to_model(frame) for frame in self._frame_stack
-            ]
+            halt.program_frames = pre_action_frames
             halt.program_params = dict(params)
             halt.program_history_hash = _history_hash(report.visited_states)
             raise halt
@@ -1770,7 +2779,14 @@ class Replayer:
         # selecting an outgoing guarded edge: predicate evaluation can halt,
         # but the already-performed write must still enter the effect ledger.
         self._record_program_checkpoint(state, result, params, report)
-        nxt = self._select_transition(state, params=params, bundle_dir=bundle_dir)
+        nxt = self._select_transition(
+            state,
+            workflow=workflow,
+            params=params,
+            bundle_dir=bundle_dir,
+            report=report,
+            run_dir=run_dir,
+        )
         return nxt
 
     def _exec_loop_state(
@@ -1801,6 +2817,9 @@ class Replayer:
                 state,
                 f"loop state '{state.id}' body subflow '{loop.body}' is not "
                 "defined — run aborted",
+                failure_kind="missing_loop_body",
+                report=report,
+                workflow=workflow,
             )
         rows = self._resolve_worklist(state, loop, workflow, worklists)
         if len(rows) > loop.max_iterations:
@@ -1808,6 +2827,9 @@ class Replayer:
                 state,
                 f"loop state '{state.id}' worklist has {len(rows)} rows, "
                 f"exceeding max_iterations={loop.max_iterations} — run aborted",
+                failure_kind="loop_bound_exceeded",
+                report=report,
+                workflow=workflow,
             )
         for i, row in enumerate(rows):
             iter_params = {**params, **row}
@@ -1829,14 +2851,71 @@ class Replayer:
                     rows=rows,
                 ),
             )
-        return self._select_transition(state, params=params, bundle_dir=bundle_dir)
+        return self._select_transition(
+            state,
+            workflow=workflow,
+            params=params,
+            bundle_dir=bundle_dir,
+            report=report,
+            run_dir=run_dir,
+        )
 
-    def _on_state_failure(self, state: State, reason: str) -> str:
+    def _on_state_failure(
+        self,
+        state: State,
+        reason: str,
+        *,
+        failure_kind: Literal[
+            "branch_without_transition",
+            "missing_subflow",
+            "missing_loop_body",
+            "loop_bound_exceeded",
+        ],
+        report: RunReport,
+        workflow: Workflow,
+    ) -> str:
         """A non-action state hit an unrecoverable condition: route to its
         ``on_exception`` handler if it has one, else HALT the run."""
+        self._raise_on_workflow_snapshot_mutation(workflow)
         if state.on_exception is not None:
+            scope = self._program_execution_scope()
+            if not scope:
+                raise _ProgramHalt(
+                    "halt",
+                    "program exception evidence has no execution scope — run aborted",
+                    safety=True,
+                )
+            report.program_exception_evidence.append(
+                ProgramExceptionEvidence(
+                    decision_index=self._next_program_decision_index(report),
+                    graph_id=scope[-1].graph_id,
+                    state_id=state.id,
+                    program_scope=scope,
+                    target_state_id=state.on_exception,
+                    failure_kind=failure_kind,
+                    governed_runtime_inputs_digest=(
+                        report.governed_runtime_inputs_digest
+                    ),
+                )
+            )
             return state.on_exception
         raise _ProgramHalt("halt", reason)
+
+    @staticmethod
+    def _next_program_decision_index(report: RunReport) -> int:
+        """Return the next index shared by all typed program decisions."""
+
+        decision_indexes = [
+            evidence.decision_index for evidence in report.program_transition_evidence
+        ]
+        decision_indexes.extend(
+            evidence.decision_index for evidence in report.program_exception_evidence
+        )
+        decision_indexes.extend(
+            evidence.decision_index
+            for evidence in report.attended_program_transition_evidence
+        )
+        return max(decision_indexes, default=-1) + 1
 
     def _resolve_worklist(
         self,
@@ -1865,8 +2944,12 @@ class Replayer:
         self,
         state: State,
         *,
+        workflow: Workflow,
         params: dict[str, str],
         bundle_dir: Path,
+        report: Optional[RunReport] = None,
+        run_dir: Optional[Path] = None,
+        allow_unmatched: bool = False,
     ) -> Optional[str]:
         """Pick this state's next state id (RFC §2.2): evaluate ``transitions``
         IN ORDER, first whose guard holds wins; ``None`` guard is unconditional.
@@ -1877,19 +2960,69 @@ class Replayer:
         edge). Screenshots only when a guard actually needs a frame, so a
         degenerate all-unconditional chain replays with no extra settles (the
         byte-identical linear lift)."""
+        self._raise_on_workflow_snapshot_mutation(workflow)
         transitions = state.transitions
         if not transitions:
             return None
         if all(t.guard is None for t in transitions):
-            return transitions[0].target
+            target = transitions[0].target
+            self._retain_program_transition_evidence(
+                state=state,
+                evaluations=[(0, True)],
+                selected_target=target,
+                frame=None,
+                bundle_dir=bundle_dir,
+                report=report,
+                run_dir=run_dir,
+            )
+            return target
+        evaluator_contract_sha256: Optional[str] = None
+        if any(self._program_guard_uses_frame(t.guard) for t in transitions):
+            try:
+                evaluator_contract_sha256 = program_predicate_evaluator_contract_sha256(
+                    self.vision
+                )
+            except ValueError as exc:
+                raise _ProgramHalt(
+                    "halt",
+                    "visual program predicate evaluator has no exact semantic "
+                    f"contract ({exc}) — run aborted",
+                    safety=True,
+                ) from exc
         frame = self.vision.wait_settled(self.backend)
-        for t in transitions:
+        self._raise_on_workflow_snapshot_mutation(workflow)
+        evaluations: list[tuple[int, bool]] = []
+        for transition_index, t in enumerate(transitions):
             matched = t.guard is None or self._predicate_holds(
                 t.guard, frame, bundle_dir, params
             )
+            evaluations.append((transition_index, matched))
             self._raise_on_governed_asset_mutation()
+            self._raise_on_workflow_snapshot_mutation(workflow)
             if matched:
+                self._retain_program_transition_evidence(
+                    state=state,
+                    evaluations=evaluations,
+                    selected_target=t.target,
+                    frame=frame,
+                    bundle_dir=bundle_dir,
+                    report=report,
+                    run_dir=run_dir,
+                    evaluator_contract_sha256=evaluator_contract_sha256,
+                )
                 return t.target
+        self._retain_program_transition_evidence(
+            state=state,
+            evaluations=evaluations,
+            selected_target=None,
+            frame=frame,
+            bundle_dir=bundle_dir,
+            report=report,
+            run_dir=run_dir,
+            evaluator_contract_sha256=evaluator_contract_sha256,
+        )
+        if allow_unmatched:
+            return None
         raise _ProgramHalt(
             "halt",
             f"no outgoing transition matched at state '{state.id}' on the "
@@ -1902,16 +3035,267 @@ class Replayer:
             + ") — run aborted",
         )
 
+    @staticmethod
+    def _program_guard_uses_frame(predicate: Optional[Predicate]) -> bool:
+        """Return whether a guard contract reads the observed application frame."""
+
+        return predicate_uses_frame(predicate)
+
+    def _retain_program_transition_evidence(
+        self,
+        *,
+        state: State,
+        evaluations: list[tuple[int, bool]],
+        selected_target: Optional[str],
+        frame: Optional[bytes],
+        bundle_dir: Path,
+        report: Optional[RunReport],
+        run_dir: Optional[Path],
+        evaluator_contract_sha256: Optional[str] = None,
+    ) -> None:
+        """Retain the exact ordered evidence used to select one transition."""
+
+        if report is None or run_dir is None:
+            return
+        scope = self._program_execution_scope()
+        if not scope:
+            raise _ProgramHalt(
+                "halt",
+                "program transition evidence has no execution scope — run aborted",
+                safety=True,
+            )
+        decision_index = self._next_program_decision_index(report)
+        frame_sha256: Optional[str] = None
+        frame_ref: Optional[str] = None
+        viewport: Optional[tuple[int, int]] = None
+        context_sha256: Optional[str] = None
+        context_ref: Optional[str] = None
+        if any(
+            self._program_guard_uses_frame(state.transitions[index].guard)
+            for index, _verdict in evaluations
+        ):
+            if frame is None:
+                raise _ProgramHalt(
+                    "halt",
+                    "visual program transition has no retained frame — run aborted",
+                    safety=True,
+                )
+            frame_sha256 = hashlib.sha256(frame).hexdigest()
+            frame_ref = f"private/program-transitions/{frame_sha256}.png"
+            viewport = (
+                int(self.backend.viewport[0]),
+                int(self.backend.viewport[1]),
+            )
+            try:
+                retained_frame_size = exact_png_size(frame)
+            except Exception as exc:
+                raise _ProgramHalt(
+                    "halt",
+                    "visual program transition frame is not a valid PNG "
+                    f"({type(exc).__name__}) — run aborted",
+                    safety=True,
+                ) from exc
+            if evaluator_contract_sha256 is None:
+                raise _ProgramHalt(
+                    "halt",
+                    "visual program transition has no exact evaluator contract — "
+                    "run aborted",
+                    safety=True,
+                )
+            context_payload = json.dumps(
+                {
+                    "schema_version": 1,
+                    "frame_sha256": frame_sha256,
+                    "frame_size": list(retained_frame_size),
+                    "viewport": list(viewport),
+                    "evaluator_contract_sha256": evaluator_contract_sha256,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+            context_sha256 = hashlib.sha256(context_payload).hexdigest()
+            context_ref = (
+                f"private/program-transition-observations/{context_sha256}.json"
+            )
+            root = Path(run_dir).resolve()
+            private_dir = root / "private"
+            inventory_dir = private_dir / "program-transitions"
+            context_dir = private_dir / "program-transition-observations"
+            try:
+                if (
+                    private_dir.is_symlink()
+                    or inventory_dir.is_symlink()
+                    or context_dir.is_symlink()
+                ):
+                    raise OSError("transition inventory path is a symlink")
+                inventory_dir.mkdir(parents=True, exist_ok=True)
+                context_dir.mkdir(parents=True, exist_ok=True)
+                if (
+                    private_dir.is_symlink()
+                    or inventory_dir.is_symlink()
+                    or context_dir.is_symlink()
+                    or not inventory_dir.resolve().is_relative_to(root)
+                    or not context_dir.resolve().is_relative_to(root)
+                ):
+                    raise OSError("transition inventory leaves the run root")
+                frame_path = root / frame_ref
+                if frame_path.is_symlink():
+                    raise OSError("transition frame path is a symlink")
+                existing = frame_path.read_bytes() if frame_path.exists() else None
+                if existing is not None and existing != frame:
+                    raise OSError("transition frame digest path has other bytes")
+                frame_path.write_bytes(frame)
+                context_path = root / context_ref
+                if context_path.is_symlink():
+                    raise OSError("transition context path is a symlink")
+                existing_context = (
+                    context_path.read_bytes() if context_path.exists() else None
+                )
+                if existing_context is not None and existing_context != context_payload:
+                    raise OSError("transition context digest path has other bytes")
+                context_path.write_bytes(context_payload)
+            except OSError as exc:
+                raise _ProgramHalt(
+                    "halt",
+                    "program transition frame could not be retained exactly "
+                    f"({type(exc).__name__}) — run aborted",
+                    safety=True,
+                ) from exc
+
+        selected_index = evaluations[-1][0] if selected_target is not None else None
+        for transition_index, verdict in evaluations:
+            transition = state.transitions[transition_index]
+            uses_frame = self._program_guard_uses_frame(transition.guard)
+            evidence_kind: Literal["unconditional", "parameters", "frame"]
+            if transition.guard is None:
+                evidence_kind = "unconditional"
+            elif uses_frame:
+                evidence_kind = "frame"
+            else:
+                evidence_kind = "parameters"
+            assets: list[ProgramGuardAssetEvidence] = []
+            if uses_frame and transition.guard is not None:
+                root = Path(run_dir).resolve()
+                private_dir = root / "private"
+                asset_dir = private_dir / "program-transition-assets"
+                for source_ref in predicate_template_refs(transition.guard):
+                    payload = self._asset_bytes(bundle_dir, source_ref)
+                    if payload is None:
+                        raise _ProgramHalt(
+                            "halt",
+                            "program transition guard asset is unavailable — "
+                            "run aborted",
+                            safety=True,
+                        )
+                    digest = hashlib.sha256(payload).hexdigest()
+                    inventory_ref = f"private/program-transition-assets/{digest}.bin"
+                    try:
+                        if private_dir.is_symlink() or asset_dir.is_symlink():
+                            raise OSError(
+                                "transition asset inventory path is a symlink"
+                            )
+                        asset_dir.mkdir(parents=True, exist_ok=True)
+                        if (
+                            private_dir.is_symlink()
+                            or asset_dir.is_symlink()
+                            or not asset_dir.resolve().is_relative_to(root)
+                        ):
+                            raise OSError("transition asset inventory leaves run root")
+                        path = root / inventory_ref
+                        if path.is_symlink():
+                            raise OSError("transition asset path is a symlink")
+                        existing = path.read_bytes() if path.exists() else None
+                        if existing is not None and existing != payload:
+                            raise OSError(
+                                "transition asset digest path has other bytes"
+                            )
+                        path.write_bytes(payload)
+                    except OSError as exc:
+                        raise _ProgramHalt(
+                            "halt",
+                            "program transition guard asset could not be retained "
+                            f"exactly ({type(exc).__name__}) — run aborted",
+                            safety=True,
+                        ) from exc
+                    assets.append(
+                        ProgramGuardAssetEvidence(
+                            source_ref=source_ref,
+                            sha256=digest,
+                            inventory_ref=inventory_ref,
+                        )
+                    )
+            report.program_transition_evidence.append(
+                ProgramTransitionEvidence(
+                    decision_index=decision_index,
+                    graph_id=scope[-1].graph_id,
+                    state_id=state.id,
+                    program_scope=scope,
+                    transition_index=transition_index,
+                    guard_contract_sha256=predicate_contract_sha256(transition.guard),
+                    guard_verdict=verdict,
+                    selected=(
+                        selected_index is not None
+                        and transition_index == selected_index
+                    ),
+                    selected_target=selected_target,
+                    guard_evidence_kind=evidence_kind,
+                    observed_frame_sha256=frame_sha256 if uses_frame else None,
+                    observed_frame_inventory_ref=frame_ref if uses_frame else None,
+                    observed_viewport=viewport if uses_frame else None,
+                    observed_context_sha256=(context_sha256 if uses_frame else None),
+                    observed_context_inventory_ref=(
+                        context_ref if uses_frame else None
+                    ),
+                    guard_evaluator_contract_sha256=(
+                        evaluator_contract_sha256 if uses_frame else None
+                    ),
+                    guard_assets=assets,
+                    governed_runtime_inputs_digest=(
+                        report.governed_runtime_inputs_digest
+                    ),
+                )
+            )
+
     # -- Tier-3 durable checkpoint / pause / resume (program mode, RFC §5) ----
 
     def _frame_to_model(self, frame: dict) -> GraphFrame:
         """Snapshot one live interpreter frame as a durable :class:`GraphFrame`."""
+        loop = frame["loop"]
+        if loop is not None:
+            loop = LoopCursor.model_validate(loop).model_copy(deep=True)
         return GraphFrame(
             graph_id=frame["graph_id"],
             state_id=frame["state_id"],
             params=dict(frame["params"]),
-            loop=frame["loop"],
+            loop=loop,
         )
+
+    def _program_execution_scope(self) -> list[ProgramExecutionScopeFrame]:
+        """Return graph and loop cursors without retaining worklist values."""
+
+        frames = [
+            self._frame_to_model(frame) for frame in getattr(self, "_frame_stack", [])
+        ]
+        return self._program_scope_from_frames(frames)
+
+    @staticmethod
+    def _program_scope_from_frames(
+        frames: list[GraphFrame],
+    ) -> list[ProgramExecutionScopeFrame]:
+        """Project a previously validated cursor into privacy-safe evidence."""
+
+        return [
+            ProgramExecutionScopeFrame(
+                graph_id=frame.graph_id,
+                loop_state_id=(
+                    frame.loop.loop_state_id if frame.loop is not None else None
+                ),
+                relation=(frame.loop.relation if frame.loop is not None else None),
+                row_index=(frame.loop.row_index if frame.loop is not None else None),
+            )
+            for frame in frames
+        ]
 
     def _skip_completed_effect_state(
         self, state: State, params: dict[str, str], report: RunReport
@@ -1989,10 +3373,32 @@ class Replayer:
                     "re-executed; it remains unverified"
                 ]
             ),
+            program_scope=self._program_execution_scope(),
         )
         report.results.append(result)
         self._account_result(report, result)
         return True
+
+    @staticmethod
+    def _program_checkpoint_history(
+        checkpoints: list[ProgramCheckpoint],
+    ) -> Optional[list[str]]:
+        """Reconstruct one contiguous, hash-bound pre-resume state trace."""
+
+        history: list[str] = []
+        for expected_seq, checkpoint in enumerate(checkpoints, start=1):
+            delta = checkpoint.visited_states_delta
+            attended = checkpoint.attended_transition is not None
+            if (
+                checkpoint.seq != expected_seq
+                or (not attended and delta != checkpoint.transition_delta)
+                or (attended and checkpoint.transition_delta)
+                or not delta
+                or (delta and delta[-1] != checkpoint.verified_state_id)
+            ):
+                return None
+            history.extend(delta)
+        return history
 
     @staticmethod
     def _resumed_program_results(
@@ -2037,12 +3443,36 @@ class Replayer:
                     effect_contract_hashes=verified_keys or unverified_keys,
                     effect_evidence=list(checkpoint.new_effect_evidence),
                     identity=checkpoint.identity,
+                    input_verified=checkpoint.input_verified,
+                    starting_state_settled=checkpoint.starting_state_settled,
+                    delivery_attempted=checkpoint.delivery_attempted,
+                    delivery_receipt=checkpoint.delivery_receipt,
+                    drag_end_resolution=checkpoint.drag_end_resolution,
+                    fresh_actuation_events=list(checkpoint.fresh_actuation_events),
+                    before_png=checkpoint.before_png,
                     postconditions_ok=checkpoint.postconditions_ok,
                     actuation=checkpoint.actuation,
                     delivery_uncertainty=checkpoint.delivery_uncertainty,
                     resolution=checkpoint.resolution,
                     drift_oracle_calls=checkpoint.drift_oracle_calls,
                     heal=checkpoint.heal,
+                    program_scope=[
+                        ProgramExecutionScopeFrame(
+                            graph_id=frame.graph_id,
+                            loop_state_id=(
+                                frame.loop.loop_state_id
+                                if frame.loop is not None
+                                else None
+                            ),
+                            relation=(
+                                frame.loop.relation if frame.loop is not None else None
+                            ),
+                            row_index=(
+                                frame.loop.row_index if frame.loop is not None else None
+                            ),
+                        )
+                        for frame in checkpoint.frames
+                    ],
                 )
             )
         return results
@@ -2080,6 +3510,50 @@ class Replayer:
         if durable is None:
             return
         step = state.step
+        if step is None:
+            raise _ProgramHalt(
+                "halt",
+                "verified action checkpoint has no compiled step",
+                safety=True,
+            )
+        from openadapt_flow.action_evidence import action_evidence_error
+
+        profile = (
+            self.governed_authorization.execution_profile
+            if self.governed_authorization is not None
+            else None
+        )
+        evidence_error = action_evidence_error(
+            step,
+            result,
+            params=params,
+            identity_required=(
+                step.identity_armed
+                or (
+                    self.governed_authorization is not None
+                    and self.governed_authorization.requires_verified_identity(step.id)
+                )
+            ),
+            strict_production=(
+                profile in {"standard", "regulated"}
+                and (
+                    step.identity_armed
+                    or (
+                        self.governed_authorization is not None
+                        and self.governed_authorization.requires_verified_identity(
+                            step.id
+                        )
+                    )
+                )
+            ),
+        )
+        if evidence_error is not None:
+            raise _ProgramHalt(
+                "halt",
+                "refusing a durable checkpoint with invalid action evidence: "
+                f"{evidence_error}",
+                safety=True,
+            )
         new_keys = (
             list(result.effect_contract_hashes)
             if result.effect_verified is True
@@ -2092,9 +3566,7 @@ class Replayer:
         )
         from openadapt_flow.policy import effects_for_actuation
 
-        declared_effects = (
-            effects_for_actuation(step, result.actuation) if step is not None else []
-        )
+        declared_effects = effects_for_actuation(step, result.actuation)
         resolved_effects = (
             [
                 e.model_dump(mode="json")
@@ -2109,17 +3581,17 @@ class Replayer:
         if new_keys:
             self._completed_effect_evidence.extend(result.effect_evidence)
         self._completed_unverified_effect_keys.extend(new_unverified_keys)
-        expected = (
-            [
-                pc.text
-                for pc in step.expect
-                if pc.kind is PostconditionKind.TEXT_PRESENT and pc.text
-            ]
-            if step is not None
-            else []
-        )
+        expected = [
+            pc.text
+            for pc in step.expect
+            if pc.kind is PostconditionKind.TEXT_PRESENT and pc.text
+        ]
         self._program_seq += 1
+        report_history = list(report.visited_states)
+        transition_delta = report_history[self._program_history_boundary_index :]
+        transition_history = [*self._program_durable_history, *transition_delta]
         checkpoint = ProgramCheckpoint(
+            run_id=self._run_id,
             workflow_name=durable.workflow_name,
             seq=self._program_seq,
             verified_state_id=state.id,
@@ -2131,8 +3603,15 @@ class Replayer:
             new_effect_evidence=(list(result.effect_evidence) if new_keys else []),
             new_unverified_effect_keys=new_unverified_keys,
             new_unverified_effects=(resolved_effects if new_unverified_keys else []),
-            step_id=step.id if step is not None else state.id,
+            step_id=step.id,
             identity=result.identity,
+            input_verified=result.input_verified,
+            starting_state_settled=result.starting_state_settled,
+            delivery_attempted=result.delivery_attempted,
+            delivery_receipt=result.delivery_receipt,
+            drag_end_resolution=result.drag_end_resolution,
+            fresh_actuation_events=list(result.fresh_actuation_events),
+            before_png=result.before_png,
             postconditions_ok=result.postconditions_ok,
             skipped=result.skipped,
             actuation=result.actuation,
@@ -2151,10 +3630,37 @@ class Replayer:
                 else None
             ),
             expected_texts=expected,
-            transition_history_hash=_history_hash(report.visited_states),
+            expected_postconditions=(
+                [condition.model_copy(deep=True) for condition in step.expect]
+                if not result.skipped
+                else []
+            ),
+            transition_history_hash=_history_hash(transition_history),
+            visited_states_delta=transition_delta,
+            program_transition_evidence_delta=report.program_transition_evidence[
+                self._program_transition_evidence_checkpoint_len :
+            ],
+            program_exception_evidence_delta=report.program_exception_evidence[
+                self._program_exception_evidence_checkpoint_len :
+            ],
+            transition_parent_hash=self._program_history_parent_hash,
+            transition_delta=transition_delta,
+            transition_history=transition_history,
             bundle_version=self._bundle_version,
         )
         durable.record_program_checkpoint(checkpoint)
+        self._program_checkpoint_history_len = len(report_history)
+        self._program_transition_evidence_checkpoint_len = len(
+            report.program_transition_evidence
+        )
+        self._program_exception_evidence_checkpoint_len = len(
+            report.program_exception_evidence
+        )
+        self._program_history_boundary_index = len(report_history)
+        self._program_durable_history = transition_history
+        self._program_history_parent_hash = checkpoint.transition_history_hash
+        if self._durable_continuation_guard is not None:
+            self._durable_continuation_guard.acknowledge_progress()
 
     def _record_program_pause(
         self, halt: "_ProgramHalt", report: RunReport, *, workflow: Workflow
@@ -2178,6 +3684,13 @@ class Replayer:
             )
         elif failing.error is None:
             failing = failing.model_copy(update={"error": halt.reason})
+        program_history_delta = list(
+            report.visited_states[self._program_history_boundary_index :]
+        )
+        durable_program_history = [
+            *self._program_durable_history,
+            *program_history_delta,
+        ]
         durable.record_program_halt(
             state_id=self._current_state_id or failing.step_id,
             intent=self._current_intent or failing.intent,
@@ -2187,53 +3700,251 @@ class Replayer:
             transition_observation=self._attended_transition_observation(),
             program_frames=halt.program_frames,
             program_checkpoint_seq=self._program_seq,
-            program_history_hash=halt.program_history_hash,
+            program_history_hash=_history_hash(durable_program_history),
+            program_parent_history_hash=self._program_history_parent_hash,
+            program_history_delta=program_history_delta,
+            program_history=durable_program_history,
+            program_transition_evidence_delta=report.program_transition_evidence[
+                self._program_transition_evidence_checkpoint_len :
+            ],
+            program_exception_evidence_delta=report.program_exception_evidence[
+                self._program_exception_evidence_checkpoint_len :
+            ],
         )
+        if (
+            self._durable_continuation_guard is not None
+            and failing.failure_category != "continuation_preempted"
+        ):
+            self._durable_continuation_guard.acknowledge_progress(terminal=True)
 
     def revalidate_program_checkpoint(
-        self, checkpoint: ProgramCheckpoint, completed_effects: list[dict]
+        self,
+        checkpoint: ProgramCheckpoint,
+        completed_effects: list[dict],
+        *,
+        workflow: Workflow,
+        bundle_dir: Path,
     ) -> None:
         """Revalidate the live app before RESTORING a program checkpoint (RFC §5).
 
         Two checks, both raising :class:`StateDiverged` (refuse -- never re-drive
         from a state the checkpoint was not captured against):
 
-        1. the live app must still show the checkpoint's expected on-screen text
-           (the state the interpreter paused at);
+        1. the live app must still satisfy every replayable retained
+           postcondition for the state where the interpreter paused;
         2. every already-confirmed effect must STILL hold (a read-only re-verify
            against the system of record -- an already-landed write that has since
            been reverted / deleted means the world moved under the checkpoint).
         """
-        if checkpoint.expected_texts:
-            frame = self.vision.wait_settled(self.backend)
-            missing = [
-                text
-                for text in checkpoint.expected_texts
-                if not self.vision.text_present(frame, text)
-            ]
-            if missing:
+        self.revalidate_program_checkpoint_state(
+            checkpoint,
+            bundle_dir=bundle_dir,
+        )
+        self.revalidate_program_checkpoint_effects(
+            checkpoint,
+            completed_effects,
+            workflow=workflow,
+        )
+
+    def revalidate_program_checkpoint_state(
+        self,
+        checkpoint: ProgramCheckpoint,
+        *,
+        bundle_dir: Path,
+    ) -> None:
+        """Prove that the live application still matches the resume cursor."""
+
+        conditions = checkpoint.expected_postconditions
+        if not conditions and not checkpoint.expected_texts:
+            return
+        if not conditions:
+            raise StateDiverged(
+                "the durable checkpoint predates exact postcondition retention; "
+                "refusing to resume"
+            )
+        self._revalidate_retained_postconditions(
+            conditions,
+            bundle_dir=bundle_dir,
+        )
+
+    def revalidate_linear_checkpoint_state(
+        self,
+        checkpoint: Any,
+        *,
+        bundle_dir: Path,
+    ) -> None:
+        """Prove that the live app still satisfies a linear resume cursor."""
+
+        self._revalidate_retained_postconditions(
+            checkpoint.expected_postconditions,
+            bundle_dir=bundle_dir,
+        )
+
+    def _revalidate_retained_postconditions(
+        self,
+        conditions: list[Postcondition],
+        *,
+        bundle_dir: Path,
+    ) -> None:
+        """Re-evaluate an exact retained postcondition contract or refuse."""
+
+        if not conditions:
+            return
+        non_replayable = [
+            condition
+            for condition in conditions
+            if condition.kind
+            in {
+                PostconditionKind.URL_CHANGED,
+                PostconditionKind.TITLE_CHANGED,
+                PostconditionKind.NEW_TAB_OPENED,
+            }
+        ]
+        if non_replayable:
+            raise StateDiverged(
+                "the durable checkpoint contains a transition-relative "
+                "postcondition that cannot be revalidated after restart"
+            )
+        frame = self.vision.wait_settled(self.backend)
+        failed = [
+            condition
+            for condition in conditions
+            if not self._postcondition_passes(
+                condition,
+                frame,
+                bundle_dir,
+                {},
+            )
+        ]
+        if failed:
+            raise StateDiverged(
+                "the live app no longer satisfies the retained postcondition "
+                "contract ("
+                + ", ".join(self._describe_postcondition(item) for item in failed)
+                + "); refusing to resume"
+            )
+
+    def revalidate_program_checkpoint_effects(
+        self,
+        checkpoint: ProgramCheckpoint,
+        completed_effects: list[dict],
+        *,
+        workflow: Workflow,
+    ) -> None:
+        """Re-read effects owned by one exact retained program action."""
+
+        parsed: list[Effect] = []
+        for dump in completed_effects:
+            try:
+                parsed.append(Effect.model_validate(dump))
+            except Exception as exc:
                 raise StateDiverged(
-                    "the live app is not in the checkpoint's expected state "
-                    "(missing on-screen text: "
-                    + ", ".join(repr(m) for m in missing)
-                    + ") — refusing to resume a run whose app state diverged "
-                    "from the checkpoint"
+                    "a retained system-of-record effect contract is invalid"
+                ) from exc
+        source_step = next(
+            (
+                step
+                for step in _all_workflow_steps(workflow)
+                if step.id == checkpoint.step_id
+            ),
+            None,
+        )
+        if source_step is None and workflow.program is not None:
+            source_step = next(
+                (
+                    state.step
+                    for graph in [workflow.program, *workflow.subflows.values()]
+                    for state in graph.states.values()
+                    if state.id == checkpoint.verified_state_id
+                    and state.step is not None
+                ),
+                None,
+            )
+        if parsed and source_step is None:
+            raise StateDiverged(
+                "retained program effects have no exact source action contract"
+            )
+        if source_step is not None:
+            self.revalidate_retained_effects(
+                parsed,
+                workflow=workflow,
+                step=source_step,
+                actuation_path="api" if checkpoint.actuation == "api" else "gui",
+            )
+
+    def revalidate_retained_effects(
+        self,
+        effects: list[Effect],
+        *,
+        workflow: Workflow,
+        step: Step,
+        actuation_path: Literal["gui", "api"],
+    ) -> None:
+        """Prove that previously confirmed effects still hold before resume."""
+
+        if not effects:
+            return
+        if self.effect_verifier is None:
+            raise StateDiverged(
+                "resume requires the qualified effect verifier for retained "
+                "confirmed writes"
+            )
+        refusal = self._profile_effect_tier_refusal(
+            workflow,
+            step,
+            actuation_path,
+            effects,
+            self.effect_verifier,
+        )
+        if refusal is not None:
+            raise StateDiverged(refusal)
+        try:
+            current = self.effect_verifier.capture_pre_state()
+        except Exception as exc:
+            raise StateDiverged(
+                "the retained effects could not be read before resume"
+            ) from exc
+        if not current.reachable:
+            raise StateDiverged("the retained effects could not be read before resume")
+        from openadapt_flow.runtime.effects._common import judge_records
+
+        for effect in effects:
+            if effect.needs_operator_confirmation:
+                raise StateDiverged(
+                    "a retained effect still requires an operator-authored binding"
                 )
-        if self.effect_verifier is not None and completed_effects:
-            before = self.effect_verifier.capture_pre_state()
-            for dump in completed_effects:
-                try:
-                    effect = Effect.model_validate(dump)
-                except Exception:
-                    continue
-                verdict = self.effect_verifier.verify(effect, before)
-                if not verdict.confirmed:
-                    raise StateDiverged(
-                        "an already-confirmed effect no longer holds "
-                        f"({effect.kind.value}: {verdict.verdict.value}) — "
-                        "refusing to resume; the system of record diverged from "
-                        "the checkpoint"
-                    )
+            # Historical evidence already proves the original delta and
+            # collateral-loss contract. Resume must prove that the intended
+            # effect still persists now. Re-read the current records through
+            # the qualified read-only verifier and judge the exact selector as
+            # an absolute persistence contract. Calling ``verify`` here would
+            # incorrectly use the current snapshot as a new pre-action
+            # baseline and can also invoke delivery-oriented verifier logic.
+            persistence_effect = effect.model_copy(
+                update={
+                    "count_new_only": False,
+                    "forbid_collateral_loss": False,
+                }
+            )
+            baseline = EffectState(
+                substrate=current.substrate,
+                reachable=True,
+                records=[],
+                detail={"durable_resume_persistence_readback": True},
+            )
+            verdict = judge_records(
+                persistence_effect,
+                baseline,
+                current.records,
+                substrate=current.substrate,
+            )
+            if not verdict.confirmed:
+                raise StateDiverged(
+                    "an already-confirmed effect no longer holds "
+                    f"({effect.kind.value}: {verdict.verdict.value}) — "
+                    "refusing to resume; the system of record diverged from "
+                    "the checkpoint"
+                )
 
     def revalidate_attended_program_completion(
         self,
@@ -2256,17 +3967,28 @@ class Replayer:
         caller persists that selected target in a transition receipt before
         resume, so neither the source action nor its edge selection is repeated.
         """
-        graph = self._resolve_graph(workflow, graph_id)
+        # This observation-only continuation runs outside ``run()``. Install
+        # the same exact semantic snapshot before its first vision/effect
+        # callback so a callback cannot rewrite an outgoing edge and then have
+        # that edge committed into the attended transition receipt.
+        self._install_execution_snapshots(workflow)
+        execution_workflow = self._execution_workflow_snapshot or workflow
+        snapshot_refusal = self._workflow_snapshot_refusal(execution_workflow)
+        if snapshot_refusal is None:
+            snapshot_refusal = self._governed_authorization_snapshot_refusal()
+        if snapshot_refusal is not None:
+            raise StateDiverged(snapshot_refusal)
+        graph = self._resolve_graph(execution_workflow, graph_id)
         state = graph.states.get(state_id)
         if state is None or state.kind is not StateKind.ACTION or state.step is None:
             raise StateDiverged(
                 "the attended program cursor does not name an action state"
             )
         verification_workflow = Workflow(
-            name=workflow.name,
-            steps=[state.step],
-            params=dict(workflow.params),
-            param_specs=dict(workflow.param_specs),
+            name=execution_workflow.name,
+            steps=[state.step.model_copy(deep=True)],
+            params=dict(execution_workflow.params),
+            param_specs=dict(execution_workflow.param_specs),
         )
         result = self.revalidate_attended_completion(
             verification_workflow,
@@ -2277,16 +3999,27 @@ class Replayer:
             run_id=run_id,
             transition_baseline=transition_baseline,
             transition_digest=transition_digest,
+            _preserve_execution_snapshot=True,
         )
         if not result.ok:
             return result, None
+        snapshot_refusal = self._workflow_snapshot_refusal(execution_workflow)
+        if snapshot_refusal is None:
+            snapshot_refusal = self._governed_authorization_snapshot_refusal()
+        if snapshot_refusal is not None:
+            result.ok = False
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            result.error = snapshot_refusal
+            return result, None
         target = self.select_attended_program_transition(
-            workflow,
+            execution_workflow,
             graph_id=graph_id,
             state_id=state_id,
             params=params,
             bundle_dir=bundle_dir,
         )
+        self._raise_on_workflow_snapshot_mutation(execution_workflow)
         return result, target
 
     def select_attended_program_transition(
@@ -2299,7 +4032,10 @@ class Replayer:
         bundle_dir: Path,
     ) -> Optional[str]:
         """Select and prove one exact successor for an attended action state."""
-        graph = self._resolve_graph(workflow, graph_id)
+        if not self._execution_snapshot_required:
+            self._install_execution_snapshots(workflow)
+        execution_workflow = self._execution_workflow_snapshot or workflow
+        graph = self._resolve_graph(execution_workflow, graph_id)
         state = graph.states.get(state_id)
         if state is None or state.kind is not StateKind.ACTION or state.step is None:
             raise StateDiverged(
@@ -2307,7 +4043,10 @@ class Replayer:
             )
         try:
             target = self._select_transition(
-                state, params=params, bundle_dir=bundle_dir
+                state,
+                workflow=execution_workflow,
+                params=params,
+                bundle_dir=bundle_dir,
             )
         except _ProgramHalt as exc:
             raise StateDiverged(
@@ -2331,7 +4070,7 @@ class Replayer:
         ):
             frame = self.vision.wait_settled(self.backend)
             resolution, _region, error = self._resolve_step(
-                next_state.step, frame, bundle_dir, workflow
+                next_state.step, frame, bundle_dir, execution_workflow
             )
             if error is not None or resolution is None:
                 raise StateDiverged(
@@ -2344,13 +4083,14 @@ class Replayer:
                     resolution,
                     frame,
                     params,
-                    workflow,
+                    execution_workflow,
                     bundle_dir,
                 )
                 if identity.status != "verified":
                     raise StateDiverged(
                         "the exact attended program successor identity did not verify"
                     )
+        self._raise_on_workflow_snapshot_mutation(execution_workflow)
         return target
 
     def revalidate_attended_completion(
@@ -2364,6 +4104,7 @@ class Replayer:
         run_id: str,
         transition_baseline: Any,
         transition_digest: Callable[[str, str], str],
+        _preserve_execution_snapshot: bool = False,
     ) -> StepResult:
         """Verify a human-completed linear step without actuating it.
 
@@ -2387,6 +4128,14 @@ class Replayer:
         from openadapt_flow.runtime.effects import EffectState
         from openadapt_flow.runtime.effects._common import judge_records
 
+        if not _preserve_execution_snapshot:
+            self._install_execution_snapshots(workflow)
+            workflow = self._execution_workflow_snapshot or workflow
+        snapshot_refusal = self._workflow_snapshot_refusal(workflow)
+        if snapshot_refusal is None:
+            snapshot_refusal = self._governed_authorization_snapshot_refusal()
+        if snapshot_refusal is not None:
+            raise StateDiverged(snapshot_refusal)
         if not (0 <= step_index < len(workflow.steps)):
             raise StateDiverged("the attended pause references no workflow step")
         step = workflow.steps[step_index]
@@ -2404,11 +4153,12 @@ class Replayer:
             risk_review_required=step.risk_review_required,
             actuation="human_attended",
         )
+        evidence_step_id = self._new_step_evidence_key(run_dir, step.id)
         self._run_id = run_id
         (Path(run_dir) / "steps").mkdir(parents=True, exist_ok=True)
         frame = self.vision.wait_settled(self.backend)
         result.before_png = self._save_step_png(
-            run_dir, step.id, "attended-before", frame
+            run_dir, evidence_step_id, "attended-before", frame
         )
 
         relative_kinds = {"url_changed", "title_changed", "new_tab_opened"}
@@ -2479,7 +4229,7 @@ class Replayer:
                     f"satisfied ({len(failed)} condition(s) failed)"
                 )
                 result.after_png = self._save_step_png(
-                    run_dir, step.id, "attended-after", frame
+                    run_dir, evidence_step_id, "attended-after", frame
                 )
                 return result
 
@@ -2491,10 +4241,56 @@ class Replayer:
                     "effect verifier; outcome is uncertain and Continue is refused"
                 )
                 result.after_png = self._save_step_png(
-                    run_dir, step.id, "attended-after", frame
+                    run_dir, evidence_step_id, "attended-after", frame
+                )
+                return result
+            effects = self._resolve_effects(attended_effects, params)
+            profile_workflow = self._execution_workflow_snapshot or workflow
+            tier_refusal = self._profile_effect_tier_refusal(
+                profile_workflow,
+                step,
+                "gui",
+                effects,
+                self.effect_verifier,
+            )
+            if tier_refusal is not None:
+                result.effect_verified = False
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.error = tier_refusal
+                result.after_png = self._save_step_png(
+                    run_dir, evidence_step_id, "attended-after", frame
                 )
                 return result
             current = self.effect_verifier.capture_pre_state()
+            tier_refusal = self._profile_effect_tier_refusal(
+                profile_workflow,
+                step,
+                "gui",
+                effects,
+                self.effect_verifier,
+            )
+            if tier_refusal is not None:
+                result.effect_verified = False
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.error = tier_refusal
+                result.after_png = self._save_step_png(
+                    run_dir, evidence_step_id, "attended-after", frame
+                )
+                return result
+            snapshot_refusal = self._workflow_snapshot_refusal(profile_workflow)
+            if snapshot_refusal is None:
+                snapshot_refusal = self._governed_authorization_snapshot_refusal()
+            if snapshot_refusal is not None:
+                result.effect_verified = False
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.error = snapshot_refusal
+                result.after_png = self._save_step_png(
+                    run_dir, evidence_step_id, "attended-after", frame
+                )
+                return result
             if not current.reachable:
                 result.effect_verified = False
                 result.error = (
@@ -2502,10 +4298,9 @@ class Replayer:
                     "and Continue is refused"
                 )
                 result.after_png = self._save_step_png(
-                    run_dir, step.id, "attended-after", frame
+                    run_dir, evidence_step_id, "attended-after", frame
                 )
                 return result
-            effects = self._resolve_effects(attended_effects, params)
             for effect in effects:
                 if effect.needs_operator_confirmation:
                     result.effect_verified = False
@@ -2546,11 +4341,22 @@ class Replayer:
                         f"confirm the outcome ({verdict.verdict.value})"
                     )
                     break
+                tier = verifier_effect_tier(self.effect_verifier, effect)
+                result.effect_evidence.append(
+                    EffectVerificationEvidence(
+                        effect_contract_hash=effect.contract_hash(),
+                        substrate=verdict.substrate,
+                        verification_tier=(int(tier) if tier is not None else None),
+                        initial_verdict=verdict.verdict.value,
+                        final_verdict=verdict.verdict.value,
+                        observed_effect=verdict.observed_effect,
+                    )
+                )
             else:
                 result.effect_verified = True
             if result.error is not None:
                 result.after_png = self._save_step_png(
-                    run_dir, step.id, "attended-after", frame
+                    run_dir, evidence_step_id, "attended-after", frame
                 )
                 return result
 
@@ -2561,7 +4367,7 @@ class Replayer:
                 "verification, so Continue is refused"
             )
             result.after_png = self._save_step_png(
-                run_dir, step.id, "attended-after", frame
+                run_dir, evidence_step_id, "attended-after", frame
             )
             return result
 
@@ -2580,7 +4386,7 @@ class Replayer:
                         "uniquely; live state diverged and Continue is refused"
                     )
                     result.after_png = self._save_step_png(
-                        run_dir, step.id, "attended-after", frame
+                        run_dir, evidence_step_id, "attended-after", frame
                     )
                     return result
                 if next_step.identity_armed:
@@ -2599,15 +4405,29 @@ class Replayer:
                             f"was {identity.status}; Continue is refused"
                         )
                         result.after_png = self._save_step_png(
-                            run_dir, step.id, "attended-after", frame
+                            run_dir, evidence_step_id, "attended-after", frame
                         )
                         return result
 
+        # Screenshot persistence can invoke a deployment-provided scrubber.
+        # Persist before the last semantic comparison, then return VERIFIED
+        # only if that callback left the admitted workflow and authorization
+        # unchanged.
+        result.after_png = self._save_step_png(
+            run_dir, evidence_step_id, "attended-after", frame
+        )
+        snapshot_refusal = self._workflow_snapshot_refusal(
+            self._execution_workflow_snapshot or workflow
+        )
+        if snapshot_refusal is None:
+            snapshot_refusal = self._governed_authorization_snapshot_refusal()
+        if snapshot_refusal is not None:
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            result.error = snapshot_refusal
+            return result
         result.ok = True
         result.postconditions_ok = True if step.expect else None
-        result.after_png = self._save_step_png(
-            run_dir, step.id, "attended-after", frame
-        )
         return result
 
     def _resolve_graph(self, workflow: Workflow, graph_id: str) -> ProgramGraph:
@@ -2644,6 +4464,106 @@ class Replayer:
         mid-loop pause finishes the in-progress row and runs the remaining rows.
         """
         assert workflow.program is not None
+        if (
+            not checkpoint.frames
+            or not isinstance(checkpoint.frames[-1], GraphFrame)
+            or checkpoint.frames[-1].state_id != checkpoint.verified_state_id
+        ):
+            raise _ProgramHalt(
+                "halt",
+                "the durable interpreter cursor does not match its verified state",
+            )
+        # Validate the complete retained control path before appending or
+        # changing any live frame.  Checkpoints are normally written only after
+        # an ACTION state verifies.  Treating a LOOP, SUBFLOW_CALL, BRANCH, or
+        # TERMINAL as the verified leaf would skip that control state's work and
+        # could continue at a later input edge.
+        parent_state: Optional[State] = None
+        expected_params = dict(self._governed_base_params or {})
+        leaf_state: Optional[State] = None
+        for index, frame in enumerate(checkpoint.frames):
+            graph = self._resolve_graph(workflow, frame.graph_id)
+            state = graph.states.get(frame.state_id)
+            if state is None or state.id != frame.state_id:
+                raise _ProgramHalt(
+                    "halt",
+                    "the durable interpreter cursor references an undefined "
+                    "program state",
+                )
+            if index == 0:
+                if frame.graph_id != TOP_GRAPH_ID or frame.loop is not None:
+                    raise _ProgramHalt(
+                        "halt",
+                        "the durable interpreter cursor has an invalid root frame",
+                    )
+            elif frame.loop is not None:
+                loop = parent_state.loop if parent_state is not None else None
+                cursor = frame.loop
+                if (
+                    parent_state is None
+                    or parent_state.kind is not StateKind.LOOP
+                    or loop is None
+                    or parent_state.id != cursor.loop_state_id
+                    or cursor.relation != loop.relation
+                    or frame.graph_id != loop.body
+                ):
+                    raise _ProgramHalt(
+                        "halt",
+                        "the durable interpreter loop cursor does not match its "
+                        "parent loop state",
+                    )
+                source_rows = (
+                    worklists[loop.relation]
+                    if loop.relation in worklists
+                    else (
+                        workflow.data_sources[loop.relation].rows
+                        if loop.relation in workflow.data_sources
+                        else None
+                    )
+                )
+                if (
+                    source_rows is None
+                    or len(source_rows) > loop.max_iterations
+                    or cursor.rows != source_rows
+                    or cursor.row_index < 0
+                    or cursor.row_index >= len(source_rows)
+                ):
+                    raise _ProgramHalt(
+                        "halt",
+                        "the durable interpreter loop cursor does not match its "
+                        "authorized worklist",
+                    )
+                expected_params.update(source_rows[cursor.row_index])
+            elif (
+                parent_state is None
+                or parent_state.kind is not StateKind.SUBFLOW_CALL
+                or parent_state.subflow != frame.graph_id
+            ):
+                raise _ProgramHalt(
+                    "halt",
+                    "the durable interpreter child frame does not match its "
+                    "parent subflow call",
+                )
+            if frame.params != expected_params:
+                raise _ProgramHalt(
+                    "halt",
+                    "the durable interpreter frame parameters do not match the "
+                    "authorized control path",
+                )
+            parent_state = state
+            leaf_state = state
+        if (
+            leaf_state is None
+            or leaf_state.kind is not StateKind.ACTION
+            or leaf_state.step is None
+            or (checkpoint.step_id and checkpoint.step_id != leaf_state.step.id)
+            or checkpoint.bound_params != checkpoint.frames[-1].params
+        ):
+            raise _ProgramHalt(
+                "halt",
+                "the durable interpreter verified leaf does not match an exact "
+                "action state",
+            )
         receipt = checkpoint.attended_transition
         if receipt is not None:
             if (
@@ -2679,22 +4599,6 @@ class Replayer:
                     "the attended interpreter transition receipt names an "
                     "undeclared successor",
                 )
-        if not checkpoint.frames:
-            # Nothing verified pre-pause (halted on the very first state): there
-            # is no interpreter state to restore, so re-walk from the top.
-            self._walk_graph(
-                workflow.program,
-                graph_id=TOP_GRAPH_ID,
-                workflow=workflow,
-                params=dict(checkpoint.bound_params),
-                worklists=worklists,
-                bundle_dir=bundle_dir,
-                run_dir=run_dir,
-                report=report,
-                new_crops=new_crops,
-                depth=0,
-            )
-            return
         self._resume_descend(
             checkpoint.frames,
             0,
@@ -2751,14 +4655,21 @@ class Replayer:
             if is_leaf:
                 # The verified state: re-drive from its SUCCESSOR (never re-run
                 # the verified state itself).
+                self._raise_on_workflow_snapshot_mutation(workflow)
                 nxt = (
                     attended_transition.target_state_id
                     if attended_transition is not None
                     else self._select_transition(
-                        state, params=params, bundle_dir=bundle_dir
+                        state,
+                        workflow=workflow,
+                        params=params,
+                        bundle_dir=bundle_dir,
+                        report=report,
+                        run_dir=run_dir,
                     )
                 )
                 if nxt is not None:
+                    self._raise_on_workflow_snapshot_mutation(workflow)
                     live["state_id"] = nxt
                     self._run_states_from(
                         graph,
@@ -2820,12 +4731,22 @@ class Replayer:
                         ),
                     )
                 nxt = self._select_transition(
-                    state, params=params, bundle_dir=bundle_dir
+                    state,
+                    workflow=workflow,
+                    params=params,
+                    bundle_dir=bundle_dir,
+                    report=report,
+                    run_dir=run_dir,
                 )
             else:
                 # subflow_call: continue after the call once the child returned.
                 nxt = self._select_transition(
-                    state, params=params, bundle_dir=bundle_dir
+                    state,
+                    workflow=workflow,
+                    params=params,
+                    bundle_dir=bundle_dir,
+                    report=report,
+                    run_dir=run_dir,
                 )
             if nxt is not None:
                 live["state_id"] = nxt
@@ -2895,6 +4816,254 @@ class Replayer:
 
     # -- per-step execution ---------------------------------------------------
 
+    def _qualification_fault_driver_refusal(self, workflow: Workflow) -> Optional[str]:
+        authorization = self.governed_authorization
+        if authorization is None or authorization.qualification_case_kind in {
+            None,
+            "representative",
+        }:
+            return None
+        driver = self.qualification_fault_driver
+        if driver is None:
+            return "qualification fault driver is not configured"
+        try:
+            if driver.driver_id != authorization.qualification_fault_driver_id:
+                return "qualification fault driver id does not match authorization"
+            if (
+                driver.contract_sha256
+                != authorization.qualification_fault_driver_contract_sha256
+            ):
+                return (
+                    "qualification fault driver contract does not match authorization"
+                )
+            if (
+                driver.attestation_key_id
+                != authorization.qualification_fault_driver_key_id
+            ):
+                return "qualification fault driver key does not match authorization"
+        except Exception:
+            return "qualification fault driver identity could not be observed"
+        project = workflow.qualification
+        assert project is not None
+        trusted = project.trusted_fault_driver_keys.get(
+            authorization.qualification_fault_driver_key_id or ""
+        )
+        if trusted is None:
+            return "qualification fault driver key is not trusted by the project"
+        self._qualification_fault_public_key = trusted
+        return None
+
+    @staticmethod
+    def _qualification_fault_gate_for_kind(
+        kind: QualificationFaultKind,
+    ) -> QualificationFaultGate:
+        gates: dict[QualificationFaultKind, QualificationFaultGate] = {
+            "ambiguity": "target_resolution",
+            "wrong_identity": "identity_verification",
+            "stale_identity": "actuation_revalidation",
+            "weak_effect": "effect_strength",
+            "missing_effect": "effect_verifier",
+        }
+        return gates[kind]
+
+    def _qualification_fault_context(
+        self,
+        *,
+        gate: QualificationFaultGate,
+        step: Step,
+        actuation_path: Literal["gui", "api"],
+        before_input_sha256: str,
+        effect_verifier: Any,
+        effects: tuple[Any, ...] = (),
+    ) -> Optional[QualificationFaultContext]:
+        authorization = self.governed_authorization
+        if authorization is None or authorization.qualification_case_kind in {
+            None,
+            "representative",
+        }:
+            return None
+        kind = cast(QualificationFaultKind, authorization.qualification_case_kind)
+        if self._qualification_fault_gate_for_kind(kind) != gate:
+            return None
+        if authorization.qualification_fault_step_id_sha256 != sha256_bytes(
+            step.id.encode("utf-8")
+        ):
+            return None
+        if self._qualification_case_action_paths.get(step.id) != actuation_path:
+            return None
+        required = (
+            authorization.qualification_project_id,
+            authorization.qualification_project_revision,
+            authorization.qualification_project_contract_sha256,
+            authorization.qualification_campaign_id_sha256,
+            self._qualification_id_sha256(authorization.qualification_case_id),
+            authorization.qualification_case_input_sha256,
+            authorization.qualification_run_id_sha256,
+        )
+        if any(value is None for value in required):
+            raise RuntimeError("qualification_fault_binding_incomplete")
+        return QualificationFaultContext(
+            project_id=cast(str, required[0]),
+            project_revision=cast(int, required[1]),
+            project_contract_sha256=cast(str, required[2]),
+            campaign_id_sha256=cast(str, required[3]),
+            case_id_sha256=cast(str, required[4]),
+            case_input_sha256=cast(str, required[5]),
+            run_id_sha256=cast(str, required[6]),
+            step_id=step.id,
+            actuation_path=actuation_path,
+            fault_kind=kind,
+            gate=gate,
+            before_input_sha256=before_input_sha256,
+            backend=self.backend,
+            vision=self.vision,
+            effect_verifier=effect_verifier,
+            effects=effects,
+        )
+
+    def _require_current_fault_driver_binding(self) -> QualificationFaultDriver:
+        """Snapshot the configured driver identity immediately before mutation."""
+
+        driver = self.qualification_fault_driver
+        authorization = self.governed_authorization
+        if driver is None or authorization is None:
+            raise RuntimeError("qualification_fault_driver_missing")
+        try:
+            observed = (
+                driver.driver_id,
+                driver.contract_sha256,
+                driver.attestation_key_id,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "qualification_fault_driver_identity_unavailable"
+            ) from exc
+        expected = (
+            authorization.qualification_fault_driver_id,
+            authorization.qualification_fault_driver_contract_sha256,
+            authorization.qualification_fault_driver_key_id,
+        )
+        if observed != expected:
+            raise RuntimeError("qualification_fault_driver_binding_changed")
+        return driver
+
+    def _validate_fault_mutation(
+        self,
+        context: QualificationFaultContext,
+        receipt: FaultMutationReceipt,
+        *,
+        after_input_sha256: str,
+    ) -> None:
+        authorization = self.governed_authorization
+        if authorization is None:
+            raise RuntimeError("qualification_fault_authorization_missing")
+        expected = {
+            "project_id": context.project_id,
+            "project_revision": context.project_revision,
+            "project_contract_sha256": context.project_contract_sha256,
+            "campaign_id_sha256": context.campaign_id_sha256,
+            "case_id_sha256": context.case_id_sha256,
+            "case_input_sha256": context.case_input_sha256,
+            "run_id_sha256": context.run_id_sha256,
+            "step_id_sha256": sha256_bytes(context.step_id.encode("utf-8")),
+            "actuation_path": context.actuation_path,
+            "fault_kind": context.fault_kind,
+            "gate": context.gate,
+            "driver_id": authorization.qualification_fault_driver_id,
+            "driver_contract_sha256": (
+                authorization.qualification_fault_driver_contract_sha256
+            ),
+            "attestation_key_id": (authorization.qualification_fault_driver_key_id),
+            "before_input_sha256": context.before_input_sha256,
+            "after_input_sha256": after_input_sha256,
+        }
+        actual = receipt.model_dump(mode="python")
+        if any(actual.get(key) != value for key, value in expected.items()):
+            raise RuntimeError("qualification_fault_receipt_binding_invalid")
+        if context.before_input_sha256 == after_input_sha256:
+            raise RuntimeError("qualification_fault_input_unchanged")
+        trusted_key = self._qualification_fault_public_key
+        if trusted_key is None or not verify_fault_mutation_receipt(
+            receipt,
+            trusted_public_key_base64=trusted_key,
+        ):
+            raise RuntimeError("qualification_fault_receipt_signature_invalid")
+        if self._qualification_fault_mutations:
+            raise RuntimeError("qualification_fault_mutation_repeated")
+        self._qualification_fault_mutations.append(receipt)
+
+    def _apply_screen_fault_mutation(
+        self,
+        *,
+        gate: QualificationFaultGate,
+        step: Step,
+        before_png: bytes,
+        effect_verifier: Any,
+    ) -> bytes:
+        if self._qualification_fault_mutations:
+            return before_png
+        context = self._qualification_fault_context(
+            gate=gate,
+            step=step,
+            actuation_path="gui",
+            before_input_sha256=sha256_bytes(before_png),
+            effect_verifier=effect_verifier,
+        )
+        if context is None:
+            return before_png
+        driver = self._require_current_fault_driver_binding()
+        mutation = driver.mutate(context)
+        if mutation is None:
+            return before_png
+        if mutation.replace_effect_verifier:
+            raise RuntimeError("qualification_screen_fault_replaced_verifier")
+        after_png = self.backend.screenshot()
+        self._validate_fault_mutation(
+            context,
+            mutation.receipt,
+            after_input_sha256=sha256_bytes(after_png),
+        )
+        return after_png
+
+    def _apply_effect_fault_mutation(
+        self,
+        *,
+        gate: QualificationFaultGate,
+        step: Step,
+        actuation_path: Literal["gui", "api"],
+        effect_verifier: Any,
+        effects: tuple[Any, ...],
+    ) -> Any:
+        if self._qualification_fault_mutations:
+            return effect_verifier
+        before_sha256 = effect_verifier_input_sha256(effect_verifier, effects)
+        context = self._qualification_fault_context(
+            gate=gate,
+            step=step,
+            actuation_path=actuation_path,
+            before_input_sha256=before_sha256,
+            effect_verifier=effect_verifier,
+            effects=effects,
+        )
+        if context is None:
+            return effect_verifier
+        driver = self._require_current_fault_driver_binding()
+        mutation = driver.mutate(context)
+        if mutation is None:
+            return effect_verifier
+        if not mutation.replace_effect_verifier:
+            raise RuntimeError("qualification_effect_fault_did_not_replace_verifier")
+        after_sha256 = effect_verifier_input_sha256(
+            mutation.effect_verifier,
+            effects,
+        )
+        self._validate_fault_mutation(
+            context,
+            mutation.receipt,
+            after_input_sha256=after_sha256,
+        )
+        return mutation.effect_verifier
+
     def _run_step(
         self,
         step: Step,
@@ -2916,6 +5085,7 @@ class Replayer:
         so a linear run is byte-for-byte unchanged.
         """
         t0 = time.monotonic()
+        evidence_step_id = self._new_step_evidence_key(run_dir, step.id)
         result = StepResult(
             step_id=step.id,
             intent=step.intent,
@@ -2928,22 +5098,97 @@ class Replayer:
         overlay_current, overlay_total = self._control_overlay_progress(
             workflow, step_index, graph_ctx
         )
+        qualification_path: Literal["gui", "api"] | None = None
+        authorization = self.governed_authorization
+        if (
+            authorization is not None
+            and authorization.qualification_case_id is not None
+        ):
+            from openadapt_flow.qualification import qualification_action_requirements
+
+            required_actions, _required_identity = qualification_action_requirements(
+                workflow
+            )
+            qualification_path = self._qualification_case_action_paths.get(step.id)
+            if step.id in required_actions and qualification_path is None:
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.error = (
+                    "qualification case reached a required write outside its exact "
+                    "authorized actuation-path map"
+                )
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
+            if qualification_path == "api" and step.api_binding is None:
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.error = (
+                    "qualification case requires the API actuation path, but its "
+                    "binding is unavailable"
+                )
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
+        if (
+            qualification_path != "gui"
+            and step.api_binding is not None
+            and self.api_actuator is None
+            and (
+                qualification_path == "api" or step.api_binding.on_unavailable == "halt"
+            )
+        ):
+            self._set_api_unavailable_refusal(
+                step,
+                result,
+                reason="no API actuator is configured for this deployment",
+            )
+            result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return result
         # API/tool tier -- the TOP of the capability ladder. When the step
         # carries an api_binding and an ApiActuator is configured, PERFORM the
         # write via the API (deterministic, $0, no GUI), CONFIRM it with the
         # EffectVerifier, and SKIP the GUI resolve/act entirely. Returns True
         # when the API tier took responsibility (actuated+verified, or HALTed);
-        # returns False (API tier unavailable -- endpoint unreachable / no
-        # binding param) to fall through to the GUI ladder below with NO write
-        # yet performed (the no-double-write contract). See
+        # returns False only when the API tier is unavailable AND the binding
+        # permits GUI fallback. API-only bindings return a typed pre-delivery
+        # halt with NO write performed (the no-double-write contract). See
         # openadapt_flow.runtime.actuators.
-        if self.api_actuator is not None and step.api_binding is not None:
+        api_effect_verifier = self.effect_verifier
+        api_effects: tuple[Any, ...] = ()
+        api_fault_mutation_start = len(self._qualification_fault_mutations)
+        if (
+            qualification_path != "gui"
+            and self.api_actuator is not None
+            and step.api_binding is not None
+            and step.api_binding.effects
+        ):
+            api_effects = tuple(self._resolve_effects(step.api_binding.effects, params))
+            api_effect_verifier = self._apply_effect_fault_mutation(
+                gate="effect_verifier",
+                step=step,
+                actuation_path="api",
+                effect_verifier=api_effect_verifier,
+                effects=api_effects,
+            )
+            api_effect_verifier = self._apply_effect_fault_mutation(
+                gate="effect_strength",
+                step=step,
+                actuation_path="api",
+                effect_verifier=api_effect_verifier,
+                effects=api_effects,
+            )
+        if (
+            qualification_path != "gui"
+            and self.api_actuator is not None
+            and step.api_binding is not None
+        ):
             if self._try_api_tier(
                 step,
                 params,
                 result,
                 workflow=workflow,
                 step_index=step_index,
+                bundle_dir=bundle_dir,
+                effect_verifier=api_effect_verifier,
             ):
                 if not result.ok and result.failure_category is None:
                     result.safety_halt = True
@@ -2952,6 +5197,28 @@ class Replayer:
                         if self.governed_authorization is not None
                         else "safety_halt"
                     )
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
+            if qualification_path == "api":
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.error = (
+                    "qualification case requires the API actuation path, but that "
+                    "path reported unavailable; refusing GUI fallback"
+                )
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
+            if len(self._qualification_fault_mutations) > api_fault_mutation_start:
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.error = (
+                    "the qualification fault changed the API detector input, but "
+                    "the API path became unavailable without producing the required "
+                    "detector refusal; refusing to reuse that mutation on the GUI "
+                    "actuation path"
+                )
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
 
@@ -2964,7 +5231,9 @@ class Replayer:
             if self.require_settled
             else self.vision.wait_settled(self.backend)
         )
-        result.before_png = self._save_step_png(run_dir, step.id, "before", before_png)
+        result.before_png = self._save_step_png(
+            run_dir, evidence_step_id, "before", before_png
+        )
         last_frame = before_png
         self._emit_control_overlay_phase(
             "observing",
@@ -3003,7 +5272,7 @@ class Replayer:
                 result.safety_halt = True
                 result.failure_category = "safety_halt"
                 result.after_png = self._save_step_png(
-                    run_dir, step.id, "after", last_frame
+                    run_dir, evidence_step_id, "after", last_frame
                 )
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
@@ -3022,7 +5291,7 @@ class Replayer:
             )
             if before_png is not last_frame:
                 result.before_png = self._save_step_png(
-                    run_dir, step.id, "before", before_png
+                    run_dir, evidence_step_id, "before", before_png
                 )
                 last_frame = before_png
             if not proceed:
@@ -3041,11 +5310,21 @@ class Replayer:
                         else "safety_halt"
                     )
                 result.after_png = self._save_step_png(
-                    run_dir, step.id, "after", last_frame
+                    run_dir, evidence_step_id, "after", last_frame
                 )
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
 
+            before_png = self._apply_screen_fault_mutation(
+                gate="target_resolution",
+                step=step,
+                before_png=before_png,
+                effect_verifier=active_verifier,
+            )
+            result.before_png = self._save_step_png(
+                run_dir, evidence_step_id, "before", before_png
+            )
+            last_frame = before_png
             resolution, matched_region, error = self._resolve_step(
                 step, before_png, bundle_dir, workflow
             )
@@ -3064,14 +5343,35 @@ class Replayer:
                 time.sleep(self.poll_interval_s)
                 before_png = self.vision.wait_settled(self.backend)
                 result.before_png = self._save_step_png(
-                    run_dir, step.id, "before", before_png
+                    run_dir, evidence_step_id, "before", before_png
                 )
                 last_frame = before_png
                 resolution, matched_region, error = self._resolve_step(
                     step, before_png, bundle_dir, workflow
                 )
+            if resolution is not None and matched_region is not None:
+                assert step.anchor is not None
+                resolution = self._retain_visual_resolution_evidence(
+                    workflow=workflow,
+                    anchor=step.anchor,
+                    resolution=resolution,
+                    matched_region=matched_region,
+                    frame_png=before_png,
+                    bundle_dir=bundle_dir,
+                    run_dir=run_dir,
+                )
             result.resolution = resolution
             if error is None and resolution is not None:
+                before_png = self._apply_screen_fault_mutation(
+                    gate="identity_verification",
+                    step=step,
+                    before_png=before_png,
+                    effect_verifier=active_verifier,
+                )
+                result.before_png = self._save_step_png(
+                    run_dir, evidence_step_id, "before", before_png
+                )
+                last_frame = before_png
                 error = self._identity_gate_error(
                     step,
                     resolution,
@@ -3080,7 +5380,19 @@ class Replayer:
                     workflow,
                     bundle_dir,
                     result,
+                    evidence_run_dir=run_dir,
                 )
+                if error is not None and result.identity is not None:
+                    code: Literal["identity_conflict", "identity_unverifiable"] = (
+                        "identity_conflict"
+                        if result.identity.status == "mismatch"
+                        else "identity_unverifiable"
+                    )
+                    result.safety_refusal_evidence = SafetyRefusalEvidence(
+                        stage="identity_verification",
+                        code=code,
+                        detector_input_sha256=sha256_bytes(before_png),
+                    )
             # System-of-record effect verification -- SNAPSHOT the record just
             # before the (consequential) action, so the post-action verifier
             # can count only what THIS step wrote (delta / at-most-once /
@@ -3089,7 +5401,33 @@ class Replayer:
             # error -- refuse to perform an unverifiable consequential write
             # rather than pass it silently.
             if error is None and step.effects:
-                if active_verifier is None and self._all_default_readback(step.effects):
+                resolved_effects = self._resolve_effects(step.effects, params)
+                effect_inputs = tuple(resolved_effects)
+                active_verifier = self._apply_effect_fault_mutation(
+                    gate="effect_verifier",
+                    step=step,
+                    actuation_path="gui",
+                    effect_verifier=active_verifier,
+                    effects=effect_inputs,
+                )
+                active_verifier = self._apply_effect_fault_mutation(
+                    gate="effect_strength",
+                    step=step,
+                    actuation_path="gui",
+                    effect_verifier=active_verifier,
+                    effects=effect_inputs,
+                )
+                missing_verifier_fault_applied = any(
+                    receipt.gate == "effect_verifier"
+                    and receipt.fault_kind == "missing_effect"
+                    for receipt in self._qualification_fault_mutations
+                )
+                if (
+                    error is None
+                    and active_verifier is None
+                    and self._all_default_readback(step.effects)
+                    and not missing_verifier_fault_applied
+                ):
                     # AUTO-DEFAULT (no connector): every declared effect is an
                     # auto-derived DIFFERENT-PATH on-screen read-back, whose
                     # measured false-CONFIRM rate is ~0. Wire a read-back
@@ -3097,7 +5435,9 @@ class Replayer:
                     # same-surface (weak) read-back or a structured effect is
                     # NOT eligible and falls through to the HALT/approval path.
                     active_verifier = self._auto_readback_verifier()
-                if active_verifier is None:
+                if error is not None:
+                    pass
+                elif active_verifier is None:
                     authorization = self.governed_authorization
                     approved = (
                         authorization is not None
@@ -3105,7 +5445,6 @@ class Replayer:
                     )
                     if approved:
                         assert authorization is not None
-                        resolved_effects = self._resolve_effects(step.effects, params)
                         result.effect_contract_hashes.extend(
                             effect.contract_hash() for effect in resolved_effects
                         )
@@ -3129,6 +5468,14 @@ class Replayer:
                             "no EffectVerifier configured for a step that declares "
                             "effects (fail-safe HALT)"
                         )
+                        result.safety_refusal_evidence = SafetyRefusalEvidence(
+                            stage="effect_verifier",
+                            code="effect_verifier_missing",
+                            detector_input_sha256=effect_verifier_input_sha256(
+                                None,
+                                effect_inputs,
+                            ),
+                        )
                     if error is not None and self.governed_authorization is not None:
                         result.safety_halt = True
                         result.failure_category = "governed_refusal"
@@ -3136,12 +5483,13 @@ class Replayer:
                     # Bind the effect contracts to this run's params BEFORE the
                     # pre-state snapshot (P0-3): match/value/idempotency_key must
                     # describe the record THIS run writes, not the demo's.
-                    resolved_effects = self._resolve_effects(step.effects, params)
                     result.effect_contract_hashes.extend(
                         effect.contract_hash() for effect in resolved_effects
                     )
                     error = self._profile_effect_tier_refusal(
                         workflow,
+                        step,
+                        "gui",
                         resolved_effects,
                         active_verifier,
                     )
@@ -3149,6 +5497,8 @@ class Replayer:
                         effect_pre_state = active_verifier.capture_pre_state()
                         error = self._profile_effect_tier_refusal(
                             workflow,
+                            step,
+                            "gui",
                             resolved_effects,
                             active_verifier,
                         )
@@ -3157,12 +5507,26 @@ class Replayer:
                         result.safety_halt = True
                         result.failure_category = "governed_refusal"
                         result.effect_results.append(error)
+                        result.safety_refusal_evidence = SafetyRefusalEvidence(
+                            stage="effect_strength",
+                            code="effect_strength_insufficient",
+                            detector_input_sha256=effect_verifier_input_sha256(
+                                active_verifier,
+                                effect_inputs,
+                            ),
+                        )
 
             if self._governed_asset_mutation is not None:
                 error = self._governed_asset_mutation
                 result.safety_halt = True
 
             if error is None:
+                before_png = self._apply_screen_fault_mutation(
+                    gate="actuation_revalidation",
+                    step=step,
+                    before_png=before_png,
+                    effect_verifier=active_verifier,
+                )
                 (
                     resolution,
                     matched_region,
@@ -3177,19 +5541,42 @@ class Replayer:
                     workflow,
                     bundle_dir,
                     result,
+                    run_dir=run_dir,
                     arm_keyboard=step.action in (ActionKind.KEY, ActionKind.HOTKEY),
                 )
+                if resolution is not None and matched_region is not None:
+                    assert step.anchor is not None
+                    resolution = self._retain_visual_resolution_evidence(
+                        workflow=workflow,
+                        anchor=step.anchor,
+                        resolution=resolution,
+                        matched_region=matched_region,
+                        frame_png=before_png,
+                        bundle_dir=bundle_dir,
+                        run_dir=run_dir,
+                    )
                 result.resolution = resolution
                 if before_png is not last_frame:
                     result.before_png = self._save_step_png(
-                        run_dir, step.id, "before", before_png
+                        run_dir, evidence_step_id, "before", before_png
                     )
                     last_frame = before_png
+                if error is not None and any(
+                    receipt.gate == "actuation_revalidation"
+                    for receipt in self._qualification_fault_mutations
+                ):
+                    result.safety_refusal_evidence = SafetyRefusalEvidence(
+                        stage="actuation_revalidation",
+                        code="actuation_observation_changed",
+                        detector_input_sha256=sha256_bytes(before_png),
+                    )
 
             if error is None:
                 if resolved_effects is not None and active_verifier is not None:
                     error = self._profile_effect_tier_refusal(
                         workflow,
+                        step,
+                        "gui",
                         resolved_effects,
                         active_verifier,
                     )
@@ -3203,57 +5590,284 @@ class Replayer:
                 self._cancel_guarded_coordinate()
                 self._cancel_guarded_keyboard()
 
+            authorization = self.governed_authorization
+            if (
+                error is None
+                and authorization is not None
+                and authorization.qualification_fault_step_id_sha256
+                == sha256_bytes(step.id.encode("utf-8"))
+            ):
+                error = (
+                    "the bound qualification fault case did not produce its "
+                    "required detector refusal; refusing to cross the input boundary"
+                )
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+
             if error is None:
-                # Structural postconditions compare against the final observed
-                # state immediately before action delivery.  Readiness gates,
-                # interstitial dismissal, target resolution, identity checks,
-                # and effect pre-state capture can all cross backend or time
-                # boundaries; none of their state changes may be credited to
-                # the workflow action as URL_CHANGED, TITLE_CHANGED, or
-                # NEW_TAB_OPENED.
-                start_state = self._structural_state()
-                overlay_target = self._control_overlay_browser_target(
-                    step,
-                    resolution,
-                    matched_region,
-                    before_png,
-                )
-                self._emit_control_overlay_phase(
-                    "executing",
-                    current_step=overlay_current,
-                    total_steps=overlay_total,
-                    target_tracking=overlay_target,
-                    observation_png=before_png,
-                )
-                try:
-                    error = self._act(
+                fresh_reacquisitions = 0
+                while True:
+                    # Structural postconditions compare against the final
+                    # observed state immediately before action delivery.
+                    # Readiness gates, target resolution, identity checks, and
+                    # effect pre-state capture can cross backend or time
+                    # boundaries; none of their state changes may be credited
+                    # to the workflow action.
+                    start_state = self._structural_state()
+                    overlay_target = self._control_overlay_browser_target(
                         step,
                         resolution,
-                        params,
-                        workflow=workflow,
-                        step_index=step_index,
-                        bundle_dir=bundle_dir,
-                        before_png=before_png,
-                        result=result,
-                        graph_ctx=graph_ctx,
+                        matched_region,
+                        before_png,
                     )
-                except ActionDeliveryUncertain as exc:
-                    delivery_uncertain = True
-                    result.delivery_uncertainty = ActionDeliveryUncertainty(
-                        operation=exc.operation,
-                        native=exc.native,
-                        target_fingerprint=exc.target_fingerprint,
-                        observed_at=datetime.now(timezone.utc).isoformat(),
-                        cause_type=exc.cause_type,
+                    self._emit_control_overlay_phase(
+                        "executing",
+                        current_step=overlay_current,
+                        total_steps=overlay_total,
+                        target_tracking=overlay_target,
+                        observation_png=before_png,
                     )
-                    # Continue to settled-state, postcondition, and independent
-                    # effect verification.  This is not permission to assume
-                    # delivery; it is the exact opposite: success now requires
-                    # the full configured contract.
-                    error = None
-                if self._governed_asset_mutation is not None:
-                    error = self._governed_asset_mutation
-                    result.safety_halt = True
+                    # A retry reaches this last common point only after fresh
+                    # target, context identity, and effect pre-state callbacks.
+                    # Recheck exact authority after the presentation callback
+                    # too, immediately before the next delivery boundary.
+                    if fresh_reacquisitions:
+                        error = self._fresh_actuation_authorization_refusal(
+                            workflow, params, step
+                        )
+                        if error is not None:
+                            result.safety_halt = True
+                            result.failure_category = (
+                                "governed_refusal"
+                                if self.governed_authorization is not None
+                                else "safety_halt"
+                            )
+                            break
+                    try:
+                        self._active_delivery_resolution = resolution
+                        self._active_delivery_region = matched_region
+                        error = self._act(
+                            step,
+                            resolution,
+                            params,
+                            workflow=workflow,
+                            step_index=step_index,
+                            bundle_dir=bundle_dir,
+                            before_png=before_png,
+                            result=result,
+                            run_dir=run_dir,
+                            graph_ctx=graph_ctx,
+                        )
+                    except FreshActuationRequired as exc:
+                        retry_reset_error: Optional[str] = None
+                        reacquisition_backend = (
+                            cast(FreshActuationReacquisitionBackend, self.backend)
+                            if isinstance(
+                                self.backend, FreshActuationReacquisitionBackend
+                            )
+                            else None
+                        )
+                        can_retry = (
+                            result.delivery_attempted is False
+                            and fresh_reacquisitions
+                            < _MAX_FRESH_ACTUATION_REACQUISITIONS
+                            and self._step_needs_consequential_revalidation(
+                                step, workflow
+                            )
+                            and isinstance(self.backend, RemoteActuationBackend)
+                            and reacquisition_backend is not None
+                        )
+                        if can_retry:
+                            assert reacquisition_backend is not None
+                            try:
+                                reacquisition_backend.reset_fresh_actuation_state()
+                            except Exception as reset_exc:  # noqa: BLE001
+                                retry_reset_error = (
+                                    "the backend refused the typed zero-input "
+                                    "lease reset "
+                                    f"({type(reset_exc).__name__})"
+                                )
+                                can_retry = False
+                        result.fresh_actuation_events.append(
+                            self._fresh_actuation_event(
+                                exc,
+                                step=step,
+                                workflow=workflow,
+                                resolution=self._active_delivery_resolution,
+                                matched_region=self._active_delivery_region,
+                                retried=can_retry,
+                                attempt=len(result.fresh_actuation_events) + 1,
+                            )
+                        )
+                        self._cancel_guarded_coordinate()
+                        self._cancel_guarded_keyboard()
+                        if not can_retry:
+                            if retry_reset_error is not None:
+                                retry_detail = retry_reset_error
+                            elif result.delivery_attempted is not False:
+                                retry_detail = (
+                                    "an earlier input edge crossed for this step, "
+                                    "so replay cannot retry it"
+                                )
+                            elif fresh_reacquisitions >= (
+                                _MAX_FRESH_ACTUATION_REACQUISITIONS
+                            ):
+                                retry_detail = (
+                                    "the bounded fresh-frame reacquisition "
+                                    "limit was exhausted"
+                                )
+                            elif not self._step_needs_consequential_revalidation(
+                                step, workflow
+                            ):
+                                retry_detail = (
+                                    "the step has no complete consequential "
+                                    "revalidation contract"
+                                )
+                            else:
+                                retry_detail = (
+                                    "the backend cannot reset a typed invalidated "
+                                    "lease for complete fresh revalidation"
+                                )
+                            error = f"{exc}; {retry_detail}"
+                            result.safety_halt = True
+                            result.failure_category = (
+                                "governed_refusal"
+                                if self.governed_authorization is not None
+                                else "safety_halt"
+                            )
+                            break
+
+                        fresh_reacquisitions += 1
+                        error = self._fresh_actuation_authorization_refusal(
+                            workflow, params, step
+                        )
+                        if error is None:
+                            (
+                                resolution,
+                                matched_region,
+                                before_png,
+                                error,
+                            ) = self._revalidate_consequential_actuation(
+                                step,
+                                resolution,
+                                matched_region,
+                                before_png,
+                                params,
+                                workflow,
+                                bundle_dir,
+                                result,
+                                run_dir=run_dir,
+                                arm_keyboard=step.action
+                                in (ActionKind.KEY, ActionKind.HOTKEY),
+                            )
+                            if resolution is not None and matched_region is not None:
+                                assert step.anchor is not None
+                                resolution = self._retain_visual_resolution_evidence(
+                                    workflow=workflow,
+                                    anchor=step.anchor,
+                                    resolution=resolution,
+                                    matched_region=matched_region,
+                                    frame_png=before_png,
+                                    bundle_dir=bundle_dir,
+                                    run_dir=run_dir,
+                                )
+                            result.resolution = resolution
+                            if before_png is not last_frame:
+                                result.before_png = self._save_step_png(
+                                    run_dir, evidence_step_id, "before", before_png
+                                )
+                                last_frame = before_png
+
+                        # The verifier pre-state belongs to the exact target,
+                        # identity, application, session, and workflow-state
+                        # observation that authorizes the next input attempt.
+                        effect_refresh_error: Optional[str] = None
+                        if (
+                            error is None
+                            and resolved_effects is not None
+                            and active_verifier is not None
+                        ):
+                            effect_refresh_error = self._profile_effect_tier_refusal(
+                                workflow,
+                                step,
+                                "gui",
+                                resolved_effects,
+                                active_verifier,
+                            )
+                            if effect_refresh_error is None:
+                                effect_pre_state = active_verifier.capture_pre_state()
+                                effect_refresh_error = (
+                                    self._profile_effect_tier_refusal(
+                                        workflow,
+                                        step,
+                                        "gui",
+                                        resolved_effects,
+                                        active_verifier,
+                                    )
+                                )
+                            error = effect_refresh_error
+
+                        if error is not None:
+                            result.safety_halt = True
+                            result.failure_category = (
+                                "governed_refusal"
+                                if self.governed_authorization is not None
+                                else "safety_halt"
+                            )
+                            if effect_refresh_error is not None:
+                                result.effect_verified = False
+                                result.effect_results.append(effect_refresh_error)
+                            break
+                        continue
+                    except ActionDeliveryUncertain as exc:
+                        delivery_uncertain = True
+                        result.delivery_uncertainty = ActionDeliveryUncertainty(
+                            operation=exc.operation,
+                            native=exc.native,
+                            target_fingerprint=exc.target_fingerprint,
+                            observed_at=datetime.now(timezone.utc).isoformat(),
+                            cause_type=exc.cause_type,
+                        )
+                        # Continue to settled-state, postcondition, and
+                        # independent effect verification. This is not
+                        # permission to assume delivery. Success now requires
+                        # the complete configured contract.
+                        error = None
+                    except (OcrResolutionRefused, StructuralResolutionRefused):
+                        # This typed refusal proves that the current delivery
+                        # boundary did not emit input. Preserve its exact safety
+                        # semantics even when an earlier focus edge in the same
+                        # composite step already crossed.
+                        raise
+                    except Exception as exc:
+                        if result.delivery_attempted is not True:
+                            raise
+                        # An untyped backend exception after a delivery boundary
+                        # is conservative uncertainty, not proof of no input.
+                        # Do not retain its message because it can contain page
+                        # or record data.  Continue through the same postcondition
+                        # and independent-effect reconciliation as the typed path.
+                        delivery_uncertain = True
+                        target_fingerprint = None
+                        if (
+                            resolution is not None
+                            and resolution.structural_handle is not None
+                        ):
+                            target_fingerprint = (
+                                resolution.structural_handle.target_fingerprint
+                            )
+                        result.delivery_uncertainty = ActionDeliveryUncertainty(
+                            operation=step.action.value,
+                            native=result.actuation == "uia",
+                            target_fingerprint=target_fingerprint,
+                            observed_at=datetime.now(timezone.utc).isoformat(),
+                            cause_type=type(exc).__name__,
+                        )
+                        error = None
+                    if self._governed_asset_mutation is not None:
+                        error = self._governed_asset_mutation
+                        result.safety_halt = True
+                    break
 
             if error is None:
                 try:
@@ -3294,7 +5908,13 @@ class Replayer:
                     if self._governed_asset_mutation is not None:
                         postconditions_ok = False
                         failed.append(self._governed_asset_mutation)
-                    result.postconditions_ok = postconditions_ok
+                    # ``postconditions_ok`` records the explicit ``expect``
+                    # contract only.  Input readback has its own typed field
+                    # and receipt evidence.  An empty predicate list is not an
+                    # implicit explicit-predicate pass.
+                    result.postconditions_ok = (
+                        postconditions_ok if step.expect else None
+                    )
                     if result.postcondition_drift_rescues:
                         # The rescue descriptions embed OCR'd on-screen text
                         # (postcondition literals) — scrub PHI before it hits the
@@ -3435,9 +6055,19 @@ class Replayer:
             result.ok = False
             result.safety_halt = True
             result.failure_category = "safety_halt"
+            admission = (
+                "no further action was admitted after the earlier input edge"
+                if result.delivery_attempted is True
+                else "no action was admitted"
+            )
             result.error = (
                 f"OCR safety refusal for step '{step.id}' "
-                f"({step.intent}): {exc} — no action was admitted"
+                f"({step.intent}): {exc} — {admission}"
+            )
+            result.safety_refusal_evidence = SafetyRefusalEvidence(
+                stage="target_resolution",
+                code="target_ambiguous",
+                detector_input_sha256=sha256_bytes(last_frame),
             )
         except StructuralResolutionRefused as exc:
             self._cancel_guarded_coordinate()
@@ -3448,9 +6078,19 @@ class Replayer:
             result.ok = False
             result.safety_halt = True
             result.failure_category = "safety_halt"
+            admission = (
+                "no further action was admitted after the earlier input edge"
+                if result.delivery_attempted is True
+                else "no action was admitted"
+            )
             result.error = (
                 f"Structural safety refusal for step '{step.id}' "
-                f"({step.intent}): {exc} — no action was admitted"
+                f"({step.intent}): {exc} — {admission}"
+            )
+            result.safety_refusal_evidence = SafetyRefusalEvidence(
+                stage="target_resolution",
+                code="target_ambiguous",
+                detector_input_sha256=sha256_bytes(last_frame),
             )
         except Exception as exc:  # defensive: report, don't crash the run
             self._cancel_guarded_coordinate()
@@ -3473,7 +6113,9 @@ class Replayer:
                     if self.governed_authorization is not None
                     else "safety_halt"
                 )
-        result.after_png = self._save_step_png(run_dir, step.id, "after", last_frame)
+        result.after_png = self._save_step_png(
+            run_dir, evidence_step_id, "after", last_frame
+        )
         result.elapsed_ms = (time.monotonic() - t0) * 1000.0
         return result
 
@@ -3664,6 +6306,8 @@ class Replayer:
         *,
         workflow: Workflow,
         step_index: int,
+        bundle_dir: Path,
+        effect_verifier: Any,
     ) -> bool:
         """Perform ``step.api_binding``'s write via the API and confirm it.
 
@@ -3679,17 +6323,18 @@ class Replayer:
           effect contract, or no verifier) -- an unverifiable consequential
           write never proceeds;
         - snapshot the system of record, then actuate ONCE;
-        - UNAVAILABLE (request never sent) -> return False so the caller falls
-          through to the GUI ladder; nothing was written, so no double-write;
-        - HALT (request sent, outcome unknown / rejected) -> stop the run; the
-          write may have landed, so it is NEVER re-done through the GUI;
+        - UNAVAILABLE (request never sent) -> use the binding's configured GUI
+          fallback or typed pre-delivery halt; nothing was written;
+        - HALT (request sent, outcome unknown / rejected) -> run the configured
+          postcondition and independent-effect checks without retry or GUI
+          fallback; resolve only if the complete contract proves the effect;
         - ACTUATED (2xx) -> CONFIRM with the EffectVerifier; a non-CONFIRMED
           verdict HALTs exactly as it would for a GUI write.
 
         Returns True when the API tier took responsibility for the step (the
         result is final -- actuated+verified, HALTed, or a config-error HALT),
-        False when the API tier is UNAVAILABLE and the caller must fall through
-        to the GUI resolution ladder.
+        False only when the API tier is UNAVAILABLE and the binding permits the
+        caller to fall through to the GUI resolution ladder.
         """
         binding = step.api_binding
         assert binding is not None  # guaranteed by the caller
@@ -3727,7 +6372,10 @@ class Replayer:
             result.failure_category = "governed_refusal"
             result.error = identity_refusal
             return True
-        if self.effect_verifier is None:
+        # Bind the effect contracts to this run before either the verifier
+        # strength check or its detector-input digest is evaluated.
+        effects = self._resolve_effects(effects, params)
+        if effect_verifier is None:
             result.effect_verified = False
             result.effect_results.append(
                 "API binding present but no EffectVerifier is configured to "
@@ -3739,22 +6387,25 @@ class Replayer:
                 "but no EffectVerifier is configured to confirm the write -- "
                 "refusing an unverifiable consequential write; run aborted"
             )
+            result.safety_refusal_evidence = SafetyRefusalEvidence(
+                stage="effect_verifier",
+                code="effect_verifier_missing",
+                detector_input_sha256=effect_verifier_input_sha256(None, effects),
+            )
             return True
 
-        # Bind the effect contracts to this run's params BEFORE snapshotting the
-        # pre-state (P0-3): the same {param} substitution the ApiActuator applies
-        # to the URL/query/body must apply to what the write is verified against,
-        # or an API write for patient "Susan" would be confirmed against the
-        # demonstration's patient "Phil".
-        effects = self._resolve_effects(effects, params)
+        # The same parameter substitution that the ApiActuator applies to the
+        # URL/query/body now also applies to the effect checked below.
         api_hash_start = len(result.effect_contract_hashes)
         result.effect_contract_hashes.extend(
             effect.contract_hash() for effect in effects
         )
         refusal = self._profile_effect_tier_refusal(
             workflow,
+            step,
+            "api",
             effects,
-            self.effect_verifier,
+            effect_verifier,
         )
         if refusal is not None:
             result.effect_verified = False
@@ -3762,13 +6413,21 @@ class Replayer:
             result.failure_category = "governed_refusal"
             result.effect_results.append(refusal)
             result.error = refusal
+            result.safety_refusal_evidence = SafetyRefusalEvidence(
+                stage="effect_strength",
+                code="effect_strength_insufficient",
+                detector_input_sha256=effect_verifier_input_sha256(
+                    effect_verifier,
+                    effects,
+                ),
+            )
             return True
 
         # Snapshot the system of record BEFORE the write so the verifier counts
         # only what THIS actuation wrote (delta / at-most-once / collateral
         # loss), then actuate exactly once.
         try:
-            before = self.effect_verifier.capture_pre_state()
+            before = effect_verifier.capture_pre_state()
         except Exception as exc:  # noqa: BLE001 - deployment verifier boundary
             result.effect_verified = False
             result.effect_results.append(
@@ -3784,8 +6443,10 @@ class Replayer:
             return True
         refusal = self._profile_effect_tier_refusal(
             workflow,
+            step,
+            "api",
             effects,
-            self.effect_verifier,
+            effect_verifier,
         )
         if refusal is not None:
             result.effect_verified = False
@@ -3793,6 +6454,14 @@ class Replayer:
             result.failure_category = "governed_refusal"
             result.effect_results.append(refusal)
             result.error = refusal
+            result.safety_refusal_evidence = SafetyRefusalEvidence(
+                stage="effect_strength",
+                code="effect_strength_insufficient",
+                detector_input_sha256=effect_verifier_input_sha256(
+                    effect_verifier,
+                    effects,
+                ),
+            )
             return True
         overlay_current, overlay_total = self._control_overlay_progress(
             workflow, step_index, None
@@ -3802,11 +6471,21 @@ class Replayer:
             current_step=overlay_current,
             total_steps=overlay_total,
         )
+        refusal = self._delivery_authorization_refusal(workflow, params, step, result)
+        if refusal is not None:
+            result.ok = False
+            result.error = refusal
+            return True
+        # Structural postconditions compare against the last observation before
+        # request delivery, not against state captured earlier during
+        # authorization or verifier setup.
+        start_state = self._structural_state()
         # This transition is the explicit delivery boundary. Set it BEFORE the
         # call because an exception/timeout may occur after the request left the
         # process but before the actuator can return a receipt-like outcome.
         result.delivery_attempted = True
         try:
+            self._require_qualification_environment_current()
             outcome = self.api_actuator.actuate(binding, params)
         except Exception as exc:  # noqa: BLE001 - external actuator boundary
             # The actuator contract is no-throw, but a deployment adapter can
@@ -3819,53 +6498,155 @@ class Replayer:
                 "[api] actuator raised after delivery may have begun "
                 f"({type(exc).__name__}); outcome requires reconciliation"
             )
-            result.ok = False
-            result.error = (
-                f"API actuation for step '{step.id}' ({step.intent}) raised "
-                f"{type(exc).__name__} after delivery may have begun; refusing "
-                "GUI fallback or blind retry — run aborted"
+            return self._verify_uncertain_api_delivery(
+                step,
+                result,
+                workflow=workflow,
+                step_index=step_index,
+                bundle_dir=bundle_dir,
+                start_state=start_state,
+                before=before,
+                effects=effects,
+                effect_verifier=effect_verifier,
+                cause_type=type(exc).__name__,
             )
-            return True
 
-        from openadapt_flow.runtime.actuators import ActuationStatus
+        from openadapt_flow.runtime.actuators import (
+            ActuationStatus,
+            ApiActuationResult,
+            ApiHaltKind,
+        )
 
-        if outcome.status == ActuationStatus.UNAVAILABLE:
-            # The request was NEVER sent -- nothing was written. Fall through to
-            # the GUI ladder for this step (no double-write risk). The GUI path
-            # populates the result. Remove the unused API-path contracts before
-            # that path binds its own effects: the result must describe exactly
+        # Only the validated model can prove the pre-delivery UNAVAILABLE
+        # state.  A deployment-owned actuator may return any object after its
+        # call, including a duck-typed object that claims ``UNAVAILABLE``.
+        # Treat that as possible delivery: collect evidence, never fall
+        # through to the GUI, and never turn it into success.
+        if type(outcome) is not ApiActuationResult:
+            result.actuation = "api"
+            result.effect_results.append(
+                "[api] actuator returned an untyped result after delivery may "
+                f"have begun ({type(outcome).__name__}); treating it as a "
+                "protocol error that cannot resolve to success"
+            )
+            return self._verify_uncertain_api_delivery(
+                step,
+                result,
+                workflow=workflow,
+                step_index=step_index,
+                bundle_dir=bundle_dir,
+                start_state=start_state,
+                before=before,
+                effects=effects,
+                effect_verifier=effect_verifier,
+                cause_type="ApiActuatorProtocolError",
+                allow_contract_resolution=False,
+            )
+        try:
+            # Revalidate the return value because an adapter can mutate a
+            # Pydantic instance after construction.  The runtime trusts the
+            # copied, validated receipt only.
+            outcome = ApiActuationResult.model_validate(
+                outcome.model_dump(mode="python")
+            )
+        except Exception as exc:  # noqa: BLE001 - deployment actuator boundary
+            result.actuation = "api"
+            result.effect_results.append(
+                "[api] actuator returned a malformed typed result after "
+                "delivery may have begun "
+                f"({type(exc).__name__}); treating it as a protocol error "
+                "that cannot resolve to success"
+            )
+            return self._verify_uncertain_api_delivery(
+                step,
+                result,
+                workflow=workflow,
+                step_index=step_index,
+                bundle_dir=bundle_dir,
+                start_state=start_state,
+                before=before,
+                effects=effects,
+                effect_verifier=effect_verifier,
+                cause_type="ApiActuatorProtocolError",
+                allow_contract_resolution=False,
+            )
+
+        outcome_status = outcome.status
+        outcome_reason = outcome.reason
+
+        if outcome_status is ActuationStatus.UNAVAILABLE:
+            # The request was NEVER sent -- nothing was written. Remove the
+            # unused API-path contracts before applying the binding's exact
+            # unavailability policy. A GUI fallback result must describe only
             # the path responsible for delivery, never both alternatives.
             result.delivery_attempted = False
             del result.effect_contract_hashes[api_hash_start:]
-            result.effect_results.append(f"[api] {outcome.reason}")
+            result.effect_results.append(f"[api] {outcome_reason}")
+            if binding.on_unavailable == "halt":
+                self._set_api_unavailable_refusal(
+                    step,
+                    result,
+                    reason=outcome_reason,
+                )
+                return True
             return False
 
         # From here the request WAS attempted -- this step is API-tier and is
         # NEVER also GUI-written (the no-double-write contract).
         result.actuation = "api"
 
-        if outcome.status == ActuationStatus.HALT:
-            result.effect_verified = False
-            result.effect_results.append(f"[api] {outcome.reason}")
-            result.ok = False
-            result.error = (
-                f"API actuation HALTED step '{step.id}' ({step.intent}): "
-                f"{outcome.reason} -- run aborted"
+        if outcome_status is ActuationStatus.HALT:
+            result.effect_results.append(f"[api] {outcome_reason}")
+            halt_kind = getattr(outcome, "halt_kind", None)
+            typed_halt = isinstance(halt_kind, ApiHaltKind)
+            if not typed_halt:
+                result.effect_results.append(
+                    "[api] actuator returned an untyped HALT result; treating "
+                    "the delivery as a protocol error that cannot resolve to "
+                    "success"
+                )
+            return self._verify_uncertain_api_delivery(
+                step,
+                result,
+                workflow=workflow,
+                step_index=step_index,
+                bundle_dir=bundle_dir,
+                start_state=start_state,
+                before=before,
+                effects=effects,
+                effect_verifier=effect_verifier,
+                cause_type=(
+                    "ApiActuatorProtocolError"
+                    if not typed_halt
+                    else (
+                        "ApiResponseRejected"
+                        if halt_kind is ApiHaltKind.RESPONSE_REJECTED
+                        else "ApiDeliveryUncertain"
+                    )
+                ),
+                allow_contract_resolution=(
+                    typed_halt and halt_kind is ApiHaltKind.DELIVERY_UNCERTAIN
+                ),
             )
-            return True
 
         # ACTUATED (2xx): confirm the write against the system of record with
         # the same EffectVerifier that gates a GUI write. A non-CONFIRMED
         # verdict HALTs. The GUI resolve/act (and screen postconditions) are
         # SKIPPED -- the record, not the screen, is the oracle for an API write.
-        result.effect_results.append(f"[api] actuated {outcome.reason}")
+        result.effect_results.append(f"[api] actuated {outcome_reason}")
         self._emit_control_overlay_phase(
             "verifying",
             current_step=overlay_current,
             total_steps=overlay_total,
         )
         try:
-            error = self._verify_effects(step, before, result, effects=effects)
+            error = self._verify_effects(
+                step,
+                before,
+                result,
+                effects=effects,
+                verifier=effect_verifier,
+            )
         except Exception as exc:  # noqa: BLE001 - deployment verifier boundary
             result.effect_verified = False
             result.effect_results.append(
@@ -3880,6 +6661,171 @@ class Replayer:
         result.ok = error is None
         result.error = error
         return True
+
+    def _verify_uncertain_api_delivery(
+        self,
+        step: Step,
+        result: StepResult,
+        *,
+        workflow: Workflow,
+        step_index: int,
+        bundle_dir: Path,
+        start_state: dict[str, Any],
+        before: EffectState,
+        effects: list["Effect"],
+        effect_verifier: Any,
+        cause_type: str,
+        allow_contract_resolution: bool = True,
+    ) -> bool:
+        """Resolve one possibly dispatched API write without another actuation.
+
+        A response loss, rejected response, or non-conforming actuator
+        exception does not end evidence collection. The runtime checks the
+        configured postcondition and the independent system-of-record effect.
+        A response loss can resolve only when both contracts confirm. An
+        explicit response outside the binding's accepted contract always
+        remains halted, even when later evidence confirms a business effect.
+        The API request is never retried and the GUI fallback never runs.
+        """
+
+        result.delivery_uncertainty = ActionDeliveryUncertainty(
+            operation="api_request",
+            native=False,
+            observed_at=datetime.now(timezone.utc).isoformat(),
+            cause_type=cause_type,
+        )
+        overlay_current, overlay_total = self._control_overlay_progress(
+            workflow, step_index, None
+        )
+        self._emit_control_overlay_phase(
+            "verifying",
+            current_step=overlay_current,
+            total_steps=overlay_total,
+        )
+        verification_errors: list[str] = []
+
+        if step.expect:
+            try:
+                after_png = self.vision.wait_settled(self.backend)
+                postconditions_ok, _last_frame, failed = self._check_postconditions(
+                    step,
+                    after_png,
+                    bundle_dir,
+                    start_state,
+                    result,
+                )
+                result.postconditions_ok = postconditions_ok
+                if not postconditions_ok:
+                    verification_errors.append(
+                        "postcondition did not confirm: "
+                        + ("; ".join(failed) or "unknown postcondition")
+                    )
+            except Exception as exc:  # noqa: BLE001 - observation boundary
+                result.postconditions_ok = False
+                verification_errors.append(
+                    f"postcondition observation failed ({type(exc).__name__})"
+                )
+        else:
+            # An absent postcondition cannot resolve uncertain delivery.
+            result.postconditions_ok = None
+            verification_errors.append("no postcondition was declared")
+
+        try:
+            effect_error = self._verify_effects(
+                step,
+                before,
+                result,
+                effects=effects,
+                verifier=effect_verifier,
+            )
+        except Exception as exc:  # noqa: BLE001 - deployment verifier boundary
+            result.effect_verified = False
+            result.effect_results.append(
+                "[api] effect verification raised after uncertain delivery "
+                f"({type(exc).__name__}); outcome requires reconciliation"
+            )
+            effect_error = (
+                f"independent effect verification failed ({type(exc).__name__})"
+            )
+        if effect_error is not None:
+            verification_errors.append(effect_error)
+
+        uncertainty = result.delivery_uncertainty
+        assert uncertainty is not None
+        uncertainty.verification_attempted = True
+        uncertainty.postconditions_confirmed = result.postconditions_ok is True
+        uncertainty.effects_confirmed = result.effect_verified is True
+        uncertainty.resolved_by_contract = (
+            allow_contract_resolution
+            and uncertainty.postconditions_confirmed
+            and uncertainty.effects_confirmed
+            and not verification_errors
+        )
+        result.ok = uncertainty.resolved_by_contract
+        if result.ok:
+            result.error = None
+        else:
+            result.safety_halt = True
+            result.failure_category = (
+                "governed_refusal"
+                if self.governed_authorization is not None
+                else "safety_halt"
+            )
+            detail = "; ".join(verification_errors) or "verification confirmed"
+            if allow_contract_resolution:
+                result.error = (
+                    f"API delivery for step '{step.id}' ({step.intent}) was "
+                    "uncertain and was not retried; the complete postcondition "
+                    "and independent effect contract did not confirm: "
+                    f"{detail}"
+                )
+            else:
+                result.error = (
+                    f"API delivery for step '{step.id}' ({step.intent}) "
+                    "received a response outside the binding's accepted "
+                    "contract and was not retried; later verification evidence "
+                    f"was collected but cannot override that rejection: {detail}"
+                )
+        return True
+
+    @staticmethod
+    def _set_api_unavailable_refusal(
+        step: Step,
+        result: StepResult,
+        *,
+        reason: str,
+    ) -> None:
+        """Record an exact pre-delivery API-only refusal.
+
+        The caller invokes this only when no request was sent. The typed
+        evidence distinguishes that state from an attempted or uncertain API
+        delivery and prevents any GUI fallback.
+        """
+
+        binding = step.api_binding
+        assert binding is not None
+        detector_input = json.dumps(
+            {
+                "binding": binding.model_dump(mode="json"),
+                "reason_sha256": hashlib.sha256(reason.encode("utf-8")).hexdigest(),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        result.ok = False
+        result.delivery_attempted = False
+        result.safety_halt = True
+        result.failure_category = "governed_refusal"
+        result.effect_verified = False
+        result.error = (
+            f"API-only step '{step.id}' ({step.intent}) is unavailable before "
+            "delivery; refusing GUI fallback — run aborted"
+        )
+        result.safety_refusal_evidence = SafetyRefusalEvidence(
+            stage="api_admission",
+            code="api_path_unavailable",
+            detector_input_sha256=hashlib.sha256(detector_input).hexdigest(),
+        )
 
     # -- system-of-record effect verification -----------------------------------
 
@@ -3896,11 +6842,20 @@ class Replayer:
         returned value-identical -- ``resolve`` is a no-op for it.
         """
         namespace = {**params, "__run_id__": self._run_id}
-        return [effect.resolve(namespace) for effect in effects]
+        run_id_sha256 = hashlib.sha256(self._run_id.encode("utf-8")).hexdigest()
+        return [
+            effect.resolve(
+                namespace,
+                opaque_param_sha256={"__run_id__": run_id_sha256},
+            )
+            for effect in effects
+        ]
 
     def _profile_effect_tier_refusal(
         self,
         workflow: Workflow,
+        step: Step,
+        actuation_path: Literal["gui", "api"],
         effects: list["Effect"],
         verifier: object,
     ) -> Optional[str]:
@@ -3919,10 +6874,37 @@ class Replayer:
         )
         if minimum is None:
             return None
+        requirements = authorization.effect_requirements(step.id, actuation_path)
+        if requirements:
+            from openadapt_flow.policy import effects_for_actuation
+
+            declared = effects_for_actuation(
+                step, "api" if actuation_path == "api" else "guarded_coordinate"
+            )
+            if len(requirements) != len(declared) or len(effects) != len(declared):
+                return (
+                    "Qualified effect requirements changed after admission — "
+                    "refusing to actuate; run aborted"
+                )
+            for index, requirement in enumerate(requirements):
+                if (
+                    requirement.effect_index != index
+                    or requirement.effect_contract_hash
+                    != declared[index].contract_hash()
+                ):
+                    return (
+                        "Qualified effect contract changed after admission — "
+                        "refusing to actuate; run aborted"
+                    )
         weak = []
-        for effect in effects:
+        for index, effect in enumerate(effects):
+            required = (
+                VerificationTier(requirements[index].minimum_tier)
+                if requirements
+                else minimum
+            )
             actual = verifier_effect_tier(verifier, effect)
-            if actual is None or not actual.satisfies(minimum):
+            if actual is None or not actual.satisfies(required):
                 weak.append("untyped" if actual is None else actual.name.lower())
         if not weak:
             return None
@@ -3930,7 +6912,7 @@ class Replayer:
         return (
             "Effect verifier strength changed after admission: "
             f"{observed} evidence cannot satisfy the required "
-            f"{minimum.name.lower()} tier — refusing to actuate; run aborted"
+            "qualified effect tier — refusing to actuate; run aborted"
         )
 
     def _all_default_readback(self, effects: list["Effect"]) -> bool:
@@ -4016,8 +6998,21 @@ class Replayer:
                     "be completed by an operator before this consequential "
                     "write can run — run aborted"
                 )
-            verdict = verifier.verify(effect, before)
-            tier = verifier_effect_tier(verifier, effect)
+            try:
+                verdict = verify_effect_without_mutation(verifier, effect, before)
+                tier = verifier_effect_tier(verifier, effect)
+            except EffectContractMutationError:
+                result.effect_verified = False
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.effect_results.append(
+                    "effect verifier changed the resolved effect contract; HALT"
+                )
+                return (
+                    f"Effect verifier changed the resolved contract for step "
+                    f"'{step.id}' — refusing mutable verification evidence; "
+                    "run aborted"
+                )
             if verdict.confirmed:
                 result.effect_evidence.append(
                     EffectVerificationEvidence(
@@ -4132,6 +7127,8 @@ class Replayer:
         workflow: Workflow,
         bundle_dir: Path,
         result: StepResult,
+        *,
+        evidence_run_dir: Optional[Path] = None,
     ) -> Optional[str]:
         """Run the target-identity contract on one exact observed frame."""
         qualification = workflow.qualification
@@ -4168,6 +7165,37 @@ class Replayer:
         check = self._verify_identity(
             step, resolution, frame_png, params, workflow, bundle_dir
         )
+        if (
+            check.status in {"verified", "mismatch"}
+            and check.mode == "pixel"
+            and workflow.qualification is not None
+        ):
+            try:
+                if evidence_run_dir is None:
+                    raise OSError("pixel evidence has no local run directory")
+                recorded_png, live_png = self._identifier_crops(
+                    step.anchor,
+                    resolution,
+                    frame_png,
+                    bundle_dir,
+                    workflow=workflow,
+                )
+                if recorded_png is None or live_png is None:
+                    raise OSError("pixel evidence crops are unavailable")
+                check.pixel_evidence = self._retain_pixel_identity_evidence(
+                    workflow=workflow,
+                    anchor=step.anchor,
+                    recorded_png=recorded_png,
+                    live_png=live_png,
+                    run_dir=evidence_run_dir,
+                )
+            except OSError:
+                check = IdentityCheck(
+                    status="unreadable",
+                    mode="pixel",
+                    expected="recorded identifier crop",
+                    observed="exact local pixel evidence could not be retained",
+                )
         result.identity = check
         governed = (
             self.governed_authorization is not None
@@ -4233,6 +7261,152 @@ class Replayer:
         if error is not None and (governed or signal_quorum):
             result.safety_halt = True
         return error
+
+    @staticmethod
+    def _retain_pixel_identity_evidence(
+        *,
+        workflow: Workflow,
+        anchor: Anchor,
+        recorded_png: bytes,
+        live_png: bytes,
+        run_dir: Path,
+    ) -> PixelIdentityEvidence:
+        """Retain exact identity crops locally and return only PHI-free bindings."""
+
+        if anchor.identifier_crop is None:
+            raise OSError("pixel evidence has no recorded anchor reference")
+        recorded_sha256 = hashlib.sha256(recorded_png).hexdigest()
+        live_sha256 = hashlib.sha256(live_png).hexdigest()
+        if (
+            workflow.manifest is None
+            or workflow.manifest.file_hashes.get(anchor.identifier_crop)
+            != recorded_sha256
+        ):
+            raise OSError("recorded identity crop does not match the bundle manifest")
+
+        root = Path(run_dir).resolve()
+        private_dir = root / "private"
+        inventory_dir = private_dir / "identity-crops"
+        try:
+            if private_dir.is_symlink() or inventory_dir.is_symlink():
+                raise OSError("pixel evidence inventory path is a symlink")
+            inventory_dir.mkdir(parents=True, exist_ok=True)
+            if (
+                private_dir.is_symlink()
+                or inventory_dir.is_symlink()
+                or not inventory_dir.resolve().is_relative_to(root)
+            ):
+                raise OSError("pixel evidence inventory leaves the run root")
+            for digest, payload in (
+                (recorded_sha256, recorded_png),
+                (live_sha256, live_png),
+            ):
+                path = inventory_dir / f"{digest}.png"
+                if path.is_symlink():
+                    raise OSError("pixel evidence crop path is a symlink")
+                existing = path.read_bytes() if path.exists() else None
+                if existing is not None and existing != payload:
+                    raise OSError("pixel evidence digest path has other bytes")
+                path.write_bytes(payload)
+        except OSError:
+            raise
+
+        return PixelIdentityEvidence(
+            recorded_crop_sha256=recorded_sha256,
+            live_crop_sha256=live_sha256,
+            recorded_crop_inventory_ref=(
+                f"private/identity-crops/{recorded_sha256}.png"
+            ),
+            live_crop_inventory_ref=f"private/identity-crops/{live_sha256}.png",
+            evaluator_contract_sha256=(
+                identity_mod.pixel_identity_evaluator_contract_sha256()
+            ),
+        )
+
+    def _retain_visual_resolution_evidence(
+        self,
+        *,
+        workflow: Workflow,
+        anchor: Anchor,
+        resolution: Resolution,
+        matched_region: Region,
+        frame_png: bytes,
+        bundle_dir: Path,
+        run_dir: Path,
+        allow_target_ocr: bool = True,
+    ) -> Resolution:
+        """Bind a visual resolution to exact, locally retained resolver inputs."""
+
+        if self.qualification_fault_driver is None:
+            return resolution
+        if resolution.rung == "structural":
+            return resolution
+        if resolution.rung == "grounder":
+            # A model response is not independently reproducible from the
+            # retained frame.  Qualification rejects it as exact fault proof.
+            return resolution
+        template_png = self._asset_bytes(
+            bundle_dir,
+            anchor.template,
+            workflow=workflow,
+        )
+        if template_png is None:
+            raise OSError("visual resolution template is unavailable")
+        frame_sha256 = hashlib.sha256(frame_png).hexdigest()
+        template_sha256 = hashlib.sha256(template_png).hexdigest()
+        if (
+            workflow.manifest is None
+            or workflow.manifest.file_hashes.get(anchor.template) != template_sha256
+        ):
+            raise OSError("visual resolution template does not match the manifest")
+
+        root = Path(run_dir).resolve()
+        inventory_dir = root / "private" / "resolution-inputs"
+        if inventory_dir.is_symlink():
+            raise OSError("visual resolution inventory path is a symlink")
+        inventory_dir.mkdir(parents=True, exist_ok=True)
+        if inventory_dir.is_symlink() or not inventory_dir.resolve().is_relative_to(
+            root
+        ):
+            raise OSError("visual resolution inventory leaves the run root")
+        for digest, payload in (
+            (frame_sha256, frame_png),
+            (template_sha256, template_png),
+        ):
+            path = inventory_dir / f"{digest}.png"
+            if path.is_symlink():
+                raise OSError("visual resolution input path is a symlink")
+            existing = path.read_bytes() if path.exists() else None
+            if existing is not None and existing != payload:
+                raise OSError("visual resolution digest path has other bytes")
+            path.write_bytes(payload)
+
+        return resolution.model_copy(
+            update={
+                "visual_evidence": VisualResolutionEvidence(
+                    frame_sha256=frame_sha256,
+                    frame_inventory_ref=(
+                        f"private/resolution-inputs/{frame_sha256}.png"
+                    ),
+                    template_sha256=template_sha256,
+                    template_inventory_ref=(
+                        f"private/resolution-inputs/{template_sha256}.png"
+                    ),
+                    evaluator_contract_sha256=(
+                        visual_resolution_evaluator_contract_sha256()
+                    ),
+                    anchor_contract_sha256=(
+                        visual_resolution_anchor_contract_sha256(
+                            anchor,
+                            template_sha256=template_sha256,
+                            allow_target_ocr=allow_target_ocr,
+                        )
+                    ),
+                    matched_region=matched_region,
+                    allow_target_ocr=allow_target_ocr,
+                )
+            }
+        )
 
     def _step_is_consequential(self, step: Step, workflow: Workflow) -> bool:
         authorization = self.governed_authorization
@@ -4308,6 +7482,21 @@ class Replayer:
             # It always needs an exact fresh-frame lease before the focus click
             # and another after focus before text+commit, independent of a
             # generic risk classifier's opinion of the TYPE step.
+            return True
+        if (
+            self.qualification_fault_driver is not None
+            and step.action
+            in {
+                ActionKind.CLICK,
+                ActionKind.DOUBLE_CLICK,
+                ActionKind.RIGHT_CLICK,
+                ActionKind.DRAG,
+            }
+            and isinstance(self.backend, RemoteActuationBackend)
+        ):
+            # Exact fault-prefix proof includes read-only prior actions. Arm a
+            # fresh remote lease for those actions only during the fault run,
+            # so ordinary demo replay keeps its reversible fast path.
             return True
         return self._step_is_consequential(step, workflow) and (
             isinstance(self.backend, RemoteActuationBackend)
@@ -4457,6 +7646,7 @@ class Replayer:
         bundle_dir: Path,
         result: StepResult,
         *,
+        run_dir: Path,
         arm_keyboard: bool = False,
     ) -> tuple[
         Optional[Resolution],
@@ -4592,20 +7782,35 @@ class Replayer:
                 f"'{step.id}' ({step.intent}): {detail}",
             )
 
-        fresh_resolution, fresh_region, error = self._resolve_step(
-            step,
-            fresh_png,
-            bundle_dir,
-            workflow,
-            # Opening an opaque select control can repeat its current value in
-            # the option popup. That text is valid target evidence before the
-            # focusing click, but it is no longer unique afterward. The second
-            # phase therefore requires the retained template or independent
-            # relational landmarks. Ambiguous or absent context still halts.
-            allow_target_ocr=not (
-                arm_keyboard and step.action is ActionKind.SELECT_OPTION
-            ),
-        )
+        try:
+            fresh_resolution, fresh_region, error = self._resolve_step(
+                step,
+                fresh_png,
+                bundle_dir,
+                workflow,
+                # Opening an opaque select control can repeat its current value
+                # in the option popup. That text is valid target evidence before
+                # the focusing click, but it is no longer unique afterward. The
+                # second phase therefore requires the retained template or
+                # independent relational landmarks.
+                allow_target_ocr=not (
+                    arm_keyboard and step.action is ActionKind.SELECT_OPTION
+                ),
+            )
+        except (OcrResolutionRefused, StructuralResolutionRefused) as exc:
+            result.safety_halt = True
+            result.safety_refusal_evidence = SafetyRefusalEvidence(
+                stage="actuation_revalidation",
+                code="actuation_observation_changed",
+                detector_input_sha256=sha256_bytes(fresh_png),
+            )
+            return (
+                None,
+                None,
+                fresh_png,
+                "Actuation preflight HALTED because the fresh target was "
+                f"ambiguous for step '{step.id}' ({step.intent}): {exc}",
+            )
         if error is not None:
             if self.governed_authorization is not None:
                 result.safety_halt = True
@@ -4700,6 +7905,7 @@ class Replayer:
                     workflow,
                     bundle_dir,
                     result,
+                    evidence_run_dir=run_dir,
                 )
             except Exception:
                 if guarded_coordinate:
@@ -4715,6 +7921,13 @@ class Replayer:
                 self._cancel_guarded_keyboard()
             if error is not None and focused_element_backend:
                 self._cancel_guarded_keyboard()
+        # Retain the exact observation that authorizes the next input edge.
+        # Composite TYPE/SELECT_OPTION and retry paths can re-resolve inside
+        # ``_act`` after the outer scope captured its initial geometry. A typed
+        # zero-input mismatch must describe this live edge, not the stale
+        # pre-focus target.
+        self._active_delivery_resolution = fresh_resolution
+        self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
 
     def _resolve_step(
@@ -4812,7 +8025,7 @@ class Replayer:
         screen_png: bytes,
         bundle_dir: Path,
         workflow: Workflow,
-    ) -> tuple[Optional[Resolution], Optional[str]]:
+    ) -> tuple[Optional[Resolution], Optional[Region], Optional[str]]:
         """Resolve a drag destination independently on the actuation frame.
 
         A drag is never replayed as a stored coordinate pair. The compiler
@@ -4822,20 +8035,476 @@ class Replayer:
         """
 
         if step.drag_end_anchor is None:
-            return None, (
-                f"Step '{step.id}' ({step.intent}) is a drag step but has no "
-                "destination anchor"
+            return (
+                None,
+                None,
+                (
+                    f"Step '{step.id}' ({step.intent}) is a drag step but has no "
+                    "destination anchor"
+                ),
             )
         endpoint_step = step.model_copy(
             update={"action": ActionKind.CLICK, "anchor": step.drag_end_anchor}
         )
-        resolution, _region, error = self._resolve_step(
+        resolution, region, error = self._resolve_step(
             endpoint_step,
             screen_png,
             bundle_dir,
             workflow,
         )
-        return resolution, error
+        return resolution, region, error
+
+    @staticmethod
+    def _deliver_backend_call(
+        result: StepResult,
+        call: Callable[[], _DeliveryResultT],
+    ) -> _DeliveryResultT:
+        """Call one backend delivery boundary with exact attempt reporting.
+
+        A typed fresh-frame mismatch or structural refusal proves that this
+        call emitted no input edge, so it preserves the step's prior delivery
+        state. Every other exception is conservative: the boundary may have
+        been crossed and the step must not enter the pre-delivery retry loop.
+        """
+
+        attempted_before = result.delivery_attempted
+        try:
+            delivered = call()
+        except (FreshActuationRequired, StructuralResolutionRefused):
+            result.delivery_attempted = attempted_before
+            raise
+        except Exception:
+            result.delivery_attempted = True
+            raise
+        result.delivery_attempted = True
+        return delivered
+
+    @staticmethod
+    def _regions_intersect(left: Region, right: Region) -> bool:
+        left_x, left_y, left_width, left_height = left
+        right_x, right_y, right_width, right_height = right
+        return not (
+            left_x + left_width <= right_x
+            or right_x + right_width <= left_x
+            or left_y + left_height <= right_y
+            or right_y + right_height <= left_y
+        )
+
+    @staticmethod
+    def _translate_recorded_region(
+        step: Step,
+        resolution: Optional[Resolution],
+        region: Region,
+    ) -> Region:
+        """Map recorded anchor-relative geometry onto the live target point."""
+
+        if step.anchor is None or resolution is None:
+            return region
+        recorded_x, recorded_y = step.anchor.click_point
+        live_x, live_y = resolution.point
+        x, y, width, height = region
+        return (
+            live_x + x - recorded_x,
+            live_y + y - recorded_y,
+            width,
+            height,
+        )
+
+    @classmethod
+    def _fresh_actuation_identity_regions(
+        cls,
+        step: Step,
+        workflow: Workflow,
+        resolution: Optional[Resolution],
+    ) -> list[Region]:
+        regions: list[Region] = []
+        if step.anchor is not None and step.anchor.identifier_region is not None:
+            regions.append(
+                cls._translate_recorded_region(
+                    step, resolution, step.anchor.identifier_region
+                )
+            )
+        if workflow.qualification is not None:
+            policy = workflow.qualification.identity_policies.get(step.id)
+            if policy is not None:
+                regions.extend(
+                    cls._translate_recorded_region(step, resolution, signal.region)
+                    for signal in policy.signals
+                    if signal.region is not None
+                )
+        return regions
+
+    def _fresh_actuation_event(
+        self,
+        exc: FreshActuationRequired,
+        *,
+        step: Step,
+        workflow: Workflow,
+        resolution: Optional[Resolution],
+        matched_region: Optional[Region],
+        retried: bool,
+        attempt: int,
+    ) -> FreshActuationEvent:
+        target_region = matched_region
+        if target_region is None and step.anchor is not None:
+            target_region = self._translate_recorded_region(
+                step, resolution, step.anchor.region
+            )
+        target_intersection = (
+            self._regions_intersect(exc.changed_bbox, target_region)
+            if target_region is not None
+            else None
+        )
+        identity_regions = self._fresh_actuation_identity_regions(
+            step, workflow, resolution
+        )
+        identity_intersection = (
+            any(
+                self._regions_intersect(exc.changed_bbox, region)
+                for region in identity_regions
+            )
+            if identity_regions
+            else None
+        )
+        return FreshActuationEvent(
+            attempt=attempt,
+            operation=exc.operation,
+            changed_pixel_count=exc.changed_pixel_count,
+            changed_bbox=exc.changed_bbox,
+            frame_size=exc.frame_size,
+            target_intersection=target_intersection,
+            identity_intersection=identity_intersection,
+            retried=retried,
+        )
+
+    def _active_program_frame_refusal(
+        self,
+        workflow: Workflow,
+        params: dict[str, str],
+        step: Step,
+        base_params: dict[str, str],
+    ) -> Optional[str]:
+        """Bind the live interpreter path to the sealed program before input."""
+
+        frames = getattr(self, "_frame_stack", ())
+        if not frames:
+            if workflow.program is not None:
+                return "governed program execution lost its active control frame"
+            return None
+        if workflow.program is None:
+            return "governed linear execution acquired an unexpected program frame"
+
+        expected_params = dict(base_params)
+        parent_state: Optional[State] = None
+        for index, frame in enumerate(frames):
+            graph_id = frame.get("graph_id")
+            graph = (
+                workflow.program
+                if graph_id == TOP_GRAPH_ID
+                else workflow.subflows.get(str(graph_id))
+            )
+            state_id = frame.get("state_id")
+            state = graph.states.get(str(state_id)) if graph is not None else None
+            if graph is None or state is None:
+                return (
+                    "governed program control frame no longer matches a sealed "
+                    "graph and state"
+                )
+            if state.id != str(state_id):
+                return "program state identity changed after action admission"
+            cursor = frame.get("loop")
+            if index == 0:
+                if graph_id != TOP_GRAPH_ID or cursor is not None:
+                    return (
+                        "governed program root frame no longer matches the sealed "
+                        "program entry path"
+                    )
+            elif cursor is not None:
+                loop = parent_state.loop if parent_state is not None else None
+                if (
+                    parent_state is None
+                    or parent_state.kind is not StateKind.LOOP
+                    or loop is None
+                    or parent_state.id != cursor.loop_state_id
+                    or cursor.relation != loop.relation
+                    or graph_id != loop.body
+                ):
+                    return (
+                        "governed program loop cursor no longer matches its "
+                        "sealed loop state"
+                    )
+                source_rows: Optional[list[dict[str, str]]]
+                if (
+                    self._active_runtime_worklists is not None
+                    and loop.relation in self._active_runtime_worklists
+                ):
+                    source_rows = self._active_runtime_worklists[loop.relation]
+                else:
+                    relation = workflow.data_sources.get(loop.relation)
+                    source_rows = relation.rows if relation is not None else None
+                if source_rows is None or cursor.rows != source_rows:
+                    return (
+                        "governed program loop cursor no longer matches its "
+                        "authorized worklist"
+                    )
+                if cursor.row_index < 0 or cursor.row_index >= len(source_rows):
+                    return "governed program loop lost its authorized iteration cursor"
+                expected_params.update(source_rows[cursor.row_index])
+            elif (
+                parent_state is None
+                or parent_state.kind is not StateKind.SUBFLOW_CALL
+                or parent_state.subflow != graph_id
+            ):
+                return (
+                    "governed program child frame no longer matches its sealed "
+                    "subflow call"
+                )
+
+            if frame.get("params") != expected_params:
+                return (
+                    "governed program frame parameters no longer derive from "
+                    "the authorized base inputs and active worklist rows"
+                )
+            parent_state = state
+
+        leaf = frames[-1]
+        if (
+            leaf.get("graph_id") != self._current_graph_id
+            or leaf.get("state_id") != self._current_state_id
+            or parent_state is None
+            or parent_state.kind is not StateKind.ACTION
+            or parent_state.step != step
+        ):
+            return (
+                "governed program leaf frame no longer matches the exact sealed "
+                "action being executed"
+            )
+        if params != expected_params:
+            return (
+                "governed program iteration parameters no longer derive from "
+                "the authorized base inputs and active worklist row"
+            )
+        return None
+
+    def _fresh_actuation_authorization_refusal(
+        self,
+        workflow: Workflow,
+        params: dict[str, str],
+        step: Step,
+    ) -> Optional[str]:
+        """Recheck exact governed authority and inputs before fresh input."""
+
+        snapshot_refusal = self._workflow_snapshot_refusal(workflow)
+        if snapshot_refusal is not None:
+            return snapshot_refusal
+        authorization_snapshot_refusal = self._governed_authorization_snapshot_refusal()
+        if authorization_snapshot_refusal is not None:
+            return authorization_snapshot_refusal
+        profile_refusal = self._profile_runtime_refusal(workflow)
+        if profile_refusal is not None:
+            return profile_refusal
+        base_params = self._governed_base_params
+        if base_params is None:
+            if self.governed_authorization is not None or workflow.program is not None:
+                return "runtime lost its admitted parameter scope before input"
+            return self._governed_asset_mutation
+        authorization = self.governed_authorization
+        if authorization is not None:
+            authorization_refusal = authorization.validate_workflow(workflow)
+            if authorization_refusal is not None:
+                return authorization_refusal
+            actual_inputs = runtime_inputs_digest(
+                workflow,
+                base_params,
+                self._active_runtime_worklists,
+                interstitials=list(self._interstitials),
+            )
+            if actual_inputs != authorization.runtime_inputs_digest:
+                return (
+                    "governed run authorization no longer matches the current "
+                    "runtime inputs"
+                )
+        try:
+            frame_refusal = self._active_program_frame_refusal(
+                workflow, params, step, base_params
+            )
+        except Exception as exc:  # noqa: BLE001 - mutated interpreter boundary
+            frame_refusal = (
+                "program frame validation failed closed before input "
+                f"({type(exc).__name__})"
+            )
+        if frame_refusal is not None:
+            return frame_refusal
+        return self._governed_asset_mutation
+
+    def _install_execution_snapshots(self, workflow: Workflow) -> None:
+        """Copy caller-owned workflow and authorization before any callback."""
+
+        self._execution_snapshot_required = True
+        self._execution_workflow_source = workflow
+        try:
+            self._execution_workflow_snapshot = workflow.model_copy(deep=True)
+        except Exception:  # noqa: BLE001 - mutable caller-owned model boundary
+            self._execution_workflow_snapshot = None
+        self._governed_authorization_source = self.governed_authorization
+        self._governed_authorization_snapshot_error = None
+        if self.governed_authorization is not None:
+            try:
+                self.governed_authorization = self.governed_authorization.model_copy(
+                    deep=True
+                )
+            except Exception as exc:  # noqa: BLE001 - caller-owned boundary
+                self.governed_authorization = None
+                self._governed_authorization_snapshot_error = (
+                    "governed authorization could not be snapshotted before "
+                    f"execution ({type(exc).__name__})"
+                )
+
+    def _workflow_snapshot_refusal(self, workflow: Workflow) -> Optional[str]:
+        """Refuse a caller-owned workflow change after run admission."""
+
+        snapshot = self._execution_workflow_snapshot
+        source = self._execution_workflow_source or workflow
+        if snapshot is None:
+            if (
+                self._execution_snapshot_required
+                or self.governed_authorization is not None
+                or workflow.program is not None
+            ):
+                return "workflow semantics could not be snapshotted before execution"
+            # Preserve the private direct-_act compatibility seam for a linear
+            # Demo step. Public run() always installs a snapshot first.
+            return None
+        try:
+            current = source.model_dump(mode="json")
+            admitted = snapshot.model_dump(mode="json")
+        except Exception as exc:  # noqa: BLE001 - mutated model boundary
+            return (
+                "workflow semantic validation failed closed before input "
+                f"({type(exc).__name__})"
+            )
+        if current != admitted:
+            return "workflow semantics changed after admission"
+        return None
+
+    def _governed_authorization_snapshot_refusal(self) -> Optional[str]:
+        """Refuse drift in the caller-owned governed run authorization."""
+
+        if self._governed_authorization_snapshot_error is not None:
+            return self._governed_authorization_snapshot_error
+        source = self._governed_authorization_source
+        admitted = self.governed_authorization
+        if source is None:
+            return None
+        if admitted is None:
+            return "governed authorization snapshot is unavailable"
+        try:
+            current = source.model_dump(mode="json")
+            snapshot = admitted.model_dump(mode="json")
+        except Exception as exc:  # noqa: BLE001 - mutable caller-owned boundary
+            return (
+                "governed authorization validation failed closed before input "
+                f"({type(exc).__name__})"
+            )
+        if current != snapshot:
+            return "governed authorization changed after run admission"
+        return None
+
+    def _raise_on_workflow_snapshot_mutation(self, workflow: Workflow) -> None:
+        """Stop a program edge or terminal when admitted semantics changed."""
+
+        refusal = self._workflow_snapshot_refusal(workflow)
+        if refusal is None:
+            refusal = self._governed_authorization_snapshot_refusal()
+        if refusal is not None:
+            raise _ProgramHalt(
+                "halt",
+                f"{refusal}; no later program state was executed",
+                safety=True,
+            )
+
+    def _managed_dispatch_refusal(self) -> Optional[str]:
+        """Refuse public-field drift from the managed constructor capability."""
+
+        snapshot = self._managed_dispatch_snapshot
+        if snapshot is None:
+            return None
+        run_id, binding_sha256, authorization_json = snapshot
+        if self.durable is not True:
+            return "managed dispatch binding requires durable=True"
+        if self.delivery_authority_kind != "cloud_runner":
+            return "managed dispatch delivery authority changed after admission"
+        if self.remote_delivery_run_id != run_id:
+            return "managed dispatch run identity changed after admission"
+        binding = self.managed_dispatch_binding
+        try:
+            from openadapt_flow.runner.dispatch_envelope import ManagedDispatchBinding
+            from openadapt_flow.runner.protocol import dispatch_binding_sha256 as digest
+
+            if not isinstance(binding, ManagedDispatchBinding):
+                return "managed dispatch binding disappeared after admission"
+            authorization = self.governed_authorization
+            if authorization is None:
+                return "managed dispatch authorization disappeared after admission"
+            current_authorization_json = json.dumps(
+                authorization.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+            if (
+                binding.run_id != run_id
+                or binding.binding_sha256 != binding_sha256
+                or binding.authorization.model_dump(mode="json")
+                != authorization.model_dump(mode="json")
+                or current_authorization_json != authorization_json
+                or binding_sha256 != digest(run_id, binding.authorization)
+            ):
+                return "managed dispatch binding changed after admission"
+        except Exception:  # noqa: BLE001 - managed capability boundary
+            return "managed dispatch binding is invalid after admission"
+        return None
+
+    def _delivery_authorization_refusal(
+        self,
+        workflow: Workflow,
+        params: dict[str, str],
+        step: Step,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Recheck exact authority at the last point before input delivery."""
+
+        refusal = self._managed_dispatch_refusal()
+        if refusal is None:
+            refusal = self._fresh_actuation_authorization_refusal(
+                workflow, params, step
+            )
+        initial_guard = getattr(self, "_durable_initial_delivery_guard", None)
+        if refusal is None and initial_guard is not None:
+            try:
+                initial_guard.before_delivery()
+            except Exception as exc:  # noqa: BLE001 - durable fencing boundary
+                refusal = (
+                    f"managed initial delivery was preempted before delivery: {exc}"
+                )
+                result.failure_category = "continuation_preempted"
+        if refusal is None and self._durable_continuation_guard is not None:
+            try:
+                self._durable_continuation_guard.before_delivery()
+            except Exception as exc:  # noqa: BLE001 - durable fencing boundary
+                refusal = f"durable continuation was preempted before delivery: {exc}"
+                result.failure_category = "continuation_preempted"
+        if refusal is not None:
+            self._cancel_guarded_coordinate()
+            self._cancel_guarded_keyboard()
+            result.safety_halt = True
+            if result.failure_category != "continuation_preempted":
+                result.failure_category = (
+                    "governed_refusal"
+                    if self.governed_authorization is not None
+                    else "safety_halt"
+                )
+        return refusal
 
     def _act(
         self,
@@ -4848,6 +8517,7 @@ class Replayer:
         bundle_dir: Path,
         before_png: bytes,
         result: StepResult,
+        run_dir: Path,
         graph_ctx: Optional["_GraphStepContext"] = None,
     ) -> Optional[str]:
         """Perform the step's action through the backend.
@@ -4881,32 +8551,86 @@ class Replayer:
                         "fresh actuation fingerprint — refusing raw coordinate "
                         "delivery; run aborted"
                     )
-                result.delivery_attempted = True
-                delivery_receipt = native_act(
-                    step.anchor.structural,
-                    resolution.structural_handle,
-                    double=step.action is ActionKind.DOUBLE_CLICK,
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                structural_locator = step.anchor.structural
+                structural_handle = resolution.structural_handle
+                structural_act = cast(Callable[..., Any], native_act)
+                delivery_receipt = self._deliver_backend_call(
+                    result,
+                    lambda: structural_act(
+                        structural_locator,
+                        structural_handle,
+                        double=step.action is ActionKind.DOUBLE_CLICK,
+                    ),
                 )
                 result.delivery_receipt = delivery_receipt
                 result.actuation = "uia" if delivery_receipt.native else "dom"
             else:
-                if requires_atomic_identity:
-                    if isinstance(self.backend, RemoteActuationBackend):
-                        result.delivery_attempted = True
-                        self.backend.click(
-                            x,
-                            y,
-                            double=step.action is ActionKind.DOUBLE_CLICK,
+                remote_consequential = isinstance(
+                    self.backend, RemoteActuationBackend
+                ) and (
+                    self._step_is_consequential(step, workflow)
+                    or self.qualification_fault_driver is not None
+                )
+                if remote_consequential:
+                    if not isinstance(
+                        self.backend,
+                        GuardedRemotePointerActionBackend,
+                    ):
+                        result.safety_halt = True
+                        result.failure_category = "safety_halt"
+                        return (
+                            f"Step '{step.id}' ({step.intent}) is a consequential "
+                            "remote click, but this backend cannot bind its exact "
+                            "fresh frame and target to delivery; run aborted"
                         )
-                    elif isinstance(self.backend, GuardedCoordinateActionBackend):
-                        result.delivery_attempted = True
-                        result.delivery_receipt = self.backend.act_guarded_coordinate(
+                    refusal = self._delivery_authorization_refusal(
+                        workflow, params, step, result
+                    )
+                    if refusal is not None:
+                        return refusal
+                    self._require_qualification_environment_current()
+                    remote_pointer = cast(
+                        GuardedRemotePointerActionBackend, self.backend
+                    )
+                    result.delivery_receipt = self._deliver_backend_call(
+                        result,
+                        lambda: remote_pointer.click_guarded(
                             x,
                             y,
                             expected_frame_sha256=hashlib.sha256(
                                 before_png
                             ).hexdigest(),
                             double=step.action is ActionKind.DOUBLE_CLICK,
+                        ),
+                    )
+                    result.actuation = "remote_guarded"
+                elif requires_atomic_identity:
+                    if isinstance(self.backend, GuardedCoordinateActionBackend):
+                        refusal = self._delivery_authorization_refusal(
+                            workflow, params, step, result
+                        )
+                        if refusal is not None:
+                            return refusal
+                        self._require_qualification_environment_current()
+                        coordinate_backend = cast(
+                            GuardedCoordinateActionBackend, self.backend
+                        )
+                        result.delivery_receipt = self._deliver_backend_call(
+                            result,
+                            lambda: coordinate_backend.act_guarded_coordinate(
+                                x,
+                                y,
+                                expected_frame_sha256=hashlib.sha256(
+                                    before_png
+                                ).hexdigest(),
+                                double=step.action is ActionKind.DOUBLE_CLICK,
+                            ),
                         )
                         result.actuation = "guarded_coordinate"
                     else:
@@ -4919,11 +8643,19 @@ class Replayer:
                             "— refusing raw coordinate delivery; run aborted"
                         )
                 else:
-                    result.delivery_attempted = True
-                    self.backend.click(
-                        x,
-                        y,
-                        double=step.action is ActionKind.DOUBLE_CLICK,
+                    refusal = self._delivery_authorization_refusal(
+                        workflow, params, step, result
+                    )
+                    if refusal is not None:
+                        return refusal
+                    self._require_qualification_environment_current()
+                    self._deliver_backend_call(
+                        result,
+                        lambda: self.backend.click(
+                            x,
+                            y,
+                            double=step.action is ActionKind.DOUBLE_CLICK,
+                        ),
                     )
             self._last_click_point = (x, y)
             # Only a STRUCTURAL handle reports the element's own bounds. A
@@ -4945,23 +8677,59 @@ class Replayer:
             requires_atomic_identity = self._requires_atomic_identity_pointer(
                 step, workflow
             )
-            if requires_atomic_identity:
-                if isinstance(self.backend, RemoteActuationBackend):
-                    if not isinstance(self.backend, RichPointerActionBackend):
-                        return (
-                            f"Step '{step.id}' ({step.intent}) requires a right "
-                            "click, but this backend has no bounded right-click "
-                            "operation"
-                        )
-                    result.delivery_attempted = True
-                    self.backend.right_click(x, y)
-                elif isinstance(self.backend, GuardedCoordinateActionBackend):
-                    result.delivery_attempted = True
-                    result.delivery_receipt = self.backend.act_guarded_coordinate(
+            remote_consequential = isinstance(
+                self.backend, RemoteActuationBackend
+            ) and (
+                self._step_is_consequential(step, workflow)
+                or self.qualification_fault_driver is not None
+            )
+            if remote_consequential:
+                if not isinstance(
+                    self.backend,
+                    GuardedRemotePointerActionBackend,
+                ):
+                    return (
+                        f"Step '{step.id}' ({step.intent}) is a consequential "
+                        "remote right click, but this backend cannot bind its "
+                        "exact fresh frame and target to delivery; run aborted"
+                    )
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                remote_pointer = cast(GuardedRemotePointerActionBackend, self.backend)
+                result.delivery_receipt = self._deliver_backend_call(
+                    result,
+                    lambda: remote_pointer.right_click_guarded(
                         x,
                         y,
                         expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
-                        button="right",
+                    ),
+                )
+                result.actuation = "remote_guarded"
+            elif requires_atomic_identity:
+                if isinstance(self.backend, GuardedCoordinateActionBackend):
+                    refusal = self._delivery_authorization_refusal(
+                        workflow, params, step, result
+                    )
+                    if refusal is not None:
+                        return refusal
+                    self._require_qualification_environment_current()
+                    coordinate_backend = cast(
+                        GuardedCoordinateActionBackend, self.backend
+                    )
+                    result.delivery_receipt = self._deliver_backend_call(
+                        result,
+                        lambda: coordinate_backend.act_guarded_coordinate(
+                            x,
+                            y,
+                            expected_frame_sha256=hashlib.sha256(
+                                before_png
+                            ).hexdigest(),
+                            button="right",
+                        ),
                     )
                     result.actuation = "guarded_coordinate"
                 else:
@@ -4973,8 +8741,18 @@ class Replayer:
                         "identity verification to delivery; run aborted"
                     )
             elif isinstance(self.backend, RichPointerActionBackend):
-                result.delivery_attempted = True
-                self.backend.right_click(x, y)
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                self._deliver_backend_call(
+                    result,
+                    lambda: cast(RichPointerActionBackend, self.backend).right_click(
+                        x, y
+                    ),
+                )
             else:
                 return (
                     f"Step '{step.id}' ({step.intent}) requires a right click, "
@@ -4984,12 +8762,26 @@ class Replayer:
 
         if step.action is ActionKind.DRAG:
             assert resolution is not None  # guaranteed by _resolve_step
-            drag_end, drag_error = self._resolve_drag_end(
+            drag_end, drag_end_region, drag_error = self._resolve_drag_end(
                 step,
                 before_png,
                 bundle_dir,
                 workflow,
             )
+            if (
+                drag_end is not None
+                and drag_end_region is not None
+                and step.drag_end_anchor is not None
+            ):
+                drag_end = self._retain_visual_resolution_evidence(
+                    workflow=workflow,
+                    anchor=step.drag_end_anchor,
+                    resolution=drag_end,
+                    matched_region=drag_end_region,
+                    frame_png=before_png,
+                    bundle_dir=bundle_dir,
+                    run_dir=run_dir,
+                )
             result.drag_end_resolution = drag_end
             if drag_error is not None:
                 self._cancel_guarded_coordinate()
@@ -5012,14 +8804,60 @@ class Replayer:
                 and step.drag_end_anchor.structural is not None
                 and callable(structural_drag)
             ):
-                result.delivery_attempted = True
-                result.delivery_receipt = structural_drag(
-                    step.anchor.structural,
-                    resolution.structural_handle,
-                    step.drag_end_anchor.structural,
-                    drag_end.structural_handle,
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                source_locator = step.anchor.structural
+                source_handle = resolution.structural_handle
+                destination_locator = step.drag_end_anchor.structural
+                destination_handle = drag_end.structural_handle
+                structural_drag_act = cast(Callable[..., Any], structural_drag)
+                result.delivery_receipt = self._deliver_backend_call(
+                    result,
+                    lambda: structural_drag_act(
+                        source_locator,
+                        source_handle,
+                        destination_locator,
+                        destination_handle,
+                    ),
                 )
                 result.actuation = "dom"
+            elif isinstance(self.backend, RemoteActuationBackend) and (
+                self._step_is_consequential(step, workflow)
+                or self.qualification_fault_driver is not None
+            ):
+                if not isinstance(
+                    self.backend,
+                    GuardedRemotePointerActionBackend,
+                ):
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) is a consequential "
+                        "remote drag, but this backend cannot bind both exact "
+                        "fresh-frame endpoints to delivery; run aborted"
+                    )
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                remote_pointer = cast(GuardedRemotePointerActionBackend, self.backend)
+                result.delivery_receipt = self._deliver_backend_call(
+                    result,
+                    lambda: remote_pointer.drag_guarded(
+                        x,
+                        y,
+                        end_x,
+                        end_y,
+                        expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                    ),
+                )
+                result.actuation = "remote_guarded"
             elif requires_atomic_identity and not isinstance(
                 self.backend, RemoteActuationBackend
             ):
@@ -5062,18 +8900,37 @@ class Replayer:
                         f"Step '{step.id}' ({step.intent}) could not bind its "
                         f"freshly resolved drag source: {detail}; run aborted"
                     )
-                result.delivery_attempted = True
-                result.delivery_receipt = self.backend.drag_guarded(
-                    x,
-                    y,
-                    end_x,
-                    end_y,
-                    expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                drag_backend = cast(GuardedDragActionBackend, self.backend)
+                result.delivery_receipt = self._deliver_backend_call(
+                    result,
+                    lambda: drag_backend.drag_guarded(
+                        x,
+                        y,
+                        end_x,
+                        end_y,
+                        expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                    ),
                 )
                 result.actuation = "guarded_coordinate"
             elif isinstance(self.backend, RichPointerActionBackend):
-                result.delivery_attempted = True
-                self.backend.drag(x, y, end_x, end_y)
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                self._deliver_backend_call(
+                    result,
+                    lambda: cast(RichPointerActionBackend, self.backend).drag(
+                        x, y, end_x, end_y
+                    ),
+                )
             else:
                 return (
                     f"Step '{step.id}' ({step.intent}) requires a drag, but "
@@ -5160,10 +9017,21 @@ class Replayer:
                     and step.anchor.structural is not None
                     and callable(native_act)
                 ):
-                    result.delivery_attempted = True
-                    result.delivery_receipt = native_act(
-                        step.anchor.structural,
-                        resolution.structural_handle,
+                    refusal = self._delivery_authorization_refusal(
+                        workflow, params, step, result
+                    )
+                    if refusal is not None:
+                        return refusal
+                    self._require_qualification_environment_current()
+                    structural_locator = step.anchor.structural
+                    structural_handle = resolution.structural_handle
+                    structural_act = cast(Callable[..., Any], native_act)
+                    result.delivery_receipt = self._deliver_backend_call(
+                        result,
+                        lambda: structural_act(
+                            structural_locator,
+                            structural_handle,
+                        ),
                     )
                     result.actuation = "uia"
                 else:
@@ -5172,13 +9040,24 @@ class Replayer:
                         and not isinstance(self.backend, RemoteActuationBackend)
                         and isinstance(self.backend, GuardedCoordinateActionBackend)
                     ):
-                        result.delivery_attempted = True
-                        result.delivery_receipt = self.backend.act_guarded_coordinate(
-                            x,
-                            y,
-                            expected_frame_sha256=hashlib.sha256(
-                                before_png
-                            ).hexdigest(),
+                        refusal = self._delivery_authorization_refusal(
+                            workflow, params, step, result
+                        )
+                        if refusal is not None:
+                            return refusal
+                        self._require_qualification_environment_current()
+                        coordinate_backend = cast(
+                            GuardedCoordinateActionBackend, self.backend
+                        )
+                        result.delivery_receipt = self._deliver_backend_call(
+                            result,
+                            lambda: coordinate_backend.act_guarded_coordinate(
+                                x,
+                                y,
+                                expected_frame_sha256=hashlib.sha256(
+                                    before_png
+                                ).hexdigest(),
+                            ),
                         )
                         result.actuation = "guarded_coordinate"
                     elif requires_atomic_identity and not isinstance(
@@ -5194,8 +9073,15 @@ class Replayer:
                             "delivery; run aborted"
                         )
                     else:
-                        result.delivery_attempted = True
-                        self.backend.click(x, y)
+                        refusal = self._delivery_authorization_refusal(
+                            workflow, params, step, result
+                        )
+                        if refusal is not None:
+                            return refusal
+                        self._require_qualification_environment_current()
+                        self._deliver_backend_call(
+                            result, lambda: self.backend.click(x, y)
+                        )
                 field_point = (x, y)
                 # See ``_last_click_region``: a visual rung's matched region is
                 # the anchor template's live position, not the field's bounds.
@@ -5228,6 +9114,7 @@ class Replayer:
                         workflow,
                         bundle_dir,
                         result,
+                        run_dir=run_dir,
                         arm_keyboard=True,
                     )
                     if remote_error is not None:
@@ -5251,6 +9138,18 @@ class Replayer:
                                 "to a different field after focus; refusing "
                                 "option selection"
                             )
+                        assert step.anchor is not None
+                        if refreshed_region is not None:
+                            refreshed = self._retain_visual_resolution_evidence(
+                                workflow=workflow,
+                                anchor=step.anchor,
+                                resolution=refreshed,
+                                matched_region=refreshed_region,
+                                frame_png=before_png,
+                                bundle_dir=bundle_dir,
+                                run_dir=run_dir,
+                                allow_target_ocr=False,
+                            )
                         resolution = refreshed
                         result.resolution = refreshed
                         field_point = refreshed.point
@@ -5264,6 +9163,7 @@ class Replayer:
             if baseline_field_value is None:
                 baseline_field_value = self._text_value_at(None)
             if step.selection_commit_key is not None:
+                selection_commit_key = step.selection_commit_key
                 assert step.selection_region is not None
                 assert isinstance(self.backend, SelectOptionBackend)
                 assert step.anchor is not None
@@ -5278,8 +9178,39 @@ class Replayer:
                         "selection"
                     )
                 assert field_region is not None
-                result.delivery_attempted = True
-                self.backend.select_option(text, step.selection_commit_key)
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                if isinstance(self.backend, GuardedSelectOptionBackend):
+                    assert field_point is not None
+                    guarded_select = cast(GuardedSelectOptionBackend, self.backend)
+                    result.delivery_receipt = self._deliver_backend_call(
+                        result,
+                        lambda: guarded_select.select_option_guarded(
+                            text,
+                            selection_commit_key,
+                            target_point=field_point,
+                            expected_frame_sha256=hashlib.sha256(
+                                before_png
+                            ).hexdigest(),
+                        ),
+                    )
+                    result.actuation = (
+                        "remote_guarded"
+                        if isinstance(self.backend, RemoteActuationBackend)
+                        else "guarded_keyboard"
+                    )
+                else:
+                    select_backend = cast(SelectOptionBackend, self.backend)
+                    self._deliver_backend_call(
+                        result,
+                        lambda: select_backend.select_option(
+                            text, selection_commit_key
+                        ),
+                    )
                 return None
             guarded_type = (
                 requires_atomic_keyboard
@@ -5287,12 +9218,20 @@ class Replayer:
                 and isinstance(self.backend, GuardedKeyboardActionBackend)
             )
             if guarded_type:
-                result.delivery_attempted = True
-                result.delivery_receipt = cast(
-                    GuardedKeyboardActionBackend, self.backend
-                ).type_text_guarded(
-                    text,
-                    expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                result.delivery_receipt = self._deliver_backend_call(
+                    result,
+                    lambda: cast(
+                        GuardedKeyboardActionBackend, self.backend
+                    ).type_text_guarded(
+                        text,
+                        expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                    ),
                 )
                 result.actuation = "guarded_keyboard"
             elif requires_atomic_keyboard and not isinstance(
@@ -5306,8 +9245,13 @@ class Replayer:
                     "run aborted"
                 )
             else:
-                result.delivery_attempted = True
-                self.backend.type_text(text)
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                self._deliver_backend_call(result, lambda: self.backend.type_text(text))
             if not text:
                 return None  # nothing typed, nothing to verify
             return self._verify_typed_input(
@@ -5316,6 +9260,11 @@ class Replayer:
                 field_point,
                 before_png,
                 result,
+                workflow=workflow,
+                params=params,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                resolution=resolution,
                 field_region=field_region,
                 baseline_field_value=baseline_field_value,
                 allow_masked=step.secret,
@@ -5342,12 +9291,20 @@ class Replayer:
                 and isinstance(self.backend, GuardedKeyboardActionBackend)
             )
             if guarded_key:
-                result.delivery_attempted = True
-                result.delivery_receipt = cast(
-                    GuardedKeyboardActionBackend, self.backend
-                ).press_guarded(
-                    key,
-                    expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                result.delivery_receipt = self._deliver_backend_call(
+                    result,
+                    lambda: cast(
+                        GuardedKeyboardActionBackend, self.backend
+                    ).press_guarded(
+                        key,
+                        expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                    ),
                 )
                 result.actuation = "guarded_keyboard"
             elif requires_atomic_keyboard and not isinstance(
@@ -5361,8 +9318,13 @@ class Replayer:
                     "run aborted"
                 )
             else:
-                result.delivery_attempted = True
-                self.backend.press(key)
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                self._deliver_backend_call(result, lambda: self.backend.press(key))
             return None
 
         if step.action is ActionKind.WAIT:
@@ -5375,6 +9337,7 @@ class Replayer:
                 workflow=workflow,
                 step_index=step_index,
                 bundle_dir=bundle_dir,
+                run_dir=run_dir,
                 before_png=before_png,
                 params=params,
                 result=result,
@@ -5476,7 +9439,7 @@ class Replayer:
 
     def _wait_starting_state_settled(
         self, before_png: bytes
-    ) -> tuple[bytes, Optional[str]]:
+    ) -> tuple[bytes, Optional[str], Optional[bool]]:
         """Readiness gate: refuse to act on a frame that never settled.
 
         When ``require_settled`` is on, invoke exactly ONE readiness-aware settle
@@ -5489,14 +9452,18 @@ class Replayer:
         ``(frame, halt_reason)``.
         """
         if not self.require_settled:
-            return before_png, None
+            return before_png, None, None
         fn = getattr(self.vision, "wait_settled_result", None)
         if not callable(fn):
-            return before_png, (
-                "The configured vision facade cannot report whether the screen "
-                "settled (wait_settled_result is unavailable) - refusing to "
-                "act while require_settled=True; run aborted (starting state "
-                "not ready)."
+            return (
+                before_png,
+                (
+                    "The configured vision facade cannot report whether the screen "
+                    "settled (wait_settled_result is unavailable) - refusing to "
+                    "act while require_settled=True; run aborted (starting state "
+                    "not ready)."
+                ),
+                False,
             )
         try:
             result = fn(
@@ -5509,22 +9476,195 @@ class Replayer:
             if not isinstance(frame, bytes) or not isinstance(settled, bool):
                 raise TypeError("invalid settle result")
         except Exception as exc:
-            return before_png, (
-                "The screen readiness check failed "
-                f"({type(exc).__name__}) - refusing to act while "
-                "require_settled=True; run aborted (starting state not ready)."
+            return (
+                before_png,
+                (
+                    "The screen readiness check failed "
+                    f"({type(exc).__name__}) - refusing to act while "
+                    "require_settled=True; run aborted (starting state not ready)."
+                ),
+                False,
             )
         if not settled:
-            return frame, (
-                "The screen never stopped changing (still loading or animating) "
-                f"within {self.settle_readiness_timeout_s:.1f}s - refusing to act "
-                "on a mid-transition frame; run aborted (starting state not "
-                "ready). If this UI animates continuously, qualify the workflow "
-                "with a bounded per-step wait_until readiness predicate over a "
-                "stable observation region before retrying; otherwise keep the "
-                "readiness gate enabled and halt."
+            return (
+                frame,
+                (
+                    "The screen never stopped changing (still loading or animating) "
+                    f"within {self.settle_readiness_timeout_s:.1f}s - refusing to act "
+                    "on a mid-transition frame; run aborted (starting state not "
+                    "ready). If this UI animates continuously, qualify the workflow "
+                    "with a bounded per-step wait_until readiness predicate over a "
+                    "stable observation region before retrying; otherwise keep the "
+                    "readiness gate enabled and halt."
+                ),
+                False,
             )
-        return frame, None
+        return frame, None, True
+
+    @staticmethod
+    def _qualification_id_sha256(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+    def _observe_qualification_environment(
+        self,
+        workflow: Workflow,
+        report: RunReport,
+        *,
+        execution_target_kind: Optional[ExecutionTargetKind],
+    ) -> Optional[str]:
+        """Retain exact live environment evidence for a campaign run.
+
+        Project labels are expected values only. They never become observed
+        evidence. A qualification case refuses before workflow actuation when
+        the active backend cannot independently return the application,
+        application version, and session identity or when either expected
+        application field differs.
+        """
+
+        authorization = self.governed_authorization
+        if authorization is None or authorization.qualification_case_id is None:
+            return None
+        project = workflow.qualification
+        if project is None or execution_target_kind is None:
+            return "qualification environment evidence is unavailable"
+        if (
+            authorization.qualification_run_id_sha256
+            != hashlib.sha256(self._run_id.encode("utf-8")).hexdigest()
+        ):
+            return "qualification run identity does not match its authorization"
+        if execution_target_kind != project.environment.target_kind:
+            return "qualification target kind does not match the project"
+
+        configured_observer = self.qualification_environment_observer
+        if configured_observer is None:
+            if not callable(
+                getattr(self.backend, "qualification_environment_identity", None)
+            ):
+                return (
+                    "qualification backend cannot observe the complete environment; "
+                    "configure the project's environment observer"
+                )
+            configured_observer = BackendQualificationEnvironmentObserver(self.backend)
+        expected_observer = (
+            project.environment.environment_observer_id,
+            project.environment.environment_observer_contract_sha256,
+        )
+        try:
+            observed_observer = (
+                configured_observer.observer_id,
+                configured_observer.contract_sha256,
+            )
+        except Exception:
+            return "qualification environment observer identity is unavailable"
+        if expected_observer != observed_observer:
+            return "qualification environment observer does not match the project"
+
+        def environment_call() -> QualificationEnvironmentObservation:
+            try:
+                before_observer = (
+                    configured_observer.observer_id,
+                    configured_observer.contract_sha256,
+                )
+            except Exception as exc:
+                raise StructuralResolutionRefused(
+                    "qualification environment observer binding is unavailable"
+                ) from exc
+            if before_observer != observed_observer:
+                raise StructuralResolutionRefused(
+                    "qualification environment observer binding changed before input"
+                )
+            current = configured_observer.observe(
+                self.backend,
+                project.environment.target_kind,
+            )
+            try:
+                after_observer = (
+                    configured_observer.observer_id,
+                    configured_observer.contract_sha256,
+                )
+            except Exception as exc:
+                raise StructuralResolutionRefused(
+                    "qualification environment observer binding is unavailable"
+                ) from exc
+            if after_observer != before_observer:
+                raise StructuralResolutionRefused(
+                    "qualification environment observer binding changed during observation"
+                )
+            return current
+
+        try:
+            observed = environment_call()
+        except Exception:
+            return "qualification environment observation failed"
+        application = observed.application_identity
+        application_version = observed.application_version
+        if observed.target_kind != project.environment.target_kind:
+            return "qualification environment observer returned the wrong surface"
+        session = observed.session_identity_sha256
+        report.observed_application_sha256 = hashlib.sha256(
+            application.encode("utf-8")
+        ).hexdigest()
+        report.observed_application_version_sha256 = hashlib.sha256(
+            application_version.encode("utf-8")
+        ).hexdigest()
+        report.observed_session_sha256 = session
+        report.observed_environment_digest = observed.environment_digest
+        report.qualification_environment_observer_id = observed_observer[0]
+        report.qualification_environment_observer_contract_sha256 = observed_observer[1]
+        report.observed_environment_binding_sha256 = observed.binding_sha256(
+            observer_id=observed_observer[0],
+            observer_contract_sha256=observed_observer[1],
+        )
+        if project.environment.expected_application_identity is None:
+            return (
+                "qualification project has no executable application identity; "
+                "set application_identity separately from the display name"
+            )
+        if application != project.environment.expected_application_identity:
+            return "observed qualification application does not match the project"
+        if application_version != project.environment.application_version:
+            return (
+                "observed qualification application version does not match the project"
+            )
+        if observed.environment_digest != project.environment.environment_digest:
+            return (
+                "observed qualification environment digest does not match the project"
+            )
+        self._qualification_environment_call = environment_call
+        # The observer owns ``observed`` and can legally reuse or mutate that
+        # object on a later call.  Keep an independent immutable-value
+        # snapshot so such mutation cannot also change the expected side of
+        # the input-edge comparison.
+        self._qualification_environment_bound = observed.model_copy(deep=True)
+        set_guard = getattr(self.backend, "set_qualification_input_guard", None)
+        if not callable(set_guard):
+            self._qualification_environment_call = None
+            self._qualification_environment_bound = None
+            return "qualification backend cannot bind an input-edge environment guard"
+        set_guard(self._require_qualification_environment_current)
+        return None
+
+    def _require_qualification_environment_current(self) -> None:
+        """Recheck the bound environment immediately before an input edge."""
+
+        call = self._qualification_environment_call
+        expected = self._qualification_environment_bound
+        if call is None or expected is None:
+            return
+        try:
+            observed = call()
+        except StructuralResolutionRefused:
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "qualification environment could not be observed before input"
+            ) from exc
+        if observed != expected:
+            raise StructuralResolutionRefused(
+                "qualification environment changed before input"
+            )
 
     def _resettle_after_interstitial(
         self, before_png: bytes
@@ -5570,9 +9710,11 @@ class Replayer:
 
     def _handle_interstitials(
         self,
+        step: Step,
         before_png: bytes,
         bundle_dir: Path,
         params: dict[str, str],
+        result: StepResult,
         audit_events: list[InterstitialActionResult],
         workflow: Optional[Workflow],
     ) -> tuple[bytes, Optional[str]]:
@@ -5741,7 +9883,6 @@ class Replayer:
             mutation_error = self._interstitial_declaration_mutation(workflow)
             if mutation_error is not None:
                 return before_png, mutation_error
-
             # Append BEFORE delivery: a backend exception can never create an
             # unreported key/click attempt. The event carries the exact admitted
             # policy and expected visual outcome.
@@ -5755,33 +9896,85 @@ class Replayer:
             )
             audit_events.append(event)
             handled_indices.add(active_index)
+            if workflow is not None:
+                authorization_error = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if authorization_error is not None:
+                    event.error = authorization_error
+                    return before_png, authorization_error
+            elif self._durable_continuation_guard is not None:
+                # Normal replay always supplies ``workflow``. Keep the shared
+                # continuation fence fail-closed for direct helper/test use as
+                # well: every backend input edge must cross the same lease.
+                try:
+                    self._durable_continuation_guard.before_delivery()
+                except Exception as exc:  # noqa: BLE001 - fencing boundary
+                    result.failure_category = "continuation_preempted"
+                    result.safety_halt = True
+                    event.error = (
+                        f"durable continuation was preempted before delivery: {exc}"
+                    )
+                    return before_png, event.error
             try:
                 if it.dismiss_key is not None:
-                    self.backend.press(it.dismiss_key)
+                    self._require_qualification_environment_current()
+                    self._deliver_backend_call(
+                        result, lambda: self.backend.press(it.dismiss_key or "Escape")
+                    )
                 else:
                     assert resolution is not None
                     assert it.dismiss_anchor is not None
                     if resolution.rung == "structural":
                         native_act = getattr(self.backend, "act_structural", None)
+                        structural_anchor = it.dismiss_anchor.structural
                         if (
                             not callable(native_act)
                             or resolution.structural_handle is None
-                            or it.dismiss_anchor.structural is None
+                            or structural_anchor is None
                         ):
                             raise StructuralResolutionRefused(
                                 "structural dismissal cannot be delivered "
                                 "natively without a stable element handle"
                             )
-                        native_act(
-                            it.dismiss_anchor.structural,
-                            resolution.structural_handle,
+                        self._require_qualification_environment_current()
+                        self._deliver_backend_call(
+                            result,
+                            lambda: native_act(
+                                structural_anchor,
+                                resolution.structural_handle,
+                            ),
                         )
                     else:
-                        self.backend.click(
-                            int(resolution.point[0]), int(resolution.point[1])
+                        self._require_qualification_environment_current()
+                        self._deliver_backend_call(
+                            result,
+                            lambda: self.backend.click(
+                                int(resolution.point[0]), int(resolution.point[1])
+                            ),
                         )
                 event.delivered = True
             except Exception as exc:
+                if not isinstance(
+                    exc, (FreshActuationRequired, StructuralResolutionRefused)
+                ):
+                    target_fingerprint = None
+                    if (
+                        resolution is not None
+                        and resolution.structural_handle is not None
+                    ):
+                        target_fingerprint = (
+                            resolution.structural_handle.target_fingerprint
+                        )
+                    result.delivery_uncertainty = ActionDeliveryUncertainty(
+                        operation="interstitial_dismiss",
+                        native=(
+                            resolution is not None and resolution.rung == "structural"
+                        ),
+                        target_fingerprint=target_fingerprint,
+                        observed_at=datetime.now(timezone.utc).isoformat(),
+                        cause_type=type(exc).__name__,
+                    )
                 event.error = (
                     "dismissal delivery failed "
                     f"({type(exc).__name__}); outcome is unknown"
@@ -5886,7 +10079,10 @@ class Replayer:
                     before_png,
                 )
         # (1) Readiness: never act on a frame that never settled.
-        before_png, readiness_error = self._wait_starting_state_settled(before_png)
+        before_png, readiness_error, settled = self._wait_starting_state_settled(
+            before_png
+        )
+        result.starting_state_settled = settled
         if readiness_error is not None:
             # Like an interstitial refusal, a not-ready starting state is a
             # safety halt. A program on_exception edge must not convert the
@@ -5896,7 +10092,13 @@ class Replayer:
 
         # (2) Interstitials: dismiss a KNOWN overlay, or HALT gracefully.
         before_png, interstitial_error = self._handle_interstitials(
-            before_png, bundle_dir, params, result.interstitial_actions, workflow
+            step,
+            before_png,
+            bundle_dir,
+            params,
+            result,
+            result.interstitial_actions,
+            workflow,
         )
         if interstitial_error is not None:
             # An interstitial refusal is a state-safety halt, not an ordinary
@@ -5978,66 +10180,18 @@ class Replayer:
         ``param_equals`` is a string compare, and ``and`` / ``or`` / ``not``
         compose. An unknown kind fails safe (does not hold).
         """
-        kind = pred.kind
-        if kind is PredicateKind.ANCHOR_RESOLVES:
-            if pred.anchor is None:
-                return False
-            template_png = self._asset_bytes(
+        return evaluate_program_predicate(
+            pred,
+            frame_png,
+            params,
+            vision=self.vision,
+            viewport=self.backend.viewport,
+            asset_loader=lambda rel: self._asset_bytes(
                 bundle_dir,
-                pred.anchor.template,
+                rel,
                 workflow=workflow,
-            )
-            return (
-                resolve(
-                    pred.anchor,
-                    frame_png,
-                    self.vision,
-                    None,  # NEVER ground inside a predicate probe: stay model-free
-                    pred.intent or pred.anchor.ocr_text or "",
-                    template_png=template_png,
-                    viewport=self.backend.viewport,
-                )
-                is not None
-            )
-        if kind is PredicateKind.TEXT_PRESENT:
-            return bool(pred.text) and self.vision.text_present(frame_png, pred.text)
-        if kind is PredicateKind.TEXT_ABSENT:
-            return not (pred.text and self.vision.text_present(frame_png, pred.text))
-        if kind is PredicateKind.PARAM_EQUALS:
-            return pred.param is not None and str(params.get(pred.param)) == str(
-                pred.value
-            )
-        if kind is PredicateKind.AND:
-            return all(
-                self._predicate_holds(
-                    op,
-                    frame_png,
-                    bundle_dir,
-                    params,
-                    workflow=workflow,
-                )
-                for op in pred.operands
-            )
-        if kind is PredicateKind.OR:
-            return any(
-                self._predicate_holds(
-                    op,
-                    frame_png,
-                    bundle_dir,
-                    params,
-                    workflow=workflow,
-                )
-                for op in pred.operands
-            )
-        if kind is PredicateKind.NOT:
-            return bool(pred.operands) and not self._predicate_holds(
-                pred.operands[0],
-                frame_png,
-                bundle_dir,
-                params,
-                workflow=workflow,
-            )
-        return False
+            ),
+        )
 
     @staticmethod
     def _describe_predicate(pred: Predicate) -> str:
@@ -7013,6 +11167,11 @@ class Replayer:
         baseline_png: bytes,
         result: StepResult,
         *,
+        workflow: Workflow,
+        params: dict[str, str],
+        bundle_dir: Path,
+        run_dir: Path,
+        resolution: Optional[Resolution],
         field_region: Optional[Region] = None,
         baseline_field_value: Optional[str] = None,
         allow_masked: bool = False,
@@ -7061,18 +11220,138 @@ class Replayer:
                 "confirmed change; refusing an unleased refocus/retype retry"
             )
         result.input_retried = True
+        retry_resolution = resolution
+        retry_region = field_region
+        retry_frame = baseline_png
+        needs_revalidation = self._step_needs_consequential_revalidation(step, workflow)
         if field_point is not None:
-            self.backend.click(*field_point)
+            if needs_revalidation:
+                (
+                    retry_resolution,
+                    retry_region,
+                    retry_frame,
+                    retry_error,
+                ) = self._revalidate_consequential_actuation(
+                    step,
+                    retry_resolution,
+                    retry_region,
+                    retry_frame,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                    run_dir=run_dir,
+                )
+                if retry_error is not None:
+                    result.input_verified = False
+                    return retry_error
+                if retry_resolution is None:
+                    result.input_verified = False
+                    return (
+                        f"Typed input retry for step '{step.id}' ({step.intent}) "
+                        "could not freshly resolve its field; run aborted"
+                    )
+                field_point = retry_resolution.point
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                result.input_verified = False
+                return refusal
+            self._require_qualification_environment_current()
+            self._deliver_backend_call(
+                result,
+                lambda: self.backend.click(*field_point),
+            )
             # Replace, don't append: if the first attempt DID land but was
             # not visible to the diff/OCR, retyping raw would double it.
-            self.backend.press("ControlOrMeta+a")
-        retry_baseline = self.backend.screenshot()
-        self.backend.type_text(text)
+            if needs_revalidation:
+                (
+                    retry_resolution,
+                    retry_region,
+                    retry_frame,
+                    retry_error,
+                ) = self._revalidate_consequential_actuation(
+                    step,
+                    retry_resolution,
+                    retry_region,
+                    retry_frame,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                    run_dir=run_dir,
+                    arm_keyboard=True,
+                )
+                if retry_error is not None:
+                    result.input_verified = False
+                    return retry_error
+                if retry_resolution is None or retry_resolution.point != field_point:
+                    self._cancel_guarded_keyboard()
+                    result.input_verified = False
+                    return (
+                        f"Typed input retry for step '{step.id}' ({step.intent}) "
+                        "resolved to a different field after refocus; run aborted"
+                    )
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                result.input_verified = False
+                return refusal
+            self._require_qualification_environment_current()
+            self._deliver_backend_call(
+                result,
+                lambda: self.backend.press("ControlOrMeta+a"),
+            )
+
+        # The refocus click and select-all key each consume an opaque remote
+        # lease.  Acquire and validate one more exact frame for the retype edge.
+        if needs_revalidation:
+            (
+                retry_resolution,
+                retry_region,
+                retry_baseline,
+                retry_error,
+            ) = self._revalidate_consequential_actuation(
+                step,
+                retry_resolution,
+                retry_region,
+                retry_frame,
+                params,
+                workflow,
+                bundle_dir,
+                result,
+                run_dir=run_dir,
+                arm_keyboard=True,
+            )
+            if retry_error is not None:
+                result.input_verified = False
+                return retry_error
+        else:
+            retry_baseline = self.backend.screenshot()
+        if (
+            needs_revalidation
+            and field_point is not None
+            and (retry_resolution is None or retry_resolution.point != field_point)
+        ):
+            self._cancel_guarded_keyboard()
+            result.input_verified = False
+            return (
+                f"Typed input retry for step '{step.id}' ({step.intent}) "
+                "resolved to a different field before retyping; run aborted"
+            )
+        refusal = self._delivery_authorization_refusal(workflow, params, step, result)
+        if refusal is not None:
+            result.input_verified = False
+            return refusal
+        self._require_qualification_environment_current()
+        self._deliver_backend_call(result, lambda: self.backend.type_text(text))
         landed, _changed = self._typed_input_landed(
             text,
             field_point,
             retry_baseline,
-            field_region=field_region,
+            field_region=retry_region,
             # Select-all means the retry's expected exact value is ``text``
             # regardless of what the field contained before replacement.
             baseline_field_value="" if baseline_field_value is not None else None,
@@ -7340,6 +11619,7 @@ class Replayer:
         workflow: Workflow,
         step_index: int,
         bundle_dir: Path,
+        run_dir: Path,
         before_png: bytes,
         params: dict[str, str],
         result: StepResult,
@@ -7393,8 +11673,16 @@ class Replayer:
                 intent=next_step.intent,
             )
         if stop_pred is None or (dx == 0 and dy == 0):
-            result.delivery_attempted = True
-            self.backend.scroll(dx, dy)
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                return refusal
+            self._require_qualification_environment_current()
+            self._deliver_backend_call(
+                result,
+                lambda: self.backend.scroll(dx, dy),
+            )
             return None
 
         def readiness_holds(frame_png: bytes) -> bool:
@@ -7425,10 +11713,44 @@ class Replayer:
         budget = SCROLL_BUDGET_FACTOR * increment
         scrolled = 0.0
         while scrolled + increment <= budget:
-            result.delivery_attempted = True
-            self.backend.scroll(dx, dy)
+            # Readiness callbacks run after the outer step preflight.  Bind
+            # every wheel edge to a new exact remote frame and repeat the
+            # context/identity checks after those callbacks.  This also avoids
+            # reusing the one-shot lease consumed by the prior wheel edge.
+            if self._step_needs_consequential_revalidation(step, workflow):
+                (
+                    _scroll_resolution,
+                    _scroll_region,
+                    fresh_scroll_frame,
+                    scroll_error,
+                ) = self._revalidate_consequential_actuation(
+                    step,
+                    None,
+                    None,
+                    before_png,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                    run_dir=run_dir,
+                )
+                if scroll_error is not None:
+                    return scroll_error
+                if readiness_holds(fresh_scroll_frame):
+                    return None
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                return refusal
+            self._require_qualification_environment_current()
+            self._deliver_backend_call(
+                result,
+                lambda: self.backend.scroll(dx, dy),
+            )
             scrolled += increment
             frame = self.vision.wait_settled(self.backend)
+            before_png = frame
             holds = readiness_holds(frame)
             if self._governed_asset_mutation is not None:
                 return self._governed_asset_mutation
@@ -7796,11 +12118,73 @@ class Replayer:
         outcome = healing_mod.govern_heal(step, event, run_dir=run_dir)
         if outcome.promoted:
             heal_mod.apply_heal(workflow, event)
+            source = self._execution_workflow_source
+            if source is not None and source is not workflow:
+                heal_mod.apply_heal(source, event)
+            self._accept_healed_anchor_in_workflow_snapshot(workflow, event)
             heal_mod.persist_heal(event, crop_png, frame_png, run_dir)
             new_crops[step.id] = crop_png
         return outcome
 
+    def _accept_healed_anchor_in_workflow_snapshot(
+        self,
+        workflow: Workflow,
+        event: Any,
+    ) -> None:
+        """Update only the governed heal's anchor in the admitted snapshot."""
+
+        snapshot = self._execution_workflow_snapshot
+        if snapshot is None:
+            return
+
+        for live_step, admitted_step in zip(workflow.steps, snapshot.steps):
+            if (
+                live_step.id == event.step_id
+                and admitted_step.id == event.step_id
+                and live_step.anchor == event.new_anchor
+            ):
+                admitted_step.anchor = event.new_anchor.model_copy(deep=True)
+
+        live_graphs: dict[str, ProgramGraph] = dict(workflow.subflows)
+        admitted_graphs: dict[str, ProgramGraph] = dict(snapshot.subflows)
+        if workflow.program is not None and snapshot.program is not None:
+            live_graphs[TOP_GRAPH_ID] = workflow.program
+            admitted_graphs[TOP_GRAPH_ID] = snapshot.program
+        for graph_id, live_graph in live_graphs.items():
+            admitted_graph = admitted_graphs.get(graph_id)
+            if admitted_graph is None:
+                continue
+            for state_id, live_state in live_graph.states.items():
+                admitted_state = admitted_graph.states.get(state_id)
+                if (
+                    admitted_state is not None
+                    and live_state.step is not None
+                    and admitted_state.step is not None
+                    and live_state.step.id == event.step_id
+                    and admitted_state.step.id == event.step_id
+                    and live_state.step.anchor == event.new_anchor
+                ):
+                    admitted_state.step.anchor = event.new_anchor.model_copy(deep=True)
+
     # -- io ----------------------------------------------------------------------
+
+    @staticmethod
+    def _new_step_evidence_key(run_dir: Path, step_id: str) -> str:
+        """Allocate one stable, collision-free file key for an action occurrence."""
+
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", step_id).strip("._-") or "step"
+        if safe != step_id:
+            safe = f"{safe}_{hashlib.sha256(step_id.encode()).hexdigest()[:8]}"
+        steps_dir = Path(run_dir) / "steps"
+        candidate = safe
+        occurrence = 1
+        while any(
+            (steps_dir / f"{candidate}_{suffix}.png").exists()
+            for suffix in ("before", "after", "attended-before", "attended-after")
+        ):
+            occurrence += 1
+            candidate = f"{safe}__{occurrence:04d}"
+        return candidate
 
     @staticmethod
     def _save_step_png(run_dir: Path, step_id: str, suffix: str, png: bytes) -> str:

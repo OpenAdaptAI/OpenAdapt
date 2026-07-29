@@ -57,11 +57,19 @@ import io
 import threading
 import time
 import unicodedata
+import uuid
+from datetime import datetime, timezone
 from typing import Callable, Optional, Protocol, Union, runtime_checkable
 
-from PIL import Image
+from PIL import Image, ImageChops
 
-from openadapt_flow.backend import ActionDeliveryUncertain
+from openadapt_flow.backend import (
+    ActionDeliveryUncertain,
+    FreshActuationRequired,
+    StructuralResolutionRefused,
+)
+from openadapt_flow.ir import ActionDeliveryReceipt, Point
+from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
 
 # What a transport may hand back as the current frame: a PIL image, or raw
 # pixel bytes (RGB or RGBA, row-major) that the backend wraps with the
@@ -290,6 +298,10 @@ class FreeRDPBackend:
         readiness_probe: Optional[Callable[[bytes], bool]] = None,
         application_marker: Optional[str] = None,
         application_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        application_version_marker: Optional[str] = None,
+        application_version_marker_probe: Optional[Callable[[bytes], bool]] = None,
+        environment_marker: Optional[str] = None,
+        environment_marker_probe: Optional[Callable[[bytes], bool]] = None,
         workflow_state_marker: Optional[str] = None,
         workflow_state_marker_probe: Optional[Callable[[bytes], bool]] = None,
         session_marker: Optional[str] = None,
@@ -308,6 +320,20 @@ class FreeRDPBackend:
         self._application_marker_probe = _marker_probe(
             self._application_marker,
             application_marker_probe,
+        )
+        self._application_version_marker = _clean_marker(
+            application_version_marker, name="application_version_marker"
+        )
+        self._application_version_marker_probe = _marker_probe(
+            self._application_version_marker,
+            application_version_marker_probe,
+        )
+        self._environment_marker = _clean_marker(
+            environment_marker, name="environment_marker"
+        )
+        self._environment_marker_probe = _marker_probe(
+            self._environment_marker,
+            environment_marker_probe,
         )
         self._workflow_state_marker = _clean_marker(
             workflow_state_marker, name="workflow_state_marker"
@@ -332,6 +358,8 @@ class FreeRDPBackend:
         self._last_frame_monotonic: Optional[float] = None
         self._last_frame_digest: Optional[bytes] = None
         self._last_session_identity: Optional[str] = None
+        self._qualification_environment: Optional[tuple[str, str, str, str]] = None
+        self._qualification_input_guard: Optional[Callable[[], None]] = None
         self._actuation_frame_png: Optional[bytes] = None
         self._actuation_lease_state = _LEASE_NONE
         # Keep capture/geometry validation and a complete input gesture in one
@@ -402,9 +430,34 @@ class FreeRDPBackend:
                     "configured RDP session identity is unavailable on the "
                     "fresh actuation frame"
                 )
+            if self._qualification_environment is not None and (
+                self._qualification_environment_from_frame(png)
+                != self._qualification_environment
+            ):
+                self._invalidate_actuation_lease()
+                raise RuntimeError(
+                    "qualified application, version, environment, or session "
+                    "changed on the "
+                    "fresh actuation frame"
+                )
             self._actuation_frame_png = png
             self._actuation_lease_state = _LEASE_ARMED
             return png
+
+    def reset_fresh_actuation_state(self) -> None:
+        """Reset only a typed zero-input content invalidation.
+
+        This does not arm a lease.  The runtime must reacquire and revalidate a
+        new frame before it can send input.
+        """
+
+        with self._input_lock:
+            if self._actuation_lease_state != _LEASE_INVALIDATED:
+                raise RuntimeError(
+                    "RDP fresh-actuation reset requires a typed invalidated lease"
+                )
+            self._actuation_lease_state = _LEASE_NONE
+            self._actuation_frame_png = None
 
     # -- Optional ExecutionContextIdentityBackend --------------------------
 
@@ -415,6 +468,66 @@ class FreeRDPBackend:
             self._application_marker,
             self._application_marker_probe,
         )
+
+    def application_version_identity(self) -> Optional[str]:
+        """Return a PHI-free version marker verified on a fresh frame."""
+
+        return self._verified_marker_identity(
+            self._application_version_marker,
+            self._application_version_marker_probe,
+        )
+
+    def _qualification_environment_from_frame(
+        self, png: bytes
+    ) -> Optional[tuple[str, str, str, str]]:
+        """Verify all qualification environment signals on one exact frame."""
+
+        marker_pairs = (
+            (self._application_marker, self._application_marker_probe),
+            (
+                self._application_version_marker,
+                self._application_version_marker_probe,
+            ),
+            (self._environment_marker, self._environment_marker_probe),
+        )
+        if any(marker is None or probe is None for marker, probe in marker_pairs):
+            return None
+        try:
+            if not all(bool(probe(png)) for _marker, probe in marker_pairs if probe):
+                return None
+        except Exception:  # noqa: BLE001 - observer failure is unverifiable
+            return None
+        session = self._session_identity_from_frame(png)
+        if session is None:
+            return None
+        assert self._application_marker is not None
+        assert self._application_version_marker is not None
+        assert self._environment_marker is not None
+        environment_digest = hashlib.sha256(
+            f"rdp-environment-v1\0{self._environment_marker}".encode("utf-8")
+        ).hexdigest()
+        return (
+            self._application_marker,
+            self._application_version_marker,
+            session,
+            environment_digest,
+        )
+
+    def qualification_environment_identity(
+        self,
+    ) -> Optional[tuple[str, str, str, str]]:
+        """Bind app, version, and session from one fresh remote frame."""
+
+        with self._input_lock:
+            png = self._fresh_identity_frame()
+            if png is None:
+                return None
+            observed = self._qualification_environment_from_frame(png)
+            if observed is None:
+                self._invalidate_actuation_lease()
+                return None
+            self._qualification_environment = observed
+            return observed
 
     def workflow_state_identity(self) -> Optional[str]:
         """Return a PHI-free workflow-state marker verified on a fresh frame."""
@@ -484,19 +597,58 @@ class FreeRDPBackend:
         that press/release sequence sent twice.
         """
         with self._input_lock:
-            self._ensure_input_ready(point=(int(x), int(y)))
+            self._ensure_input_ready(
+                point=(int(x), int(y)),
+                operation="rdp_double_click" if double else "rdp_click",
+            )
             presses = 2 if double else 1
             for _ in range(presses):
                 self._assert_frame_fresh()
-                self._transport.pointer(int(x), int(y), "left", True)
-                self._transport.pointer(int(x), int(y), "left", False)
+                try:
+                    self._transport.pointer(int(x), int(y), "left", True)
+                    self._transport.pointer(int(x), int(y), "left", False)
+                except Exception as exc:
+                    try:
+                        self._transport.pointer(int(x), int(y), "left", False)
+                    except Exception:
+                        pass
+                    raise ActionDeliveryUncertain(
+                        operation="rdp_double_click" if double else "rdp_click",
+                        native=False,
+                        cause_type=type(exc).__name__,
+                    ) from exc
+
+    def click_guarded(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        """Click through the exact RDP fresh-frame lease."""
+
+        point = (int(x), int(y))
+        with self._input_lock:
+            self._require_exact_actuation_frame(expected_frame_sha256, "click")
+            self.click(*point, double=double)
+        return ActionDeliveryReceipt(
+            receipt_id=f"rdp-click-{uuid.uuid4().hex}",
+            operation="rdp_double_click" if double else "rdp_click",
+            native=False,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                point,
+            ),
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
 
     def right_click(self, x: int, y: int) -> None:
         """Right-click at a freshly resolved framebuffer point."""
 
         with self._input_lock:
             point = (int(x), int(y))
-            self._ensure_input_ready(point=point)
+            self._ensure_input_ready(point=point, operation="rdp_right_click")
             self._assert_frame_fresh()
             try:
                 self._transport.pointer(*point, "right", True)
@@ -512,13 +664,40 @@ class FreeRDPBackend:
                     cause_type=type(exc).__name__,
                 ) from exc
 
+    def right_click_guarded(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        """Right-click through the exact RDP fresh-frame lease."""
+
+        point = (int(x), int(y))
+        with self._input_lock:
+            self._require_exact_actuation_frame(
+                expected_frame_sha256,
+                "right click",
+            )
+            self.right_click(*point)
+        return ActionDeliveryReceipt(
+            receipt_id=f"rdp-right-click-{uuid.uuid4().hex}",
+            operation="rdp_right_click",
+            native=False,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                point,
+            ),
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
     def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
         """Drag between two points resolved from the same fresh framebuffer."""
 
         with self._input_lock:
             start = (int(x), int(y))
             end = (int(end_x), int(end_y))
-            self._ensure_input_ready(point=start)
+            self._ensure_input_ready(point=start, operation="rdp_drag")
             assert self._viewport is not None
             if not (
                 0 <= end[0] < self._viewport[0] and 0 <= end[1] < self._viewport[1]
@@ -551,6 +730,37 @@ class FreeRDPBackend:
                             cause_type=type(exc).__name__,
                         ) from exc
 
+    def drag_guarded(
+        self,
+        x: int,
+        y: int,
+        end_x: int,
+        end_y: int,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        """Drag through the exact RDP fresh-frame lease."""
+
+        start = (int(x), int(y))
+        end = (int(end_x), int(end_y))
+        with self._input_lock:
+            self._require_exact_actuation_frame(expected_frame_sha256, "drag")
+            self.drag(*start, *end)
+        return ActionDeliveryReceipt(
+            receipt_id=f"rdp-drag-{uuid.uuid4().hex}",
+            operation="rdp_drag",
+            native=False,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                start,
+            ),
+            destination_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                end,
+            ),
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
     def type_text(self, text: str) -> None:
         """Type text through a capability-gated bulk or per-character path.
 
@@ -571,7 +781,7 @@ class FreeRDPBackend:
             return
         with self._input_lock:
             self._focus_input_surface()
-            self._ensure_input_ready()
+            self._ensure_input_ready(operation="rdp_type_text")
             self._dispatch_text_locked(text)
 
     def press(self, key: str) -> None:
@@ -593,7 +803,7 @@ class FreeRDPBackend:
         parts = normalize_chord(key)
         with self._input_lock:
             self._focus_input_surface()
-            self._ensure_input_ready()
+            self._ensure_input_ready(operation="rdp_press")
             self._dispatch_key_locked(parts)
 
     def select_option(self, text: str, commit_key: str) -> None:
@@ -612,18 +822,81 @@ class FreeRDPBackend:
         parts = normalize_chord(commit_key)
         with self._input_lock:
             self._focus_input_surface()
-            self._ensure_input_ready()
-            try:
-                self._dispatch_text_locked(text, strict_release=True)
-                self._dispatch_key_locked(parts, strict_release=True)
-            except ActionDeliveryUncertain:
-                raise
-            except Exception as exc:
-                raise ActionDeliveryUncertain(
-                    operation="rdp_select_option",
-                    native=False,
-                    cause_type=type(exc).__name__,
-                ) from exc
+            self._ensure_input_ready(operation="rdp_select_option")
+            self._select_option_locked(text, parts)
+
+    def select_option_guarded(
+        self,
+        text: str,
+        commit_key: str,
+        *,
+        target_point: Point,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        """Select one option through the exact remote frame/target lease."""
+
+        if not text:
+            raise ValueError("RDP option text must be non-empty")
+        if commit_key not in {"Enter", "Tab"}:
+            raise ValueError("RDP option commit key must be Enter or Tab")
+        parts = normalize_chord(commit_key)
+        point = (int(target_point[0]), int(target_point[1]))
+        with self._input_lock:
+            self._require_exact_actuation_frame(
+                expected_frame_sha256,
+                "option selection",
+            )
+            self._focus_input_surface()
+            self._ensure_input_ready(
+                point=point,
+                operation="rdp_select_option",
+            )
+            self._select_option_locked(text, parts)
+        return ActionDeliveryReceipt(
+            receipt_id=f"rdp-select-{uuid.uuid4().hex}",
+            operation="rdp_select_option",
+            native=False,
+            target_fingerprint=visual_resolution_point_fingerprint(
+                expected_frame_sha256,
+                point,
+            ),
+            selection_value_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            selection_commit_key=commit_key,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def _require_exact_actuation_frame(
+        self,
+        expected_frame_sha256: str,
+        operation: str,
+    ) -> None:
+        """Refuse a guarded pointer action without its exact PNG lease."""
+
+        leased_png = self._actuation_frame_png
+        if (
+            self._actuation_lease_state != _LEASE_ARMED
+            or leased_png is None
+            or hashlib.sha256(leased_png).hexdigest() != expected_frame_sha256
+        ):
+            self._invalidate_actuation_lease()
+            raise StructuralResolutionRefused(
+                f"RDP {operation} lacks its exact fresh-frame lease"
+            )
+
+    def _select_option_locked(self, text: str, parts: list[str]) -> None:
+        """Dispatch one selection while the caller owns the input lock."""
+
+        try:
+            self._dispatch_text_locked(text, strict_release=True)
+            self._dispatch_key_locked(parts, strict_release=True)
+        except ActionDeliveryUncertain:
+            raise
+        except Exception as exc:
+            raise ActionDeliveryUncertain(
+                operation="rdp_select_option",
+                native=False,
+                cause_type=type(exc).__name__,
+            ) from exc
 
     def _dispatch_text_locked(self, text: str, *, strict_release: bool = False) -> None:
         """Dispatch text while ``_input_lock`` and readiness are held."""
@@ -717,7 +990,7 @@ class FreeRDPBackend:
         if dx == 0 and dy == 0:
             return
         with self._input_lock:
-            self._ensure_input_ready()
+            self._ensure_input_ready(operation="rdp_scroll")
             self._transport.wheel(int(dx), int(dy))
 
     # -- lifecycle -----------------------------------------------------------
@@ -745,7 +1018,12 @@ class FreeRDPBackend:
         if callable(focus):
             focus()
 
-    def _ensure_input_ready(self, *, point: Optional[tuple[int, int]] = None) -> None:
+    def _ensure_input_ready(
+        self,
+        *,
+        point: Optional[tuple[int, int]] = None,
+        operation: str = "rdp_input",
+    ) -> None:
         """Validate the frame lease, dimensions, bounds and readiness hook.
 
         The resolver acts on screenshot pixels. Sending those coordinates after
@@ -788,6 +1066,7 @@ class FreeRDPBackend:
             self._readiness_probe is not None
             or self._actuation_lease_state == _LEASE_ARMED
             or self._session_identity_configured
+            or self._qualification_environment is not None
         ):
             # Evaluate readiness on the current framebuffer, not merely the
             # resolver's leased image: a lock/disconnect or content change can
@@ -812,20 +1091,44 @@ class FreeRDPBackend:
                     "RDP session identity changed or became unverifiable after "
                     "capture; refusing input"
                 )
+            if self._qualification_environment is not None and (
+                self._qualification_environment_from_frame(current_png)
+                != self._qualification_environment
+            ):
+                self._invalidate_actuation_lease()
+                raise RuntimeError(
+                    "qualified application, version, environment, or session "
+                    "changed after "
+                    "target resolution; refusing input"
+                )
             if self._actuation_lease_state == _LEASE_ARMED:
                 digest = self._canonical_frame_digest(current_img)
                 if self._last_frame_digest is None or digest != self._last_frame_digest:
+                    changed_pixel_count, changed_bbox = self._frame_difference(
+                        self._actuation_frame_png,
+                        current_img,
+                    )
                     self._invalidate_actuation_lease()
-                    raise RuntimeError(
-                        "RDP frame content changed after target and identity "
-                        "resolution; refusing input and requiring a fresh "
-                        "actuation lease"
+                    raise FreshActuationRequired(
+                        operation=operation,
+                        changed_pixel_count=changed_pixel_count,
+                        changed_bbox=changed_bbox,
+                        frame_size=current,
                     )
                 self._actuation_lease_state = _LEASE_NONE
                 self._actuation_frame_png = None
         # framebuffer/readiness work can block on the network; recheck at the
         # last common point before an input edge.
+        if self._qualification_input_guard is not None:
+            self._qualification_input_guard()
         self._assert_frame_fresh()
+
+    def set_qualification_input_guard(
+        self, guard: Optional[Callable[[], None]]
+    ) -> None:
+        """Install or clear the run-scoped qualification input guard."""
+
+        self._qualification_input_guard = guard
 
     @property
     def _session_identity_configured(self) -> bool:
@@ -949,6 +1252,28 @@ class FreeRDPBackend:
         digest.update(rgb.height.to_bytes(4, "big"))
         digest.update(rgb.tobytes())
         return digest.digest()
+
+    @staticmethod
+    def _frame_difference(
+        expected_png: Optional[bytes], current: Image.Image
+    ) -> tuple[int, tuple[int, int, int, int]]:
+        """Return exact, payload-free diff geometry for a rejected frame."""
+
+        if expected_png is None:
+            raise RuntimeError("armed RDP lease has no retained actuation frame")
+        expected = Image.open(io.BytesIO(expected_png)).convert("RGB")
+        observed = current.convert("RGB")
+        if expected.size != observed.size:
+            raise RuntimeError("RDP diff frames have inconsistent dimensions")
+        difference = ImageChops.difference(expected, observed)
+        raw_bbox = difference.getbbox()
+        if raw_bbox is None:
+            raise RuntimeError("RDP frame digest changed without a pixel difference")
+        x1, y1, x2, y2 = raw_bbox
+        red, green, blue = difference.split()
+        changed_mask = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+        changed_pixel_count = sum(changed_mask.histogram()[1:])
+        return changed_pixel_count, (x1, y1, x2 - x1, y2 - y1)
 
 
 # =============================================================================

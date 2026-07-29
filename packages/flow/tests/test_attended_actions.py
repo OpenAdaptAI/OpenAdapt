@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -18,10 +19,12 @@ from openadapt_flow.console.attention import attention_item
 from openadapt_flow.console.human_decisions import (
     RemoteAttendedActionRequest,
     RemoteDecisionPrincipal,
+    decision_receipt,
     execute_remote_attended_action,
     portable_remote_decision_task,
 )
 from openadapt_flow.deployment import DeploymentConfig
+from openadapt_flow.execution_profiles import _program_action_trace
 from openadapt_flow.ir import (
     ActionDeliveryUncertainty,
     ActionKind,
@@ -44,37 +47,57 @@ from openadapt_flow.ir import (
     Transition,
     Workflow,
 )
+from openadapt_flow.privacy import reset_scrubbers, set_image_scrubber
 from openadapt_flow.qualification import (
     ActionRiskClassification,
     EnvironmentBoundary,
     init_project,
     set_action_classification,
+    workflow_contract_sha256,
 )
-from openadapt_flow.runtime.authorization import GovernedRunAuthorization
+from openadapt_flow.runtime.authorization import (
+    GovernedRunAuthorization,
+    runtime_inputs_digest,
+)
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
     ApprovalRequired,
+    approval_pause_digest,
     enforce_resume_authorization,
 )
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRefused,
     AttendedActionRequest,
     AttendedActionStore,
+    AttendedDecision,
     BoundAttendedExecutor,
     TransitionObservation,
+    attended_decision_payload,
     execute_attended_action,
     issue_attended_capability,
     validate_attended_program_receipt,
 )
 from openadapt_flow.runtime.durable.attended_service import AttendedActionService
+from openadapt_flow.runtime.durable.authority import (
+    DurableAuthority,
+    DurableAuthorityBusy,
+)
 from openadapt_flow.runtime.durable.checkpoint import (
     CheckpointStore,
     PendingEscalation,
     RunManifest,
 )
+from openadapt_flow.runtime.durable.continuation import ContinuationLeaseRecord
 from openadapt_flow.runtime.durable.program_checkpoint import ProgramCheckpoint
-from openadapt_flow.runtime.effects import Effect, EffectKind, EffectState
+from openadapt_flow.runtime.effects import (
+    Effect,
+    EffectKind,
+    EffectState,
+    EffectVerdict,
+    Verdict,
+)
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.verification import VerificationTier
 from tests.test_replayer import (
     FakeBackend,
     FakeVision,
@@ -83,6 +106,77 @@ from tests.test_replayer import (
     click_step,
     make_png,
 )
+
+
+def _digest_fixture_decision(
+    *,
+    schema_version: int = 2,
+    decided_by: str = "unknown",
+) -> AttendedDecision:
+    return AttendedDecision(
+        schema_version=schema_version,
+        decision_id="0123456789abcdef0123456789abcdef",
+        pause_id="fedcba9876543210fedcba9876543210",
+        capability_digest="sha256:" + "a" * 64,
+        request_digest="sha256:" + "b" * 64,
+        idempotency_key="digest-fixture-key-0001",
+        action="continue",
+        operator="José",
+        decided_by=decided_by,
+        status="completed",
+        message="vérifié",
+        created_at="2026-07-01T00:00:00+00:00",
+        report_success=True,
+    )
+
+
+def test_v1_unicode_decision_keeps_exact_engine_and_portable_payloads():
+    current = _digest_fixture_decision(decided_by="unknown")
+    legacy_wire = current.model_dump(mode="json")
+    legacy_wire["schema_version"] = 1
+    legacy_wire.pop("decided_by")
+    legacy = AttendedDecision.model_validate(legacy_wire)
+
+    assert legacy.decided_by == "unknown"
+    assert attended_decision_payload(legacy) == legacy_wire
+    portable = json.dumps(
+        legacy_wire, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    assert decision_receipt(legacy).decision_digest == (
+        "sha256:" + hashlib.sha256(portable).hexdigest()
+    )
+    engine = json.dumps(
+        legacy_wire, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    assert engine != portable
+
+
+def test_v2_decision_digest_commits_to_trusted_provenance():
+    human = _digest_fixture_decision(decided_by="human")
+    automated = _digest_fixture_decision(decided_by="automation")
+
+    assert human.schema_version == automated.schema_version == 2
+    assert attended_decision_payload(human)["decided_by"] == "human"
+    assert attended_decision_payload(automated)["decided_by"] == "automation"
+    assert (
+        decision_receipt(human).decision_digest
+        != decision_receipt(automated).decision_digest
+    )
+
+
+def test_v1_cannot_claim_provenance_and_untrusted_request_cannot_supply_it():
+    with pytest.raises(ValidationError, match="schema v1"):
+        _digest_fixture_decision(schema_version=1, decided_by="human")
+    with pytest.raises(ValidationError):
+        AttendedActionRequest.model_validate(
+            {
+                "capability_digest": "sha256:" + "0" * 64,
+                "idempotency_key": "forged-provenance-0001",
+                "action": "escalate",
+                "disposition": "needs_assistance",
+                "decided_by": "human",
+            }
+        )
 
 
 def _step(step_id: str, key: str, *, expect: str | None = None) -> Step:
@@ -105,6 +199,37 @@ def _step(step_id: str, key: str, *, expect: str | None = None) -> Step:
     )
 
 
+_AUTHORITY_DIGESTS: dict[str, str] = {}
+
+
+def _write_v2_manifest(store: CheckpointStore, manifest: RunManifest) -> None:
+    committed = manifest.model_copy(
+        update={
+            "namespace_id": f"namespace-{manifest.run_id}",
+            "canonical_run_dir": str(store.run_dir.resolve()),
+        }
+    )
+    store.write_fresh_manifest(committed)
+    _AUTHORITY_DIGESTS[str(store.run_dir.resolve())] = (
+        DurableAuthority(store.run_dir, store).validate(committed).progress_digest
+    )
+
+
+def _sync_v2_authority(store: CheckpointStore) -> None:
+    manifest = store.read_manifest()
+    assert manifest is not None
+    pending = store.read_pending()
+    key = str(store.run_dir.resolve())
+    _AUTHORITY_DIGESTS[key] = DurableAuthority(store.run_dir, store).advance(
+        manifest,
+        expected_progress_digest=_AUTHORITY_DIGESTS[key],
+        phase="paused" if pending is not None else "active",
+        pause_binding_sha256=(
+            approval_pause_digest(pending) if pending is not None else ""
+        ),
+    )
+
+
 def _paused(
     tmp_path: Path,
     *,
@@ -120,15 +245,17 @@ def _paused(
     run = tmp_path / "run"
     workflow.save(bundle)
     store = CheckpointStore(run)
-    store.write_manifest(
+    _write_v2_manifest(
+        store,
         RunManifest(
             run_id="run-instance-a",
             workflow_name=workflow.name,
             bundle_dir=str(bundle),
             params={},
-        )
+        ),
     )
     pending = PendingEscalation(
+        run_id="run-instance-a",
         workflow_name=workflow.name,
         step_index=0,
         step_id=workflow.steps[0].id,
@@ -172,6 +299,7 @@ def _paused(
         ),
         transition_observation=transition_observation,
     )
+    _sync_v2_authority(store)
     return workflow, bundle, run, store, capability
 
 
@@ -230,19 +358,43 @@ class _ResultExecutor:
     def __init__(self):
         self.calls = 0
 
-    def continue_run(self, run_dir, capability, approval):
-        from openadapt_flow.runtime.durable.attended import AttendedExecutionResult
+        def replayer_for(manifest):
+            workflow = Workflow.load(manifest.bundle_dir)
+            steps = list(workflow.steps)
+            if workflow.program is not None:
+                steps.extend(
+                    state.step
+                    for state in workflow.program.states.values()
+                    if state.step is not None
+                )
+            for subflow in workflow.subflows.values():
+                steps.extend(
+                    state.step
+                    for state in subflow.states.values()
+                    if state.step is not None
+                )
+            vision = FakeVision()
+            vision.text_results = {
+                postcondition.text: Match(
+                    point=(10, 10),
+                    region=(0, 0, 20, 20),
+                    confidence=1.0,
+                )
+                for step in steps
+                for postcondition in step.expect
+                if postcondition.text
+            }
+            return Replayer(FakeBackend(), vision=vision, poll_interval_s=0.0)
 
+        self.bound = BoundAttendedExecutor(replayer_for)
+
+    def continue_run(self, run_dir, capability, approval):
         self.calls += 1
-        return AttendedExecutionResult(
-            status="completed",
-            message="verified",
-            report_success=True,
-            next_transition=capability.expected_next_transition,
-        )
+        return self.bound.continue_run(run_dir, capability, approval)
 
     def skip_run(self, run_dir, capability, approval):
-        return self.continue_run(run_dir, capability, approval)
+        self.calls += 1
+        return self.bound.skip_run(run_dir, capability, approval)
 
 
 def test_capability_binds_run_bundle_pause_and_transition(tmp_path):
@@ -643,6 +795,201 @@ def _run_attended_program_to_pause(tmp_path, workflow, *, optional_visible=False
     )
 
 
+def _attended_effect_program() -> Workflow:
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"id": "row-1"},
+        forbid_collateral_loss=False,
+    )
+    return Workflow(
+        name="attended-effect-program",
+        program=ProgramGraph(
+            entry="human",
+            states={
+                "human": State(
+                    id="human",
+                    kind=StateKind.ACTION,
+                    step=Step(
+                        id="human-step",
+                        intent="save record",
+                        action=ActionKind.KEY,
+                        key="A",
+                        effects=[effect],
+                    ),
+                    transitions=[Transition(target="done")],
+                ),
+                "done": State(id="done", kind=StateKind.TERMINAL, outcome="success"),
+            },
+        ),
+    )
+
+
+def test_linear_attended_verification_uses_admitted_postconditions(tmp_path):
+    workflow = Workflow(
+        name="linear-attended-snapshot",
+        steps=[
+            Step(
+                id="human-step",
+                intent="save record",
+                action=ActionKind.KEY,
+                key="A",
+                expect=[
+                    Postcondition(
+                        kind=PostconditionKind.TEXT_PRESENT,
+                        text="ORIGINAL_REQUIRED_RESULT",
+                        timeout_s=0.01,
+                    )
+                ],
+            )
+        ],
+    )
+
+    class MutatingVision(FakeVision):
+        def wait_settled(self, backend, **kwargs):
+            workflow.steps[0].expect[0].text = "EASY_REPLACEMENT"
+            return super().wait_settled(backend, **kwargs)
+
+    vision = MutatingVision()
+    vision.text_results["EASY_REPLACEMENT"] = Match((1, 1), (0, 0, 2, 2))
+    result = Replayer(FakeBackend(), vision=vision).revalidate_attended_completion(
+        workflow,
+        step_index=0,
+        params={},
+        bundle_dir=tmp_path,
+        run_dir=tmp_path / "run",
+        run_id="run-linear",
+        transition_baseline=TransitionObservation(),
+        transition_digest=lambda field, value: f"{field}:{value}",
+    )
+
+    assert result.ok is False
+    assert result.postconditions_ok is False
+
+
+@pytest.mark.parametrize("mutate_authorization", [False, True])
+def test_program_attended_verification_keeps_the_admitted_effect_tier(
+    tmp_path, mutate_authorization
+):
+    workflow = _attended_effect_program()
+    authorization = GovernedRunAuthorization(
+        bundle_content_digest="a" * 64,
+        runtime_inputs_digest="b" * 64,
+        admitted_policy_name="test",
+        execution_profile="standard",
+        minimum_effect_tier=int(VerificationTier.INDEPENDENT_SYSTEM),
+    )
+
+    class CurrentRecords:
+        substrate = "test"
+        verification_tier = (
+            VerificationTier.INDEPENDENT_SYSTEM
+            if mutate_authorization
+            else VerificationTier.IMMEDIATE_SCREEN
+        )
+
+        def capture_pre_state(self, context=None):
+            if mutate_authorization:
+                object.__setattr__(
+                    authorization,
+                    "minimum_effect_tier",
+                    int(VerificationTier.IMMEDIATE_SCREEN),
+                )
+            return EffectState(
+                substrate=self.substrate,
+                reachable=True,
+                records=[{"id": "row-1"}],
+            )
+
+    result, target = Replayer(
+        FakeBackend(),
+        vision=FakeVision(),
+        effect_verifier=CurrentRecords(),
+        governed_authorization=authorization,
+    ).revalidate_attended_program_completion(
+        workflow,
+        graph_id="__program__",
+        state_id="human",
+        params={},
+        bundle_dir=tmp_path,
+        run_dir=tmp_path / "run",
+        run_id="run-program",
+        transition_baseline=TransitionObservation(),
+        transition_digest=lambda field, value: f"{field}:{value}",
+    )
+
+    assert result.ok is False
+    assert result.safety_halt is True
+    assert target is None
+
+
+def test_attended_final_persistence_callback_cannot_verify_changed_semantics(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "auto")
+    monkeypatch.setenv("OPENADAPT_FLOW_SCRUB_IMAGES", "1")
+    workflow = Workflow(
+        name="attended-final-callback",
+        steps=[
+            Step(
+                id="human",
+                intent="save",
+                action=ActionKind.KEY,
+                key="A",
+                expect=[
+                    Postcondition(
+                        kind=PostconditionKind.TEXT_PRESENT,
+                        text="ORIGINAL_RESULT",
+                        timeout_s=0.01,
+                    )
+                ],
+            )
+        ],
+    )
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    assert workflow.manifest is not None
+    authorization = GovernedRunAuthorization(
+        bundle_content_digest=workflow.manifest.content_digest,
+        runtime_inputs_digest=runtime_inputs_digest(workflow, {}, None),
+        admitted_policy_name="test",
+    )
+
+    class MutatingImageScrubber:
+        calls = 0
+
+        def scrub_image(self, image, fill_color=None):
+            self.calls += 1
+            if self.calls == 2:
+                workflow.steps[0].expect[0].text = "REPLACED_AFTER_CHECK"
+                object.__setattr__(authorization, "runtime_inputs_digest", "f" * 64)
+            return image
+
+    set_image_scrubber(MutatingImageScrubber())
+    try:
+        vision = FakeVision()
+        vision.text_results["ORIGINAL_RESULT"] = Match(
+            point=(1, 1), region=(0, 0, 2, 2), confidence=1.0
+        )
+        result = Replayer(
+            FakeBackend(), vision=vision, governed_authorization=authorization
+        ).revalidate_attended_completion(
+            workflow,
+            step_index=0,
+            params={},
+            bundle_dir=bundle,
+            run_dir=tmp_path / "run",
+            run_id="run-final-callback",
+            transition_baseline=TransitionObservation(),
+            transition_digest=lambda field, value: f"{field}:{value}",
+        )
+    finally:
+        reset_scrubbers()
+
+    assert result.ok is False
+    assert result.safety_halt is True
+
+
 def test_program_continue_commits_exact_receipt_without_reactuating_source(tmp_path):
     workflow = _attended_program()
     _bundle, run, initial_backend, store, capability = _run_attended_program_to_pause(
@@ -704,6 +1051,185 @@ def test_program_continue_commits_exact_receipt_without_reactuating_source(tmp_p
     if os.name != "nt":
         assert receipt_path.parent.stat().st_mode & 0o077 == 0
         assert receipt_path.stat().st_mode & 0o077 == 0
+    resumed_report = RunReport.model_validate_json((run / "report.json").read_bytes())
+    assert len(resumed_report.attended_program_transition_evidence) == 1
+    transition_evidence = resumed_report.attended_program_transition_evidence[0]
+    assert transition_evidence.state_id == "human"
+    assert transition_evidence.target_state_id == "next"
+    assert transition_evidence.action == "continue"
+    assert transition_evidence.decision_index == 0
+    assert [
+        item.decision_index for item in resumed_report.program_transition_evidence
+    ] == [1]
+    assert (
+        _program_action_trace(
+            workflow,
+            resumed_report.visited_states,
+            runtime_params=resumed_report.params,
+            transition_evidence=resumed_report.program_transition_evidence,
+            attended_transition_evidence=(
+                resumed_report.attended_program_transition_evidence
+            ),
+            transition_evidence_root=run,
+            governed_runtime_inputs_digest=(
+                resumed_report.governed_runtime_inputs_digest
+            ),
+            run_id_sha256=resumed_report.run_id_sha256,
+            workflow_contract_digest=workflow_contract_sha256(workflow),
+            reported_results=resumed_report.results,
+        )
+        is not None
+    )
+    assert (
+        _program_action_trace(
+            workflow,
+            resumed_report.visited_states,
+            runtime_params=resumed_report.params,
+            transition_evidence=resumed_report.program_transition_evidence,
+            attended_transition_evidence=(
+                resumed_report.attended_program_transition_evidence
+            ),
+            transition_evidence_root=run,
+            governed_runtime_inputs_digest=(
+                resumed_report.governed_runtime_inputs_digest
+            ),
+            run_id_sha256="0" * 64,
+            workflow_contract_digest=workflow_contract_sha256(workflow),
+            reported_results=resumed_report.results,
+        )
+        is None
+    )
+    rebound_inputs = resumed_report.model_copy(deep=True)
+    rebound_inputs.governed_runtime_inputs_digest = "b" * 64
+    rebound_inputs.program_transition_evidence = [
+        item.model_copy(update={"governed_runtime_inputs_digest": "b" * 64})
+        for item in rebound_inputs.program_transition_evidence
+    ]
+    rebound_inputs.attended_program_transition_evidence = [
+        item.model_copy(update={"governed_runtime_inputs_digest": "b" * 64})
+        for item in rebound_inputs.attended_program_transition_evidence
+    ]
+    assert (
+        _program_action_trace(
+            workflow,
+            rebound_inputs.visited_states,
+            runtime_params=rebound_inputs.params,
+            transition_evidence=rebound_inputs.program_transition_evidence,
+            attended_transition_evidence=(
+                rebound_inputs.attended_program_transition_evidence
+            ),
+            transition_evidence_root=run,
+            governed_runtime_inputs_digest=(
+                rebound_inputs.governed_runtime_inputs_digest
+            ),
+            run_id_sha256=rebound_inputs.run_id_sha256,
+            workflow_contract_digest=workflow_contract_sha256(workflow),
+            reported_results=rebound_inputs.results,
+        )
+        is None
+    )
+    tampered = resumed_report.model_copy(deep=True)
+    tampered.attended_program_transition_evidence[0] = (
+        tampered.attended_program_transition_evidence[0].model_copy(
+            update={"receipt_sha256": "0" * 64}
+        )
+    )
+    assert (
+        _program_action_trace(
+            workflow,
+            tampered.visited_states,
+            runtime_params=tampered.params,
+            transition_evidence=tampered.program_transition_evidence,
+            attended_transition_evidence=(
+                tampered.attended_program_transition_evidence
+            ),
+            transition_evidence_root=run,
+            governed_runtime_inputs_digest=tampered.governed_runtime_inputs_digest,
+            run_id_sha256=tampered.run_id_sha256,
+            workflow_contract_digest=workflow_contract_sha256(workflow),
+            reported_results=tampered.results,
+        )
+        is None
+    )
+
+
+def test_program_continue_persists_current_readback_effect_evidence(tmp_path):
+    workflow = _attended_effect_program()
+    bundle = tmp_path / "bundle"
+    run = tmp_path / "run"
+    workflow.save(bundle)
+
+    class InitialRefutingRecords:
+        substrate = "independent-test-records"
+        verification_tier = VerificationTier.INDEPENDENT_SYSTEM
+
+        def capture_pre_state(self, context=None):
+            return EffectState(substrate=self.substrate, reachable=True, records=[])
+
+        def verify(self, effect, before):
+            return EffectVerdict(
+                verdict=Verdict.REFUTED,
+                kind=effect.kind,
+                substrate=self.substrate,
+                reason="the first verification did not find the record",
+            )
+
+    initial_backend = FakeBackend()
+    report = Replayer(
+        initial_backend,
+        vision=FakeVision(),
+        effect_verifier=InitialRefutingRecords(),
+        durable=True,
+        poll_interval_s=0.0,
+    ).run(workflow, bundle_dir=bundle, run_dir=run)
+    assert report.success is False
+    store = CheckpointStore(run)
+    capability = AttendedActionStore(run).read()
+    assert initial_backend.actions == [("press", "A")]
+
+    class CurrentRecords:
+        substrate = "independent-test-records"
+        verification_tier = VerificationTier.INDEPENDENT_SYSTEM
+
+        def capture_pre_state(self, context=None):
+            return EffectState(
+                substrate=self.substrate,
+                reachable=True,
+                records=[{"id": "row-1"}],
+            )
+
+        def verify(self, effect, before):
+            return EffectVerdict(
+                verdict=Verdict.CONFIRMED,
+                kind=effect.kind,
+                substrate=self.substrate,
+                observed_effect="present",
+            )
+
+    decision = execute_attended_action(
+        run,
+        _request(capability, key="program-current-readback-request"),
+        operator="staff",
+        executor=BoundAttendedExecutor(
+            lambda _manifest: Replayer(
+                FakeBackend(),
+                vision=FakeVision(),
+                effect_verifier=CurrentRecords(),
+                poll_interval_s=0.0,
+            )
+        ),
+    )
+
+    assert decision.status == "completed"
+    checkpoint = store.program_checkpoints()[0]
+    assert checkpoint is not None
+    assert len(checkpoint.new_effect_keys) == 1
+    assert len(checkpoint.new_effects) == 1
+    assert len(checkpoint.new_effect_evidence) == 1
+    evidence = checkpoint.new_effect_evidence[0]
+    assert evidence.effect_contract_hash == checkpoint.new_effect_keys[0]
+    assert evidence.substrate == "independent-test-records"
+    assert evidence.verification_tier == int(VerificationTier.INDEPENDENT_SYSTEM)
 
 
 def test_program_continue_rebinds_exact_pause_before_transition_commit(tmp_path):
@@ -740,14 +1266,13 @@ def test_program_continue_rebinds_exact_pause_before_transition_commit(tmp_path)
         )
         return replayer
 
-    decision = execute_attended_action(
-        run,
-        _request(capability, key="program-pause-race-request"),
-        operator="staff",
-        executor=BoundAttendedExecutor(factory),
-    )
-    assert decision.status == "refused"
-    assert "program pause changed before transition commit" in decision.message
+    with pytest.raises(AttendedActionRefused, match="durable state"):
+        execute_attended_action(
+            run,
+            _request(capability, key="program-pause-race-request"),
+            operator="staff",
+            executor=BoundAttendedExecutor(factory),
+        )
     assert not backend.actions
     assert store.program_checkpoints() == []
     assert store.read_approval() is None
@@ -932,12 +1457,16 @@ def test_program_transition_refuses_a_different_checkpoint_at_reserved_sequence(
     )
     pending = store.read_pending()
     assert pending is not None
+    different_frames = list(pending.program_frames)
+    different_frames[-1] = different_frames[-1].model_copy(
+        update={"state_id": "unrelated"}
+    )
     store.write_program_checkpoint(
         ProgramCheckpoint(
             workflow_name=workflow.name,
             seq=1,
             verified_state_id="unrelated",
-            frames=list(pending.program_frames),
+            frames=different_frames,
             bound_params={},
             bundle_version=capability.bundle_version,
         )
@@ -947,16 +1476,15 @@ def test_program_transition_refuses_a_different_checkpoint_at_reserved_sequence(
     vision.text_results["DONE"] = Match(
         point=(10, 10), region=(0, 0, 20, 20), confidence=1.0
     )
-    decision = execute_attended_action(
-        run,
-        _request(capability, key="program-sequence-conflict"),
-        operator="staff",
-        executor=BoundAttendedExecutor(
-            lambda _manifest: Replayer(backend, vision=vision, poll_interval_s=0.0)
-        ),
-    )
-    assert decision.status == "refused"
-    assert "sequence advanced differently" in decision.message
+    with pytest.raises(AttendedActionRefused, match="monotonic authority"):
+        execute_attended_action(
+            run,
+            _request(capability, key="program-sequence-conflict"),
+            operator="staff",
+            executor=BoundAttendedExecutor(
+                lambda _manifest: Replayer(backend, vision=vision, poll_interval_s=0.0)
+            ),
+        )
     assert not backend.actions
     assert store.read_pending() is not None
 
@@ -1004,6 +1532,80 @@ def test_program_resume_refuses_tampered_receipt_target(tmp_path):
             ),
             pending=pending.model_copy(update={"status": "approved"}),
             manifest=manifest,
+            workflow=workflow,
+            live_bundle_version=capability.bundle_version,
+        )
+
+
+@pytest.mark.parametrize(
+    "binding",
+    ["workflow_contract", "runtime_inputs", "bound_params"],
+)
+def test_program_resume_refuses_receipt_with_changed_qualification_binding(
+    tmp_path,
+    binding,
+):
+    workflow = _attended_program()
+    _bundle, run, _initial, store, capability = _run_attended_program_to_pause(
+        tmp_path, workflow
+    )
+    pending = store.read_pending()
+    assert pending is not None
+    vision = FakeVision()
+    vision.text_results["DONE"] = Match(
+        point=(10, 10), region=(0, 0, 20, 20), confidence=1.0
+    )
+    decision = execute_attended_action(
+        run,
+        _request(capability, key=f"program-binding-{binding}"),
+        operator="staff",
+        executor=BoundAttendedExecutor(
+            lambda _manifest: Replayer(
+                FakeBackend(), vision=vision, poll_interval_s=0.0
+            )
+        ),
+    )
+    assert decision.status == "completed"
+    checkpoint = store.program_checkpoints()[0]
+    assert checkpoint.attended_transition is not None
+    manifest = store.read_manifest()
+    assert manifest is not None
+
+    checked_workflow = workflow.model_copy(deep=True)
+    checked_checkpoint = checkpoint
+    if binding == "workflow_contract":
+        assert checked_workflow.program is not None
+        source = checked_workflow.program.states[
+            checkpoint.attended_transition.source_state_id
+        ]
+        assert source.step is not None
+        source.step.intent += " changed"
+    else:
+        update = {
+            "pause_id": hashlib.sha256(binding.encode()).hexdigest()[:32],
+            "signature": "",
+            (
+                "governed_runtime_inputs_digest"
+                if binding == "runtime_inputs"
+                else "bound_params_sha256"
+            ): "f" * 64,
+        }
+        actions = AttendedActionStore(run)
+        changed_receipt = actions.seal_program_receipt(
+            checkpoint.attended_transition.model_copy(update=update)
+        )
+        actions.write_program_receipt(changed_receipt)
+        checked_checkpoint = checkpoint.model_copy(
+            update={"attended_transition": changed_receipt}
+        )
+
+    with pytest.raises(AttendedActionRefused, match="lineage"):
+        validate_attended_program_receipt(
+            run,
+            checkpoint=checked_checkpoint,
+            pending=pending.model_copy(update={"status": "approved"}),
+            manifest=manifest,
+            workflow=checked_workflow,
             live_bundle_version=capability.bundle_version,
         )
 
@@ -1042,12 +1644,13 @@ def test_program_receipt_cannot_replay_across_run_identity(tmp_path):
     receipt_checkpoint = copied_store.program_checkpoints()[0]
     copied_pending = copied_store.read_pending()
     assert copied_manifest is not None and copied_pending is not None
-    with pytest.raises(AttendedActionRefused, match="run/bundle/pause/state/frame"):
+    with pytest.raises(AttendedActionRefused, match="run|source capability"):
         validate_attended_program_receipt(
             copied,
             checkpoint=receipt_checkpoint,
             pending=copied_pending,
             manifest=copied_manifest,
+            workflow=workflow,
             live_bundle_version=capability.bundle_version,
         )
 
@@ -1089,6 +1692,7 @@ def test_repeated_halt_on_same_step_gets_a_new_exact_pause_capability(tmp_path):
             error="Please verify you are human",
         ),
     )
+    _sync_v2_authority(store)
     assert second.pause_id != first.pause_id
     assert second.pause_digest != first.pause_digest
     assert (first.event_sequence, second.event_sequence) == (1, 2)
@@ -1132,7 +1736,7 @@ def test_capability_cannot_be_replayed_into_another_run(tmp_path):
     manifest = copied_store.read_manifest()
     assert manifest is not None
     copied_store.write_manifest(manifest.model_copy(update={"run_id": "other-run"}))
-    with pytest.raises(AttendedActionRefused, match="transition binding"):
+    with pytest.raises(AttendedActionRefused, match="canonical path"):
         execute_attended_action(
             copied,
             _request(capability),
@@ -1175,9 +1779,25 @@ def test_same_request_is_idempotent_and_conflicting_reuse_refuses(tmp_path):
     _workflow, _bundle, run, _store, capability = _paused(tmp_path)
     executor = _ResultExecutor()
     request = _request(capability)
-    first = execute_attended_action(run, request, operator="staff", executor=executor)
-    second = execute_attended_action(run, request, operator="staff", executor=executor)
+    first = execute_attended_action(
+        run,
+        request,
+        operator="staff",
+        decided_by="human",
+        executor=executor,
+    )
+    second = execute_attended_action(
+        run,
+        request,
+        operator="staff",
+        decided_by="automation",
+        executor=executor,
+    )
     assert first == second
+    assert first.decided_by == "human"
+    assert {
+        item.decided_by for item in AttendedActionStore(run)._read_log().decisions
+    } == {"human"}
     assert executor.calls == 1
     conflict = request.model_copy(
         update={"action": "skip", "disposition": "not_applicable"}
@@ -1197,14 +1817,17 @@ def test_crash_after_delivery_started_becomes_uncertain_and_never_retries(tmp_pa
     executor = Explodes()
     request = _request(capability)
     with pytest.raises(RuntimeError):
-        execute_attended_action(run, request, operator="staff", executor=executor)
-    statuses = [
-        item["status"]
-        for item in json.loads((run / "attended_decisions.json").read_text())[
-            "decisions"
-        ]
-    ]
+        execute_attended_action(
+            run,
+            request,
+            operator="staff",
+            decided_by="automation",
+            executor=executor,
+        )
+    journal = json.loads((run / "attended_decisions.json").read_text())["decisions"]
+    statuses = [item["status"] for item in journal]
     assert statuses == ["prepared", "delivery_started", "delivery_uncertain"]
+    assert {item["decided_by"] for item in journal} == {"automation"}
     with pytest.raises(AttendedActionRefused, match="automatic retry"):
         execute_attended_action(run, request, operator="staff", executor=executor)
     with pytest.raises(AttendedActionRefused, match="another request"):
@@ -1215,6 +1838,36 @@ def test_crash_after_delivery_started_becomes_uncertain_and_never_retries(tmp_pa
             executor=executor,
         )
     assert executor.calls == 1
+
+
+@pytest.mark.parametrize(
+    ("action", "disposition", "status"),
+    [
+        ("teach", "teach_requested", "needs_demonstration"),
+        ("escalate", "needs_assistance", "escalated"),
+        ("reject", "rejected_by_operator", "rejected"),
+    ],
+)
+def test_non_actuating_and_reject_decisions_keep_trusted_provenance(
+    tmp_path, action, disposition, status
+):
+    _workflow, _bundle, run, _store, capability = _paused(tmp_path)
+    request = AttendedActionRequest(
+        capability_digest=capability.digest,
+        idempotency_key=f"{action}-provenance-key-0001",
+        action=action,
+        disposition=disposition,
+    )
+
+    decision = execute_attended_action(
+        run,
+        request,
+        operator="staff",
+        decided_by="human",
+    )
+
+    assert decision.status == status
+    assert decision.decided_by == "human"
 
 
 def test_challenge_payload_has_no_answer_code_or_raw_path_surface():
@@ -1334,20 +1987,97 @@ def test_linear_continue_rebinds_exact_pause_before_checkpoint_commit(tmp_path):
         replayer.revalidate_attended_completion = replace_pause_after_live_verification
         return replayer
 
-    decision = execute_attended_action(
-        run,
-        _request(capability, key="request-key-pause-race"),
-        operator="front-desk",
-        executor=BoundAttendedExecutor(factory),
-    )
-    assert decision.status == "refused"
-    assert "pause changed before checkpoint commit" in decision.message
+    with pytest.raises(AttendedActionRefused, match="durable state"):
+        execute_attended_action(
+            run,
+            _request(capability, key="request-key-pause-race"),
+            operator="front-desk",
+            executor=BoundAttendedExecutor(factory),
+        )
     assert not backend.actions
     assert store.checkpoints() == []
     assert store.read_approval() is None
     pending = store.read_pending()
     assert pending is not None
     assert pending.step_id == "independently-replaced-pause"
+
+
+def test_linear_completion_refused_by_remote_permit_keeps_local_progress_unchanged(
+    tmp_path, monkeypatch
+):
+    """A refused production permit cannot commit attended local state."""
+
+    _workflow, _bundle, run, store, capability = _paused(tmp_path)
+    monkeypatch.setattr(
+        DurableAuthority,
+        "_require_remote_delivery_permit",
+        lambda _self, _manifest, _record, **_kwargs: (_ for _ in ()).throw(
+            DurableAuthorityBusy("remote delivery authority refused")
+        ),
+    )
+    vision = FakeVision()
+    vision.text_results["DONE"] = Match(
+        point=(10, 10), region=(0, 0, 20, 20), confidence=1.0
+    )
+
+    decision = execute_attended_action(
+        run,
+        _request(capability, key="linear-refused-remote-permit"),
+        operator="front-desk",
+        executor=BoundAttendedExecutor(
+            lambda _manifest: Replayer(
+                FakeBackend(), vision=vision, poll_interval_s=0.0
+            )
+        ),
+    )
+
+    assert decision.status == "refused"
+    assert "remote delivery authority refused" in decision.message
+    assert store.checkpoints() == []
+    assert store.read_approval() is None
+    assert store.read_pending() is not None
+
+
+def test_program_completion_refused_by_remote_permit_keeps_local_progress_unchanged(
+    tmp_path, monkeypatch
+):
+    """The program receipt and checkpoint use the same production fence."""
+
+    workflow = _attended_program()
+    _bundle, run, _initial_backend, store, capability = _run_attended_program_to_pause(
+        tmp_path, workflow
+    )
+    monkeypatch.setattr(
+        DurableAuthority,
+        "_require_remote_delivery_permit",
+        lambda _self, _manifest, _record, **_kwargs: (_ for _ in ()).throw(
+            DurableAuthorityBusy("remote delivery authority refused")
+        ),
+    )
+    vision = FakeVision()
+    vision.text_results["DONE"] = Match(
+        point=(10, 10), region=(0, 0, 20, 20), confidence=1.0
+    )
+
+    decision = execute_attended_action(
+        run,
+        _request(capability, key="program-refused-remote-permit"),
+        operator="front-desk",
+        executor=BoundAttendedExecutor(
+            lambda _manifest: Replayer(
+                FakeBackend(), vision=vision, poll_interval_s=0.0
+            )
+        ),
+    )
+
+    assert decision.status == "refused"
+    assert "remote delivery authority refused" in decision.message
+    assert store.program_checkpoints() == []
+    assert store.read_approval() is None
+    assert store.read_pending() is not None
+    assert not (
+        run / ".attended_program_receipts" / f"{capability.pause_id}.json"
+    ).exists()
 
 
 def test_continue_refuses_live_postcondition_failure_without_actuation(tmp_path):
@@ -1807,14 +2537,16 @@ def test_encrypted_pause_uses_environment_key_and_protected_capability_secret(
     run = tmp_path / "run"
     workflow.save(bundle, encrypt=True, key=key)
     store = CheckpointStore(run, key=key)
-    store.write_manifest(
+    _write_v2_manifest(
+        store,
         RunManifest(
             run_id="sealed-run",
             workflow_name=workflow.name,
             bundle_dir=str(bundle),
-        )
+        ),
     )
     pending = PendingEscalation(
+        run_id="sealed-run",
         workflow_name=workflow.name,
         step_index=0,
         step_id="human",
@@ -1831,6 +2563,7 @@ def test_encrypted_pause_uses_environment_key_and_protected_capability_secret(
             step_id="human", intent="press A", ok=False, error="MFA required"
         ),
     )
+    _sync_v2_authority(store)
     monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", key)
     decision = execute_attended_action(
         run,
@@ -1857,19 +2590,23 @@ def test_lease_refuses_concurrent_or_crashed_delivery(tmp_path):
             with store.lease(request):
                 pass
 
-    expired = {
-        "request_digest": "sha256:" + "0" * 64,
-        "idempotency_key": "old-request-key",
-        "acquired_at": "2020-01-01T00:00:00+00:00",
-        "expires_at": "2020-01-01T00:01:00+00:00",
-    }
-    store.lease_path.write_text(json.dumps(expired))
-    with pytest.raises(AttendedActionRefused, match="delivery is uncertain"):
-        with store.lease(
-            request,
-            now=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        ):
-            pass
+    pending = CheckpointStore(run).read_pending()
+    assert pending is not None
+    expired = ContinuationLeaseRecord(
+        attempt_id="old-attempt",
+        run_id=pending.run_id,
+        pause_binding_sha256=approval_pause_digest(pending),
+        operation="continue",
+        owner_nonce_sha256="sha256:" + "0" * 64,
+        acquired_at="2020-01-01T00:00:00+00:00",
+        expires_at="2020-01-01T00:01:00+00:00",
+    )
+    store.lease_path.write_text(expired.model_dump_json())
+    with store.lease(
+        request,
+        now=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    ):
+        pass
 
 
 def test_attended_http_action_requires_auth_csrf_and_exact_capability(
@@ -1882,11 +2619,15 @@ def test_attended_http_action_requires_auth_csrf_and_exact_capability(
     executor = _ResultExecutor()
 
     class Service:
-        def execute(self, run_dir, request, *, operator):
+        decided_by: list[str] = []
+
+        def execute(self, run_dir, request, *, operator, decided_by="unknown"):
+            self.decided_by.append(decided_by)
             return execute_attended_action(
                 run_dir,
                 request,
                 operator=operator,
+                decided_by=decided_by,
                 executor=executor,
             )
 
@@ -1949,6 +2690,7 @@ def test_attended_http_action_requires_auth_csrf_and_exact_capability(
     assert receipt["action"] == "verify_and_resume"
     assert "message" not in receipt and "operator" not in receipt
     assert executor.calls == 1
+    assert Service.decided_by == ["human"]
 
     wrong_path = client.post(
         f"/api/attention/{item['id']}/actions/skip",
@@ -2070,6 +2812,7 @@ def test_remote_decision_is_idempotent_and_resumes_through_fresh_remote_actuatio
     )
 
     assert first == second
+    assert first.decided_by == "human"
     assert first.status == "completed"
     assert backend.acquire_count == 1
     assert ("press", "A") not in backend.actions
@@ -2089,10 +2832,12 @@ def test_public_attended_service_executes_exact_request_on_owner(tmp_path, monke
             run,
             _request(capability, key="request-key-public-service"),
             operator="staff",
+            decided_by="automation",
         )
         owner_thread = service._owner.owner_thread_id
 
     assert decision.status == "completed"
+    assert decision.decided_by == "automation"
     assert executor.calls == 1
     assert owner_thread is not None
 
@@ -2248,13 +2993,14 @@ def test_reject_admission_refuses_every_mutation_of_its_preconditions(tmp_path):
     bundle = tmp_path / "uncertain" / "bundle"
     workflow.save(bundle)
     store = CheckpointStore(uncertain_run)
-    store.write_manifest(
+    _write_v2_manifest(
+        store,
         RunManifest(
             run_id="run-uncertain-a",
             workflow_name=workflow.name,
             bundle_dir=str(bundle),
             params={},
-        )
+        ),
     )
     uncertainty = ActionDeliveryUncertainty(
         operation="click",
@@ -2263,6 +3009,7 @@ def test_reject_admission_refuses_every_mutation_of_its_preconditions(tmp_path):
         cause_type="TimeoutError",
     )
     pending = PendingEscalation(
+        run_id="run-uncertain-a",
         workflow_name=workflow.name,
         step_index=0,
         step_id="human",
@@ -2294,6 +3041,7 @@ def test_reject_admission_refuses_every_mutation_of_its_preconditions(tmp_path):
         workflow=workflow,
         result=uncertain_result,
     )
+    _sync_v2_authority(store)
     assert uncertain.delivery_state == "unknown"
     assert "reject" not in uncertain.allowed_actions
     # And escalate survives: handing a possibly-landed write to someone who can

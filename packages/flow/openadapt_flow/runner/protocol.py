@@ -15,9 +15,11 @@ re-validates it locally before any GUI is touched.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Union
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 
@@ -35,6 +37,25 @@ POLL_MAX_WAIT_S = 25
 
 class DispatchParseError(ValueError):
     """A dispatch payload could not be strictly parsed (contract drift)."""
+
+
+def dispatch_binding_sha256(
+    run_id: str, authorization: GovernedRunAuthorization
+) -> str:
+    """Commit to the exact Cloud run and governed authorization.
+
+    This is canonical JSON, not a bearer credential. Cloud and Flow use this
+    one function's field ordering and UTF-8 encoding contract.
+    """
+
+    payload = {
+        "run_id": run_id,
+        "authorization": authorization.model_dump(mode="json"),
+    }
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 class DispatchBundle(BaseModel):
@@ -77,13 +98,31 @@ class RunnerDispatchPayload(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     job_kind: str
-    run_id: str
+    # This is the Cloud-owned run identity.  It is deliberately not a local
+    # workflow/authorization id: durable remote delivery permits bind to this
+    # exact UUID across runner restart and reassignment.
+    run_id: str = Field(
+        pattern=(
+            "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        )
+    )
     workflow_id: str
     bundle: DispatchBundle
     deployment_profile_id: str
     authorization: GovernedRunAuthorization
+    #: Server-issued genesis binding. Flow transports this opaque digest to the
+    #: remote permit authority; it must never derive a replacement locally.
+    dispatch_binding_sha256: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
     params: Union[DispatchParamsValues, DispatchParamsRef]
     expires_at: str
+
+    @model_validator(mode="after")
+    def _binding_commits_to_exact_dispatch(self) -> "RunnerDispatchPayload":
+        if self.dispatch_binding_sha256 != dispatch_binding_sha256(
+            self.run_id, self.authorization
+        ):
+            raise ValueError("dispatch binding does not match run authorization")
+        return self
 
 
 class LeasedDispatch(BaseModel):

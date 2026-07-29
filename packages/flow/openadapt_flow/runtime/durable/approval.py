@@ -20,8 +20,11 @@ Import-light (pydantic + datetime): no vision, no backend, no model.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -88,7 +91,7 @@ class ApprovalRecord(BaseModel):
     :meth:`~.checkpoint.CheckpointStore.write_approval`).
     """
 
-    schema_version: int = 1
+    schema_version: int = 2
     #: WHO approved (an operator identity -- required; a blank one is rejected).
     approver: str
     #: WHEN it was approved (ISO-8601 UTC).
@@ -101,7 +104,11 @@ class ApprovalRecord(BaseModel):
     bundle_version: str = ""
     #: The workflow this approval is for (audit; must match the paused run).
     workflow_name: str = ""
-    #: The run directory this approval authorizes (audit).
+    #: The exact run instance this approval authorizes.
+    run_id: str = ""
+    #: Digest of the exact active pause, excluding only its lifecycle status.
+    pause_binding_sha256: str = ""
+    #: The canonical run directory this approval authorizes.
     run_dir: str = ""
     #: A normal resume approval must never repeat a step whose input may have
     #: landed.  This separate, explicit authority is set only after an operator
@@ -109,11 +116,74 @@ class ApprovalRecord(BaseModel):
     authorize_uncertain_retry: bool = False
 
 
+def approval_pause_digest(pending: Any) -> str:
+    """Bind an approval to one pause while allowing its status to advance.
+
+    The CLI and attended executor mark a pause ``approved`` before resume.
+    ``status`` is therefore lifecycle state, not pause identity. All other
+    fields remain bound, including the run, cursor, parameters, reason, and
+    creation time.
+    """
+
+    model_dump = getattr(pending, "model_dump", None)
+    if not callable(model_dump):
+        raise TypeError("a durable pause must be a serializable model")
+    payload = model_dump(mode="json")
+    payload["status"] = "pending"
+    canonical = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def issue_resume_approval(
+    pending: Any,
+    *,
+    approver: str,
+    resolution: str,
+    bundle_version: str,
+    run_id: str,
+    workflow_name: str,
+    run_dir: Path | str,
+    authorize_uncertain_retry: bool = False,
+) -> ApprovalRecord:
+    """Create one approval bound to the exact active durable pause."""
+
+    if not approver.strip():
+        raise ApprovalRequired("an authenticated approver identity is required")
+    if not resolution.strip():
+        raise ApprovalRequired("an operator resolution is required for approval")
+    if not bundle_version or not run_id or not workflow_name:
+        raise ApprovalRequired(
+            "bundle, run, and workflow identity are required for approval"
+        )
+    if (
+        getattr(pending, "run_id", "") != run_id
+        or getattr(pending, "workflow_name", "") != workflow_name
+    ):
+        raise ApprovalRequired(
+            "the active pause does not match the retained run and workflow"
+        )
+    return ApprovalRecord(
+        approver=approver,
+        resolution=resolution,
+        bundle_version=bundle_version,
+        workflow_name=workflow_name,
+        run_id=run_id,
+        pause_binding_sha256=approval_pause_digest(pending),
+        run_dir=str(Path(run_dir).resolve()),
+        authorize_uncertain_retry=authorize_uncertain_retry,
+    )
+
+
 def enforce_resume_authorization(
     pending,
     approval: Optional[ApprovalRecord],
     *,
     bundle_version: str,
+    run_id: str = "",
+    workflow_name: str = "",
+    run_dir: Path | str | None = None,
     now: Optional[datetime] = None,
 ) -> ApprovalRecord:
     """Gate a resume on an authenticated, current, matching approval.
@@ -173,9 +243,43 @@ def enforce_resume_authorization(
             "the approval record carries no approver identity — refusing to "
             "resume an unauthenticated escalation"
         )
+    if not (approval.resolution or "").strip():
+        raise ApprovalRequired(
+            "the approval record carries no operator resolution — refusing resume"
+        )
 
-    # (3) The approval must be for THIS compiled program (bundle/version hash).
-    if approval.bundle_version and approval.bundle_version != bundle_version:
+    # (3) The approval must bind the exact retained run and active pause.
+    pending_run_id = str(getattr(pending, "run_id", "") or "")
+    if not run_id or pending_run_id != run_id:
+        raise ApprovalRequired(
+            "the active pause does not match the retained run identity"
+        )
+    if approval.run_id != run_id:
+        raise ApprovalRequired(
+            "the approval does not authorize this exact run instance"
+        )
+    if run_dir is None or approval.run_dir != str(Path(run_dir).resolve()):
+        raise ApprovalRequired(
+            "the approval does not authorize this exact durable run directory"
+        )
+    if (
+        approval.workflow_name != workflow_name
+        or getattr(pending, "workflow_name", "") != workflow_name
+    ):
+        raise ApprovalRequired(
+            "the approval or active pause names a different workflow"
+        )
+    expected_pause_digest = approval_pause_digest(pending)
+    if (
+        not approval.pause_binding_sha256
+        or approval.pause_binding_sha256 != expected_pause_digest
+    ):
+        raise ApprovalRequired(
+            "the approval does not authorize the exact active durable pause"
+        )
+
+    # (4) The approval must be for THIS compiled program (bundle/version hash).
+    if not approval.bundle_version or approval.bundle_version != bundle_version:
         raise BundleMismatch(
             "the approval was granted against bundle version "
             f"{approval.bundle_version!r} but the bundle being resumed is "
@@ -183,10 +287,14 @@ def enforce_resume_authorization(
             "current bundle"
         )
 
-    # (4) The approval must not PREDATE the pause it claims to resolve.
+    # (5) The approval must not PREDATE the pause it claims to resolve.
     approved = _parse(approval.approved_at)
     created = _parse(getattr(pending, "created_at", ""))
-    if approved is not None and created is not None and approved < created:
+    if approved is None or created is None:
+        raise ApprovalRequired(
+            "the approval or pause timestamp is invalid — refusing resume"
+        )
+    if approved < created:
         raise ApprovalRequired(
             "the approval predates the pause it claims to resolve — refusing "
             "to resume on a stale approval"

@@ -46,7 +46,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, runtime_checkable
 
-from openadapt_flow.backend import StructuralResolutionRefused
+from openadapt_flow.backend import FreshActuationRequired, StructuralResolutionRefused
 from openadapt_flow.backends.remote_display import (
     _CHAR_KEYCODES,
     _LEASE_ARMED,
@@ -67,6 +67,10 @@ from openadapt_flow.ir import (
 
 class MacOSBackendError(RemoteDisplayError):
     """Native macOS capture/input could not be performed safely."""
+
+
+class _MacOSFreshActuationRequired(FreshActuationRequired, MacOSBackendError):
+    """Typed zero-input refusal that keeps the macOS backend error contract."""
 
 
 @runtime_checkable
@@ -887,6 +891,7 @@ class MacOSBackend(RemoteDisplayBackend):
         *,
         point: Optional[tuple[int, int]] = None,
         consume_actuation_lease: bool = True,
+        operation: str = "remote_input",
     ) -> None:
         """Gate native input on the exact frame lease plus exact AX/CG window."""
         self._ensure_input_trusted()
@@ -904,7 +909,19 @@ class MacOSBackend(RemoteDisplayBackend):
                 self,
                 point=point,
                 consume_actuation_lease=consume_actuation_lease,
+                operation=operation,
             )
+        except FreshActuationRequired as exc:
+            # Preserve the proved-zero-input signal.  Replayer owns the
+            # bounded reset, full reacquisition, and retry policy.  The dual
+            # subclass also preserves MacOSBackendError compatibility for
+            # direct backend callers.
+            raise _MacOSFreshActuationRequired(
+                operation=exc.operation,
+                changed_pixel_count=exc.changed_pixel_count,
+                changed_bbox=exc.changed_bbox,
+                frame_size=exc.frame_size,
+            ) from exc
         except RemoteDisplayError as exc:
             raise MacOSBackendError(str(exc)) from exc
         bound = self._resolve_window(refresh=True)

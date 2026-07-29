@@ -84,6 +84,9 @@ def _step_shape(step: Any) -> dict[str, Any]:
         # The pre-action identity gate: armed, and what it concluded.
         "identity_status": getattr(identity, "status", None),
         "identity_mode": getattr(identity, "mode", None),
+        # TYPE/SELECT_OPTION use their own explicit readback contract. It is
+        # not a screen postcondition and must not impersonate one.
+        "input_verified": step.input_verified,
         "postconditions_ok": step.postconditions_ok,
         "safety_halt": step.safety_halt,
         "healed": bool(step.heal),
