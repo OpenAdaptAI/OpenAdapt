@@ -36,6 +36,7 @@ from typing import Any, Iterator, List, Optional
 from PIL import Image
 
 from openadapt_privacy.base import ScrubbingProvider
+from openadapt_privacy.config import privacy_operation
 
 
 class UnscrubbedScreenshot(RuntimeError):
@@ -195,22 +196,43 @@ class Recording:
         Returns:
             New Recording instance with all content scrubbed.
         """
-        scrubbed_actions = [action.scrub(scrubber) for action in self.actions]
-        scrubbed_screenshots = (
-            [screenshot.scrub(scrubber) for screenshot in self.screenshots]
-            if scrub_images
-            else self.screenshots
-        )
+        with privacy_operation() as policy:
+            policy_sha256 = policy.policy_digest()
+            required_modalities = ["TEXT"]
+            if scrub_images and self.screenshots:
+                required_modalities.append("PIL_IMAGE")
+            scrubber.validate_ready(required_modalities)
+
+            scrubbed_task_description = (
+                scrubber.scrub_text(self.task_description) if self.task_description else None
+            )
+            scrubbed_actions = [action.scrub(scrubber) for action in self.actions]
+            scrubbed_screenshots = (
+                [screenshot.scrub(scrubber) for screenshot in self.screenshots]
+                if scrub_images
+                else [
+                    Screenshot(
+                        id=screenshot.id,
+                        action_id=screenshot.action_id,
+                        timestamp=screenshot.timestamp,
+                    )
+                    for screenshot in self.screenshots
+                ]
+            )
+
+            scrubbed_metadata = scrubber.scrub_dict(self.metadata) if self.metadata else {}
+            scrubbed_metadata["_openadapt_privacy"] = {
+                **scrubber.evidence(required_modalities, policy_sha256=policy_sha256),
+                "omitted_modalities": [] if scrub_images else ["PIL_IMAGE"],
+            }
 
         return Recording(
             id=self.id,
-            task_description=(
-                scrubber.scrub_text(self.task_description) if self.task_description else None
-            ),
+            task_description=scrubbed_task_description,
             timestamp=self.timestamp,
             actions=scrubbed_actions,
             screenshots=scrubbed_screenshots,
-            metadata=scrubber.scrub_dict(self.metadata) if self.metadata else {},
+            metadata=scrubbed_metadata,
         )
 
     def iter_actions_with_screenshots(self) -> Iterator[tuple[Action, Optional[Screenshot]]]:

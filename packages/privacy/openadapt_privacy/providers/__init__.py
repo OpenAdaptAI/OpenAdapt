@@ -35,12 +35,12 @@ class ScrubProvider:
 
     @classmethod
     def get_available_providers(cls) -> list[str]:
-        """Return the list of available provider IDs.
+        """Return provider IDs implemented by this installed package.
 
         Returns:
             List of provider ID strings.
         """
-        return [cls.PRESIDIO, cls.PRIVATE_AI]
+        return [cls.PRESIDIO]
 
     @classmethod
     def get_scrubber(cls, provider: str) -> "ScrubbingProvider":
@@ -55,17 +55,14 @@ class ScrubProvider:
         Raises:
             ValueError: If the provider is not supported.
         """
-        if provider not in cls.get_available_providers():
-            raise ValueError(f"Provider {provider} is not supported.")
-
         if provider == cls.PRESIDIO:
             from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
 
             return PresidioScrubbingProvider()
-        elif provider == cls.PRIVATE_AI:
+        if provider == cls.PRIVATE_AI:
             raise NotImplementedError(
                 "Private AI provider is not yet implemented in openadapt-privacy. "
                 "Please use PRESIDIO or contribute an implementation."
             )
 
-        raise ValueError(f"Unknown provider: {provider}")
+        raise ValueError(f"Provider {provider} is not supported.")

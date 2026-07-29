@@ -11,7 +11,7 @@ from openadapt_privacy.base import (
     ScrubbingProviderUnavailable,
     TextScrubbingMixin,
 )
-from openadapt_privacy.config import PrivacyConfig, config
+from openadapt_privacy.config import PrivacyConfig, ScrubbingPolicyChanged, config
 from openadapt_privacy.loaders import (
     Action,
     DictRecordingLoader,
@@ -79,11 +79,13 @@ def __dir__() -> list[str]:
     """Return the package attribute names, including lazy re-exports."""
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
 
+
 __all__ = [
     # Base classes
     "Modality",
     "ScrubbingProvider",
     "ScrubbingProviderFactory",
+    "ScrubbingPolicyChanged",
     "ScrubbingProviderUnavailable",
     "TextScrubbingMixin",
     # Config

@@ -7,12 +7,13 @@ PII/PHI scrubbing providers.
 from __future__ import annotations
 
 import importlib
-from typing import Any, List
+from importlib import metadata
+from typing import Any, List, Optional
 
 from PIL import Image
 from pydantic import BaseModel
 
-from openadapt_privacy.config import config
+from openadapt_privacy.config import effective_config
 
 # Provider modules that must be imported before the subclass registry is read.
 # ``ScrubbingProvider.__subclasses__()`` only sees classes whose module has been
@@ -50,6 +51,36 @@ class ScrubbingProvider(BaseModel):
     capabilities: List[str]
 
     model_config = {"arbitrary_types_allowed": True}
+
+    def validate_ready(self, modalities: list[str]) -> None:
+        """Fail before processing when this provider cannot scrub a modality."""
+        unsupported = sorted(set(modalities) - set(self.capabilities))
+        if unsupported:
+            raise ScrubbingProviderUnavailable(
+                f"Provider {self.name!r} cannot scrub required modalities {unsupported}; "
+                "no scrub was attempted."
+            )
+
+    def evidence(
+        self,
+        modalities: list[str],
+        *,
+        policy_sha256: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Return privacy-safe provenance for a completed scrub operation."""
+        try:
+            package_version = metadata.version("openadapt-privacy")
+        except metadata.PackageNotFoundError:  # pragma: no cover - source checkout only
+            package_version = "unknown"
+        return {
+            "schema_version": 1,
+            "provider": self.name,
+            "provider_class": f"{type(self).__module__}.{type(self).__qualname__}",
+            "package_version": package_version,
+            "policy_sha256": policy_sha256 or effective_config().policy_digest(),
+            "modalities": sorted(set(modalities)),
+            "status": "completed",
+        }
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         """Scrub PII/PHI from text.
@@ -152,7 +183,7 @@ class TextScrubbingMixin:
         """
         if text is None:
             return None
-        return config.SCRUB_CHAR * len(text)
+        return effective_config().SCRUB_CHAR * len(text)
 
     def scrub_dict(
         self,
@@ -178,7 +209,7 @@ class TextScrubbingMixin:
             Scrubbed dictionary with PII/PHI removed.
         """
         if list_keys is None:
-            list_keys = config.SCRUB_KEYS_HTML
+            list_keys = effective_config().SCRUB_KEYS_HTML
 
         scrubbed_dict: dict[str, Any] = {}
         for key, value in input_dict.items():

@@ -8,13 +8,14 @@ unapproved operator-selected model at runtime.
 from __future__ import annotations
 
 import logging
+import threading
 import warnings
 from typing import List
 
 from PIL import Image
 
 from openadapt_privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
-from openadapt_privacy.config import config
+from openadapt_privacy.config import effective_config
 
 logger = logging.getLogger(__name__)
 
@@ -46,37 +47,53 @@ _analyzer_engine = None
 _anonymizer_engine = None
 _image_redactor_engine = None
 _scrubbing_entities = None
+_analyzer_policy_sha256 = None
+_cache_lock = threading.RLock()
+
+
+def _invalidate_policy_bound_caches(current_policy_sha256: str) -> None:
+    """Discard analyzer-derived state when the effective policy changes."""
+    global _analyzer_engine, _analyzer_policy_sha256, _image_redactor_engine
+    global _scrubbing_entities
+
+    if _analyzer_policy_sha256 == current_policy_sha256:
+        return
+    _analyzer_engine = None
+    _image_redactor_engine = None
+    _scrubbing_entities = None
+    _analyzer_policy_sha256 = current_policy_sha256
 
 
 def _ensure_spacy_model() -> None:
     """Validate the configured local model without downloading any code."""
     import spacy
 
-    allowed_models = SUPPORTED_SPACY_MODELS.get(config.SCRUB_LANGUAGE)
+    policy = effective_config()
+    allowed_models = SUPPORTED_SPACY_MODELS.get(policy.SCRUB_LANGUAGE)
     if allowed_models is None:
         raise PrivacyModelUnavailable(
-            f"Refusing unsupported scrub language {config.SCRUB_LANGUAGE!r}; "
+            f"Refusing unsupported scrub language {policy.SCRUB_LANGUAGE!r}; "
             f"allowed languages: {sorted(SUPPORTED_SPACY_MODELS)}"
         )
     expected_config = {
         "nlp_engine_name": "spacy",
-        "models": [{"lang_code": config.SCRUB_LANGUAGE, "model_name": config.SPACY_MODEL_NAME}],
+        "models": [{"lang_code": policy.SCRUB_LANGUAGE, "model_name": policy.SPACY_MODEL_NAME}],
     }
-    if config.SPACY_MODEL_NAME not in allowed_models:
+    if policy.SPACY_MODEL_NAME not in allowed_models:
         raise PrivacyModelUnavailable(
-            f"Refusing unapproved spaCy model {config.SPACY_MODEL_NAME!r}; "
-            f"allowed models for {config.SCRUB_LANGUAGE!r}: {sorted(allowed_models)}"
+            f"Refusing unapproved spaCy model {policy.SPACY_MODEL_NAME!r}; "
+            f"allowed models for {policy.SCRUB_LANGUAGE!r}: {sorted(allowed_models)}"
         )
-    if config.SCRUB_CONFIG_TRF != expected_config:
+    if policy.SCRUB_CONFIG_TRF != expected_config:
         raise PrivacyModelUnavailable(
             "Refusing inconsistent Presidio NLP configuration; model selection "
             "must match the allowlisted local SPACY_MODEL_NAME"
         )
-    if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+    if not spacy.util.is_package(policy.SPACY_MODEL_NAME):
         raise PrivacyModelUnavailable(
-            f"Required spaCy model {config.SPACY_MODEL_NAME!r} is not installed. "
+            f"Required spaCy model {policy.SPACY_MODEL_NAME!r} is not installed. "
             f"Install it explicitly with: python -m spacy download "
-            f"{config.SPACY_MODEL_NAME}. No scrub was attempted."
+            f"{policy.SPACY_MODEL_NAME}. No scrub was attempted."
         )
 
 
@@ -129,31 +146,34 @@ def _get_analyzer_engine():
     """Get or create the Presidio analyzer engine (lazy initialization)."""
     global _analyzer_engine, _scrubbing_entities
 
-    # Revalidate on every access so a cached analyzer cannot mask a later,
-    # operator-controlled configuration change.
-    _ensure_spacy_model()
-    if _analyzer_engine is None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            from presidio_analyzer import AnalyzerEngine
-            from presidio_analyzer.nlp_engine import NlpEngineProvider
+    with _cache_lock:
+        # Revalidate on every access so a cached analyzer cannot mask a later,
+        # operator-controlled configuration change.
+        _ensure_spacy_model()
+        policy = effective_config()
+        _invalidate_policy_bound_caches(policy.policy_digest())
+        if _analyzer_engine is None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                from presidio_analyzer import AnalyzerEngine
+                from presidio_analyzer.nlp_engine import NlpEngineProvider
 
-        nlp_provider = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
-        nlp_engine = nlp_provider.create_engine()
-        _analyzer_engine = AnalyzerEngine(
-            nlp_engine=nlp_engine,
-            supported_languages=[config.SCRUB_LANGUAGE],
-        )
-        _register_phi_recognizers(_analyzer_engine)
+            nlp_provider = NlpEngineProvider(nlp_configuration=policy.SCRUB_CONFIG_TRF)
+            nlp_engine = nlp_provider.create_engine()
+            _analyzer_engine = AnalyzerEngine(
+                nlp_engine=nlp_engine,
+                supported_languages=[policy.SCRUB_LANGUAGE],
+            )
+            _register_phi_recognizers(_analyzer_engine)
 
-        # Cache the scrubbing entities
-        _scrubbing_entities = [
-            entity
-            for entity in _analyzer_engine.get_supported_entities()
-            if entity not in config.SCRUB_PRESIDIO_IGNORE_ENTITIES
-        ]
+            # Cache the scrubbing entities
+            _scrubbing_entities = [
+                entity
+                for entity in _analyzer_engine.get_supported_entities()
+                if entity not in policy.SCRUB_PRESIDIO_IGNORE_ENTITIES
+            ]
 
-    return _analyzer_engine
+        return _analyzer_engine
 
 
 def _get_anonymizer_engine():
@@ -174,26 +194,25 @@ def _get_image_redactor_engine():
     """Get or create the Presidio image redactor engine (lazy initialization)."""
     global _image_redactor_engine
 
-    if _image_redactor_engine is None:
+    with _cache_lock:
         analyzer = _get_analyzer_engine()
+        if _image_redactor_engine is None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
+            _image_redactor_engine = ImageRedactorEngine(ImageAnalyzerEngine(analyzer))
 
-        _image_redactor_engine = ImageRedactorEngine(ImageAnalyzerEngine(analyzer))
-
-    return _image_redactor_engine
+        return _image_redactor_engine
 
 
 def _get_scrubbing_entities() -> List[str]:
     """Get the list of entity types to scrub."""
     global _scrubbing_entities
 
-    if _scrubbing_entities is None:
-        _get_analyzer_engine()  # This will populate _scrubbing_entities
-
-    return _scrubbing_entities
+    with _cache_lock:
+        _get_analyzer_engine()
+        return list(_scrubbing_entities)
 
 
 class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
@@ -205,6 +224,22 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
 
     name: str = "PRESIDIO"
     capabilities: List[str] = [Modality.TEXT, Modality.PIL_IMAGE]
+
+    def validate_ready(self, modalities: list[str]) -> None:
+        """Validate every local dependency before any source content is read."""
+        super().validate_ready(modalities)
+        _ensure_spacy_model()
+        try:
+            import presidio_analyzer  # noqa: F401
+            import presidio_anonymizer  # noqa: F401
+
+            if Modality.PIL_IMAGE in modalities:
+                import presidio_image_redactor  # noqa: F401
+        except ImportError as exc:
+            raise PrivacyModelUnavailable(
+                "The configured Presidio scrubber is incomplete; no scrub was attempted. "
+                "Install it with: pip install 'openadapt-privacy[presidio]'"
+            ) from exc
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         """Scrub PII/PHI from text using Presidio.
@@ -220,6 +255,7 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
         if text is None:
             return None
 
+        policy = effective_config()
         analyzer = _get_analyzer_engine()
         anonymizer = _get_anonymizer_engine()
         entities = _get_scrubbing_entities()
@@ -227,16 +263,16 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
         # Handle separated text (e.g., key sequences)
         original_text = text
         if is_separated and not (
-            text.startswith(config.ACTION_TEXT_NAME_PREFIX)
-            or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)
+            text.startswith(policy.ACTION_TEXT_NAME_PREFIX)
+            or text.endswith(policy.ACTION_TEXT_NAME_SUFFIX)
         ):
-            text = "".join(text.split(config.ACTION_TEXT_SEP))
+            text = "".join(text.split(policy.ACTION_TEXT_SEP))
 
         # Analyze and anonymize
         analyzer_results = analyzer.analyze(
             text=text,
             entities=entities,
-            language=config.SCRUB_LANGUAGE,
+            language=policy.SCRUB_LANGUAGE,
         )
         analyzer_results = _filter_automation_false_positives(text, analyzer_results)
 
@@ -253,10 +289,10 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
 
         # Restore separator format if needed
         if is_separated and not (
-            original_text.startswith(config.ACTION_TEXT_NAME_PREFIX)
-            or original_text.endswith(config.ACTION_TEXT_NAME_SUFFIX)
+            original_text.startswith(policy.ACTION_TEXT_NAME_PREFIX)
+            or original_text.endswith(policy.ACTION_TEXT_NAME_SUFFIX)
         ):
-            result_text = config.ACTION_TEXT_SEP.join(result_text)
+            result_text = policy.ACTION_TEXT_SEP.join(result_text)
 
         return result_text
 
@@ -276,7 +312,7 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
             Scrubbed image with PII/PHI redacted.
         """
         if fill_color is None:
-            fill_color = config.SCRUB_FILL_COLOR
+            fill_color = effective_config().SCRUB_FILL_COLOR
 
         redactor = _get_image_redactor_engine()
         entities = _get_scrubbing_entities()

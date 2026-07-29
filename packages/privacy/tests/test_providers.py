@@ -30,7 +30,7 @@ class TestScrubProvider:
 
         assert isinstance(providers, list)
         assert ScrubProvider.PRESIDIO in providers
-        assert ScrubProvider.PRIVATE_AI in providers
+        assert ScrubProvider.PRIVATE_AI not in providers
 
     def test_get_scrubber_invalid_provider(self) -> None:
         """Test get_scrubber raises error for invalid provider."""

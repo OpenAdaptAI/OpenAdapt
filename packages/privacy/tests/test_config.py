@@ -57,3 +57,12 @@ class TestPrivacyConfig:
         """Test that SCRUB_PRESIDIO_IGNORE_ENTITIES defaults to empty."""
         cfg = PrivacyConfig()
         assert list(cfg.SCRUB_PRESIDIO_IGNORE_ENTITIES) == []
+
+
+def test_policy_digest_is_stable_and_covers_effective_policy() -> None:
+    first = PrivacyConfig()
+    second = PrivacyConfig()
+    assert first.policy_digest() == second.policy_digest()
+
+    second.SCRUB_KEYS_HTML.append("custom_sensitive_field")
+    assert first.policy_digest() != second.policy_digest()
