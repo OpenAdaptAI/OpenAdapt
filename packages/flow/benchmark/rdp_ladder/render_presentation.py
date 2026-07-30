@@ -22,7 +22,7 @@ import math
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -44,6 +44,230 @@ BLUE = "#7da8ff"
 AMBER = "#ffbd66"
 RED = "#ff7a79"
 GREEN = "#58d68d"
+PUBLIC_FACT_KEYS = frozenset(
+    {
+        "authorization",
+        "effect",
+        "effect_verifier_kind",
+        "identity",
+        "model_calls",
+        "outcome",
+    }
+)
+
+
+class HybridTimeline:
+    """Bind a presentation derivative to exact retained evidence.
+
+    This exporter describes only media that the renderer actually writes.  It
+    deliberately does not reconstruct target rectangles, record values, or
+    semantic phases from playback time.  Consumers can therefore attach a web
+    visualization to a video frame without treating the visualization as
+    execution evidence.
+    """
+
+    def __init__(self, *, video: str, fps: int, frame_size: tuple[int, int]) -> None:
+        self.video = video
+        self.fps = fps
+        self.frame_size = list(frame_size)
+        self.entries: list[dict[str, Any]] = []
+        self.frame_index = 0
+
+    def append(
+        self,
+        count: int,
+        *,
+        phase: str,
+        facts: dict[str, Any] | None = None,
+        source_frame: dict[str, Any] | None = None,
+        compiled_graph: dict[str, Any] | None = None,
+    ) -> None:
+        if count <= 0:
+            raise ValueError("presentation timeline count must be positive")
+        start = self.frame_index
+        self.frame_index += count
+        entry: dict[str, Any] = {
+            "phase": phase,
+            "start_frame": start,
+            "end_frame_exclusive": self.frame_index,
+            "start_pts_s": start / self.fps,
+            "end_pts_s": self.frame_index / self.fps,
+        }
+        if facts:
+            entry["facts"] = facts
+        if source_frame:
+            entry["source_frame"] = source_frame
+        if compiled_graph:
+            entry["compiled_graph"] = compiled_graph
+        self.entries.append(entry)
+
+    def export(
+        self,
+        *,
+        video_sha256: str,
+        workflow_digest: str | None,
+        program_graph_sha256: str,
+        source_manifest_sha256: dict[str, str],
+    ) -> dict[str, Any]:
+        return {
+            "schema_version": "openadapt.rdp-hybrid-presentation.v1",
+            "derivative": {
+                "video": self.video,
+                "video_sha256": video_sha256,
+                "fps": self.fps,
+                "frame_size": self.frame_size,
+                "frame_count": self.frame_index,
+            },
+            "workflow_digest": workflow_digest,
+            "program_graph_sha256": program_graph_sha256,
+            "source_manifest_sha256": source_manifest_sha256,
+            "timeline": self.entries,
+        }
+
+
+def _frame_ref(event: dict[str, Any], *, presentation_phase: str) -> dict[str, Any]:
+    """Return the non-content binding for one retained source frame."""
+    return {
+        "presentation_phase": presentation_phase,
+        "file": event["file"],
+        "sha256": event["sha256"],
+        "captured_elapsed_s": event["elapsed_s"],
+        "source": event["source"],
+    }
+
+
+def _public_facts(summary: dict[str, Any], outcome: str | None) -> dict[str, Any]:
+    """Export result facts without copying parameter or record values."""
+    facts: dict[str, Any] = {}
+    if outcome is not None:
+        facts["outcome"] = outcome
+    if "model_calls" in summary:
+        facts["model_calls"] = summary["model_calls"]
+    if summary.get("identity_verified"):
+        facts["identity"] = "verified"
+    elif summary.get("identity_mismatch"):
+        facts["identity"] = "mismatch"
+    if summary.get("effect_confirmed"):
+        facts["effect"] = "confirmed"
+    elif summary.get("effect_written") is False:
+        facts["effect"] = "not_written"
+    verifier = summary.get("verifier")
+    if isinstance(verifier, dict) and isinstance(verifier.get("kind"), str):
+        facts["effect_verifier_kind"] = verifier["kind"]
+    return facts
+
+
+def validate_hybrid_timeline(
+    timeline: dict[str, Any],
+    *,
+    manifests: dict[str, dict[str, Any]],
+    graph: dict[str, Any],
+) -> None:
+    """Reject a derivative timeline that is not exactly evidence-bound.
+
+    The contract is intentionally strict. A web client can use only a complete
+    run of fixed video frames and retained proof references. It cannot fill a
+    time gap, attach a different source frame, or add a new public fact.
+    """
+    derivative = timeline.get("derivative")
+    if not isinstance(derivative, dict):
+        raise RuntimeError("hybrid timeline is missing derivative metadata")
+    fps = derivative.get("fps")
+    frame_count = derivative.get("frame_count")
+    entries = timeline.get("timeline")
+    if not isinstance(fps, int) or fps <= 0:
+        raise RuntimeError("hybrid timeline has an invalid FPS")
+    if not isinstance(frame_count, int) or frame_count <= 0:
+        raise RuntimeError("hybrid timeline has an invalid frame count")
+    if not isinstance(entries, list) or not entries:
+        raise RuntimeError("hybrid timeline has no entries")
+
+    source_frames: dict[tuple[str, str], dict[str, Any]] = {}
+    for presentation_phase, manifest in manifests.items():
+        events = manifest.get("events")
+        if not isinstance(events, list):
+            raise RuntimeError(
+                f"source manifest has invalid events: {presentation_phase}"
+            )
+        for event in events:
+            if isinstance(event, dict) and event.get("kind") == "frame":
+                file = event.get("file")
+                if not isinstance(file, str):
+                    raise RuntimeError(
+                        f"source manifest frame has no file: {presentation_phase}"
+                    )
+                source_frames[(presentation_phase, file)] = event
+
+    nodes = graph.get("nodes")
+    if not isinstance(nodes, list):
+        raise RuntimeError("compiled graph has no nodes")
+    expected_start = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise RuntimeError("hybrid timeline entry is not an object")
+        start = entry.get("start_frame")
+        end = entry.get("end_frame_exclusive")
+        if (
+            not isinstance(start, int)
+            or not isinstance(end, int)
+            or start != expected_start
+        ):
+            raise RuntimeError(
+                "hybrid timeline has incomplete or overlapping frame coverage"
+            )
+        if end <= start:
+            raise RuntimeError("hybrid timeline entry has an empty frame range")
+        expected_start = end
+        if (
+            entry.get("start_pts_s") != start / fps
+            or entry.get("end_pts_s") != end / fps
+        ):
+            raise RuntimeError("hybrid timeline PTS does not match the frame range")
+
+        facts = entry.get("facts")
+        if facts is not None:
+            if not isinstance(facts, dict) or not set(facts).issubset(PUBLIC_FACT_KEYS):
+                raise RuntimeError("hybrid timeline contains a non-public fact")
+
+        source_frame = entry.get("source_frame")
+        if source_frame is not None:
+            if not isinstance(source_frame, dict):
+                raise RuntimeError("hybrid timeline source frame is invalid")
+            presentation_phase = source_frame.get("presentation_phase")
+            file = source_frame.get("file")
+            if not isinstance(presentation_phase, str) or not isinstance(file, str):
+                raise RuntimeError("hybrid timeline source frame is incomplete")
+            source = source_frames.get((presentation_phase, file))
+            if source is None:
+                raise RuntimeError("hybrid timeline source frame is not retained")
+            for key, source_key in (
+                ("sha256", "sha256"),
+                ("captured_elapsed_s", "elapsed_s"),
+                ("source", "source"),
+            ):
+                if source_frame.get(key) != source.get(source_key):
+                    raise RuntimeError(
+                        "hybrid timeline source frame does not match its manifest"
+                    )
+
+        compiled_graph = entry.get("compiled_graph")
+        if compiled_graph is not None:
+            if not isinstance(compiled_graph, dict):
+                raise RuntimeError("hybrid timeline graph binding is invalid")
+            index = compiled_graph.get("node_index")
+            node_id = compiled_graph.get("node_id")
+            if (
+                not isinstance(index, int)
+                or index < 0
+                or index >= len(nodes)
+                or not isinstance(nodes[index], dict)
+                or node_id != nodes[index].get("id")
+            ):
+                raise RuntimeError(
+                    "hybrid timeline graph node does not match the graph"
+                )
+    if expected_start != frame_count:
+        raise RuntimeError("hybrid timeline does not cover the derivative frame count")
 
 
 def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -67,19 +291,13 @@ def _write_repeated(
     process: subprocess.Popen,
     image: Image.Image,
     seconds: float,
-) -> None:
+) -> int:
     payload = image.convert("RGB").tobytes()
-    for _ in range(max(1, round(FPS * seconds))):
+    count = max(1, round(FPS * seconds))
+    for _ in range(count):
         assert process.stdin is not None
         process.stdin.write(payload)
-
-
-def _write_frames(
-    process: subprocess.Popen,
-    images: Iterable[Image.Image],
-) -> None:
-    for image in images:
-        _write_repeated(process, image, 1 / FPS)
+    return count
 
 
 def _wrap(text: object, width: int) -> list[str]:
@@ -229,10 +447,11 @@ def _overlay(
 def _demonstration_frames(
     root: Path,
     manifest: dict,
-) -> list[Image.Image]:
+) -> list[tuple[Image.Image, dict[str, Any]]]:
     phase = root / "01-demonstration"
-    images: list[Image.Image] = []
+    images: list[tuple[Image.Image, dict[str, Any]]] = []
     last_frame: Image.Image | None = None
+    last_event: dict[str, Any] | None = None
     cursor: tuple[float, float] = (70.0, 740.0)
     for event in manifest["events"]:
         if event["kind"] == "frame":
@@ -241,18 +460,26 @@ def _demonstration_frames(
             if hashlib.sha256(payload).hexdigest() != event["sha256"]:
                 raise RuntimeError(f"frame hash mismatch: {path}")
             last_frame = Image.open(path).convert("RGB")
+            last_event = event
             images.extend(
                 [
-                    _overlay(
-                        last_frame,
-                        phase="1 · Demonstrate",
-                        detail="Human-paced input over RDP",
-                        cursor=cursor,
+                    (
+                        _overlay(
+                            last_frame,
+                            phase="1 · Demonstrate",
+                            detail="Human-paced input over RDP",
+                            cursor=cursor,
+                        ),
+                        event,
                     )
                 ]
                 * 2
             )
-        elif event["kind"] == "pointer" and last_frame is not None:
+        elif (
+            event["kind"] == "pointer"
+            and last_frame is not None
+            and last_event is not None
+        ):
             target = (float(event["x"]), float(event["y"]))
             start = cursor
             for step in range(1, 8):
@@ -263,22 +490,28 @@ def _demonstration_frames(
                     start[1] + (target[1] - start[1]) * eased,
                 )
                 images.append(
-                    _overlay(
-                        last_frame,
-                        phase="1 · Demonstrate",
-                        detail="Mouse and keyboard are retained",
-                        cursor=point,
+                    (
+                        _overlay(
+                            last_frame,
+                            phase="1 · Demonstrate",
+                            detail="Mouse and keyboard are retained",
+                            cursor=point,
+                        ),
+                        last_event,
                     )
                 )
             cursor = target
             images.extend(
                 [
-                    _overlay(
-                        last_frame,
-                        phase="1 · Demonstrate",
-                        detail="Action recorded",
-                        cursor=cursor,
-                        click=True,
+                    (
+                        _overlay(
+                            last_frame,
+                            phase="1 · Demonstrate",
+                            detail="Action recorded",
+                            cursor=cursor,
+                            click=True,
+                        ),
+                        last_event,
                     )
                 ]
                 * 3
@@ -368,12 +601,12 @@ def _graph_view(spec: dict, *, active_index: int | None = None) -> Image.Image:
 def _selected_frames(
     frames: list[tuple[dict, Image.Image]],
     limit: int = 18,
-) -> list[Image.Image]:
+) -> list[tuple[dict, Image.Image]]:
     if len(frames) <= limit:
-        return [image for _event, image in frames]
+        return frames
     last = len(frames) - 1
     indexes = {round(index * last / (limit - 1)) for index in range(limit)}
-    return [frames[index][1] for index in sorted(indexes)]
+    return [frames[index] for index in sorted(indexes)]
 
 
 def _verifier_view(frame: Image.Image, summary: dict) -> Image.Image:
@@ -568,6 +801,14 @@ def render(presentation_dir: Path, output: Path) -> dict:
         manifest, frames = _read_phase(presentation_dir, name)
         manifests[name] = manifest
         phase_frames[name] = frames
+    program_graph_sha256 = hashlib.sha256(
+        (presentation_dir / request["program_graph"]).read_bytes()
+    ).hexdigest()
+    timeline = HybridTimeline(
+        video=output.name,
+        fps=FPS,
+        frame_size=(WIDTH, HEIGHT),
+    )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     command = [
@@ -599,23 +840,49 @@ def render(presentation_dir: Path, output: Path) -> dict:
     process = subprocess.Popen(command, stdin=subprocess.PIPE)
     presented_counts: dict[str, int] = {}
     try:
-        _write_repeated(process, _request_view(request), 4.8)
+        request_count = _write_repeated(process, _request_view(request), 4.8)
+        timeline.append(
+            request_count,
+            phase="execute_request",
+            facts={"authorization": "qualified"},
+        )
 
         demo_images = _demonstration_frames(
             presentation_dir,
             manifests["01-demonstration"],
         )
-        _write_frames(process, demo_images)
+        for image, source_event in demo_images:
+            count = _write_repeated(process, image, 1 / FPS)
+            timeline.append(
+                count,
+                phase="demonstration",
+                facts=_public_facts(
+                    manifests["01-demonstration"]["summary"],
+                    manifests["01-demonstration"]["outcome"],
+                ),
+                source_frame=_frame_ref(
+                    source_event,
+                    presentation_phase="01-demonstration",
+                ),
+            )
         presented_counts["01-demonstration"] = len(demo_images)
 
         nodes = graph["nodes"]
         for index in range(len(nodes)):
-            _write_repeated(process, _graph_view(graph, active_index=index), 1.1)
-        _write_repeated(process, _graph_view(graph), 3.6)
+            count = _write_repeated(
+                process, _graph_view(graph, active_index=index), 1.1
+            )
+            timeline.append(
+                count,
+                phase="compiled_workflow",
+                compiled_graph={"node_id": nodes[index]["id"], "node_index": index},
+            )
+        count = _write_repeated(process, _graph_view(graph), 3.6)
+        timeline.append(count, phase="compiled_workflow")
 
         replay_images = _selected_frames(phase_frames["02-verified-replay"])
-        for image in replay_images:
-            _write_repeated(
+        for source_event, image in replay_images:
+            count = _write_repeated(
                 process,
                 _overlay(
                     image,
@@ -624,10 +891,22 @@ def render(presentation_dir: Path, output: Path) -> dict:
                 ),
                 0.38,
             )
+            timeline.append(
+                count,
+                phase="governed_replay",
+                facts=_public_facts(
+                    manifests["02-verified-replay"]["summary"],
+                    manifests["02-verified-replay"]["outcome"],
+                ),
+                source_frame=_frame_ref(
+                    source_event,
+                    presentation_phase="02-verified-replay",
+                ),
+            )
         presented_counts["02-verified-replay"] = len(replay_images)
 
-        replay_last = phase_frames["02-verified-replay"][-1][1]
-        _write_repeated(
+        replay_last_event, replay_last = phase_frames["02-verified-replay"][-1]
+        count = _write_repeated(
             process,
             _verifier_view(
                 replay_last,
@@ -635,9 +914,21 @@ def render(presentation_dir: Path, output: Path) -> dict:
             ),
             6.0,
         )
+        timeline.append(
+            count,
+            phase="independent_effect_check",
+            facts=_public_facts(
+                manifests["02-verified-replay"]["summary"],
+                manifests["02-verified-replay"]["outcome"],
+            ),
+            source_frame=_frame_ref(
+                replay_last_event,
+                presentation_phase="02-verified-replay",
+            ),
+        )
 
-        halt_last = phase_frames["03-safe-halt"][-1][1]
-        _write_repeated(
+        halt_last_event, halt_last = phase_frames["03-safe-halt"][-1]
+        count = _write_repeated(
             process,
             _wrong_record_view(
                 halt_last,
@@ -645,9 +936,33 @@ def render(presentation_dir: Path, output: Path) -> dict:
             ),
             7.0,
         )
+        timeline.append(
+            count,
+            phase="wrong_record_refusal",
+            facts=_public_facts(
+                manifests["03-safe-halt"]["summary"],
+                manifests["03-safe-halt"]["outcome"],
+            ),
+            source_frame=_frame_ref(
+                halt_last_event,
+                presentation_phase="03-safe-halt",
+            ),
+        )
         presented_counts["03-safe-halt"] = 1
 
-        _write_repeated(process, _final_view(replay_last), 4.2)
+        count = _write_repeated(process, _final_view(replay_last), 4.2)
+        timeline.append(
+            count,
+            phase="terminal_summary",
+            facts=_public_facts(
+                manifests["02-verified-replay"]["summary"],
+                manifests["02-verified-replay"]["outcome"],
+            ),
+            source_frame=_frame_ref(
+                replay_last_event,
+                presentation_phase="02-verified-replay",
+            ),
+        )
     finally:
         if process.stdin is not None:
             process.stdin.close()
@@ -656,6 +971,28 @@ def render(presentation_dir: Path, output: Path) -> dict:
         raise RuntimeError(f"FFmpeg failed with exit code {return_code}")
 
     video_hash = hashlib.sha256(output.read_bytes()).hexdigest()
+    source_manifest_sha256 = {
+        name: hashlib.sha256(
+            (presentation_dir / name / "manifest.json").read_bytes()
+        ).hexdigest()
+        for name in PHASE_DIRS
+    }
+    timeline_manifest = timeline.export(
+        video_sha256=video_hash,
+        workflow_digest=request.get("workflow_digest"),
+        program_graph_sha256=program_graph_sha256,
+        source_manifest_sha256=source_manifest_sha256,
+    )
+    validate_hybrid_timeline(
+        timeline_manifest,
+        manifests=manifests,
+        graph=graph,
+    )
+    timeline_path = output.with_suffix(".timeline.json")
+    timeline_path.write_text(
+        json.dumps(timeline_manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     render_manifest = {
         "schema_version": "openadapt.rdp-presentation-render.v2",
         "video": output.name,
@@ -663,8 +1000,10 @@ def render(presentation_dir: Path, output: Path) -> dict:
         "fps": FPS,
         "frame_size": [WIDTH, HEIGHT],
         "timing": "paced derivative; source frames and input events remain exact",
-        "program_graph_sha256": hashlib.sha256(
-            (presentation_dir / request["program_graph"]).read_bytes()
+        "program_graph_sha256": program_graph_sha256,
+        "hybrid_timeline": timeline_path.name,
+        "hybrid_timeline_sha256": hashlib.sha256(
+            timeline_path.read_bytes()
         ).hexdigest(),
         "workflow_digest": request.get("workflow_digest"),
         "phases": [

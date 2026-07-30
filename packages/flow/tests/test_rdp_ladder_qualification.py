@@ -233,6 +233,63 @@ def test_presentation_is_hash_bound_and_renders_without_staged_video_frames(
         "VERIFIED",
         "HALTED",
     ]
+    timeline_path = output.with_suffix(".timeline.json")
+    timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
+    assert timeline["schema_version"] == "openadapt.rdp-hybrid-presentation.v1"
+    assert timeline["derivative"]["video_sha256"] == result["video_sha256"]
+    assert timeline["derivative"]["frame_count"] > 0
+    assert (
+        result["hybrid_timeline_sha256"]
+        == hashlib.sha256(timeline_path.read_bytes()).hexdigest()
+    )
+    source_entries = [
+        entry for entry in timeline["timeline"] if "source_frame" in entry
+    ]
+    assert source_entries
+    assert all(
+        entry["end_frame_exclusive"] > entry["start_frame"] for entry in source_entries
+    )
+    assert all("sha256" in entry["source_frame"] for entry in source_entries)
+    assert all("target_geometry" not in entry for entry in timeline["timeline"])
+    graph_entries = [
+        entry for entry in timeline["timeline"] if "compiled_graph" in entry
+    ]
+    assert graph_entries
+    assert all("node_id" in entry["compiled_graph"] for entry in graph_entries)
+    source_manifests = {
+        name: json.loads(
+            (tmp_path / name / "manifest.json").read_text(encoding="utf-8")
+        )
+        for name in renderer.PHASE_DIRS
+    }
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    invalid_timelines = []
+    invalid = copy.deepcopy(timeline)
+    invalid["timeline"][1]["start_frame"] = 0
+    invalid_timelines.append((invalid, "incomplete or overlapping"))
+    invalid = copy.deepcopy(timeline)
+    invalid["timeline"][0]["end_pts_s"] = 0.0
+    invalid_timelines.append((invalid, "PTS does not match"))
+    invalid = copy.deepcopy(timeline)
+    next(entry for entry in invalid["timeline"] if "source_frame" in entry)[
+        "source_frame"
+    ]["sha256"] = "0" * 64
+    invalid_timelines.append((invalid, "does not match its manifest"))
+    invalid = copy.deepcopy(timeline)
+    next(entry for entry in invalid["timeline"] if "compiled_graph" in entry)[
+        "compiled_graph"
+    ]["node_id"] = "different-step"
+    invalid_timelines.append((invalid, "does not match the graph"))
+    invalid = copy.deepcopy(timeline)
+    invalid["timeline"][0]["facts"]["record_value"] = "not allowed"
+    invalid_timelines.append((invalid, "non-public fact"))
+    for invalid, message in invalid_timelines:
+        with pytest.raises(RuntimeError, match=message):
+            renderer.validate_hybrid_timeline(
+                invalid,
+                manifests=source_manifests,
+                graph=graph,
+            )
     assert list(tmp_path.rglob("*.png")) == [
         tmp_path / "01-demonstration" / "frames" / "0000.png",
         tmp_path / "02-verified-replay" / "frames" / "0000.png",
