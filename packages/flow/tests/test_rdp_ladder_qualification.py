@@ -8,8 +8,10 @@ partial result, and manual-only release-lane workflow.
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -33,6 +35,12 @@ assert SPEC is not None and SPEC.loader is not None
 qualification = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = qualification
 SPEC.loader.exec_module(qualification)
+RENDERER = REPO / "benchmark" / "rdp_ladder" / "render_presentation.py"
+RENDER_SPEC = importlib.util.spec_from_file_location("rdp_ladder_renderer", RENDERER)
+assert RENDER_SPEC is not None and RENDER_SPEC.loader is not None
+renderer = importlib.util.module_from_spec(RENDER_SPEC)
+sys.modules[RENDER_SPEC.name] = renderer
+RENDER_SPEC.loader.exec_module(renderer)
 
 
 def _healthy(condition_trial: int) -> dict:
@@ -93,6 +101,46 @@ def test_source_provenance_requires_full_lowercase_shas() -> None:
         qualification._validate_source_provenance("abc123", "0" * 40)
     with pytest.raises(RuntimeError, match="base commit must be a full"):
         qualification._validate_source_provenance("0" * 40, "A" * 40)
+
+
+def test_presentation_is_hash_bound_and_renders_without_staged_video_frames(
+    tmp_path: Path,
+) -> None:
+    for index, (phase, outcome) in enumerate(
+        (
+            ("Demonstration", "RECORDED"),
+            ("Governed replay", "VERIFIED"),
+            ("Changed-screen refusal", "HALTED"),
+        ),
+        start=1,
+    ):
+        capture = qualification.PresentationCapture(
+            tmp_path
+            / f"0{index}-{'demonstration' if index == 1 else 'verified-replay' if index == 2 else 'safe-halt'}",
+            phase=phase,
+        )
+        image = Image.new("RGB", qualification.VIEWPORT, (index * 30, 60, 90))
+        capture.observe_image(image, source="test-frame")
+        capture.observe_image(image, source="duplicate-test-frame")
+        capture.finalize(outcome=outcome, summary={"model_calls": 0})
+
+    output = tmp_path / "rdp-demo.mp4"
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is not installed")
+    result = renderer.render(tmp_path, output)
+
+    assert output.stat().st_size > 1_000
+    assert result["video_sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
+    assert [phase["outcome"] for phase in result["phases"]] == [
+        "RECORDED",
+        "VERIFIED",
+        "HALTED",
+    ]
+    assert list(tmp_path.rglob("*.png")) == [
+        tmp_path / "01-demonstration" / "frames" / "0000.png",
+        tmp_path / "02-verified-replay" / "frames" / "0000.png",
+        tmp_path / "03-safe-halt" / "frames" / "0000.png",
+    ]
 
 
 @pytest.mark.parametrize(("character", "keysym"), [("-", "minus"), ("/", "slash")])

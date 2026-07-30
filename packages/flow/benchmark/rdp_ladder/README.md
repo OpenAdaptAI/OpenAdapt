@@ -130,6 +130,31 @@ via `workflow_dispatch` and also runs on pull requests that change the bounded
 RDP-ladder harness or its exact compiler/policy/runtime dependencies. It is not
 scheduled.
 
+## Presentation artifact
+
+The same workflow can retain exact synthetic-fixture frames for a short buyer
+demo:
+
+```bash
+python3 benchmark/rdp_ladder/run_rdp_ladder_qualification.py \
+  --container oaflow-rdp-ladder \
+  --oracle-root "${ORACLE_ROOT}" \
+  --output runs/rdp-ladder/results.json \
+  --presentation-dir runs/rdp-ladder/presentation \
+  --candidate-commit "$(git rev-parse HEAD)" \
+  --base-commit "$(git merge-base HEAD origin/main)"
+
+python3 benchmark/rdp_ladder/render_presentation.py \
+  --presentation-dir runs/rdp-ladder/presentation \
+  --output runs/rdp-ladder/openadapt-rdp-demo.mp4
+```
+
+The capture observes only frames that the qualification runtime already
+requested. It does not add a screenshot or delay to the action path. The
+renderer checks every retained frame hash, adds a compact overlay after the
+run, and streams the derivative frames directly to FFmpeg. The MP4 uses paced
+presentation timing. The qualification JSON remains the result authority.
+
 ## License posture
 
 The fixture apt-installs FreeRDP, Openbox, xdotool, and ImageMagick as external

@@ -105,6 +105,77 @@ _XDOTOOL_KEYS = {
 }
 
 
+class PresentationCapture:
+    """Retain exact synthetic-fixture frames for a derived buyer demo.
+
+    The capture only observes frames that the runtime already requested. It
+    never asks the backend for an extra frame and never changes input timing.
+    """
+
+    def __init__(self, output_dir: Path, *, phase: str) -> None:
+        self.output_dir = output_dir
+        self.phase = phase
+        self.frames_dir = output_dir / "frames"
+        self.frames_dir.mkdir(parents=True, exist_ok=True)
+        self._started = time.monotonic()
+        self._events: list[dict] = []
+        self._last_frame_hash: Optional[str] = None
+        self._frame_count = 0
+
+    def _elapsed(self) -> float:
+        return round(time.monotonic() - self._started, 3)
+
+    def observe_png(self, png: bytes, *, source: str) -> None:
+        digest = hashlib.sha256(png).hexdigest()
+        if digest == self._last_frame_hash:
+            return
+        filename = f"{self._frame_count:04d}.png"
+        (self.frames_dir / filename).write_bytes(png)
+        self._events.append(
+            {
+                "kind": "frame",
+                "elapsed_s": self._elapsed(),
+                "file": f"frames/{filename}",
+                "sha256": digest,
+                "source": source,
+            }
+        )
+        self._last_frame_hash = digest
+        self._frame_count += 1
+
+    def observe_image(self, image: Image.Image, *, source: str) -> None:
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="PNG")
+        self.observe_png(buffer.getvalue(), source=source)
+
+    def input_event(self, kind: str, **fields: object) -> None:
+        self._events.append(
+            {
+                "kind": kind,
+                "elapsed_s": self._elapsed(),
+                **fields,
+            }
+        )
+
+    def finalize(self, *, outcome: str, summary: dict) -> None:
+        payload = {
+            "schema_version": "openadapt.rdp-presentation.v1",
+            "phase": self.phase,
+            "source": (
+                "Exact synthetic-fixture frames observed on the RDP client "
+                "or by the runtime drift adapter. Presentation timing is paced."
+            ),
+            "frame_count": self._frame_count,
+            "events": self._events,
+            "outcome": outcome,
+            "summary": summary,
+        }
+        (self.output_dir / "manifest.json").write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+
 class DockerX11RdpTransport:
     """`RDPTransport` over the FreeRDP client display inside the fixture
     container: `framebuffer()` screenshots the RDP-decoded client display and
@@ -278,6 +349,53 @@ class DockerX11RdpTransport:
             self._exec(["xdotool", "click", btn])
 
 
+class PresentationRDPTransport:
+    """Observe an RDP transport without adding framebuffer reads."""
+
+    def __init__(
+        self,
+        inner: DockerX11RdpTransport,
+        capture: PresentationCapture,
+    ) -> None:
+        self._inner = inner
+        self._capture = capture
+
+    def connect(self) -> None:
+        self._inner.connect()
+
+    def disconnect(self) -> None:
+        self._inner.disconnect()
+
+    def framebuffer(self):
+        image, width, height = self._inner.framebuffer()
+        self._capture.observe_image(image, source="rdp-client-framebuffer")
+        return image, width, height
+
+    def pointer(self, x: int, y: int, button: str, down: bool) -> None:
+        if down:
+            self._capture.input_event(
+                "pointer",
+                x=int(x),
+                y=int(y),
+                button=button,
+            )
+        self._inner.pointer(x, y, button, down)
+
+    def key(self, keysym_or_char: str, down: bool) -> None:
+        if down:
+            self._capture.input_event(
+                "key",
+                category=(
+                    "character" if len(keysym_or_char) == 1 else "named-key"
+                ),
+            )
+        self._inner.key(keysym_or_char, down)
+
+    def wheel(self, dx: int, dy: int) -> None:
+        self._capture.input_event("wheel", dx=int(dx), dy=int(dy))
+        self._inner.wheel(dx, dy)
+
+
 # -- injected-drift wrapper (simulated drift on a real RDP session) ------------
 class _DriftBackend:
     """Wraps a Backend and degrades every screenshot with DPI + theme + JPEG
@@ -291,9 +409,11 @@ class _DriftBackend:
         downscale: float = 0.4,
         invert: bool = True,
         jpeg_quality: int = 8,
+        presentation_capture: Optional[PresentationCapture] = None,
     ) -> None:
         self._b = backend
         self._ds, self._invert, self._q = downscale, invert, jpeg_quality
+        self._presentation_capture = presentation_capture
 
     def __getattr__(self, name):
         return getattr(self._b, name)
@@ -315,7 +435,13 @@ class _DriftBackend:
         out = Image.open(io.BytesIO(buf.getvalue())).convert("RGB")
         png = io.BytesIO()
         out.save(png, format="PNG")
-        return png.getvalue()
+        payload = png.getvalue()
+        if self._presentation_capture is not None:
+            self._presentation_capture.observe_png(
+                payload,
+                source="runtime-drift-frame",
+            )
+        return payload
 
 
 def _read_saved_note(oracle_root: Path) -> Optional[str]:
@@ -626,6 +752,7 @@ def run_qualification(
     candidate_commit: str,
     base_commit: str,
     work_dir: Optional[Path] = None,
+    presentation_dir: Optional[Path] = None,
 ) -> dict:
     from openadapt_flow.backends.rdp_backend import FreeRDPBackend
     from openadapt_flow.compiler import compile_recording
@@ -645,7 +772,19 @@ def run_qualification(
 
     # ---- Record once, then replay each condition independently --------------
     _reset_kiosk(container, oracle_root)
-    transport = DockerX11RdpTransport(container)
+    record_capture = (
+        PresentationCapture(
+            presentation_dir / "01-demonstration",
+            phase="Demonstration",
+        )
+        if presentation_dir is not None
+        else None
+    )
+    transport: DockerX11RdpTransport | PresentationRDPTransport = (
+        DockerX11RdpTransport(container)
+    )
+    if record_capture is not None:
+        transport = PresentationRDPTransport(transport, record_capture)
     backend = FreeRDPBackend(transport, connect=True)
 
     rec_dir = work / "recording"
@@ -662,6 +801,15 @@ def run_qualification(
     rec.type_text(NOTE_VALUE, param=NOTE_PARAM)
     rec.click(*SAVE_BUTTON)  # write (irreversible)
     rec.finish()
+    if record_capture is not None:
+        record_capture.finalize(
+            outcome="RECORDED",
+            summary={
+                "actions": 4,
+                "model_calls": 0,
+                "surface": "real RDP round-trip",
+            },
+        )
     _arm_recorded_identifiers(rec_dir)
 
     workflow = compile_recording(
@@ -684,7 +832,23 @@ def run_qualification(
             approval_source="rdp-ladder-qualification",
             params=params,
         )
-        replay_backend = FreeRDPBackend(DockerX11RdpTransport(container), connect=True)
+        healthy_capture = (
+            PresentationCapture(
+                presentation_dir / "02-verified-replay",
+                phase="Governed replay",
+            )
+            if presentation_dir is not None and condition_trial == 1
+            else None
+        )
+        healthy_transport: DockerX11RdpTransport | PresentationRDPTransport = (
+            DockerX11RdpTransport(container)
+        )
+        if healthy_capture is not None:
+            healthy_transport = PresentationRDPTransport(
+                healthy_transport,
+                healthy_capture,
+            )
+        replay_backend = FreeRDPBackend(healthy_transport, connect=True)
         report = Replayer(
             replay_backend,
             poll_interval_s=0.3,
@@ -819,6 +983,16 @@ def run_qualification(
         }
         healthy_trials.append(trial)
         trials.append(trial)
+        if healthy_capture is not None:
+            healthy_capture.finalize(
+                outcome="VERIFIED" if healthy_ok else "FAILED",
+                summary={
+                    "effect_confirmed": effect_confirmed,
+                    "identity_verified": identity_verified,
+                    "model_calls": int(report.model_calls),
+                    "silent_incorrect_success": silent_incorrect_success,
+                },
+            )
 
     drift_trials: list[dict] = []
     for condition_trial in range(1, TRIALS_PER_CONDITION + 1):
@@ -831,8 +1005,17 @@ def run_qualification(
             approval_source="rdp-ladder-qualification",
             params=params,
         )
+        drift_capture = (
+            PresentationCapture(
+                presentation_dir / "03-safe-halt",
+                phase="Changed-screen refusal",
+            )
+            if presentation_dir is not None and condition_trial == 1
+            else None
+        )
         drift_backend = _DriftBackend(
-            FreeRDPBackend(DockerX11RdpTransport(container), connect=True)
+            FreeRDPBackend(DockerX11RdpTransport(container), connect=True),
+            presentation_capture=drift_capture,
         )
         drift_report = Replayer(
             drift_backend,
@@ -875,6 +1058,15 @@ def run_qualification(
         }
         drift_trials.append(trial)
         trials.append(trial)
+        if drift_capture is not None:
+            drift_capture.finalize(
+                outcome="HALTED" if drift_ok else "FAILED",
+                summary={
+                    "effect_written": silent_write,
+                    "model_calls": int(drift_report.model_calls),
+                    "safety_halt": safety_halt,
+                },
+            )
 
     _reset_kiosk(container, oracle_root)
 
@@ -992,6 +1184,14 @@ def main() -> int:
     )
     ap.add_argument("--candidate-commit", required=True)
     ap.add_argument("--base-commit", required=True)
+    ap.add_argument(
+        "--presentation-dir",
+        type=Path,
+        help=(
+            "Retain exact synthetic-fixture frames and a paced presentation "
+            "manifest. This does not add runtime framebuffer reads."
+        ),
+    )
     args = ap.parse_args()
 
     out_dir = args.output.parent
@@ -1003,6 +1203,7 @@ def main() -> int:
         work_dir=args.work_dir,
         candidate_commit=args.candidate_commit,
         base_commit=args.base_commit,
+        presentation_dir=args.presentation_dir,
     )
     args.output.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
     payload = json.dumps(evidence, sort_keys=True).encode()

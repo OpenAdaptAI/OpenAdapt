@@ -87,15 +87,24 @@ jobs:
             --container oaflow-rdp-ladder \
             --oracle-root "${RUNNER_TEMP}/rdp-ladder-oracle" \
             --output runs/rdp-ladder/results.json \
+            --presentation-dir runs/rdp-ladder/presentation \
             --candidate-commit "$(git rev-parse HEAD)" \
             --base-commit "$(git merge-base HEAD origin/main)"
 
-      - name: Upload evidence
+      - name: Render the paced RDP presentation
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python benchmark/rdp_ladder/render_presentation.py \
+            --presentation-dir runs/rdp-ladder/presentation \
+            --output runs/rdp-ladder/openadapt-rdp-demo.mp4
+
+      - name: Upload evidence and presentation
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rdp-ladder-qualification
-          path: runs/rdp-ladder/results.json
+          path: runs/rdp-ladder/
           if-no-files-found: error
 
       - name: Tear down
