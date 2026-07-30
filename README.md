@@ -48,11 +48,18 @@ target application, API key, or operating-system automation permissions:
 openadapt quickstart
 ```
 
+The tutorial records and compiles a synthetic task, certifies it with the
+shipped clinical-write policy, and runs it under the Standard profile. A
+separate read-only API confirms the saved record outside the screen that
+performed the write. The healthy run returns `VERIFIED` with no model or Cloud
+call.
+
 You now have:
 
 - `openadapt-quickstart/recording/`: the demonstrated interaction and retained target evidence
 - `openadapt-quickstart/bundle/`: the inspectable compiled workflow
 - `openadapt-quickstart/run/REPORT.md`: the ordered actions, evidence, outcome, and any halt reason
+- `openadapt-quickstart/run/receipt.json`: the privacy-safe local receipt for the synthetic verified run
 
 Inspect the program and its deployment gaps:
 
