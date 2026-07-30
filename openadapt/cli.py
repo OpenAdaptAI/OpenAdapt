@@ -220,7 +220,9 @@ def quickstart(out: Path, headed: bool) -> None:
     click.echo(f"Bundle: {root / 'bundle'}")
     click.echo(f"Run evidence: {root / 'run'}")
     click.echo("Outcome: VERIFIED under the Standard profile.")
-    click.echo("The synthetic write was confirmed through a read-only system-of-record API.")
+    click.echo(
+        "The synthetic write was confirmed through a read-only system-of-record API."
+    )
     click.echo("No model or Cloud call was enabled.")
     click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
     click.echo(
