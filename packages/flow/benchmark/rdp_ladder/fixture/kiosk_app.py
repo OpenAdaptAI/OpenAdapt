@@ -122,7 +122,6 @@ def main() -> None:
             root,
             text=f"{name}    {mrn}",
             font=("DejaVu Sans", 18),
-            width=34,
             anchor="w",
             bg=ROW_BG,
             fg=FG,
@@ -131,7 +130,7 @@ def main() -> None:
             bd=2,
         )
         b.config(command=lambda n=name, m=mrn, bb=b: select(n, m, bb))
-        b.place(x=50, y=166 + i * 70)
+        b.place(x=50, y=166 + i * 70, width=430, height=54)
         row_btns.append(b)
 
     tk.Label(

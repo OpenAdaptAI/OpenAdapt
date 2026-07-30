@@ -382,7 +382,7 @@ def _verifier_view(frame: Image.Image, summary: dict) -> Image.Image:
     _brand(draw, section="Independent result check")
     draw.text(
         (44, 100),
-        "The screen reports success. The database must agree.",
+        "The app says saved. OpenAdapt proves the result.",
         font=_font(32, bold=True),
         fill=TEXT,
     )
@@ -425,10 +425,16 @@ def _verifier_view(frame: Image.Image, summary: dict) -> Image.Image:
         fill=TEXT,
     )
     draw.text(
-        (44, 708),
-        "The verifier used a separate read-only connection. The run used zero model calls.",
-        font=_font(17),
+        (44, 704),
+        "This workflow uses read-only SQL. Others can qualify an API, export, or persisted-state read-back.",
+        font=_font(15),
         fill=MUTED,
+    )
+    draw.text(
+        (44, 730),
+        "OpenAdapt requires qualified proof. If it cannot prove the result, it does not report VERIFIED.",
+        font=_font(15, bold=True),
+        fill=TEXT,
     )
     return image
 
@@ -604,8 +610,8 @@ def render(presentation_dir: Path, output: Path) -> dict:
 
         nodes = graph["nodes"]
         for index in range(len(nodes)):
-            _write_repeated(process, _graph_view(graph, active_index=index), 0.42)
-        _write_repeated(process, _graph_view(graph), 2.4)
+            _write_repeated(process, _graph_view(graph, active_index=index), 1.1)
+        _write_repeated(process, _graph_view(graph), 3.6)
 
         replay_images = _selected_frames(phase_frames["02-verified-replay"])
         for image in replay_images:
