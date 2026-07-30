@@ -1381,6 +1381,25 @@ def test_read_only_prior_remote_click_has_exact_fault_prefix_proof(
         remote_first=True,
         first_read_only=True,
     )
+    assert workflow.qualification is not None
+    submit_target = QualificationActionTarget(step_id="submit", actuation_path="gui")
+    workflow.qualification.cases = [
+        case.model_copy(
+            update={
+                "action_targets": [submit_target],
+                "fault_target": (
+                    submit_target
+                    if case.kind is QualificationCaseKind.MISSING_EFFECT
+                    else case.fault_target
+                ),
+            }
+        )
+        if case.kind is QualificationCaseKind.MISSING_EFFECT
+        else case
+        for case in workflow.qualification.cases
+    ]
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
     run_id = "prior-read-only-remote-click"
     run_dir = tmp_path / f"run-{run_id}"
     report = Replayer(
@@ -1391,7 +1410,7 @@ def test_read_only_prior_remote_click_has_exact_fault_prefix_proof(
             QualificationCaseKind.MISSING_EFFECT,
             driver,
             run_id=run_id,
-            action_paths={"prepare": "gui", "submit": "gui"},
+            action_paths={"submit": "gui"},
             required_identity_step_ids=("submit",),
             fault_step_id="submit",
         ),

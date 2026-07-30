@@ -972,6 +972,7 @@ def test_qualification_run_case_derives_exact_standard_authorization(
     )
     assert authorization.qualification_case_id == "representative-1"
     assert authorization.qualification_case_action_paths == {"s1": "gui"}
+    assert authorization.required_identity_step_ids == ("s1",)
     assert (
         authorization.qualification_campaign_id_sha256
         == hashlib.sha256(b"campaign-1").hexdigest()

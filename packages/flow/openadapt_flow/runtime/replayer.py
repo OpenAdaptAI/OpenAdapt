@@ -8970,8 +8970,11 @@ class Replayer:
                     f"Step '{step.id}' ({step.intent}) is a TYPE step with "
                     "neither text nor param"
                 )
-            requires_atomic_keyboard = self._requires_atomic_identity_keyboard(
+            identity_atomic_keyboard = self._requires_atomic_identity_keyboard(
                 step, workflow
+            )
+            requires_atomic_keyboard = (
+                identity_atomic_keyboard or self.qualification_fault_driver is not None
             )
             if (
                 requires_atomic_keyboard
@@ -8981,7 +8984,7 @@ class Replayer:
                 result.safety_halt = True
                 result.failure_category = "safety_halt"
                 return (
-                    f"Step '{step.id}' ({step.intent}) is a consequential "
+                    f"Step '{step.id}' ({step.intent}) is a qualification or "
                     "identity-gated keyboard action, but this backend cannot "
                     "bind the verified focus and execution context to the same "
                     "input operation — refusing unguarded keyboard delivery; "
@@ -9212,6 +9215,22 @@ class Replayer:
                         ),
                     )
                 return None
+            if (
+                self.qualification_fault_driver is not None
+                and not identity_atomic_keyboard
+                and isinstance(self.backend, GuardedKeyboardActionBackend)
+            ):
+                if field_point is None:
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) has no focused field "
+                        "point for exact qualification delivery; run aborted"
+                    )
+                self._require_qualification_environment_current()
+                cast(GuardedKeyboardActionBackend, self.backend).arm_guarded_keyboard(
+                    *field_point
+                )
             guarded_type = (
                 requires_atomic_keyboard
                 and not isinstance(self.backend, RemoteActuationBackend)

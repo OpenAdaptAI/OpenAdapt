@@ -2841,10 +2841,21 @@ def _case_run_report_integrity_error(
         # The profile classifier proves the ordered action trace and the broad
         # production outcome. Qualification also proves the exact compiled
         # action, path, identity policy, and resolved effect contracts.
+        from openadapt_flow.policy import executable_actuation_paths
+
         for item in prior_action_results:
             step = steps_by_id.get(item.step_id)
-            actuation_path = expected_action_paths.get(item.step_id)
-            if step is None or actuation_path is None:
+            observed_path = _qualification_actuation_path(item.actuation)
+            actuation_path = expected_action_paths.get(item.step_id, observed_path)
+            if (
+                step is None
+                or actuation_path is None
+                or actuation_path not in executable_actuation_paths(step)
+                or (
+                    item.step_id in required_actions
+                    and item.step_id not in expected_action_paths
+                )
+            ):
                 return (
                     QualificationRefusalCode.CASE_ATTESTATION_INVALID,
                     "fault case prior action is outside its exact qualified scope",

@@ -49,7 +49,7 @@ is refused, not repaired.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -1090,6 +1090,110 @@ def build_runtime_authorization(
         unverified_write_approvals=tuple(approvals),
         approval_source=approval_source,
     )
+
+
+def build_qualification_case_authorization(
+    workflow: Workflow,
+    report: RunGateReport,
+    *,
+    case_id: str,
+    params: Optional[dict[str, str]],
+    worklists: Optional[dict[str, list[dict[str, str]]]],
+    campaign_id: str,
+    run_id: str,
+    fault_driver: Any = None,
+) -> GovernedRunAuthorization:
+    """Build the exact authority for one governed qualification-case run.
+
+    Qualification exporters and the CLI share this trust boundary.  Callers
+    supply a Standard-profile admission report produced with
+    ``qualification_evidence_only=True``; this function binds the current
+    project revision, case, inputs, action paths, campaign, run, and optional
+    signed fault driver into one immutable runtime capability.
+    """
+
+    from openadapt_flow.qualification import (
+        QualificationCaseKind,
+        qualification_action_requirements,
+        qualification_campaign_id_sha256,
+        qualification_run_id_sha256,
+    )
+    from openadapt_flow.qualification_faults import sha256_bytes
+
+    if report.execution_profile != "standard":
+        raise ValueError("qualification cases require the Standard profile")
+    project = workflow.qualification
+    if project is None:
+        raise ValueError("qualification case requires a qualification project")
+    case = next((item for item in project.cases if item.id == case_id), None)
+    if case is None:
+        raise ValueError("qualification case is not declared by this project")
+    if not case.action_targets or case.runtime_input_sha256 is None:
+        raise ValueError("qualification case has no exact approved action/input scope")
+    input_sha256 = runtime_inputs_digest(workflow, params, worklists)
+    if input_sha256 != case.runtime_input_sha256:
+        raise ValueError("qualification case inputs do not match the approved case")
+
+    authorization = build_runtime_authorization(
+        workflow,
+        report,
+        approval_source="qualification-campaign",
+        params=params,
+        worklists=worklists,
+    )
+    _required_actions, required_identity = qualification_action_requirements(workflow)
+    updates: dict[str, Any] = {
+        "authorization_id": run_id,
+        "qualification_project_id": project.project_id,
+        "qualification_project_revision": project.revision,
+        "qualification_project_contract_sha256": project.contract_sha256(),
+        "qualification_case_id": case.id,
+        "qualification_campaign_id_sha256": qualification_campaign_id_sha256(
+            campaign_id
+        ),
+        "qualification_case_input_sha256": input_sha256,
+        "qualification_run_id_sha256": qualification_run_id_sha256(run_id),
+        "qualification_case_kind": case.kind.value,
+        "qualification_case_action_paths": {
+            target.step_id: target.actuation_path for target in case.action_targets
+        },
+        "required_identity_step_ids": tuple(sorted(required_identity)),
+    }
+    if case.kind is not QualificationCaseKind.REPRESENTATIVE:
+        target = case.resolved_fault_target()
+        if target is None:
+            raise ValueError("qualification fault case has no exact target")
+        if fault_driver is None:
+            raise ValueError("qualification fault case requires a fault driver")
+        try:
+            updates.update(
+                {
+                    "qualification_fault_driver_id": fault_driver.driver_id,
+                    "qualification_fault_driver_contract_sha256": (
+                        fault_driver.contract_sha256
+                    ),
+                    "qualification_fault_driver_key_id": (
+                        fault_driver.attestation_key_id
+                    ),
+                    "qualification_fault_step_id_sha256": sha256_bytes(
+                        target.step_id.encode("utf-8")
+                    ),
+                }
+            )
+        except Exception as exc:
+            raise ValueError(
+                "qualification fault driver identity is unavailable"
+            ) from exc
+    elif fault_driver is not None:
+        raise ValueError("representative qualification case cannot bind a fault driver")
+
+    bound = authorization.model_copy(update=updates)
+    validation_error = bound.validate_workflow(workflow)
+    if validation_error is not None:
+        raise ValueError(
+            f"qualification evidence does not match this exact case: {validation_error}"
+        )
+    return bound
 
 
 def _template_asset_encryption(

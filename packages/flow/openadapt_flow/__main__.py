@@ -1344,6 +1344,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     )
     from openadapt_flow.ir import Workflow
     from openadapt_flow.run_gate import (
+        build_qualification_case_authorization,
         build_runtime_authorization,
         evaluate_run_gate,
     )
@@ -1525,40 +1526,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     if qualification_case is not None:
         runtime_worklists = qualification_case["worklists"]
-        local_authorization = build_runtime_authorization(
-            workflow,
-            report,
-            params=gate_params,
-            worklists=runtime_worklists,
-        )
-        project = workflow.qualification
-        case = qualification_case["case"]
-        assert project is not None
-        authorization = local_authorization.model_copy(
-            update={
-                "authorization_id": qualification_case["run_id"],
-                "approval_source": "qualification-campaign",
-                "qualification_project_id": project.project_id,
-                "qualification_project_revision": project.revision,
-                "qualification_project_contract_sha256": project.contract_sha256(),
-                "qualification_case_id": case.id,
-                "qualification_campaign_id_sha256": qualification_case[
-                    "campaign_id_sha256"
-                ],
-                "qualification_case_input_sha256": qualification_case["input_sha256"],
-                "qualification_run_id_sha256": qualification_case["run_id_sha256"],
-                "qualification_case_kind": case.kind.value,
-                "qualification_case_action_paths": {
-                    target.step_id: target.actuation_path
-                    for target in case.action_targets
-                },
-            }
-        )
-        validation_error = authorization.validate_workflow(workflow)
-        if (
-            authorization.runtime_inputs_digest != qualification_case["input_sha256"]
-            or validation_error is not None
-        ):
+        try:
+            authorization = build_qualification_case_authorization(
+                workflow,
+                report,
+                case_id=qualification_case["case"].id,
+                params=gate_params,
+                worklists=runtime_worklists,
+                campaign_id=qualification_case["campaign_id"],
+                run_id=qualification_case["run_id"],
+            )
+        except ValueError:
             print(
                 "run REFUSED: qualification evidence does not match this exact "
                 "case. Nothing was executed."
@@ -2387,6 +2365,7 @@ def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
         "params": params,
         "worklists": worklists,
         "input_sha256": input_sha256,
+        "campaign_id": args.campaign_id,
         "campaign_id_sha256": campaign_id_sha256,
         "run_id": args.run_id,
         "run_id_sha256": run_id_sha256,
