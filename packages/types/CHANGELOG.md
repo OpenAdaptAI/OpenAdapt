@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.9.0 (2026-07-30)
+
+### Features
+
+- Add Execute reference clients
+  ([`f0c08c4`](https://github.com/OpenAdaptAI/openadapt-types/commit/f0c08c4cf3610fdf8216f2fc86735ef32de4ba00))
+
+Add the public Execute OpenAPI client, secure reference clients, and integration examples.
+
+
 ## v0.8.0 (2026-07-29)
 
 ### Features
