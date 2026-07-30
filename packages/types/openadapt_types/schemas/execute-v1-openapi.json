@@ -905,6 +905,14 @@
         "type": "object"
       },
       "JsonValue": {}
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "bearerFormat": "OpenAdapt Execute partner token",
+        "description": "A partner-provisioned, scope-limited service token. Do not put it in browser code or workflow parameters.",
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
@@ -939,7 +947,12 @@
             },
             "description": "Execution accepted for durable processing."
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/executions/{execution_id}": {
@@ -967,7 +980,12 @@
             },
             "description": "Current lifecycle state."
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/executions/{execution_id}/receipt": {
@@ -995,13 +1013,19 @@
             },
             "description": "Terminal receipt with evidence identifiers."
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     }
   },
   "webhooks": {
     "executionDecisionRequired": {
       "post": {
+        "description": "Verify the body HMAC with the published Execute v1 webhook contract before accepting this delivery.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1016,11 +1040,13 @@
           "204": {
             "description": "Accepted by endpoint."
           }
-        }
+        },
+        "security": []
       }
     },
     "executionStateChanged": {
       "post": {
+        "description": "Verify the body HMAC with the published Execute v1 webhook contract before accepting this delivery.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1035,11 +1061,13 @@
           "204": {
             "description": "Accepted by endpoint."
           }
-        }
+        },
+        "security": []
       }
     },
     "executionTerminal": {
       "post": {
+        "description": "Verify the body HMAC with the published Execute v1 webhook contract before accepting this delivery.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1054,7 +1082,8 @@
           "204": {
             "description": "Accepted by endpoint."
           }
-        }
+        },
+        "security": []
       }
     }
   },

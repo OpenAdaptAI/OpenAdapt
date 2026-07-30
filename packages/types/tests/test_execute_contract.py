@@ -2,6 +2,9 @@
 
 import json
 from importlib.resources import files
+from unittest.mock import patch
+from urllib.error import HTTPError
+from urllib.request import Request
 
 import pytest
 from pydantic import ValidationError
@@ -10,6 +13,7 @@ from openadapt_types import (
     EffectStrengthV1,
     ExecuteEvidenceContractV1,
     ExecuteEvidenceReceiptV1,
+    ExecuteClient,
     ExecuteLifecycleStateV1,
     ExecuteRequestV1,
     ExecuteStatusV1,
@@ -18,6 +22,7 @@ from openadapt_types import (
     execute_openapi_document,
     sign_execute_webhook_hmac,
 )
+from openadapt_types.execute_client import _RejectRedirectHandler
 
 
 def _contract(**updates: object) -> ExecuteEvidenceContractV1:
@@ -159,3 +164,91 @@ def test_packaged_openapi_is_the_generated_public_contract() -> None:
         "/v1/executions/{execution_id}",
         "/v1/executions/{execution_id}/receipt",
     }
+    assert "security" not in generated
+    assert all(
+        operation["security"] == [{"bearerAuth": []}]
+        for path in generated["paths"].values()
+        for operation in path.values()
+    )
+    for webhook in generated["webhooks"].values():
+        operation = webhook["post"]
+        assert operation["security"] == []
+        assert "body HMAC" in operation["description"]
+
+
+def test_python_client_uses_the_public_base_url_and_v1_contract() -> None:
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"schema_version":"openadapt.execute-accepted/v1","execution_id":"execution_12345678","state":"queued"}'
+
+    request = ExecuteRequestV1(
+        qualification_id="qualification_12345678",
+        workflow_version="workflow_20260729",
+        workflow_digest="sha256:" + "c" * 64,
+        environment_id="environment_12345678",
+        idempotency_key="caller_key_12345678",
+        authorization_context={
+            "actor_id": "caller_agent_12345678",
+            "authorization_reference": "authorization_12345678",
+        },
+        minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+    )
+    with patch(
+        "openadapt_types.execute_client._NO_REDIRECT_OPENER.open", return_value=Response()
+    ) as open_request:
+        accepted = ExecuteClient("https://example.test/api", "partner-token").create_execution(
+            request
+        )
+
+    sent = open_request.call_args.args[0]
+    assert accepted.execution_id == "execution_12345678"
+    assert sent.full_url == "https://example.test/api/v1/executions"
+    assert sent.get_header("Authorization") == "Bearer partner-token"
+
+
+def test_python_client_rejects_redirect_before_token_forwarding() -> None:
+    original = Request(
+        "https://partner.example/api/v1/executions",
+        headers={"Authorization": "Bearer partner-token"},
+    )
+
+    with pytest.raises(HTTPError, match="redirects are not allowed") as error:
+        _RejectRedirectHandler().redirect_request(
+            original,
+            None,
+            302,
+            "Found",
+            {},
+            "https://untrusted.example/collect-token",
+        )
+
+    assert error.value.code == 302
+
+
+def test_python_client_url_encodes_execution_identifiers() -> None:
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"schema_version":"openadapt.execute-status/v1","execution_id":"execution_12345678","state":"running","updated_at":"2026-07-29T12:00:00Z"}'
+
+    with patch(
+        "openadapt_types.execute_client._NO_REDIRECT_OPENER.open", return_value=Response()
+    ) as open_request:
+        ExecuteClient("https://example.test/api", "partner-token").get_execution(
+            "execution:with/slash"
+        )
+
+    assert open_request.call_args.args[0].full_url.endswith(
+        "/v1/executions/execution%3Awith%2Fslash"
+    )

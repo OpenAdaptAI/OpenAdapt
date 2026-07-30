@@ -192,6 +192,36 @@ status, terminal evidence receipts, and signed decision and terminal webhooks.
 It keeps `waiting_for_reconciliation` as a lifecycle state and
 `reconciliation_required` as a terminal outcome.
 
+## OpenAdapt Execute v1
+
+OpenAdapt Execute is the public asynchronous contract for a qualified
+workflow. A partner sends an authorized request, receives an execution ID, and
+then reads a terminal receipt or receives a signed webhook. The contract does
+not expose a runner, customer data, evidence bytes, application recipes, or
+Cloud control-plane internals.
+
+The generated OpenAPI document is packaged at
+`openadapt_types/schemas/execute-v1-openapi.json`. The package also includes a
+small Python client. The reference Python and TypeScript clients are in
+[`examples/execute`](examples/execute/). Use `https://app.openadapt.ai/api` as
+the OpenAdapt Cloud base URL. It uses a partner-provisioned bearer token and
+the client appends the stable `/v1` paths.
+The client requires an HTTPS base URL and rejects redirects before it can send
+the bearer token to another endpoint.
+
+```python
+from openadapt_types import ExecuteClient
+
+client = ExecuteClient(
+    base_url="https://app.openadapt.ai/api",
+    bearer_token="partner-provisioned-token",
+)
+```
+
+The client does not poll forever. A workflow can wait for a human decision or
+reconciliation. Use the terminal receipt or signed webhook as the completion
+signal.
+
 ## Design principles
 
 - **Pydantic v2**: runtime validation, JSON Schema export, fast serialization

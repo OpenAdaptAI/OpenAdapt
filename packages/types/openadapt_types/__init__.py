@@ -105,6 +105,7 @@ from openadapt_types.execute import (
     sign_execute_webhook_hmac,
 )
 from openadapt_types.execute_openapi import execute_openapi_document
+from openadapt_types.execute_client import ExecuteApiError, ExecuteClient
 from openadapt_types.execution_requirements import (
     CAPABILITY_MATCH_SCHEMA,
     EXECUTION_REQUIREMENTS_SCHEMA,
@@ -250,6 +251,8 @@ __all__ = [  # noqa: RUF022
     "ExecuteWebhookV1",
     "sign_execute_webhook_hmac",
     "execute_openapi_document",
+    "ExecuteApiError",
+    "ExecuteClient",
     # runner capability and execution requirements
     "CAPABILITY_MATCH_SCHEMA",
     "EXECUTION_REQUIREMENTS_SCHEMA",
