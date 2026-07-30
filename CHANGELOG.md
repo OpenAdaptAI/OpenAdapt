@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.10.3 (2026-07-30)
+
+### Bug Fixes
+
+- Make quickstart independently verified
+  ([`abac585`](https://github.com/OpenAdaptAI/OpenAdapt/commit/abac58567bab0a71e1fe30b2d712d6af9dbbfd36))
+
+### Chores
+
+- Refresh Desktop product image
+  ([`68ab457`](https://github.com/OpenAdaptAI/OpenAdapt/commit/68ab457a289b758aa3fb98558ee51ea37165eb96))
+
+- **release**: Reconcile platform manifest
+  ([`d7ce46b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d7ce46b59f60fe3dd7bfc109663307c3851fda52))
+
+
 ## v1.10.2 (2026-07-28)
 
 ### Bug Fixes
