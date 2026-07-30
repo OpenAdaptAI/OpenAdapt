@@ -9,7 +9,10 @@ A CLI test confirms ``run`` refuses without executing (and ``--dry-run`` reports
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -38,9 +41,19 @@ from openadapt_flow.policy import load_policy, policy_contract_sha256
 from openadapt_flow.qualification import (
     ActionRiskClassification,
     EnvironmentBoundary,
+    IdentityEnforcement,
+    IdentityPolicy,
+    QualificationActionTarget,
+    QualificationCase,
+    QualificationCaseKind,
     QualificationCertification,
+    QualificationOutcome,
+    add_case,
     init_project,
     set_action_classification,
+    set_case_scope,
+    set_effect_policy,
+    set_identity_policy,
     workflow_contract_sha256,
 )
 from openadapt_flow.run_gate import (
@@ -55,7 +68,9 @@ from openadapt_flow.run_gate import (
     evaluate_run_gate,
     is_consequential,
 )
+from openadapt_flow.runtime.authorization import runtime_inputs_bytes
 from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
+from openadapt_flow.verification import VerificationTier
 
 _KEY = "correct horse battery staple"
 _PC = [Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Saved OK")]
@@ -838,6 +853,301 @@ def test_cli_run_hands_bound_authorization_to_replay(tmp_path, monkeypatch, caps
     assert authorization.validate_workflow(wf) is None
     assert authorization.approves_unverified_write(wf.steps[1])
     assert "EXPLICITLY approved" in capsys.readouterr().out
+
+
+def _representative_qualification_bundle(
+    tmp_path: Path, *, target_kind: str = "web"
+) -> tuple[Workflow, Path, bytes]:
+    workflow = _good_workflow("qualification_case")
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind=target_kind,
+            application="Qualification fixture",
+            application_version="1",
+            environment_digest="a" * 64,
+            runtime_version="1.27.0",
+        ),
+        minimum_effect_tier=VerificationTier.INDEPENDENT_SYSTEM,
+    )
+    set_action_classification(
+        workflow,
+        ActionRiskClassification(
+            step_id="s0",
+            classification="read_only",
+            explanation="This step only opens the selected record.",
+            operator_confirmed=True,
+        ),
+    )
+    set_action_classification(
+        workflow,
+        ActionRiskClassification(
+            step_id="s1",
+            classification="irreversible",
+            explanation="The save changes the source-of-record state.",
+            operator_confirmed=True,
+        ),
+    )
+    set_identity_policy(
+        workflow,
+        IdentityPolicy(step_id="s1", enforcement=IdentityEnforcement.CANONICAL_LADDER),
+    )
+    set_effect_policy(
+        workflow,
+        step_id="s1",
+        effect_index=0,
+        tier=VerificationTier.INDEPENDENT_SYSTEM,
+    )
+    inputs = runtime_inputs_bytes(workflow, None, None)
+    add_case(
+        workflow,
+        QualificationCase(
+            id="representative-1",
+            kind=QualificationCaseKind.REPRESENTATIVE,
+            expected_outcome=QualificationOutcome.VERIFIED,
+        ),
+    )
+    set_case_scope(
+        workflow,
+        case_id="representative-1",
+        runtime_input_sha256=hashlib.sha256(inputs).hexdigest(),
+        action_targets=[QualificationActionTarget(step_id="s1", actuation_path="gui")],
+    )
+    workflow, bundle = _seal(workflow, tmp_path)
+    return workflow, bundle, inputs
+
+
+def test_qualification_run_case_derives_exact_standard_authorization(
+    tmp_path, monkeypatch
+):
+    import openadapt_flow.__main__ as main
+
+    workflow, bundle, inputs = _representative_qualification_bundle(tmp_path)
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _KEY)
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "state"))
+    inputs_path = tmp_path / "case-inputs.json"
+    inputs_path.write_bytes(inputs)
+    inputs_path.chmod(0o600)
+    bundle.chmod(0o555)
+    captured = {}
+
+    def capture(args):
+        captured["authorization"] = args._governed_run_authorization
+        return 0
+
+    monkeypatch.setattr(main, "_cmd_replay", capture)
+    args = main.build_parser().parse_args(
+        [
+            "qualify",
+            "run-case",
+            str(bundle),
+            "--case-id",
+            "representative-1",
+            "--inputs",
+            str(inputs_path),
+            "--campaign-id",
+            "campaign-1",
+            "--run-id",
+            "run-1",
+            "--run-dir",
+            str(tmp_path / "case-run"),
+            "--effects-kind",
+            "rest",
+            "--effects-base-url",
+            "http://sor.local",
+            "--backend",
+            "web",
+        ]
+    )
+    assert args.func(args) == 0
+    authorization = captured["authorization"]
+    assert authorization.execution_profile == "standard"
+    assert authorization.approval_source == "qualification-campaign"
+    assert authorization.qualification_project_id == workflow.qualification.project_id
+    assert (
+        authorization.qualification_project_revision == workflow.qualification.revision
+    )
+    assert authorization.qualification_project_contract_sha256 == (
+        workflow.qualification.contract_sha256()
+    )
+    assert authorization.qualification_case_id == "representative-1"
+    assert authorization.qualification_case_action_paths == {"s1": "gui"}
+    assert (
+        authorization.qualification_campaign_id_sha256
+        == hashlib.sha256(b"campaign-1").hexdigest()
+    )
+    assert (
+        authorization.qualification_run_id_sha256
+        == hashlib.sha256(b"run-1").hexdigest()
+    )
+    assert authorization.validate_workflow(workflow) is None
+    assert list((tmp_path / "state" / "qualification-attempts").glob("*.json"))
+    assert not (bundle / ".openadapt").exists()
+
+
+def test_qualification_run_case_tightens_owned_legacy_state_root(tmp_path, monkeypatch):
+    """A connector-created state root stays usable after private-ledger rollout."""
+    if os.name == "nt":
+        pytest.skip("POSIX permission migration is not applicable on Windows")
+    import openadapt_flow.__main__ as main
+
+    _workflow, bundle, inputs = _representative_qualification_bundle(tmp_path)
+    state_root = tmp_path / "legacy-state"
+    state_root.mkdir()
+    state_root.chmod(0o755)
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _KEY)
+    monkeypatch.setenv("OPENADAPT_HOME", str(state_root))
+    inputs_path = tmp_path / "case-inputs.json"
+    inputs_path.write_bytes(inputs)
+    inputs_path.chmod(0o600)
+    called = []
+    monkeypatch.setattr(main, "_cmd_replay", lambda args: called.append(args) or 0)
+
+    assert (
+        main.main(
+            [
+                "qualify",
+                "run-case",
+                str(bundle),
+                "--case-id",
+                "representative-1",
+                "--inputs",
+                str(inputs_path),
+                "--campaign-id",
+                "campaign-1",
+                "--run-id",
+                "run-1",
+                "--run-dir",
+                str(tmp_path / "case-run"),
+                "--effects-kind",
+                "rest",
+                "--effects-base-url",
+                "http://sor.local",
+                "--backend",
+                "web",
+            ]
+        )
+        == 0
+    )
+    assert called
+    assert stat.S_IMODE(state_root.stat().st_mode) == 0o700
+
+
+def test_qualification_run_case_refuses_changed_inputs_and_duplicate_attempt(
+    tmp_path, monkeypatch, capsys
+):
+    import openadapt_flow.__main__ as main
+
+    _workflow, bundle, inputs = _representative_qualification_bundle(tmp_path)
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _KEY)
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "state"))
+    inputs_path = tmp_path / "case-inputs.json"
+    inputs_path.write_bytes(inputs.replace(b"{}", b'{"changed":true}'))
+    inputs_path.chmod(0o600)
+    called = []
+    monkeypatch.setattr(main, "_cmd_replay", lambda args: called.append(args) or 0)
+    argv = [
+        "qualify",
+        "run-case",
+        str(bundle),
+        "--case-id",
+        "representative-1",
+        "--inputs",
+        str(inputs_path),
+        "--campaign-id",
+        "campaign-1",
+        "--run-id",
+        "run-1",
+        "--run-dir",
+        str(tmp_path / "case-run"),
+        "--effects-kind",
+        "rest",
+        "--effects-base-url",
+        "http://sor.local",
+        "--backend",
+        "web",
+    ]
+    assert main.main(argv) == 2
+    assert not called
+    assert "qualification run-case REFUSED" in capsys.readouterr().out
+
+    inputs_path.write_bytes(inputs)
+    inputs_path.chmod(0o600)
+    assert main.main(argv) == 0
+    alternate_argv = [
+        item if item != str(tmp_path / "case-run") else str(tmp_path / "other-case-run")
+        for item in argv
+    ]
+    assert main.main(alternate_argv) == 2
+    assert len(called) == 1
+    assert "already started" in capsys.readouterr().out
+
+
+def test_qualification_run_case_constructs_a_durable_replayer(tmp_path, monkeypatch):
+    import openadapt_flow.__main__ as main
+    import openadapt_flow.backends.factory as factory
+    import openadapt_flow.deployment as deployment
+    import openadapt_flow.report as report_module
+
+    _workflow, bundle, inputs = _representative_qualification_bundle(
+        tmp_path, target_kind="windows"
+    )
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _KEY)
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "state"))
+    inputs_path = tmp_path / "case-inputs.json"
+    inputs_path.write_bytes(inputs)
+    inputs_path.chmod(0o600)
+    captured = {}
+
+    class Backend:
+        def close(self):
+            pass
+
+    class Report:
+        success = True
+        execution_outcome = "VERIFIED"
+        screenshots_may_leave_box = False
+
+    class Replayer:
+        def run(self, *_args, **_kwargs):
+            return Report()
+
+    monkeypatch.setattr(factory, "build_backend", lambda _cfg: Backend())
+    monkeypatch.setattr(
+        deployment,
+        "build_replayer",
+        lambda _backend, **kwargs: (
+            captured.setdefault("durable", kwargs["durable"]) and Replayer()
+        ),
+    )
+    monkeypatch.setattr(
+        report_module, "render_run_report", lambda _run_dir: "REPORT.md"
+    )
+    argv = [
+        "qualify",
+        "run-case",
+        str(bundle),
+        "--case-id",
+        "representative-1",
+        "--inputs",
+        str(inputs_path),
+        "--campaign-id",
+        "campaign-1",
+        "--run-id",
+        "run-1",
+        "--run-dir",
+        str(tmp_path / "case-run"),
+        "--backend",
+        "windows",
+        "--agent-url",
+        "http://127.0.0.1:5001",
+        "--effects-kind",
+        "rest",
+        "--effects-base-url",
+        "http://sor.local",
+    ]
+    assert main.main(argv) == 0
+    assert captured["durable"] is True
 
 
 def test_cli_run_refuses_citrix_without_readiness_before_execution(

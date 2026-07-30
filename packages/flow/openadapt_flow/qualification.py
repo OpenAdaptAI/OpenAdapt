@@ -59,6 +59,28 @@ _PARAM_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 
 
+def _qualification_identifier_sha256(value: str, *, kind: str) -> str:
+    if not _ID_RE.fullmatch(value):
+        raise ValueError(f"qualification {kind} id is invalid")
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def qualification_campaign_id_sha256(campaign_id: str) -> str:
+    """Return the canonical digest used to bind one qualification campaign.
+
+    The campaign identifier stays local.  Reports and authorizations retain
+    only this digest, so Desktop and Flow must derive it through this one API.
+    """
+
+    return _qualification_identifier_sha256(campaign_id, kind="campaign")
+
+
+def qualification_run_id_sha256(run_id: str) -> str:
+    """Return the canonical digest used to bind one qualification run."""
+
+    return _qualification_identifier_sha256(run_id, kind="run")
+
+
 def _qualification_actuation_path(
     value: Optional[str],
 ) -> Optional[Literal["gui", "api"]]:

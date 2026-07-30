@@ -586,6 +586,7 @@ def _build_and_run_replayer(
     surface_override: bool = False,
     execution_origin: Optional[str] = None,
     execution_entry_url: Optional[str] = None,
+    run_id: Optional[str] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow."""
     return _configured_replayer(
@@ -613,9 +614,11 @@ def _build_and_run_replayer(
         surface_override=surface_override,
         execution_origin=execution_origin,
         execution_entry_url=execution_entry_url,
-        run_id=remote_delivery_run_id
-        if delivery_authority_kind == "cloud_runner"
-        else None,
+        run_id=(
+            remote_delivery_run_id
+            if delivery_authority_kind == "cloud_runner"
+            else run_id
+        ),
     )
 
 
@@ -667,6 +670,7 @@ def _replay_desktop(
     remote_delivery_run_id: Optional[str] = None,
     managed_dispatch_binding=None,
     runtime_config=None,
+    run_id: Optional[str] = None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
@@ -711,6 +715,7 @@ def _replay_desktop(
             runtime_config=runtime_config,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
             surface_override=bool(getattr(args, "_surface_override", False)),
+            run_id=run_id,
         )
     finally:
         close = getattr(backend, "close", None)
@@ -1150,7 +1155,12 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     bundle = Path(args.bundle)
     run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
     workflow = Workflow.load(bundle)
-    params = _replay_params(args.param, getattr(args, "params_file", None))
+    qualification_case = getattr(args, "_qualification_case_execution", None)
+    params = (
+        qualification_case["params"]
+        if qualification_case is not None
+        else _replay_params(args.param, getattr(args, "params_file", None))
+    )
 
     # Deployment wiring (from --config and/or direct flags): a system-of-record
     # EffectVerifier, an ApiActuator, durable-runtime, and the egress opt-in.
@@ -1162,7 +1172,17 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         durable,
         allow_egress,
     ) = _deployment_runtime(args, params=params)
-    worklists = _resolve_worklists(getattr(args, "worklist", None), workflow)
+    # Qualification cases are always Standard and must keep their durable
+    # evidence/recovery contract through this second deployment resolution.
+    # ``_cmd_run`` already checked this; retain it here so a future replay
+    # wiring change cannot silently construct a non-durable Replayer.
+    if qualification_case is not None:
+        durable = True
+    worklists = (
+        qualification_case["worklists"]
+        if qualification_case is not None
+        else _resolve_worklists(getattr(args, "worklist", None), workflow)
+    )
 
     # Backend selection (web/native/remote, overriding --config). A
     # non-web backend drives a native desktop / RDP / remote-display session with
@@ -1200,6 +1220,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             remote_delivery_run_id=getattr(args, "_remote_delivery_run_id", None),
             managed_dispatch_binding=getattr(args, "_managed_dispatch_binding", None),
             runtime_config=cfg.runtime,
+            run_id=getattr(args, "_qualification_run_id", None),
         )
 
     headed = args.headed or cfg.backend.headed
@@ -1283,6 +1304,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                         f"{urlsplit(page.url).scheme}://{urlsplit(page.url).netloc}"
                     ),
                     execution_entry_url=url,
+                    run_id=getattr(args, "_qualification_run_id", None),
                 )
             finally:
                 video_path = None
@@ -1346,7 +1368,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         return 2
 
-    gate_params = _replay_params(args.param, getattr(args, "params_file", None))
+    qualification_case = getattr(args, "_qualification_case_execution", None)
+    gate_params = (
+        qualification_case["params"]
+        if qualification_case is not None
+        else _replay_params(args.param, getattr(args, "params_file", None))
+    )
     cfg, effect_verifier, api_actuator, configured_durable, _egress = (
         _deployment_runtime(args, params=gate_params)
     )
@@ -1361,6 +1388,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
             return 2
         profile = execution_profile_contract(selected_profile)
         args._execution_profile = selected_profile.value
+    if qualification_case is not None and selected_profile is None:
+        print(
+            "run REFUSED: qualification evidence requires the Standard profile. "
+            "Nothing was executed."
+        )
+        return 2
+    if qualification_case is not None and selected_profile.value != "standard":
+        print(
+            "run REFUSED: qualification evidence can run only under the Standard "
+            "profile. Nothing was executed."
+        )
+        return 2
     effective_durable = bool(
         configured_durable or (profile is not None and profile.require_durable)
     )
@@ -1412,6 +1451,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         effective_require_settled=(
             effective_require_settled if profile is not None else None
         ),
+        qualification_evidence_only=qualification_case is not None,
     )
     print(report.render())
 
@@ -1421,10 +1461,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 2
 
     dispatch_file = getattr(args, "managed_dispatch_file", None)
+    if qualification_case is not None and dispatch_file:
+        print(
+            "run REFUSED: a qualification evidence run cannot accept a managed "
+            "dispatch. Nothing was executed."
+        )
+        return 2
     if dispatch_file:
         runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
-        runtime_worklists = _resolve_worklists(
-            getattr(args, "worklist", None), workflow
+        runtime_worklists = (
+            qualification_case["worklists"]
+            if qualification_case is not None
+            else _resolve_worklists(getattr(args, "worklist", None), workflow)
         )
         try:
             managed_binding = read_managed_dispatch_envelope(Path(dispatch_file))
@@ -1475,11 +1523,57 @@ def _cmd_run(args: argparse.Namespace) -> int:
         args._delivery_authority_kind = "cloud_runner"
         args._remote_delivery_run_id = managed_binding.run_id
 
+    if qualification_case is not None:
+        runtime_worklists = qualification_case["worklists"]
+        local_authorization = build_runtime_authorization(
+            workflow,
+            report,
+            params=gate_params,
+            worklists=runtime_worklists,
+        )
+        project = workflow.qualification
+        case = qualification_case["case"]
+        assert project is not None
+        authorization = local_authorization.model_copy(
+            update={
+                "authorization_id": qualification_case["run_id"],
+                "approval_source": "qualification-campaign",
+                "qualification_project_id": project.project_id,
+                "qualification_project_revision": project.revision,
+                "qualification_project_contract_sha256": project.contract_sha256(),
+                "qualification_case_id": case.id,
+                "qualification_campaign_id_sha256": qualification_case[
+                    "campaign_id_sha256"
+                ],
+                "qualification_case_input_sha256": qualification_case["input_sha256"],
+                "qualification_run_id_sha256": qualification_case["run_id_sha256"],
+                "qualification_case_kind": case.kind.value,
+                "qualification_case_action_paths": {
+                    target.step_id: target.actuation_path
+                    for target in case.action_targets
+                },
+            }
+        )
+        validation_error = authorization.validate_workflow(workflow)
+        if (
+            authorization.runtime_inputs_digest != qualification_case["input_sha256"]
+            or validation_error is not None
+        ):
+            print(
+                "run REFUSED: qualification evidence does not match this exact "
+                "case. Nothing was executed."
+            )
+            return 2
+        args._governed_run_authorization = authorization
+        args._delivery_authority_kind = "customer_local"
+        args._remote_delivery_run_id = None
+        args._qualification_run_id = qualification_case["run_id"]
+
     if getattr(args, "dry_run", False) or getattr(args, "explain", False):
         # A managed dry run also validates its protected Cloud handoff above.
         # Report-only: it never executes, regardless of the verdict.
         return 0 if report.passed else 2
-    if not dispatch_file:
+    if not dispatch_file and qualification_case is None:
         runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
         runtime_worklists = _resolve_worklists(
             getattr(args, "worklist", None), workflow
@@ -1492,6 +1586,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         args._delivery_authority_kind = "customer_local"
         args._remote_delivery_run_id = None
+
+    if qualification_case is not None and not _claim_qualification_case_attempt(args):
+        return 2
 
     # Admitted. A deployment run is not the drift-demo; force it off and delegate
     # to the shared replay executor (which reads all deployment wiring itself).
@@ -2039,6 +2136,279 @@ def _qualification_report(args: argparse.Namespace):
     )
 
 
+def _read_qualification_case_inputs(path: Path, *, workflow):
+    """Read only the canonical local input artifact for one case attempt."""
+
+    import os
+    import stat
+
+    from openadapt_flow.runtime.authorization import (
+        parse_runtime_inputs_bytes,
+        runtime_inputs_bytes,
+    )
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise ValueError(
+            "qualification case inputs could not be opened safely"
+        ) from exc
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_size > 1024 * 1024
+            or (
+                os.name != "nt"
+                and (
+                    not hasattr(os, "geteuid")
+                    or metadata.st_uid != os.geteuid()
+                    or stat.S_IMODE(metadata.st_mode) != 0o600
+                )
+            )
+        ):
+            raise ValueError("qualification case inputs are not a private regular file")
+        raw = os.read(descriptor, 1024 * 1024 + 1)
+    finally:
+        os.close(descriptor)
+    if len(raw) > 1024 * 1024:
+        raise ValueError("qualification case inputs are too large")
+    params, worklists = parse_runtime_inputs_bytes(raw, workflow=workflow)
+    if runtime_inputs_bytes(workflow, params, worklists) != raw:
+        raise ValueError("qualification case inputs are not canonical")
+    return params, worklists, raw
+
+
+def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
+    """Persist one exact case attempt before it can reach an actuator."""
+
+    import hashlib
+    import json
+    import os
+    import stat
+
+    def private_directory(path: Path, *, migrate_owned_root: bool = False) -> Path:
+        """Open a private directory without trusting a pathname after inspection."""
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            initial = os.lstat(path)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger could not be inspected"
+            ) from exc
+        if stat.S_ISLNK(initial.st_mode) or not stat.S_ISDIR(initial.st_mode):
+            raise ValueError("qualification attempt ledger is not a private directory")
+        flags = os.O_RDONLY
+        if hasattr(os, "O_DIRECTORY"):
+            flags |= os.O_DIRECTORY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(path, flags)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger is not a private directory"
+            ) from exc
+        try:
+            metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISDIR(metadata.st_mode)
+                or metadata.st_dev != initial.st_dev
+                or metadata.st_ino != initial.st_ino
+            ):
+                raise ValueError(
+                    "qualification attempt ledger changed while it was inspected"
+                )
+            if os.name != "nt":
+                if not hasattr(os, "geteuid") or metadata.st_uid != os.geteuid():
+                    raise ValueError(
+                        "qualification attempt ledger is not owned by this user"
+                    )
+                if migrate_owned_root and stat.S_IMODE(metadata.st_mode) != 0o700:
+                    os.fchmod(descriptor, 0o700)
+                    metadata = os.fstat(descriptor)
+                if stat.S_IMODE(metadata.st_mode) != 0o700:
+                    raise ValueError(
+                        "qualification attempt ledger is not a private directory"
+                    )
+        finally:
+            os.close(descriptor)
+        try:
+            final = os.lstat(path)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger could not be inspected"
+            ) from exc
+        if (
+            stat.S_ISLNK(final.st_mode)
+            or not stat.S_ISDIR(final.st_mode)
+            or final.st_dev != initial.st_dev
+            or final.st_ino != initial.st_ino
+        ):
+            raise ValueError(
+                "qualification attempt ledger changed while it was inspected"
+            )
+        return path
+
+    case = args._qualification_case_execution["case"]
+    workflow = args._qualification_case_execution["workflow"]
+    run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
+    args.run_dir = str(run_dir)
+    project = workflow.qualification
+    manifest = workflow.manifest
+    assert project is not None and manifest is not None
+    identity = {
+        "schema": "openadapt.qualification-attempt/v1",
+        "bundle_content_digest": manifest.content_digest,
+        "project_id": project.project_id,
+        "project_revision": project.revision,
+        "project_contract_sha256": project.contract_sha256(),
+        "campaign_id_sha256": args._qualification_case_execution["campaign_id_sha256"],
+        "case_id": case.id,
+        "case_input_sha256": args._qualification_case_execution["input_sha256"],
+        "run_id_sha256": args._qualification_case_execution["run_id_sha256"],
+    }
+    payload = {
+        **identity,
+        "run_dir_sha256": hashlib.sha256(
+            str(run_dir.resolve()).encode("utf-8")
+        ).hexdigest(),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    attempt_key = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    state_root = Path(os.environ.get("OPENADAPT_HOME", Path.home() / ".openadapt"))
+    try:
+        ledger_dir = private_directory(
+            private_directory(state_root, migrate_owned_root=True)
+            / "qualification-attempts"
+        )
+    except ValueError:
+        print(
+            "run REFUSED: qualification attempt ledger is not available safely. "
+            "Nothing was executed."
+        )
+        return False
+    marker = ledger_dir / f"{attempt_key}.json"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(marker, flags, 0o600)
+    except FileExistsError:
+        print(
+            "run REFUSED: this qualification case attempt already started in this "
+            "local qualification ledger; "
+            "reconcile its retained run evidence before another attempt. "
+            "Nothing was executed."
+        )
+        return False
+    except OSError:
+        print(
+            "run REFUSED: qualification case attempt could not be claimed safely. "
+            "Nothing was executed."
+        )
+        return False
+    try:
+        os.write(descriptor, canonical)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        directory_flags = os.O_RDONLY
+        if hasattr(os, "O_DIRECTORY"):
+            directory_flags |= os.O_DIRECTORY
+        if hasattr(os, "O_NOFOLLOW"):
+            directory_flags |= os.O_NOFOLLOW
+        directory = os.open(ledger_dir, directory_flags)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError:
+        print(
+            "run REFUSED: qualification attempt ledger could not be persisted safely. "
+            "Nothing was executed."
+        )
+        return False
+    return True
+
+
+def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
+    """Execute one sealed, current qualification case with Flow-owned authority."""
+
+    from openadapt_flow.qualification import (
+        qualification_campaign_id_sha256,
+        qualification_run_id_sha256,
+    )
+    from openadapt_flow.runtime.authorization import runtime_inputs_digest
+
+    try:
+        workflow = _qualification_workflow(args)
+        if workflow.manifest is None or workflow.qualification is None:
+            raise ValueError(
+                "qualification case execution requires a sealed project bundle"
+            )
+        case = next(
+            (item for item in workflow.qualification.cases if item.id == args.case_id),
+            None,
+        )
+        if case is None:
+            raise ValueError("qualification case is not declared by this project")
+        if case.kind.value != "representative":
+            raise ValueError(
+                "fault qualification cases require the configured fault-driver campaign"
+            )
+        if not case.action_targets or case.runtime_input_sha256 is None:
+            raise ValueError(
+                "qualification case has no exact approved action/input scope"
+            )
+        params, worklists, _raw_inputs = _read_qualification_case_inputs(
+            Path(args.inputs), workflow=workflow
+        )
+        input_sha256 = runtime_inputs_digest(workflow, params, worklists)
+        if input_sha256 != case.runtime_input_sha256:
+            raise ValueError("qualification case inputs do not match the approved case")
+        campaign_id_sha256 = qualification_campaign_id_sha256(args.campaign_id)
+        run_id_sha256 = qualification_run_id_sha256(args.run_id)
+    except (OSError, ValueError) as exc:
+        print(f"qualification run-case REFUSED: {exc}. Nothing was executed.")
+        return 2
+
+    args._qualification_case_execution = {
+        "workflow": workflow,
+        "case": case,
+        "params": params,
+        "worklists": worklists,
+        "input_sha256": input_sha256,
+        "campaign_id_sha256": campaign_id_sha256,
+        "run_id": args.run_id,
+        "run_id_sha256": run_id_sha256,
+    }
+    args.profile = "standard"
+    args.policy = None
+    args.param = None
+    args.params_file = None
+    args.worklist = None
+    args.managed_dispatch_file = None
+    args.allow_unencrypted = False
+    args.approve_unverified_writes = False
+    args.strict_templates = False
+    args.pin_digest = workflow.manifest.content_digest
+    args.pin_version = None
+    args.drift = None
+    args.dry_run = bool(getattr(args, "dry_run", False))
+    if args.dry_run:
+        return _cmd_run(args)
+    return _cmd_run(args)
+
+
 def _cmd_qualify(args: argparse.Namespace) -> int:
     import json
 
@@ -2070,6 +2440,8 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
     )
 
     verb = args.qualify_cmd
+    if verb == "run-case":
+        return _cmd_qualify_run_case(args)
     if verb == "schema":
         print(json.dumps(project_schema(), indent=2, sort_keys=True))
         return 0
@@ -4033,6 +4405,37 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--results", required=True, metavar="JSON")
     q.add_argument("--evidence-root", required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "run-case",
+        help=(
+            "Run one current representative qualification case with Flow-owned "
+            "Standard authorization"
+        ),
+    )
+    q.add_argument("bundle", help="Sealed workflow bundle directory")
+    q.add_argument("--case-id", required=True, help="Declared representative case")
+    q.add_argument(
+        "--inputs",
+        required=True,
+        metavar="JSON",
+        help=(
+            "Private canonical runtime-input artifact from Desktop "
+            "(mode 0600; params and worklists only)"
+        ),
+    )
+    q.add_argument("--campaign-id", required=True, help="Local campaign identity")
+    q.add_argument("--run-id", required=True, help="One local case-attempt identity")
+    q.add_argument(
+        "--run-dir", required=True, help="New durable case-attempt directory"
+    )
+    q.add_argument("--url", default=None, help="Target app URL")
+    q.add_argument("--headed", action="store_true", help="Run browser headed")
+    q.add_argument("--dry-run", action="store_true", help="Validate without input")
+    q.add_argument("--save-healed-to", default=None, help=argparse.SUPPRESS)
+    _add_backend_flags(q)
+    _add_deployment_flags(q)
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(

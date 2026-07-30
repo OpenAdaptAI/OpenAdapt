@@ -320,6 +320,7 @@ def evaluate_run_gate(
     profile_contract: Optional[ExecutionProfileContract] = None,
     effective_durable: Optional[bool] = None,
     effective_require_settled: Optional[bool] = None,
+    qualification_evidence_only: bool = False,
 ) -> RunGateReport:
     """Admit or refuse ``workflow`` for a regulated run in this deployment.
 
@@ -377,7 +378,9 @@ def evaluate_run_gate(
     # Demo and legacy qualification harnesses may bind a typed operator review
     # through this policy decision plus the exact sealed manifest.
     require_current_risk_cert = bool(
-        profile_contract is not None and profile_contract.production
+        profile_contract is not None
+        and profile_contract.production
+        and not qualification_evidence_only
     )
     try:
         from openadapt_flow.policy import load_policy
