@@ -597,6 +597,15 @@ wheels = [
 ]
 
 [[package]]
+name = "comtypes"
+version = "1.4.16"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/2a/65274c13327f637ec13af8d39f2cf579d9ebe7a0e683696b5f05236d2805/comtypes-1.4.16.tar.gz", hash = "sha256:cd66d1add01265cface4df51ba1e31cd1657e04463c281c802e737e79e1ba93c", size = 260252 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5f/7c/0eb685107290b6221c03c46d39214a4e42a124189691cb83ae3228257f46/comtypes-1.4.16-py3-none-any.whl", hash = "sha256:e18d85179ff12955524c5a8c3bc09cb3c0d890f1da4d7123d14244c7b78f84c8", size = 296230 },
+]
+
+[[package]]
 name = "confection"
 version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2331,14 +2340,14 @@ requires-dist = [
     { name = "openadapt", extras = ["macos"], marker = "sys_platform == 'darwin' and extra == 'all'" },
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.0.4,<2.0.0" },
     { name = "openadapt-evals", marker = "extra == 'evals'", specifier = ">=0.1.0" },
-    { name = "openadapt-flow", marker = "extra == 'flow'", specifier = ">=1.20.1,<2.0.0" },
-    { name = "openadapt-flow", extras = ["capture"], marker = "extra == 'capture'", specifier = ">=1.20.1,<2.0.0" },
-    { name = "openadapt-flow", extras = ["hosted"], specifier = ">=1.20.1,<2.0.0" },
-    { name = "openadapt-flow", extras = ["linux"], marker = "sys_platform == 'linux' and extra == 'linux'", specifier = ">=1.20.1,<2.0.0" },
-    { name = "openadapt-flow", extras = ["macos"], marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=1.20.1,<2.0.0" },
-    { name = "openadapt-flow", extras = ["privacy"], marker = "extra == 'privacy'", specifier = ">=1.20.1,<2.0.0" },
-    { name = "openadapt-flow", extras = ["rdp"], marker = "extra == 'rdp'", specifier = ">=1.20.1,<2.0.0" },
-    { name = "openadapt-flow", extras = ["windows"], marker = "extra == 'windows'", specifier = ">=1.20.1,<2.0.0" },
+    { name = "openadapt-flow", marker = "extra == 'flow'", specifier = ">=1.25.1,<2.0.0" },
+    { name = "openadapt-flow", extras = ["capture"], marker = "extra == 'capture'", specifier = ">=1.25.1,<2.0.0" },
+    { name = "openadapt-flow", extras = ["hosted"], specifier = ">=1.25.1,<2.0.0" },
+    { name = "openadapt-flow", extras = ["linux"], marker = "sys_platform == 'linux' and extra == 'linux'", specifier = ">=1.25.1,<2.0.0" },
+    { name = "openadapt-flow", extras = ["macos"], marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=1.25.1,<2.0.0" },
+    { name = "openadapt-flow", extras = ["privacy"], marker = "extra == 'privacy'", specifier = ">=1.25.1,<2.0.0" },
+    { name = "openadapt-flow", extras = ["rdp"], marker = "extra == 'rdp'", specifier = ">=1.25.1,<2.0.0" },
+    { name = "openadapt-flow", extras = ["windows"], marker = "extra == 'windows'", specifier = ">=1.25.1,<2.0.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-ml", marker = "extra == 'ml'", specifier = ">=0.2.0" },
     { name = "openadapt-retrieval", marker = "extra == 'retrieval'", specifier = ">=0.1.0" },
@@ -2350,7 +2359,7 @@ requires-dist = [
 
 [[package]]
 name = "openadapt-capture"
-version = "1.0.4"
+version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
@@ -2359,22 +2368,22 @@ dependencies = [
     { name = "matplotlib" },
     { name = "mss" },
     { name = "numpy" },
-    { name = "openai" },
     { name = "pillow" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pympler" },
     { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin'" },
+    { name = "pywinauto", marker = "sys_platform == 'win32'" },
     { name = "sounddevice" },
     { name = "soundfile" },
     { name = "sqlalchemy" },
     { name = "tqdm" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/b7/d7002739f0eca1bcdaa748c4e47154b8c0c785387ae3f1f584d13f8062e1/openadapt_capture-1.0.4.tar.gz", hash = "sha256:990b93ed81f58c55ae0b5ee2dd09bcf1714740e7d995768d119ca742fb2ce9fc", size = 11976924 }
+sdist = { url = "https://files.pythonhosted.org/packages/19/ff/fdba52fe9ca72c3d3acca72d3382d4bb12870aa134a8958ea4c8bec00d59/openadapt_capture-1.2.2.tar.gz", hash = "sha256:6f4298d3daadf9cced8994207e34b3116a79209ef792e98f778a0770e2f3406c", size = 974499 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/39/31677da3654aae8671c80abcca51ac805bf3331e62d95aa1c825a274dfb1/openadapt_capture-1.0.4-py3-none-any.whl", hash = "sha256:a5e93317e054f5faef6dd88ce9a50878770b16cffca97e21d59e6c171b4c6808", size = 185407 },
+    { url = "https://files.pythonhosted.org/packages/48/11/d737d8125155f98695e2331c8d16084869946d39fb97a52e694c1ef80e3e/openadapt_capture-1.2.2-py3-none-any.whl", hash = "sha256:550fffe50990fa8431d332bdd5fe4755976d83baa7ad62553f50ad9e4ddcd1ae", size = 202545 },
 ]
 
 [[package]]
@@ -2415,7 +2424,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "1.20.1"
+version = "1.27.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -2424,15 +2433,14 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python-headless" },
     { name = "pillow" },
-    { name = "playwright" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/76/c6/89fdb1162a3e2473b88349d010a4c85d51630f29267c1e135bbffe893e09/openadapt_flow-1.20.1.tar.gz", hash = "sha256:b65dbe853f25f8d259ba848eb5c7ae3494ef12c472ae0d9c3758687fee1650a1", size = 18851535 }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/28/f29542489f2a45d3c80f28bde06a344e28d090d3e2721c760b2d6ebcba93/openadapt_flow-1.27.0.tar.gz", hash = "sha256:2c0c1da300659ea6007d194cc07732e7436b06b2a0cbcf0386256f1064ebc107", size = 19780272 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ba/12/e7b2630b231fa85ebe559e6934298dd5bfa8b4ae36dec884114dd5de85e7/openadapt_flow-1.20.1-py3-none-any.whl", hash = "sha256:9b8b7677bcb39f1c0448e012ec9791b6c44dce4e0a8c04734165e663c99cc8f3", size = 1182939 },
+    { url = "https://files.pythonhosted.org/packages/42/e5/c08a34a0fc3ab4d05e37e55db11347fa1eb56fb86082de217f2970c35cd0/openadapt_flow-1.27.0-py3-none-any.whl", hash = "sha256:1de9fd1fb89811e2411946fcc61bfbf08e433b746ff6a4008f3294332abb816b", size = 1685766 },
 ]
 
 [package.optional-dependencies]
@@ -3463,6 +3471,18 @@ wheels = [
 ]
 
 [[package]]
+name = "python-xlib"
+version = "0.33"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/86/f5/8c0653e5bb54e0cbdfe27bf32d41f27bc4e12faa8742778c17f2a71be2c0/python-xlib-0.33.tar.gz", hash = "sha256:55af7906a2c75ce6cb280a584776080602444f75815a7aff4d287bb2d7018b32", size = 269068 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/b8/ff33610932e0ee81ae7f1269c890f697d56ff74b9f5b2ee5d9b7fa2c5355/python_xlib-0.33-py2.py3-none-any.whl", hash = "sha256:c3534038d42e0df2f1392a1b30a15a4ff5fdc2b86cfa94f072bf11b10a164398", size = 182185 },
+]
+
+[[package]]
 name = "python3-xlib"
 version = "0.15"
 source = { registry = "https://pypi.org/simple" }
@@ -3497,6 +3517,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/85/9f/01a1a99704853cb63f253eea009390c88e7131c67e66a0a02099a8c917cb/pywin32-ctypes-0.2.3.tar.gz", hash = "sha256:d162dc04946d704503b2edc4d55f3dba5c1d539ead017afa00142c38b9885755", size = 29471 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/3d/8161f7711c017e01ac9f008dfddd9410dff3674334c233bde66e7ba65bbf/pywin32_ctypes-0.2.3-py3-none-any.whl", hash = "sha256:8a1513379d709975552d202d942d9837758905c8d01eb82b8bcc30918929e7b8", size = 30756 },
+]
+
+[[package]]
+name = "pywinauto"
+version = "0.6.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "comtypes", marker = "sys_platform == 'win32'" },
+    { name = "python-xlib", marker = "platform_system == 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux'" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "six", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2c/85/cc65e3b64e7473cc86c07f0b5c415d509402c03ef19dadc39c583835eb5f/pywinauto-0.6.9.tar.gz", hash = "sha256:94d710bfa796df245250f952ffa65d97233d9807bcd42e052b71b81af469b6de", size = 434734 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/46/f2283648e0c237af451dc50ebc42121abfd198d12391fd9ad4df1c6b97d2/pywinauto-0.6.9-py2.py3-none-any.whl", hash = "sha256:5924b3072864a1d730c5546bbeb17cf4063ba518b618dbc5e43c18276c7c9356", size = 363041 },
 ]
 
 [[package]]

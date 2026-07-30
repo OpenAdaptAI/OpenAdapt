@@ -25,7 +25,6 @@ Usage:
     openadapt doctor
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -172,75 +171,64 @@ def _run_flow(argv: list[str]) -> None:
     "--headed", is_flag=True, help="Show the browser while the tutorial runs."
 )
 def quickstart(out: Path, headed: bool) -> None:
-    """Run the complete local tutorial: record, compile, check, and replay.
+    """Run a verified local tutorial against the bundled synthetic app.
 
     This is the shortest path to a real OpenAdapt run. It uses the bundled
-    synthetic tutorial, keeps every artifact on this computer, and enables no
-    model or Cloud call. The output directory is never overwritten.
+    synthetic tutorial, verifies the write through an independent read-only
+    system-of-record interface, keeps every artifact on this computer, and
+    enables no model or Cloud call. The output directory is never overwritten.
     """
+    import os
+
     root = out.expanduser().resolve()
     if root.exists():
         raise click.UsageError(
             f"Output already exists: {root}. Pass --out with a new directory."
         )
 
-    recording = root / "recording"
-    bundle = root / "bundle"
-    run_dir = root / "run"
-    steps = [
-        ("Record the tutorial", ["demo-record", "--out", str(recording)]),
-        (
-            "Compile the recording",
-            [
-                "compile",
-                str(recording),
-                "--out",
-                str(bundle),
-                "--name",
-                "local-quickstart",
-            ],
-        ),
-        (
-            "Certify the tutorial",
-            ["certify", str(bundle), "--policy", "permissive"],
-        ),
-        (
-            "Replay locally",
-            ["replay", str(bundle), "--run-dir", str(run_dir)],
-        ),
+    argv = [
+        "tutorial",
+        "--out",
+        str(root),
+        "--name",
+        "local-quickstart",
     ]
     if headed:
-        steps[0][1].append("--headed")
-        steps[-1][1].append("--headed")
+        argv.append("--headed")
 
-    for index, (label, argv) in enumerate(steps, start=1):
-        click.echo(f"\n[{index}/{len(steps)}] {label}")
-        # The bundled tutorial contains synthetic identity-like strings. Keep
-        # the ordinary report warning meaningful for real workflows by making
-        # this one known-safe fixture explicit, then restore the operator's
-        # environment immediately after replay.
-        scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
-        if argv[0] == "replay" and scrub in (None, "auto"):
-            os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
-        try:
-            code = _invoke_flow(argv)
-        finally:
-            if argv[0] == "replay" and scrub in (None, "auto"):
-                if scrub is None:
-                    os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
-                else:
-                    os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
-        if code:
-            raise click.ClickException(
-                f"{label} stopped with exit code {code}. "
-                f"Any completed artifacts remain in {root}."
-            )
+    # The bundled tutorial contains only fixed synthetic data. Keep an
+    # installed-but-unconfigured privacy provider from blocking this known-safe
+    # fixture, then restore the operator's setting immediately.
+    scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
+    if scrub in (None, "auto"):
+        os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+    try:
+        code = _invoke_flow(argv)
+    finally:
+        if scrub in (None, "auto"):
+            if scrub is None:
+                os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
+            else:
+                os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
+    if code:
+        raise click.ClickException(
+            f"The verified tutorial stopped with exit code {code}. "
+            f"Any completed artifacts remain in {root}."
+        )
 
     click.echo("\nLocal quickstart complete.")
-    click.echo(f"Bundle: {bundle}")
-    click.echo(f"Run evidence: {run_dir}")
+    click.echo(f"Bundle: {root / 'bundle'}")
+    click.echo(f"Run evidence: {root / 'run'}")
+    click.echo("Outcome: VERIFIED under the Standard profile.")
+    click.echo(
+        "The synthetic write was confirmed through a read-only system-of-record API."
+    )
     click.echo("No model or Cloud call was enabled.")
-    click.echo(f"Inspect qualification gaps: openadapt flow lint {bundle}")
+    click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
+    click.echo(
+        "See a fail-safe halt: openadapt flow replay "
+        f"{root / 'bundle'} --drift modal --run-dir {root}-halt"
+    )
     click.echo(
         "Connect this computer when you want Cloud history and collaboration: "
         "https://app.openadapt.ai/dashboard/settings/ingest"
