@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import json
 import shutil
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -72,10 +73,24 @@ def _drift(condition_trial: int) -> dict:
     }
 
 
-def test_acceptance_requires_exact_fail_closed_three_plus_three() -> None:
+def _wrong_record(condition_trial: int) -> dict:
+    return {
+        "condition_trial": condition_trial,
+        "passed": True,
+        "model_calls": 0,
+        "halted": True,
+        "identity_mismatch": True,
+        "silent_write": False,
+        "false_completion": False,
+        "policy_bound": True,
+    }
+
+
+def test_acceptance_requires_exact_fail_closed_three_by_three_matrix() -> None:
     healthy = [_healthy(i) for i in range(1, 4)]
     drift = [_drift(i) for i in range(1, 4)]
-    assert qualification._accepted_contract(healthy, drift)
+    wrong_record = [_wrong_record(i) for i in range(1, 4)]
+    assert qualification._accepted_contract(healthy, drift, wrong_record)
 
     for collection, index, key, value in (
         (healthy, 0, "runtime_effect_verified", False),
@@ -85,15 +100,30 @@ def test_acceptance_requires_exact_fail_closed_three_plus_three() -> None:
         (drift, 0, "silent_write", True),
         (drift, 1, "false_completion", True),
         (drift, 2, "policy_bound", False),
+        (wrong_record, 0, "identity_mismatch", False),
+        (wrong_record, 1, "silent_write", True),
+        (wrong_record, 2, "false_completion", True),
     ):
         broken_healthy = copy.deepcopy(healthy)
         broken_drift = copy.deepcopy(drift)
-        target = broken_healthy if collection is healthy else broken_drift
+        broken_wrong = copy.deepcopy(wrong_record)
+        target = (
+            broken_healthy
+            if collection is healthy
+            else broken_drift
+            if collection is drift
+            else broken_wrong
+        )
         target[index][key] = value
-        assert not qualification._accepted_contract(broken_healthy, broken_drift)
+        assert not qualification._accepted_contract(
+            broken_healthy,
+            broken_drift,
+            broken_wrong,
+        )
 
-    assert not qualification._accepted_contract(healthy[:2], drift)
-    assert not qualification._accepted_contract(healthy, drift[:2])
+    assert not qualification._accepted_contract(healthy[:2], drift, wrong_record)
+    assert not qualification._accepted_contract(healthy, drift[:2], wrong_record)
+    assert not qualification._accepted_contract(healthy, drift, wrong_record[:2])
 
 
 def test_source_provenance_requires_full_lowercase_shas() -> None:
@@ -106,11 +136,46 @@ def test_source_provenance_requires_full_lowercase_shas() -> None:
 def test_presentation_is_hash_bound_and_renders_without_staged_video_frames(
     tmp_path: Path,
 ) -> None:
+    workflow = Workflow(
+        name="test-rdp-workflow",
+        steps=[],
+        params=dict(qualification.DEMO_PARAMS),
+    )
+    from openadapt_flow.visualize import build_program_graph
+
+    graph_dir = tmp_path / "02-compiled-workflow"
+    graph_dir.mkdir()
+    graph_path = graph_dir / "program-graph.json"
+    graph_path.write_text(
+        build_program_graph(workflow).model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    (tmp_path / "execution-request.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "openadapt.rdp-presentation-request.v1",
+                "workflow": workflow.name,
+                "workflow_digest": "a" * 64,
+                "gate_passed": True,
+                "demonstration": {
+                    "patient_mrn": qualification.EXPECTED_MRN,
+                    **qualification.DEMO_PARAMS,
+                },
+                "execution": {
+                    "patient_mrn": qualification.EXPECTED_MRN,
+                    **qualification.REPLAY_PARAMS,
+                    qualification.REQUEST_ID_PARAM: "REQ-LIVE-2048-1",
+                },
+                "program_graph": "02-compiled-workflow/program-graph.json",
+            }
+        ),
+        encoding="utf-8",
+    )
     for index, (phase, outcome) in enumerate(
         (
             ("Demonstration", "RECORDED"),
             ("Governed replay", "VERIFIED"),
-            ("Changed-screen refusal", "HALTED"),
+            ("Wrong-record refusal", "HALTED"),
         ),
         start=1,
     ):
@@ -121,8 +186,40 @@ def test_presentation_is_hash_bound_and_renders_without_staged_video_frames(
         )
         image = Image.new("RGB", qualification.VIEWPORT, (index * 30, 60, 90))
         capture.observe_image(image, source="test-frame")
+        if index == 1:
+            capture.input_event("pointer", x=100, y=120, button="left")
         capture.observe_image(image, source="duplicate-test-frame")
-        capture.finalize(outcome=outcome, summary={"model_calls": 0})
+        summary: dict = {"model_calls": 0}
+        if index == 2:
+            summary["verifier"] = {
+                "kind": "read-only SQL",
+                "query": "SELECT * FROM appointments",
+                "rows": [
+                    {
+                        "request_id": "REQ-LIVE-2048-1",
+                        "patient_mrn": qualification.EXPECTED_MRN,
+                        "appointment_slot": qualification.REPLAY_PARAMS[
+                            qualification.SLOT_PARAM
+                        ],
+                        "visit_type": qualification.REPLAY_PARAMS[
+                            qualification.VISIT_TYPE_PARAM
+                        ],
+                        "status": "scheduled",
+                    }
+                ],
+            }
+        if index == 3:
+            summary.update(
+                {
+                    "expected_record": "Ada Lovelace · MRN A1001",
+                    "observed_record": "Grace Hopper · MRN B2002",
+                    "identity_region": list(
+                        qualification.ACTIVE_PATIENT_IDENTIFIER_REGION
+                    ),
+                    "verifier": {"kind": "read-only SQL", "rows": []},
+                }
+            )
+        capture.finalize(outcome=outcome, summary=summary)
 
     output = tmp_path / "rdp-demo.mp4"
     if shutil.which("ffmpeg") is None:
@@ -143,7 +240,10 @@ def test_presentation_is_hash_bound_and_renders_without_staged_video_frames(
     ]
 
 
-@pytest.mark.parametrize(("character", "keysym"), [("-", "minus"), ("/", "slash")])
+@pytest.mark.parametrize(
+    ("character", "keysym"),
+    [("-", "minus"), ("/", "slash"), (":", "colon")],
+)
 def test_rdp_fixture_transport_uses_unambiguous_punctuation_keysyms(
     character: str, keysym: str
 ) -> None:
@@ -168,6 +268,10 @@ def test_recorded_identity_regions_cover_every_pointer_action(tmp_path: Path) ->
         {"kind": "click", "x": 3, "y": 4},
         {"kind": "type", "text": "example"},
         {"kind": "click", "x": 5, "y": 6},
+        {"kind": "type", "text": "example"},
+        {"kind": "click", "x": 7, "y": 8},
+        {"kind": "type", "text": "example"},
+        {"kind": "click", "x": 9, "y": 10},
     ]
     (recording / "events.jsonl").write_text(
         "".join(json.dumps(event) + "\n" for event in events),
@@ -188,6 +292,12 @@ def test_recorded_identity_regions_cover_every_pointer_action(tmp_path: Path) ->
     assert updated[3]["identifier_region"] == list(
         qualification.ACTIVE_PATIENT_IDENTIFIER_REGION
     )
+    assert updated[5]["identifier_region"] == list(
+        qualification.ACTIVE_PATIENT_IDENTIFIER_REGION
+    )
+    assert updated[7]["identifier_region"] == list(
+        qualification.ACTIVE_PATIENT_IDENTIFIER_REGION
+    )
 
 
 def test_identity_marking_refuses_an_unexpected_recording_shape(tmp_path: Path) -> None:
@@ -201,19 +311,18 @@ def test_identity_marking_refuses_an_unexpected_recording_shape(tmp_path: Path) 
         qualification._arm_recorded_identifiers(recording)
 
 
-def test_committed_result_is_exact_accepted_six_trial_evidence() -> None:
+def test_committed_result_retains_the_prior_accepted_v2_evidence() -> None:
     result = json.loads(
         (REPO / "benchmark" / "rdp_ladder" / "results.json").read_text()
     )
     assert result["schema_version"] == "openadapt.rdp-ladder-qualification.v2"
-    assert result["candidate_commit"] == ("6031fde559b942a1d8b1a560d8b6cee8a6bfc800")
-    assert result["base_commit"] == ("d952c363d1910f1699c1a4690002879b1990d743")
     assert result["run_count"] == 6
     assert result["successes"] == 6
     assert result["accepted"] is True
-    assert qualification._accepted_contract(
-        result["trials"][: qualification.TRIALS_PER_CONDITION],
-        result["trials"][qualification.TRIALS_PER_CONDITION :],
+    assert result["model_calls"] == 0
+    assert not any(
+        trial.get("silent_incorrect_success") or trial.get("false_completion")
+        for trial in result["trials"]
     )
 
 
@@ -249,7 +358,13 @@ def test_headless_bundle_is_encrypted_and_admitted_before_any_replay(
     image = Image.new("RGB", (20, 20), "white")
 
     steps = []
-    for index, risk in ((0, "reversible"), (1, "reversible"), (3, "irreversible")):
+    for index, risk in (
+        (0, "reversible"),
+        (1, "reversible"),
+        (3, "reversible"),
+        (5, "reversible"),
+        (7, "irreversible"),
+    ):
         template = f"templates/step_{index:03d}.png"
         identifier = f"templates/identifiers/step_{index:03d}.png"
         image.save(bundle / template)
@@ -257,33 +372,58 @@ def test_headless_bundle_is_encrypted_and_admitted_before_any_replay(
         steps.append(
             Step(
                 id=f"step_{index:03d}",
-                intent="click 'Save Note'" if index == 3 else "click fixture",
+                intent=("click 'Save appointment'" if index == 7 else "click fixture"),
                 action=ActionKind.CLICK,
                 risk=risk,
                 anchor=Anchor(
                     template=template,
                     region=(0, 0, 20, 20),
                     click_point=(10, 10),
-                    ocr_text="Save Note" if index == 3 else "Fixture",
+                    ocr_text="Save appointment" if index == 7 else "Fixture",
                     identifier_crop=identifier,
                     identifier_region=(0, 0, 20, 20),
                 ),
                 identity_armed=True,
             )
         )
-    # Preserve the real action order: select, focus, type, save.
-    steps.insert(
-        2,
-        Step(
-            id="step_002",
-            intent="type <note>",
-            action=ActionKind.TYPE,
-            param=qualification.NOTE_PARAM,
-        ),
+    for index, param in (
+        (2, qualification.SLOT_PARAM),
+        (4, qualification.VISIT_TYPE_PARAM),
+        (6, qualification.REQUEST_ID_PARAM),
+    ):
+        steps.insert(
+            index,
+            Step(
+                id=f"step_{index:03d}",
+                intent=f"type <{param}>",
+                action=ActionKind.TYPE,
+                param=param,
+            ),
+        )
+    workflow = Workflow(
+        name="headless-rdp-ladder",
+        steps=steps,
+        params=dict(qualification.DEMO_PARAMS),
     )
-    workflow = Workflow(name="headless-rdp-ladder", steps=steps)
     oracle_root = tmp_path / "oracle"
     oracle_root.mkdir()
+    database = oracle_root / qualification.DATABASE_FILENAME
+    connection = sqlite3.connect(database)
+    connection.execute(
+        """
+        CREATE TABLE appointments (
+            appointment_id TEXT PRIMARY KEY,
+            request_id TEXT NOT NULL UNIQUE,
+            patient_mrn TEXT NOT NULL,
+            patient_name TEXT NOT NULL,
+            appointment_slot TEXT NOT NULL,
+            visit_type TEXT NOT NULL,
+            status TEXT NOT NULL
+        )
+        """
+    )
+    connection.commit()
+    connection.close()
 
     governed, save_step_id, verifier, report = qualification._seal_and_admit_workflow(
         workflow, bundle, oracle_root
@@ -294,20 +434,22 @@ def test_headless_bundle_is_encrypted_and_admitted_before_any_replay(
     assert governed.steps[0].expect == [
         Postcondition(
             kind=PostconditionKind.TEXT_PRESENT,
-            text="Active: Ada Lovelace",
+            text="Active record: Ada Lovelace",
         )
     ]
-    assert save_step_id == "step_003"
+    assert save_step_id == "step_007"
     effect = governed.steps[-1].effects[0]
-    assert effect.match["name"].literal == qualification.ORACLE_FILENAME
+    assert effect.match["request_id"].param == qualification.REQUEST_ID_PARAM
     assert effect.idempotency_key is not None
-    assert effect.idempotency_key.literal == qualification.ORACLE_FILENAME
-    assert effect.key_field == "name"
+    assert effect.idempotency_key.param == qualification.REQUEST_ID_PARAM
+    assert effect.key_field == "request_id"
     assert effect.count_new_only is True
     assert report.required_identity_step_ids == [
         "step_000",
         "step_001",
         "step_003",
+        "step_005",
+        "step_007",
     ]
     project = governed.qualification
     assert project is not None and project.last_certification is None
@@ -331,9 +473,13 @@ def test_headless_bundle_is_encrypted_and_admitted_before_any_replay(
         bundle_dir=bundle,
         deployment=DeploymentConfig(
             effects=EffectsConfig(
-                kind="document-hash",
-                root=str(oracle_root),
-                glob=qualification.ORACLE_FILENAME,
+                kind="sql",
+                sqlite_database=str(database),
+                sql_query=(
+                    "SELECT appointment_id, request_id, patient_mrn, "
+                    "patient_name, appointment_slot, visit_type, status "
+                    "FROM appointments"
+                ),
             ),
             policy=PolicySection(policy=str(qualification.POLICY_PATH)),
         ),

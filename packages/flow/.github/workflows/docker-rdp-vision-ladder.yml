@@ -12,7 +12,9 @@ name: docker-rdp-vision-ladder
 # default-branch reruns. There is deliberately no schedule until a rebased
 # candidate produces a fresh accepted 3x healthy + 3x refusal batch, avoiding
 # recurring runner spend and red-main noise from an intentionally pending
-# qualification. The fixture image is amd64+arm64; GitHub's runner is amd64.
+# qualification. The accepted campaign requires 3 healthy trials and 6 refusal
+# trials: 3 screen-drift cases and 3 wrong-record cases. The fixture image is
+# amd64+arm64; GitHub's runner is amd64.
 on:
   pull_request:
     paths:

@@ -8,13 +8,13 @@ the production Recorder -> compiler -> governed Replayer classes over a real
 RDP pixel surface with NO structural (a11y/UIA) backend, so resolution can only
 go through the visual rungs (template -> template_global -> ocr -> geometry).
 The harness binds explicit pixel identities, policy, encryption, and a typed
-document effect contract before replay. It asserts:
+appointment effect contract before replay. It asserts:
 
   * record -> compile -> replay succeeds on a healthy run,
   * ZERO model calls on the healthy run (the $0 deterministic guarantee),
   * resolution used the VISUAL rungs and NEVER the structural rung,
-  * the write EFFECT is confirmed both by the runtime's exactly-one-new-document
-    verifier and by an independent exact-content host read,
+  * the booking EFFECT is confirmed by a read-only SQL verifier and by an
+    independent exact-row read,
   * the ladder HALTS (never silently mis-clicks) when the frame is degraded by
     injected DPI/theme/JPEG-compression drift (simulated drift on a real
     session).
@@ -40,6 +40,7 @@ import io
 import json
 import os
 import secrets
+import sqlite3
 import subprocess
 import tempfile
 import time
@@ -51,29 +52,35 @@ from PIL import Image, ImageOps
 
 # -- fixture geometry (kiosk_app.py renders these at fixed positions) ----------
 VIEWPORT = (1280, 800)
-ADA_ROW = (347, 192)  # "Ada Lovelace   MRN A1001" roster row
-GRACE_ROW = (347, 262)  # "Grace Hopper   MRN B2002" roster row
-# Click close enough to the Entry's left edge that the 160px recorded target
-# crop includes its stable border. The former interior point produced a nearly
-# blank/generic template that could resolve with a small offset on the RDP
-# surface; translating the patient-identifier crop by that offset correctly
-# made identity abstain. A distinctive target crop keeps resolution and the
-# separately verified active-patient region in the same coordinate frame.
-NOTE_FIELD = (120, 588)  # clinical-note entry, left-border-bearing crop
-SAVE_BUTTON = (910, 588)  # "Save Note" button
-ADA_IDENTIFIER_REGION = (60, 168, 500, 48)
-# After Ada is selected, both the field-focus click and the consequential Save
-# click bind to the live selected-record banner, not merely to a blank field or
-# generic button. This is the pixel-only equivalent of verifying the active
-# patient context before continuing and before writing.
-ACTIVE_PATIENT_IDENTIFIER_REGION = (55, 458, 620, 40)
-NOTE_PARAM = "note"
-NOTE_VALUE = "followup in two weeks"
-EXPECTED_MRN = "MRN A1001"  # Ada's MRN, written by the kiosk on save
-ORACLE_FILENAME = "saved_note.txt"
+ADA_ROW = (335, 190)  # "Ada Lovelace   MRN A1001" roster row
+GRACE_ROW = (335, 260)  # "Grace Hopper   MRN B2002" roster row
+SLOT_FIELD = (590, 268)
+VISIT_TYPE_FIELD = (590, 388)
+REQUEST_ID_FIELD = (590, 508)
+BOOK_BUTTON = (720, 590)
+ADA_IDENTIFIER_REGION = (50, 164, 490, 54)
+# Every field and the write button bind to the selected-record banner. This is
+# the pixel-only equivalent of verifying the active record before each input.
+ACTIVE_PATIENT_IDENTIFIER_REGION = (545, 118, 680, 55)
+SLOT_PARAM = "appointment_slot"
+VISIT_TYPE_PARAM = "visit_type"
+REQUEST_ID_PARAM = "request_id"
+DEMO_PARAMS = {
+    SLOT_PARAM: "2026-08-12 09:30",
+    VISIT_TYPE_PARAM: "Cardiology follow-up",
+    REQUEST_ID_PARAM: "REQ-DEMO-001",
+}
+REPLAY_PARAMS = {
+    SLOT_PARAM: "2026-08-14 10:45",
+    VISIT_TYPE_PARAM: "Intake consultation",
+    REQUEST_ID_PARAM: "REQ-LIVE-2048",
+}
+EXPECTED_MRN = "MRN A1001"
+WRONG_MRN = "MRN B2002"
+DATABASE_FILENAME = "appointments.sqlite3"
 RESET_ACK_FILENAME = "reset_ack.txt"
 TRIALS_PER_CONDITION = 3
-RESULT_SCHEMA = "openadapt.rdp-ladder-qualification.v2"
+RESULT_SCHEMA = "openadapt.rdp-ladder-qualification.v3"
 POLICY_PATH = Path(__file__).with_name("policy.yaml")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -102,14 +109,17 @@ _XDOTOOL_KEYS = {
     # keysym names for punctuation present in parameterized fixture values.
     "-": "minus",
     "/": "slash",
+    ":": "colon",
 }
 
 
 class PresentationCapture:
     """Retain exact synthetic-fixture frames for a derived buyer demo.
 
-    The capture only observes frames that the runtime already requested. It
-    never asks the backend for an extra frame and never changes input timing.
+    The normal runtime path does not use this object. The isolated presentation
+    path can retain an additional frame after an input so the derivative shows
+    the demonstrated cursor and text sequence. The qualification result still
+    comes from the governed runtime and the independent verifier.
     """
 
     def __init__(self, output_dir: Path, *, phase: str) -> None:
@@ -162,8 +172,9 @@ class PresentationCapture:
             "schema_version": "openadapt.rdp-presentation.v1",
             "phase": self.phase,
             "source": (
-                "Exact synthetic-fixture frames observed on the RDP client "
-                "or by the runtime drift adapter. Presentation timing is paced."
+                "Exact synthetic-fixture frames observed on the RDP client. "
+                "The isolated presentation capture can add post-input frames; "
+                "the governed runtime and verifier remain the result authority."
             ),
             "frame_count": self._frame_count,
             "events": self._events,
@@ -350,15 +361,25 @@ class DockerX11RdpTransport:
 
 
 class PresentationRDPTransport:
-    """Observe an RDP transport without adding framebuffer reads."""
+    """Capture a human-readable derivative from an isolated RDP demonstration."""
 
     def __init__(
         self,
         inner: DockerX11RdpTransport,
         capture: PresentationCapture,
+        *,
+        human_pacing: bool = False,
     ) -> None:
         self._inner = inner
         self._capture = capture
+        self._human_pacing = human_pacing
+        self._key_index = 0
+
+    def _retain_post_input(self, *, source: str) -> None:
+        if not self._human_pacing:
+            return
+        image, _width, _height = self._inner.framebuffer()
+        self._capture.observe_image(image, source=source)
 
     def connect(self) -> None:
         self._inner.connect()
@@ -380,16 +401,30 @@ class PresentationRDPTransport:
                 button=button,
             )
         self._inner.pointer(x, y, button, down)
+        if down:
+            if self._human_pacing:
+                # Let the remote application repaint before the derivative
+                # captures the exact post-click frame.
+                time.sleep(0.18)
+            self._retain_post_input(source="presentation-post-pointer")
+            if self._human_pacing:
+                time.sleep(0.20)
 
     def key(self, keysym_or_char: str, down: bool) -> None:
         if down:
             self._capture.input_event(
                 "key",
-                category=(
-                    "character" if len(keysym_or_char) == 1 else "named-key"
-                ),
+                category=("character" if len(keysym_or_char) == 1 else "named-key"),
             )
         self._inner.key(keysym_or_char, down)
+        if down and (len(keysym_or_char) == 1 or keysym_or_char == "space"):
+            if self._human_pacing:
+                # A deterministic rhythm makes the demonstration readable
+                # without changing the production runtime's input timing.
+                delays = (0.055, 0.082, 0.064, 0.105, 0.071)
+                time.sleep(delays[self._key_index % len(delays)])
+                self._key_index += 1
+            self._retain_post_input(source="presentation-post-key")
 
     def wheel(self, dx: int, dy: int) -> None:
         self._capture.input_event("wheel", dx=int(dx), dy=int(dy))
@@ -444,12 +479,33 @@ class _DriftBackend:
         return payload
 
 
-def _read_saved_note(oracle_root: Path) -> Optional[str]:
-    """Read the bind-mounted document oracle without using the GUI/RDP path."""
-    try:
-        return (oracle_root / ORACLE_FILENAME).read_text(encoding="utf-8").strip()
-    except OSError:
+def _database_path(oracle_root: Path) -> Path:
+    return oracle_root / DATABASE_FILENAME
+
+
+def _read_appointments(oracle_root: Path) -> Optional[list[dict[str, str]]]:
+    """Read the bind-mounted system of record without the GUI or RDP path."""
+    database = _database_path(oracle_root)
+    if not database.exists():
         return None
+    connection: Optional[sqlite3.Connection] = None
+    try:
+        connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT appointment_id, request_id, patient_mrn, patient_name,
+                   appointment_slot, visit_type, status
+            FROM appointments
+            ORDER BY request_id
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+    except (OSError, sqlite3.Error):
+        return None
+    finally:
+        if connection is not None:
+            connection.close()
 
 
 def _read_reset_ack(oracle_root: Path) -> Optional[int]:
@@ -461,10 +517,10 @@ def _read_reset_ack(oracle_root: Path) -> Optional[int]:
 
 def _reset_kiosk(container: str, oracle_root: Path) -> None:
     """Restore the kiosk to its initial state between trials via an IN-PLACE
-    reset (SIGUSR1): the kiosk clears the form and deletes the saved note
+    reset (SIGUSR1): the kiosk clears the form and the appointment table
     without destroying its window, so the RDP display never blanks and
     keyboard-focus continuity is preserved (see kiosk_app.py). The reset must
-    be acknowledged by the Tk thread and the external oracle must be empty;
+    be acknowledged by the Tk thread and the external database must be empty;
     otherwise the trial refuses to start instead of reusing stale state."""
     before = _read_reset_ack(oracle_root)
     res = subprocess.run(
@@ -481,10 +537,11 @@ def _reset_kiosk(container: str, oracle_root: Path) -> None:
     while time.monotonic() < deadline:
         after = _read_reset_ack(oracle_root)
         advanced = after is not None and (before is None or after > before)
-        if advanced and _read_saved_note(oracle_root) is None:
+        appointments = _read_appointments(oracle_root)
+        if advanced and appointments == []:
             return
         time.sleep(0.1)
-    raise RuntimeError("fixture reset was not acknowledged with an empty oracle")
+    raise RuntimeError("fixture reset was not acknowledged with an empty database")
 
 
 def _arm_recorded_identifiers(recording_dir: Path) -> None:
@@ -495,6 +552,8 @@ def _arm_recorded_identifiers(recording_dir: Path) -> None:
         0: ADA_IDENTIFIER_REGION,
         1: ACTIVE_PATIENT_IDENTIFIER_REGION,
         3: ACTIVE_PATIENT_IDENTIFIER_REGION,
+        5: ACTIVE_PATIENT_IDENTIFIER_REGION,
+        7: ACTIVE_PATIENT_IDENTIFIER_REGION,
     }
     for index, region in regions.items():
         if index >= len(events) or events[index].get("kind") != "click":
@@ -584,13 +643,19 @@ def _validate_source_provenance(candidate_commit: str, base_commit: str) -> None
         )
 
 
-def _accepted_contract(healthy: list[dict], drift: list[dict]) -> bool:
-    """Return true only for the exact fail-closed 3+3 qualification matrix."""
+def _accepted_contract(
+    healthy: list[dict],
+    drift: list[dict],
+    wrong_record: Optional[list[dict]] = None,
+) -> bool:
+    """Return true only for the complete fail-closed qualification matrix."""
+    wrong_record = wrong_record or []
     return (
         len(healthy) == TRIALS_PER_CONDITION
         and len(drift) == TRIALS_PER_CONDITION
-        and all(t["passed"] for t in [*healthy, *drift])
-        and all(t["model_calls"] == 0 for t in [*healthy, *drift])
+        and len(wrong_record) == TRIALS_PER_CONDITION
+        and all(t["passed"] for t in [*healthy, *drift, *wrong_record])
+        and all(t["model_calls"] == 0 for t in [*healthy, *drift, *wrong_record])
         and all(t["structural_rung_used"] == 0 for t in healthy)
         and all(bool(t["visual_rungs_used"]) for t in healthy)
         and all(t["effect_confirmed"] for t in healthy)
@@ -604,6 +669,25 @@ def _accepted_contract(healthy: list[dict], drift: list[dict]) -> bool:
         and not any(t["silent_write"] for t in drift)
         and not any(t["false_completion"] for t in drift)
         and all(t["policy_bound"] for t in drift)
+        and all(t["halted"] for t in wrong_record)
+        and all(t["identity_mismatch"] for t in wrong_record)
+        and not any(t["silent_write"] for t in wrong_record)
+        and not any(t["false_completion"] for t in wrong_record)
+        and all(t["policy_bound"] for t in wrong_record)
+    )
+
+
+def _build_sql_verifier(oracle_root: Path):
+    from openadapt_flow.runtime.effects import SqlRecordVerifier
+
+    database = _database_path(oracle_root)
+    return SqlRecordVerifier(
+        lambda: sqlite3.connect(f"file:{database}?mode=ro", uri=True),
+        """
+        SELECT appointment_id, request_id, patient_mrn, patient_name,
+               appointment_slot, visit_type, status
+        FROM appointments
+        """,
     )
 
 
@@ -626,9 +710,9 @@ def _seal_and_admit_workflow(workflow, bundle_dir: Path, oracle_root: Path):
     )
     from openadapt_flow.run_gate import evaluate_run_gate
     from openadapt_flow.runtime.effects import (
-        DocumentHashVerifier,
         Effect,
         EffectKind,
+        ValueExpr,
     )
 
     if not workflow.steps:
@@ -640,43 +724,54 @@ def _seal_and_admit_workflow(workflow, bundle_dir: Path, oracle_root: Path):
         )
     # The RDP input edge is asynchronous: a visually stable frame can still
     # precede the remote Tk repaint by one protocol round trip. Make this state
-    # dependency explicit so replay cannot advance to the note field until the
+    # dependency explicit so replay cannot advance to the form fields until the
     # selected-record banner is actually observable. This is a semantic
     # postcondition evaluated on the real RDP-decoded frame, not a fixed sleep.
     select_step.expect = [
         Postcondition(
             kind=PostconditionKind.TEXT_PRESENT,
-            text="Active: Ada Lovelace",
+            text="Active record: Ada Lovelace",
         )
     ]
     save_step = workflow.steps[-1]
     if save_step.action is not ActionKind.CLICK or save_step.risk != "irreversible":
         raise RuntimeError(
-            "final qualification step is not the irreversible save click"
+            "final qualification step is not the irreversible booking click"
         )
     save_step.expect = [
         Postcondition(
             kind=PostconditionKind.TEXT_PRESENT,
-            text="Saved note for Ada Lovelace",
+            text="Appointment booked for Ada Lovelace",
         )
     ]
     save_step.effects = [
         Effect(
             kind=EffectKind.RECORD_WRITTEN,
-            match={"name": ORACLE_FILENAME},
+            match={
+                "request_id": ValueExpr(param=REQUEST_ID_PARAM),
+                "patient_mrn": ValueExpr(literal=EXPECTED_MRN),
+                "appointment_slot": ValueExpr(param=SLOT_PARAM),
+                "visit_type": ValueExpr(param=VISIT_TYPE_PARAM),
+                "status": ValueExpr(literal="scheduled"),
+            },
             expected_count=1,
             count_new_only=True,
-            # The filesystem substrate's stable operation key is the output
-            # path, not the note contents. DocumentHashVerifier exposes that
-            # path as ``name``; binding the key to a nonexistent generic
-            # ``key`` field would correctly filter every record out and halt
-            # even after the exact document landed.
-            idempotency_key=ORACLE_FILENAME,
-            key_field="name",
-        )
+            idempotency_key=ValueExpr(param=REQUEST_ID_PARAM),
+            key_field="request_id",
+            risk="irreversible",
+            probe="read-only appointment row lookup",
+        ),
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match={"request_id": ValueExpr(param=REQUEST_ID_PARAM)},
+            field="status",
+            value=ValueExpr(literal="scheduled"),
+            risk="irreversible",
+            probe="read-only appointment status lookup",
+        ),
     ]
 
-    # The note-field click changes only local focus. Bind that explicit
+    # Each field click changes only local focus. Bind that explicit
     # operator decision through the real qualification project API before the
     # policy gate certifies and seals this exact workflow. A prose marker alone
     # has no authority.
@@ -699,21 +794,26 @@ def _seal_and_admit_workflow(workflow, bundle_dir: Path, oracle_root: Path):
             environment_digest=hashlib.sha256(environment_payload).hexdigest(),
             runtime_version=__version__,
             required_capabilities=[
-                "document-hash-effect",
+                "read-only-sql-effect",
                 "pixel-identity",
                 "vision-only-resolution",
             ],
         ),
     )
-    set_action_classification(
-        workflow,
-        ActionRiskClassification(
-            step_id="step_001",
-            classification=ActionRiskClass.READ_ONLY,
-            explanation="Click focuses the fixture note field without a business write",
-            operator_confirmed=True,
-        ),
-    )
+    for step_id, field_name in (
+        ("step_001", "appointment slot"),
+        ("step_003", "visit type"),
+        ("step_005", "request ID"),
+    ):
+        set_action_classification(
+            workflow,
+            ActionRiskClassification(
+                step_id=step_id,
+                classification=ActionRiskClass.READ_ONLY,
+                explanation=f"Click focuses the fixture {field_name} field",
+                operator_confirmed=True,
+            ),
+        )
 
     # A governed run must bind policy/identity/effect decisions to an encrypted,
     # integrity-sealed bundle. The random key protects this ephemeral synthetic
@@ -721,12 +821,15 @@ def _seal_and_admit_workflow(workflow, bundle_dir: Path, oracle_root: Path):
     bundle_key = secrets.token_urlsafe(32)
     workflow.save(bundle_dir, encrypt=True, key=bundle_key)
     workflow = Workflow.load(bundle_dir, key=bundle_key)
-    verifier = DocumentHashVerifier(oracle_root, glob=ORACLE_FILENAME)
+    verifier = _build_sql_verifier(oracle_root)
     deployment = DeploymentConfig(
         effects=EffectsConfig(
-            kind="document-hash",
-            root=str(oracle_root),
-            glob=ORACLE_FILENAME,
+            kind="sql",
+            sqlite_database=str(_database_path(oracle_root)),
+            sql_query=(
+                "SELECT appointment_id, request_id, patient_mrn, patient_name, "
+                "appointment_slot, visit_type, status FROM appointments"
+            ),
         ),
         policy=PolicySection(policy=str(POLICY_PATH)),
     )
@@ -744,6 +847,54 @@ def _seal_and_admit_workflow(workflow, bundle_dir: Path, oracle_root: Path):
     return workflow, save_step.id, verifier, gate_report
 
 
+def _export_presentation_contract(
+    presentation_dir: Path,
+    workflow,
+    gate_report,
+) -> dict:
+    """Export the exact compiler graph and the exact replay request.
+
+    The presentation renderer reads this file. It does not infer targets or add
+    semantic labels that are absent from the compiled graph.
+    """
+    from openadapt_flow.visualize import build_program_graph, render_html
+
+    compiled = presentation_dir / "02-compiled-workflow"
+    compiled.mkdir(parents=True, exist_ok=True)
+    spec = build_program_graph(workflow)
+    spec_path = compiled / "program-graph.json"
+    spec_path.write_text(spec.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    html_path = compiled / "program-graph.html"
+    html_path.write_text(
+        render_html(spec, title="RDP appointment workflow"),
+        encoding="utf-8",
+    )
+    request = {
+        "schema_version": "openadapt.rdp-presentation-request.v1",
+        "workflow": workflow.name,
+        "workflow_digest": (
+            workflow.manifest.content_digest if workflow.manifest is not None else None
+        ),
+        "gate_passed": bool(gate_report.passed),
+        "demonstration": {
+            "patient_mrn": EXPECTED_MRN,
+            **DEMO_PARAMS,
+        },
+        "execution": {
+            "patient_mrn": EXPECTED_MRN,
+            **REPLAY_PARAMS,
+            REQUEST_ID_PARAM: REPLAY_PARAMS[REQUEST_ID_PARAM] + "-1",
+        },
+        "program_graph": str(spec_path.relative_to(presentation_dir)),
+    }
+    request_path = presentation_dir / "execution-request.json"
+    request_path.write_text(
+        json.dumps(request, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return request
+
+
 def run_qualification(
     container: str,
     *,
@@ -756,6 +907,7 @@ def run_qualification(
 ) -> dict:
     from openadapt_flow.backends.rdp_backend import FreeRDPBackend
     from openadapt_flow.compiler import compile_recording
+    from openadapt_flow.ir import ActionKind
     from openadapt_flow.recorder import Recorder
     from openadapt_flow.run_gate import build_runtime_authorization
     from openadapt_flow.runtime.replayer import Replayer
@@ -780,11 +932,15 @@ def run_qualification(
         if presentation_dir is not None
         else None
     )
-    transport: DockerX11RdpTransport | PresentationRDPTransport = (
-        DockerX11RdpTransport(container)
+    transport: DockerX11RdpTransport | PresentationRDPTransport = DockerX11RdpTransport(
+        container
     )
     if record_capture is not None:
-        transport = PresentationRDPTransport(transport, record_capture)
+        transport = PresentationRDPTransport(
+            transport,
+            record_capture,
+            human_pacing=True,
+        )
     backend = FreeRDPBackend(transport, connect=True)
 
     rec_dir = work / "recording"
@@ -796,18 +952,23 @@ def run_qualification(
         settle_stable_frames=2,
         settle_timeout_s=6.0,
     )
-    rec.click(*ADA_ROW)  # select patient (visual rung)
-    rec.click(*NOTE_FIELD)  # focus note field
-    rec.type_text(NOTE_VALUE, param=NOTE_PARAM)
-    rec.click(*SAVE_BUTTON)  # write (irreversible)
+    rec.click(*ADA_ROW)  # select the record (visual rung)
+    rec.click(*SLOT_FIELD)
+    rec.type_text(DEMO_PARAMS[SLOT_PARAM], param=SLOT_PARAM)
+    rec.click(*VISIT_TYPE_FIELD)
+    rec.type_text(DEMO_PARAMS[VISIT_TYPE_PARAM], param=VISIT_TYPE_PARAM)
+    rec.click(*REQUEST_ID_FIELD)
+    rec.type_text(DEMO_PARAMS[REQUEST_ID_PARAM], param=REQUEST_ID_PARAM)
+    rec.click(*BOOK_BUTTON)  # consequential write
     rec.finish()
     if record_capture is not None:
         record_capture.finalize(
             outcome="RECORDED",
             summary={
-                "actions": 4,
+                "actions": 8,
                 "model_calls": 0,
                 "surface": "real RDP round-trip",
+                "params": {"patient_mrn": EXPECTED_MRN, **DEMO_PARAMS},
             },
         )
     _arm_recorded_identifiers(rec_dir)
@@ -820,12 +981,16 @@ def run_qualification(
     workflow, save_step_id, verifier, gate_report = _seal_and_admit_workflow(
         workflow, bundle_dir, oracle_root
     )
+    if presentation_dir is not None:
+        _export_presentation_contract(presentation_dir, workflow, gate_report)
 
     healthy_trials: list[dict] = []
     for condition_trial in range(1, TRIALS_PER_CONDITION + 1):
         _reset_kiosk(container, oracle_root)
-        note_value = f"{NOTE_VALUE} / healthy-{condition_trial}"
-        params = {NOTE_PARAM: note_value}
+        params = dict(REPLAY_PARAMS)
+        params[REQUEST_ID_PARAM] = (
+            REPLAY_PARAMS[REQUEST_ID_PARAM] + f"-{condition_trial}"
+        )
         authorization = build_runtime_authorization(
             workflow,
             gate_report,
@@ -861,9 +1026,20 @@ def run_qualification(
             bundle_dir=bundle_dir,
             run_dir=work / f"run_healthy_{condition_trial}",
         )
-        expected_saved = f"{EXPECTED_MRN}\t{note_value}"
-        saved = _read_saved_note(oracle_root)
-        effect_confirmed = saved == expected_saved
+        rows = _read_appointments(oracle_root)
+        expected_row = {
+            "request_id": params[REQUEST_ID_PARAM],
+            "patient_mrn": EXPECTED_MRN,
+            "appointment_slot": params[SLOT_PARAM],
+            "visit_type": params[VISIT_TYPE_PARAM],
+            "status": "scheduled",
+        }
+        matched_rows = [
+            row
+            for row in rows or []
+            if all(row.get(key) == value for key, value in expected_row.items())
+        ]
+        effect_confirmed = len(matched_rows) == 1 and len(rows or []) == 1
         rung_counts = dict(report.rung_counts)
         structural_used = rung_counts.get("structural", 0)
         visual_rungs = {
@@ -966,8 +1142,8 @@ def run_qualification(
             "runtime_effect_verified": runtime_effect_verified,
             "policy_admitted": policy_admitted,
             "effect_confirmed": effect_confirmed,
-            "effect_expected": expected_saved,
-            "effect_observed": saved,
+            "effect_expected": expected_row,
+            "effect_observed": matched_rows[0] if len(matched_rows) == 1 else rows,
             "silent_incorrect_success": silent_incorrect_success,
             "over_halt": over_halt,
             "passed": bool(healthy_ok),
@@ -991,31 +1167,39 @@ def run_qualification(
                     "identity_verified": identity_verified,
                     "model_calls": int(report.model_calls),
                     "silent_incorrect_success": silent_incorrect_success,
+                    "verifier": {
+                        "kind": "read-only SQL",
+                        "query": (
+                            "SELECT appointment_id, request_id, patient_mrn, "
+                            "patient_name, appointment_slot, visit_type, status "
+                            "FROM appointments"
+                        ),
+                        "expected": expected_row,
+                        "rows": rows,
+                    },
+                    "workflow_digest": (
+                        workflow.manifest.content_digest
+                        if workflow.manifest is not None
+                        else None
+                    ),
                 },
             )
 
     drift_trials: list[dict] = []
     for condition_trial in range(1, TRIALS_PER_CONDITION + 1):
         _reset_kiosk(container, oracle_root)
-        note_value = f"{NOTE_VALUE} / drift-{condition_trial}"
-        params = {NOTE_PARAM: note_value}
+        params = dict(REPLAY_PARAMS)
+        params[REQUEST_ID_PARAM] = (
+            REPLAY_PARAMS[REQUEST_ID_PARAM] + f"-drift-{condition_trial}"
+        )
         authorization = build_runtime_authorization(
             workflow,
             gate_report,
             approval_source="rdp-ladder-qualification",
             params=params,
         )
-        drift_capture = (
-            PresentationCapture(
-                presentation_dir / "03-safe-halt",
-                phase="Changed-screen refusal",
-            )
-            if presentation_dir is not None and condition_trial == 1
-            else None
-        )
         drift_backend = _DriftBackend(
             FreeRDPBackend(DockerX11RdpTransport(container), connect=True),
-            presentation_capture=drift_capture,
         )
         drift_report = Replayer(
             drift_backend,
@@ -1029,11 +1213,11 @@ def run_qualification(
             bundle_dir=bundle_dir,
             run_dir=work / f"run_drift_{condition_trial}",
         )
-        saved_after_drift = _read_saved_note(oracle_root)
+        rows_after_drift = _read_appointments(oracle_root)
         # Under heavy drift the ladder must halt and must not have silently
         # written the expected or any partial/wrong effect.
         drift_halted = not drift_report.success
-        silent_write = saved_after_drift is not None
+        silent_write = bool(rows_after_drift)
         drift_no_model = drift_report.model_calls == 0
         policy_bound = drift_report.governed_policy_name == str(POLICY_PATH)
         safety_halt = any(result.safety_halt for result in drift_report.results)
@@ -1052,26 +1236,152 @@ def run_qualification(
             "false_completion": bool(drift_report.success),
             "policy_bound": policy_bound,
             "safety_halt": safety_halt,
-            "effect_after_drift": saved_after_drift,
+            "effect_after_drift": rows_after_drift,
             "passed": bool(drift_ok),
             "failure_class": None if drift_ok else "drift_contract_violation",
         }
         drift_trials.append(trial)
         trials.append(trial)
-        if drift_capture is not None:
-            drift_capture.finalize(
-                outcome="HALTED" if drift_ok else "FAILED",
+
+    wrong_record_trials: list[dict] = []
+    pointer_actions = {
+        ActionKind.CLICK,
+        ActionKind.DOUBLE_CLICK,
+        ActionKind.RIGHT_CLICK,
+        ActionKind.DRAG,
+    }
+    final_pointer_acquire = sum(
+        step.action in pointer_actions for step in workflow.steps
+    )
+    if final_pointer_acquire < 1:
+        raise RuntimeError("qualification workflow has no pointer actuation")
+    for condition_trial in range(1, TRIALS_PER_CONDITION + 1):
+        _reset_kiosk(container, oracle_root)
+        params = dict(REPLAY_PARAMS)
+        params[REQUEST_ID_PARAM] = (
+            REPLAY_PARAMS[REQUEST_ID_PARAM] + f"-wrong-{condition_trial}"
+        )
+        authorization = build_runtime_authorization(
+            workflow,
+            gate_report,
+            approval_source="rdp-ladder-qualification",
+            params=params,
+        )
+        wrong_capture = (
+            PresentationCapture(
+                presentation_dir / "03-safe-halt",
+                phase="Wrong-record refusal",
+            )
+            if presentation_dir is not None and condition_trial == 1
+            else None
+        )
+        fault_transport: DockerX11RdpTransport | PresentationRDPTransport = (
+            DockerX11RdpTransport(container)
+        )
+        raw_fault_transport = fault_transport
+        if wrong_capture is not None:
+            fault_transport = PresentationRDPTransport(
+                raw_fault_transport,
+                wrong_capture,
+            )
+        wrong_backend = FreeRDPBackend(fault_transport, connect=True)
+        original_acquire = wrong_backend.acquire_actuation_frame
+        acquire_count = 0
+        fault_injected = False
+
+        def acquire_with_wrong_record() -> bytes:
+            nonlocal acquire_count, fault_injected
+            acquire_count += 1
+            if acquire_count == final_pointer_acquire:
+                raw_fault_transport.pointer(*GRACE_ROW, "left", True)
+                raw_fault_transport.pointer(*GRACE_ROW, "left", False)
+                time.sleep(0.45)
+                fault_injected = True
+            return original_acquire()
+
+        wrong_backend.acquire_actuation_frame = acquire_with_wrong_record  # type: ignore[method-assign]
+        wrong_report = Replayer(
+            wrong_backend,
+            poll_interval_s=0.3,
+            effect_verifier=verifier,
+            governed_authorization=authorization,
+            pixel_verify_enabled=True,
+        ).run(
+            workflow,
+            params=params,
+            bundle_dir=bundle_dir,
+            run_dir=work / f"run_wrong_record_{condition_trial}",
+        )
+        rows_after_wrong_record = _read_appointments(oracle_root)
+        identity_results = [
+            result.identity.status
+            for result in wrong_report.results
+            if result.identity is not None
+        ]
+        identity_mismatch = "mismatch" in identity_results
+        halted = not wrong_report.success
+        silent_write = bool(rows_after_wrong_record)
+        policy_bound = wrong_report.governed_policy_name == str(POLICY_PATH)
+        wrong_ok = (
+            fault_injected
+            and halted
+            and identity_mismatch
+            and not silent_write
+            and wrong_report.model_calls == 0
+            and policy_bound
+        )
+        trial = {
+            "trial": len(trials) + 1,
+            "condition_trial": condition_trial,
+            "kind": "wrong_record_safe_halt",
+            "fault": (
+                "active record changed from Ada Lovelace / MRN A1001 to "
+                "Grace Hopper / MRN B2002 before the final write"
+            ),
+            "fault_injected": fault_injected,
+            "fresh_frame_acquisitions": acquire_count,
+            "fault_acquisition_index": final_pointer_acquire,
+            "halted": halted,
+            "identity_mismatch": identity_mismatch,
+            "identity_statuses": identity_results,
+            "model_calls": int(wrong_report.model_calls),
+            "silent_write": silent_write,
+            "false_completion": bool(wrong_report.success),
+            "policy_bound": policy_bound,
+            "effect_after_wrong_record": rows_after_wrong_record,
+            "passed": bool(wrong_ok),
+            "failure_class": (None if wrong_ok else "wrong_record_contract_violation"),
+        }
+        wrong_record_trials.append(trial)
+        trials.append(trial)
+        if wrong_capture is not None:
+            wrong_capture.finalize(
+                outcome="HALTED" if wrong_ok else "FAILED",
                 summary={
+                    "expected_record": "Ada Lovelace · MRN A1001",
+                    "observed_record": "Grace Hopper · MRN B2002",
+                    "identity_region": list(ACTIVE_PATIENT_IDENTIFIER_REGION),
+                    "identity_mismatch": identity_mismatch,
                     "effect_written": silent_write,
-                    "model_calls": int(drift_report.model_calls),
-                    "safety_halt": safety_halt,
+                    "verifier": {
+                        "kind": "read-only SQL",
+                        "rows": rows_after_wrong_record,
+                    },
+                    "model_calls": int(wrong_report.model_calls),
+                    "safety_halt": any(
+                        result.safety_halt for result in wrong_report.results
+                    ),
                 },
             )
 
     _reset_kiosk(container, oracle_root)
 
     successes = sum(1 for t in trials if t["passed"])
-    accepted = _accepted_contract(healthy_trials, drift_trials)
+    accepted = _accepted_contract(
+        healthy_trials,
+        drift_trials,
+        wrong_record_trials,
+    )
 
     evidence = {
         "schema_version": RESULT_SCHEMA,
@@ -1079,10 +1389,11 @@ def run_qualification(
         "candidate_commit": candidate_commit,
         "base_commit": base_commit,
         "task": (
-            "record->compile->replay a patient-note write through the "
+            "record->compile->replay an appointment booking through the "
             "vision-only resolver ladder over a real RDP round-trip, with "
-            "no structural backend; confirm the write via an independent "
-            "document oracle; and halt under injected DPI/theme/JPEG drift"
+            "no structural backend; confirm the write through read-only SQL; "
+            "halt under injected DPI/theme/JPEG drift; and halt when the "
+            "active patient changes before the write"
         ),
         "contract": {
             "healthy_trials": len(healthy_trials),
@@ -1119,6 +1430,19 @@ def run_qualification(
             "drift_false_completions": sum(
                 bool(t["false_completion"]) for t in drift_trials
             ),
+            "wrong_record_trials": len(wrong_record_trials),
+            "wrong_record_safely_halted": sum(
+                bool(t["halted"]) for t in wrong_record_trials
+            ),
+            "wrong_record_identity_mismatches": sum(
+                bool(t["identity_mismatch"]) for t in wrong_record_trials
+            ),
+            "wrong_record_silent_writes": sum(
+                bool(t["silent_write"]) for t in wrong_record_trials
+            ),
+            "wrong_record_false_completions": sum(
+                bool(t["false_completion"]) for t in wrong_record_trials
+            ),
         },
         "environment": {
             "rdp_server": "freerdp-shadow-cli3 (FreeRDP3 server)",
@@ -1128,7 +1452,9 @@ def run_qualification(
             "transport": "DockerX11RdpTransport (screenshot+xdotool over the RDP client)",
             "fixture_package_versions": fixture_versions,
             "governed_policy": POLICY_PATH.name,
-            "runtime_effect_verifier": "DocumentHashVerifier over bind-mounted oracle",
+            "runtime_effect_verifier": (
+                "SqlRecordVerifier over a separate read-only SQLite connection"
+            ),
             "pixel_identity_verify": "enabled for this synthetic qualification only",
             "viewport": list(VIEWPORT),
             "note": (
@@ -1139,8 +1465,8 @@ def run_qualification(
             ),
         },
         "oracle": (
-            "host read of the bind-mounted kiosk document, plus the runtime "
-            "DocumentHashVerifier exactly-one-new-document gate"
+            "host read of the bind-mounted appointment database, plus the "
+            "runtime read-only SQL exactly-one-new-record and status gates"
         ),
         "failure_taxonomy": [
             "connect_or_frame_failure",
@@ -1152,6 +1478,7 @@ def run_qualification(
             "effect_not_runtime_verified",
             "policy_not_admitted",
             "drift_contract_violation",
+            "wrong_record_contract_violation",
             "reset_not_acknowledged",
         ],
         "caveat": (

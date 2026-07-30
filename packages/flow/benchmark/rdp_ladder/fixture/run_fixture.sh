@@ -6,7 +6,7 @@
 set -euo pipefail
 export HOME=/root
 export RDP_FIXTURE_ORACLE_ROOT="${RDP_FIXTURE_ORACLE_ROOT:-/opt/rdp_fixture/oracle}"
-export RDP_FIXTURE_SAVE_PATH="${RDP_FIXTURE_SAVE_PATH:-${RDP_FIXTURE_ORACLE_ROOT}/saved_note.txt}"
+export RDP_FIXTURE_DB_PATH="${RDP_FIXTURE_DB_PATH:-${RDP_FIXTURE_ORACLE_ROOT}/appointments.sqlite3}"
 export RDP_FIXTURE_RESET_ACK_PATH="${RDP_FIXTURE_RESET_ACK_PATH:-${RDP_FIXTURE_ORACLE_ROOT}/reset_ack.txt}"
 export RDP_FIXTURE_THEME="${RDP_FIXTURE_THEME:-light}"
 

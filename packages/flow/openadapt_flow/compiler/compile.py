@@ -295,6 +295,43 @@ def _best_crop_text(
     return best.text.strip()
 
 
+def _best_target_text(
+    crop_lines: list[OcrLine],
+    frame_lines: list[OcrLine],
+    click: Point,
+) -> Optional[str]:
+    """Return the complete OCR label under ``click`` when one is retained.
+
+    A fixed target crop can cut a wide control label even when the full-frame
+    OCR engine retained the complete line. That truncation can remove a
+    consequential verb such as ``Save`` or ``Submit``. Prefer the most
+    confident complete full-frame line whose box contains the exact click
+    point. Keep the crop's word boundaries when both OCR passes contain the
+    same characters. Fall back to the crop when no complete line exists.
+    """
+    click_x, click_y = click
+    crop_text = _best_crop_text(crop_lines, click_y=click_y)
+    clicked_lines = [
+        line
+        for line in frame_lines
+        if line.confidence >= MIN_OCR_CONFIDENCE
+        and line.text.strip()
+        and line.region[0] <= click_x <= line.region[0] + line.region[2]
+        and line.region[1] <= click_y <= line.region[1] + line.region[3]
+    ]
+    if clicked_lines:
+        best = max(clicked_lines, key=lambda line: line.confidence)
+        frame_text = best.text.strip()
+        if (
+            crop_text
+            and re.sub(r"\W+", "", crop_text).casefold()
+            == re.sub(r"\W+", "", frame_text).casefold()
+        ):
+            return crop_text
+        return frame_text
+    return crop_text
+
+
 def _landmarks_for(
     frame_lines: list[OcrLine],
     crop_region: Region,
@@ -1634,10 +1671,12 @@ def compile_recording(
             template_rel = f"templates/{step_id}.png"
             (bundle / template_rel).write_bytes(template_bytes)
 
-            ocr_text = _best_crop_text(
-                ocr(before_png, region=crop_region), click_y=click[1]
-            )
             frame_lines = cached_lines(i, "before", before_png)
+            ocr_text = _best_target_text(
+                ocr(before_png, region=crop_region),
+                frame_lines,
+                click,
+            )
             landmarks = _landmarks_for(
                 frame_lines,
                 crop_region,

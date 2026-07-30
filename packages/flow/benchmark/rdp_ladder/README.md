@@ -27,9 +27,11 @@ run `29978847851`, attempt 2, at mechanism commit
 three drift trials passed. Healthy replay used only deterministic visual
 resolution, verified every governed pixel identity plus the runtime and host
 effects, and made zero model calls, with no over-halt or silent incorrect
-success. Every drift trial halted with no write or false completion. This is
-bounded evidence for the synthetic real-RDP surface described under
-[Honest scope](#honest-scope), not a general application-support claim.
+success. Every drift trial halted with no write or false completion. This
+historical artifact uses the previous document fixture. The v3 harness below
+uses appointment booking, read-only SQL, and a separate wrong-record campaign.
+This remains bounded evidence for the synthetic real-RDP surface described
+under [Honest scope](#honest-scope).
 
 ## Acceptance contract
 
@@ -37,20 +39,27 @@ bounded evidence for the synthetic real-RDP surface described under
 `compile_recording` → governed `Replayer` classes over a genuine RDP
 round-trip, with **no structural backend**. The harness adds explicit recorded
 pixel-identity regions, a strict fixture policy, an encrypted/sealed bundle,
-and an exactly-one-new-document effect contract before replay. It accepts only:
+and an exactly-one-new-appointment effect contract before replay. It accepts
+only:
 
 - **healthy (3 trials)**: three trial-unique parameter values succeed with zero
   model calls; only visual resolution rungs are used; every governed identity
-  requirement verifies; the runtime `DocumentHashVerifier` confirms exactly
-  one new document; and a separate host read confirms its exact contents;
+  requirement verifies; the runtime `SqlRecordVerifier` confirms exactly one
+  appointment through a separate read-only SQLite connection; and the harness
+  confirms the request ID, patient MRN, appointment slot, visit type, and saved
+  status;
 - **halt-under-drift (3 trials)**: with DPI + theme-inversion + JPEG drift
   injected onto the real session, the governed replay halts with no model call,
-  false completion, or document write.
+  false completion, or appointment write;
+- **wrong-record halt (3 trials)**: the active record changes from Ada Lovelace
+  / MRN A1001 to Grace Hopper / MRN B2002 immediately before the final write.
+  The fresh actuation frame fails identity verification, the workflow halts
+  before Save, and the appointment table remains empty.
 
 Evidence is written to `results.json`
-(`schema_version: openadapt.rdp-ladder-qualification.v2`) with an `accepted`
-gate. Reset acknowledgements and trial-unique values prevent stale state from
-satisfying the oracle.
+(`schema_version: openadapt.rdp-ladder-qualification.v3`) with an `accepted`
+gate. Reset acknowledgements, trial-unique request IDs, and the read-only
+system-of-record query prevent stale state from satisfying the verifier.
 
 ## Why FreeRDP (not the product's aardwolf client) for the Linux surface
 
@@ -120,8 +129,9 @@ python3 benchmark/rdp_ladder/run_rdp_ladder_qualification.py \
 docker rm -f oaflow-rdp-ladder
 ```
 
-Exit code `0` iff all six trials are accepted. The run takes a few minutes (the
-transport screenshots/injects over `docker exec`, one operation at a time).
+Exit code `0` iff all nine trials are accepted. The run takes a few minutes
+(the transport screenshots/injects over `docker exec`, one operation at a
+time).
 
 The env-gated pytest wrapper `tests/e2e/test_docker_rdp_vision_ladder_e2e.py`
 (`OAFLOW_DOCKER_RDP_E2E=1`) builds the fixture, runs the qualification, and
@@ -132,8 +142,7 @@ scheduled.
 
 ## Presentation artifact
 
-The same workflow can retain exact synthetic-fixture frames for a short buyer
-demo:
+The same workflow can retain exact synthetic-fixture frames for a buyer demo:
 
 ```bash
 python3 benchmark/rdp_ladder/run_rdp_ladder_qualification.py \
@@ -149,16 +158,29 @@ python3 benchmark/rdp_ladder/render_presentation.py \
   --output runs/rdp-ladder/openadapt-rdp-demo.mp4
 ```
 
-The capture observes only frames that the qualification runtime already
-requested. It does not add a screenshot or delay to the action path. The
-renderer checks every retained frame hash, adds a compact overlay after the
-run, and streams the derivative frames directly to FFmpeg. The MP4 uses paced
-presentation timing. The qualification JSON remains the result authority.
+The demonstration recorder uses presentation-only pacing and retains one exact
+post-input frame after each input. This path is isolated from production
+replay. It does not change the accepted workflow or its qualification result.
+The renderer verifies every retained frame hash and reads the exact
+`ProgramGraphSpec` exported from the accepted bundle. It does not invent target
+names or workflow structure. It shows:
+
+1. The structured appointment request.
+2. The recorded human demonstration with paced cursor and keyboard input.
+3. The real compiled workflow graph, parameters, resolution evidence, identity
+   gates, effects, and bundle digest.
+4. A replay with values that differ from the demonstration.
+5. The remote application beside the independently read SQL row.
+6. The wrong-record halt beside the unchanged empty SQL result.
+
+The renderer streams RGB frames directly to FFmpeg. The qualification JSON,
+the compiled graph JSON, and the read-only SQL evidence remain the result
+authorities.
 
 ## License posture
 
 The fixture apt-installs FreeRDP, Openbox, xdotool, and ImageMagick as external
 applications inside an ephemeral test image. No third-party source or binary is
 vendored here, the workflow does not publish the image, and none of those
-binaries enters the MIT wheel or sdist. Exact installed package versions are
-recorded in each v2 evidence artifact.
+binaries enters the MIT wheel or sdist. Each evidence artifact records the
+exact installed package versions.

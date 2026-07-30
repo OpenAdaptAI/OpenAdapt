@@ -383,6 +383,49 @@ def test_compiler_auto_classifies_write_step(two_button_bundle, tmp_path):
     assert by_id["step_001"].risk == "irreversible", by_id["step_001"].intent
 
 
+def test_compiler_uses_complete_full_frame_label_for_a_wide_write_control(
+    tmp_path: Path,
+) -> None:
+    recording = tmp_path / "wide-recording"
+    bundle = tmp_path / "wide-bundle"
+    (recording / "frames").mkdir(parents=True)
+
+    before = _blank()
+    _draw_button(before, 550, 570, 400, 64, "Save appointment")
+    after = before.copy()
+    cv2.putText(
+        after,
+        "Appointment saved",
+        (550, 680),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 0, 0),
+        2,
+        cv2.LINE_AA,
+    )
+    _write_frame(recording, 0, "before", before)
+    _write_frame(recording, 0, "after", after)
+    (recording / "events.jsonl").write_text(
+        json.dumps({"i": 0, "kind": "click", "x": 720, "y": 600, "t": 1.0}) + "\n"
+    )
+    (recording / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": "rec-wide-write",
+                "created_at": "2026-07-30T00:00:00+00:00",
+                "viewport": list(VIEWPORT),
+                "params": {},
+            }
+        )
+    )
+
+    workflow = compile_recording(recording, bundle, name="wide-write")
+
+    assert workflow.steps[0].anchor is not None
+    assert workflow.steps[0].anchor.ocr_text == "Save appointment"
+    assert workflow.steps[0].risk == "irreversible"
+
+
 def test_risk_overrides_still_win_both_directions(two_button_bundle, tmp_path):
     wf = compile_recording(
         two_button_bundle["recording"],

@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-"""Deterministic Tk kiosk app for the real-RDP vision-ladder e2e fixture.
+"""Deterministic appointment-booking kiosk for the real-RDP qualification.
 
-Runs as the entire RDP session (no desktop chrome) so the framebuffer is a
-fixed, reproducible pixel surface for template/OCR resolution. No animation, a
-solid (non-blinking) caret, and fixed DejaVu fonts keep rendering identical
-run-to-run. Saving a note writes it to SAVE_PATH so an out-of-band
-DocumentHashVerifier oracle can confirm the effect with no app API.
+The application runs as the complete remote session. It has no DOM or
+accessibility tree. OpenAdapt must therefore use the RDP pixels for observation
+and the RDP input channel for actuation.
+
+Booking writes one row to a SQLite system of record. The qualification process
+opens that database through a separate read-only connection. The verifier does
+not trust the screen or the application success message.
 """
 
+import hashlib
 import os
 import signal
+import sqlite3
 import tkinter as tk
 
-SAVE_PATH = os.environ.get("RDP_FIXTURE_SAVE_PATH", "/opt/rdp_fixture/saved_note.txt")
+DB_PATH = os.environ.get(
+    "RDP_FIXTURE_DB_PATH",
+    "/opt/rdp_fixture/oracle/appointments.sqlite3",
+)
 RESET_ACK_PATH = os.environ.get(
     "RDP_FIXTURE_RESET_ACK_PATH", "/opt/rdp_fixture/reset_ack.txt"
 )
@@ -31,7 +38,34 @@ PATIENTS = [
 state = {"active": None, "saved": False}
 
 
+def _connect() -> sqlite3.Connection:
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    connection = sqlite3.connect(DB_PATH)
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS appointments (
+            appointment_id TEXT PRIMARY KEY,
+            request_id TEXT NOT NULL UNIQUE,
+            patient_mrn TEXT NOT NULL,
+            patient_name TEXT NOT NULL,
+            appointment_slot TEXT NOT NULL,
+            visit_type TEXT NOT NULL,
+            status TEXT NOT NULL
+        )
+        """
+    )
+    connection.commit()
+    return connection
+
+
+def _clear_appointments() -> None:
+    with _connect() as connection:
+        connection.execute("DELETE FROM appointments")
+        connection.commit()
+
+
 def main() -> None:
+    _clear_appointments()
     root = tk.Tk()
     root.title("OpenAdapt RDP Fixture")
     root.geometry("1280x800+0+0")
@@ -47,29 +81,37 @@ def main() -> None:
 
     tk.Label(
         root,
-        text="OpenAdapt RDP Fixture  -  Patient Notes",
+        text="Northstar Clinic  ·  Appointment Scheduling",
         font=("DejaVu Sans", 26, "bold"),
         bg=BG,
         fg=FG,
-    ).place(x=60, y=40)
+    ).place(x=50, y=34)
 
-    tk.Label(root, text="Roster", font=("DejaVu Sans", 16, "bold"), bg=BG, fg=FG).place(
-        x=60, y=120
-    )
+    tk.Label(
+        root,
+        text="Patient roster",
+        font=("DejaVu Sans", 16, "bold"),
+        bg=BG,
+        fg=FG,
+    ).place(x=50, y=116)
 
     active_lbl = tk.Label(
-        root, text="Active: (none)", font=("DejaVu Sans", 16), bg=BG, fg=FG
+        root,
+        text="Active record: (none)",
+        font=("DejaVu Sans", 16, "bold"),
+        bg=BG,
+        fg=FG,
     )
-    active_lbl.place(x=60, y=470)
+    active_lbl.place(x=550, y=130)
 
     status_lbl = tk.Label(
         root, text="", font=("DejaVu Sans", 16, "bold"), bg=BG, fg="#1a7f37"
     )
-    status_lbl.place(x=60, y=690)
+    status_lbl.place(x=550, y=660)
 
     def select(name, mrn, btn):
         state["active"] = (name, mrn)
-        active_lbl.config(text=f"Active: {name}  {mrn}")
+        active_lbl.config(text=f"Active record: {name}  {mrn}")
         for b in row_btns:
             b.config(relief="raised", bd=2)
         btn.config(relief="sunken", bd=4)
@@ -89,50 +131,141 @@ def main() -> None:
             bd=2,
         )
         b.config(command=lambda n=name, m=mrn, bb=b: select(n, m, bb))
-        b.place(x=60, y=170 + i * 70)
+        b.place(x=50, y=166 + i * 70)
         row_btns.append(b)
 
     tk.Label(
-        root, text="Clinical note", font=("DejaVu Sans", 16, "bold"), bg=BG, fg=FG
-    ).place(x=60, y=530)
-    note = tk.Entry(
+        root,
+        text="Appointment slot",
+        font=("DejaVu Sans", 16, "bold"),
+        bg=BG,
+        fg=FG,
+    ).place(x=550, y=210)
+    slot = tk.Entry(
         root,
         font=("DejaVu Sans", 18),
-        width=44,
+        width=35,
         bg=ROW_BG,
         fg=FG,
         insertbackground=FG,
         insertofftime=0,
     )
-    note.place(x=60, y=570)
-    # Clicking the field claims both the toplevel X focus and the widget focus,
-    # so RDP-forwarded keystrokes land here even with no window manager.
-    note.bind("<Button-1>", lambda e: (root.focus_force(), note.focus_set()))
+    slot.place(x=550, y=250)
+
+    tk.Label(
+        root,
+        text="Visit type",
+        font=("DejaVu Sans", 16, "bold"),
+        bg=BG,
+        fg=FG,
+    ).place(x=550, y=330)
+    visit_type = tk.Entry(
+        root,
+        font=("DejaVu Sans", 18),
+        width=35,
+        bg=ROW_BG,
+        fg=FG,
+        insertbackground=FG,
+        insertofftime=0,
+    )
+    visit_type.place(x=550, y=370)
+
+    tk.Label(
+        root,
+        text="Request ID",
+        font=("DejaVu Sans", 16, "bold"),
+        bg=BG,
+        fg=FG,
+    ).place(x=550, y=450)
+    request_id = tk.Entry(
+        root,
+        font=("DejaVu Sans", 18),
+        width=35,
+        bg=ROW_BG,
+        fg=FG,
+        insertbackground=FG,
+        insertofftime=0,
+    )
+    request_id.place(x=550, y=490)
+
+    for field in (slot, visit_type, request_id):
+        # The complete remote session has no window manager. A click must claim
+        # the X focus and the exact field focus before RDP text delivery.
+        field.bind(
+            "<Button-1>",
+            lambda _event, target=field: (root.focus_force(), target.focus_set()),
+        )
 
     def save():
         active = state["active"]
-        text = note.get()
-        if not active or not text:
+        appointment_slot = slot.get().strip()
+        appointment_type = visit_type.get().strip()
+        request = request_id.get().strip()
+        if not active or not appointment_slot or not appointment_type or not request:
             status_lbl.config(
-                text="Refused: select a patient and enter a note", fg="#b42318"
+                text="Refused: select a patient and complete all fields",
+                fg="#b42318",
             )
             return
-        os.makedirs(os.path.dirname(SAVE_PATH), exist_ok=True)
-        with open(SAVE_PATH, "w") as f:
-            f.write(f"{active[1]}\t{text}\n")
+        appointment_id = (
+            "APT-" + hashlib.sha256(request.encode()).hexdigest()[:8].upper()
+        )
+        with _connect() as connection:
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO appointments (
+                        appointment_id,
+                        request_id,
+                        patient_mrn,
+                        patient_name,
+                        appointment_slot,
+                        visit_type,
+                        status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        appointment_id,
+                        request,
+                        active[1],
+                        active[0],
+                        appointment_slot,
+                        appointment_type,
+                        "scheduled",
+                    ),
+                )
+                connection.commit()
+            except sqlite3.IntegrityError:
+                existing = connection.execute(
+                    """
+                    SELECT patient_mrn, appointment_slot, visit_type
+                    FROM appointments
+                    WHERE request_id = ?
+                    """,
+                    (request,),
+                ).fetchone()
+                if existing != (active[1], appointment_slot, appointment_type):
+                    status_lbl.config(
+                        text="Refused: request ID already belongs to another booking",
+                        fg="#b42318",
+                    )
+                    return
         state["saved"] = True
-        status_lbl.config(text=f"Saved note for {active[0]}", fg="#1a7f37")
+        status_lbl.config(
+            text=f"Appointment booked for {active[0]}  ·  {appointment_id}",
+            fg="#1a7f37",
+        )
 
     tk.Button(
         root,
-        text="Save Note",
+        text="Save appointment",
         font=("DejaVu Sans", 18, "bold"),
-        width=16,
+        width=20,
         bg=BTN_BG,
         fg="#ffffff",
         activebackground=BTN_BG,
         command=save,
-    ).place(x=760, y=566)
+    ).place(x=550, y=570)
 
     # In-place trial reset (SIGUSR1): clear the form and delete the saved note
     # WITHOUT destroying the window -- so the RDP display never goes black and
@@ -156,15 +289,13 @@ def main() -> None:
     def _apply_reset() -> None:
         state["active"] = None
         state["saved"] = False
-        note.delete(0, tk.END)
-        active_lbl.config(text="Active: (none)")
+        for field in (slot, visit_type, request_id):
+            field.delete(0, tk.END)
+        active_lbl.config(text="Active record: (none)")
         status_lbl.config(text="", fg="#1a7f37")
         for b in row_btns:
             b.config(relief="raised", bd=2)
-        try:
-            os.remove(SAVE_PATH)
-        except OSError:
-            pass
+        _clear_appointments()
         root.focus_force()
         reset_sequence["v"] += 1
         _ack_reset()
