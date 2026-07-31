@@ -41,13 +41,21 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Mapping, Optional
+from urllib.parse import urlsplit
 
 from openadapt_flow.connector.config import ConnectorSettings
 from openadapt_flow.connector.protocol import ByocGovernanceError, ByocJob
 from openadapt_flow.connector.storage import CustomerStorage, extract_bundle_archive
 from openadapt_flow.failure_signals import automation_failure_signal
 from openadapt_flow.ir import RunReport
+from openadapt_flow.runner.dispatch_envelope import (
+    write_managed_dispatch_envelope_value,
+)
+from openadapt_flow.runtime.durable.authority import (
+    REMOTE_AUTHORITY_TOKEN_ENV,
+    REMOTE_AUTHORITY_URL_ENV,
+)
 
 #: A run-gate refusal (fail-closed admission denied) exits 2 before the replay
 #: creates report.json.
@@ -64,7 +72,9 @@ class RunOutcome:
 
 #: A runner maps argv -> RunOutcome. The default shells the governed ``run`` CLI
 #: in a child process; tests inject a fake to avoid launching a GUI.
-Runner = Callable[[list[str], Path], RunOutcome]
+Runner = Callable[[list[str], Path, Mapping[str, str]], RunOutcome]
+
+_MANAGED_DELIVERY_AUTHORITY_PATH = "/api/internal/managed-delivery-permit"
 
 
 @dataclass
@@ -104,6 +114,7 @@ def build_run_argv(
     bundle_dir: Path,
     run_dir: Path,
     params_file: Optional[Path],
+    managed_dispatch_file: Optional[Path] = None,
 ) -> list[str]:
     """The exact governed CLI invocation for a verified BYOC dispatch.
 
@@ -132,14 +143,23 @@ def build_run_argv(
         argv += ["--params-file", str(params_file)]
     if job.target_url:
         argv += ["--url", job.target_url]
+    if managed_dispatch_file is not None:
+        argv += ["--managed-dispatch-file", str(managed_dispatch_file)]
     if settings.allow_unencrypted:
         # Local escape hatch, mirroring the governed run CLI; default OFF.
         argv.append("--allow-unencrypted")
     return argv
 
 
-def _subprocess_runner(argv: list[str], run_dir: Path) -> RunOutcome:
-    proc = subprocess.run(argv, capture_output=True, text=True)  # nosec - fixed argv
+def _subprocess_runner(
+    argv: list[str], run_dir: Path, child_env: Mapping[str, str]
+) -> RunOutcome:
+    proc = subprocess.run(  # nosec - fixed argv and exact process-local env
+        argv,
+        capture_output=True,
+        text=True,
+        env=dict(child_env),
+    )
     report_path = run_dir / "report.json"
     report: dict[str, Any] = {}
     if report_path.is_file():
@@ -267,6 +287,44 @@ def _write_policy_audit(job: ByocJob, run_dir: Path) -> None:
         pass
 
 
+def _assert_managed_authority_is_pinned(
+    job: ByocJob, settings: ConnectorSettings
+) -> None:
+    """Keep the run capability on the enrolled control-plane origin."""
+
+    if job.managed_dispatch is None:
+        return
+    try:
+        configured = urlsplit(settings.control_plane_url)
+        delivered = urlsplit(job.managed_delivery_authority_url or "")
+        configured_port = configured.port or (
+            443 if configured.scheme == "https" else None
+        )
+        delivered_port = delivered.port or (
+            443 if delivered.scheme == "https" else None
+        )
+    except ValueError as exc:
+        raise ByocGovernanceError(
+            "byoc managed delivery authority URL is invalid"
+        ) from exc
+    if (
+        configured.scheme != "https"
+        or not configured.hostname
+        or configured.username is not None
+        or configured.password is not None
+        or bool(configured.query)
+        or bool(configured.fragment)
+        or delivered.scheme != "https"
+        or delivered.hostname != configured.hostname
+        or delivered_port != configured_port
+        or delivered.path != _MANAGED_DELIVERY_AUTHORITY_PATH
+    ):
+        raise ByocGovernanceError(
+            "byoc managed delivery authority is not pinned to the enrolled "
+            "control plane (fail closed)"
+        )
+
+
 def execute_job(
     job: ByocJob,
     settings: ConnectorSettings,
@@ -284,6 +342,7 @@ def execute_job(
     # 1. Governance gates (fail closed BEFORE any bundle is fetched or run).
     try:
         job.ensure_governed(require_run_token=require_run_token)
+        _assert_managed_authority_is_pinned(job, settings)
     except ByocGovernanceError as exc:
         return ExecutionResult("failed", {}, None, job.report_ref(), str(exc))
     if not _grounding_env_available(job):
@@ -332,10 +391,32 @@ def execute_job(
 
         try:
             params_file = _write_params_file(job.params, run_dir)
+            managed_dispatch_file = None
+            child_env = os.environ.copy()
+            # Never let a long-running Connector inherit stale authority from
+            # its service environment. Add the exact run capability only for
+            # the child that also receives the matching dispatch envelope.
+            child_env.pop(REMOTE_AUTHORITY_URL_ENV, None)
+            child_env.pop(REMOTE_AUTHORITY_TOKEN_ENV, None)
+            if job.managed_dispatch is not None:
+                managed_dispatch_file = write_managed_dispatch_envelope_value(
+                    run_dir / "managed-dispatch.json", job.managed_dispatch
+                )
+                child_env[REMOTE_AUTHORITY_URL_ENV] = str(
+                    job.managed_delivery_authority_url
+                )
+                child_env[REMOTE_AUTHORITY_TOKEN_ENV] = str(job.run_token)
 
             # 3. The governed, fail-closed child invocation.
-            argv = build_run_argv(job, settings, Path(bundle_dir), run_dir, params_file)
-            outcome = runner(argv, run_dir)
+            argv = build_run_argv(
+                job,
+                settings,
+                Path(bundle_dir),
+                run_dir,
+                params_file,
+                managed_dispatch_file,
+            )
+            outcome = runner(argv, run_dir, child_env)
         except Exception as exc:
             return ExecutionResult(
                 "failed",

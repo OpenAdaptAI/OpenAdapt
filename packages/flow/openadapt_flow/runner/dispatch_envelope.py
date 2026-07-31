@@ -93,18 +93,18 @@ class ManagedDispatchEnvelope(BaseModel):
         return self.authorization
 
 
-def write_managed_dispatch_envelope(path: Path, verified: "VerifiedDispatch") -> Path:
-    """Write one already verified dispatch without following a path."""
+def write_managed_dispatch_envelope_value(
+    path: Path, envelope: ManagedDispatchEnvelope
+) -> Path:
+    """Write one strictly parsed dispatch envelope without following a path.
 
-    run_id = verified.payload.run_id
-    authorization = verified.payload.authorization
-    envelope = ManagedDispatchEnvelope(
-        run_id=run_id,
-        bundle_content_digest=authorization.bundle_content_digest,
-        runtime_inputs_digest=authorization.runtime_inputs_digest,
-        authorization=authorization,
-        dispatch_binding_sha256=verified.payload.dispatch_binding_sha256,
-    )
+    This is the shared process-boundary writer for both push runners and the
+    customer-controlled outbound-pull Connector.  The caller must already hold
+    the strict :class:`ManagedDispatchEnvelope` model; this function rechecks
+    its internal authorization binding before any bytes reach disk.
+    """
+
+    envelope.exact_authorization()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
@@ -134,6 +134,21 @@ def write_managed_dispatch_envelope(path: Path, verified: "VerifiedDispatch") ->
     finally:
         os.close(descriptor)
     return path
+
+
+def write_managed_dispatch_envelope(path: Path, verified: "VerifiedDispatch") -> Path:
+    """Write one already verified runner dispatch without following a path."""
+
+    run_id = verified.payload.run_id
+    authorization = verified.payload.authorization
+    envelope = ManagedDispatchEnvelope(
+        run_id=run_id,
+        bundle_content_digest=authorization.bundle_content_digest,
+        runtime_inputs_digest=authorization.runtime_inputs_digest,
+        authorization=authorization,
+        dispatch_binding_sha256=verified.payload.dispatch_binding_sha256,
+    )
+    return write_managed_dispatch_envelope_value(path, envelope)
 
 
 def _read_managed_dispatch_envelope(path: Path) -> ManagedDispatchEnvelope:

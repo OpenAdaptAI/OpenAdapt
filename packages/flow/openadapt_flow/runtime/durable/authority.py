@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Iterator, Literal, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pydantic import BaseModel, ConfigDict
 
@@ -68,6 +68,27 @@ _REMOTE_OPERATIONS = {
     "teach",
     "escalate",
 }
+
+
+class _RefuseRemoteAuthorityRedirects(HTTPRedirectHandler):
+    """Keep the runner credential on the configured authority origin."""
+
+    def redirect_request(
+        self,
+        req: Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        raise HTTPError(
+            req.full_url,
+            code,
+            "remote delivery authority redirects are refused",
+            headers,
+            fp,
+        )
 
 
 def _is_windows() -> bool:
@@ -1645,7 +1666,8 @@ class DurableAuthority:
                 response_bytes = self._remote_transport(url, headers, body)
             else:
                 request = Request(url, data=body, headers=headers, method="POST")
-                with urlopen(request, timeout=10) as response:  # nosec B310 - HTTPS above
+                opener = build_opener(_RefuseRemoteAuthorityRedirects())
+                with opener.open(request, timeout=10) as response:  # nosec B310 - HTTPS above
                     if not 200 <= response.status < 300:
                         raise DurableAuthorityBusy("remote delivery authority refused")
                     response_bytes = response.read(

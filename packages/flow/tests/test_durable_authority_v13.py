@@ -17,6 +17,7 @@ from typing import Literal
 
 import pytest
 
+import openadapt_flow.runtime.durable.authority as durable_authority_module
 from openadapt_flow.ir import ActionKind, RunReport, Step, StepResult, Workflow
 from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 from openadapt_flow.runtime.durable.approval import (
@@ -293,6 +294,60 @@ def test_production_delivery_requires_remote_configuration(
             owner_nonce_sha256=owner,
         )
     assert not called
+    assert authority.validate(manifest).delivery_sequence == 0
+
+
+def test_remote_authority_refuses_redirect_before_forwarding_bearer_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, authority, owner = _remote_ready_authority(
+        tmp_path, monkeypatch, lambda *_args: b"{}"
+    )
+    authority._remote_transport = None
+    monkeypatch.setenv(
+        REMOTE_AUTHORITY_URL_ENV,
+        "https://control.example/api/internal/managed-delivery-permit",
+    )
+    attempted_urls: list[str] = []
+
+    class RedirectingOpener:
+        def __init__(self, handler: object) -> None:
+            self.handler = handler
+
+        def open(self, request: object, *, timeout: int) -> object:
+            assert timeout == 10
+            attempted_urls.append(request.full_url)  # type: ignore[attr-defined]
+            assert request.get_header("Authorization") == "Bearer secret-token"  # type: ignore[attr-defined]
+            self.handler.redirect_request(  # type: ignore[attr-defined]
+                request,
+                None,
+                307,
+                "Temporary Redirect",
+                {},
+                "https://attacker.invalid/permit",
+            )
+            raise AssertionError("redirect refusal must stop the request")
+
+    def build_redirecting_opener(handler: object) -> RedirectingOpener:
+        assert isinstance(
+            handler, durable_authority_module._RefuseRemoteAuthorityRedirects
+        )
+        return RedirectingOpener(handler)
+
+    monkeypatch.setattr(
+        durable_authority_module,
+        "build_opener",
+        build_redirecting_opener,
+    )
+    with pytest.raises(DurableAuthorityBusy, match="unavailable or refused"):
+        authority.before_delivery(
+            manifest,
+            attempt_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            owner_nonce_sha256=owner,
+        )
+    assert attempted_urls == [
+        "https://control.example/api/internal/managed-delivery-permit"
+    ]
     assert authority.validate(manifest).delivery_sequence == 0
 
 

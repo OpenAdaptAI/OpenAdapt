@@ -28,6 +28,8 @@ import httpx
 
 from openadapt_flow.hosted import HostedError
 
+MANAGED_DELIVERY_AUTHORITY_CAPABILITY = "managed_delivery_authority_v1"
+
 
 class ConnectorClientError(HostedError):
     """An outbound control-plane call failed."""
@@ -88,7 +90,12 @@ class ConnectorClient:
         """Long-poll for the next leased job. Returns the poll envelope
         ``{"job": {...}}`` or None on a 204 (no work in the wait window)."""
         resp = self._client.post(
-            "/api/connector/poll", json={"wait": wait_s}, headers=self._bearer()
+            "/api/connector/poll",
+            json={
+                "wait": wait_s,
+                "capabilities": [MANAGED_DELIVERY_AUTHORITY_CAPABILITY],
+            },
+            headers=self._bearer(),
         )
         if resp.status_code == 204:
             return None

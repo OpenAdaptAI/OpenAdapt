@@ -21,10 +21,12 @@ our-owned signed URL that has no place on the byoc path.
 from __future__ import annotations
 
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from openadapt_flow.ir import ExecutionTargetKind
+from openadapt_flow.runner.dispatch_envelope import ManagedDispatchEnvelope
 
 
 class ByocJobParseError(ValueError):
@@ -100,9 +102,15 @@ class ByocJob(BaseModel):
     bundle_download_url: Optional[str] = None
 
     # --- Governed callback binding (fail-closed) -------------------------------
-    #: Run-scoped HMAC capability presented as ``x-run-token`` on the PHI-free
-    #: callback. Not a secret value — proves this run, forbids forging another.
+    #: Run-scoped bearer capability presented as ``x-run-token`` on the PHI-free
+    #: callback. It proves this run and must remain private.
     run_token: Optional[str] = None
+    #: Exact Cloud-issued, one-run authority. It stays PHI-free and is written
+    #: to a private local file before the governed child starts.
+    managed_dispatch: Optional[ManagedDispatchEnvelope] = None
+    #: HTTPS endpoint that issues monotonic per-action delivery permits for the
+    #: exact managed dispatch. The run-scoped ``run_token`` authenticates it.
+    managed_delivery_authority_url: Optional[str] = None
     bundle_version_id: Optional[str] = None
     runtime_validation_id: Optional[str] = None
     #: SHA-256 of the exact approved sanitized derivative ZIP bytes staged at
@@ -162,6 +170,46 @@ class ByocJob(BaseModel):
                 "byoc dispatch is missing a run-scoped callback token; refusing "
                 "to run a job whose outcome we could not report (fail closed)"
             )
+        if (self.managed_dispatch is None) != (
+            self.managed_delivery_authority_url is None
+        ):
+            raise ByocGovernanceError(
+                "byoc managed dispatch and delivery authority must be supplied "
+                "together (fail closed)"
+            )
+        if self.managed_dispatch is not None:
+            try:
+                authorization = self.managed_dispatch.exact_authorization()
+            except ValueError as exc:
+                raise ByocGovernanceError(
+                    "byoc managed dispatch has an invalid authorization binding"
+                ) from exc
+            if self.managed_dispatch.run_id != self.run_id:
+                raise ByocGovernanceError(
+                    "byoc managed dispatch belongs to a different run (fail closed)"
+                )
+            if not authorization.approval_source.startswith("hosted:"):
+                raise ByocGovernanceError(
+                    "byoc managed dispatch lacks hosted authorization provenance"
+                )
+            try:
+                parsed = urlsplit(self.managed_delivery_authority_url or "")
+            except ValueError as exc:
+                raise ByocGovernanceError(
+                    "byoc managed delivery authority URL is invalid"
+                ) from exc
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or bool(parsed.query)
+                or bool(parsed.fragment)
+            ):
+                raise ByocGovernanceError(
+                    "byoc managed delivery authority must be a credential-free "
+                    "HTTPS endpoint without query or fragment"
+                )
         if not self.bundle_version_id or not self.runtime_validation_id:
             raise ByocGovernanceError(
                 "byoc dispatch is missing its immutable bundle-version or "
