@@ -23,6 +23,7 @@ unavoidable and the outcome needs proof.
 [Documentation](https://docs.openadapt.ai) ·
 [Desktop downloads](https://openadapt.ai/download) ·
 [OpenAdapt Cloud](https://app.openadapt.ai) ·
+[OpenAdapt Execute](https://openadapt.ai/execute) ·
 [Qualify a workflow](https://openadapt.ai/qualify)
 
 > **Repository role:** this is the flagship OpenAdapt project, the source of
@@ -173,6 +174,21 @@ verification interfaces, and basic qualification tools are MIT licensed.
 OpenAdapt Cloud is the commercial multi-tenant control plane for managed
 operation, fleet governance, billing, and enterprise integrations. Local
 safety-critical verification is not paywalled.
+
+## OpenAdapt Execute for partners
+
+[OpenAdapt Execute](https://openadapt.ai/execute) is the private partner
+service for software and service providers that need to complete an authorized
+transaction in an application they cannot directly integrate with. The partner
+supplies structured input and business authorization. OpenAdapt runs the exact
+qualified workflow in the customer-controlled environment, verifies the
+declared business effect, and returns an asynchronous receipt with `VERIFIED`
+or a precise non-success outcome.
+
+OpenAdapt Execute starts with one named transaction and one qualified customer
+environment. It is a private pilot service, not a public self-service API. See
+the [OpenAdapt Execute guide](https://docs.openadapt.ai/commercial/oem-brief/)
+for the partner contract and qualification process.
 
 ## Evidence
 
