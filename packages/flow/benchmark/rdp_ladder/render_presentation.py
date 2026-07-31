@@ -4,7 +4,8 @@
 The renderer consumes:
 
 * exact RDP frames and input events from the isolated presentation capture;
-* the exact ``ProgramGraphSpec`` emitted by ``build_program_graph``;
+* the exact ``ProgramGraphSpec`` emitted by ``build_program_graph`` and shown
+  beside the video;
 * the exact run parameters used by the first governed replay;
 * the independent SQL rows retained in the run summary.
 
@@ -36,7 +37,6 @@ PHASE_DIRS = (
 )
 BG = "#071113"
 PANEL = "#0d1c1f"
-PANEL_2 = "#13272a"
 TEXT = "#f2f8f7"
 MUTED = "#a8bcba"
 TEAL = "#45d6c3"
@@ -466,7 +466,7 @@ def _demonstration_frames(
                     (
                         _overlay(
                             last_frame,
-                            phase="1 · Demonstrate",
+                            phase="Demonstrate",
                             detail="Human-paced input over RDP",
                             cursor=cursor,
                         ),
@@ -493,7 +493,7 @@ def _demonstration_frames(
                     (
                         _overlay(
                             last_frame,
-                            phase="1 · Demonstrate",
+                            phase="Demonstrate",
                             detail="Mouse and keyboard are retained",
                             cursor=point,
                         ),
@@ -506,7 +506,7 @@ def _demonstration_frames(
                     (
                         _overlay(
                             last_frame,
-                            phase="1 · Demonstrate",
+                            phase="Demonstrate",
                             detail="Action recorded",
                             cursor=cursor,
                             click=True,
@@ -519,83 +519,6 @@ def _demonstration_frames(
     if not images:
         raise RuntimeError("demonstration timeline has no renderable frames")
     return images
-
-
-def _graph_view(spec: dict, *, active_index: int | None = None) -> Image.Image:
-    image = _base()
-    draw = ImageDraw.Draw(image)
-    _brand(draw, section="Real compiled artifact")
-    bundle = spec["bundle"]
-    draw.text(
-        (44, 104),
-        bundle["name"],
-        font=_font(34, bold=True),
-        fill=TEXT,
-    )
-    params = [f"${item['name']}" for item in bundle.get("params", [])]
-    draw.text(
-        (45, 150),
-        "Parameters: " + ("  ·  ".join(params) if params else "none"),
-        font=_font(16),
-        fill=MUTED,
-    )
-
-    nodes = spec["nodes"]
-    positions: list[tuple[int, int, int, int]] = []
-    for index, node in enumerate(nodes):
-        col, row = index % 3, index // 3
-        x = 38 + col * 414
-        y = 194 + row * 176
-        box = (x, y, x + 378, y + 138)
-        positions.append(box)
-        highlighted = active_index is None or index <= active_index
-        fill = PANEL_2 if highlighted else PANEL
-        outline = TEAL if index == active_index else "#284248"
-        draw.rounded_rectangle(box, 18, fill=fill, outline=outline, width=3)
-        draw.text(
-            (x + 18, y + 14),
-            f"{index + 1:02d}",
-            font=_font(15, bold=True),
-            fill=TEAL if highlighted else MUTED,
-        )
-        title_lines = _wrap(node["title"], 35)[:2]
-        title_y = y + 12
-        for line in title_lines:
-            draw.text((x + 58, title_y), line, font=_font(16, bold=True), fill=TEXT)
-            title_y += 23
-        details: list[str] = []
-        resolution = node.get("resolution")
-        if resolution and resolution.get("top_rung"):
-            details.append(f"resolve: {resolution['top_rung']}")
-        if node.get("param"):
-            details.append(f"input: ${node['param']}")
-        if node.get("badges"):
-            details.extend(node["badges"][:2])
-        detail = "  ·  ".join(details) or node.get("kind", "")
-        for line in _wrap(detail, 47)[:2]:
-            draw.text((x + 18, title_y + 8), line, font=_font(13), fill=MUTED)
-            title_y += 19
-
-    for index in range(len(positions) - 1):
-        left = positions[index]
-        right = positions[index + 1]
-        if index % 3 != 2:
-            start = (left[2] + 4, (left[1] + left[3]) // 2)
-            end = (right[0] - 6, (right[1] + right[3]) // 2)
-        else:
-            start = ((left[0] + left[2]) // 2, left[3] + 3)
-            end = ((right[0] + right[2]) // 2, right[1] - 5)
-        draw.line((start, end), fill="#527277", width=3)
-
-    provenance = bundle.get("provenance") or {}
-    digest = provenance.get("content_digest") or "not available"
-    draw.text(
-        (45, 742),
-        f"Graph spec v{spec['spec_version']}  ·  bundle {str(digest)[:20]}",
-        font=_font(14),
-        fill=MUTED,
-    )
-    return image
 
 
 def _selected_frames(
@@ -872,26 +795,13 @@ def render(presentation_dir: Path, output: Path) -> dict:
             )
         presented_counts["01-demonstration"] = len(demo_images)
 
-        nodes = graph["nodes"]
-        for index in range(len(nodes)):
-            count = _write_repeated(
-                process, _graph_view(graph, active_index=index), 1.1
-            )
-            timeline.append(
-                count,
-                phase="compiled_workflow",
-                compiled_graph={"node_id": nodes[index]["id"], "node_index": index},
-            )
-        count = _write_repeated(process, _graph_view(graph), 3.6)
-        timeline.append(count, phase="compiled_workflow")
-
         replay_images = _selected_frames(phase_frames["02-verified-replay"])
         for source_event, image in replay_images:
             count = _write_repeated(
                 process,
                 _overlay(
                     image,
-                    phase="3 · Execute",
+                    phase="Execute",
                     detail="The correct record is checked before input",
                 ),
                 0.38,

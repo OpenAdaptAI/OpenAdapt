@@ -251,11 +251,8 @@ def test_presentation_is_hash_bound_and_renders_without_staged_video_frames(
     )
     assert all("sha256" in entry["source_frame"] for entry in source_entries)
     assert all("target_geometry" not in entry for entry in timeline["timeline"])
-    graph_entries = [
-        entry for entry in timeline["timeline"] if "compiled_graph" in entry
-    ]
-    assert graph_entries
-    assert all("node_id" in entry["compiled_graph"] for entry in graph_entries)
+    assert "compiled_workflow" not in {entry["phase"] for entry in timeline["timeline"]}
+    assert not any("compiled_graph" in entry for entry in timeline["timeline"])
     source_manifests = {
         name: json.loads(
             (tmp_path / name / "manifest.json").read_text(encoding="utf-8")
@@ -276,9 +273,10 @@ def test_presentation_is_hash_bound_and_renders_without_staged_video_frames(
     ]["sha256"] = "0" * 64
     invalid_timelines.append((invalid, "does not match its manifest"))
     invalid = copy.deepcopy(timeline)
-    next(entry for entry in invalid["timeline"] if "compiled_graph" in entry)[
-        "compiled_graph"
-    ]["node_id"] = "different-step"
+    invalid["timeline"][0]["compiled_graph"] = {
+        "node_index": 0,
+        "node_id": "different-step",
+    }
     invalid_timelines.append((invalid, "does not match the graph"))
     invalid = copy.deepcopy(timeline)
     invalid["timeline"][0]["facts"]["record_value"] = "not allowed"
