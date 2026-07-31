@@ -64,6 +64,18 @@ const ACTION_WIRE = {
       "Passes the decision on. The run stays paused exactly where it is and " +
       "nothing in the application is touched.",
   },
+  reconcile: {
+    // Reconciliation is not a retry. The runner looks for the declared
+    // persisted effect of the earlier delivery and reports what it finds. It
+    // never dispatches that earlier action again from this decision path.
+    wire: "reconcile",
+    label: "Check what happened",
+    brief: "Checks, never resends",
+    consequence:
+      "OpenAdapt checks whether the earlier action already changed the system " +
+      "of record. It does not send that action again. If it cannot prove the " +
+      "result, the run stays paused for reconciliation.",
+  },
 };
 
 const DISPOSITION = {
@@ -72,6 +84,7 @@ const DISPOSITION = {
   reject: "rejected_by_operator",
   teach: "teach_requested",
   escalate: "needs_assistance",
+  reconcile: "reconcile_requested",
 };
 
 // -------------------------------------------------- the terminal receipt shape
@@ -88,22 +101,39 @@ const DISPOSITION = {
 
 const RECEIPT_COPY = {
   "completed/verified_and_resumed": {
+    label: "CHECKS PASSED",
+    tone: "success",
     text:
       "Checked and continued. OpenAdapt re-read the live screen, its checks " +
       "passed, and the workflow moved on.",
     terminal: true,
   },
   "completed/skipped_and_resumed": {
+    label: "STEP SKIPPED",
+    tone: "neutral",
     text: "Step skipped. The workflow continued from the next step.",
     terminal: true,
   },
+  "completed/reconciled_and_resumed": {
+    label: "RESULT PROVED",
+    tone: "success",
+    text:
+      "Reconciled and continued. OpenAdapt proved the earlier action already " +
+      "changed the system of record. It did not send that action again.",
+    terminal: true,
+    reconciliation: true,
+  },
   "halted/continuation_halted": {
+    label: "PAUSED AGAIN",
+    tone: "halted",
     text:
       "OpenAdapt continued and then stopped again further on. Nothing was " +
       "guessed. Open this run on the computer to see where it stopped.",
     terminal: true,
   },
   "refused/revalidation_refused": {
+    label: "CHECK DID NOT PASS",
+    tone: "halted",
     text:
       "OpenAdapt re-read the live screen and it is still not in the state this " +
       "step needs, so it did nothing. Fix it in the application, then answer " +
@@ -111,29 +141,39 @@ const RECEIPT_COPY = {
     terminal: false,
   },
   "expired/expired": {
+    label: "DECISION EXPIRED",
+    tone: "neutral",
     text:
       "This decision expired before it reached the computer. Reload for a " +
       "fresh one.",
     terminal: true,
   },
   "delivery_uncertain/delivery_uncertain": {
+    label: "RESULT UNCERTAIN",
+    tone: "uncertain",
     text:
       "This may already have been sent. Do not answer again — reconcile it on " +
       "the computer running OpenAdapt.",
     terminal: true,
   },
   "accepted_pending_runner/pending_runner": {
+    label: "CHECKING LIVE STATE",
+    tone: "pending",
     text: "Submitted. Waiting for this computer to check the live screen…",
     terminal: false,
     pending: true,
   },
   "demonstration_requested/demonstration_requested": {
+    label: "CORRECTION REQUESTED",
+    tone: "teach",
     text:
       "Saved as a correction to teach. The run stays paused until someone " +
       "records the new way on the computer.",
     terminal: true,
   },
   "escalated/escalation_recorded": {
+    label: "ROUTED FOR HELP",
+    tone: "teach",
     text:
       "Escalated. The run stays paused exactly where it is until someone picks " +
       "it up.",
@@ -143,6 +183,8 @@ const RECEIPT_COPY = {
   // will pick this up; this one says nobody will, because there is no longer a
   // run to pick up. An operator told the wrong one of those acts on it.
   "rejected/rejected_by_operator": {
+    label: "RUN STOPPED",
+    tone: "halted",
     text:
       "Stopped. This run is over and cannot be resumed, and nothing in the " +
       "application was touched. Start it again on the computer if it should be " +
@@ -283,6 +325,24 @@ const RISK_COPY = {
       "The step OpenAdapt stopped on changes stored data, and the result has " +
       "to be proved afterwards rather than assumed.",
   },
+};
+
+const TASK_KIND_COPY = {
+  identity: "Record identity",
+  effect: "Saved-result check",
+  ambiguity: "Target ambiguity",
+  human_step: "Human-only step",
+  delivery_uncertain: "Delivery uncertainty",
+  halt: "Workflow pause",
+  operator_review: "Operator review",
+};
+
+const RISK_LABEL = {
+  read_only: "Read-only",
+  state_changing: "Changes application state",
+  consequential: "Consequential write",
+  irreversible: "Irreversible action",
+  unknown: "Review required",
 };
 
 // --------------------------------------------------- what the engine cannot do
@@ -545,7 +605,7 @@ function ladderRows(halt) {
     <ul class="ladder">${items}</ul></details>`;
 }
 
-function recheckBlock(halt) {
+function recheckBlock(halt, task) {
   const checks = (halt && halt.will_recheck) || [];
   if (checks.length === 0) return "";
   const items = checks
@@ -558,10 +618,16 @@ function recheckBlock(halt) {
     .filter(Boolean)
     .join("");
   if (!items) return "";
+  const reconciling = task && task.task_kind === "delivery_uncertain";
+  const heading = reconciling
+    ? "If you select “Check what happened”"
+    : "If you answer “I fixed it”";
+  const introduction = reconciling
+    ? "OpenAdapt will not send the earlier action again. It checks the live application and must still:"
+    : "OpenAdapt will not repeat the step blindly. It re-reads the live screen and must still:";
   return `<section class="recheck">
-      <h2>If you answer “I fixed it”</h2>
-      <p class="muted">OpenAdapt will not repeat the step blindly. It re-reads the
-      live screen and must still:</p>
+      <h2>${esc(heading)}</h2>
+      <p class="muted">${esc(introduction)}</p>
       <ul>${items}</ul>
       <p class="muted">If any of those fail it stops again and changes nothing.</p>
     </section>`;
@@ -609,13 +675,16 @@ function frameBlock(task, presentation) {
   if (!frameId) return "";
   const age = describeAge(task && task.created_at);
   const stopped = age ? `when it stopped ${age} ago` : "when it stopped";
-  return `<details class="shot"><summary>Screen when OpenAdapt stopped</summary>
+  return `<figure class="shot">
+      <div class="shot-head">
+        <strong>Screen when OpenAdapt stopped</strong>
+        <span>RETAINED FRAME</span>
+      </div>
       <img id="frame" alt="The screen OpenAdapt retained when it stopped"
            data-artifact="${esc(frameId)}">
-      <p class="muted">This is the picture OpenAdapt kept ${esc(stopped)}. It is
-      not the live screen and it does not update. Look at the application itself
-      before you answer.</p>
-    </details>`;
+      <figcaption>OpenAdapt kept this picture ${esc(stopped)}. It is not live.
+      Check the application before you answer.</figcaption>
+    </figure>`;
 }
 
 function consequenceBlock(task) {
@@ -633,6 +702,18 @@ function consequenceBlock(task) {
     <ul>${items}</ul></section>`;
 }
 
+function actionIsValidForTask(action, task) {
+  // Types v0.7 closes this too, but preserve the boundary in Desktop: an old
+  // or malformed runner must not turn a definitely un-sent action into a
+  // reconciliation UI. The signed task remains the source of authority; this
+  // is a presentation refusal, never an addition to its action set.
+  return (
+    action !== "reconcile" ||
+    (task.task_kind === "delivery_uncertain" &&
+      ["delivered", "unknown"].includes(task.delivery_state))
+  );
+}
+
 async function showTask(runId) {
   const { status, body } = await api(`/api/portal/tasks/${encodeURIComponent(runId)}`);
   if (status === 401 || status === 202) return startPairing();
@@ -647,46 +728,65 @@ async function showTask(runId) {
   }[delivery];
   const halt = presentation.halt;
   const stopped = describeStop(halt);
-  // Reading order matters more than length here. What a wrong answer costs and
-  // what the engine cannot check are placed where they are passed on the way to
-  // the buttons; the counts, the expiry and the long-form consequence card are
-  // left below, where volume is free.
-  //
-  // `presentation.assurance` is deliberately not rendered: it is the one-sided
-  // sentence LIMIT_COPY replaces, and printing both would restate the reassuring
-  // half twice and the limit once.
+  const taskKind = TASK_KIND_COPY[task && task.task_kind] || "Operator decision";
+  const risk = RISK_LABEL[task && task.risk_class] || "Review required";
+  const reason =
+    presentation.explanation || stopped || "OpenAdapt stopped instead of guessing.";
+  const nextCheck =
+    task && task.task_kind === "delivery_uncertain"
+      ? "OpenAdapt will check the saved result. It will not send the action again."
+      : "OpenAdapt will re-read the live application before it continues.";
   render(`
     <button class="back" id="back">← All decisions</button>
     <section class="card">
-      ${deliveryText ? `<p class="chip">${esc(deliveryText)}</p>` : ""}
-      ${stakesBlock(task)}
-      <h1>${esc(presentation.question || "OpenAdapt needs a decision")}</h1>
-      ${stopped ? `<p class="lede">${esc(stopped)}</p>` : ""}
-      ${presentation.explanation ? `<p class="muted">${esc(presentation.explanation)}</p>` : ""}
-      ${frameBlock(task, presentation)}
-      ${ladderRows(halt)}
-      ${recheckBlock(halt)}
-      ${evidenceRows(task)}
-      ${
-        task && task.expires_at
-          ? `<p class="muted">This decision is valid until ${esc(task.expires_at)}.</p>`
-          : ""
-      }
-      <p class="limit">${esc(LIMIT_COPY)}</p>
-      <p class="outcome" id="outcome"></p>
+      <div id="decision">
+        <div class="task-kicker">
+          <span>${esc(taskKind)}</span>
+          <span>${esc(deliveryText || "Paused")}</span>
+        </div>
+        <section class="task-hero">
+          <span aria-hidden="true">!</span>
+          <div>
+            <p>OpenAdapt needs your help</p>
+            <h1>${esc(presentation.question || "Review the live application.")}</h1>
+          </div>
+        </section>
+        <p class="task-reason">${esc(reason)}</p>
+        <div class="task-signals">
+          <span><small>Delivery</small><strong>${esc(deliveryText || "Paused")}</strong></span>
+          <span><small>Risk</small><strong>${esc(risk)}</strong></span>
+        </div>
+        ${frameBlock(task, presentation)}
+        <section class="task-next">
+          <span aria-hidden="true">↻</span>
+          <p><strong>After your answer</strong>${esc(nextCheck)}</p>
+        </section>
+        <details class="task-details">
+          <summary>Technical details and action effects</summary>
+          ${stakesBlock(task)}
+          ${stopped && stopped !== reason ? `<p class="muted">${esc(stopped)}</p>` : ""}
+          ${ladderRows(halt)}
+          ${recheckBlock(halt, task)}
+          ${evidenceRows(task)}
+          ${
+            task && task.expires_at
+              ? `<p class="muted">This decision is valid until ${esc(task.expires_at)}.</p>`
+              : ""
+          }
+          <p class="limit">${esc(LIMIT_COPY)}</p>
+          ${consequenceBlock(task)}
+        </details>
+      </div>
+      <section class="outcome" id="outcome" hidden>
+        <strong></strong>
+        <span></span>
+      </section>
     </section>
-    ${consequenceBlock(task)}
     <div id="gate" class="gate-mark" aria-hidden="true"></div>
   `);
   document.getElementById("back").addEventListener("click", showList);
   const frame = document.getElementById("frame");
-  if (frame) {
-    frame.closest("details").addEventListener(
-      "toggle",
-      () => loadFrame(runId, frame),
-      { once: true },
-    );
-  }
+  if (frame) loadFrame(runId, frame);
   renderActions(runId, body);
 }
 
@@ -751,7 +851,7 @@ function renderActions(runId, detail) {
   const task = detail.task;
   if (!task || !Array.isArray(task.allowed_actions)) return;
   const buttons = task.allowed_actions
-    .filter((action) => ACTION_WIRE[action])
+    .filter((action) => ACTION_WIRE[action] && actionIsValidForTask(action, task))
     .map(
       (action) =>
         // Each button carries its consequence, because "verify & continue",
@@ -786,13 +886,18 @@ function renderActions(runId, detail) {
     // the scroll position down by exactly that much so nothing that was on
     // screen is swallowed -- the same defect as the outcome line disappearing
     // under a taller-than-guessed bar.
-    const before = actionBar.hidden ? 0 : actionBar.getBoundingClientRect().height;
+    const wasHidden = actionBar.hidden;
+    const before = wasHidden ? 0 : actionBar.getBoundingClientRect().height;
     actionBar.innerHTML = buttons;
     actionBar.hidden = false;
     syncActionBarSpace();
     const growth = actionBar.getBoundingClientRect().height - before;
     const scroller = document.scrollingElement || document.documentElement;
-    if (growth > 0 && scroller) scroller.scrollTop += growth;
+    // On first render the bar was absent. Moving the document by the new bar
+    // height there hides the question under the sticky heading before the
+    // operator reads it. Preserve the viewport only when an already-visible
+    // gate or action bar grew.
+    if (growth > 0 && scroller && !wasHidden) scroller.scrollTop += growth;
     actionBar.querySelectorAll("[data-action]").forEach((node) => {
       node.addEventListener("click", () => decide(runId, detail, node.dataset.action));
     });
@@ -812,9 +917,20 @@ function renderActions(runId, detail) {
 // Translate one reply into operator copy. Returns `terminal` (the decision is
 // over -- take the buttons away) and `retry` (the runner refused without acting,
 // so answering again after fixing the application is legitimate).
+function hasReconciliationSuccessProof(body) {
+  return (
+    body &&
+    body.report_success === true &&
+    typeof body.transition_receipt_digest === "string" &&
+    /^sha256:[0-9a-f]{64}$/.test(body.transition_receipt_digest)
+  );
+}
+
 function interpretReply(status, body, portableAction) {
   if (status === 0 || status >= 500) {
     return {
+      label: "RESULT UNCERTAIN",
+      tone: "uncertain",
       text:
         "The result is uncertain. Do not answer again — check this decision on " +
         "the computer running OpenAdapt.",
@@ -837,11 +953,50 @@ function interpretReply(status, body, portableAction) {
   }
   if (state && reason) {
     const copy = RECEIPT_COPY[`${state}/${reason}`];
-    if (copy) return { text: copy.text, terminal: copy.terminal, pending: copy.pending };
+    if (copy) {
+      // `reconciled_and_resumed` is a success-shaped outcome only when the
+      // exact receipt commits to both a successful report and the transition
+      // that consumed the pause. Do not translate a partial reply into proof.
+      if (copy.reconciliation && !hasReconciliationSuccessProof(body)) {
+        return {
+          label: "PROOF INCOMPLETE",
+          tone: "uncertain",
+          text:
+            "OpenAdapt returned an incomplete reconciliation receipt. It did " +
+            "not claim the earlier action succeeded. Check this decision on " +
+            "the computer running OpenAdapt.",
+          terminal: true,
+        };
+      }
+      if (
+        portableAction === "reconcile" &&
+        state === "refused" &&
+        reason === "revalidation_refused"
+      ) {
+        return {
+          label: "RESULT NOT PROVED",
+          tone: "halted",
+          text:
+            "OpenAdapt could not yet prove the saved result. It did not send " +
+            "the earlier action again. Review the live record, then check " +
+            "again or hand this case to someone else.",
+          terminal: false,
+        };
+      }
+      return {
+        label: copy.label,
+        tone: copy.tone,
+        text: copy.text,
+        terminal: copy.terminal,
+        pending: copy.pending,
+      };
+    }
     // A state this build has no wording for is reported as exactly that. It is
     // NOT a refusal: showing a real terminal outcome as "refused" is the defect
     // this branch exists to prevent.
     return {
+      label: "UNKNOWN OUTCOME",
+      tone: "uncertain",
       text:
         `OpenAdapt returned an outcome this phone has no wording for (${state}). ` +
         "Check this decision on the computer running OpenAdapt.",
@@ -851,6 +1006,8 @@ function interpretReply(status, body, portableAction) {
   // No receipt at all: a pre-admission refusal (expired task, wrong binding,
   // action not allowed, another operator already answered).
   return {
+    label: "DECISION NOT ACCEPTED",
+    tone: "halted",
     text:
       (body && body.detail) ||
       "That decision was not accepted. Reload and review the live state.",
@@ -858,12 +1015,23 @@ function interpretReply(status, body, portableAction) {
   };
 }
 
+function renderOutcome(outcome, reply) {
+  outcome.hidden = false;
+  outcome.className = `outcome ${reply.tone || "neutral"}`;
+  outcome.querySelector("strong").textContent = reply.label || "RESULT";
+  outcome.querySelector("span").textContent = reply.text;
+}
+
 async function decide(runId, detail, portableAction) {
   const outcome = document.getElementById("outcome");
   const buttons = Array.from(actionBar.querySelectorAll("button"));
   buttons.forEach((button) => (button.disabled = true));
   const wire = ACTION_WIRE[portableAction].wire;
-  outcome.textContent = "Submitted. Waiting for this computer to check the live screen…";
+  renderOutcome(outcome, {
+    label: "CHECKING LIVE STATE",
+    tone: "pending",
+    text: "Submitted. Waiting for this computer to check the live screen…",
+  });
   const payload = {
     capability_digest: detail.task.capability_digest,
     task_digest: detail.task_digest,
@@ -879,15 +1047,21 @@ async function decide(runId, detail, portableAction) {
   // Never translate an accepted tap into success: the runner's own terminal
   // state decides what this says.
   const reply = interpretReply(status, body, portableAction);
-  outcome.textContent = reply.text;
+  renderOutcome(outcome, reply);
   if (reply.terminal) {
+    const decision = document.getElementById("decision");
+    if (decision) decision.hidden = true;
+    outcome.classList.add("terminal");
+    outcome.closest(".card").classList.add("result-card");
     hideActions();
+    const scroller = document.scrollingElement || document.documentElement;
+    if (scroller) scroller.scrollTop = 0;
   } else if (!reply.pending) {
     buttons.forEach((button) => (button.disabled = false));
   }
   // With the bar gone or resized, put the answer the operator is waiting for
   // back in view rather than leaving it below the fold.
-  if (typeof outcome.scrollIntoView === "function") {
+  if (!reply.terminal && typeof outcome.scrollIntoView === "function") {
     outcome.scrollIntoView({ block: "nearest" });
   }
 }

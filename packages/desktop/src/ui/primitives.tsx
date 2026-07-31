@@ -1,5 +1,9 @@
 // Small presentational primitives built on the design tokens.
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  ReactNode,
+} from "react";
 import type { StepState } from "../lib/types";
 
 export function Eyebrow({ children }: { children: ReactNode }) {
@@ -33,11 +37,13 @@ export function Button({
 export function Card({
   children,
   className = "",
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return <div className={`card ${className}`}>{children}</div>;
+  ...rest
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`card ${className}`} {...rest}>
+      {children}
+    </div>
+  );
 }
 
 export function CardHead({

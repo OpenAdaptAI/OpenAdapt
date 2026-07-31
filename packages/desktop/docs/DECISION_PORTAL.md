@@ -1,8 +1,17 @@
 # The mobile decision portal
 
 When a governed run cannot confirm something, OpenAdapt halts instead of
-guessing. This portal is how that question reaches a staff member's phone
-without moving protected evidence off the runner.
+guessing. This portal is how that question reaches a staff member's phone with
+**full evidence** -- the screen crops, the gated control label, the whole halt
+detail -- without moving any of it off the runner.
+
+It is not the only way to reach a phone, and it is not the right one for a
+customer with no IT department. Serving full evidence to a phone requires an
+HTTPS origin the customer terminates themselves, which a dental practice will
+not stand up. For them, Flow's hosted lane dials **out** to the control plane
+and needs nothing on their network; it carries the signed PHI-free task and the
+closed halt context, never pixels. See
+[Answering a halt with no ingress](#answering-a-halt-with-no-ingress).
 
 Desktop owns the **lifecycle, the network boundary, device pairing, and the
 generic notification**. It owns no decision semantics: the question, the
@@ -47,6 +56,37 @@ The rules, all enforced in `engine/portal/ingress.py` and all fail-closed:
 
 There is no self-signed-certificate bypass and no test-only wide bind. The test
 suite exercises the shipped loopback configuration on a real socket.
+
+## Answering a halt with no ingress
+
+Everything above is about publishing **this** surface, which serves protected
+evidence. A customer who does not operate an ingress uses Flow's hosted lane
+instead: the engine makes outbound HTTPS requests only, so there is no inbound
+port, no port forward, no certificate, no reverse proxy and no static address,
+and it works behind NAT.
+
+Desktop turns it on when the operator's `deployment.json` sets
+`human_decisions.remote.enabled: true`. It then passes `--remote-decisions` to
+the attended console and hands it the runner credential from the keychain in the
+child process's environment -- never in `argv`, where it would sit in the
+process table for every user on the machine.
+
+Two things are checked **before** the console is spawned, because afterwards the
+failure is an opaque "the local decision service did not start":
+
+- this computer must be registered with the control plane, or Desktop refuses
+  and names the host; and
+- the resolved Flow must be at least `MIN_FLOW_FOR_REMOTE_DECISIONS`
+  (`engine/portal/service.py`), because an older one exits on the unknown flag
+  before printing its capability banner.
+
+`enabled` must be literally `true`. A truthy string or a `1` means no. Neither
+check degrades: a lane that looks on and is not is worse than one that is
+plainly off, because nothing on either surface would say the phone will never
+ring.
+
+The two paths are independent. A deployment may run the local portal, the hosted
+lane, both, or neither.
 
 ## Pairing a phone
 
@@ -113,7 +153,15 @@ is deliberate: a free-text explanation field on the wire is how protected
 content escapes a closed contract, so the runner never sends prose and the
 phone never renders a runner string.
 
-**What broke.** `presentation.halt` carries the engine's typed halt category,
+The primary screen is intentionally short: one question, the delivery and risk
+signals, one retained application frame, and what OpenAdapt will check next.
+The resolution ladder, evidence counts, expiry, and full action consequences
+remain available under **Technical details and action effects**. A terminal
+receipt replaces the request with a visually distinct result screen. A
+non-terminal refusal leaves the request in place so the operator can correct
+the live application and answer again.
+
+**Why it stopped.** `presentation.halt` carries the engine's typed halt category,
 the step's ordinal, its action kind, the target's role, and the target's label
 *only when Flow proved that label is static control chrome rather than record
 content*. The shell composes "Step 1 of 6 could not start: OpenAdapt could not
@@ -134,6 +182,13 @@ names. Each button carries its consequence, and the card states it in full:
 *stop — this is wrong* ends this run and it cannot be resumed; *teach the
 correction* changes future runs and continues nothing now; *needs more help*
 leaves the run paused and untouched.
+
+**Reconcile is not retry.** A signed `reconcile` action is shown only when
+Flow records that an earlier action was delivered or may have been delivered.
+It asks Flow to prove the already-requested business effect. It never sends the
+earlier action again. The phone reports reconciliation success only when the
+receipt has both `report_success=true` and the bound transition receipt digest.
+If either is absent, it reports an incomplete receipt instead of success.
 
 **Stop and needs-more-help are not two phrasings of one answer.** Escalation
 *parks* the run: the durable pause stays intact and a qualified operator can
@@ -167,6 +222,39 @@ prevents. A runner still returning the older decision record is mapped through
 Flow's own status table so it renders identically. `src/portalShell.test.ts`
 drives the shipped `app.js` in a DOM and pins each of those outcomes.
 
+## Synthetic phone screenshots
+
+Use the deterministic fixture generator when a document or demo needs current
+phone screens. It contains synthetic labels and closed receipt results only. It
+does not start a runner and does not read customer evidence:
+
+```bash
+uv run --extra build python scripts/capture_portal_scenarios.py \
+  --out /tmp/openadapt-desktop-phone-fixtures
+```
+
+The command writes one pre-action and one result image for each of the six
+operator request types: identity, ambiguity, human step, saved-result check,
+delivery uncertainty, and a declared optional-step halt. The set covers each
+portable action result. The files
+include `/tmp/openadapt-desktop-phone-fixtures/delivery-uncertain.png` and
+`/tmp/openadapt-desktop-phone-fixtures/delivery-uncertain-reconcile-result.png`.
+The generator requires `--out` so generated images do not enter the Desktop
+package or source tree by accident.
+
+To show the retained application context inside the phone, provide a raster
+frame from a public reference run:
+
+```bash
+uv run --extra build python scripts/capture_portal_scenarios.py \
+  --out /tmp/openadapt-desktop-phone-fixtures \
+  --frame /path/to/public-reference-run-frame.png
+```
+
+The retained frame is visible in each request image. Use only a public
+reference frame with synthetic data. The portal labels the frame as historical
+and tells the operator to use the live application before answering.
+
 ## Notifications
 
 Operating-system notifications are generic by construction. Desktop reads a
@@ -181,7 +269,7 @@ the dispatcher, and again in the shell before the plugin is called.
 ### Packaging: done
 
 The frozen sidecar now carries the console. `pyproject.toml` pins
-`openadapt-flow[browser,console]==1.25.0`, `scripts/build_frozen_engine.py`
+`openadapt-flow[browser,console]==1.27.1`, `scripts/build_frozen_engine.py`
 collects uvicorn's run-time string imports and `openadapt_flow.console`, and
 the executable is built unbuffered so the console's one-time capability banner
 survives the pipe the portal reads it from. `scripts/smoke_test_frozen_flow.py`
@@ -220,7 +308,7 @@ sensitive when it derives log redactions. A file like that is not eligible to
 sit on disk for the hours a portal session can last.
 
 Re-staging it per run would also be theatre. In the pinned
-`openadapt-flow==1.25.0`, `_attended_service_from_args` resolves `--config`
+`openadapt-flow==1.27.1`, `_attended_service_from_args` resolves `--config`
 eagerly through `load_deployment` **before** it yields, and
 `AttendedActionService` is built from the parsed `DeploymentConfig` object and
 never sees the path again. Rewriting the file later changes nothing about what

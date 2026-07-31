@@ -39,6 +39,13 @@ def _report(
         "results": results or [],
     }
     if profile is not None:
+        classes = evidence_classes or ["authorization"]
+        contracts = {
+            "authorization": 1,
+            "identity": int("identity" in classes),
+            "postcondition": int("postcondition" in classes),
+            "effect": int(any(item.startswith("effect_tier_") for item in classes)),
+        }
         report.update(
             {
                 "execution_profile": profile,
@@ -52,25 +59,47 @@ def _report(
                     "profile": profile,
                     "production_eligible": True,
                     "execution_completed": True,
-                    "required_contracts": {
-                        "authorization": 1,
-                        "identity": 0,
-                        "postcondition": 0,
-                        "effect": 0,
-                    },
-                    "passed_contracts": {
-                        "authorization": 1,
-                        "identity": 0,
-                        "postcondition": 0,
-                        "effect": 0,
-                    },
-                    "evidence_classes": evidence_classes or ["authorization"],
+                    "required_contracts": contracts,
+                    "passed_contracts": contracts,
+                    "evidence_classes": classes,
                     "model_calls": 0,
                     "external_network_calls": "none",
                     "compensation_actions": 0,
                 },
             }
         )
+        if "postcondition" in classes:
+            from openadapt_flow.ir import (
+                postcondition_contract_sha256,
+                postcondition_step_contract_sha256,
+            )
+
+            workflow_contract_sha256 = "a" * 64
+            step_contract_sha256 = postcondition_step_contract_sha256(
+                workflow_contract_sha256=workflow_contract_sha256,
+                step_index=0,
+                action_kind="click",
+            )
+            report["outcome_envelope"]["workflow_contract_sha256"] = workflow_contract_sha256
+            report["outcome_envelope"]["postcondition_evidence"] = [
+                {
+                    "result_index": 0,
+                    "workflow_contract_sha256": workflow_contract_sha256,
+                    "step_index": 0,
+                    "step_contract_sha256": step_contract_sha256,
+                    "action_kind": "click",
+                    "contract_kind": "explicit_predicate",
+                    "contract_index": 0,
+                    "contract_sha256": postcondition_contract_sha256(
+                        workflow_contract_sha256=workflow_contract_sha256,
+                        step_contract_sha256=step_contract_sha256,
+                        action_kind="click",
+                        contract_kind="explicit_predicate",
+                        contract_index=0,
+                    ),
+                    "verdict": "passed",
+                }
+            ]
     return report
 
 

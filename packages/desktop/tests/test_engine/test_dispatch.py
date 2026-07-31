@@ -964,6 +964,76 @@ class TestLibraryCommands:
         if outcome == "HALTED":
             assert result["halt"]["reason"]
 
+    def test_run_history_failure_is_explicit_and_retryable(
+        self, deps, monkeypatch, tmp_path: Path
+    ) -> None:
+        disp, db, _events = deps
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        db.insert_bundle("bnd1", str(bundle), capture_id="cap1")
+
+        class Bridge:
+            def replay(self, _bundle, out_dir, *, config):
+                from engine.flow_bridge import FlowResult
+
+                (out_dir / "report.json").write_text(
+                    json.dumps(
+                        _precise_report(
+                            "VERIFIED",
+                            production_eligible=True,
+                            execution_completed=True,
+                        )
+                    )
+                )
+                return FlowResult(ok=True, returncode=0, out_dir=out_dir)
+
+        disp.services._flow_bridge = Bridge()
+        insert_run = db.insert_run
+
+        def leave_incomplete_history(
+            run_id: str,
+            run_path: str,
+            *,
+            bundle_id: str | None = None,
+            status: str = "pending",
+        ) -> None:
+            insert_run(run_id, run_path, bundle_id=bundle_id, status="pending")
+            raise OSError("disk busy")
+
+        monkeypatch.setattr(db, "insert_run", leave_incomplete_history)
+
+        result = disp.dispatch(
+            "replay_workflow",
+            {
+                "workflow_id": "bnd1",
+                "target": {
+                    "backend": "citrix",
+                    "rdp_readiness_text": "Patient Search",
+                },
+            },
+        )
+
+        assert result["outcome"] == "VERIFIED"
+        assert result["persistence"]["state"] == "degraded"
+        assert result["persistence"]["retryable"] is True
+        assert db.list_runs()[0]["status"] == "pending"
+        retained = disp.dispatch("get_run_report", {"workflow_id": "bnd1"})
+        assert retained["run_id"] == result["run_id"]
+        assert retained["persistence"]["state"] == "degraded"
+        teach = disp.dispatch("teach_fix", {"workflow_id": "bnd1"})
+        assert "not saved in local history" in teach["message"]
+
+        monkeypatch.setattr(db, "insert_run", insert_run)
+        retry = disp.dispatch(
+            "retry_run_persistence",
+            {"workflow_id": "bnd1", "run_id": result["run_id"]},
+        )
+
+        assert retry["ok"] is True
+        assert retry["report"]["persistence"]["state"] == "persisted"
+        assert db.list_runs(limit=1)[0]["status"] == "VERIFIED"
+        assert not list((disp.config.data_dir / "runs").glob("*/.desktop-run-persistence.json"))
+
     def test_legacy_flow_success_remains_ok(self, deps, tmp_path: Path) -> None:
         disp, _db, _events = deps
         run_dir = tmp_path / "run"
@@ -1095,6 +1165,63 @@ class TestLibraryCommands:
         assert result["halt"]["reason"] == "ambiguous target"
         assert result["steps"][0]["state"] == "halted"
         assert db.list_runs(limit=10)[0]["bundle_id"] == "bnd1"
+
+    def test_teach_uses_only_the_latest_halted_run(self, deps, tmp_path: Path) -> None:
+        from engine.flow_bridge import FlowResult
+
+        disp, db, _events = deps
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        db.insert_bundle("bnd1", str(bundle), capture_id="cap1")
+        old_halt = tmp_path / "run-old-halt"
+        latest_halt = tmp_path / "run-latest-halt"
+        db.insert_run("run-old", str(old_halt), bundle_id="bnd1", status="HALTED")
+        db.insert_run("run-latest", str(latest_halt), bundle_id="bnd1", status="halt")
+
+        class Bridge:
+            calls: list[Path] = []
+
+            def teach(self, run_path, _bundle, out_dir):
+                self.calls.append(run_path)
+                return FlowResult(ok=True, returncode=0, out_dir=out_dir)
+
+        bridge = Bridge()
+        disp.services._flow_bridge = bridge
+
+        result = disp.dispatch("teach_fix", {"workflow_id": "bnd1"})
+
+        assert result == {"promoted": True, "message": "Fix promoted."}
+        assert bridge.calls == [latest_halt]
+
+    def test_teach_never_reuses_an_old_halt_after_a_newer_terminal_run(
+        self, deps, tmp_path: Path
+    ) -> None:
+        disp, db, _events = deps
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        db.insert_bundle("bnd1", str(bundle), capture_id="cap1")
+        db.insert_run(
+            "run-old-halt",
+            str(tmp_path / "run-old-halt"),
+            bundle_id="bnd1",
+            status="HALTED",
+        )
+        db.insert_run(
+            "run-new-verified",
+            str(tmp_path / "run-new-verified"),
+            bundle_id="bnd1",
+            status="VERIFIED",
+        )
+
+        class Bridge:
+            def teach(self, *_args, **_kwargs):
+                raise AssertionError("a stale halt must not be taught")
+
+        disp.services._flow_bridge = Bridge()
+        result = disp.dispatch("teach_fix", {"workflow_id": "bnd1"})
+
+        assert result["promoted"] is False
+        assert "latest run ended as VERIFIED" in result["message"]
 
 
 class TestSyncCommands:
@@ -1440,6 +1567,7 @@ class TestMisc:
             "replay_workflow",
             "run_workflow",
             "get_run_report",
+            "retry_run_persistence",
             "teach_fix",
             "get_qualification",
             "initialize_qualification",

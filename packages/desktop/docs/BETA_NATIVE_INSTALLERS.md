@@ -10,7 +10,7 @@ only the fixed `openadapt://connect` action and forwards it to the sidecar's
 strict, transactional pairing flow.
 
 The canonical compiler and governed runtime remain in `openadapt-flow`. Each
-native installer freezes the exact `openadapt-flow[browser,console]==1.25.0`
+native installer freezes the exact `openadapt-flow[browser,console]==1.27.1`
 runtime and its `playwright==1.61.0` browser automation dependency into the
 Desktop sidecar. The `console` extra is what lets an installed application
 serve the attended decision console the mobile decision portal relays; the

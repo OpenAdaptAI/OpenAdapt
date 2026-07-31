@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 from pathlib import Path
@@ -235,3 +236,47 @@ def test_prepare_and_stage_use_one_immutable_source_snapshot(tmp_path: Path) -> 
     assert "first-secret" in prepared.redactions
     assert "second.example" not in prepared.payload
     assert "second-secret" not in prepared.redactions
+
+
+# --------------------------------------------------- the hosted decision lane
+
+
+def test_remote_decisions_is_read_from_the_same_snapshot_as_the_payload(tmp_path):
+    """One read decides both what Flow executes and whether the lane is on."""
+    source = tmp_path / "deployment.json"
+    source.write_text(
+        json.dumps(
+            {
+                "human_decisions": {
+                    "remote": {"enabled": True, "runner_id": " runner_exact_01 "}
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    prepared = prepare_flow_config(source, None)
+    assert prepared is not None
+    assert prepared.remote_decisions is True
+    assert prepared.remote_decision_runner_id == "runner_exact_01"
+
+
+@pytest.mark.parametrize(
+    "deployment",
+    [
+        {},
+        {"human_decisions": {}},
+        {"human_decisions": {"remote": {}}},
+        {"human_decisions": {"remote": {"enabled": False}}},
+        # Truthy is not True. An outbound lane carrying decision context is
+        # never inferred from a stray string or a 1.
+        {"human_decisions": {"remote": {"enabled": "yes"}}},
+        {"human_decisions": {"remote": {"enabled": 1}}},
+        {"human_decisions": "remote"},
+    ],
+)
+def test_remote_decisions_defaults_to_off_and_is_never_inferred(tmp_path, deployment):
+    source = tmp_path / "deployment.json"
+    source.write_text(json.dumps(deployment), encoding="utf-8")
+    prepared = prepare_flow_config(source, None)
+    assert prepared is not None
+    assert prepared.remote_decisions is False

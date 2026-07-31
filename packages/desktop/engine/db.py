@@ -332,13 +332,26 @@ class IndexDB:
 
     # --- Run operations (local replay/run executions) ---
 
-    def insert_run(self, run_id: str, run_path: str, *, bundle_id: str | None = None) -> None:
-        """Record a local replay/run execution."""
-        self.conn.execute(
-            "INSERT INTO runs (run_id, bundle_id, run_path, created_at) VALUES (?, ?, ?, ?)",
-            (run_id, bundle_id, run_path, _now()),
-        )
-        self.conn.commit()
+    def insert_run(
+        self,
+        run_id: str,
+        run_path: str,
+        *,
+        bundle_id: str | None = None,
+        status: str = "pending",
+    ) -> None:
+        """Record a local execution and its known outcome atomically."""
+        try:
+            self.conn.execute(
+                "INSERT INTO runs "
+                "(run_id, bundle_id, run_path, status, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (run_id, bundle_id, run_path, status, _now()),
+            )
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
 
     def get_run(self, run_id: str) -> dict | None:
         """Get a single run by ID."""

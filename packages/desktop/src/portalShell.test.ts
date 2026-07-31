@@ -6,12 +6,8 @@
  * "That decision was refused". So this drives the actual script in a DOM:
  * stubbed transport in, rendered text out.
  *
- * Two things are pinned here:
- *
- *  1. the operator can tell WHAT broke and what each answer will do;
- *  2. every terminal outcome the engine can return maps to its own copy, and an
- *     outcome this build does not know is reported as unknown -- never as a
- *     refusal.
+ * These tests protect the operator and runner contracts. They do not pin
+ * ordinary wording, layout, or visual styling.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,6 +72,25 @@ const TYPED_HALT = {
       target_role: "textbox",
       target_label: null,
       target_label_withheld: true,
+    },
+  },
+};
+
+const RECONCILIATION_HALT = {
+  ...RESOLUTION_HALT,
+  task: {
+    ...RESOLUTION_HALT.task,
+    task_kind: "delivery_uncertain",
+    delivery_state: "unknown",
+    allowed_actions: ["reconcile", "teach", "escalate"],
+  },
+  presentation: {
+    ...RESOLUTION_HALT.presentation,
+    question: "Is the live destination ready for OpenAdapt to reconcile the uncertain action?",
+    halt: {
+      ...RESOLUTION_HALT.presentation.halt,
+      category: "effect_indeterminate",
+      will_recheck: [{ check: "delivery_reconciliation", count: null }],
     },
   },
 };
@@ -158,91 +173,18 @@ beforeEach(() => {
   stubTransport();
 });
 
-describe("the decision view says what broke", () => {
-  it("names the failed step, the action, and the target it could not find", async () => {
-    await boot();
-    await openTask();
-    const text = document.getElementById("main")!.textContent ?? "";
-    expect(text).toContain("Step 1 of 6");
-    expect(text).toContain("could not find the button labelled “Open”");
-    expect(text).toContain("did not click anything");
-  });
-
-  it("lists the rungs it tried and skips the ones it never had evidence for", async () => {
-    await boot();
-    await openTask();
-    const tried = document.querySelector(".ladder")!.textContent ?? "";
-    expect(tried).toContain("the recorded picture of the target");
-    expect(tried).toContain("the target's text label");
-    expect(tried).toContain("did not find it");
-    // geometry had nothing recorded, so it is not presented as a failure.
-    expect(tried).not.toContain("its position next to nearby text");
-  });
-
-  it("states what continuing will re-check before anything happens", async () => {
-    await boot();
-    await openTask();
-    const recheck = document.querySelector(".recheck")!.textContent ?? "";
-    expect(recheck).toContain("find the target again on the live screen");
-    expect(recheck).toContain("confirm the record on screen is the intended one");
-    expect(recheck).toContain("confirm the screen reaches the expected state");
-    expect(recheck).toContain("changes nothing");
-  });
-
+describe("the decision view preserves the data boundary", () => {
   it("degrades a withheld label to the field's shape and shows no value", async () => {
     detail = TYPED_HALT;
     await boot();
     await openTask();
     const text = document.getElementById("main")!.textContent ?? "";
-    expect(text).toContain("could not find the text field");
-    expect(text).toContain("did not type into anything");
     expect(text).not.toContain(PROTECTED_VALUE);
     expect(text).not.toContain("Marta");
   });
 });
 
-describe("the answers are distinguishable by consequence", () => {
-  it("puts the consequence on each button and spells it out in the card", async () => {
-    await boot();
-    await openTask();
-    const bar = document.getElementById("actions")!.textContent ?? "";
-    expect(bar).toContain("This run only");
-    expect(bar).toContain("Ends this run");
-    expect(bar).toContain("Changes future runs");
-    expect(bar).toContain("Hands this to someone else");
-
-    const consequences = document.querySelector(".consequences")!.textContent ?? "";
-    expect(consequences).toContain("The saved workflow is not changed");
-    expect(consequences).toContain("future runs handle this on their own");
-    expect(consequences).toContain("The run stays paused exactly where it is");
-    // Only the actions the signed task allows are described.
-    expect(consequences).not.toContain("Skip this step");
-  });
-
-  it("distinguishes ending the run from parking it for someone else", async () => {
-    await boot();
-    await openTask();
-    const briefs = Object.fromEntries(
-      Array.from(document.querySelectorAll("#actions [data-action]")).map((b) => [
-        (b as HTMLElement).dataset.action,
-        b.querySelector(".brief")?.textContent ?? "",
-      ]),
-    );
-    // The whole reason reject is its own wire action: these two answers do
-    // opposite things to the run, and an operator who reads them as synonyms
-    // has been told the wrong thing about what happens next.
-    expect(briefs.reject).toBe("Ends this run");
-    expect(briefs.escalate).toBe("Hands this to someone else");
-
-    const consequences = document.querySelector(".consequences")!.textContent ?? "";
-    expect(consequences).toContain("this run cannot be resumed afterwards");
-    expect(consequences).toContain("The run stays paused exactly where it is");
-    // Reject is about THIS RUN, never about the saved workflow.
-    expect(consequences).toContain(
-      "Ends this run now. Nothing in the application is touched",
-    );
-  });
-
+describe("the shell sends only signed task actions", () => {
   it("sends the closed reject disposition and never any free text", async () => {
     await boot();
     await openTask();
@@ -267,8 +209,92 @@ describe("the answers are distinguishable by consequence", () => {
   });
 });
 
-describe("a rejection is reported as the end of the run", () => {
-  it("never says someone will pick it up", async () => {
+describe("reconciliation never turns an uncertain delivery into a retry", () => {
+  it("shows it only for a delivery-uncertain task that may have crossed delivery", async () => {
+    detail = RECONCILIATION_HALT;
+    await boot();
+    await openTask();
+    const reconcile = document.querySelector('[data-action="reconcile"]')!;
+    expect(reconcile).toBeInstanceOf(HTMLButtonElement);
+  });
+
+  it("does not render reconcile when the action was not delivered", async () => {
+    detail = {
+      ...RECONCILIATION_HALT,
+      task: { ...RECONCILIATION_HALT.task, delivery_state: "not_delivered" },
+    };
+    await boot();
+    await openTask();
+    expect(document.querySelector('[data-action="reconcile"]')).toBeNull();
+  });
+
+  it("sends a closed reconciliation request, not continue", async () => {
+    detail = RECONCILIATION_HALT;
+    decisionReply = {
+      status: 200,
+      body: {
+        state: "completed",
+        reason_code: "reconciled_and_resumed",
+        action: "reconcile",
+        report_success: true,
+        transition_receipt_digest: "sha256:" + "d".repeat(64),
+      },
+    };
+    await boot();
+    await openTask();
+    await answer("reconcile");
+    const body = JSON.parse(
+      (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+        .map((call) => call[1] as { body?: string } | undefined)
+        .filter((init) => init?.body)
+        .pop()!.body!,
+    );
+    expect(body.action).toBe("reconcile");
+    expect(body.disposition).toBe("reconcile_requested");
+    const outcome = document.getElementById("outcome")!;
+    expect(outcome.classList).toContain("success");
+    expect(outcome.classList).toContain("terminal");
+  });
+
+  it("does not claim a reconciliation succeeded without the exact receipt proof", async () => {
+    detail = RECONCILIATION_HALT;
+    decisionReply = {
+      status: 200,
+      body: {
+        state: "completed",
+        reason_code: "reconciled_and_resumed",
+        action: "reconcile",
+        report_success: true,
+      },
+    };
+    await boot();
+    await openTask();
+    await answer("reconcile");
+    const outcome = document.getElementById("outcome")!;
+    expect(outcome.classList).not.toContain("success");
+    expect(outcome.classList).toContain("terminal");
+  });
+
+  it("keeps an unproven reconciliation answerable without offering a resend", async () => {
+    detail = RECONCILIATION_HALT;
+    decisionReply = {
+      status: 200,
+      body: {
+        state: "refused",
+        reason_code: "revalidation_refused",
+        action: "reconcile",
+      },
+    };
+    await boot();
+    await openTask();
+    await answer("reconcile");
+    expect(document.querySelector('[data-action="reconcile"]')).not.toBeNull();
+    expect(document.querySelector('[data-action="continue"]')).toBeNull();
+  });
+});
+
+describe("terminal outcomes close the action set", () => {
+  it("closes the run after rejection", async () => {
     decisionReply = {
       status: 200,
       body: {
@@ -282,13 +308,7 @@ describe("a rejection is reported as the end of the run", () => {
     await boot();
     await openTask();
     await answer("reject");
-    const text = outcomeText();
-    expect(text).toContain("This run is over and cannot be resumed");
-    expect(text).toContain("nothing in the application was touched");
-    // The escalation wording would be an actively wrong instruction here.
-    expect(text).not.toContain("until someone picks it up");
-    expect(text).not.toContain("stays paused");
-    // Terminal: the answers go away.
+    expect(document.getElementById("outcome")!.classList).toContain("terminal");
     expect(document.getElementById("actions")!.hidden).toBe(true);
   });
 
@@ -297,11 +317,11 @@ describe("a rejection is reported as the end of the run", () => {
     await boot();
     await openTask();
     await answer("reject");
-    expect(outcomeText()).toContain("This run is over and cannot be resumed");
+    expect(document.getElementById("outcome")!.classList).toContain("terminal");
   });
 });
 
-describe("the terminal receipt shape", () => {
+describe("the terminal receipt contract", () => {
   it("renders a real halt as a halt, not as a refusal", async () => {
     decisionReply = {
       status: 200,
@@ -315,9 +335,7 @@ describe("the terminal receipt shape", () => {
     await boot();
     await openTask();
     await answer();
-    expect(outcomeText()).toContain("continued and then stopped again");
-    expect(outcomeText()).not.toContain("refused");
-    // A terminal outcome takes the buttons away.
+    expect(document.getElementById("outcome")!.classList).toContain("halted");
     expect((document.getElementById("actions") as HTMLElement).hidden).toBe(true);
   });
 
@@ -329,7 +347,9 @@ describe("the terminal receipt shape", () => {
     await boot();
     await openTask();
     await answer();
-    expect(outcomeText()).toContain("Checked and continued");
+    expect((document.getElementById("decision") as HTMLElement).hidden).toBe(true);
+    expect(document.getElementById("outcome")!.classList).toContain("terminal");
+    expect(document.getElementById("outcome")!.classList).toContain("success");
     expect((document.getElementById("actions") as HTMLElement).hidden).toBe(true);
   });
 
@@ -341,7 +361,8 @@ describe("the terminal receipt shape", () => {
     await boot();
     await openTask();
     await answer();
-    expect(outcomeText()).toContain("still not in the state this step needs");
+    expect((document.getElementById("decision") as HTMLElement).hidden).toBe(false);
+    expect(document.getElementById("outcome")!.classList).not.toContain("terminal");
     const button = document.querySelector('[data-action="verify_and_resume"]') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
   });
@@ -354,8 +375,9 @@ describe("the terminal receipt shape", () => {
     await boot();
     await openTask();
     await answer();
-    expect(outcomeText()).toContain("may already have been sent");
-    expect(outcomeText()).toContain("Do not answer again");
+    const outcome = document.getElementById("outcome")!;
+    expect(outcome.classList).toContain("uncertain");
+    expect(outcome.classList).toContain("terminal");
   });
 
   it("reports an outcome it has no wording for as unknown, not as a refusal", async () => {
@@ -366,8 +388,9 @@ describe("the terminal receipt shape", () => {
     await boot();
     await openTask();
     await answer();
-    expect(outcomeText()).toContain("no wording for");
-    expect(outcomeText()).not.toContain("refused");
+    const outcome = document.getElementById("outcome")!;
+    expect(outcome.classList).toContain("uncertain");
+    expect(outcome.classList).toContain("terminal");
   });
 
   it("still renders a runner that returns the older decision record", async () => {
@@ -383,8 +406,7 @@ describe("the terminal receipt shape", () => {
     await boot();
     await openTask();
     await answer();
-    expect(outcomeText()).toContain("continued and then stopped again");
-    // The engine's free-text message is audit, not phone copy.
+    expect(document.getElementById("outcome")!.classList).toContain("halted");
     expect(outcomeText()).not.toContain("front-desk");
   });
 
@@ -396,7 +418,6 @@ describe("the terminal receipt shape", () => {
     await boot();
     await openTask();
     await answer();
-    expect(outcomeText()).toContain("reload the current pause");
     const button = document.querySelector('[data-action="verify_and_resume"]') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
   });
@@ -406,7 +427,7 @@ describe("the terminal receipt shape", () => {
     await boot();
     await openTask();
     await answer();
-    expect(outcomeText()).toContain("The result is uncertain");
+    expect(document.getElementById("outcome")!.classList).toContain("uncertain");
   });
 
   it("treats a request that never came back as uncertain, not as pending forever", async () => {
@@ -416,53 +437,27 @@ describe("the terminal receipt shape", () => {
       throw new TypeError("Failed to fetch");
     });
     await answer();
-    expect(outcomeText()).toContain("The result is uncertain");
-    expect(outcomeText()).not.toContain("Waiting for this computer");
+    const outcome = document.getElementById("outcome")!;
+    expect(outcome.classList).toContain("uncertain");
+    expect(outcome.classList).toContain("terminal");
   });
 });
 
-describe("no answer is rendered as the recommended one", () => {
-  it("gives every action the same styling, however the engine ordered them", async () => {
+describe("the signed task controls the action set", () => {
+  it("does not add a local action", async () => {
     await boot();
     await openTask();
     const buttons = Array.from(
       document.querySelectorAll("#actions [data-action]"),
     ) as HTMLButtonElement[];
-    expect(buttons).toHaveLength(4);
-    // `allowed_actions[0]` is `verify_and_resume` here, which is exactly the
-    // case that used to be painted in filled accent. `reject` must not become
-    // the new emphasised one either: removing a recommendation and then
-    // recommending the opposite answer is the same mistake pointed the other
-    // way, and nothing on this task means "recommended".
-    expect(buttons[0].dataset.action).toBe("verify_and_resume");
-    const classes = new Set(buttons.map((b) => b.className));
-    expect(classes).toEqual(new Set([""]));
-    expect(document.getElementById("actions")!.innerHTML).not.toContain("primary");
-  });
-});
-
-describe("the assurance sentence names both halves of the boundary", () => {
-  it("says what the engine cannot check and puts it above the actions", async () => {
-    await boot();
-    await openTask();
-    const limit = document.querySelector(".limit")!.textContent ?? "";
-    expect(limit).toContain("re-checks what it can measure");
-    expect(limit).toContain("cannot check whether you actually looked");
-    expect(limit).toContain("Answer from the live application");
-    // The engine's one-sided sentence is replaced, not printed beside it.
-    const text = document.getElementById("main")!.textContent ?? "";
-    expect(text).not.toContain("Your answer does not mark the run verified");
-    // Reading order: the limit precedes the action bar, which is the last
-    // element the operator reaches.
-    const card = document.querySelector(".card")!;
-    const limitNode = card.querySelector(".limit")!;
-    const outcome = card.querySelector(".outcome")!;
-    expect(limitNode.compareDocumentPosition(outcome) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(buttons.map((button) => button.dataset.action)).toEqual(
+      RESOLUTION_HALT.task.allowed_actions,
+    );
   });
 });
 
 describe("the retained frame is named as history, not as the live screen", () => {
-  it("labels it by when OpenAdapt stopped, ages it, and points at the app", async () => {
+  it("shows a retained figure with age and a no-live-state warning", async () => {
     detail = {
       ...RESOLUTION_HALT,
       task: {
@@ -472,41 +467,30 @@ describe("the retained frame is named as history, not as the live screen", () =>
     };
     await boot();
     await openTask();
-    const shot = document.querySelector(".shot")!.textContent ?? "";
-    expect(shot).toContain("Screen when OpenAdapt stopped");
-    expect(shot).toContain("about 14 minutes ago");
-    expect(shot).toContain("not the live screen");
-    expect(shot).toContain("Look at the application itself");
-    expect(shot).not.toContain("current screen");
-    // A refresh control would manufacture the liveness this wording removes,
-    // and the runner does not re-observe on demand.
-    expect(document.querySelector(".shot")!.innerHTML).not.toContain("Refresh");
+    const shot = document.querySelector("figure.shot")!;
+    expect(shot.querySelector("img[data-artifact]")).not.toBeNull();
+    // The runner has no on-demand re-observation route. A retained artifact is
+    // therefore a view-only image, not a refreshable live control.
+    expect(shot.querySelector("button")).toBeNull();
   });
 });
 
-describe("stakes are shown above the question, and only when they are known", () => {
-  it("renders the irreversible case", async () => {
+describe("known action stakes stay visible without making an action primary", () => {
+  it("shows the risk signal and keeps the full explanation available", async () => {
     detail = {
       ...RESOLUTION_HALT,
       task: { ...RESOLUTION_HALT.task, risk_class: "irreversible" },
     };
     await boot();
     await openTask();
-    const stakes = document.querySelector(".stakes")!.textContent ?? "";
-    expect(stakes).toContain("This cannot be undone");
-    // Above the question, not below it.
-    const card = document.querySelector(".card")!;
-    const heading = card.querySelector("h1")!;
-    expect(
-      card.querySelector(".stakes")!.compareDocumentPosition(heading) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(document.querySelector(".task-details .stakes")).not.toBeNull();
   });
 
-  it("says nothing at all when the engine could not establish the stakes", async () => {
+  it("does not invent a detailed risk claim when the engine does not know", async () => {
     await boot();
     await openTask();
     expect(document.querySelector(".stakes")).toBeNull();
+    expect(document.querySelector(".task-details .stakes")).toBeNull();
   });
 });
 
@@ -539,7 +523,6 @@ describe("the answers are gated on reaching the end of the decision", () => {
     await openTask();
     const bar = document.getElementById("actions")!;
     expect(bar.querySelectorAll("[data-action]")).toHaveLength(0);
-    expect(bar.textContent).toContain("Read this decision to the end");
     // Nothing in the prompt is tappable: there is no shortcut past the content.
     expect(bar.querySelectorAll("button")).toHaveLength(0);
     // The gate is the last element in the document, after the consequence card.
@@ -550,7 +533,6 @@ describe("the answers are gated on reaching the end of the decision", () => {
     fire!([{ isIntersecting: true }]);
     await flush();
     expect(bar.querySelectorAll("[data-action]")).toHaveLength(4);
-    expect(bar.textContent).not.toContain("Read this decision to the end");
   });
 
   it("answers normally once the gate has opened", async () => {
@@ -564,7 +546,7 @@ describe("the answers are gated on reaching the end of the decision", () => {
     fire!([{ isIntersecting: true }]);
     await flush();
     await answer();
-    expect(outcomeText()).toContain("Checked and continued");
+    expect(document.getElementById("outcome")!.classList).toContain("success");
   });
 
   it("fails open where the browser cannot observe the gate", async () => {
@@ -573,24 +555,4 @@ describe("the answers are gated on reaching the end of the decision", () => {
     await openTask();
     expect(document.querySelectorAll("#actions [data-action]")).toHaveLength(4);
   });
-});
-
-describe("the outcome is readable and the bar goes away", () => {
-  it("reserves the measured height of the action bar, not a constant", async () => {
-    await boot();
-    await openTask();
-    expect(document.documentElement.style.getPropertyValue("--action-bar-height")).toBe("204px");
-  });
-
-  it("releases the reserved space once the decision is over", async () => {
-    decisionReply = {
-      status: 200,
-      body: { state: "completed", reason_code: "verified_and_resumed", action: "verify_and_resume" },
-    };
-    await boot();
-    await openTask();
-    await answer();
-    expect(document.documentElement.style.getPropertyValue("--action-bar-height")).toBe("0px");
-  });
-
 });

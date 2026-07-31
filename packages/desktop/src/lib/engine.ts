@@ -32,6 +32,7 @@ export const CMD = {
   REPLAY_WORKFLOW: "replay_workflow",
   RUN_WORKFLOW: "run_workflow",
   GET_RUN_REPORT: "get_run_report",
+  RETRY_RUN_PERSISTENCE: "retry_run_persistence",
   TEACH_FIX: "teach_fix",
   GET_QUALIFICATION: "get_qualification",
   INITIALIZE_QUALIFICATION: "initialize_qualification",

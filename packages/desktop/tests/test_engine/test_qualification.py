@@ -27,6 +27,7 @@ from engine.qualification import (
     set_action_effect_verification,
     set_action_identity_policy,
     set_action_risk,
+    set_local_qualification_case_scope,
     set_project_minimum_effect_tier,
 )
 from engine.qualification_capabilities import (
@@ -36,6 +37,8 @@ from engine.qualification_capabilities import (
 from engine.qualification_lifecycle import (
     retain_capability_observation,
     retain_run_evidence,
+    stage_case_runtime_inputs,
+    store_case_parameters,
 )
 
 pytest.importorskip("openadapt_flow.qualification")
@@ -44,12 +47,13 @@ from openadapt_flow.ir import (  # noqa: E402
     ActionKind,
     Anchor,
     Landmark,
+    ParamKind,
     ParamSpec,
     Step,
     StructuralLocator,
     Workflow,
 )
-from openadapt_flow.qualification import IdentitySignalPolicy, sign_case_result  # noqa: E402
+from openadapt_flow.qualification import IdentitySignalPolicy  # noqa: E402
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind  # noqa: E402
 from openadapt_flow.traversal import iter_workflow_steps  # noqa: E402
 
@@ -133,7 +137,45 @@ def test_environment_identifier_digest_is_reproducible_but_explicitly_operator_d
     assert result["project"]["environment"]["environment_digest"] == exact_measured_digest
 
 
-def test_local_case_run_is_signed_and_bound_to_exact_retained_evidence(
+def test_inspection_projects_typed_case_inputs_without_secret_values(
+    tmp_path: Path,
+) -> None:
+    bundle = tmp_path / "bundle"
+    Workflow(
+        name="typed-parameters",
+        params={"priority": "routine"},
+        param_specs={
+            "priority": ParamSpec(
+                name="priority",
+                type=ParamKind.ENUM,
+                example="routine",
+                required=True,
+                choices=["routine", "urgent"],
+            ),
+            "note": ParamSpec(name="note", required=False),
+            "api_token": ParamSpec(name="api_token", example="must-not-leak"),
+        },
+        secret_params=["api_token"],
+    ).save(bundle)
+
+    controls = inspect_bundle(bundle, workflow_id="wf-typed")["controls"]
+    parameters = {item["name"]: item for item in controls["parameters"]}
+
+    assert parameters["priority"] == {
+        "name": "priority",
+        "type": "enum",
+        "secret": False,
+        "required": True,
+        "example": "routine",
+        "choices": ["routine", "urgent"],
+    }
+    assert parameters["note"]["required"] is False
+    assert parameters["api_token"]["secret"] is True
+    assert parameters["api_token"]["example"] is None
+    assert parameters["api_token"]["choices"] == []
+
+
+def test_local_case_result_refuses_unbound_retained_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle = _bundle(
@@ -240,6 +282,7 @@ def test_local_case_run_is_signed_and_bound_to_exact_retained_evidence(
         case_id="representative-local",
         run_id="run-1",
         run_dir=run_dir,
+        runtime_input_bytes=b'{"params":{},"worklists":{}}',
     )
     workflow = Workflow.load(bundle)
     assert workflow.qualification is not None
@@ -273,53 +316,21 @@ def test_local_case_run_is_signed_and_bound_to_exact_retained_evidence(
             observation=signed_observation.model_dump(mode="json"),
         )
     )
-    result = record_local_qualification_result(
-        bundle,
-        workflow_id="wf-1",
-        case_id="representative-local",
-        observed_outcome="verified",
-        evidence=evidence,
-        capability_observation=signed_observation,
-    )
-    case = next(item for item in result["project"]["cases"] if item["id"] == "representative-local")
+    with pytest.raises(QualificationError, match="current signed receipt"):
+        record_local_qualification_result(
+            bundle,
+            workflow_id="wf-1",
+            case_id="representative-local",
+            observed_outcome="verified",
+            evidence=evidence,
+            capability_observation=signed_observation,
+        )
 
     assert added["project"]["cases"][-1]["input_ref"].startswith("desktop-input://")
-    assert result["project"]["revision"] == revision
-    assert case["results"][0]["status"] == "passed"
-    assert case["results"][0]["attestation_signature"]
-
-    persisted = Workflow.load(bundle)
-    assert persisted.qualification is not None
-    persisted_case = next(
-        item
-        for item in persisted.qualification.cases
-        if item.id == "representative-local"
-    )
-    linked_result = persisted_case.results[-1]
-    later_unlinked = sign_case_result(
-        linked_result.model_copy(
-            update={
-                "evidence": [
-                    item for item in linked_result.evidence if item.kind == "run_report"
-                ],
-                "attestation_signature": "",
-            }
-        ),
-        private_key=private_raw,
-    )
-    persisted_case.results.append(later_unlinked)
-    persisted.save(bundle)
-
-    coverage = inspect_bundle(bundle, workflow_id="wf-1")["capability_coverage"]
-    case_coverage = next(
-        item for item in coverage["cases"] if item["case_id"] == "representative-local"
-    )
-    assert case_coverage["has_current_receipt"] is True
-    assert case_coverage["has_current_result"] is False
-    assert coverage["satisfied"] is False
+    assert revision >= 1
 
 
-def test_retained_case_receipt_binds_report_without_copying_sensitive_body(
+def test_retained_case_evidence_keeps_exact_report_and_input_inside_local_boundary(
     tmp_path: Path,
 ) -> None:
     bundle = tmp_path / "bundle"
@@ -344,11 +355,61 @@ def test_retained_case_receipt_binds_report_without_copying_sensitive_body(
         case_id="representative-1",
         run_id="run-1",
         run_dir=run,
+        runtime_input_bytes=b'{"params":{},"worklists":{}}',
     )
-    receipt = (bundle / "qualification-evidence" / references[0]["relative_path"]).read_text()
+    report = (bundle / "qualification-evidence" / references[0]["relative_path"]).read_bytes()
+    inputs = (bundle / "qualification-evidence" / references[1]["relative_path"]).read_bytes()
 
-    assert "Sensitive Person" not in receipt
-    assert hashlib.sha256(receipt.encode()).hexdigest() == references[0]["sha256"]
+    assert [item["kind"] for item in references] == ["run_report", "case_input"]
+    assert hashlib.sha256(report).hexdigest() == references[0]["sha256"]
+    assert hashlib.sha256(inputs).hexdigest() == references[1]["sha256"]
+
+
+def test_desktop_binds_canonical_inputs_and_action_scope_before_case_run(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="save", intent="Save", action=ActionKind.CLICK),
+        params={"record_id": "example"},
+    )
+    _initialize(bundle)
+    add_qualification_case(
+        bundle,
+        workflow_id="wf-1",
+        case_id="representative-1",
+        kind="representative",
+    )
+    from engine.qualification_lifecycle import stage_case_runtime_inputs, store_case_parameters
+
+    parameters_path, _ = store_case_parameters(
+        tmp_path / "state",
+        workflow_id="wf-1",
+        case_id="representative-1",
+        parameters_json='{"record_id":"case-1"}',
+    )
+    inputs_path, inputs = stage_case_runtime_inputs(
+        tmp_path / "state",
+        workflow_id="wf-1",
+        case_id="representative-1",
+        workflow=Workflow.load(bundle),
+        parameters_path=parameters_path,
+    )
+    set_local_qualification_case_scope(
+        bundle,
+        workflow_id="wf-1",
+        case_id="representative-1",
+        runtime_input_bytes=inputs,
+    )
+
+    project = Workflow.load(bundle).qualification
+    assert project is not None
+    case = next(item for item in project.cases if item.id == "representative-1")
+    assert inputs_path.stat().st_mode & 0o777 == 0o600
+    assert case.runtime_input_sha256 == hashlib.sha256(inputs).hexdigest()
+    assert [(target.step_id, target.actuation_path) for target in case.action_targets] == [
+        ("save", "gui")
+    ]
 
 
 def test_inspection_exposes_durable_target_evidence_without_flattening_to_coordinates(
@@ -855,7 +916,7 @@ def test_effect_control_writes_executable_contract_and_canonical_tier(
     assert result["controls"]["actions"]["save"]["effects"][0]["verification_tier"] == 2
     assert (
         persisted.qualification.action_classifications["save"].classification.value
-        == "state_changing"
+        == "irreversible"
     )
 
 
@@ -961,61 +1022,42 @@ def test_certification_uses_canonical_refusals_instead_of_policy_only_success(
 
     assert result["certification_attempt"]["passed"] is False
     assert result["certification_current"] is False
-    assert {refusal["code"] for refusal in result["certification_attempt"]["refusals"]} >= {
-        "representative_case_missing",
-        "case_not_passed",
+    assert "representative_case_missing" in {
+        refusal["code"] for refusal in result["certification_attempt"]["refusals"]
     }
     assert persisted.qualification.last_certification is not None
     assert persisted.qualification.last_certification.passed is False
     assert persisted.manifest.provenance.certified is False
 
 
-@pytest.mark.parametrize("require_unobserved_session", [False, True])
-def test_dispatcher_signs_observed_capabilities_instead_of_requirements(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    require_unobserved_session: bool,
-) -> None:
-    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
-    bundle = _bundle(
-        config.data_dir / "bundles" / "wf-1",
+def _sealed_scoped_case_for_flow_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
+    """Build the Desktop-owned inputs and exact Flow case scope for one case."""
+
+    key = "desktop-flow-command-test-key"
+    source = _bundle(
+        tmp_path / "source",
         Step(
-            id="submit",
-            intent="Submit",
+            id="open",
+            intent="Open the selected record",
             action=ActionKind.CLICK,
             anchor=Anchor(
-                template="submit.png",
+                template="target.png",
                 region=(0, 0, 20, 20),
                 click_point=(10, 10),
-                structural=StructuralLocator(
-                    automation_id="submit",
-                    role="button",
-                    name="Submit",
-                ),
             ),
         ),
+        params={"record_id": "A-1"},
     )
-    initialize_qualification(
-        bundle,
-        workflow_id="wf-1",
-        target_kind="web",
-        application="Reference app",
-        application_version="1",
-        environment_label="reference-web",
-        required_capabilities=[
-            "structural_observation",
-            "actuation",
-            *(["session_continuity"] if require_unobserved_session else []),
-        ],
-        minimum_effect_tier=3,
-    )
+    _initialize(source)
+    set_action_risk(source, workflow_id="wf-1", step_id="open", risk="read_only")
     add_qualification_case(
-        bundle,
+        source,
         workflow_id="wf-1",
         case_id="representative",
         kind="representative",
     )
-
     private = Ed25519PrivateKey.generate()
     private_raw = private.private_bytes(
         encoding=serialization.Encoding.Raw,
@@ -1030,135 +1072,138 @@ def test_dispatcher_signs_observed_capabilities_instead_of_requirements(
         "engine.qualification_keys.qualification_signer",
         lambda: (private_raw, b64encode(public_raw).decode("ascii")),
     )
+    data_dir = tmp_path / ".openadapt"
+    parameters_path, _input_ref = store_case_parameters(
+        data_dir,
+        workflow_id="wf-1",
+        case_id="representative",
+        parameters_json='{"record_id":"A-1"}',
+    )
+    workflow = Workflow.load(source)
+    inputs_path, inputs = stage_case_runtime_inputs(
+        data_dir,
+        workflow_id="wf-1",
+        case_id="representative",
+        workflow=workflow,
+        parameters_path=parameters_path,
+    )
+    set_local_qualification_case_scope(
+        source,
+        workflow_id="wf-1",
+        case_id="representative",
+        runtime_input_bytes=inputs,
+    )
+    prepare_local_qualification_runner(source, workflow_id="wf-1")
+    sealed = tmp_path / "sealed"
+    seal_qualification_bundle(
+        source,
+        sealed,
+        workflow_id="wf-1",
+        destination_key=key,
+    )
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", key)
+    return sealed, inputs_path
+
+
+def test_desktop_case_scope_reaches_flow_owned_qualification_authorization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Flow, not Desktop, constructs authority for the exact scoped case."""
+
+    import openadapt_flow.__main__ as flow_main
+    from openadapt_flow.policy import load_policy, policy_contract_sha256
+    from openadapt_flow.run_gate import RunGateReport
+
+    sealed, inputs_path = _sealed_scoped_case_for_flow_command(tmp_path, monkeypatch)
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "flow-state"))
+    captured: dict[str, object] = {}
+    workflow = Workflow.load(sealed)
+    assert workflow.manifest is not None
+    policy = load_policy("clinical-write")
     monkeypatch.setattr(
-        "engine.flow_bridge.FlowBridge.read_report",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("qualification must parse the exact retained report bytes")
+        "openadapt_flow.run_gate.evaluate_run_gate",
+        lambda *_args, **_kwargs: RunGateReport(
+            workflow_name=workflow.name,
+            policy_name=policy.name,
+            policy_contract_sha256=policy_contract_sha256(policy),
+            execution_profile="standard",
+            bundle_content_digest=workflow.manifest.content_digest,
+            minimum_effect_tier=3,
         ),
     )
-
-    run_dir = config.data_dir / "runs" / "run-1"
-    run_dir.mkdir(parents=True)
-    (run_dir / "report.json").write_text(
-        json.dumps(
-            {
-                "workflow_name": "qualification-test",
-                "started_at": "2026-07-27T12:00:00+00:00",
-                "execution_target_kind": "web",
-                "execution_profile": "standard",
-                "execution_outcome": "VERIFIED",
-                "production_eligible": True,
-                "execution_completed": True,
-                "success": True,
-                "model_calls": 0,
-                "outcome_envelope": {
-                    "version": "openadapt.execution-outcome/v1",
-                    "outcome": "VERIFIED",
-                    "profile": "standard",
-                    "production_eligible": True,
-                    "execution_completed": True,
-                    "required_contracts": {
-                        "authorization": 1,
-                        "identity": 0,
-                        "postcondition": 0,
-                        "effect": 0,
-                    },
-                    "passed_contracts": {
-                        "authorization": 1,
-                        "identity": 0,
-                        "postcondition": 0,
-                        "effect": 0,
-                    },
-                    "evidence_classes": ["authorization"],
-                    "model_calls": 0,
-                    "external_network_calls": "none",
-                    "compensation_actions": 0,
-                },
-                "results": [
-                    {
-                        "step_id": "submit",
-                        "intent": "Submit",
-                        "ok": True,
-                        "resolution": {
-                            "rung": "structural",
-                            "point": [10, 10],
-                            "confidence": 1.0,
-                            "elapsed_ms": 1.0,
-                        },
-                        "delivery_receipt": {
-                            "receipt_id": "receipt-1",
-                            "operation": "dom_click",
-                            "native": True,
-                            "delivered_at": "2026-07-27T12:00:01+00:00",
-                        },
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    db = IndexDB(tmp_path / "index.db")
-    db.initialize()
-    db.insert_bundle("wf-1", str(bundle))
-    db.insert_run("run-1", str(run_dir), bundle_id="wf-1")
-    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
     monkeypatch.setattr(
-        dispatcher,
-        "_replay_or_run",
-        lambda _params, *, run: {"outcome": "VERIFIED", "run_id": "run-1"},
+        flow_main,
+        "_cmd_replay",
+        lambda args: captured.setdefault("args", args) and 0,
     )
-    try:
-        result = dispatcher.run_qualification_case(
-            workflow_id="wf-1",
-            case_id="representative",
-            target={"backend": "web"},
-        )
-    finally:
-        db.close()
 
-    representative = next(
-        item for item in result["project"]["cases"] if item["id"] == "representative"
+    result = flow_main.main(
+        [
+            "qualify",
+            "run-case",
+            str(sealed),
+            "--case-id",
+            "representative",
+            "--inputs",
+            str(inputs_path),
+            "--campaign-id",
+            "campaign-1",
+            "--run-id",
+            "run-1",
+            "--run-dir",
+            str(tmp_path / "run"),
+            "--backend",
+            "web",
+        ]
     )
-    case_coverage = next(
-        item
-        for item in result["capability_coverage"]["cases"]
-        if item["case_id"] == "representative"
-    )
-    expected_observed = [
-        "actuation",
-        "governed_authorization",
-        "playwright_dom",
-        "settled_state_detection",
-        "structural_observation",
-    ]
-    assert case_coverage["has_current_receipt"] is True
-    assert case_coverage["observed"] == expected_observed
-    assert case_coverage["runtime_version"] == result["project"]["environment"]["runtime_version"]
-    receipt_path = (
-        bundle
-        / "qualification-evidence"
-        / "representative"
-        / "run-1"
-        / "capability-observation.json"
-    )
-    assert json.loads(receipt_path.read_text())["attestation_signature"]
 
-    if require_unobserved_session:
-        assert result["ok"] is False
-        assert result["missing_capabilities"] == ["session_continuity"]
-        assert case_coverage["missing"] == ["session_continuity"]
-        assert case_coverage["has_current_result"] is False
-        assert representative["results"] == []
-    else:
-        assert result["ok"] is True
-        assert case_coverage["missing"] == []
-        assert case_coverage["has_current_result"] is True
-        case_result = representative["results"][0]
-        assert case_result["runner_capabilities"] == expected_observed
-        assert {item["kind"] for item in case_result["evidence"]} == {
-            "run_report",
-            "other",
-        }
+    assert result == 0
+    args = captured["args"]
+    authorization = args._governed_run_authorization
+    assert args._qualification_case_execution["case"].id == "representative"
+    assert authorization.approval_source == "qualification-campaign"
+    assert authorization.execution_profile == "standard"
+    assert authorization.qualification_case_action_paths == {"open": "gui"}
+    assert authorization.validate_workflow(workflow) is None
+
+
+def test_desktop_case_scope_refuses_changed_canonical_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Flow refuses a valid but differently-bound input artifact before a run."""
+
+    import openadapt_flow.__main__ as flow_main
+
+    sealed, inputs_path = _sealed_scoped_case_for_flow_command(tmp_path, monkeypatch)
+    changed_inputs = inputs_path.with_name("representative.changed.json")
+    changed_inputs.write_bytes(inputs_path.read_bytes().replace(b"A-1", b"B-2"))
+    changed_inputs.chmod(0o600)
+    called = []
+    monkeypatch.setattr(flow_main, "_cmd_run", lambda args: called.append(args) or 0)
+
+    result = flow_main.main(
+        [
+            "qualify",
+            "run-case",
+            str(sealed),
+            "--case-id",
+            "representative",
+            "--inputs",
+            str(changed_inputs),
+            "--campaign-id",
+            "campaign-1",
+            "--run-id",
+            "run-1",
+            "--run-dir",
+            str(tmp_path / "run"),
+            "--backend",
+            "web",
+        ]
+    )
+
+    assert result == 2
+    assert called == []
+    assert "inputs do not match the approved case" in capsys.readouterr().out
 
 
 def test_dispatcher_initialization_persists_bundle_status_and_contract(

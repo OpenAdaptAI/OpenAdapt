@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CMD, engineInvoke } from "../lib/engine";
+import {
+  serializeQualificationParameters,
+  type QualificationParameterValues,
+} from "../lib/qualificationParameters";
 import type {
   ExecutionTarget,
   QualificationCaseKind,
@@ -42,6 +46,9 @@ export function QualificationLifecycle({
   );
   const [selectedCaseId, setSelectedCaseId] = useState("");
   const [parametersJson, setParametersJson] = useState("{}");
+  const [parameterValues, setParameterValues] =
+    useState<QualificationParameterValues>({});
+  const [advancedParameters, setAdvancedParameters] = useState(false);
   const [target, setTarget] = useState<ExecutionTarget>(() =>
     targetForProject(project),
   );
@@ -63,12 +70,52 @@ export function QualificationLifecycle({
       ),
     [project.capability_coverage?.cases],
   );
+  const editableParameters = useMemo(
+    () => project.controls.parameters.filter((parameter) => !parameter.secret),
+    [project.controls.parameters],
+  );
+  const parameterSchemaKey = editableParameters
+    .map((parameter) =>
+      [
+        parameter.name,
+        parameter.type,
+        parameter.required,
+        parameter.example,
+        parameter.choices.join(","),
+      ].join(":"),
+    )
+    .join("|");
 
   useEffect(() => {
     if (!selectedCaseId && cases[0]) setSelectedCaseId(cases[0].id);
   }, [cases, selectedCaseId]);
 
   useEffect(() => setTarget(targetForProject(project)), [workflowId]);
+
+  useEffect(() => {
+    setParameterValues(
+      Object.fromEntries(
+        editableParameters.map((parameter) => [
+          parameter.name,
+          parameter.example ?? "",
+        ]),
+      ),
+    );
+  }, [parameterSchemaKey, workflowId]);
+
+  function caseParameters(): string | null {
+    if (advancedParameters) return parametersJson;
+    const serialized = serializeQualificationParameters(
+      editableParameters,
+      parameterValues,
+    );
+    if (!serialized.ok) {
+      setIssue(serialized.error);
+      setNotice("");
+      return null;
+    }
+    return serialized.json;
+  }
 
   async function mutate(
     command: string,
@@ -102,13 +149,15 @@ export function QualificationLifecycle({
   }
 
   async function addCase() {
+    const caseParametersJson = caseParameters();
+    if (caseParametersJson === null) return;
     await mutate(
       CMD.ADD_QUALIFICATION_CASE,
       {
         case_id: caseId.trim(),
         kind: caseKind,
         description: description.trim(),
-        parameters_json: parametersJson,
+        parameters_json: caseParametersJson,
       },
       "add",
     );
@@ -116,11 +165,13 @@ export function QualificationLifecycle({
 
   async function runCase() {
     if (!selectedCase) return;
+    const caseParametersJson = caseParameters();
+    if (caseParametersJson === null) return;
     await mutate(
       CMD.RUN_QUALIFICATION_CASE,
       {
         case_id: selectedCase.id,
-        parameters_json: parametersJson,
+        parameters_json: caseParametersJson,
         target,
         ...(deploymentConfig.trim()
           ? { deployment_config: deploymentConfig.trim() }
@@ -212,7 +263,7 @@ export function QualificationLifecycle({
         </Callout>
       )}
 
-      <Card>
+      <Card id="qualification-cases-section">
         <CardHead
           eyebrow={`Revision ${project.project?.revision || 0}`}
           title="Qualification cases"
@@ -332,19 +383,105 @@ export function QualificationLifecycle({
             </Field>
           </div>
           <div>
-            <Field
-              label="Case parameters"
-              hint="Stored locally outside the workflow; secret values never enter the qualification project."
-              htmlFor="qualification-case-parameters"
-            >
-              <textarea
-                id="qualification-case-parameters"
-                className="input mono"
-                rows={8}
-                value={parametersJson}
-                onChange={(event) => setParametersJson(event.target.value)}
-              />
-            </Field>
+            <h3>Case inputs</h3>
+            <p className="page-sub">
+              Desktop creates the runner input object. Values stay local and secret
+              parameters remain credential references.
+            </p>
+            {editableParameters.length > 0 ? (
+              <div className="grid grid-2" style={{ marginTop: "var(--space-3)" }}>
+                {editableParameters.map((parameter) => (
+                  <Field
+                    key={parameter.name}
+                    label={parameter.name.replaceAll("_", " ")}
+                    hint={[
+                      parameter.type.replaceAll("_", " "),
+                      parameter.required ? "required" : "optional",
+                      parameter.example !== null
+                        ? `recorded value: ${parameter.example}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    htmlFor={`qualification-case-param-${parameter.name}`}
+                  >
+                    {parameter.choices.length > 0 ? (
+                      <select
+                        id={`qualification-case-param-${parameter.name}`}
+                        className="input"
+                        required={parameter.required}
+                        value={parameterValues[parameter.name] ?? ""}
+                        onChange={(event) =>
+                          setParameterValues((current) => ({
+                            ...current,
+                            [parameter.name]: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="" disabled={parameter.required}>
+                          {parameter.required ? "Select a value" : "Not set"}
+                        </option>
+                        {parameter.choices.map((choice) => (
+                          <option key={choice} value={choice}>
+                            {choice}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id={`qualification-case-param-${parameter.name}`}
+                        className="input"
+                        required={parameter.required}
+                        type={
+                          parameter.type === "number"
+                            ? "number"
+                            : parameter.type === "date"
+                              ? "date"
+                              : "text"
+                        }
+                        value={parameterValues[parameter.name] ?? ""}
+                        onChange={(event) =>
+                          setParameterValues((current) => ({
+                            ...current,
+                            [parameter.name]: event.target.value,
+                          }))
+                        }
+                      />
+                    )}
+                  </Field>
+                ))}
+              </div>
+            ) : (
+              <p className="page-sub">This workflow has no public case inputs.</p>
+            )}
+            <details className="advanced-target">
+              <summary>Advanced: exact input JSON</summary>
+              <div className="advanced-target-body">
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={advancedParameters}
+                    onChange={(event) => setAdvancedParameters(event.target.checked)}
+                  />
+                  <span>Use exact JSON instead of the input form</span>
+                </label>
+                {advancedParameters && (
+                  <Field
+                    label="Exact input JSON"
+                    hint="For expert use. Desktop still rejects named secret parameters."
+                    htmlFor="qualification-case-parameters"
+                  >
+                    <textarea
+                      id="qualification-case-parameters"
+                      className="input mono"
+                      rows={8}
+                      value={parametersJson}
+                      onChange={(event) => setParametersJson(event.target.value)}
+                    />
+                  </Field>
+                )}
+              </div>
+            </details>
             {project.controls.parameters.some((parameter) => parameter.secret) && (
               <Callout tone="info" title="Runner secret references">
                 {project.controls.parameters
@@ -432,7 +569,7 @@ export function QualificationLifecycle({
         </details>
       </Card>
 
-      <Card>
+      <Card id="qualification-artifact-section">
         <CardHead
           eyebrow="Artifact lifecycle"
           title="Version, seal, export, or deploy"

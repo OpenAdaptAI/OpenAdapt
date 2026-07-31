@@ -133,6 +133,7 @@ describe("Qualification effect requirements", () => {
 
     render(<Qualification workflowId="wf-1" onBack={() => {}} />);
 
+    expect(await screen.findByText("Next: Run cases")).toBeTruthy();
     const actionSelect = await screen.findByLabelText("Action");
     const tierSelect = screen.getByLabelText(
       "Minimum evidence required for this effect",

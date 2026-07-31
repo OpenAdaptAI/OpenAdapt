@@ -25,7 +25,7 @@ ROOT_DISTRIBUTION = "openadapt-desktop"
 # ``console`` extra on Flow is what puts fastapi/uvicorn/starlette in the
 # artifact; without it the mobile decision portal cannot start its console.
 # ``browser`` carries Playwright, which Flow moved out of its core dependencies
-# in 1.25.0 and which Desktop still freezes on purpose.
+# in the pinned Flow runtime and which Desktop still freezes on purpose.
 FROZEN_RUNTIME_ROOTS = ("openadapt-desktop", "openadapt-flow[browser,console]")
 BUILD_EXTRA = frozenset({"build"})
 NOTICE_BUNDLE_MEMBER = "third_party/python"

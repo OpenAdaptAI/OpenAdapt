@@ -1,7 +1,8 @@
 /* =============================================================================
    OpenAdapt Desktop — application styles.
    Built ONLY on the semantic tokens from tokens.css (no raw palette, no hex).
-   Surface: phosphor (dark "execution/terminal" cockpit) — data-theme="phosphor".
+   Surface: paper, shared with the Cloud product shell. Terminal and execution
+   evidence can still use the phosphor surface where the content requires it.
    ============================================================================= */
 
 @import "./tokens.css";
@@ -77,45 +78,103 @@ a:hover {
 }
 
 /* -----------------------------------------------------------------------------
-   App shell: left rail + content
+   App shell: product header + content
    -------------------------------------------------------------------------- */
 .app {
-  display: grid;
-  grid-template-columns: 232px 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
 }
-
-.rail {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+.desktop-entry-shell {
   display: flex;
   flex-direction: column;
-  padding: var(--space-4) var(--space-3);
-  gap: var(--space-1);
+  height: 100vh;
+  overflow: hidden;
+}
+.desktop-entry-shell > main {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.desktop-entry-shell .center-stage {
+  height: 100%;
 }
 
-.wordmark {
+.desktop-shell {
+  z-index: 100;
+  flex: 0 0 auto;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.desktop-shell-inner {
   display: flex;
+  width: 100%;
+  max-width: 1280px;
+  min-height: 64px;
+  align-items: center;
+  gap: var(--space-5);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+
+.product-brand {
+  display: inline-flex;
   align-items: baseline;
-  gap: 1px;
-  padding: var(--space-2) var(--space-3) var(--space-5);
+  flex: 0 0 auto;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
   font-family: var(--font-display);
   font-size: var(--fs-lg);
+  letter-spacing: var(--tracking-tight);
 }
-.wordmark .open {
+.product-brand-static {
+  cursor: default;
+}
+.product-brand .brand-open {
   font-weight: 200;
   color: var(--text);
 }
-.wordmark .adapt {
+.product-brand .brand-adapt {
   font-weight: var(--fw-semibold);
   color: var(--text-strong);
 }
+.product-brand .brand-product {
+  margin-left: var(--space-2);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--border);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+.product-brand:focus-visible {
+  border-radius: var(--radius-1);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 5px;
+}
+
+.desktop-nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+}
 
 .nav-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  flex: 0 0 auto;
+  gap: var(--space-2);
+  min-height: 38px;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-1);
   color: var(--text-muted);
@@ -124,8 +183,7 @@ a:hover {
   background: none;
   font: inherit;
   text-align: left;
-  width: 100%;
-  border-left: 2px solid transparent;
+  border-bottom: 2px solid transparent;
   transition: color var(--motion) var(--ease-out),
     background var(--motion) var(--ease-out);
 }
@@ -136,7 +194,7 @@ a:hover {
 .nav-item.active {
   color: var(--text-strong);
   background: var(--surface-sunk);
-  border-left-color: var(--brand);
+  border-bottom-color: var(--brand);
 }
 .nav-item .glyph {
   width: 16px;
@@ -144,24 +202,103 @@ a:hover {
   color: inherit;
   opacity: 0.9;
 }
-.nav-spacer {
+.desktop-shell-spacer {
   flex: 1;
 }
 
-.rail-status {
-  padding: var(--space-3);
-  border-top: 1px solid var(--border);
-  margin-top: var(--space-3);
+.desktop-status {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--fs-caption);
   color: var(--text-faint);
 }
+.desktop-status > span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunk);
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.desktop-status > span.recording {
+  color: var(--attention);
+}
+.desktop-status strong {
+  color: inherit;
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+}
+.desktop-status small {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn-fg);
+  font-size: 9px;
+}
+
+.app > main {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
 
 .content {
+  width: 100%;
+  max-width: 1120px;
+  height: 100%;
   overflow-y: auto;
+  margin: 0 auto;
   padding: var(--space-8) var(--space-10);
+}
+
+@media (max-width: 1080px) {
+  .desktop-shell-inner {
+    gap: var(--space-3);
+    padding-inline: var(--space-4);
+  }
+  .desktop-nav {
+    gap: 0;
+  }
+  .nav-item {
+    padding-inline: var(--space-2);
+  }
+  .nav-item .glyph {
+    display: none;
+  }
+  .desktop-status strong {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .desktop-shell-inner {
+    min-height: 0;
+    flex-wrap: wrap;
+    padding-block: var(--space-3);
+  }
+  .desktop-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+  }
+  .desktop-shell-spacer {
+    display: none;
+  }
+  .desktop-status {
+    margin-left: auto;
+  }
+  .content {
+    padding: var(--space-6) var(--space-4);
+  }
 }
 
 .page-head {
@@ -257,6 +394,76 @@ a:hover {
   flex-direction: column;
   gap: var(--space-1);
   margin-bottom: var(--space-4);
+}
+
+.qualification-journey-steps {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.qualification-journey-step {
+  min-width: 0;
+}
+.qualification-journey-button {
+  align-items: center;
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: var(--space-2);
+  grid-template-columns: 28px minmax(0, 1fr);
+  height: 100%;
+  padding: var(--space-2);
+  text-align: left;
+  width: 100%;
+}
+.qualification-journey-button:hover,
+.qualification-journey-button:focus-visible {
+  border-color: var(--brand);
+}
+.qualification-journey-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.qualification-journey-index {
+  align-items: center;
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+.qualification-journey-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.qualification-journey-state {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.qualification-journey-state {
+  font-family: var(--font-mono);
+}
+.qualification-journey-step.complete .qualification-journey-index,
+.qualification-journey-step.ready .qualification-journey-index {
+  background: var(--pill-ok-bg);
+  color: var(--pill-ok-fg);
+}
+.qualification-journey-step.current .qualification-journey-index {
+  background: var(--pill-run-bg);
+  color: var(--pill-run-fg);
 }
 .grid {
   display: grid;

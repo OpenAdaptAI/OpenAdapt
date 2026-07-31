@@ -14,6 +14,7 @@ import type {
   QualificationTargetKind,
 } from "../lib/types";
 import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
+import { QualificationJourney } from "../ui/QualificationJourney";
 import { QualificationLifecycle } from "./QualificationLifecycle";
 
 const POLICY = "clinical-write";
@@ -176,6 +177,15 @@ function certificationState(project: QualificationProject): {
     return { label: "ready to certify", tone: "warn" };
   }
   return { label: "needs review", tone: "crit" };
+}
+
+function scrollToQualificationSection(id: string) {
+  window.requestAnimationFrame(() =>
+    document.getElementById(id)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    }),
+  );
 }
 
 export function Qualification({
@@ -634,6 +644,25 @@ export function Qualification({
     }
   }
 
+  function openActionContract(stepId: string) {
+    setContractActionId(stepId);
+    scrollToQualificationSection("qualification-contract-section");
+  }
+
+  function openRefusal(
+    refusal: QualificationProject["report"]["refusals"][number],
+  ) {
+    if (refusal.step_id) {
+      openActionContract(refusal.step_id);
+      return;
+    }
+    scrollToQualificationSection(
+      refusal.case_id
+        ? "qualification-cases-section"
+        : "qualification-summary-section",
+    );
+  }
+
   const state = project ? certificationState(project) : null;
   const digest = project?.graph.bundle.provenance.content_digest;
 
@@ -662,8 +691,10 @@ export function Qualification({
         </Card>
       ) : (
         <>
+          <QualificationJourney project={project} />
+
           {project.migration_required && (
-            <Card>
+            <Card id="qualification-environment-section">
               <CardHead
                 eyebrow="Environment boundary"
                 title="Start the qualification project"
@@ -785,7 +816,7 @@ export function Qualification({
             </Card>
           )}
 
-          <Card>
+          <Card id="qualification-summary-section">
             <CardHead
               eyebrow={project.qualification_schema}
               title="Qualification contract"
@@ -920,7 +951,7 @@ export function Qualification({
                       </div>
                     ))}
                   </div>
-                  <Button onClick={() => setContractActionId(action.id)}>
+                  <Button onClick={() => openActionContract(action.id)}>
                     Edit contract
                   </Button>
                 </div>
@@ -928,7 +959,7 @@ export function Qualification({
             </Card>
           )}
 
-          <Card>
+          <Card id="qualification-graph-section">
             <CardHead
               eyebrow="Graph review"
               title="Workflow structure"
@@ -985,7 +1016,7 @@ export function Qualification({
             </table>
           </Card>
 
-          <Card>
+          <Card id="qualification-actions-section">
             <CardHead
               eyebrow="Contract review"
               title="Actions, identity, and effects"
@@ -1075,7 +1106,7 @@ export function Qualification({
             </table>
           </Card>
 
-          <Card>
+          <Card id="qualification-contract-section">
             <CardHead
               eyebrow="Contract authoring"
               title="Arm identity and bind the business effect"
@@ -1879,6 +1910,13 @@ export function Qualification({
                 >
                   {refusal.message}
                   <div className="page-sub mono">{refusal.path}</div>
+                  <Button
+                    size="sm"
+                    style={{ marginTop: "var(--space-2)" }}
+                    onClick={() => openRefusal(refusal)}
+                  >
+                    Open required control
+                  </Button>
                 </Callout>
               ))}
               {project.lint.findings

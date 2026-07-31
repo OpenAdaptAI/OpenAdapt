@@ -80,10 +80,19 @@ class PrivateFlowConfigError(ValueError):
 
 @dataclass(frozen=True)
 class PreparedPrivateYaml:
-    """One immutable serialization and its same-snapshot log redactions."""
+    """One immutable serialization and its same-snapshot log redactions.
+
+    ``remote_decisions`` is read from the SAME snapshot as ``payload``, not by
+    re-opening the operator's file. Deciding "does this deployment answer halts
+    on a phone?" from a second read would reintroduce exactly the TOCTOU gap
+    this class exists to close: Flow could be launched with the outbound lane on
+    while executing a config that never enabled it.
+    """
 
     payload: str
     redactions: tuple[str, ...]
+    remote_decisions: bool = False
+    remote_decision_runner_id: str | None = None
 
 
 def _load_mapping(source: Path | None) -> dict[str, Any]:
@@ -206,10 +215,42 @@ def prepare_flow_config(
     if source is None and target is None:
         return None
     deployment = _merged_config(source, target)
+    remote_decisions, remote_decision_runner_id = _remote_decision_settings(deployment)
     return PreparedPrivateYaml(
         payload=yaml.safe_dump(deployment, sort_keys=False),
         redactions=_redactions_for_mapping(deployment),
+        remote_decisions=remote_decisions,
+        remote_decision_runner_id=remote_decision_runner_id,
     )
+
+
+def _remote_decisions_enabled(deployment: Mapping[str, Any]) -> bool:
+    """Whether this deployment answers halts through the hosted lane.
+
+    Strictly ``True``: a truthy string, a 1, or a missing section all mean "no".
+    Turning on an outbound lane that carries decision context is not a default
+    and is not inferred.
+    """
+
+    return _remote_decision_settings(deployment)[0]
+
+
+def _remote_decision_settings(
+    deployment: Mapping[str, Any],
+) -> tuple[bool, str | None]:
+    """Return the remote-decision switch and runner from one config snapshot."""
+
+    human_decisions = deployment.get("human_decisions")
+    if not isinstance(human_decisions, Mapping):
+        return False, None
+    remote = human_decisions.get("remote")
+    if not isinstance(remote, Mapping):
+        return False, None
+    runner_id = remote.get("runner_id")
+    normalized_runner_id = (
+        runner_id.strip() if isinstance(runner_id, str) and runner_id.strip() else None
+    )
+    return remote.get("enabled") is True, normalized_runner_id
 
 
 def prepare_flow_record_request(

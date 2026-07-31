@@ -42,7 +42,7 @@ def _flow_api() -> dict[str, Any]:
 
     try:
         import openadapt_flow.qualification as flow_qualification
-        from openadapt_flow.ir import Workflow
+        from openadapt_flow.ir import RunReport, Workflow
         from openadapt_flow.policy import evaluate_policy, lint_workflow, load_policy
         from openadapt_flow.qualification import (
             ActionRiskClass,
@@ -54,6 +54,7 @@ def _flow_api() -> dict[str, Any]:
             IdentityNormalizer,
             IdentityPolicy,
             IdentitySignalPolicy,
+            QualificationActionTarget,
             QualificationCase,
             QualificationCaseKind,
             QualificationCaseResult,
@@ -63,9 +64,11 @@ def _flow_api() -> dict[str, Any]:
             certify_project,
             evaluate_qualification,
             init_project,
+            qualification_action_requirements,
             record_case_results,
             save_qualified_workflow,
             set_action_classification,
+            set_case_scope,
             set_effect_policy,
             set_identity_policy,
             set_minimum_effect_tier,
@@ -83,6 +86,7 @@ def _flow_api() -> dict[str, Any]:
         ) from exc
     return {
         "Workflow": Workflow,
+        "RunReport": RunReport,
         "evaluate_policy": evaluate_policy,
         "lint_workflow": lint_workflow,
         "load_policy": load_policy,
@@ -93,6 +97,7 @@ def _flow_api() -> dict[str, Any]:
         "QualificationCase": QualificationCase,
         "QualificationCaseKind": QualificationCaseKind,
         "QualificationCaseResult": QualificationCaseResult,
+        "QualificationActionTarget": QualificationActionTarget,
         "QualificationOutcome": QualificationOutcome,
         "EnvironmentBoundary": EnvironmentBoundary,
         "IdentityEnforcement": IdentityEnforcement,
@@ -107,11 +112,13 @@ def _flow_api() -> dict[str, Any]:
         "certify_project": certify_project,
         "evaluate_qualification": evaluate_qualification,
         "init_project": init_project,
+        "qualification_action_requirements": qualification_action_requirements,
         "record_case_results": record_case_results,
         "save_qualified_workflow": save_qualified_workflow,
         "set_trusted_runner_key": set_trusted_runner_key,
         "sign_case_result": sign_case_result,
         "set_action_classification": set_action_classification,
+        "set_case_scope": set_case_scope,
         "set_effect_policy": set_effect_policy,
         "set_identity_policy": set_identity_policy,
         "set_minimum_effect_tier": set_minimum_effect_tier,
@@ -330,11 +337,19 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
     parameters = []
     for name in parameter_names:
         spec = workflow.param_specs.get(name)
+        secret = name in workflow.secret_params
+        example = spec.example if spec is not None else workflow.params.get(name)
         parameters.append(
             {
                 "name": name,
                 "type": spec.type.value if spec is not None else "string",
-                "secret": name in workflow.secret_params,
+                "secret": secret,
+                "required": spec.required if spec is not None else True,
+                # A secret's recorded value and allowed-value list are also
+                # secret material. Desktop receives only the schema needed to
+                # render the credential reference, never its reusable value.
+                "example": None if secret else example,
+                "choices": [] if secret or spec is None else list(spec.choices),
             }
         )
 
@@ -1077,6 +1092,59 @@ def prepare_local_qualification_runner(
     )
 
 
+def set_local_qualification_case_scope(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    case_id: str,
+    runtime_input_bytes: bytes,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Bind a Desktop case to its canonical inputs and executable action paths."""
+
+    from openadapt_flow.policy import executable_actuation_paths
+    from openadapt_flow.runtime.authorization import parse_runtime_inputs_bytes
+
+    api = _flow_api()
+    workflow = _load(bundle_dir, key=bundle_key)
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError("Initialize the qualification boundary before running cases.")
+    try:
+        _params, worklists = parse_runtime_inputs_bytes(runtime_input_bytes, workflow=workflow)
+    except ValueError as exc:
+        raise QualificationError("Qualification inputs are not canonical governed inputs") from exc
+    if worklists:
+        raise QualificationError("Desktop qualification cases do not yet support worklists")
+    steps = {step.id: step for step in api["iter_workflow_steps"](workflow)}
+    targets = []
+    for step_id, step in sorted(steps.items()):
+        paths = executable_actuation_paths(step)
+        if not paths:
+            continue
+        path = "gui" if "gui" in paths else "api" if "api" in paths else None
+        if path is None:
+            raise QualificationError(f"Qualification action {step_id!r} has no executable path")
+        targets.append(api["QualificationActionTarget"](step_id=step_id, actuation_path=path))
+    try:
+        api["set_case_scope"](
+            workflow,
+            case_id=case_id,
+            runtime_input_sha256=hashlib.sha256(runtime_input_bytes).hexdigest(),
+            action_targets=targets,
+        )
+        _save(workflow, bundle_dir, key=bundle_key)
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
 def record_local_qualification_result(
     bundle_dir: Path,
     *,
@@ -1130,6 +1198,46 @@ def record_local_qualification_result(
         raise QualificationError(
             "The signed case evidence does not hash-bind its capability receipt"
         )
+    run_reports = [item for item in evidence if item.get("kind") == "run_report"]
+    inputs = [item for item in evidence if item.get("kind") == "case_input"]
+    if len(run_reports) != 1 or len(inputs) != 1:
+        raise QualificationError(
+            "Qualification evidence requires one exact report and one exact input artifact"
+        )
+    try:
+        evidence_root = (bundle_dir / "qualification-evidence").resolve()
+        report_path = (evidence_root / str(run_reports[0]["relative_path"])).resolve()
+        input_path = (evidence_root / str(inputs[0]["relative_path"])).resolve()
+        if (
+            not report_path.is_relative_to(evidence_root)
+            or not input_path.is_relative_to(evidence_root)
+            or report_path.is_symlink()
+            or input_path.is_symlink()
+        ):
+            raise OSError("qualification evidence leaves its local root")
+        report_bytes = report_path.read_bytes()
+        input_bytes = input_path.read_bytes()
+        report = api["RunReport"].model_validate_json(report_bytes)
+    except (OSError, ValueError) as exc:
+        raise QualificationError("Qualification report evidence is invalid") from exc
+    input_sha256 = str(inputs[0]["sha256"])
+    if (
+        hashlib.sha256(input_bytes).hexdigest() != input_sha256
+        or report.governed_qualification_case_input_sha256 != input_sha256
+        or report.governed_runtime_inputs_digest != input_sha256
+        or report.governed_qualification_run_id_sha256
+        != hashlib.sha256(observation.run_id.encode("utf-8")).hexdigest()
+    ):
+        raise QualificationError("Qualification evidence does not bind this exact input and run")
+    if (
+        report.governed_qualification_project_id != project.project_id
+        or report.governed_qualification_project_revision != project.revision
+        or report.governed_qualification_project_contract_sha256 != project.contract_sha256()
+        or report.governed_qualification_case_id_sha256
+        != hashlib.sha256(case.id.encode("utf-8")).hexdigest()
+        or report.governed_qualification_case_kind != case.kind.value
+    ):
+        raise QualificationError("Qualification report does not bind the current case contract")
     private_key, _public_key = qualification_signer()
     observed = api["QualificationOutcome"](observed_outcome)
     status = "passed" if observed_outcome == case.expected_outcome.value and evidence else "failed"
@@ -1150,6 +1258,9 @@ def record_local_qualification_result(
             evidence=evidence,
             detail_code=detail_code,
             attestation_key_id=KEY_ID,
+            campaign_id_sha256=report.governed_qualification_campaign_id_sha256,
+            case_input_sha256=input_sha256,
+            run_id_sha256=report.governed_qualification_run_id_sha256,
         )
         signed = api["sign_case_result"](result, private_key=private_key)
         api["record_case_results"](

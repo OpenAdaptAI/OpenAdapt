@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -96,6 +97,30 @@ class TestFlowBridgeInvocation:
         assert "--config" in command
         # The run directory is passed via --run-dir (not --out).
         assert "--run-dir" in command
+
+    def test_qualify_run_case_uses_flow_owned_authorization(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls))
+
+        bridge.qualify_run_case(
+            tmp_path / "bundle",
+            tmp_path / "cfg.yaml",
+            case_id="representative-1",
+            inputs_file=tmp_path / "runtime-inputs.json",
+            campaign_id="campaign-1",
+            run_id="run-1",
+            out_dir=tmp_path / "run",
+        )
+
+        command, _ = calls[0]
+        assert command[1:3] == ["qualify", "run-case"]
+        assert command[command.index("--case-id") + 1] == "representative-1"
+        assert command[command.index("--inputs") + 1] == str(tmp_path / "runtime-inputs.json")
+        assert command[command.index("--campaign-id") + 1] == "campaign-1"
+        assert command[command.index("--run-id") + 1] == "run-1"
 
     def test_qualification_inputs_and_bundle_key_stay_out_of_argv(
         self, tmp_path: Path, monkeypatch
@@ -580,6 +605,92 @@ class TestReportParsing:
             },
         }
 
+        assert FlowBridge.classify_outcome(0, report) == "unknown"
+
+    def test_accepts_hash_bound_postcondition_evidence_from_flow_1271(self) -> None:
+        workflow_digest = "a" * 64
+        step_payload = {
+            "domain": "openadapt.postcondition-step/v1",
+            "workflow_contract_sha256": workflow_digest,
+            "step_index": 0,
+            "action_kind": "type",
+        }
+        step_digest = hashlib.sha256(
+            json.dumps(
+                step_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        contract_payload = {
+            "domain": "openadapt.postcondition-contract/v1",
+            "workflow_contract_sha256": workflow_digest,
+            "step_contract_sha256": step_digest,
+            "action_kind": "type",
+            "actuation_path": "gui",
+            "contract_kind": "intrinsic_input_readback",
+            "contract_index": 0,
+        }
+        contract_digest = hashlib.sha256(
+            json.dumps(
+                contract_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        report = {
+            "success": True,
+            "model_calls": 0,
+            "external_network_calls": "none",
+            "execution_outcome": "COMPLETED_UNVERIFIED",
+            "execution_profile": "demo",
+            "production_eligible": False,
+            "execution_completed": True,
+            "outcome_envelope": {
+                "version": "openadapt.execution-outcome/v1",
+                "outcome": "COMPLETED_UNVERIFIED",
+                "profile": "demo",
+                "production_eligible": False,
+                "execution_completed": True,
+                "required_contracts": {
+                    "authorization": 0,
+                    "identity": 0,
+                    "postcondition": 1,
+                    "effect": 0,
+                },
+                "passed_contracts": {
+                    "authorization": 0,
+                    "identity": 0,
+                    "postcondition": 1,
+                    "effect": 0,
+                },
+                "workflow_contract_sha256": workflow_digest,
+                "postcondition_evidence": [
+                    {
+                        "result_index": 0,
+                        "workflow_contract_sha256": workflow_digest,
+                        "step_index": 0,
+                        "step_contract_sha256": step_digest,
+                        "action_kind": "type",
+                        "actuation_path": "gui",
+                        "contract_kind": "intrinsic_input_readback",
+                        "contract_index": 0,
+                        "contract_sha256": contract_digest,
+                        "verdict": "passed",
+                    }
+                ],
+                "evidence_classes": ["postcondition"],
+                "model_calls": 0,
+                "external_network_calls": "none",
+                "compensation_actions": 0,
+            },
+        }
+
+        assert FlowBridge.classify_outcome(0, report) == "COMPLETED_UNVERIFIED"
+
+        report["outcome_envelope"]["postcondition_evidence"][0]["contract_sha256"] = "b" * 64
         assert FlowBridge.classify_outcome(0, report) == "unknown"
 
 

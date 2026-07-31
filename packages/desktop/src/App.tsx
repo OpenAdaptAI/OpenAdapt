@@ -1,6 +1,6 @@
-// App shell: left-rail nav + routed screens, gated by first-run/auth.
-// Rail carries the two orthogonal status channels (recording, sync) plus the
-// needs-attention break count, mirrored from the engine over events (spec §3d).
+// Product shell + routed screens, gated by first-run/auth.
+// The top shell uses the same OpenAdapt | Product pattern as Cloud. It also
+// carries the local engine, recording, sync, and attention state.
 import { useEffect, useState } from "react";
 import {
   CMD,
@@ -56,6 +56,42 @@ const NAV: { route: Route["name"]; label: string; glyph: string }[] = [
   { route: "portal", label: "Phone", glyph: "▯" },
   { route: "settings", label: "Settings", glyph: "⚙" },
 ];
+
+function DesktopBrand({ onOpen }: { onOpen?: () => void }) {
+  const content = (
+    <>
+      <span className="brand-open">Open</span>
+      <span className="brand-adapt">Adapt</span>
+      <span className="brand-product">Desktop</span>
+    </>
+  );
+  if (!onOpen) {
+    return <div className="product-brand product-brand-static">{content}</div>;
+  }
+  return (
+    <button
+      aria-label="Open OpenAdapt Desktop workflows"
+      className="product-brand"
+      onClick={onOpen}
+      type="button"
+    >
+      {content}
+    </button>
+  );
+}
+
+function DesktopEntryShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="desktop-entry-shell">
+      <header className="desktop-shell">
+        <div className="desktop-shell-inner">
+          <DesktopBrand />
+        </div>
+      </header>
+      <main>{children}</main>
+    </div>
+  );
+}
 
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
@@ -158,7 +194,9 @@ export default function App() {
     return (
       <>
         {pairingNotice}
-        <div className="center-stage"><span className="page-sub">Loading…</span></div>
+        <DesktopEntryShell>
+          <div className="center-stage"><span className="page-sub">Loading…</span></div>
+        </DesktopEntryShell>
       </>
     );
   }
@@ -167,15 +205,17 @@ export default function App() {
     return (
       <>
         {pairingNotice}
-        <Login
-          onLocal={() => {
-            rememberLocalSession();
-            setLocalSession(true);
-          }}
-          onAuthed={(s) => {
-            setAuth(s);
-          }}
-        />
+        <DesktopEntryShell>
+          <Login
+            onLocal={() => {
+              rememberLocalSession();
+              setLocalSession(true);
+            }}
+            onAuthed={(s) => {
+              setAuth(s);
+            }}
+          />
+        </DesktopEntryShell>
       </>
     );
   }
@@ -184,12 +224,14 @@ export default function App() {
     return (
       <>
         {pairingNotice}
-        <Onboarding
-          onStart={() => {
-            setOnboarded(true);
-            setRoute({ name: "record" });
-          }}
-        />
+        <DesktopEntryShell>
+          <Onboarding
+            onStart={() => {
+              setOnboarded(true);
+              setRoute({ name: "record" });
+            }}
+          />
+        </DesktopEntryShell>
       </>
     );
   }
@@ -207,49 +249,49 @@ export default function App() {
     <>
       {pairingNotice}
       <div className="app">
-        <nav className="rail">
-        <div className="wordmark">
-          <span className="open">Open</span>
-          <span className="adapt">Adapt</span>
-        </div>
+        <header className="desktop-shell">
+          <div className="desktop-shell-inner">
+            <DesktopBrand onOpen={() => setRoute({ name: "library" })} />
 
-        {NAV.map((n) => (
-          <button
-            key={n.route}
-            className={`nav-item ${route.name === n.route ? "active" : ""}`}
-            onClick={() => setRoute({ name: n.route } as Route)}
-          >
-            <span className="glyph">{n.glyph}</span>
-            {n.label}
-            {n.route === "library" && breaks > 0 && (
-              <>
-                <span className="spacer" />
-                <Pill tone="warn">{breaks}</Pill>
-              </>
-            )}
-          </button>
-        ))}
+            <nav className="desktop-nav" aria-label="Desktop navigation">
+              {NAV.map((n) => (
+                <button
+                  aria-current={route.name === n.route ? "page" : undefined}
+                  className={`nav-item ${route.name === n.route ? "active" : ""}`}
+                  key={n.route}
+                  onClick={() => setRoute({ name: n.route } as Route)}
+                  type="button"
+                >
+                  <span className="glyph" aria-hidden="true">{n.glyph}</span>
+                  <span>{n.label}</span>
+                  {n.route === "library" && breaks > 0 ? (
+                    <Pill tone="warn">{breaks}</Pill>
+                  ) : null}
+                </button>
+              ))}
+            </nav>
 
-        <div className="nav-spacer" />
+            <div className="desktop-shell-spacer" />
 
-        <div className="rail-status">
-          <div className="row">
-            <StatusDot tone={engineUp ? "ok" : "off"} />
-            <span>{engineUp ? "engine ready" : "engine offline"}</span>
+            <div className="desktop-status" aria-label="Desktop status">
+              <span title={engineUp ? "Local engine ready" : "Local engine offline"}>
+                <StatusDot tone={engineUp ? "ok" : "off"} />
+                <strong>{engineUp ? "Engine ready" : "Engine offline"}</strong>
+              </span>
+              {recording ? (
+                <span className="recording" title="A demonstration is being recorded">
+                  <StatusDot tone="warn" />
+                  <strong>Recording</strong>
+                </span>
+              ) : null}
+              <span title={`Cloud sync: ${sync.state}`}>
+                <StatusDot tone={syncTone} />
+                <strong>{sync.state}</strong>
+                {sync.queued ? <small>{sync.queued}</small> : null}
+              </span>
+            </div>
           </div>
-          <div className="row">
-            <StatusDot tone={recording ? "warn" : "off"} />
-            <span>{recording ? "recording" : "idle"}</span>
-          </div>
-          <div className="row">
-            <StatusDot tone={syncTone} />
-            <span>
-              {sync.state}
-              {sync.queued ? ` · ${sync.queued} queued` : ""}
-            </span>
-          </div>
-        </div>
-        </nav>
+        </header>
 
         <main>
         {route.name === "library" && (

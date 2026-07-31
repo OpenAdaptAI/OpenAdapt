@@ -1,16 +1,20 @@
 /* Mobile-first task shell. One decision, thumb-reachable actions, safe areas. */
 
 :root {
-  color-scheme: dark;
-  --bg: #101418;
-  --panel: #181d23;
-  --line: #262d35;
-  --text: #eef2f6;
-  --muted: #9fadbc;
-  --accent: #4c9aff;
+  color-scheme: light;
+  --bg: #f4f3ed;
+  --panel: #fffef9;
+  --panel-2: #eeede5;
+  --line: #d6d8ce;
+  --text: #252a22;
+  --muted: #687066;
+  --accent: #2f7154;
   /* Used only to mark stakes. Never on a button: nothing in the action bar is
      allowed to be more salient than anything else in it. */
-  --warn: #f0b429;
+  --warn: #a66a25;
+  --success: #2e7c5a;
+  --danger: #a34f4c;
+  --teach: #356f9f;
   /* Measured from the real action bar by app.js. A constant was wrong once the
      bar carried three two-line buttons, and the outcome line -- the last thing
      in the card -- ended up underneath it. */
@@ -36,10 +40,15 @@ html, body {
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
-  background: var(--bg);
+  /* The task card follows the header in document order. Without a stacking
+     context it can paint over the sticky label while the page moves. */
+  z-index: 2;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
 }
 
-.brand { font-weight: 600; letter-spacing: 0.01em; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: 0.01em; }
+.brand > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--text); color: var(--panel); font-size: 10px; font-weight: 850; }
 .device { color: var(--muted); font-size: 13px; }
 
 .main {
@@ -57,8 +66,9 @@ html, body {
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 18px;
+  padding: 17px;
+  box-shadow: 0 14px 34px rgba(33, 39, 31, .07);
 }
 
 .card h1 { font-size: 21px; line-height: 1.35; margin: 6px 0 12px; }
@@ -71,7 +81,7 @@ html, body {
   border: 1px solid var(--line);
   border-radius: 999px;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--accent);
   margin: 0;
 }
 
@@ -139,19 +149,76 @@ html, body {
   font-size: 15px;
 }
 
-.shot { margin: 16px 0; }
-.shot summary { cursor: pointer; padding: 10px 0; color: var(--accent); }
-.shot .muted { margin: 8px 0 0; }
+.shot { overflow: hidden; margin: 16px 0; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+.shot-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 11px; }
+.shot-head strong { font-size: 12px; }
+.shot-head span { color: var(--muted); font-size: 10px; }
 .shot img {
+  display: block;
   width: 100%;
-  height: auto;
-  object-fit: contain;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #000;
+  height: 170px;
+  object-fit: cover;
+  object-position: top center;
+  border-block: 1px solid var(--line);
+  background: var(--panel);
 }
+.shot figcaption { padding: 8px 11px 10px; color: var(--muted); font-size: 11px; line-height: 1.4; }
 
-.outcome { margin: 14px 0 0; min-height: 1.5em; }
+.outcome { display: grid; gap: 4px; margin: 16px 0 0; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel-2); }
+.outcome[hidden] { display: none; }
+.outcome strong { font-size: 12px; letter-spacing: .08em; }
+.outcome span { font-size: 15px; line-height: 1.45; }
+.outcome.pending { border-color: color-mix(in srgb, var(--accent) 38%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #dcece5); }
+.outcome.success { border-color: color-mix(in srgb, var(--success) 44%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #dff1e8); }
+.outcome.halted { border-color: color-mix(in srgb, var(--warn) 44%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #f6ead7); }
+.outcome.uncertain { border-color: color-mix(in srgb, var(--danger) 46%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #f7e4e2); }
+.outcome.teach { border-color: color-mix(in srgb, var(--teach) 42%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #e0ebf5); }
+.outcome.neutral { background: var(--panel-2); }
+.outcome.terminal {
+  min-height: min(520px, calc(100vh - 160px));
+  margin: 0;
+  align-content: center;
+  justify-items: center;
+  padding: 38px 24px;
+  text-align: center;
+}
+.outcome.terminal::before {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 12px;
+  border-radius: 22px;
+  background: var(--success);
+  color: #fff;
+  font-size: 34px;
+  font-weight: 800;
+}
+.outcome.terminal.halted::before { content: "■"; background: var(--warn); font-size: 25px; }
+.outcome.terminal.uncertain::before { content: "!"; background: var(--danger); }
+.outcome.terminal.teach::before { content: "↗"; background: var(--teach); }
+.outcome.terminal.neutral::before { content: "—"; background: var(--muted); }
+.outcome.terminal strong { font-size: 13px; }
+.outcome.terminal span { max-width: 32ch; font-size: 17px; line-height: 1.55; }
+.result-card { padding: 10px; }
+
+.task-kicker { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.task-hero { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px; border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line)); border-radius: 16px; background: color-mix(in srgb, var(--panel) 86%, #dcece5); }
+.task-hero > span { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: var(--accent); color: #fff; font-size: 21px; font-weight: 900; }
+.task-hero p { margin: 1px 0 3px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.task-hero h1 { margin: 0; font-size: 21px; line-height: 1.28; }
+.task-reason { margin: 14px 0 0; font-size: 14px; line-height: 1.5; }
+.task-signals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.task-signals > span { display: grid; gap: 2px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.task-signals small { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.task-signals strong { font-size: 12px; line-height: 1.35; }
+.task-next { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; align-items: start; margin: 14px 0 0; padding: 11px; border-radius: 12px; background: color-mix(in srgb, var(--panel) 86%, #dcece5); }
+.task-next > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--panel); color: var(--accent); }
+.task-next p { display: grid; gap: 1px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.task-next strong { color: var(--text); font-size: 12px; }
+.task-details { margin-top: 15px; border-top: 1px solid var(--line); padding-top: 12px; }
+.task-details > summary { color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 700; }
 
 .actions {
   position: fixed;
@@ -161,7 +228,7 @@ html, body {
   display: grid;
   gap: 10px;
   padding: 12px 16px calc(env(safe-area-inset-bottom) + 16px);
-  background: linear-gradient(to top, var(--bg) 78%, transparent);
+  background: linear-gradient(to top, var(--bg) 82%, transparent);
   max-width: 640px;
   margin: 0 auto;
 }
@@ -178,8 +245,8 @@ html, body {
 .actions button {
   min-height: 52px;
   border-radius: 12px;
-  border: 1px solid #3a444f;
-  background: #212831;
+  border: 1px solid color-mix(in srgb, var(--text) 22%, var(--line));
+  background: var(--panel);
   color: var(--text);
   font: 600 16px/1.2 inherit;
   cursor: pointer;
@@ -190,7 +257,7 @@ html, body {
 }
 
 .actions button .label { font-weight: 600; }
-.actions button .brief { font-weight: 400; font-size: 13px; opacity: 0.78; }
+.actions button .brief { color: var(--muted); font-weight: 400; font-size: 13px; }
 
 /* A fixed bar that eats half the phone is a legibility problem in its own
    right, and adding `reject` made a four-button bar the ordinary case.

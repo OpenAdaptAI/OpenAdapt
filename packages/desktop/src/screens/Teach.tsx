@@ -4,7 +4,7 @@
 // leaves the machine — this is the regulated-lane correction surface.
 import { useEffect, useState } from "react";
 import { CMD, engineInvoke, engineTry } from "../lib/engine";
-import type { RunReport } from "../lib/types";
+import type { RunPersistenceRetryResponse, RunReport } from "../lib/types";
 import { Button, Card, CardHead, Callout, Field } from "../ui/primitives";
 
 export function Teach({
@@ -19,6 +19,7 @@ export function Teach({
   const [mode, setMode] = useState<"record" | "describe">("record");
   const [phase, setPhase] = useState<"idle" | "recording" | "teaching">("idle");
   const [result, setResult] = useState<string | null>(null);
+  const [retryingPersistence, setRetryingPersistence] = useState(false);
 
   useEffect(() => {
     engineTry<RunReport | null>(
@@ -64,6 +65,28 @@ export function Teach({
     }
   }
 
+  async function retryPersistence() {
+    if (!report) return;
+    setRetryingPersistence(true);
+    setResult(null);
+    try {
+      const response = await engineInvoke<RunPersistenceRetryResponse>(
+        CMD.RETRY_RUN_PERSISTENCE,
+        { workflow_id: workflowId, run_id: report.run_id },
+      );
+      if (response.ok && response.report) {
+        setReport(response.report);
+        setResult("The run is now saved in local history and is ready for Teach.");
+      } else {
+        setResult(response.error || "Desktop could not save the run in local history.");
+      }
+    } catch {
+      setResult("Desktop could not save the run in local history.");
+    } finally {
+      setRetryingPersistence(false);
+    }
+  }
+
   return (
     <div className="content">
       <div className="page-head">
@@ -77,6 +100,24 @@ export function Teach({
         <Card>
           <CardHead eyebrow="Halted step" title={report.halt.step_intent} />
           <Callout tone="warn">{report.halt.reason}</Callout>
+        </Card>
+      )}
+
+      {report?.persistence && report.persistence.state !== "persisted" && (
+        <Card>
+          <CardHead
+            eyebrow="Local history"
+            title="Save this run before teaching"
+            sub={report.persistence.message}
+          />
+          {report.persistence.retryable && (
+            <Button
+              disabled={retryingPersistence}
+              onClick={() => void retryPersistence()}
+            >
+              {retryingPersistence ? "Saving…" : "Retry local history save"}
+            </Button>
+          )}
         </Card>
       )}
 

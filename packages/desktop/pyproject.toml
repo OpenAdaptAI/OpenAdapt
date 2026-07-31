@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-desktop"
-version = "0.14.0"
+version = "0.15.0"
 description = "Beta desktop authoring surface and local capture/review tooling for OpenAdapt workflows"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -41,15 +41,17 @@ dependencies = [
     "openadapt-privacy>=1.0.0",
     # Exact cross-surface status/target contract used by the presentation
     # exporter and by the generated TypeScript projection checked into src/.
-    # 0.6.x additionally carries the HumanDecisionTaskV1 contract that Flow's
-    # attended console projects and the mobile decision portal relays; the
-    # control-overlay v2 schemas are byte-identical to 0.5.0.
-    "openadapt-types==0.6.1",
+    # 0.7.0 carries the portable attended-reconciliation action used by the
+    # Desktop phone portal and Flow's governed runner.
+    "openadapt-types==0.7.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "PyYAML>=6.0,<7",
     "httpx>=0.27",
     "keyring>=24",
+    # PEP 440 comparison is required before Desktop enables a Flow capability.
+    # Hand-parsing would accept pre-release builds such as 1.26.0rc1 as 1.26.0.
+    "packaging>=24",
     # Qualification evidence is signed locally. Cryptography 49 no longer
     # publishes a macOS Intel wheel, so keep that platform on the latest
     # universal2 release while using the current runtime elsewhere.
@@ -79,16 +81,15 @@ build = [
     # decision portal supervises ``openadapt-flow console --attend``; without
     # this extra the frozen sidecar carries no fastapi/uvicorn and the console
     # exits with an install hint instead of a capability banner, so the portal
-    # is dead in every signed installer.  1.25.0 is also the first release
-    # whose ``openadapt_flow/console/human_decisions.py`` projects the signed
-    # HumanDecisionTaskV1 detail the portal shell renders and acts on.
+    # is dead in every signed installer.  1.27.1 carries the current signed
+    # attended-decision and reconciliation contract that the portal renders.
     #
     # ``browser`` is equally load-bearing: 1.25.0 moved Playwright from a core
     # Flow dependency to that extra, and Desktop freezes the browser driver on
     # purpose (see the pin below and the embedded ``-m playwright`` process
     # mode). Without it the driver becomes build-only and the artifact gate
     # correctly refuses the archive.
-    "openadapt-flow[browser,console]==1.25.0",
+    "openadapt-flow[browser,console]==1.27.1",
     # Desktop deliberately embeds the optional browser driver so selecting a
     # web workflow is one click. It does NOT bundle Chromium: that larger
     # runtime is fetched only after the operator chooses the browser surface.

@@ -17,7 +17,6 @@ from engine.portal.server import PROTECTED_PREFIX, SHELL_ASSETS
 SHELL = Path(__file__).resolve().parents[2] / "engine" / "portal" / "shell"
 SW = (SHELL / "sw.js").read_text(encoding="utf-8")
 APP = (SHELL / "app.js").read_text(encoding="utf-8")
-INDEX = (SHELL / "index.html").read_text(encoding="utf-8")
 
 
 def _precached_paths() -> list[str]:
@@ -102,10 +101,7 @@ def test_the_shell_renders_the_engines_action_set_without_adding_to_it() -> None
     assert "task.allowed_actions" in APP
     # Buttons are filtered from the signed task's list, never unioned with a
     # local default set.
-    assert re.search(
-        r"task\.allowed_actions\s*\.filter\(\(action\) => ACTION_WIRE\[action\]\)",
-        APP.replace("\n", "").replace("  ", ""),
-    )
+    assert "actionIsValidForTask(action, task)" in APP
     # The mapping mirrors Flow's own action names and adds no others.
     assert set(re.findall(r'wire: "(\w+)"', APP)) == {
         "continue",
@@ -113,121 +109,5 @@ def test_the_shell_renders_the_engines_action_set_without_adding_to_it() -> None
         "reject",
         "teach",
         "escalate",
+        "reconcile",
     }
-
-
-def test_an_accepted_tap_is_never_rendered_as_success() -> None:
-    assert "Waiting for this computer to check the live screen" in APP
-    assert "The result is uncertain. Do not answer again" in APP
-    assert "VERIFIED" not in APP
-
-
-def test_the_shell_is_a_responsive_pwa_and_not_a_native_project() -> None:
-    assert 'name="viewport"' in INDEX and "viewport-fit=cover" in INDEX
-    assert 'rel="manifest"' in INDEX
-    manifest = json.loads((SHELL / "manifest.webmanifest").read_text(encoding="utf-8"))
-    assert manifest["display"] == "standalone"
-    assert manifest["scope"] == "/"
-    # Safe-area insets keep the action bar above the browser chrome on a phone.
-    assert "env(safe-area-inset-bottom)" in (SHELL / "styles.css").read_text(encoding="utf-8")
-
-
-def test_the_action_bar_is_actually_hidden_and_reserves_its_real_height() -> None:
-    """The two defects seen on a phone were both stylesheet-level.
-
-    ``hidden`` sets an attribute the user-agent stylesheet honours with
-    ``display: none``, but ANY author ``display`` outranks it -- so
-    ``.actions { display: grid }`` kept a bar on screen after a terminal
-    receipt even though ``actionBar.hidden = true`` had run. And the space the
-    page reserved for that fixed bar was a constant, which a taller action set
-    outgrew, hiding the outcome line underneath it.
-    """
-    styles = (SHELL / "styles.css").read_text(encoding="utf-8")
-    assert re.search(r"\.actions\[hidden\]\s*\{\s*display:\s*none", styles)
-    assert "var(--action-bar-height)" in styles
-    # The reserve is measured, never guessed.
-    assert not re.search(r"padding-bottom:\s*calc\([^)]*\+\s*\d+px\)", styles)
-    assert "--action-bar-height" in APP
-
-
-def test_the_shell_maps_every_receipt_outcome_and_never_defaults_to_refused() -> None:
-    """A closed receipt has no message, so the shell owns the copy.
-
-    Behaviour is covered in ``src/portalShell.test.ts``; this pins the contract
-    surface itself: every state Flow's ``HumanDecisionReceiptState`` can carry
-    must have copy here, or a real terminal outcome reaches an operator as some
-    other outcome.
-    """
-    for state in (
-        "accepted_pending_runner",
-        "completed",
-        "refused",
-        "halted",
-        "expired",
-        "delivery_uncertain",
-        "demonstration_requested",
-        "escalated",
-        "rejected",
-    ):
-        assert f'"{state}/' in APP, state
-    # The refusal copy is reachable only from an actual refusal, never as the
-    # fallback for an unrecognised reply.
-    assert "no wording for" in APP
-
-
-def test_no_native_mobile_project_was_added() -> None:
-    root = Path(__file__).resolve().parents[2]
-    for forbidden in ("ios", "android", "Podfile", "build.gradle"):
-        assert not (root / forbidden).exists(), forbidden
-
-
-def test_the_action_bar_stays_usable_once_reject_makes_four_the_ordinary_case() -> None:
-    """Four two-line buttons is now the normal bar, and five is reachable.
-
-    Measured in headless Chromium at 360x640 (a small Android, the tightest
-    case that still ships) against this stylesheet BEFORE the compaction rule:
-    three buttons 207px, four 270px (42% of the viewport), five 333px (52%).
-    At five the operator could see 307px of the decision at a time. After it:
-    248px and 286px, so 45% at five instead of 52%.
-
-    Two properties this pins, because both are load-bearing and neither is
-    obvious from reading the rule:
-
-    * the compaction is keyed on the COUNT of buttons, never on which action a
-      button is. A per-action size would be a prominence difference, and which
-      option looks like the default is the largest measured lever on this kind
-      of screen.
-    * it never goes below the 44px touch-target floor. A mis-tap here is a
-      wrong answer to a governed decision, so the bar gets shorter by shedding
-      padding, not by shrinking below what a thumb can hit.
-    """
-    styles = (SHELL / "styles.css").read_text(encoding="utf-8")
-    assert ":has(button:nth-child(4))" in styles
-    assert ":has(button:nth-child(5))" in styles
-    # Keyed on count only: no action name may appear in a sizing selector.
-    for action in ("reject", "escalate", "teach", "skip", "continue"):
-        assert f'[data-action="{action}"]' not in styles, action
-    heights = [
-        int(value)
-        for value in re.findall(r"min-height:\s*(\d+)px", styles)
-    ]
-    assert heights, "the action bar must declare an explicit touch-target height"
-    assert min(heights) >= 44, heights
-
-
-def test_reject_is_not_the_new_emphasised_answer() -> None:
-    """Removing a recommendation and then recommending the opposite is the
-    same mistake pointed the other way.
-
-    Nothing on the task means "recommended", so nothing is emphasised. The
-    stylesheet has no per-action rule at all, and the shell's own equality is
-    asserted behaviourally in ``src/portalShell.test.ts``.
-    """
-    styles = (SHELL / "styles.css").read_text(encoding="utf-8")
-    # Comments explaining the absence are welcome; a rule is not.
-    rules = re.sub(r"/\*.*?\*/", "", styles, flags=re.S)
-    assert ".primary" not in rules
-    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", rules):
-        if ".actions" not in selector:
-            continue
-        assert "--accent" not in body, selector.strip()

@@ -99,6 +99,43 @@ def case_parameters_path(data_dir: Path, *, workflow_id: str, case_id: str) -> P
     return path if path.is_file() else None
 
 
+def stage_case_runtime_inputs(
+    data_dir: Path,
+    *,
+    workflow_id: str,
+    case_id: str,
+    workflow: Any,
+    parameters_path: Path,
+) -> tuple[Path, bytes]:
+    """Write the exact private canonical inputs Flow authorizes for one case."""
+
+    workflow_id = validate_path_token(workflow_id, label="Workflow id")
+    case_id = validate_case_id(case_id)
+    try:
+        raw_parameters = parameters_path.read_bytes()
+        parameters = json.loads(raw_parameters)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise QualificationLifecycleError("Case parameters cannot be read safely") from exc
+    if not isinstance(parameters, dict) or any(
+        not isinstance(name, str) or not isinstance(value, str)
+        for name, value in parameters.items()
+    ):
+        raise QualificationLifecycleError("Case parameters must be a string-value object")
+    from openadapt_flow.runtime.authorization import runtime_inputs_bytes
+
+    inputs = runtime_inputs_bytes(workflow, parameters, {})
+    root = data_dir / "qualification-inputs" / workflow_id
+    path = root / f"{case_id}.runtime-inputs.json"
+    temporary = root / f".{case_id}.runtime-inputs.json.tmp"
+    try:
+        temporary.write_bytes(inputs)
+        temporary.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return path, inputs
+
+
 def retain_run_evidence(
     bundle_dir: Path,
     *,
@@ -106,8 +143,9 @@ def retain_run_evidence(
     run_id: str,
     run_dir: Path,
     report_bytes: bytes | None = None,
+    runtime_input_bytes: bytes | None = None,
 ) -> list[dict[str, str]]:
-    """Retain a privacy-safe receipt bound to the exact local run report."""
+    """Retain exact local qualification evidence inside its local boundary."""
 
     case_id = validate_case_id(case_id)
     run_id = validate_path_token(run_id, label="Run id")
@@ -122,36 +160,28 @@ def retain_run_evidence(
         raise QualificationLifecycleError("Run report is not valid JSON") from exc
     if not isinstance(report, dict):
         raise QualificationLifecycleError("Run report must be a JSON object")
-    envelope = report.get("outcome_envelope") or {}
-    receipt = {
-        "schema": "openadapt.qualification-run-receipt/v1",
-        "run_id": run_id,
-        "report_sha256": hashlib.sha256(report_bytes).hexdigest(),
-        "execution_outcome": report.get("execution_outcome"),
-        "production_eligible": bool(report.get("production_eligible", False)),
-        "execution_completed": bool(report.get("execution_completed", False)),
-        "model_calls": report.get("model_calls"),
-        "contracts": {
-            "required": envelope.get("required_contracts", {}),
-            "passed": envelope.get("passed_contracts", {}),
-            "evidence_classes": envelope.get("evidence_classes", []),
-            "external_network_calls": envelope.get("external_network_calls"),
-        },
-    }
-    relative = Path(case_id) / run_id / "run-report-receipt.json"
+    if runtime_input_bytes is None:
+        raise QualificationLifecycleError("Qualification evidence requires canonical inputs")
+    relative = Path(case_id) / run_id / "report.json"
     destination = bundle_dir / "qualification-evidence" / relative
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        json.dumps(receipt, sort_keys=True, separators=(",", ":")),
-        encoding="utf-8",
-    )
-    digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+    destination.write_bytes(report_bytes)
+    report_digest = hashlib.sha256(report_bytes).hexdigest()
+    input_relative = Path(case_id) / run_id / "runtime-inputs.json"
+    input_destination = bundle_dir / "qualification-evidence" / input_relative
+    input_destination.write_bytes(runtime_input_bytes)
+    input_digest = hashlib.sha256(runtime_input_bytes).hexdigest()
     return [
         {
             "kind": "run_report",
-            "sha256": digest,
+            "sha256": report_digest,
             "relative_path": relative.as_posix(),
-        }
+        },
+        {
+            "kind": "case_input",
+            "sha256": input_digest,
+            "relative_path": input_relative.as_posix(),
+        },
     ]
 
 

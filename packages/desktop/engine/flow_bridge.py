@@ -17,8 +17,10 @@ zips a bundle/recording directory before upload.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -67,7 +69,7 @@ _OUTCOME_EVIDENCE_CLASSES = frozenset(
         "compensation",
     }
 )
-_OUTCOME_ENVELOPE_KEYS = frozenset(
+_OUTCOME_ENVELOPE_REQUIRED_KEYS = frozenset(
     {
         "version",
         "outcome",
@@ -82,6 +84,42 @@ _OUTCOME_ENVELOPE_KEYS = frozenset(
         "compensation_actions",
     }
 )
+_OUTCOME_ENVELOPE_OPTIONAL_KEYS = frozenset(
+    {
+        "qualification_evidence_only",
+        "workflow_contract_sha256",
+        "postcondition_evidence",
+    }
+)
+_POSTCONDITION_EVIDENCE_KEYS = frozenset(
+    {
+        "result_index",
+        "workflow_contract_sha256",
+        "step_index",
+        "step_contract_sha256",
+        "action_kind",
+        "actuation_path",
+        "contract_kind",
+        "contract_index",
+        "contract_sha256",
+        "verdict",
+    }
+)
+_POSTCONDITION_ACTION_KINDS = frozenset(
+    {
+        "click",
+        "double_click",
+        "right_click",
+        "drag",
+        "type",
+        "select_option",
+        "key",
+        "hotkey",
+        "wait",
+        "scroll",
+    }
+)
+_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 def _contract_counts(value: object) -> dict[str, int] | None:
@@ -98,7 +136,10 @@ def _contract_counts(value: object) -> dict[str, int] | None:
 def _valid_precise_envelope(report: dict, envelope: dict, outcome: object) -> bool:
     """Mirror Flow's v1 envelope invariants at the Desktop trust boundary."""
 
-    if set(envelope) != _OUTCOME_ENVELOPE_KEYS:
+    envelope_keys = set(envelope)
+    if not _OUTCOME_ENVELOPE_REQUIRED_KEYS <= envelope_keys or not envelope_keys <= (
+        _OUTCOME_ENVELOPE_REQUIRED_KEYS | _OUTCOME_ENVELOPE_OPTIONAL_KEYS
+    ):
         return False
     profile = envelope.get("profile")
     if profile is not None and profile not in _OUTCOME_PROFILES:
@@ -113,6 +154,95 @@ def _valid_precise_envelope(report: dict, envelope: dict, outcome: object) -> bo
         return False
     if any(passed[key] > required[key] for key in _OUTCOME_CONTRACT_KEYS):
         return False
+    qualification_only = envelope.get("qualification_evidence_only", False)
+    if not isinstance(qualification_only, bool):
+        return False
+    workflow_digest = envelope.get("workflow_contract_sha256")
+    if workflow_digest is not None and (
+        not isinstance(workflow_digest, str) or not _SHA256_RE.fullmatch(workflow_digest)
+    ):
+        return False
+    postcondition_evidence = envelope.get("postcondition_evidence", [])
+    if (
+        not isinstance(postcondition_evidence, list)
+        or len(postcondition_evidence) != required["postcondition"]
+    ):
+        return False
+    if postcondition_evidence and workflow_digest is None:
+        return False
+    evidence_keys: list[tuple[int, str, int]] = []
+    result_contracts: list[tuple[int, str]] = []
+    passed_postconditions = 0
+    for item in postcondition_evidence:
+        if not isinstance(item, dict) or set(item) != _POSTCONDITION_EVIDENCE_KEYS:
+            return False
+        integer_fields = ("result_index", "step_index", "contract_index")
+        if any(
+            not isinstance(item.get(field), int)
+            or isinstance(item.get(field), bool)
+            or item[field] < 0
+            for field in integer_fields
+        ):
+            return False
+        if (
+            item.get("workflow_contract_sha256") != workflow_digest
+            or item.get("action_kind") not in _POSTCONDITION_ACTION_KINDS
+            or item.get("actuation_path") != "gui"
+            or item.get("contract_kind") not in {"explicit_predicate", "intrinsic_input_readback"}
+            or item.get("verdict") not in {"passed", "refuted", "unverifiable"}
+        ):
+            return False
+        if item["contract_kind"] == "intrinsic_input_readback" and (
+            item["action_kind"] not in {"type", "select_option"} or item["contract_index"] != 0
+        ):
+            return False
+        if any(
+            not isinstance(item.get(field), str) or not _SHA256_RE.fullmatch(item[field])
+            for field in ("step_contract_sha256", "contract_sha256")
+        ):
+            return False
+        expected_step = hashlib.sha256(
+            json.dumps(
+                {
+                    "domain": "openadapt.postcondition-step/v1",
+                    "workflow_contract_sha256": workflow_digest,
+                    "step_index": item["step_index"],
+                    "action_kind": item["action_kind"],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        if item["step_contract_sha256"] != expected_step:
+            return False
+        expected_contract = hashlib.sha256(
+            json.dumps(
+                {
+                    "domain": "openadapt.postcondition-contract/v1",
+                    "workflow_contract_sha256": workflow_digest,
+                    "step_contract_sha256": expected_step,
+                    "action_kind": item["action_kind"],
+                    "actuation_path": "gui",
+                    "contract_kind": item["contract_kind"],
+                    "contract_index": item["contract_index"],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        if item["contract_sha256"] != expected_contract:
+            return False
+        evidence_keys.append((item["result_index"], item["contract_kind"], item["contract_index"]))
+        result_contracts.append((item["result_index"], item["contract_sha256"]))
+        passed_postconditions += item["verdict"] == "passed"
+    if (
+        len(evidence_keys) != len(set(evidence_keys))
+        or len(result_contracts) != len(set(result_contracts))
+        or passed_postconditions != passed["postcondition"]
+    ):
+        return False
     evidence = envelope.get("evidence_classes")
     if (
         not isinstance(evidence, list)
@@ -121,6 +251,8 @@ def _valid_precise_envelope(report: dict, envelope: dict, outcome: object) -> bo
         )
         or len(evidence) != len(set(evidence))
     ):
+        return False
+    if ("postcondition" in evidence) != bool(passed["postcondition"]):
         return False
     model_calls = envelope.get("model_calls")
     compensation_actions = envelope.get("compensation_actions")
@@ -145,11 +277,13 @@ def _valid_precise_envelope(report: dict, envelope: dict, outcome: object) -> bo
         if (
             required != passed
             or profile not in {"standard", "regulated"}
-            or production is not True
+            or not (production is True or qualification_only is True)
             or required["authorization"] < 1
         ):
             return False
     elif production is not False:
+        return False
+    if production and qualification_only:
         return False
     has_compensation = "compensation" in evidence
     if has_compensation != (compensation_actions > 0):
@@ -574,6 +708,46 @@ class FlowBridge:
             timeout=timeout,
             env_overrides=env_overrides,
         )
+
+    def qualify_run_case(
+        self,
+        bundle_dir: Path,
+        config: Path,
+        *,
+        case_id: str,
+        inputs_file: Path,
+        campaign_id: str,
+        run_id: str,
+        out_dir: Path,
+        url: str | None = None,
+        env_overrides: dict[str, str] | None = None,
+    ) -> FlowResult:
+        """Run one qualification case through Flow-owned authorization.
+
+        Desktop supplies only private canonical inputs and stable local ids.
+        Flow builds and consumes the Standard authorization in the same process.
+        """
+
+        args = [
+            "qualify",
+            "run-case",
+            str(bundle_dir),
+            "--case-id",
+            case_id,
+            "--inputs",
+            str(inputs_file),
+            "--campaign-id",
+            campaign_id,
+            "--run-id",
+            run_id,
+            "--run-dir",
+            str(out_dir),
+            "--config",
+            str(config),
+        ]
+        if url:
+            args += ["--url", url]
+        return self._run(args, out_dir=out_dir, env_overrides=env_overrides)
 
     def run_supports_authorization(self) -> bool:
         """Probe (once) whether the installed flow CLI accepts ``--authorization-file``."""

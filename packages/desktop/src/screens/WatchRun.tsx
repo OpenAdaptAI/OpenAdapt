@@ -8,6 +8,7 @@ import type {
   ExecutionTarget,
   ReplayProgress,
   RunReport,
+  RunPersistenceRetryResponse,
   RunStep,
 } from "../lib/types";
 import {
@@ -84,6 +85,8 @@ export function WatchRun({
   const [running, setRunning] = useState(false);
   const [runtime, setRuntime] = useState<BrowserRuntimeStatus | null>(null);
   const [runIssue, setRunIssue] = useState<RunIssue | null>(null);
+  const [persistenceIssue, setPersistenceIssue] = useState("");
+  const [retryingPersistence, setRetryingPersistence] = useState(false);
   const [target, setTarget] = useState<ExecutionTarget>(
     initialTarget ?? { backend: "web" },
   );
@@ -141,6 +144,7 @@ export function WatchRun({
     reportGenerationRef.current += 1;
     setRunning(true);
     setRunIssue(null);
+    setPersistenceIssue("");
     stepsRef.current = [];
     setReport((current) =>
       current
@@ -189,6 +193,30 @@ export function WatchRun({
       });
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function retryPersistence() {
+    if (!report) return;
+    setRetryingPersistence(true);
+    setPersistenceIssue("");
+    try {
+      const response = await engineInvoke<RunPersistenceRetryResponse>(
+        CMD.RETRY_RUN_PERSISTENCE,
+        { workflow_id: workflowId, run_id: report.run_id },
+      );
+      if (!response.ok || !response.report) {
+        setPersistenceIssue(
+          response.error || "Desktop could not save this run in local history.",
+        );
+        return;
+      }
+      setReport(response.report);
+      stepsRef.current = response.report.steps ?? [];
+    } catch {
+      setPersistenceIssue("Desktop could not save this run in local history.");
+    } finally {
+      setRetryingPersistence(false);
     }
   }
 
@@ -288,6 +316,26 @@ export function WatchRun({
             {runIssue.preActionRefusal
               ? "Correct the configuration before trying again; Flow was not invoked."
               : "Do not retry until you verify the target application or system of record and inspect the retained run evidence; the prior dispatch may have delivered an action."}
+          </Callout>
+        )}
+        {report?.persistence && report.persistence.state !== "persisted" && (
+          <Callout
+            tone={report.persistence.state === "failed" ? "crit" : "warn"}
+            title="Local run history needs attention"
+          >
+            {report.persistence.message}
+            {persistenceIssue && <div>{persistenceIssue}</div>}
+            {report.persistence.retryable && (
+              <div style={{ marginTop: "var(--space-3)" }}>
+                <Button
+                  size="sm"
+                  disabled={retryingPersistence}
+                  onClick={() => void retryPersistence()}
+                >
+                  {retryingPersistence ? "Saving…" : "Retry local history save"}
+                </Button>
+              </div>
+            )}
           </Callout>
         )}
         <ReplayMonitor

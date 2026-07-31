@@ -111,3 +111,46 @@ it("clears prior terminal evidence while a new run is in flight", async () => {
   });
   expect(await screen.findByText("Outcome evidence")).toBeTruthy();
 });
+
+it("keeps a report visible while local history is retried", async () => {
+  const degraded = {
+    ...preciseReport("VERIFIED"),
+    persistence: {
+      state: "degraded" as const,
+      retryable: true,
+      message: "The report is visible, but local history is not saved.",
+    },
+  };
+  const persisted = {
+    ...degraded,
+    persistence: {
+      state: "persisted" as const,
+      retryable: false,
+      message: "The report is saved in local history.",
+    },
+  };
+  vi.mocked(engineTry).mockResolvedValue(degraded);
+  vi.mocked(engineInvoke).mockResolvedValue({ ok: true, report: persisted });
+
+  render(
+    <WatchRun
+      workflowId="workflow-1"
+      initialTarget={{ backend: "web" }}
+      onTeach={() => {}}
+    />,
+  );
+
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Retry local history save" }),
+  );
+  await waitFor(() =>
+    expect(engineInvoke).toHaveBeenCalledWith("retry_run_persistence", {
+      workflow_id: "workflow-1",
+      run_id: "run-1",
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText("Local run history needs attention")).toBeNull(),
+  );
+  expect(screen.getByText("Outcome evidence")).toBeTruthy();
+});

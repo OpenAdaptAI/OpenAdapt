@@ -45,6 +45,21 @@ from engine.config import EngineConfig
 
 EmitFn = Callable[[str, dict], None]
 
+_RUN_PERSISTENCE_MARKER = ".desktop-run-persistence.json"
+_KNOWN_RUN_OUTCOMES = frozenset(
+    {
+        "VERIFIED",
+        "COMPLETED_UNVERIFIED",
+        "HALTED",
+        "FAILED",
+        "ROLLED_BACK",
+        "success",
+        "halt",
+        "unknown",
+    }
+)
+_TEACHABLE_RUN_OUTCOMES = frozenset({"HALTED", "halt"})
+
 
 def _noop_emit(event: str, data: dict) -> None:
     """Default event sink -- drops events when no emitter is wired."""
@@ -211,6 +226,7 @@ class EngineDispatcher:
             "replay_workflow": self.replay_workflow,
             "run_workflow": self.run_workflow,
             "get_run_report": self.get_run_report,
+            "retry_run_persistence": self.retry_run_persistence,
             "teach_fix": self.teach_fix,
             # qualification cockpit (canonical Flow graph/policy/manifests)
             "get_qualification": self.get_qualification,
@@ -781,6 +797,7 @@ class EngineDispatcher:
         run_dir.mkdir(parents=True, exist_ok=True)
         params_file = None
         qualification_case_id = params.get("_qualification_case_id")
+        qualification_case_execution = params.get("_qualification_case_execution")
         if qualification_case_id is not None:
             from engine.qualification_lifecycle import case_parameters_path
 
@@ -868,7 +885,23 @@ class EngineDispatcher:
                             run_kwargs["params_file"] = params_file
                         if bundle_env:
                             run_kwargs["env_overrides"] = bundle_env
-                        result = self.services.flow_bridge.run(bundle, config_path, **run_kwargs)
+                        if qualification_case_execution is not None:
+                            result = self.services.flow_bridge.qualify_run_case(
+                                bundle,
+                                config_path,
+                                case_id=str(qualification_case_execution["case_id"]),
+                                inputs_file=Path(qualification_case_execution["inputs_file"]),
+                                campaign_id=str(qualification_case_execution["campaign_id"]),
+                                run_id=run_id,
+                                out_dir=run_dir,
+                                env_overrides=bundle_env,
+                            )
+                        else:
+                            result = self.services.flow_bridge.run(
+                                bundle,
+                                config_path,
+                                **run_kwargs,
+                            )
                     else:
                         replay_kwargs: dict[str, Any] = {
                             "out_dir": run_dir,
@@ -923,11 +956,12 @@ class EngineDispatcher:
                     "an action."
                 )
 
-        try:
-            self.services.db.insert_run(run_id, str(run_dir), bundle_id=workflow_id)
-            self.services.db.update_run(run_id, status=outcome)
-        except Exception:
-            pass
+        persistence = self._persist_local_run(
+            run_id=run_id,
+            run_dir=run_dir,
+            workflow_id=str(workflow_id),
+            outcome=outcome,
+        )
         report = self._run_report(
             run_dir,
             workflow_id,
@@ -935,6 +969,7 @@ class EngineDispatcher:
             outcome=outcome,
             error=error,
         )
+        report["persistence"] = persistence
         progress_state = {
             "VERIFIED": "done",
             "COMPLETED_UNVERIFIED": "completed_unverified",
@@ -981,6 +1016,188 @@ class EngineDispatcher:
             },
         )
         return report
+
+    @staticmethod
+    def _persistence_marker_path(run_dir: Path) -> Path:
+        return run_dir / _RUN_PERSISTENCE_MARKER
+
+    def _persist_local_run(
+        self,
+        *,
+        run_id: str,
+        run_dir: Path,
+        workflow_id: str,
+        outcome: str,
+    ) -> dict:
+        """Persist one local run or leave a bounded recovery marker."""
+
+        marker = self._persistence_marker_path(run_dir)
+        payload = {
+            "schema": "openadapt.desktop-run-persistence/v1",
+            "run_id": run_id,
+            "workflow_id": workflow_id,
+            "outcome": outcome,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        staging = marker.with_name(f"{marker.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            staging.write_text(json.dumps(payload, sort_keys=True))
+            staging.replace(marker)
+        except Exception:
+            staging.unlink(missing_ok=True)
+            return {
+                "state": "failed",
+                "retryable": False,
+                "message": (
+                    "The run report is available for this session, but Desktop "
+                    "could not create a local history recovery record. Preserve "
+                    "the run evidence before closing Desktop."
+                ),
+            }
+
+        try:
+            self.services.db.insert_run(
+                run_id,
+                str(run_dir),
+                bundle_id=workflow_id,
+                status=outcome,
+            )
+        except Exception:
+            return self._degraded_run_persistence()
+
+        try:
+            marker.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove reconciled run persistence marker")
+        return {
+            "state": "persisted",
+            "retryable": False,
+            "message": "The report is saved in local history.",
+        }
+
+    @staticmethod
+    def _degraded_run_persistence() -> dict:
+        return {
+            "state": "degraded",
+            "retryable": True,
+            "message": (
+                "The report remains available, but Desktop could not add this run "
+                "to local history. History and Teach will not use it until the "
+                "local history save succeeds."
+            ),
+        }
+
+    def _pending_run(
+        self,
+        workflow_id: str,
+        *,
+        run_id: str | None = None,
+    ) -> tuple[Path, dict] | None:
+        """Find the newest valid local-history recovery marker."""
+
+        runs_root = self.config.data_dir / "runs"
+        if not runs_root.is_dir():
+            return None
+        matches: list[tuple[float, Path, dict]] = []
+        for marker in runs_root.glob(f"*/{_RUN_PERSISTENCE_MARKER}"):
+            if marker.parent.is_symlink():
+                continue
+            try:
+                payload = json.loads(marker.read_text())
+                valid = (
+                    payload.get("schema") == "openadapt.desktop-run-persistence/v1"
+                    and payload.get("workflow_id") == workflow_id
+                    and payload.get("outcome") in _KNOWN_RUN_OUTCOMES
+                    and isinstance(payload.get("run_id"), str)
+                    and isinstance(payload.get("created_at"), str)
+                    and (run_id is None or payload.get("run_id") == run_id)
+                )
+                if valid:
+                    matches.append((marker.stat().st_mtime, marker.parent, payload))
+            except (OSError, ValueError, TypeError):
+                continue
+        if not matches:
+            return None
+        _mtime, run_dir, payload = max(matches, key=lambda item: item[0])
+        return run_dir, payload
+
+    @staticmethod
+    def _pending_run_is_newer(pending: tuple[Path, dict] | None, run: dict | None) -> bool:
+        if pending is None:
+            return False
+        if run is None:
+            return True
+        return str(pending[1].get("created_at") or "") >= str(run.get("created_at") or "")
+
+    def retry_run_persistence(self, **params: Any) -> dict:
+        """Retry a failed local-history save from its bounded recovery marker."""
+
+        workflow_id = str(params.get("workflow_id") or "")
+        run_id = str(params.get("run_id") or "")
+        if not workflow_id or not run_id:
+            return {"ok": False, "error": "workflow_id and run_id are required"}
+
+        existing = self.services.db.get_run(run_id)
+        if existing is not None:
+            if existing.get("bundle_id") != workflow_id:
+                return {"ok": False, "error": "The saved run belongs to another workflow"}
+            if existing.get("status") in _KNOWN_RUN_OUTCOMES:
+                report = self._run_report(
+                    Path(str(existing["run_path"])),
+                    workflow_id,
+                    run_id,
+                    outcome=str(existing["status"]),
+                )
+                report["persistence"] = {
+                    "state": "persisted",
+                    "retryable": False,
+                    "message": "The report is saved in local history.",
+                }
+                return {"ok": True, "report": report}
+
+        pending = self._pending_run(workflow_id, run_id=run_id)
+        if pending is None:
+            return {
+                "ok": False,
+                "error": "No retryable local history record was found for this run",
+            }
+        run_dir, payload = pending
+        try:
+            if existing is None:
+                self.services.db.insert_run(
+                    run_id,
+                    str(run_dir),
+                    bundle_id=workflow_id,
+                    status=str(payload["outcome"]),
+                )
+            else:
+                if Path(str(existing.get("run_path") or "")) != run_dir:
+                    return {
+                        "ok": False,
+                        "error": "The recovery record does not match the saved run path",
+                    }
+                self.services.db.update_run(run_id, status=str(payload["outcome"]))
+        except Exception:
+            return {
+                "ok": False,
+                "error": "Local history is still unavailable. Fix local storage and retry.",
+            }
+        try:
+            self._persistence_marker_path(run_dir).unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove reconciled run persistence marker")
+        report = self._run_report(
+            run_dir,
+            workflow_id,
+            run_id,
+            outcome=str(payload["outcome"]),
+        )
+        report["persistence"] = {
+            "state": "persisted",
+            "retryable": False,
+            "message": "The report is saved in local history.",
+        }
+        return {"ok": True, "report": report}
 
     @staticmethod
     def _pre_action_refusal(error: str) -> dict:
@@ -1038,10 +1255,26 @@ class EngineDispatcher:
 
     def get_run_report(self, **params: Any) -> dict | None:
         """Return the latest ``RunReport`` for a workflow, or None if none."""
-        workflow_id = params.get("workflow_id")
+        workflow_id = str(params.get("workflow_id") or "")
         runs = [
             r for r in self.services.db.list_runs(limit=100) if r.get("bundle_id") == workflow_id
         ]
+        pending = self._pending_run(workflow_id)
+        pending_is_newest = self._pending_run_is_newer(
+            pending,
+            runs[0] if runs else None,
+        )
+        if pending_is_newest:
+            assert pending is not None
+            run_dir, payload = pending
+            report = self._run_report(
+                run_dir,
+                workflow_id,
+                str(payload["run_id"]),
+                outcome=str(payload["outcome"]),
+            )
+            report["persistence"] = self._degraded_run_persistence()
+            return report
         if not runs:
             return None
         run = runs[0]
@@ -1049,23 +1282,42 @@ class EngineDispatcher:
         if not run_dir:
             return None
         stored_outcome = run.get("status")
-        known_outcomes = {
-            "VERIFIED",
-            "COMPLETED_UNVERIFIED",
-            "HALTED",
-            "FAILED",
-            "ROLLED_BACK",
-            "success",
-            "halt",
-            "unknown",
-        }
-        outcome = stored_outcome if stored_outcome in known_outcomes else None
-        return self._run_report(
+        if stored_outcome not in _KNOWN_RUN_OUTCOMES:
+            pending = self._pending_run(workflow_id, run_id=str(run.get("run_id") or ""))
+            if pending is not None:
+                pending_dir, payload = pending
+                report = self._run_report(
+                    pending_dir,
+                    workflow_id,
+                    str(payload["run_id"]),
+                    outcome=str(payload["outcome"]),
+                )
+                report["persistence"] = self._degraded_run_persistence()
+                return report
+        outcome = stored_outcome if stored_outcome in _KNOWN_RUN_OUTCOMES else None
+        report = self._run_report(
             Path(run_dir),
             workflow_id,
             run.get("run_id", ""),
             outcome=outcome,
         )
+        report["persistence"] = (
+            {
+                "state": "persisted",
+                "retryable": False,
+                "message": "The report is saved in local history.",
+            }
+            if outcome is not None
+            else {
+                "state": "failed",
+                "retryable": False,
+                "message": (
+                    "Desktop found the run evidence, but its local history outcome "
+                    "is incomplete and no recovery record is available."
+                ),
+            }
+        )
+        return report
 
     def _run_report(
         self,
@@ -1229,12 +1481,41 @@ class EngineDispatcher:
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
             return {"promoted": False, "message": f"Unknown workflow {workflow_id}"}
+        # Teach is a response to the latest execution state, not a search for
+        # any historical halt. Selecting an older halt after a newer VERIFIED,
+        # FAILED, or otherwise terminal run would promote evidence against a
+        # stale application state.
         run = next(
             (r for r in self.services.db.list_runs(limit=100) if r.get("bundle_id") == workflow_id),
             None,
         )
-        if run is None or not run.get("run_path"):
+        pending = self._pending_run(str(workflow_id))
+        pending_matches_saved_run = bool(
+            pending is not None
+            and run is not None
+            and pending[1].get("run_id") == run.get("run_id")
+        )
+        if pending_matches_saved_run or self._pending_run_is_newer(pending, run):
+            return {
+                "promoted": False,
+                "message": (
+                    "The latest run is not saved in local history. Retry the "
+                    "local history save before teaching a fix."
+                ),
+            }
+        if run is None:
             return {"promoted": False, "message": "No halted run to teach against"}
+        if run.get("status") not in _TEACHABLE_RUN_OUTCOMES:
+            status = str(run.get("status") or "unknown")
+            return {
+                "promoted": False,
+                "message": f"The latest run ended as {status}, so it is not teachable.",
+            }
+        if not run.get("run_path"):
+            return {
+                "promoted": False,
+                "message": "The latest halted run has no evidence path",
+            }
         out_dir = self.config.data_dir / "bundles" / f"{workflow_id}_taught_{uuid.uuid4().hex[:6]}"
         try:
             result = self.services.flow_bridge.teach(Path(run["run_path"]), bundle, out_dir)
@@ -1609,10 +1890,12 @@ class EngineDispatcher:
             DEFAULT_QUALIFICATION_POLICY,
             prepare_local_qualification_runner,
             record_local_qualification_result,
+            set_local_qualification_case_scope,
         )
         from engine.qualification_lifecycle import (
             retain_capability_observation,
             retain_run_evidence,
+            stage_case_runtime_inputs,
             store_case_parameters,
         )
 
@@ -1648,6 +1931,35 @@ class EngineDispatcher:
                     parameters_json=str(parameters_json),
                     forbidden_keys=secret_params,
                 )
+            from engine.qualification import _load
+            from engine.qualification_lifecycle import case_parameters_path
+
+            parameters_path = case_parameters_path(
+                self.config.data_dir,
+                workflow_id=workflow_id,
+                case_id=case_id,
+            )
+            if parameters_path is None:
+                raise ValueError("Qualification case parameters are required before execution")
+            workflow_for_inputs = _load(
+                bundle,
+                key=self._qualification_bundle_key(workflow_id),
+            )
+            inputs_path, runtime_input_bytes = stage_case_runtime_inputs(
+                self.config.data_dir,
+                workflow_id=workflow_id,
+                case_id=case_id,
+                workflow=workflow_for_inputs,
+                parameters_path=parameters_path,
+            )
+            set_local_qualification_case_scope(
+                bundle,
+                workflow_id=workflow_id,
+                case_id=case_id,
+                runtime_input_bytes=runtime_input_bytes,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
             prepare_local_qualification_runner(
                 bundle,
                 workflow_id=workflow_id,
@@ -1657,6 +1969,11 @@ class EngineDispatcher:
             execution_params = {
                 "workflow_id": workflow_id,
                 "_qualification_case_id": case_id,
+                "_qualification_case_execution": {
+                    "case_id": case_id,
+                    "inputs_file": str(inputs_path),
+                    "campaign_id": uuid.uuid4().hex,
+                },
             }
             if params.get("target") is not None:
                 execution_params["target"] = params["target"]
@@ -1690,6 +2007,7 @@ class EngineDispatcher:
                 run_id=run_id,
                 run_dir=Path(str(run["run_path"])),
                 report_bytes=raw_report_bytes,
+                runtime_input_bytes=runtime_input_bytes,
             )
             from openadapt_flow.traversal import iter_workflow_steps
 
