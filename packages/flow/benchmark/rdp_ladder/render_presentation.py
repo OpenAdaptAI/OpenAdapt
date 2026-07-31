@@ -375,13 +375,13 @@ def _request_view(request: dict) -> Image.Image:
     _brand(draw, section="Execute request")
     draw.text(
         (44, 118),
-        "A structured request enters the RDP workflow",
+        "An appointment request arrives.",
         font=_font(38, bold=True),
         fill=TEXT,
     )
     draw.text(
         (45, 174),
-        "The replay uses different values from the demonstration.",
+        "This run uses new values, not the recorded example.",
         font=_font(21),
         fill=MUTED,
     )
@@ -612,10 +612,10 @@ def _selected_frames(
 def _verifier_view(frame: Image.Image, summary: dict) -> Image.Image:
     image = _base()
     draw = ImageDraw.Draw(image)
-    _brand(draw, section="Independent result check")
+    _brand(draw, section="Saved result check")
     draw.text(
         (44, 100),
-        "The app says saved. OpenAdapt proves the result.",
+        "The screen shows success. OpenAdapt checks the database.",
         font=_font(32, bold=True),
         fill=TEXT,
     )
@@ -630,7 +630,12 @@ def _verifier_view(frame: Image.Image, summary: dict) -> Image.Image:
     image.paste(app, (app_x, app_y))
     draw.rounded_rectangle((42, 172, 742, 672), 18, outline="#31535a", width=3)
     draw.rounded_rectangle((774, 172, 1238, 672), 18, fill=PANEL)
-    draw.text((804, 202), "READ-ONLY SQL", font=_font(15, bold=True), fill=BLUE)
+    draw.text(
+        (804, 202),
+        "READ-ONLY DATABASE CHECK",
+        font=_font(15, bold=True),
+        fill=BLUE,
+    )
     verifier = summary["verifier"]
     query = verifier.get("query", "")
     for index, line in enumerate(_wrap(query, 48)[:3]):
@@ -653,19 +658,19 @@ def _verifier_view(frame: Image.Image, summary: dict) -> Image.Image:
     draw.text((840, 610), "VERIFIED", font=_font(18, bold=True), fill=BG)
     draw.text(
         (1025, 612),
-        f"{len(rows)} exact row",
+        f"{len(rows)} matching row",
         font=_font(15, bold=True),
         fill=TEXT,
     )
     draw.text(
         (44, 704),
-        "This workflow uses read-only SQL. Others can qualify an API, export, or persisted-state read-back.",
+        "This demo uses a separate read-only database connection.",
         font=_font(15),
         fill=MUTED,
     )
     draw.text(
         (44, 730),
-        "OpenAdapt requires qualified proof. If it cannot prove the result, it does not report VERIFIED.",
+        "If the required result cannot be confirmed, OpenAdapt stops for review.",
         font=_font(15, bold=True),
         fill=TEXT,
     )
@@ -678,7 +683,7 @@ def _wrong_record_view(frame: Image.Image, summary: dict) -> Image.Image:
     _brand(draw, section="Fail-safe identity check")
     draw.text(
         (44, 100),
-        "The active record changed before Save",
+        "Wrong record. Save blocked.",
         font=_font(34, bold=True),
         fill=TEXT,
     )
@@ -742,7 +747,7 @@ def _wrong_record_view(frame: Image.Image, summary: dict) -> Image.Image:
     )
     draw.text(
         (44, 718),
-        "OpenAdapt rechecked the live RDP frame. It refused the write. The database stayed unchanged.",
+        "OpenAdapt rechecked the live RDP screen and stopped before Save. The database stayed unchanged.",
         font=_font(17),
         fill=MUTED,
     )
@@ -761,13 +766,13 @@ def _final_view(frame: Image.Image) -> Image.Image:
     _brand(draw, section="Execute over RDP")
     draw.text(
         (72, 210),
-        "Structured request in.",
+        "A request goes in.",
         font=_font(50, bold=True),
         fill=TEXT,
     )
     draw.text(
         (72, 284),
-        "Verified result or a safe halt out.",
+        "A verified result or safe stop comes out.",
         font=_font(46, bold=True),
         fill=TEXT,
     )
@@ -886,8 +891,8 @@ def render(presentation_dir: Path, output: Path) -> dict:
                 process,
                 _overlay(
                     image,
-                    phase="3 · Governed replay",
-                    detail="Fresh target and identity checks",
+                    phase="3 · Execute",
+                    detail="The correct record is checked before input",
                 ),
                 0.38,
             )
