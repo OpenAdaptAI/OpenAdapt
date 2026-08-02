@@ -428,8 +428,7 @@ follow_imports_for_stubs = true
 #   - the VLM microservice (FastAPI, dynamic): services.vlm_service.*
 #   - offline validation harnesses (not on the runtime path):
 #     validation.* (dense_surface, identity_ladder,
-#     pixel_identity_probe, pixel_identity_aligned,
-#     vlm_identity_probe)
+#     pixel_identity_probe, vlm_identity_probe)
 #   - perceptual hashing on numpy internals: vision.hashing
 [[tool.mypy.overrides]]
 module = [
@@ -450,7 +449,6 @@ module = [
     "openadapt_flow.validation.dense_surface",
     "openadapt_flow.validation.identity_ladder",
     "openadapt_flow.validation.pixel_identity_probe",
-    "openadapt_flow.validation.pixel_identity_aligned",
     "openadapt_flow.validation.vlm_identity_probe",
     "openadapt_flow.vision.hashing",
 ]
