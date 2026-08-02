@@ -114,6 +114,30 @@ def test_quickstart_forwards_the_headed_tutorial_option(monkeypatch):
     assert calls[0][-1] == "--headed"
 
 
+def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
+    monkeypatch,
+):
+    calls = []
+    monkeypatch.setattr(
+        "openadapt.cli._invoke_flow",
+        lambda argv: calls.append(list(argv)) or 0,
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            cli_main,
+            ["quickstart", "--break-it", "--out", "break-run"],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    assert calls[0][0] == "tutorial"
+    assert calls[0][-1] == "--break-it"
+    assert "run-broken" in result.output
+    assert "HALTED" in result.output
+
+
 def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):
     monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "auto")
     monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)

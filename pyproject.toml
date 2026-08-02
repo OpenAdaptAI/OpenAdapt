@@ -33,7 +33,7 @@ classifiers = [
 # All other capabilities (capture, ml, evals, ...) remain opt-in extras.
 dependencies = [
     "click>=8.0.0",
-    "openadapt-flow[hosted]>=1.25.1,<2.0.0",
+    "openadapt-flow[hosted]>=1.29.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -49,22 +49,22 @@ browser = [
 # separately provisioned executable, not a Python-package dependency.
 capture = [
     "openadapt-capture>=1.0.4,<2.0.0",
-    "openadapt-flow[capture]>=1.25.1,<2.0.0",
+    "openadapt-flow[capture]>=1.29.0,<2.0.0",
 ]
 # Replay substrate dependencies stay separate from capture: recording observes
 # the human on the local interactive desktop, while replay may target a WAA
 # agent, a native app, or a remote framebuffer.
 windows = [
-    "openadapt-flow[windows]>=1.25.1,<2.0.0",
+    "openadapt-flow[windows]>=1.29.0,<2.0.0",
 ]
 macos = [
-    "openadapt-flow[macos]>=1.25.1,<2.0.0; sys_platform == 'darwin'",
+    "openadapt-flow[macos]>=1.29.0,<2.0.0; sys_platform == 'darwin'",
 ]
 linux = [
-    "openadapt-flow[linux]>=1.25.1,<2.0.0; sys_platform == 'linux'",
+    "openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux'",
 ]
 rdp = [
-    "openadapt-flow[rdp]>=1.25.1,<2.0.0",
+    "openadapt-flow[rdp]>=1.29.0,<2.0.0",
 ]
 ml = [
     "openadapt-ml>=0.2.0",
@@ -82,7 +82,7 @@ retrieval = [
     "openadapt-retrieval>=0.1.0",
 ]
 privacy = [
-    "openadapt-flow[privacy]>=1.25.1,<2.0.0",
+    "openadapt-flow[privacy]>=1.29.0,<2.0.0",
 ]
 # `flow` now ships in the base install (see `dependencies` above). This
 # extra is kept for backward compatibility so `pip install openadapt[flow]`
