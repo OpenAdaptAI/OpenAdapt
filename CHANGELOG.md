@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.10.4 (2026-08-02)
+
+### Bug Fixes
+
+- Refresh desktop platform manifest ([#1081](https://github.com/OpenAdaptAI/OpenAdapt/pull/1081),
+  [`7d96a8a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7d96a8a9fc2b1cdb273fbd3640c81e53efa08646))
+
+### Chores
+
+- **release**: Reconcile platform manifest
+  ([`bb07cae`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bb07cae9ca219d533e785768563fc6ce0b13434c))
+
+### Documentation
+
+- Add the Execute partner entry point
+  ([`50ad592`](https://github.com/OpenAdaptAI/OpenAdapt/commit/50ad592bd6b2d0db8485c54aed938b984e2372db))
+
+
 ## v1.10.3 (2026-07-30)
 
 ### Bug Fixes

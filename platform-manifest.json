@@ -1,46 +1,46 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.0.0",
-  "generated_at": "2026-07-31T13:30:50+00:00",
+  "generated_at": "2026-08-02T16:33:44+00:00",
   "release_channel": "beta",
   "components": {
     "launcher": {
       "package": "openadapt",
-      "version": "1.10.3",
+      "version": "1.10.4",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt-1.10.3-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/92/46/461316b76fb6f15d0b1e36eb2e7a9f78b3e756d3f1fc4f599176b2900ab6/openadapt-1.10.3-py3-none-any.whl",
-          "sha256": "8ff2a6c57154f0b1f2e4a61b6e0fbb9b1cb3b4cdf4bccb55e54cc40819096771"
+          "filename": "openadapt-1.10.4-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/e8/a5/e880ea7196640ba3e548906a12d031dbdc4bbac0010ac25677f6de745219/openadapt-1.10.4-py3-none-any.whl",
+          "sha256": "6f6535005c8cc71e61ecdd7d586d2715a61e7d65f442b508e972a4df96b32801"
         },
         {
           "type": "sdist",
-          "filename": "openadapt-1.10.3.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/dc/d0/0485a41520c1e1acbd5869b3e0b9f0fa9974e024de754737f63e6e932c78/openadapt-1.10.3.tar.gz",
-          "sha256": "d6cfa6decd253895dc32d47991bbfc2a3f584c1762c11c3394ed3a8fa16a87f9"
+          "filename": "openadapt-1.10.4.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/ce/d2/4f935560acb1e6b68c93d4a69a76ec2c185fab92fbc0df297fd1903c6848/openadapt-1.10.4.tar.gz",
+          "sha256": "29197ae6cc2425d4cf3ed77351279b6596b60f32d268298a032587f1c18862c4"
         }
       ]
     },
     "flow": {
       "package": "openadapt-flow",
-      "version": "1.27.1",
+      "version": "1.28.0",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_flow-1.27.1-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/45/23/df60e9ad9a5dc82a4db551612de4f9b621bf20956bf5f0a34b6d8ca73953/openadapt_flow-1.27.1-py3-none-any.whl",
-          "sha256": "99d8f3ef014481356f4bcfc65f694ed2fd47a75e2025c5ddfdae4bfab2194094"
+          "filename": "openadapt_flow-1.28.0-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/2b/ce/1a43d30411e6abd35ddfaad5fbf00321c14f0cf1082ebcaee7f993ec17b5/openadapt_flow-1.28.0-py3-none-any.whl",
+          "sha256": "4d156035ea411e3cbdbc40978d653d50727a7d8664646be62f7f9e95ba0c7202"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_flow-1.27.1.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/af/99/709eeada43b5ab00da94a283d5018233c7511abb5ce33bbfd5e4b548c81f/openadapt_flow-1.27.1.tar.gz",
-          "sha256": "aeabf2b11ae6151fe76c02ee783e8368d10ee984465f858f9d37429b17a15468"
+          "filename": "openadapt_flow-1.28.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/f2/a7/9a109b155c11b5edfc2c3ed765858a976c7565f73c7f0c818a04c5ae34b8/openadapt_flow-1.28.0.tar.gz",
+          "sha256": "6e108f3469da20226427fee7a11378e067ca08c1fbbfcdbb4018ab9c3d142a8b"
         }
       ]
     },
@@ -66,21 +66,21 @@
     },
     "desktop": {
       "package": "openadapt-desktop",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "source": "pypi",
       "requires_python": ">=3.11",
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_desktop-0.14.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/dc/5f/f2cf2d6fdaab8a400e95065d2f4e1810665b3a9352879967fab5c9e9f957/openadapt_desktop-0.14.0-py3-none-any.whl",
-          "sha256": "7ee5a1d2e00f5cbd887edd070916e53530c9548b04713a1aa7d9960f2d313082"
+          "filename": "openadapt_desktop-0.15.0-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/2a/24/a037aaaca08db307ec719670eabc7e0edc2baf13f7b7ebb73dacc0288fa7/openadapt_desktop-0.15.0-py3-none-any.whl",
+          "sha256": "11dd8da225d660f23fc5e779d564ef34c5d85ad40b303951ec7697e94f488401"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_desktop-0.14.0.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/d9/47/64ceeecd28345145ee3ee5cd796806f14fc5c339c52778ae41507661ec76/openadapt_desktop-0.14.0.tar.gz",
-          "sha256": "44a50bd2c126524a76b4d0c0eb0bed9f24667940f735eed1dfed03dce7e9862b"
+          "filename": "openadapt_desktop-0.15.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/fa/b8/32de05c9ccd1c1ba4bd909ee8c40b2a68933499ea0da50453c95953181ba/openadapt_desktop-0.15.0.tar.gz",
+          "sha256": "f45e35d53469fcb75710010d56a9d3f362130f1637a2f5fb50889553104a5670"
         }
       ]
     }
