@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-08-02)
+
+### Chores
+
+- Raise remaining flow floor and regenerate platform manifest for flow 1.29.0
+  ([#1084](https://github.com/OpenAdaptAI/OpenAdapt/pull/1084),
+  [`c7bfb2f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c7bfb2f35924bf595a67d409c6a79c61bcd4a99f))
+
+- **release**: Reconcile platform manifest
+  ([`450ce61`](https://github.com/OpenAdaptAI/OpenAdapt/commit/450ce6121ad4713418c55ea432153d722b0878e2))
+
+- **release**: Refresh platform manifest for openadapt-flow 1.28.0
+  ([#1083](https://github.com/OpenAdaptAI/OpenAdapt/pull/1083),
+  [`c3b55e5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c3b55e58cbc7374fb08f247f8604405be29be663))
+
+### Documentation
+
+- Align entry commands and substrate maturity across repo READMEs
+  ([#1082](https://github.com/OpenAdaptAI/OpenAdapt/pull/1082),
+  [`4133263`](https://github.com/OpenAdaptAI/OpenAdapt/commit/413326303136b05257547742ba37988393bcab6b))
+
+### Features
+
+- **quickstart**: Forward --break-it to the flow tutorial
+  ([#1084](https://github.com/OpenAdaptAI/OpenAdapt/pull/1084),
+  [`c7bfb2f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c7bfb2f35924bf595a67d409c6a79c61bcd4a99f))
+
+### Testing
+
+- Align extras metadata floors with flow 1.29.0
+  ([#1084](https://github.com/OpenAdaptAI/OpenAdapt/pull/1084),
+  [`c7bfb2f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c7bfb2f35924bf595a67d409c6a79c61bcd4a99f))
+
+
 ## v1.10.4 (2026-08-02)
 
 ### Bug Fixes
