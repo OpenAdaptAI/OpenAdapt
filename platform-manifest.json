@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.0.0",
-  "generated_at": "2026-07-31T13:30:50+00:00",
+  "generated_at": "2026-08-02T09:41:26+00:00",
   "release_channel": "beta",
   "components": {
     "launcher": {
@@ -66,21 +66,21 @@
     },
     "desktop": {
       "package": "openadapt-desktop",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "source": "pypi",
       "requires_python": ">=3.11",
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_desktop-0.14.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/dc/5f/f2cf2d6fdaab8a400e95065d2f4e1810665b3a9352879967fab5c9e9f957/openadapt_desktop-0.14.0-py3-none-any.whl",
-          "sha256": "7ee5a1d2e00f5cbd887edd070916e53530c9548b04713a1aa7d9960f2d313082"
+          "filename": "openadapt_desktop-0.15.0-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/2a/24/a037aaaca08db307ec719670eabc7e0edc2baf13f7b7ebb73dacc0288fa7/openadapt_desktop-0.15.0-py3-none-any.whl",
+          "sha256": "11dd8da225d660f23fc5e779d564ef34c5d85ad40b303951ec7697e94f488401"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_desktop-0.14.0.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/d9/47/64ceeecd28345145ee3ee5cd796806f14fc5c339c52778ae41507661ec76/openadapt_desktop-0.14.0.tar.gz",
-          "sha256": "44a50bd2c126524a76b4d0c0eb0bed9f24667940f735eed1dfed03dce7e9862b"
+          "filename": "openadapt_desktop-0.15.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/fa/b8/32de05c9ccd1c1ba4bd909ee8c40b2a68933499ea0da50453c95953181ba/openadapt_desktop-0.15.0.tar.gz",
+          "sha256": "f45e35d53469fcb75710010d56a9d3f362130f1637a2f5fb50889553104a5670"
         }
       ]
     }
