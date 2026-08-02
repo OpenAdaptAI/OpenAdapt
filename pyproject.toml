@@ -88,7 +88,7 @@ privacy = [
 # extra is kept for backward compatibility so `pip install openadapt[flow]`
 # and the `all` bundle still resolve.
 flow = [
-    "openadapt-flow>=1.25.1,<2.0.0",
+    "openadapt-flow>=1.29.0,<2.0.0",
 ]
 # Bundles
 core = [

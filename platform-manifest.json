@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.0.0",
-  "generated_at": "2026-08-02T16:33:44+00:00",
+  "generated_at": "2026-08-02T19:53:33+00:00",
   "release_channel": "beta",
   "components": {
     "launcher": {
@@ -26,21 +26,21 @@
     },
     "flow": {
       "package": "openadapt-flow",
-      "version": "1.28.0",
+      "version": "1.29.0",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_flow-1.28.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/2b/ce/1a43d30411e6abd35ddfaad5fbf00321c14f0cf1082ebcaee7f993ec17b5/openadapt_flow-1.28.0-py3-none-any.whl",
-          "sha256": "4d156035ea411e3cbdbc40978d653d50727a7d8664646be62f7f9e95ba0c7202"
+          "filename": "openadapt_flow-1.29.0-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/8f/ab/f05f65adb368a6135a32eb201e341e00e5ccc7334715d4381aad2e656c3a/openadapt_flow-1.29.0-py3-none-any.whl",
+          "sha256": "2c5f49199161fb2964bb43cfae2470fb79e5dbcb264e3031d6f8802ecb161a6a"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_flow-1.28.0.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/f2/a7/9a109b155c11b5edfc2c3ed765858a976c7565f73c7f0c818a04c5ae34b8/openadapt_flow-1.28.0.tar.gz",
-          "sha256": "6e108f3469da20226427fee7a11378e067ca08c1fbbfcdbb4018ab9c3d142a8b"
+          "filename": "openadapt_flow-1.29.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/a1/4f/53d31b2a8600a61e35ab9aa469e25591e327eb2301039c5e55f788044a82/openadapt_flow-1.29.0.tar.gz",
+          "sha256": "d4ba0fb0af915d8fbf642fdf0843524f04992e8b3080febfb618febe507311a7"
         }
       ]
     },
@@ -95,7 +95,7 @@
         ">=0.1.0"
       ],
       "openadapt-flow": [
-        ">=1.25.1,<2.0.0"
+        ">=1.29.0,<2.0.0"
       ],
       "openadapt-grounding": [
         ">=0.1.0"
