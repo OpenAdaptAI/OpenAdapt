@@ -114,6 +114,30 @@ def test_quickstart_forwards_the_headed_tutorial_option(monkeypatch):
     assert calls[0][-1] == "--headed"
 
 
+def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
+    monkeypatch,
+):
+    calls = []
+    monkeypatch.setattr(
+        "openadapt.cli._invoke_flow",
+        lambda argv: calls.append(list(argv)) or 0,
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            cli_main,
+            ["quickstart", "--break-it", "--out", "break-run"],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    assert calls[0][0] == "tutorial"
+    assert calls[0][-1] == "--break-it"
+    assert "run-broken" in result.output
+    assert "HALTED" in result.output
+
+
 def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):
     monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "auto")
     monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)
@@ -253,22 +277,22 @@ def test_launcher_flow_and_substrate_extras_metadata():
     )["project"]
     extras = metadata["optional-dependencies"]
 
-    assert metadata["dependencies"].count("openadapt-flow[hosted]>=1.25.1,<2.0.0") == 1
-    assert extras["flow"] == ["openadapt-flow>=1.25.1,<2.0.0"]
+    assert metadata["dependencies"].count("openadapt-flow[hosted]>=1.29.0,<2.0.0") == 1
+    assert extras["flow"] == ["openadapt-flow>=1.29.0,<2.0.0"]
     assert extras["browser"] == ["playwright>=1.44"]
-    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.25.1,<2.0.0"]
+    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
     assert extras["capture"] == [
         "openadapt-capture>=1.0.4,<2.0.0",
-        "openadapt-flow[capture]>=1.25.1,<2.0.0",
+        "openadapt-flow[capture]>=1.29.0,<2.0.0",
     ]
-    assert extras["windows"] == ["openadapt-flow[windows]>=1.25.1,<2.0.0"]
+    assert extras["windows"] == ["openadapt-flow[windows]>=1.29.0,<2.0.0"]
     assert extras["macos"] == [
-        "openadapt-flow[macos]>=1.25.1,<2.0.0; sys_platform == 'darwin'"
+        "openadapt-flow[macos]>=1.29.0,<2.0.0; sys_platform == 'darwin'"
     ]
     assert extras["linux"] == [
-        "openadapt-flow[linux]>=1.25.1,<2.0.0; sys_platform == 'linux'"
+        "openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux'"
     ]
-    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.25.1,<2.0.0"]
+    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.29.0,<2.0.0"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp]",
         "openadapt[macos]; sys_platform == 'darwin'",

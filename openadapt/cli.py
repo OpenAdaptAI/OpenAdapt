@@ -170,7 +170,17 @@ def _run_flow(argv: list[str]) -> None:
 @click.option(
     "--headed", is_flag=True, help="Show the browser while the tutorial runs."
 )
-def quickstart(out: Path, headed: bool) -> None:
+@click.option(
+    "--break-it",
+    "break_it",
+    is_flag=True,
+    help=(
+        "After the verified run, rerun the same certified bundle against a "
+        "fault-injecting backend and watch the engine halt instead of "
+        "trusting the screen."
+    ),
+)
+def quickstart(out: Path, headed: bool, break_it: bool) -> None:
     """Run a verified local tutorial against the bundled synthetic app.
 
     This is the shortest path to a real OpenAdapt run. It uses the bundled
@@ -195,6 +205,8 @@ def quickstart(out: Path, headed: bool) -> None:
     ]
     if headed:
         argv.append("--headed")
+    if break_it:
+        argv.append("--break-it")
 
     # The bundled tutorial contains only fixed synthetic data. Keep an
     # installed-but-unconfigured privacy provider from blocking this known-safe
@@ -224,7 +236,18 @@ def quickstart(out: Path, headed: bool) -> None:
         "The synthetic write was confirmed through a read-only system-of-record API."
     )
     click.echo("No model or Cloud call was enabled.")
+    if break_it:
+        click.echo(
+            "The rerun against the fault-injecting backend HALTED as designed: "
+            "the screen claimed success and the system of record disagreed."
+        )
+        click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
     click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
+    if not break_it:
+        click.echo(
+            "Watch it catch a lie: openadapt quickstart --break-it --out "
+            f"{root}-break-it"
+        )
     click.echo(
         "See a fail-safe halt: openadapt flow replay "
         f"{root / 'bundle'} --drift modal --run-dir {root}-halt"
