@@ -462,6 +462,69 @@ class FreshMismatchRemoteBackend(RemoteLeaseBackend):
             )
 
 
+class PixelOnlyRemoteBackend:
+    """Opaque remote surface exposing ONLY the two-phase actuation lease.
+
+    The exact protocol surface of the no-DOM HTML5-canvas backend in
+    ``benchmark/canvas_ladder``: pixels in, coordinates out, no structural
+    tree, no identity seam, and no typed delivery receipt. It implements
+    :class:`RemoteActuationBackend` and
+    :class:`PreparedPointerActuationBackend` and nothing else, so the exact
+    frame is bound by the backend's own one-shot lease, which its next input
+    method consumes and validates before the first input edge.
+    """
+
+    def __init__(self, *, frame=None, viewport=VIEWPORT):
+        self._frame = frame if frame is not None else make_png(viewport)
+        self._viewport = viewport
+        self.actions: list = []
+        self.prepared_pointer_points: list = []
+        self.acquire_count = 0
+        self._leased_frame_sha256 = None
+        self.frame_after_lease = None
+
+    @property
+    def viewport(self):
+        return self._viewport
+
+    def screenshot(self):
+        return self._frame
+
+    def prepare_pointer_actuation(self, x, y):
+        self._leased_frame_sha256 = None
+        self.prepared_pointer_points.append((int(x), int(y)))
+
+    def acquire_actuation_frame(self) -> bytes:
+        self.acquire_count += 1
+        self._leased_frame_sha256 = hashlib.sha256(self._frame).hexdigest()
+        if self.frame_after_lease is not None:
+            self._frame = self.frame_after_lease
+        return self._frame
+
+    def _consume_lease(self):
+        leased = self._leased_frame_sha256
+        self._leased_frame_sha256 = None
+        if leased is None:
+            return
+        if hashlib.sha256(self._frame).hexdigest() != leased:
+            raise RuntimeError("remote frame content changed before the input edge")
+
+    def click(self, x, y, *, double=False):
+        self._consume_lease()
+        self.actions.append(("click", x, y, double))
+
+    def type_text(self, text):
+        self._consume_lease()
+        self.actions.append(("type", text))
+
+    def press(self, key):
+        self._consume_lease()
+        self.actions.append(("press", key))
+
+    def scroll(self, dx, dy):
+        self.actions.append(("scroll", dx, dy))
+
+
 def click_step(
     step_id="s1",
     *,
@@ -637,6 +700,94 @@ def test_consequential_remote_click_re_resolves_on_fresh_frame(bundle, run_dir):
     assert backend.acquire_count == 1
     assert backend.actions == [("click", 110, 105, False)]
     assert report.results[0].resolution.point == (110, 105)
+
+
+def test_consequential_click_uses_lease_when_backend_has_no_typed_receipt(
+    bundle, run_dir
+):
+    """A pixel-only opaque remote surface must actuate, not over-halt.
+
+    ``GuardedRemotePointerActionBackend`` adds an explicit expected-frame hash
+    and a typed receipt; a plain ``RemoteActuationBackend`` already refuses
+    before the first input edge when the leased frame changed. Refusing the
+    latter halts every no-DOM canvas/VDI workflow on its write step.
+    """
+    backend = PixelOnlyRemoteBackend()
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert backend.prepared_pointer_points == [(110, 105)]
+    assert backend.acquire_count == 1
+    assert backend.actions == [("click", 110, 105, False)]
+    assert report.rung_counts == {"template": 1}
+    assert report.model_calls == 0
+    # No typed receipt exists, so the result must not claim a closed
+    # production actuation path.
+    assert report.results[0].actuation is None
+    assert report.results[0].delivery_receipt is None
+
+
+def test_consequential_lease_click_still_refuses_a_changed_frame(bundle, run_dir):
+    """The lease is the safety property: a changed frame must stop delivery."""
+    backend = PixelOnlyRemoteBackend()
+    backend.frame_after_lease = make_png(color=(10, 20, 30))
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.actions == []
+
+
+def test_governed_consequential_click_requires_a_typed_remote_receipt(bundle, run_dir):
+    """A governed run still refuses a remote click it cannot evidence."""
+    backend = PixelOnlyRemoteBackend()
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+    ]
+    workflow = Workflow(name="wf", steps=[click_step(risk="irreversible")])
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    assert workflow.manifest is not None
+    authorization = GovernedRunAuthorization(
+        bundle_content_digest=workflow.manifest.content_digest,
+        runtime_inputs_digest=runtime_inputs_digest(workflow, None, None),
+        admitted_policy_name="test",
+    )
+
+    report = Replayer(
+        backend,
+        vision=vision,
+        governed_authorization=authorization,
+    ).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.actions == []
+    assert "cannot bind its exact" in (report.results[0].error or "")
 
 
 def test_consequential_remote_hover_target_movement_halts_before_input(bundle, run_dir):

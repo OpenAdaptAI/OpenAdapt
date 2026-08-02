@@ -7543,6 +7543,33 @@ class Replayer:
             and self._step_has_identity_contract(step, workflow)
         )
 
+    def _typed_remote_receipt_required(self) -> bool:
+        """Whether a remote pointer edge must carry a typed delivery receipt.
+
+        :class:`RemoteActuationBackend` already owns the exact-frame contract:
+        after ``acquire_actuation_frame`` the backend captures once more under
+        its own input lock and refuses *before the first input edge* when the
+        window/session, dimensions, readiness, or exact frame content changed.
+        :class:`GuardedRemotePointerActionBackend` adds an explicit
+        expected-frame hash plus a typed, target-bound receipt on top of that
+        contract; its absence is therefore missing *evidence*, not a missing
+        safety property.
+
+        A governed (Standard/Regulated) run and an exact qualification-fault
+        proof both consume that receipt as retained evidence, so they must
+        refuse before delivery rather than actuate without it. Ordinary replay
+        keeps the documented lease path — refusing there over-halts every
+        conforming opaque remote backend, including a pixel-only no-DOM canvas
+        that can only expose the lease. Such a result stays unlabeled, which
+        the outcome classifier already maps to ``COMPLETED_UNVERIFIED`` instead
+        of a production-eligible success.
+        """
+
+        return (
+            self.governed_authorization is not None
+            or self.qualification_fault_driver is not None
+        )
+
     def _cancel_guarded_coordinate(self) -> None:
         """Clean an unconsumed local coordinate lease, if one was armed."""
 
@@ -8577,39 +8604,58 @@ class Replayer:
                     self._step_is_consequential(step, workflow)
                     or self.qualification_fault_driver is not None
                 )
+                typed_remote = isinstance(
+                    self.backend,
+                    GuardedRemotePointerActionBackend,
+                )
+                if (
+                    remote_consequential
+                    and not typed_remote
+                    and self._typed_remote_receipt_required()
+                ):
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) is a consequential "
+                        "remote click, but this backend cannot bind its exact "
+                        "fresh frame and target to delivery; run aborted"
+                    )
                 if remote_consequential:
-                    if not isinstance(
-                        self.backend,
-                        GuardedRemotePointerActionBackend,
-                    ):
-                        result.safety_halt = True
-                        result.failure_category = "safety_halt"
-                        return (
-                            f"Step '{step.id}' ({step.intent}) is a consequential "
-                            "remote click, but this backend cannot bind its exact "
-                            "fresh frame and target to delivery; run aborted"
-                        )
                     refusal = self._delivery_authorization_refusal(
                         workflow, params, step, result
                     )
                     if refusal is not None:
                         return refusal
                     self._require_qualification_environment_current()
-                    remote_pointer = cast(
-                        GuardedRemotePointerActionBackend, self.backend
-                    )
-                    result.delivery_receipt = self._deliver_backend_call(
-                        result,
-                        lambda: remote_pointer.click_guarded(
-                            x,
-                            y,
-                            expected_frame_sha256=hashlib.sha256(
-                                before_png
-                            ).hexdigest(),
-                            double=step.action is ActionKind.DOUBLE_CLICK,
-                        ),
-                    )
-                    result.actuation = "remote_guarded"
+                    if typed_remote:
+                        remote_pointer = cast(
+                            GuardedRemotePointerActionBackend, self.backend
+                        )
+                        result.delivery_receipt = self._deliver_backend_call(
+                            result,
+                            lambda: remote_pointer.click_guarded(
+                                x,
+                                y,
+                                expected_frame_sha256=hashlib.sha256(
+                                    before_png
+                                ).hexdigest(),
+                                double=step.action is ActionKind.DOUBLE_CLICK,
+                            ),
+                        )
+                        result.actuation = "remote_guarded"
+                    else:
+                        # See ``_typed_remote_receipt_required``: the exact
+                        # fresh frame is already bound by the backend's own
+                        # one-shot lease, armed immediately above by
+                        # ``_revalidate_consequential_actuation``.
+                        self._deliver_backend_call(
+                            result,
+                            lambda: self.backend.click(
+                                x,
+                                y,
+                                double=step.action is ActionKind.DOUBLE_CLICK,
+                            ),
+                        )
                 elif requires_atomic_identity:
                     if isinstance(self.backend, GuardedCoordinateActionBackend):
                         refusal = self._delivery_authorization_refusal(
@@ -8683,16 +8729,39 @@ class Replayer:
                 self._step_is_consequential(step, workflow)
                 or self.qualification_fault_driver is not None
             )
-            if remote_consequential:
-                if not isinstance(
-                    self.backend,
-                    GuardedRemotePointerActionBackend,
-                ):
+            if remote_consequential and not isinstance(
+                self.backend,
+                GuardedRemotePointerActionBackend,
+            ):
+                if self._typed_remote_receipt_required():
                     return (
                         f"Step '{step.id}' ({step.intent}) is a consequential "
                         "remote right click, but this backend cannot bind its "
                         "exact fresh frame and target to delivery; run aborted"
                     )
+                # See ``_typed_remote_receipt_required``: the exact fresh frame
+                # is already bound by the backend's own one-shot lease, and its
+                # first input edge consumes it.
+                if not isinstance(self.backend, RichPointerActionBackend):
+                    return (
+                        f"Step '{step.id}' ({step.intent}) requires a right "
+                        "click, but this backend has no bounded right-click "
+                        "operation"
+                    )
+                refusal = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+                if refusal is not None:
+                    return refusal
+                self._require_qualification_environment_current()
+                self._deliver_backend_call(
+                    result,
+                    lambda: cast(RichPointerActionBackend, self.backend).right_click(
+                        x, y
+                    ),
+                )
+                return None
+            if remote_consequential:
                 refusal = self._delivery_authorization_refusal(
                     workflow, params, step, result
                 )
@@ -8825,9 +8894,16 @@ class Replayer:
                     ),
                 )
                 result.actuation = "dom"
-            elif isinstance(self.backend, RemoteActuationBackend) and (
-                self._step_is_consequential(step, workflow)
-                or self.qualification_fault_driver is not None
+            elif (
+                isinstance(self.backend, RemoteActuationBackend)
+                and (
+                    self._step_is_consequential(step, workflow)
+                    or self.qualification_fault_driver is not None
+                )
+                and (
+                    isinstance(self.backend, GuardedRemotePointerActionBackend)
+                    or self._typed_remote_receipt_required()
+                )
             ):
                 if not isinstance(
                     self.backend,
