@@ -38,7 +38,7 @@ def phash_png(png: bytes, region: Region | None = None) -> str:
     Raises:
         ValueError: If ``region`` is empty after clamping.
     """
-    img = Image.open(io.BytesIO(png))
+    img: Image.Image = Image.open(io.BytesIO(png))
     if region is not None:
         x, y, w, h = region
         x0, y0 = max(0, x), max(0, y)
