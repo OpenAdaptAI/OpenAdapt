@@ -20,13 +20,16 @@ OpenAdapt re-resolves from retained evidence or proposes a governed repair, and
 it **halts instead of guessing** when verification fails.
 
 Substrates are all first-class in the product design (web, Windows, macOS,
-Linux, RDP, and Citrix/VDI), reported against an honest maturity ladder:
+Linux, RDP, and Citrix/VDI).
+
+Substrate maturity, stated the same way across the OpenAdapt repositories:
 
 | Substrate | Maturity |
 | --- | --- |
-| Browser | Beta and available through the managed browser product |
-| Windows, macOS, Linux, RDP | Available for customer-controlled execution; qualification evidence remains task- and environment-specific |
-| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification remains deployment-specific |
+| Browser (web) | Beta; available in production today through the managed browser product |
+| Native desktop (Windows, macOS, Linux) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
+| Remote display (RDP) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
+| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification is deployment-specific |
 
 The compiler, replayer, certification, and governed repair all live in
 `openadapt-flow`. This desktop repository is the cockpit and the local wiring
@@ -94,10 +97,22 @@ generally available native release.
 
 ## Use OpenAdapt today
 
-For the runnable product loop, use `openadapt-flow` directly:
+The canonical first run uses the
+[OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) launcher:
 
 ```bash
-pip install openadapt-flow
+pip install 'openadapt[browser]'
+
+openadapt quickstart
+```
+
+On Windows `cmd.exe`, use double quotes: `pip install "openadapt[browser]"`.
+
+`openadapt quickstart` and the engine-native `openadapt-flow tutorial` run the
+same loop. To drive the stages by hand against the engine directly:
+
+```bash
+pip install 'openadapt-flow[browser]'
 
 openadapt-flow demo-record --out rec
 openadapt-flow compile rec --out bundle --name my-task
