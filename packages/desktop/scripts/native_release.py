@@ -131,6 +131,16 @@ def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
     return native_versions(root)
 
 
+def sync_native_version_from_engine(root: Path = ROOT) -> dict[str, str]:
+    """Set every native version source from the Python engine version."""
+
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    version = project.get("project", {}).get("version")
+    if not isinstance(version, str) or not VERSION_PATTERN.fullmatch(version):
+        raise ValueError(f"invalid engine version in pyproject.toml: {version!r}")
+    return set_native_version(version, root)
+
+
 def superseded_notes(body: str, newer_tag: str, repo: str) -> str | None:
     """Return release notes marking ``body`` superseded by ``newer_tag``.
 
@@ -437,6 +447,7 @@ def _parser() -> argparse.ArgumentParser:
 
     set_version_parser = subparsers.add_parser("set-version")
     set_version_parser.add_argument("version")
+    subparsers.add_parser("sync-from-engine")
 
     supersede_parser = subparsers.add_parser("supersede-notes")
     supersede_parser.add_argument("--newer-tag", required=True)
@@ -482,6 +493,10 @@ def main() -> int:
             print(validate_tag(args.tag))
         elif args.command == "set-version":
             versions = set_native_version(args.version)
+            for source, value in sorted(versions.items()):
+                print(f"{source}: {value}")
+        elif args.command == "sync-from-engine":
+            versions = sync_native_version_from_engine()
             for source, value in sorted(versions.items()):
                 print(f"{source}: {value}")
         elif args.command == "supersede-notes":

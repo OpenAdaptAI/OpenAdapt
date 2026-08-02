@@ -133,7 +133,7 @@ version_variables = ["engine/__init__.py:__version__"]
 commit_message = "chore: release {version}"
 major_on_zero = false
 allow_zero_version = true
-build_command = "python -m ensurepip --upgrade && python -m pip install --disable-pip-version-check uv==0.11.29 && python scripts/check_release_consistency.py --sync && git add uv.lock && uv build --wheel --sdist && python scripts/check_release_consistency.py --require-dist && python scripts/check_source_boundary.py --require-dist && python scripts/verify_build_artifact.py python-distribution"
+build_command = "python -m ensurepip --upgrade && python -m pip install --disable-pip-version-check uv==0.11.29 && python scripts/check_release_consistency.py --sync && python scripts/native_release.py sync-from-engine && git add uv.lock package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json && uv build --wheel --sdist && python scripts/check_release_consistency.py --require-dist && python scripts/check_source_boundary.py --require-dist && python scripts/verify_build_artifact.py python-distribution"
 
 [tool.semantic_release.branches.main]
 match = "main"

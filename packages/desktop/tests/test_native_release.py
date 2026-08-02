@@ -14,6 +14,7 @@ from scripts.native_release import (
     set_native_version,
     stage_artifacts,
     superseded_notes,
+    sync_native_version_from_engine,
     validate_release_set,
     validate_sbom,
     validate_tag,
@@ -358,6 +359,19 @@ def test_set_native_version_synchronizes_every_source_and_lockfile(tmp_path: Pat
     assert 'version = "0.5.0"' in cargo_toml
     assert 'serde = { version = "1.0" }' in cargo_toml
     assert validate_tag("desktop-v0.5.0", tmp_path) == "desktop-v0.5.0"
+
+
+def test_sync_native_version_from_engine_uses_python_release_version(tmp_path: Path) -> None:
+    _write_native_version_fixture(tmp_path, "0.1.1")
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "openadapt-desktop"\nversion = "0.5.0"\n',
+        encoding="utf-8",
+    )
+
+    versions = sync_native_version_from_engine(tmp_path)
+
+    assert set(versions.values()) == {"0.5.0"}
+    assert native_version(tmp_path) == "0.5.0"
 
 
 def test_set_native_version_rejects_non_semver_input(tmp_path: Path) -> None:
