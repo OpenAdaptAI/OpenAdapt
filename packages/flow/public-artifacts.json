@@ -89,7 +89,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "7752239ab2541c70b24e86e16706b50093f972e8c794d6e6fe385ea6db1f3739"
+      "sha256": "34f47a2752dda1e3502e90d32f443f07d27c5452af8e89e78931b507323e9bf4"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",

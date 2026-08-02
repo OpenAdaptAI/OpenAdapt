@@ -96,6 +96,34 @@ def test_macos_deselects_only_redundant_heavy_identity_harness() -> None:
     assert workflow.count(f"--deselect={node}") == 1
 
 
+def test_exhaustive_identity_ladder_corpus_runs_in_the_slow_lane_only() -> None:
+    """The exhaustive identity-ladder sweep stays OUT of the fast PR lane.
+
+    The fast `test` job runs the bounded class-covering harness; the
+    nightly/dispatch canonical-Ubuntu matrix leg opts into the exhaustive
+    corpus via OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE. This pins both sides so
+    the exhaustive sweep can neither silently stop running anywhere nor creep
+    back into the fast lane whose 900s budget it intermittently exceeded.
+    """
+    workflow = CI.read_text(encoding="utf-8")
+    flag = "OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE"
+
+    linux_start = workflow.index(
+        "- name: Test (full suite incl. e2e, canonical Ubuntu)"
+    )
+    macos_start = workflow.index(
+        "- name: Test (full suite incl. e2e, macOS platform coverage)"
+    )
+    linux_step = workflow[linux_start:macos_start]
+    assert f'{flag}: "1"' in linux_step
+
+    fast_start = workflow.index("- name: Test (fast unit suite)")
+    fast_end = workflow.index("- name: Coverage (whole-package visibility)")
+    assert flag not in workflow[fast_start:fast_end]
+    # exactly one opt-in: the canonical Ubuntu matrix leg
+    assert workflow.count(f'{flag}: "1"') == 1
+
+
 def test_clean_machine_lifecycle_declares_utf8_on_every_os() -> None:
     workflow = QUICKSTART.read_text(encoding="utf-8")
     lifecycle_start = workflow.index("  lifecycle:")

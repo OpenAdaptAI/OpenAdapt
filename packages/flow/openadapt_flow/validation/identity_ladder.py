@@ -100,6 +100,27 @@ from openadapt_flow.validation.pixel_identity_probe import COLLAPSE_PAIRS
 # assigned round-robin from the pool below (so adding pairs never truncates).
 _COLLAPSE_PAIRS = list(COLLAPSE_PAIRS)
 
+
+def bounded_pairs() -> list:
+    """The first pair of every (glyph_class, flank) equivalence class.
+
+    The CI fast lane runs the harness on this bounded, class-covering subset
+    (every collapse mechanism -- O/0 and l/1, digit-/alpha-flanked and purely
+    numeric -- is still measured through the full production tier stack); the
+    nightly/dispatch full matrix runs the exhaustive corpus. Adding pairs to
+    COLLAPSE_PAIRS never grows this subset unless it introduces a NEW class,
+    which keeps the fast lane's runtime bounded by construction.
+    """
+    seen: set[tuple[str, str]] = set()
+    subset = []
+    for p in _COLLAPSE_PAIRS:
+        key = (p.glyph_class, p.flank)
+        if key not in seen:
+            seen.add(key)
+            subset.append(p)
+    return subset
+
+
 # A shared name+DOB pool (so the ONLY discriminator is the collapsible MRN --
 # the exact wrong-patient shape). Names are fake.
 _SHARED = [
@@ -270,18 +291,30 @@ def _make_backend(viewport, live_png, structured_live):
 
 
 def _anchor(
-    rec: Rendered, *, with_structured: bool, with_crop: bool, bundle_dir: Optional[Path]
+    rec: Rendered,
+    *,
+    with_structured: bool,
+    with_crop: bool,
+    bundle_dir: Optional[Path],
+    crop_name: str = "idcrop.png",
+    ocr_lines=None,
 ) -> Anchor:
     """Build the recorded anchor exactly as the compiler would for a click on
     the Open button: OCR context band (name+DOB+MRN), optional DOM structured
-    identity, optional identifier crop (the MRN cell)."""
+    identity, optional identifier crop (the MRN cell).
+
+    ``ocr_lines`` lets the caller supply the recorded frame's OCR result (the
+    full-frame OCR is the harness's dominant cost and depends only on the
+    frame); ``crop_name`` must be unique per recorded frame so anchors cached
+    across configs never read another pair's crop from the shared bundle dir.
+    """
     import openadapt_flow.vision as vision
     from openadapt_flow.runtime.identity import band_region, context_from_lines
 
     frame_bgr = cv2.imdecode(np.frombuffer(rec.png, np.uint8), cv2.IMREAD_COLOR)
     click = rec.open_point
     crop_region = _discriminative_crop_region(frame_bgr, click)
-    lines = vision.ocr(rec.png)
+    lines = vision.ocr(rec.png) if ocr_lines is None else ocr_lines
     from datetime import date
 
     context_text = context_from_lines(
@@ -300,8 +333,8 @@ def _anchor(
         crop = frame_bgr[y : y + h, x : x + w]
         ok, buf = cv2.imencode(".png", crop)
         assert ok
-        (bundle_dir / "idcrop.png").write_bytes(buf.tobytes())
-        identifier_crop = "idcrop.png"
+        (bundle_dir / crop_name).write_bytes(buf.tobytes())
+        identifier_crop = crop_name
         identifier_region = rec.mrn_region
 
     return Anchor(
@@ -316,20 +349,23 @@ def _anchor(
 
 
 def _verdict(
-    rec: Rendered,
     live: Rendered,
     *,
+    anchor: Anchor,
     with_structured: bool,
-    with_crop: bool,
     vlm,
     bundle_dir: Optional[Path],
 ) -> I.IdentityCheck:
-    """Drive the REAL Replayer._verify_identity for this substrate config."""
+    """Drive the REAL Replayer._verify_identity for this substrate config.
+
+    ``anchor`` is the recorded anchor for this (pair, substrate) -- built once
+    per combination by ``run`` (the anchor depends only on the RECORDED frame
+    and the substrate flags, so rebuilding it per verdict re-ran the recorded
+    frame's full-frame OCR ~22x per pair for the same result: the runtime
+    nondeterminism that intermittently blew the CI timeout).
+    """
     import openadapt_flow.vision as vision
 
-    anchor = _anchor(
-        rec, with_structured=with_structured, with_crop=with_crop, bundle_dir=bundle_dir
-    )
     step = Step(
         id="open",
         intent="open patient chart",
@@ -372,8 +408,17 @@ def _measure(name: str, cases: list[dict]) -> dict:
     }
 
 
-def run(out_dir: Path) -> dict:
-    pairs = [(p, _SHARED[i % len(_SHARED)]) for i, p in enumerate(_COLLAPSE_PAIRS)]
+def run(out_dir: Path, pair_subset=None) -> dict:
+    """Measure every config over ``pair_subset`` (default: the full corpus).
+
+    ``pair_subset`` bounds RUNTIME only -- which homonym pairs are measured --
+    never the tier stack, the configs, or the verdict logic: every pair still
+    runs through the real ``Replayer._verify_identity`` under all five
+    substrate configs. The fast CI lane passes :func:`bounded_pairs`; the
+    nightly full matrix and the CLI run the exhaustive corpus.
+    """
+    corpus = _COLLAPSE_PAIRS if pair_subset is None else list(pair_subset)
+    pairs = [(p, _SHARED[i % len(_SHARED)]) for i, p in enumerate(corpus)]
     # Pre-render every (pair, condition) frame once.
     rec: dict[str, Rendered] = {}
     stable_t: dict[str, Rendered] = {}
@@ -405,25 +450,52 @@ def run(out_dir: Path) -> dict:
     results: dict[str, dict] = {}
     tmp = Path(tempfile.mkdtemp(prefix="idladder_"))
 
+    # The recorded anchor depends only on the RECORDED frame and the substrate
+    # flags -- never on the live frame or the VLM -- so build each variant once
+    # and reuse it across every verdict/config. This removes the ~22x-per-pair
+    # redundant full-frame OCR of the same recorded frame (the dominant,
+    # runner-speed-scaled cost that intermittently blew the CI timeout). The
+    # recorded frame's OCR lines are likewise shared across the variants.
+    _rec_lines: dict[str, list] = {}
+    _anchors: dict[tuple[str, bool, bool], Anchor] = {}
+
+    def recorded_anchor(label: str, *, with_structured: bool, with_crop: bool):
+        key = (label, with_structured, with_crop)
+        if key not in _anchors:
+            if label not in _rec_lines:
+                import openadapt_flow.vision as vision
+
+                _rec_lines[label] = vision.ocr(rec[label].png)
+            _anchors[key] = _anchor(
+                rec[label],
+                with_structured=with_structured,
+                with_crop=with_crop,
+                bundle_dir=tmp if with_crop else None,
+                crop_name=f"idcrop_{label}.png",
+                ocr_lines=_rec_lines[label],
+            )
+        return _anchors[key]
+
     def config(name, *, cond_kind, with_structured, with_crop, vlm_on):
         cases = []
         for p, _ in pairs:
             bd = tmp if with_crop else None
+            anchor = recorded_anchor(
+                p.label, with_structured=with_structured, with_crop=with_crop
+            )
             if cond_kind == "stable":
                 live_c, live_w = stable_t[p.label], stable_s[p.label]
                 chk_c = _verdict(
-                    rec[p.label],
                     live_c,
+                    anchor=anchor,
                     with_structured=with_structured,
-                    with_crop=with_crop,
                     vlm=(ProbeFaithfulVLM(True) if vlm_on else None),
                     bundle_dir=bd,
                 )
                 chk_w = _verdict(
-                    rec[p.label],
                     live_w,
+                    anchor=anchor,
                     with_structured=with_structured,
-                    with_crop=with_crop,
                     vlm=(ProbeFaithfulVLM(False) if vlm_on else None),
                     bundle_dir=bd,
                 )
@@ -452,18 +524,16 @@ def run(out_dir: Path) -> dict:
                     live_c = drift_t[(p.label, d.name)]
                     live_w = drift_s[(p.label, d.name)]
                     chk_c = _verdict(
-                        rec[p.label],
                         live_c,
+                        anchor=anchor,
                         with_structured=with_structured,
-                        with_crop=with_crop,
                         vlm=(ProbeFaithfulVLM(True) if vlm_on else None),
                         bundle_dir=bd,
                     )
                     chk_w = _verdict(
-                        rec[p.label],
                         live_w,
+                        anchor=anchor,
                         with_structured=with_structured,
-                        with_crop=with_crop,
                         vlm=(ProbeFaithfulVLM(False) if vlm_on else None),
                         bundle_dir=bd,
                     )

@@ -566,8 +566,16 @@ jobs:
       # same browser/OCR corpus again on macOS exceeded the 900-second test
       # budget after all other macOS tests passed, without adding OS-specific
       # coverage. Keep every other macOS test and deselect only that exact node.
+      # OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE opts this slow lane into the
+      # EXHAUSTIVE identity-ladder corpus (every collapse pair); the fast PR
+      # `test` job runs the bounded class-covering subset instead, because the
+      # full sweep's runtime scales with runner speed and intermittently blew
+      # its 900s budget on shared PR runners. Pinned by
+      # tests/test_ci_workflow_contract.py.
       - name: Test (full suite incl. e2e, canonical Ubuntu)
         if: runner.os == 'Linux'
+        env:
+          OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE: "1"
         run: |
           mkdir -p runs
           pytest -q --basetemp=runs/ci

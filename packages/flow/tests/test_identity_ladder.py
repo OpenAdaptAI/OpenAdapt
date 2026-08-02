@@ -455,12 +455,7 @@ def test_replayer_vlm_tier_off_by_default_no_crop_falls_through(tmp_path) -> Non
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.timeout(900)  # heavy browser+OCR integration; ~350s local, slower CI
-def test_harness_zero_false_accept_all_configs(tmp_path) -> None:
-    pytest.importorskip("playwright")
-    from openadapt_flow.validation import identity_ladder as H
-
-    summary = H.run(tmp_path)
+def _assert_zero_false_accept(summary: dict) -> None:
     # THE safety invariant, measured on the REAL Replayer._verify_identity
     # production tier stack (the OCR tier the replayer always appends is in the
     # stack for every config): 0 false-accept everywhere, incl. the homonym.
@@ -473,3 +468,48 @@ def test_harness_zero_false_accept_all_configs(tmp_path) -> None:
     # the OCR-only-confusable config the flawed harness never measured now
     # shows HIGH over-halt (OCR alone cannot verify a collapsible MRN).
     assert cfgs["ocr_only_confusable"]["over_halt_rate"] == 1.0
+
+
+@pytest.mark.timeout(900)  # bounded corpus: ~1/3 the exhaustive sweep's work
+def test_harness_zero_false_accept_bounded_configs(tmp_path) -> None:
+    """The fast-lane harness run: a BOUNDED, class-covering pair subset.
+
+    Runs on every PR. ``bounded_pairs`` keeps one homonym pair per
+    (glyph_class, flank) collapse class, so every collapse MECHANISM still
+    goes through the real production tier stack under all five substrate
+    configs while the runtime stays bounded by construction -- growing
+    COLLAPSE_PAIRS can never grow this test's work unless a genuinely new
+    collapse class appears. The exhaustive corpus runs nightly (see
+    ``test_harness_zero_false_accept_all_configs``)."""
+    pytest.importorskip("playwright")
+    from openadapt_flow.validation import identity_ladder as H
+
+    subset = H.bounded_pairs()
+    # every collapse class in the corpus is represented, none dropped
+    assert {(p.glyph_class, p.flank) for p in subset} == {
+        (p.glyph_class, p.flank) for p in H._COLLAPSE_PAIRS
+    }
+    _assert_zero_false_accept(H.run(tmp_path, pair_subset=subset))
+
+
+@pytest.mark.timeout(900)  # heavy browser+OCR integration, exhaustive corpus
+def test_harness_zero_false_accept_all_configs(tmp_path) -> None:
+    """The EXHAUSTIVE harness run: every collapse pair, every config.
+
+    The full 14-pair sweep's runtime scales with runner speed and blew the
+    900s budget intermittently on shared PR runners, so it runs where the
+    slow lane already runs -- the nightly/dispatch full matrix, which sets
+    OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE=1 (pinned by
+    tests/test_ci_workflow_contract.py). The invariant itself is unchanged
+    and is also asserted on every PR by the bounded run above."""
+    import os
+
+    if not os.environ.get("OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE"):
+        pytest.skip(
+            "exhaustive corpus runs in the nightly/dispatch full matrix "
+            "(set OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE=1 to run it here)"
+        )
+    pytest.importorskip("playwright")
+    from openadapt_flow.validation import identity_ladder as H
+
+    _assert_zero_false_accept(H.run(tmp_path))
