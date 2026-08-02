@@ -8,7 +8,9 @@
 > The OpenAdapt product is the demonstration compiler,
 > [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
 > via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
-> (`pip install openadapt`): it compiles a demonstrated GUI workflow into a
+> (first run: `pip install 'openadapt[browser]'` then `openadapt quickstart`;
+> on Windows `cmd.exe` use `pip install "openadapt[browser]"`): it compiles a
+> demonstrated GUI workflow into a
 > deterministic, locally executable program. Healthy runs make no model calls,
 > and it halts instead of guessing when verification fails. Lifecycle labels for
 > every repository are in the
@@ -32,8 +34,18 @@ OpenAdapt is a governed demonstration compiler: record a workflow once, compile
 the recording into a deterministic program, and replay that program with zero
 model calls on the healthy path. When the live screen does not match what was
 demonstrated it halts instead of guessing, using identity gates and independent
-effect verification. Every substrate is first-class: web and desktop recording
-are validated, RDP and Windows replay are early, and Citrix is exploratory.
+effect verification. Every substrate is first-class.
+
+Substrate maturity, stated the same way across the OpenAdapt repositories:
+
+| Substrate | Maturity |
+| --- | --- |
+| Browser (web) | Beta; available in production today through the managed browser product |
+| Native desktop (Windows, macOS, Linux) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
+| Remote display (RDP) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
+| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification is deployment-specific |
+
+The packages in the stack:
 
 | Package | Role |
 | --- | --- |
