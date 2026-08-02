@@ -41,15 +41,30 @@ rounds against the wrong-target check.
 
 ## Try it
 
+The canonical first run uses the [OpenAdapt](https://github.com/OpenAdaptAI/openadapt)
+launcher:
+
+```bash
+pip install 'openadapt[browser]'
+
+openadapt quickstart                                     # the whole loop, VERIFIED
+```
+
+On Windows `cmd.exe`, use double quotes: `pip install "openadapt[browser]"`.
+
+To work against this engine directly, install it and run the same loop under
+its engine-native name:
+
 ```bash
 pip install 'openadapt-flow[browser]'
 
-openadapt-flow tutorial                                  # the whole loop, VERIFIED
+openadapt-flow tutorial                                  # same loop as `openadapt quickstart`
 ```
 
-`tutorial` runs the complete free path against the bundled MockMed application
-served through its real transactional backend: it records a demonstration while
-observing the system of record, mines the effect contract from the record delta
+`tutorial` (which `openadapt quickstart` delegates to) runs the complete free
+path against the bundled MockMed application (a synthetic practice-management
+fixture) served through its real transactional backend: it records a
+demonstration while observing the system of record, mines the effect contract from the record delta
 it observed, certifies the bundle against the shipped `clinical-write` policy,
 admits the run through the fail-closed gate under the **Standard** profile, and
 verifies the write by reading the system of record out of band — a path the
@@ -303,7 +318,18 @@ see [what it doesn't do yet](docs/LIMITS.md).
 ## Substrates (all first-class)
 
 Every substrate runs on the same small `Backend` protocol and the same governed
-runtime; none is a second-class add-on. Maturity is reported honestly per the
+runtime; none is a second-class add-on.
+
+Substrate maturity, stated the same way across the OpenAdapt repositories:
+
+| Substrate | Maturity |
+| --- | --- |
+| Browser (web) | Beta; available in production today through the managed browser product |
+| Native desktop (Windows, macOS, Linux) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
+| Remote display (RDP) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
+| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification is deployment-specific |
+
+Per-substrate engineering evidence is reported honestly per the
 [capability and qualification matrix](docs/PRODUCT_STATUS.md):
 
 | Substrate | Selector | Status | Evidence |
