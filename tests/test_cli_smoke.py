@@ -277,22 +277,22 @@ def test_launcher_flow_and_substrate_extras_metadata():
     )["project"]
     extras = metadata["optional-dependencies"]
 
-    assert metadata["dependencies"].count("openadapt-flow[hosted]>=1.25.1,<2.0.0") == 1
-    assert extras["flow"] == ["openadapt-flow>=1.25.1,<2.0.0"]
+    assert metadata["dependencies"].count("openadapt-flow[hosted]>=1.29.0,<2.0.0") == 1
+    assert extras["flow"] == ["openadapt-flow>=1.29.0,<2.0.0"]
     assert extras["browser"] == ["playwright>=1.44"]
-    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.25.1,<2.0.0"]
+    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
     assert extras["capture"] == [
         "openadapt-capture>=1.0.4,<2.0.0",
-        "openadapt-flow[capture]>=1.25.1,<2.0.0",
+        "openadapt-flow[capture]>=1.29.0,<2.0.0",
     ]
-    assert extras["windows"] == ["openadapt-flow[windows]>=1.25.1,<2.0.0"]
+    assert extras["windows"] == ["openadapt-flow[windows]>=1.29.0,<2.0.0"]
     assert extras["macos"] == [
-        "openadapt-flow[macos]>=1.25.1,<2.0.0; sys_platform == 'darwin'"
+        "openadapt-flow[macos]>=1.29.0,<2.0.0; sys_platform == 'darwin'"
     ]
     assert extras["linux"] == [
-        "openadapt-flow[linux]>=1.25.1,<2.0.0; sys_platform == 'linux'"
+        "openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux'"
     ]
-    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.25.1,<2.0.0"]
+    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.29.0,<2.0.0"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp]",
         "openadapt[macos]; sys_platform == 'darwin'",
