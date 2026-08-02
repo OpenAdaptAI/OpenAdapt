@@ -42,6 +42,9 @@ bundled tutorial:
 python -m pip install --upgrade 'openadapt[browser]'
 ```
 
+On Windows `cmd.exe`, use double quotes:
+`python -m pip install --upgrade "openadapt[browser]"`.
+
 Run the complete bundled tutorial with one command. It needs no account,
 target application, API key, or operating-system automation permissions:
 
@@ -49,7 +52,8 @@ target application, API key, or operating-system automation permissions:
 openadapt quickstart
 ```
 
-The tutorial records and compiles a synthetic task, certifies it with the
+The tutorial records and compiles a task in MockMed (a synthetic
+practice-management fixture), certifies it with the
 shipped clinical-write policy, and runs it under the Standard profile. A
 separate read-only API confirms the saved record outside the screen that
 performed the write. The healthy run returns `VERIFIED` with no model or Cloud
@@ -151,6 +155,15 @@ client. It does not require OpenAdapt software inside the remote session.
 Every workflow is qualified against its exact application, version,
 environment, identity contract, and effect verifier rather than inheriting a
 blanket platform claim.
+
+Substrate maturity, stated the same way across the OpenAdapt repositories:
+
+| Substrate | Maturity |
+| --- | --- |
+| Browser (web) | Beta; available in production today through the managed browser product |
+| Native desktop (Windows, macOS, Linux) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
+| Remote display (RDP) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
+| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification is deployment-specific |
 
 See the [substrate model](https://docs.openadapt.ai/concepts/substrate-model/),
 [qualification evidence](https://docs.openadapt.ai/get-started/what-works-today/),
