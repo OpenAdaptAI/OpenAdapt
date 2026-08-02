@@ -70,9 +70,50 @@ TUTORIAL_POLICY = "clinical-write"
 #: key so the mined contract can assert at-most-once honestly.
 TUTORIAL_ENTRY_QUERY = "?fault=ok&idempotency=demo#tasks"
 
+#: The fault mode ``--break-it`` injects.  ``optimistic`` is the sharpest
+#: demonstration of the product's claim: the backend REJECTS the write AFTER
+#: the application has already painted its success banner, so every on-screen
+#: check passes while nothing landed in the system of record.  Only an
+#: independent read of that system can catch it -- which is the point.
+TUTORIAL_BREAK_FAULT = "optimistic"
+
+#: The entry query for the ``--break-it`` rerun.  Identical to the clean
+#: query except for the fault mode; the bundle, the policy, the gate, and the
+#: verifier are all unchanged.
+TUTORIAL_BREAK_ENTRY_QUERY = f"?fault={TUTORIAL_BREAK_FAULT}&idempotency=demo#tasks"
+
 
 class TutorialError(RuntimeError):
     """A tutorial stage did not produce the evidence it claims."""
+
+
+@dataclass
+class BreakItResult:
+    """What the ``--break-it`` rerun proved, for the CLI's narrative.
+
+    Every field is read from the halted run's own report or from the fault
+    server's ground-truth store -- nothing here is scripted output.
+    """
+
+    run_dir: Path
+    report_path: Path
+    fault: str
+    execution_outcome: str
+    transaction_outcome: Optional[str]
+    transaction_billable: Optional[bool]
+    #: The lie, observed: the consequential step's on-screen postconditions
+    #: all passed (the application painted its success banner) even though the
+    #: write never landed.
+    screen_claimed_success: bool
+    #: The success banner's text as observed on screen at the halt, if any.
+    screen_claim_text: Optional[str]
+    effects_required: int
+    effects_refuted: int
+    #: The engine's own explanation of the halt, verbatim from the report.
+    halt_reason: str
+    #: Rows in the independent system of record after the run (0: the write
+    #: the screen claimed was never persisted).
+    system_of_record_records: int
 
 
 @dataclass
@@ -93,6 +134,10 @@ class TutorialResult:
     bundle_digest: Optional[str]
     system_of_record_records: int
     receipt_paths: dict[str, Path] = field(default_factory=dict)
+    #: Present only when the tutorial ran with ``break_it=True``: the same
+    #: certified bundle, rerun against a backend that lies, and the engine's
+    #: halt that caught it.
+    break_it: Optional[BreakItResult] = None
 
 
 def _http_json(url: str, *, method: str = "GET", body: Any = None) -> Any:
@@ -229,8 +274,15 @@ def run_tutorial_workflow(
     bundle_dir: Path,
     run_dir: Path,
     headed: bool = False,
+    entry_query: Optional[str] = None,
 ) -> Any:
-    """Admit and execute the tutorial under the ``standard`` profile."""
+    """Admit and execute the tutorial under the ``standard`` profile.
+
+    ``entry_query`` defaults to the clean :data:`TUTORIAL_ENTRY_QUERY`; the
+    ``--break-it`` rerun passes :data:`TUTORIAL_BREAK_ENTRY_QUERY` instead.
+    Nothing else differs between the two runs: same bundle, same policy, same
+    gate, same verifier.
+    """
 
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.deployment import DeploymentConfig, PolicySection
@@ -242,8 +294,10 @@ def run_tutorial_workflow(
     from openadapt_flow.runtime import Replayer
     from openadapt_flow.runtime.effects import RestRecordVerifier
 
+    if entry_query is None:
+        entry_query = TUTORIAL_ENTRY_QUERY
     _http_json(f"{base_url.rstrip('/')}/api/reset", method="POST", body={})
-    entry_url = f"{base_url.rstrip('/')}/{TUTORIAL_ENTRY_QUERY}"
+    entry_url = f"{base_url.rstrip('/')}/{entry_query}"
 
     # The independent oracle: it reads the backend store over HTTP, never the
     # screen, so an optimistic banner cannot make it confirm anything.
@@ -303,11 +357,21 @@ def run_tutorial(
     name: str = TUTORIAL_WORKFLOW_NAME,
     emit_receipt: bool = True,
     echo: Optional[Callable[[str], None]] = None,
+    break_it: bool = False,
 ) -> TutorialResult:
     """Run the complete free path and return its evidence.
 
     Stages: serve -> record -> compile -> certify -> run (standard profile,
     independent effect verification) -> receipt.
+
+    With ``break_it=True`` the SAME certified bundle is then rerun against a
+    backend that injects the :data:`TUTORIAL_BREAK_FAULT` fault -- the server
+    rejects the write after the application has already painted its success
+    banner -- and the engine is expected to HALT rather than believe the
+    screen.  The rerun's evidence lands in ``<work_dir>/run-broken`` and on
+    :attr:`TutorialResult.break_it`.  If the engine does NOT halt, this
+    function raises: an uncaught injected fault is a product failure, never a
+    tutorial variant.
 
     Raises:
         TutorialError: a stage produced insufficient evidence.  Nothing here
@@ -411,4 +475,99 @@ def run_tutorial(
             say("[5/5] Emit the local run receipt")
             receipt = _build_tutorial_receipt(report)
             result.receipt_paths = write_receipt(receipt, run_dir)
+
+    if break_it:
+        result.break_it = _run_break_it(
+            workflow=workflow,
+            bundle_dir=bundle_dir,
+            run_dir=root / "run-broken",
+            headed=headed,
+            say=say,
+        )
     return result
+
+
+def _run_break_it(
+    *,
+    workflow: Any,
+    bundle_dir: Path,
+    run_dir: Path,
+    headed: bool,
+    say: Callable[[str], None],
+) -> BreakItResult:
+    """Rerun the certified bundle against a lying backend and prove the halt.
+
+    The backend now runs in ``optimistic`` fault mode: it REJECTS the write,
+    but only after the application has already painted its success banner.
+    Every on-screen check therefore passes.  The engine's independent read of
+    the system of record is the only thing standing between that screen and a
+    claimed success -- and the run must end HALTED because of it.
+    """
+
+    from openadapt_flow.mockmed.fault_server import serve
+    from openadapt_flow.report import render_run_report
+
+    say("")
+    say("[break-it] Rerun the SAME certified bundle, but this time the backend")
+    say(f"[break-it] lies: fault mode {TUTORIAL_BREAK_FAULT!r} rejects the write")
+    say("[break-it] AFTER the app has painted its success banner.")
+    base_url, _db, stop = serve()
+    try:
+        report = run_tutorial_workflow(
+            base_url=base_url,
+            workflow=workflow,
+            bundle_dir=bundle_dir,
+            run_dir=run_dir,
+            headed=headed,
+            entry_query=TUTORIAL_BREAK_ENTRY_QUERY,
+        )
+        record_count = len(_records(base_url))
+    finally:
+        stop()
+    report_path = render_run_report(run_dir)
+
+    if report.execution_outcome != "HALTED":
+        raise TutorialError(
+            "the engine FAILED to catch the injected fault: the broken run "
+            f"ended {report.execution_outcome} instead of HALTED. This is a "
+            "product failure, not a tutorial variant; do not trust this build "
+            "with a consequential write."
+        )
+
+    save_step = consequential_step(workflow)
+    step_result = next(
+        (result for result in report.results if result.step_id == save_step.id), None
+    )
+    refuted = sum(
+        1
+        for result in report.results
+        for evidence in result.effect_evidence
+        if evidence.final_verdict == "refuted"
+    )
+    claim_text: Optional[str] = None
+    if report.halt is not None:
+        claim_text = next(
+            (text for text in report.halt.observed_texts if "saved" in text.lower()),
+            None,
+        )
+    envelope = report.outcome_envelope
+    say(
+        f"[break-it] {report.execution_outcome}: the system of record holds "
+        f"{record_count} record(s); the screen said otherwise."
+    )
+    return BreakItResult(
+        run_dir=run_dir,
+        report_path=report_path,
+        fault=TUTORIAL_BREAK_FAULT,
+        execution_outcome=str(report.execution_outcome),
+        transaction_outcome=report.transaction_outcome,
+        transaction_billable=report.transaction_billable,
+        screen_claimed_success=bool(step_result and step_result.postconditions_ok),
+        screen_claim_text=claim_text,
+        effects_required=(
+            int(envelope.required_contracts.effect) if envelope is not None else 0
+        ),
+        effects_refuted=refuted,
+        halt_reason=(report.halt.reason if report.halt is not None else ""),
+        system_of_record_records=record_count,
+    )

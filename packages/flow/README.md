@@ -59,6 +59,8 @@ its engine-native name:
 pip install 'openadapt-flow[browser]'
 
 openadapt-flow tutorial                                  # same loop as `openadapt quickstart`
+
+openadapt-flow tutorial --break-it                       # then watch it catch a lie
 ```
 
 `tutorial` (which `openadapt quickstart` delegates to) runs the complete free
@@ -71,6 +73,15 @@ verifies the write by reading the system of record out of band — a path the
 application itself never calls, so the screen cannot influence it. It ends
 `VERIFIED` with zero model calls, and writes a shareable `receipt.png` /
 `receipt.json` beside the run.
+
+`--break-it` then reruns the **same certified bundle** against a backend that
+lies: the server rejects the write *after* the application has painted its
+success banner, so every on-screen check passes while nothing lands. The
+independent read of the system of record refutes the mined `record_written`
+contract and the engine **HALTS** at the consequential step instead of
+believing the screen. The caught fault's evidence is a clearly-labeled local
+`run-broken/REPORT.md`; no shareable receipt is emitted for it, because only
+`VERIFIED` runs may use the success rail.
 
 That receipt is generated from a closed allow-list — outcomes, counts, digests,
 and validated package versions — so it can carry no screenshot, OCR text,

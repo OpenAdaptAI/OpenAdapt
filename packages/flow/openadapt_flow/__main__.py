@@ -64,6 +64,7 @@ from urllib.parse import urlsplit
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.backend import Backend
     from openadapt_flow.ir import ExecutionTargetKind, RunReport
+    from openadapt_flow.tutorial import BreakItResult
 
 _VIEWPORT = {"width": 1280, "height": 800}
 
@@ -943,11 +944,14 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
             name=args.name or TUTORIAL_WORKFLOW_NAME,
             emit_receipt=not args.no_receipt,
             echo=print,
+            break_it=args.break_it,
         )
     except TutorialError as e:
         print(f"\nTutorial REFUSED: {e}")
         return 2
 
+    if result.break_it is not None:
+        print("\n--- clean run: the certified bundle, against an honest backend ---")
     print(f"\n{result.execution_outcome}: {result.run_dir / 'REPORT.md'}")
     print(
         f"  transaction     {result.transaction_outcome} "
@@ -964,9 +968,66 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
     if result.receipt_paths:
         print(f"\nShareable receipt: {result.receipt_paths['png']}")
         print(f"                   {result.receipt_paths['json']}")
+
+    if result.break_it is not None:
+        _print_break_it_narrative(result.break_it)
+    elif result.execution_outcome == "VERIFIED":
+        print(
+            "\nNext: rerun this same bundle against a backend that lies -- and "
+            "watch the engine halt:\n  openadapt-flow tutorial --break-it"
+        )
     if result.execution_outcome != "VERIFIED":
         return 1
     return 0
+
+
+def _print_break_it_narrative(broken: "BreakItResult") -> None:
+    """Tell the caught-fault story from the halted run's own evidence.
+
+    Every fact printed here was read back from the broken run's report or the
+    fault server's ground-truth store by ``run_tutorial``; nothing is scripted.
+    """
+    claim = (
+        "every on-screen check passed -- the app painted its success banner"
+        if broken.screen_claimed_success
+        else "the app's success banner did not appear"
+    )
+    if broken.screen_claim_text:
+        claim += f'\n                       (observed on screen: "{broken.screen_claim_text}")'
+    print("\n--- break-it: the same certified bundle, against a backend that lies ---")
+    print(f"\n  Injected fault:      {broken.fault!r} -- the server rejects the write")
+    print("                       AFTER the app reports success")
+    print(f"  The screen claimed:  {claim}")
+    print(
+        "  The verifier found:  "
+        f"{broken.effects_refuted}/{broken.effects_required} declared effect(s) "
+        "REFUTED by an independent\n"
+        "                       read of the system of record, which holds "
+        f"{broken.system_of_record_records} record(s)"
+    )
+    print(
+        f"  The engine did:      {broken.execution_outcome} at the consequential "
+        "step instead of claiming\n"
+        f"                       success (transaction: {broken.transaction_outcome}, "
+        f"billable: {'yes' if broken.transaction_billable else 'no'})"
+    )
+    print(
+        "\n  The screen said success. The system of record said otherwise. "
+        "The engine\n  believed the system of record."
+    )
+    print(f"\n  Engine's own words:  {broken.halt_reason}")
+    print(
+        "\nCaught-fault evidence (local report, NOT a success receipt):\n"
+        f"  {broken.report_path}"
+    )
+    print(
+        "\nNo shareable receipt for the halted run: only VERIFIED runs may use "
+        "the\nsuccess rail. The halt itself is the demonstration."
+    )
+    print(
+        "\nNext: record your own workflow:\n"
+        "  openadapt-flow record --backend web --url <your app>"
+    )
 
 
 def _cmd_compile(args: argparse.Namespace) -> int:
@@ -3651,6 +3712,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-receipt",
         action="store_true",
         help="Skip writing the local receipt (the run and its report are unchanged)",
+    )
+    p.add_argument(
+        "--break-it",
+        action="store_true",
+        dest="break_it",
+        help=(
+            "After the clean VERIFIED run, rerun the SAME certified bundle "
+            "against a backend that silently rejects the write AFTER the app "
+            "paints its success banner -- and watch the engine HALT instead of "
+            "believing the screen. The halted run's evidence lands in "
+            "<out>/run-broken/REPORT.md"
+        ),
     )
     p.set_defaults(func=_cmd_tutorial)
 
