@@ -308,6 +308,118 @@ def test_doctor_does_not_require_browser_for_citrix(monkeypatch):
     assert "no Playwright or Chromium setup will run" in result.output
 
 
+def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
+    monkeypatch,
+):
+    """A clean host gets diagnostics plus commands for the existing engine.
+
+    The deployment guide must remain a launcher seam: it does not start a
+    second engine, accept a secret value, or replace Flow's rollback path.
+    """
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: (
+            object()
+            if name in {"openadapt_flow", "fastapi", "uvicorn", "openadapt_types"}
+            else None
+        ),
+    )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+    result = CliRunner().invoke(
+        cli_main,
+        ["deploy", "--backend", "rdp", "--secret-ref", "env:BYOC_CONNECTOR_TOKEN"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Environment fingerprint" in result.output
+    assert "env:BYOC_CONNECTOR_TOKEN" in result.output
+    assert "dashboard/settings/connectors" in result.output
+    assert "connector enroll" not in result.output
+    assert "connector run" in result.output
+    assert "flow console" in result.output
+    assert "flow repair rollback" in result.output
+    assert "No service was started" in result.output
+
+
+def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch):
+    """Base Flow hosted installs must not receive an unusable console command."""
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name == "openadapt_flow" else None,
+    )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
+
+    assert result.exit_code == 0, result.output
+    assert "optional local operator console is not installed" in result.output
+    assert "python -m pip install 'openadapt-flow[console]==1.29.0'" in result.output
+    assert "openadapt flow console --bundles" not in result.output
+    assert "Re-run this preflight" in result.output
+
+
+def test_deploy_console_requires_openadapt_types(monkeypatch):
+    """Flow 1.30 imports openadapt-types when the operator console starts."""
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: (
+            object() if name in {"openadapt_flow", "fastapi", "uvicorn"} else None
+        ),
+    )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.30.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
+
+    assert result.exit_code == 0, result.output
+    assert "optional local operator console is not installed" in result.output
+    assert "python -m pip install 'openadapt-flow[console]==1.30.0'" in result.output
+    assert "openadapt flow console --bundles" not in result.output
+
+
+def test_deploy_preflight_refuses_secret_values_and_missing_engine(monkeypatch):
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: None)
+
+    runner = CliRunner()
+    secret_result = runner.invoke(cli_main, ["deploy", "--secret-ref", "actual-secret"])
+    assert secret_result.exit_code != 0
+    assert "do not pass secret values" in secret_result.output
+    assert "actual-secret" not in secret_result.output
+    assert "value hidden" in secret_result.output
+
+    missing_result = runner.invoke(cli_main, ["deploy", "--backend", "windows"])
+    assert missing_result.exit_code != 0
+    assert "[MISSING]" in missing_result.output
+    assert "Preflight failed" in missing_result.output
+
+
+def test_deploy_preflight_fails_without_web_runtime(monkeypatch):
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name == "openadapt_flow" else None,
+    )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", "web"])
+
+    assert result.exit_code != 0
+    assert "[SETUP] install the web extra" in result.output
+    assert "Preflight failed" in result.output
+    assert "Preflight passed" not in result.output
+
+
+@pytest.mark.parametrize("flow_version", ["1.28.9", "2.0.0", "2.1.0", "invalid"])
+def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: flow_version)
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
+
+    assert result.exit_code != 0
+    assert "[UNSUPPORTED]" in result.output
+    assert ">=1.29.0,<2.0.0" in result.output
+    assert "Preflight passed" not in result.output
+
+
 def test_top_level_help_leads_with_flow():
     """`openadapt --help` must list flow before the other commands."""
     runner = CliRunner()
