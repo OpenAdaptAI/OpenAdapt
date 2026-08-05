@@ -124,7 +124,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
-          uv sync --locked --extra build
+          python scripts/sync_frozen_dependencies.py
           uv run python scripts/build_frozen_engine.py
           uv run python scripts/verify_build_artifact.py sidecar
           uv run python scripts/smoke_test_frozen_flow.py
@@ -286,7 +286,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
-          uv sync --locked --extra build
+          python scripts/sync_frozen_dependencies.py
           uv run python scripts/build_frozen_engine.py
           uv run python scripts/verify_build_artifact.py sidecar
           uv run python scripts/smoke_test_frozen_flow.py
@@ -426,7 +426,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
-          uv sync --locked --extra build
+          python scripts/sync_frozen_dependencies.py
           uv run python scripts/build_frozen_engine.py
           uv run python scripts/verify_build_artifact.py sidecar
           uv run python scripts/smoke_test_frozen_flow.py

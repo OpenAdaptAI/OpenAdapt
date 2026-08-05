@@ -86,7 +86,7 @@ CONSOLE_COLLECTION: tuple[str, ...] = (
 
 RAPIDOCR_NOTICE_DIR = ROOT / "third_party" / "rapidocr"
 LINUX_RUNNER_RUNTIME_EXCLUDE = r"libgcc_s\.so(\..*)?"
-MACOS_X86_CRYPTOGRAPHY_VERSION = "48.0.0"
+MACOS_X86_CRYPTOGRAPHY_VERSION = "50.0.0"
 MACOS_OPENSSL_DYLIB = re.compile(r"(?:^|/)(?:libssl|libcrypto)(?:\.[0-9]+)*\.dylib$")
 
 
@@ -123,8 +123,8 @@ def verify_macos_intel_cryptography_boundary(
     installed = distribution_lookup("cryptography")
     if installed.version != MACOS_X86_CRYPTOGRAPHY_VERSION:
         raise RuntimeError(
-            "macOS Intel frozen builds require the universal2 cryptography "
-            f"{MACOS_X86_CRYPTOGRAPHY_VERSION} wheel, found {installed.version}"
+            "macOS Intel frozen builds require the source-built cryptography "
+            f"{MACOS_X86_CRYPTOGRAPHY_VERSION} runtime, found {installed.version}"
         )
     extension = Path(installed.locate_file("cryptography/hazmat/bindings/_rust.abi3.so"))
     if not extension.is_file():

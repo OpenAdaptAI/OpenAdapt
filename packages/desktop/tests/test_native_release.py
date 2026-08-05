@@ -51,6 +51,8 @@ def test_native_workflows_are_pinned_and_preserve_beta_boundary() -> None:
     for bundles in ("dmg", "msi,nsis", "deb,appimage"):
         assert f"bundles: {bundles}" in build
     assert "smoke_test_native_installer.py" in build
+    assert build.count("scripts/sync_frozen_dependencies.py") == 2
+    assert release.count("scripts/sync_frozen_dependencies.py") == 3
     assert "native_release.py checksums" in build
     assert 'tags:\n      - "desktop-v*"' in release
     assert "environment: native-release" in release
@@ -153,6 +155,7 @@ def test_security_workflows_cover_all_languages_and_pin_every_dependency() -> No
     for language in ("python", "javascript-typescript", "rust"):
         assert f'"{language}"' in (workflow_dir / "codeql.yml").read_text()
     dependency_audit = (workflow_dir / "dependency-review.yml").read_text()
+    assert "macos-15-intel" in dependency_audit
     assert "uv export --quiet --locked --all-extras --no-emit-project" in dependency_audit
     assert "pip-audit==2.10.1" in dependency_audit
     assert "npm audit --audit-level=high --package-lock-only" in dependency_audit

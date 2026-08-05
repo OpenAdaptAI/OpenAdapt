@@ -33,6 +33,26 @@ jobs:
           --require-hashes --disable-pip --progress-spinner off
           --requirement "${{ runner.temp }}/openadapt-desktop-requirements.txt"
 
+  python-macos-intel:
+    name: Python locked dependencies (macOS Intel)
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Export the exact Intel macOS dependency set
+        run: >-
+          uv export --quiet --locked --all-extras --no-emit-project
+          --output-file "${{ runner.temp }}/openadapt-desktop-requirements.txt"
+      - name: Audit Intel macOS Python dependencies
+        run: >-
+          uvx --from pip-audit==2.10.1 pip-audit
+          --require-hashes --disable-pip --progress-spinner off
+          --requirement "${{ runner.temp }}/openadapt-desktop-requirements.txt"
+
   npm:
     name: npm locked dependencies
     runs-on: ubuntu-22.04

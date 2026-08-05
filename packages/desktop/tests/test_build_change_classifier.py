@@ -44,6 +44,7 @@ def test_protected_main_uses_cheap_jobs_for_application_only_changes(paths: list
         "src-tauri/src/main.rs",
         "src-tauri/Cargo.lock",
         "scripts/build_frozen_engine.py",
+        "scripts/sync_frozen_dependencies.py",
         "scripts/verify_build_artifact.py",
         ".github/workflows/build.yml",
         "engine/__main__.py",

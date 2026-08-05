@@ -52,11 +52,11 @@ dependencies = [
     # PEP 440 comparison is required before Desktop enables a Flow capability.
     # Hand-parsing would accept pre-release builds such as 1.26.0rc1 as 1.26.0.
     "packaging>=24",
-    # Qualification evidence is signed locally. Cryptography 49 no longer
-    # publishes a macOS Intel wheel, so keep that platform on the latest
-    # universal2 release while using the current runtime elsewhere.
-    "cryptography==48.0.0; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-    "cryptography>=48,<50; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    # Qualification evidence is signed locally. Version 50 fixes
+    # PYSEC-2026-3552 and the other known advisories on the former Intel macOS
+    # pin. PyPI has no Intel wheel, so frozen builds compile it from the locked
+    # source archive against the static Homebrew OpenSSL libraries.
+    "cryptography>=50,<51",
     "loguru",
     "psutil",
     # Pure-Python, dependency-free, BSD-licensed QR encoder. The mobile

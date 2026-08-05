@@ -46,6 +46,7 @@ FULL_ARTIFACT_SCRIPTS = {
     "scripts/package_ffmpeg_runtime.py",
     "scripts/smoke_test_frozen_flow.py",
     "scripts/smoke_test_native_installer.py",
+    "scripts/sync_frozen_dependencies.py",
     "scripts/verify_build_artifact.py",
 }
 

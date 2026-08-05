@@ -122,7 +122,7 @@ jobs:
           enable-cache: true
 
       - name: Install locked sidecar dependencies
-        run: uv sync --locked --extra build
+        run: python scripts/sync_frozen_dependencies.py
 
       - name: Build platform-native sidecar
         run: uv run python scripts/build_frozen_engine.py
@@ -222,7 +222,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
-          uv sync --locked --extra build
+          python scripts/sync_frozen_dependencies.py
           uv run python scripts/build_frozen_engine.py
           uv run python scripts/verify_build_artifact.py sidecar
           mkdir -p src-tauri/binaries
