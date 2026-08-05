@@ -26,6 +26,7 @@ import sqlite3
 import stat
 from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Literal, Optional
@@ -45,6 +46,16 @@ REMOTE_AUTHORITY_URL_ENV = "OPENADAPT_DURABLE_AUTHORITY_URL"
 # Reuse the enrolled runner credential. The operator configures one trust
 # relationship with the control plane, not a second delivery-only secret.
 REMOTE_AUTHORITY_TOKEN_ENV = "OPENADAPT_RUNNER_TOKEN"
+# This observer exists only for the closed synthetic Execute acceptance run.
+# A Modal launcher owns the fixed, pre-opened non-blocking pipe at descriptor
+# three. A bundle, CLI invocation, or remote caller cannot select a path,
+# endpoint, or file descriptor. A separate consumer reads and relays markers.
+SYNTHETIC_DELIVERY_MARKER_ENABLED_ENV = "OPENADAPT_SYNTHETIC_DELIVERY_MARKER_ENABLED"
+SYNTHETIC_DELIVERY_MARKER_RUN_ID_ENV = "OPENADAPT_SYNTHETIC_DELIVERY_MARKER_RUN_ID"
+_SYNTHETIC_DELIVERY_MARKER_FD = 3
+_SYNTHETIC_DELIVERY_MARKER_SCHEMA_VERSION = 1
+_SYNTHETIC_DELIVERY_MARKER_DOMAIN = b"openadapt-synthetic-delivery-marker-permit-v1\0"
+_MAX_SYNTHETIC_DELIVERY_MARKER_BYTES = 1024
 MAX_REMOTE_AUTHORITY_RESPONSE_BYTES = 64 * 1024
 AUTHORITY_SCHEMA_VERSION = 1
 JOURNAL_GENESIS_DIGEST = "sha256:" + hashlib.sha256(b"").hexdigest()
@@ -209,6 +220,49 @@ class DurableAuthorityBusy(StateDiverged):
     """A different process or uncertain delivery owns the durable authority."""
 
 
+@dataclass(frozen=True)
+class _RemoteDeliveryPermit:
+    """Private remote-permit cursor update plus a one-way observer digest.
+
+    The permit id and cursor are authority secrets. The synthetic acceptance
+    observer receives only the digest, never either secret.
+    """
+
+    authority_id: str
+    next_sequence: int
+    cursor_secret: str
+    permit_digest: str
+
+
+def _fixed_synthetic_delivery_marker_sink() -> Callable[[bytes], None] | None:
+    """Get the Modal-owned non-blocking observer pipe when it is enabled.
+
+    The sink is best-effort. It never raises and does not make a delivery,
+    permit, or durable transaction fail. The acceptance consumer must reject a
+    missing or malformed marker separately.
+    """
+
+    if os.getenv(SYNTHETIC_DELIVERY_MARKER_ENABLED_ENV, "") != "1":
+        return None
+    try:
+        mode = os.fstat(_SYNTHETIC_DELIVERY_MARKER_FD).st_mode
+        if not (stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode)):
+            return None
+        os.set_blocking(_SYNTHETIC_DELIVERY_MARKER_FD, False)
+    except OSError:
+        return None
+
+    def sink(payload: bytes) -> None:
+        try:
+            # The payload is bounded well below PIPE_BUF. A short or would-block
+            # write is intentionally dropped. The consumer owns durable I/O.
+            os.write(_SYNTHETIC_DELIVERY_MARKER_FD, payload)
+        except OSError:
+            pass
+
+    return sink
+
+
 class DurableAuthorityRecord(BaseModel):
     """PHI-free monotonic authority for one canonical run path."""
 
@@ -276,6 +330,9 @@ class DurableAuthority:
         self._configured_db_path = _default_db_path()
         # Tests can inject an in-memory transport. Production always uses HTTPS.
         self._remote_transport = remote_transport
+        # Marker delivery is observation-only and uses a fixed inherited pipe.
+        # It is not a runtime output path and has no effect on actuation.
+        self._synthetic_delivery_marker_sink = _fixed_synthetic_delivery_marker_sink()
         self._assert_configured_ancestors_are_not_links()
         try:
             # Resolve the parent only. This catches an ancestor symlink that
@@ -1552,7 +1609,7 @@ class DurableAuthority:
         remote_authority_id: str | None,
         remote_delivery_sequence: int,
         permit_cursor: str | None,
-    ) -> tuple[str, int, str] | None:
+    ) -> _RemoteDeliveryPermit | None:
         """Obtain the one server-owned permit for a production input edge.
 
         This intentionally records no local success before the response is
@@ -1727,11 +1784,77 @@ class DurableAuthority:
             raise DurableAuthorityBusy(
                 "remote delivery authority response does not match request"
             )
-        return (
-            response["authority_id"],
-            remote_delivery_sequence + 1,
-            response["next_permit_cursor"],
+        permit_digest = (
+            "sha256:"
+            + hashlib.sha256(
+                _SYNTHETIC_DELIVERY_MARKER_DOMAIN
+                + response["permit_id"].encode("utf-8")
+            ).hexdigest()
         )
+        return _RemoteDeliveryPermit(
+            authority_id=response["authority_id"],
+            next_sequence=remote_delivery_sequence + 1,
+            cursor_secret=response["next_permit_cursor"],
+            permit_digest=permit_digest,
+        )
+
+    def _synthetic_delivery_marker_payload(
+        self,
+        manifest: Any,
+        *,
+        delivery_count: int,
+        permit_count: int,
+        permit_digest: str,
+    ) -> bytes | None:
+        """Build one bounded, non-secret marker for the exact synthetic run."""
+
+        if self._synthetic_delivery_marker_sink is None:
+            return None
+        if os.getenv(SYNTHETIC_DELIVERY_MARKER_RUN_ID_ENV, "") != getattr(
+            manifest, "remote_delivery_run_id", None
+        ):
+            return None
+        run_id = getattr(manifest, "remote_delivery_run_id", None)
+        binding = getattr(manifest, "managed_dispatch_binding_sha256", None)
+        if not (
+            isinstance(run_id, str)
+            and _REMOTE_UUID_RE.fullmatch(run_id)
+            and isinstance(binding, str)
+            and _REMOTE_DIGEST_RE.fullmatch(binding)
+            and type(delivery_count) is int
+            and delivery_count > 0
+            and type(permit_count) is int
+            and permit_count > 0
+            and _REMOTE_DIGEST_RE.fullmatch(permit_digest)
+        ):
+            return None
+        marker = {
+            "delivery_count": delivery_count,
+            "managed_dispatch_binding_sha256": binding,
+            "permit_count": permit_count,
+            "permit_digest": permit_digest,
+            "run_id": run_id,
+            "schema_version": _SYNTHETIC_DELIVERY_MARKER_SCHEMA_VERSION,
+        }
+        payload = self._canonical(marker) + b"\n"
+        if len(payload) > _MAX_SYNTHETIC_DELIVERY_MARKER_BYTES:
+            return None
+        return payload
+
+    def _emit_synthetic_delivery_marker(self, payload: bytes | None) -> None:
+        """Best-effort post-commit enqueue to the isolated observer.
+
+        The consumer performs durable I/O. A full pipe, partial write, or sink
+        failure must never alter a permit, delivery, or execution outcome.
+        """
+
+        sink = self._synthetic_delivery_marker_sink
+        if payload is None or sink is None:
+            return
+        try:
+            sink(payload)
+        except Exception:  # noqa: BLE001 - observer failure is non-authoritative
+            pass
 
     def before_delivery(
         self,
@@ -1740,6 +1863,7 @@ class DurableAuthority:
         attempt_id: str,
         owner_nonce_sha256: str,
     ) -> None:
+        marker_payload: bytes | None = None
         with self._transaction() as connection:
             record = self._owned(connection, manifest, attempt_id, owner_nonce_sha256)
             if record.reject_requested or record.attempt_phase not in {
@@ -1767,9 +1891,9 @@ class DurableAuthority:
             if remote_permit is not None:
                 self._advance_remote_cursor(
                     connection,
-                    authority_id=remote_permit[0],
-                    next_sequence=remote_permit[1],
-                    cursor_secret=remote_permit[2],
+                    authority_id=remote_permit.authority_id,
+                    next_sequence=remote_permit.next_sequence,
+                    cursor_secret=remote_permit.cursor_secret,
                 )
             self._update(
                 connection,
@@ -1777,6 +1901,14 @@ class DurableAuthority:
                 attempt_phase="delivery_started",
                 delivery_sequence=record.delivery_sequence + 1,
             )
+            if remote_permit is not None:
+                marker_payload = self._synthetic_delivery_marker_payload(
+                    manifest,
+                    delivery_count=record.delivery_sequence + 1,
+                    permit_count=remote_permit.next_sequence,
+                    permit_digest=remote_permit.permit_digest,
+                )
+        self._emit_synthetic_delivery_marker(marker_payload)
 
     def before_initial_delivery(self, manifest: Any) -> None:
         """Consume the managed genesis permit immediately before any first input.
@@ -1785,6 +1917,7 @@ class DurableAuthority:
         A copied envelope can therefore not start a second logical Cloud run.
         """
 
+        marker_payload: bytes | None = None
         with self._transaction() as connection:
             record = self._read(connection)
             if (
@@ -1814,15 +1947,23 @@ class DurableAuthority:
             if remote_permit is not None:
                 self._advance_remote_cursor(
                     connection,
-                    authority_id=remote_permit[0],
-                    next_sequence=remote_permit[1],
-                    cursor_secret=remote_permit[2],
+                    authority_id=remote_permit.authority_id,
+                    next_sequence=remote_permit.next_sequence,
+                    cursor_secret=remote_permit.cursor_secret,
                 )
             self._update(
                 connection,
                 record,
                 delivery_sequence=record.delivery_sequence + 1,
             )
+            if remote_permit is not None:
+                marker_payload = self._synthetic_delivery_marker_payload(
+                    manifest,
+                    delivery_count=record.delivery_sequence + 1,
+                    permit_count=remote_permit.next_sequence,
+                    permit_digest=remote_permit.permit_digest,
+                )
+        self._emit_synthetic_delivery_marker(marker_payload)
 
     def acknowledge_progress(
         self,
