@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v1.12.0 (2026-08-05)
+
+### Bug Fixes
+
+- Complete deployment console preflight
+  ([#1088](https://github.com/OpenAdaptAI/OpenAdapt/pull/1088),
+  [`870f2d6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/870f2d6820e50ac4ac6a4e6bba2c0bc2f533d216))
+
+- Fail closed in deployment preflight ([#1088](https://github.com/OpenAdaptAI/OpenAdapt/pull/1088),
+  [`870f2d6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/870f2d6820e50ac4ac6a4e6bba2c0bc2f533d216))
+
+- Gate optional deployment console step
+  ([#1088](https://github.com/OpenAdaptAI/OpenAdapt/pull/1088),
+  [`870f2d6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/870f2d6820e50ac4ac6a4e6bba2c0bc2f533d216))
+
+### Chores
+
+- **deps**: Bump vulnerable locked versions in uv.lock
+  ([#1086](https://github.com/OpenAdaptAI/OpenAdapt/pull/1086),
+  [`9b85412`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9b854120ea4727e8471c23a9bc9dc391472e3607))
+
+- **deps**: Move build off the yanked 1.5.1 release
+  ([#1087](https://github.com/OpenAdaptAI/OpenAdapt/pull/1087),
+  [`f8369b2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f8369b25a132688f82c0020661ed9d12ce04b260))
+
+- **deps**: Remove dead legacy dependency manifests
+  ([#1085](https://github.com/OpenAdaptAI/OpenAdapt/pull/1085),
+  [`d825b6f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d825b6f1e4846759f58d1792ebf2521e258eab4f))
+
+- **release**: Reconcile platform manifest
+  ([`14f2881`](https://github.com/OpenAdaptAI/OpenAdapt/commit/14f28814760bab32285c251d1f2e6957d8157226))
+
+### Features
+
+- Add guided deployment preflight ([#1088](https://github.com/OpenAdaptAI/OpenAdapt/pull/1088),
+  [`870f2d6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/870f2d6820e50ac4ac6a4e6bba2c0bc2f533d216))
+
+
 ## v1.11.0 (2026-08-02)
 
 ### Chores
