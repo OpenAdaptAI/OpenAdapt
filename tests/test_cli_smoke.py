@@ -320,6 +320,7 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
     result = CliRunner().invoke(
         cli_main,
         ["deploy", "--backend", "rdp", "--secret-ref", "env:BYOC_CONNECTOR_TOKEN"],
@@ -328,7 +329,9 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
     assert result.exit_code == 0, result.output
     assert "Environment fingerprint" in result.output
     assert "env:BYOC_CONNECTOR_TOKEN" in result.output
-    assert "connector enroll" in result.output
+    assert "dashboard/settings/connectors" in result.output
+    assert "connector enroll" not in result.output
+    assert "connector run" in result.output
     assert "flow console" in result.output
     assert "flow repair rollback" in result.output
     assert "No service was started" in result.output
@@ -341,11 +344,41 @@ def test_deploy_preflight_refuses_secret_values_and_missing_engine(monkeypatch):
     secret_result = runner.invoke(cli_main, ["deploy", "--secret-ref", "actual-secret"])
     assert secret_result.exit_code != 0
     assert "do not pass secret values" in secret_result.output
+    assert "actual-secret" not in secret_result.output
+    assert "value hidden" in secret_result.output
 
     missing_result = runner.invoke(cli_main, ["deploy", "--backend", "windows"])
     assert missing_result.exit_code != 0
     assert "[MISSING]" in missing_result.output
     assert "Preflight failed" in missing_result.output
+
+
+def test_deploy_preflight_fails_without_web_runtime(monkeypatch):
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name == "openadapt_flow" else None,
+    )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", "web"])
+
+    assert result.exit_code != 0
+    assert "[SETUP] install the web extra" in result.output
+    assert "Preflight failed" in result.output
+    assert "Preflight passed" not in result.output
+
+
+@pytest.mark.parametrize("flow_version", ["1.28.9", "2.0.0", "2.1.0", "invalid"])
+def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: flow_version)
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
+
+    assert result.exit_code != 0
+    assert "[UNSUPPORTED]" in result.output
+    assert ">=1.29.0,<2.0.0" in result.output
+    assert "Preflight passed" not in result.output
 
 
 def test_top_level_help_leads_with_flow():

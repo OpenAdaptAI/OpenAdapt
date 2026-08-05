@@ -262,6 +262,18 @@ def quickstart(out: Path, headed: bool, break_it: bool) -> None:
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
+_SUPPORTED_FLOW_RANGE = ">=1.29.0,<2.0.0"
+
+
+def _supported_flow_version(value: str) -> bool:
+    """Return whether a stable Flow version is in the launcher's supported range."""
+    match = re.fullmatch(
+        r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?(?:\+[a-zA-Z0-9.-]+)?", value
+    )
+    if match is None:
+        return False
+    parsed = tuple(int(part) for part in match.groups())
+    return (1, 29, 0) <= parsed < (2, 0, 0)
 
 
 @main.command("deploy")
@@ -307,8 +319,10 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     if not secret_ref:
         click.echo("  [--] none supplied (valid for a local-only preflight)")
     for value in secret_ref:
-        status = "[INVALID]" if value in bad_refs else "[OK]"
-        click.echo(f"  {status} {value}")
+        if value in bad_refs:
+            click.echo("  [INVALID] rejected secret reference (value hidden)")
+        else:
+            click.echo(f"  [OK] {value}")
     if bad_refs:
         raise click.UsageError(
             "Secret references must use env:NAME or keychain:service/item; "
@@ -316,17 +330,31 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
         )
 
     click.echo("\nHealth checks:")
-    flow_ready = find_spec("openadapt_flow") is not None
-    if flow_ready:
-        click.echo("  [OK] canonical openadapt-flow engine is installed")
-    else:
+    failures = []
+    flow_importable = find_spec("openadapt_flow") is not None
+    flow_version_ready = flow_version != "not installed" and _supported_flow_version(
+        flow_version
+    )
+    if flow_importable and flow_version_ready:
+        click.echo(
+            "  [OK] canonical openadapt-flow engine is installed at a supported version"
+        )
+    elif not flow_importable or flow_version == "not installed":
+        failures.append("flow")
         click.echo("  [MISSING] canonical openadapt-flow engine is not installed")
+    else:
+        failures.append("flow-version")
+        click.echo(
+            f"  [UNSUPPORTED] openadapt-flow {flow_version}; this launcher "
+            f"requires {_SUPPORTED_FLOW_RANGE}"
+        )
 
     if backend == "web":
         browser_ready = find_spec("playwright") is not None
         if browser_ready:
             click.echo("  [OK] Playwright is installed for the web backend")
         else:
+            failures.append("browser")
             click.echo(
                 "  [SETUP] install the web extra before recording or replay: "
                 "python -m pip install 'openadapt[browser]'"
@@ -337,10 +365,10 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
             "configured target opens; this guide does not claim it is ready."
         )
 
-    if not flow_ready:
+    if failures:
         raise click.ClickException(
-            "Preflight failed. Install the canonical engine with: "
-            "python -m pip install --upgrade openadapt"
+            "Preflight failed. Resolve every [MISSING], [UNSUPPORTED], and "
+            "[SETUP] item above before service setup."
         )
 
     click.echo(
@@ -350,16 +378,14 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     click.echo(
         "  1. Re-run full host diagnostics: openadapt doctor --backend " + backend
     )
+    click.echo("  2. Open the authenticated Cloud connector settings:")
+    click.echo("     https://app.openadapt.ai/dashboard/settings/connectors")
     click.echo(
-        "  2. Set up the customer-local Flow connector (provide references "
-        "through its environment, never on the command line):"
+        "     Create the customer-local connector there and put the issued "
+        "references in its environment or OS keychain."
     )
     click.echo(
-        "     openadapt flow connector enroll --profile deployment.yaml "
-        "--storage-root /secure/openadapt"
-    )
-    click.echo(
-        "  3. Start one governed poll only after enrollment: "
+        "  3. Start one governed poll only after authenticated setup: "
         "openadapt flow connector run --profile deployment.yaml --once"
     )
     click.echo(
