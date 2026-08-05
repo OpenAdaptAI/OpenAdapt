@@ -25,6 +25,8 @@ Usage:
     openadapt doctor
 """
 
+import platform
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -257,6 +259,133 @@ def quickstart(out: Path, headed: bool, break_it: bool) -> None:
         "https://app.openadapt.ai/dashboard/settings/ingest"
     )
     click.echo("Qualify a consequential workflow: https://openadapt.ai/qualify")
+
+
+_SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
+
+
+@main.command("deploy")
+@click.option(
+    "--backend",
+    type=click.Choice(["web", "windows", "macos", "linux", "rdp", "citrix"]),
+    default="web",
+    show_default=True,
+    help="The execution surface that this customer deployment will use.",
+)
+@click.option(
+    "--secret-ref",
+    multiple=True,
+    help="Secret reference only: env:NAME or keychain:service/item. Never pass a secret value.",
+)
+def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
+    """Check this host and print the safe Flow/Desktop deployment path.
+
+    This launcher command does not create another runtime or service manager.
+    It records no secret value, starts no connector, and does not treat an
+    incomplete preflight as a healthy deployment. It composes the installed
+    Flow connector, operator console, and repair lifecycle instead.
+    """
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+    from importlib.util import find_spec
+
+    click.echo("OpenAdapt deployment preflight")
+    click.echo("=" * 30)
+    click.echo("Environment fingerprint:")
+    click.echo(f"  platform: {platform.system()} {platform.release()}")
+    click.echo(f"  machine: {platform.machine() or 'unknown'}")
+    click.echo(f"  python: {platform.python_version()}")
+    try:
+        flow_version = dist_version("openadapt-flow")
+    except PackageNotFoundError:
+        flow_version = "not installed"
+    click.echo(f"  openadapt-flow: {flow_version}")
+    click.echo(f"  requested backend: {backend}")
+
+    bad_refs = [value for value in secret_ref if not _SECRET_REFERENCE.fullmatch(value)]
+    click.echo("\nSecret references:")
+    if not secret_ref:
+        click.echo("  [--] none supplied (valid for a local-only preflight)")
+    for value in secret_ref:
+        status = "[INVALID]" if value in bad_refs else "[OK]"
+        click.echo(f"  {status} {value}")
+    if bad_refs:
+        raise click.UsageError(
+            "Secret references must use env:NAME or keychain:service/item; "
+            "do not pass secret values."
+        )
+
+    click.echo("\nHealth checks:")
+    flow_ready = find_spec("openadapt_flow") is not None
+    if flow_ready:
+        click.echo("  [OK] canonical openadapt-flow engine is installed")
+    else:
+        click.echo("  [MISSING] canonical openadapt-flow engine is not installed")
+
+    if backend == "web":
+        browser_ready = find_spec("playwright") is not None
+        if browser_ready:
+            click.echo("  [OK] Playwright is installed for the web backend")
+        else:
+            click.echo(
+                "  [SETUP] install the web extra before recording or replay: "
+                "python -m pip install 'openadapt[browser]'"
+            )
+    else:
+        click.echo(
+            f"  [SETUP] {backend} readiness is checked by Flow when the "
+            "configured target opens; this guide does not claim it is ready."
+        )
+
+    if not flow_ready:
+        raise click.ClickException(
+            "Preflight failed. Install the canonical engine with: "
+            "python -m pip install --upgrade openadapt"
+        )
+
+    click.echo(
+        "\nPreflight passed for the installed components. No service was started."
+    )
+    click.echo("\nGuided deployment path:")
+    click.echo(
+        "  1. Re-run full host diagnostics: openadapt doctor --backend " + backend
+    )
+    click.echo(
+        "  2. Set up the customer-local Flow connector (provide references "
+        "through its environment, never on the command line):"
+    )
+    click.echo(
+        "     openadapt flow connector enroll --profile deployment.yaml "
+        "--storage-root /secure/openadapt"
+    )
+    click.echo(
+        "  3. Start one governed poll only after enrollment: "
+        "openadapt flow connector run --profile deployment.yaml --once"
+    )
+    click.echo(
+        "  4. Inspect local health, reports, and halt evidence: "
+        "openadapt flow console --bundles bundles --runs runs"
+    )
+    click.echo(
+        "     The console is loopback-only and read-only unless you explicitly "
+        "enable its governed actions."
+    )
+    click.echo(
+        "  5. In OpenAdapt Desktop, use the signed-in workspace connection and "
+        "open the matching run report; do not use the Desktop view as proof of effect."
+    )
+    click.echo(
+        "  6. Upgrade the launcher and its pinned Flow dependency: "
+        "python -m pip install --upgrade openadapt"
+    )
+    click.echo(
+        "  7. Roll back a governed bundle, not an unverified package: "
+        "openadapt flow repair rollback --store repair-store"
+    )
+    click.echo(
+        "  8. Uninstall only after retaining required run evidence: "
+        "python -m pip uninstall openadapt openadapt-flow"
+    )
 
 
 @main.group(cls=_FlowPassthroughGroup)

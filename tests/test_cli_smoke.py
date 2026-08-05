@@ -308,6 +308,46 @@ def test_doctor_does_not_require_browser_for_citrix(monkeypatch):
     assert "no Playwright or Chromium setup will run" in result.output
 
 
+def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
+    monkeypatch,
+):
+    """A clean host gets diagnostics plus commands for the existing engine.
+
+    The deployment guide must remain a launcher seam: it does not start a
+    second engine, accept a secret value, or replace Flow's rollback path.
+    """
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name == "openadapt_flow" else None,
+    )
+    result = CliRunner().invoke(
+        cli_main,
+        ["deploy", "--backend", "rdp", "--secret-ref", "env:BYOC_CONNECTOR_TOKEN"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Environment fingerprint" in result.output
+    assert "env:BYOC_CONNECTOR_TOKEN" in result.output
+    assert "connector enroll" in result.output
+    assert "flow console" in result.output
+    assert "flow repair rollback" in result.output
+    assert "No service was started" in result.output
+
+
+def test_deploy_preflight_refuses_secret_values_and_missing_engine(monkeypatch):
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: None)
+
+    runner = CliRunner()
+    secret_result = runner.invoke(cli_main, ["deploy", "--secret-ref", "actual-secret"])
+    assert secret_result.exit_code != 0
+    assert "do not pass secret values" in secret_result.output
+
+    missing_result = runner.invoke(cli_main, ["deploy", "--backend", "windows"])
+    assert missing_result.exit_code != 0
+    assert "[MISSING]" in missing_result.output
+    assert "Preflight failed" in missing_result.output
+
+
 def test_top_level_help_leads_with_flow():
     """`openadapt --help` must list flow before the other commands."""
     runner = CliRunner()
