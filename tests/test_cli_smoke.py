@@ -319,7 +319,9 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
     monkeypatch.setattr(
         "importlib.util.find_spec",
         lambda name: (
-            object() if name in {"openadapt_flow", "fastapi", "uvicorn"} else None
+            object()
+            if name in {"openadapt_flow", "fastapi", "uvicorn", "openadapt_types"}
+            else None
         ),
     )
     monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
@@ -354,6 +356,24 @@ def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch)
     assert "python -m pip install 'openadapt-flow[console]==1.29.0'" in result.output
     assert "openadapt flow console --bundles" not in result.output
     assert "Re-run this preflight" in result.output
+
+
+def test_deploy_console_requires_openadapt_types(monkeypatch):
+    """Flow 1.30 imports openadapt-types when the operator console starts."""
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: (
+            object() if name in {"openadapt_flow", "fastapi", "uvicorn"} else None
+        ),
+    )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.30.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
+
+    assert result.exit_code == 0, result.output
+    assert "optional local operator console is not installed" in result.output
+    assert "python -m pip install 'openadapt-flow[console]==1.30.0'" in result.output
+    assert "openadapt flow console --bundles" not in result.output
 
 
 def test_deploy_preflight_refuses_secret_values_and_missing_engine(monkeypatch):

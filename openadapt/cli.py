@@ -365,7 +365,10 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
             "configured target opens; this guide does not claim it is ready."
         )
 
-    console_ready = all(find_spec(name) is not None for name in ("fastapi", "uvicorn"))
+    console_ready = all(
+        find_spec(name) is not None
+        for name in ("fastapi", "uvicorn", "openadapt_types")
+    )
     if console_ready:
         click.echo("  [OK] optional local operator console is installed")
     else:
