@@ -365,6 +365,12 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
             "configured target opens; this guide does not claim it is ready."
         )
 
+    console_ready = all(find_spec(name) is not None for name in ("fastapi", "uvicorn"))
+    if console_ready:
+        click.echo("  [OK] optional local operator console is installed")
+    else:
+        click.echo("  [--] optional local operator console is not installed")
+
     if failures:
         raise click.ClickException(
             "Preflight failed. Resolve every [MISSING], [UNSUPPORTED], and "
@@ -388,14 +394,23 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
         "  3. Start one governed poll only after authenticated setup: "
         "openadapt flow connector run --profile deployment.yaml --once"
     )
-    click.echo(
-        "  4. Inspect local health, reports, and halt evidence: "
-        "openadapt flow console --bundles bundles --runs runs"
-    )
-    click.echo(
-        "     The console is loopback-only and read-only unless you explicitly "
-        "enable its governed actions."
-    )
+    if console_ready:
+        click.echo(
+            "  4. Inspect local health, reports, and halt evidence: "
+            "openadapt flow console --bundles bundles --runs runs"
+        )
+        click.echo(
+            "     The console is loopback-only and read-only unless you explicitly "
+            "enable its governed actions."
+        )
+    else:
+        click.echo("  4. Optional local console setup:")
+        click.echo(
+            f"     python -m pip install 'openadapt-flow[console]=={flow_version}'"
+        )
+        click.echo(
+            "     Re-run this preflight after installation before you start the console."
+        )
     click.echo(
         "  5. In OpenAdapt Desktop, use the signed-in workspace connection and "
         "open the matching run report; do not use the Desktop view as proof of effect."
