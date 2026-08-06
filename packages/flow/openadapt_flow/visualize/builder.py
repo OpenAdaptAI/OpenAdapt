@@ -498,6 +498,15 @@ def _emit_graph(
             ):
                 node.halts.append(f"terminal: {state.outcome}")
                 node.badges.append(state.outcome)
+            if state.kind == StateKind.BUSINESS_DECISION and state.decision is not None:
+                node.badges.extend(
+                    [
+                        "human decision",
+                        f"{len(state.decision.options)} finite answers",
+                        f"{len(state.decision.authorized_roles)} authorized roles",
+                    ]
+                )
+                node.halts.append("halts until an authenticated answer is signed")
         nodes.append(node)
         # exception handler edge
         if state.on_exception:
@@ -575,6 +584,8 @@ def _state_title(state: "State") -> str:
         )
     if state.kind == StateKind.BRANCH:
         return "Branch"
+    if state.kind == StateKind.BUSINESS_DECISION and state.decision is not None:
+        return state.decision.question
     if state.kind == StateKind.LOOP and state.loop is not None:
         return f"Loop over {state.loop.relation}"
     if state.kind == StateKind.SUBFLOW_CALL and state.subflow:

@@ -32,7 +32,8 @@ ProgramGraphSpec
 ├─ bundle: BundleMeta      # name, schema version, PHI/encryption flags,
 │                          # provenance/certification, params, rollup counts
 ├─ nodes: [GraphNode]      # one per compiled step / program state
-│   ├─ kind                # action | branch | loop | subflow_call | terminal
+│   ├─ kind                # action | branch | business_decision | loop |
+│   │                      # subflow_call | terminal
 │   ├─ title, action, risk # intent, click/type/…, reversible|irreversible
 │   ├─ resolution          # the target-resolution LADDER + which rung is top
 │   ├─ identity            # armed? phi-free? unarmed-reason?

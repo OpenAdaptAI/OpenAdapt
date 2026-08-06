@@ -1366,6 +1366,9 @@ class AttendedActionStore:
                 json.dumps(history, indent=2, sort_keys=True).encode("utf-8"),
             )
             event_sequence = existing.event_sequence + 1
+        elif self.capability_history_path.is_file():
+            historical = self._signed_capabilities()
+            event_sequence = max(item.event_sequence for item in historical) + 1
         now = _now()
         transition = _transition_payload(
             run_id=manifest.run_id,
@@ -1404,6 +1407,40 @@ class AttendedActionStore:
             capability.model_dump_json(indent=2).encode("utf-8"),
         )
         return capability
+
+    def retire_current(self) -> None:
+        """Archive an obsolete operational capability and remove its pointer.
+
+        A typed business-decision pause has a different authority contract. A
+        capability from an earlier operational pause must remain auditable but
+        must not remain visible as the current operator action surface.
+        """
+
+        if not self.capability_path.is_file():
+            return
+        existing = self.read()
+        history: list[dict[str, Any]] = []
+        if self.capability_history_path.is_file():
+            try:
+                raw_history = json.loads(self.capability_history_path.read_text())
+                if not isinstance(raw_history, list) or not all(
+                    isinstance(item, dict) for item in raw_history
+                ):
+                    raise ValueError("history is not a list of objects")
+                history = list(raw_history)
+            except (OSError, ValueError) as exc:
+                raise AttendedActionRefused(
+                    "the attended capability history is invalid"
+                ) from exc
+        existing_payload = existing.model_dump(mode="json")
+        if existing_payload not in history:
+            history.append(existing_payload)
+            self._atomic_write(
+                self.capability_history_path,
+                json.dumps(history, indent=2, sort_keys=True).encode("utf-8"),
+            )
+        self.capability_path.unlink()
+        self._fsync_parent(self.capability_path)
 
     def read(self) -> AttendedPauseCapability:
         try:
@@ -3457,6 +3494,9 @@ class BoundAttendedExecutor:
             program_transition_evidence_delta=list(
                 pending.program_transition_evidence_delta
             ),
+            business_decision_evidence_delta=list(
+                pending.business_decision_evidence_delta
+            ),
             program_exception_evidence_delta=list(
                 pending.program_exception_evidence_delta
             ),
@@ -3539,12 +3579,18 @@ class BoundAttendedExecutor:
             + [
                 item.decision_index
                 for prior_checkpoint in store.program_checkpoints()
+                for item in prior_checkpoint.business_decision_evidence_delta
+            ]
+            + [
+                item.decision_index
+                for prior_checkpoint in store.program_checkpoints()
                 for item in prior_checkpoint.program_exception_evidence_delta
             ]
             + [
                 item.decision_index
                 for item in pending.program_transition_evidence_delta
             ]
+            + [item.decision_index for item in pending.business_decision_evidence_delta]
             + [item.decision_index for item in pending.program_exception_evidence_delta]
         )
         receipt_path = action_store._receipt_path(receipt.pause_id)

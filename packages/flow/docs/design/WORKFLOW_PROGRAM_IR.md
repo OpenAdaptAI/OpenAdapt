@@ -260,6 +260,7 @@ mechanically to the degenerate single-path graph.
 |------|---------|----------|
 | `action` | `step: Step` | perform the hardened action leaf, then take a transition |
 | `branch` | (none) | perform no action; pick an outgoing edge by guard |
+| `business_decision` | `decision: BusinessDecisionSpec` | pause for one authorized finite human choice, bind its output, revalidate the live state, then take its exact compiled edge |
 | `loop` | `loop: LoopSpec` | iterate a worklist, running a body subflow per row |
 | `subflow_call` | `subflow: str` | invoke a reusable named subflow, then continue |
 | `terminal` | `outcome`, `reason` | end this (sub)graph |
@@ -332,6 +333,16 @@ state:
   flag forces the run to stop.
 - **branch.** Perform no action. Select a transition purely by guard. No matching
   edge routes to `on_exception` if present, otherwise halts.
+- **business_decision.** Perform no action. Require the durable runtime and
+  issue one signed, expiring request for the exact state and control scope. An
+  authenticated operator route submits one declared option with its exact
+  required local evidence set and an idempotency key. On resume, authenticate
+  the signed request and receipt, bind the declared output in the current frame,
+  capture a fresh settled frame, and re-evaluate the option's compiled
+  revalidation predicates. Continue only to the successor named by the signed
+  receipt. The answer is control authority only. It cannot satisfy an action's
+  identity, postcondition, or effect contract. See
+  [`BUSINESS_DECISIONS.md`](../BUSINESS_DECISIONS.md).
 - **loop.** Resolve the worklist (a run-time `worklists` entry overrides the
   inline `data_sources` relation; an undefined relation is a config halt, and a
   defined but empty relation legitimately runs the body zero times). If the row
@@ -464,8 +475,10 @@ ValueExpr { literal: str | null, param: str | null }   # exactly one meaningful
 ProgramGraph { entry: StateId, states: dict[StateId, State] }
 
 State
-  id, kind: "action" | "branch" | "loop" | "subflow_call" | "terminal"
+  id, kind: "action" | "branch" | "business_decision" | "loop"
+           | "subflow_call" | "terminal"
   step: Step | null                      # kind = action
+  decision: BusinessDecisionSpec | null  # kind = business_decision
   loop: LoopSpec | null                  # kind = loop
   subflow: str | null                    # kind = subflow_call
   transitions: list[Transition]          # empty on terminal
@@ -474,6 +487,15 @@ State
   reason: str
 
 Transition { guard: Predicate | null, target: StateId, label: str }
+BusinessDecisionSpec
+  schema_version: "openadapt.business-decision/v1"
+  question: str
+  authorized_roles: list[str]
+  output_param: str
+  options: list[{ id, label, value, target, required_evidence }]
+  evidence_requirements: list[{ id, label }]
+  expires_after_s: int
+  revalidation: list[Predicate]
 Relation   { name: str, rows: list[dict[str, str]], description: str }
 LoopSpec   { relation: str, body: SubflowId, var: str, max_iterations: int = 1000 }
 ```
@@ -700,6 +722,7 @@ These are additive to the document and the tests. They do not change the IR.
 | Params | `ParamSpec` (typed; `entity_ref`) | per-run overlay; identity re-resolution |
 | Predicates and guards | `Predicate`, `Guard` | model-free predicate evaluation |
 | State machine | `ProgramGraph`, `State`, `Transition`, `Relation`, `LoopSpec` | graph interpreter, transition selection |
+| Typed business choice | `BusinessDecisionSpec`, `BusinessDecisionEvidence` | signed durable request/receipt, scoped output binding, live revalidation |
 | Degenerate lift | `lift_to_program` | byte-identical linear replay |
 | Recover | `HealEvent` | Tier-2 bounded patch |
 | Halt and resume | `HaltObservation`, durable checkpoint | Tier-3 checkpoint, pause, resume |

@@ -77,6 +77,7 @@ from openadapt_flow.ir import (
     ActionKind,
     Anchor,
     ApiBinding,
+    BusinessDecisionEvidence,
     EffectVerificationEvidence,
     ExecutionTargetKind,
     FreshActuationEvent,
@@ -2255,6 +2256,11 @@ class Replayer:
         self._program_step_budget = PROGRAM_MAX_STEPS
         # -- durable interpreter state (Phase-2, RFC §5) ---------------------
         self._program_durable = durable_run
+        self._program_run_dir = run_dir
+        self._program_governed_runtime_inputs_digest = (
+            report.governed_runtime_inputs_digest
+        )
+        self._active_business_decision_evidence = report.business_decision_evidence
         self._frame_stack: list[dict] = []
         # Where the interpreter currently is (for a durable pause record).
         self._current_state_id: str = ""
@@ -2273,7 +2279,42 @@ class Replayer:
                 ):
                     durable_base_history = list(checkpoints[-1].transition_history)
                 elif pending_snapshot is not None and pending_snapshot.program:
-                    durable_base_history = list(pending_snapshot.program_history)
+                    pending_history = list(pending_snapshot.program_history)
+                    pending_delta = list(pending_snapshot.program_history_delta)
+                    pause_frame = (
+                        pending_snapshot.program_frames[-1]
+                        if pending_snapshot.program_frames
+                        else None
+                    )
+                    pause_graph = (
+                        workflow.program
+                        if pause_frame is not None
+                        and pause_frame.graph_id == TOP_GRAPH_ID
+                        else (
+                            workflow.subflows.get(pause_frame.graph_id)
+                            if pause_frame is not None
+                            else None
+                        )
+                    )
+                    pause_state = (
+                        pause_graph.states.get(pause_frame.state_id)
+                        if pause_graph is not None and pause_frame is not None
+                        else None
+                    )
+                    if (
+                        pause_state is not None
+                        and pause_state.kind is StateKind.BUSINESS_DECISION
+                    ):
+                        # The decision state has not executed until its signed
+                        # answer is consumed. Remove that paused visit before
+                        # replaying it, or a later pause counts it twice.
+                        durable_base_history = (
+                            pending_history[: -len(pending_delta)]
+                            if pending_delta
+                            else pending_history
+                        )
+                    else:
+                        durable_base_history = pending_history
                 elif checkpoints:
                     durable_base_history = list(checkpoints[-1].transition_history)
                 else:
@@ -2290,6 +2331,9 @@ class Replayer:
                 for checkpoint in checkpoints:
                     report.program_transition_evidence.extend(
                         checkpoint.program_transition_evidence_delta
+                    )
+                    report.business_decision_evidence.extend(
+                        checkpoint.business_decision_evidence_delta
                     )
                     report.program_exception_evidence.extend(
                         checkpoint.program_exception_evidence_delta
@@ -2339,6 +2383,9 @@ class Replayer:
             self._program_transition_evidence_checkpoint_len = len(
                 report.program_transition_evidence
             )
+            self._business_decision_evidence_checkpoint_len = len(
+                report.business_decision_evidence
+            )
             self._program_exception_evidence_checkpoint_len = len(
                 report.program_exception_evidence
             )
@@ -2353,6 +2400,7 @@ class Replayer:
             self._bundle_version = ""
             self._program_checkpoint_history_len = 0
             self._program_transition_evidence_checkpoint_len = 0
+            self._business_decision_evidence_checkpoint_len = 0
             self._program_exception_evidence_checkpoint_len = 0
         try:
             if resume_checkpoint is not None:
@@ -2509,7 +2557,11 @@ class Replayer:
             self._current_graph_id = str(frame["graph_id"])
             self._current_state_id = state.id
             self._current_intent = (
-                state.step.intent if state.step is not None else state.id
+                state.step.intent
+                if state.step is not None
+                else (
+                    state.decision.question if state.decision is not None else state.id
+                )
             )
             self._current_params = params
 
@@ -2593,6 +2645,16 @@ class Replayer:
                     workflow=workflow,
                 )
             return nxt
+
+        if state.kind is StateKind.BUSINESS_DECISION:
+            return self._exec_business_decision_state(
+                state,
+                workflow=workflow,
+                params=params,
+                bundle_dir=bundle_dir,
+                report=report,
+                run_dir=run_dir,
+            )
 
         if state.kind is StateKind.LOOP:
             return self._exec_loop_state(
@@ -2917,7 +2979,141 @@ class Replayer:
             evidence.decision_index
             for evidence in report.attended_program_transition_evidence
         )
+        decision_indexes.extend(
+            evidence.decision_index for evidence in report.business_decision_evidence
+        )
         return max(decision_indexes, default=-1) + 1
+
+    def _exec_business_decision_state(
+        self,
+        state: State,
+        *,
+        workflow: Workflow,
+        params: dict[str, str],
+        bundle_dir: Path,
+        report: RunReport,
+        run_dir: Path,
+    ) -> str:
+        """Consume one signed finite answer, then revalidate its live branch."""
+
+        spec = state.decision
+        durable = self._program_durable
+        frames = [self._frame_to_model(frame) for frame in self._frame_stack]
+        graph_id = self._current_graph_id or ""
+
+        def required(reason: str) -> _ProgramHalt:
+            halt = _ProgramHalt("halt", reason, safety=True)
+            halt.program_frames = frames
+            halt.program_params = dict(params)
+            return halt
+
+        if spec is None:
+            raise required("business decision state has no qualified answer contract")
+        if not graph_id:
+            raise required("business decision lost its exact program graph")
+        if durable is None:
+            raise required(
+                "business decision requires the durable runtime; refusing an "
+                "answer that cannot be paused, attributed, and resumed"
+            )
+        from openadapt_flow.runtime.durable.business_decision import (
+            BusinessDecisionRefused,
+            BusinessDecisionStore,
+        )
+
+        pending = durable.store.read_pending()
+        manifest = durable.store.read_manifest()
+        if pending is None or manifest is None:
+            raise required(
+                "business decision required; the run paused before any "
+                "workflow actuation can continue"
+            )
+        try:
+            retained = BusinessDecisionStore(
+                run_dir, checkpoint_key=self.checkpoint_key
+            ).consume(
+                pending=pending,
+                manifest=manifest,
+                workflow=workflow,
+                graph_id=graph_id,
+                state_id=state.id,
+                frames=frames,
+                params=dict(params),
+                spec=spec,
+                governed_runtime_inputs_digest=(report.governed_runtime_inputs_digest),
+            )
+        except BusinessDecisionRefused as exc:
+            raise required(f"business decision receipt was refused: {exc}") from exc
+        if retained is None:
+            raise required("business decision required; no signed answer is available")
+        request, request_sha256, receipt, receipt_sha256 = retained
+        scope = self._program_execution_scope()
+        if not scope:
+            raise required("business decision has no exact program scope")
+        decision_evidence = BusinessDecisionEvidence(
+            decision_index=self._next_program_decision_index(report),
+            graph_id=graph_id,
+            state_id=state.id,
+            program_scope=scope,
+            decision_contract_sha256=spec.contract_sha256(),
+            request_digest=request.digest,
+            request_inventory_ref=(
+                f".business_decisions/requests/{request_sha256}.json"
+            ),
+            request_sha256=request_sha256,
+            receipt_digest=receipt.digest,
+            receipt_inventory_ref=(
+                f".business_decisions/receipts/{receipt_sha256}.json"
+            ),
+            receipt_sha256=receipt_sha256,
+            option_id=receipt.option_id,
+            output_param=receipt.output_param,
+            output_value=receipt.output_value,
+            target_state_id=receipt.target_state_id,
+            operator_ref=receipt.operator_ref,
+            authorized_role=receipt.authorized_role,
+            authentication_context_sha256=receipt.authentication_context_sha256,
+            evidence_artifact_sha256s=receipt.evidence_artifact_sha256s,
+            idempotency_key_sha256=receipt.idempotency_key_sha256,
+            decided_at=receipt.decided_at,
+            governed_runtime_inputs_digest=report.governed_runtime_inputs_digest,
+        )
+        # Reserve the shared program-decision index before guard evaluation.
+        # If the fresh frame rejects the branch, remove both this control item
+        # and its transition observations so no unapplied answer enters the
+        # durable program trace.
+        transition_evidence_start = len(report.program_transition_evidence)
+        report.business_decision_evidence.append(decision_evidence)
+        prior_output = params.get(spec.output_param)
+        had_prior_output = spec.output_param in params
+        params[spec.output_param] = receipt.output_value
+        target = self._select_transition(
+            state,
+            workflow=workflow,
+            params=params,
+            bundle_dir=bundle_dir,
+            report=report,
+            run_dir=run_dir,
+            allow_unmatched=True,
+        )
+        if target != receipt.target_state_id:
+            report.business_decision_evidence.pop()
+            del report.program_transition_evidence[transition_evidence_start:]
+            if had_prior_output:
+                assert prior_output is not None
+                params[spec.output_param] = prior_output
+            else:
+                params.pop(spec.output_param, None)
+            raise required(
+                "the live application no longer satisfies the selected business "
+                "decision branch; refusing resumed actuation"
+            )
+        # The provisional item now represents applied branch control. A refused
+        # answer stays only in the local signed request/receipt audit and never
+        # changes restored parameters or the applied program-control trace.
+        if len(scope) == 1:
+            report.params[spec.output_param] = receipt.output_value
+        return target
 
     def _resolve_worklist(
         self,
@@ -3299,6 +3495,41 @@ class Replayer:
             for frame in frames
         ]
 
+    def _params_with_business_decisions(
+        self,
+        params: dict[str, str],
+        scope: list[ProgramExecutionScopeFrame],
+        evidence: list[BusinessDecisionEvidence],
+        *,
+        run_dir: Path,
+        workflow: Workflow,
+        governed_runtime_inputs_digest: str | None,
+    ) -> dict[str, str]:
+        """Reapply authenticated decisions made in this exact frame scope."""
+
+        if not evidence:
+            return dict(params)
+
+        from openadapt_flow.runtime.durable.business_decision import (
+            BusinessDecisionStore,
+        )
+
+        resolved = dict(params)
+        store = BusinessDecisionStore(run_dir, checkpoint_key=self.checkpoint_key)
+        for item in sorted(evidence, key=lambda retained: retained.decision_index):
+            item_scope = list(item.program_scope)
+            if item_scope != scope:
+                continue
+            store.authenticate_evidence(
+                item,
+                workflow=workflow,
+                run_id=self._run_id,
+                expected_bundle_version=self._bundle_version,
+                governed_runtime_inputs_digest=governed_runtime_inputs_digest,
+            )
+            resolved[item.output_param] = item.output_value
+        return resolved
+
     def _skip_completed_effect_state(
         self, state: State, params: dict[str, str], report: RunReport
     ) -> bool:
@@ -3642,6 +3873,9 @@ class Replayer:
             program_transition_evidence_delta=report.program_transition_evidence[
                 self._program_transition_evidence_checkpoint_len :
             ],
+            business_decision_evidence_delta=report.business_decision_evidence[
+                self._business_decision_evidence_checkpoint_len :
+            ],
             program_exception_evidence_delta=report.program_exception_evidence[
                 self._program_exception_evidence_checkpoint_len :
             ],
@@ -3654,6 +3888,9 @@ class Replayer:
         self._program_checkpoint_history_len = len(report_history)
         self._program_transition_evidence_checkpoint_len = len(
             report.program_transition_evidence
+        )
+        self._business_decision_evidence_checkpoint_len = len(
+            report.business_decision_evidence
         )
         self._program_exception_evidence_checkpoint_len = len(
             report.program_exception_evidence
@@ -3709,10 +3946,53 @@ class Replayer:
             program_transition_evidence_delta=report.program_transition_evidence[
                 self._program_transition_evidence_checkpoint_len :
             ],
+            business_decision_evidence_delta=report.business_decision_evidence[
+                self._business_decision_evidence_checkpoint_len :
+            ],
             program_exception_evidence_delta=report.program_exception_evidence[
                 self._program_exception_evidence_checkpoint_len :
             ],
         )
+        graph_id = self._current_graph_id or ""
+        if not graph_id:
+            return
+        graph = self._resolve_graph(workflow, graph_id)
+        decision_state = graph.states.get(self._current_state_id)
+        if (
+            decision_state is not None
+            and decision_state.kind is StateKind.BUSINESS_DECISION
+            and decision_state.decision is not None
+        ):
+            from openadapt_flow.runtime.durable.business_decision import (
+                BusinessDecisionRefused,
+                BusinessDecisionStore,
+            )
+
+            pending = durable.store.read_pending()
+            manifest = durable.store.read_manifest()
+            if pending is not None and manifest is not None:
+                try:
+                    BusinessDecisionStore(
+                        durable.store.run_dir,
+                        checkpoint_key=self.checkpoint_key,
+                    ).issue(
+                        pending=pending,
+                        manifest=manifest,
+                        workflow=workflow,
+                        graph_id=graph_id,
+                        state_id=decision_state.id,
+                        frames=list(halt.program_frames),
+                        params=dict(halt.program_params or self._current_params),
+                        spec=decision_state.decision,
+                        governed_runtime_inputs_digest=(
+                            report.governed_runtime_inputs_digest
+                        ),
+                    )
+                except BusinessDecisionRefused as exc:
+                    halt.reason = (
+                        f"{halt.reason}; the signed decision request could not "
+                        f"be issued: {exc}"
+                    )
         if (
             self._durable_continuation_guard is not None
             and failing.failure_category != "continuation_preempted"
@@ -4546,6 +4826,14 @@ class Replayer:
                     "the durable interpreter child frame does not match its "
                     "parent subflow call",
                 )
+            expected_params = self._params_with_business_decisions(
+                expected_params,
+                self._program_scope_from_frames(checkpoint.frames[: index + 1]),
+                report.business_decision_evidence,
+                run_dir=run_dir,
+                workflow=workflow,
+                governed_runtime_inputs_digest=(report.governed_runtime_inputs_digest),
+            )
             if frame.params != expected_params:
                 raise _ProgramHalt(
                     "halt",
@@ -8274,6 +8562,7 @@ class Replayer:
             return "governed linear execution acquired an unexpected program frame"
 
         expected_params = dict(base_params)
+        live_scope = self._program_execution_scope()
         parent_state: Optional[State] = None
         for index, frame in enumerate(frames):
             graph_id = frame.get("graph_id")
@@ -8338,6 +8627,17 @@ class Replayer:
                     "governed program child frame no longer matches its sealed "
                     "subflow call"
                 )
+
+            expected_params = self._params_with_business_decisions(
+                expected_params,
+                live_scope[: index + 1],
+                self._active_business_decision_evidence,
+                run_dir=self._program_run_dir,
+                workflow=workflow,
+                governed_runtime_inputs_digest=(
+                    self._program_governed_runtime_inputs_digest
+                ),
+            )
 
             if frame.get("params") != expected_params:
                 return (

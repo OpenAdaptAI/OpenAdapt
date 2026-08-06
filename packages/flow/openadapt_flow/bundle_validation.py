@@ -51,6 +51,8 @@ from openadapt_flow.ir import (
     BundleManifest,
     BundleProvenance,
     Interstitial,
+    ParamKind,
+    ParamSpec,
     Predicate,
     ProgramGraph,
     State,
@@ -58,6 +60,7 @@ from openadapt_flow.ir import (
     Step,
     StructuralLocator,
     Workflow,
+    business_decision_transitions,
 )
 from openadapt_flow.traversal import iter_workflow_steps
 
@@ -649,6 +652,8 @@ def _validate_graph(
     issues: list[ValidationIssue],
     seen_state_ids: set[str],
     seen_step_ids: set[str],
+    known_params: set[str],
+    param_specs: dict[str, ParamSpec],
 ) -> None:
     states = graph.states
 
@@ -691,7 +696,14 @@ def _validate_graph(
         _ = key
 
         _validate_state_payload(
-            state, graph_name, states, known_subflows, issues, seen_step_ids
+            state,
+            graph_name,
+            states,
+            known_subflows,
+            issues,
+            seen_step_ids,
+            known_params,
+            param_specs,
         )
 
     # 8. reachability + unsafe unconditional cycle
@@ -705,6 +717,8 @@ def _validate_state_payload(
     known_subflows: set[str],
     issues: list[ValidationIssue],
     seen_step_ids: set[str],
+    known_params: set[str],
+    param_specs: dict[str, ParamSpec],
 ) -> None:
     kind = state.kind
 
@@ -731,6 +745,117 @@ def _validate_state_payload(
                     message=(
                         "BRANCH state has no guarded (predicate) transition to "
                         "branch on"
+                    ),
+                )
+            )
+    elif kind is StateKind.BUSINESS_DECISION:
+        if len(state.id) > 128:
+            issues.append(
+                ValidationIssue(
+                    category="structure",
+                    code="business_decision_state_id_too_long",
+                    graph=graph_name,
+                    state_id=state.id,
+                    message=(
+                        "BUSINESS_DECISION state id exceeds the signed request "
+                        "and receipt limit of 128 characters"
+                    ),
+                )
+            )
+        if state.decision is None:
+            issues.append(
+                ValidationIssue(
+                    category="structure",
+                    code="business_decision_without_spec",
+                    graph=graph_name,
+                    state_id=state.id,
+                    message="BUSINESS_DECISION state carries no decision contract",
+                )
+            )
+        else:
+            if state.decision.output_param not in known_params:
+                issues.append(
+                    ValidationIssue(
+                        category="structure",
+                        code="business_decision_undeclared_output",
+                        graph=graph_name,
+                        state_id=state.id,
+                        message=(
+                            "BUSINESS_DECISION output parameter "
+                            f"{state.decision.output_param!r} is not declared"
+                        ),
+                    )
+                )
+            output_spec = param_specs.get(state.decision.output_param)
+            if output_spec is None or output_spec.type is not ParamKind.ENUM:
+                issues.append(
+                    ValidationIssue(
+                        category="structure",
+                        code="business_decision_output_not_enum",
+                        graph=graph_name,
+                        state_id=state.id,
+                        message=(
+                            "BUSINESS_DECISION output must have an explicit "
+                            "enum ParamSpec"
+                        ),
+                    )
+                )
+            elif len(set(output_spec.choices)) != len(output_spec.choices) or set(
+                output_spec.choices
+            ) != {option.value for option in state.decision.options}:
+                issues.append(
+                    ValidationIssue(
+                        category="structure",
+                        code="business_decision_output_choices_mismatch",
+                        graph=graph_name,
+                        state_id=state.id,
+                        message=(
+                            "BUSINESS_DECISION option values must exactly match "
+                            "the output enum choices"
+                        ),
+                    )
+                )
+            expected = business_decision_transitions(state.decision)
+            if state.transitions != expected:
+                issues.append(
+                    ValidationIssue(
+                        category="structure",
+                        code="business_decision_transition_mismatch",
+                        graph=graph_name,
+                        state_id=state.id,
+                        message=(
+                            "BUSINESS_DECISION transitions must exactly map each "
+                            "finite answer and its live revalidation to its "
+                            "declared successor"
+                        ),
+                    )
+                )
+        if any(
+            value is not None
+            for value in (state.step, state.loop, state.subflow, state.outcome)
+        ):
+            issues.append(
+                ValidationIssue(
+                    category="structure",
+                    code="business_decision_with_other_payload",
+                    graph=graph_name,
+                    state_id=state.id,
+                    message=(
+                        "BUSINESS_DECISION state must not carry action, loop, "
+                        "subflow, or terminal payload"
+                    ),
+                )
+            )
+        if state.on_exception is not None:
+            issues.append(
+                ValidationIssue(
+                    category="structure",
+                    code="business_decision_with_exception_handler",
+                    graph=graph_name,
+                    state_id=state.id,
+                    message=(
+                        "BUSINESS_DECISION v1 halts on refusal or expiry and must "
+                        "not route that authority failure through on_exception"
                     ),
                 )
             )
@@ -948,6 +1073,50 @@ def validate_workflow(workflow: "Workflow") -> ValidationReport:
 
     if workflow.program is not None:
         known_subflows = set(workflow.subflows.keys())
+        known_params = set(workflow.params) | set(workflow.param_specs)
+        has_business_decision = any(
+            state.kind is StateKind.BUSINESS_DECISION
+            for graph in (workflow.program, *workflow.subflows.values())
+            for state in graph.states.values()
+        )
+        if has_business_decision:
+            for name in workflow.subflows:
+                if not name or len(name) > 128:
+                    issues.append(
+                        ValidationIssue(
+                            category="structure",
+                            code="business_decision_graph_id_too_long",
+                            graph=f"subflow:{name}",
+                            message=(
+                                "subflow id cannot enter a signed business "
+                                "decision scope; it must contain 1 to 128 "
+                                "characters"
+                            ),
+                        )
+                    )
+            for scope_name, graph in (
+                ("program", workflow.program),
+                *(
+                    (f"subflow:{name}", subflow)
+                    for name, subflow in workflow.subflows.items()
+                ),
+            ):
+                for state in graph.states.values():
+                    if state.kind is not StateKind.LOOP or state.loop is None:
+                        continue
+                    if len(state.id) > 128 or len(state.loop.relation) > 128:
+                        issues.append(
+                            ValidationIssue(
+                                category="structure",
+                                code="business_decision_loop_scope_too_long",
+                                graph=scope_name,
+                                state_id=state.id,
+                                message=(
+                                    "loop state id and relation must fit the "
+                                    "128-character signed decision scope"
+                                ),
+                            )
+                        )
         _validate_graph(
             workflow.program,
             "program",
@@ -955,6 +1124,8 @@ def validate_workflow(workflow: "Workflow") -> ValidationReport:
             issues,
             seen_state_ids,
             seen_step_ids,
+            known_params,
+            workflow.param_specs,
         )
         for name, sub in workflow.subflows.items():
             _validate_graph(
@@ -964,6 +1135,8 @@ def validate_workflow(workflow: "Workflow") -> ValidationReport:
                 issues,
                 seen_state_ids,
                 seen_step_ids,
+                known_params,
+                workflow.param_specs,
             )
     else:
         # Linear bundle: only step-id uniqueness among the linear steps.

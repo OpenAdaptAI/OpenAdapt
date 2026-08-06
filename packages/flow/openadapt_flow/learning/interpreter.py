@@ -178,6 +178,11 @@ def _exec_state(graph: ProgramGraph, state: State, walk: _Walk) -> Optional[bool
         return _consume_action(state, walk)
     if state.kind is StateKind.BRANCH:
         return None  # performs no action; transition selection does the work
+    if state.kind is StateKind.BUSINESS_DECISION:
+        return walk.fail(
+            f"business decision state '{state.id}' requires signed human "
+            "evidence; a demonstration trace cannot infer or answer it"
+        )
     if state.kind is StateKind.SUBFLOW_CALL:
         return _call_subflow(state.subflow, walk)
     if state.kind is StateKind.LOOP:

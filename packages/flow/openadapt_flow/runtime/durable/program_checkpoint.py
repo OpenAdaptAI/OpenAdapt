@@ -30,6 +30,7 @@ from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     ActionDeliveryUncertainty,
     AttendedProgramTransitionEvidence,
+    BusinessDecisionEvidence,
     EffectVerificationEvidence,
     FreshActuationEvent,
     HealEvent,
@@ -287,6 +288,9 @@ class ProgramCheckpoint(BaseModel):
     visited_states_delta: list[str] = Field(default_factory=list)
     #: Exact ordered transition decisions since the preceding checkpoint.
     program_transition_evidence_delta: list[ProgramTransitionEvidence] = Field(
+        default_factory=list
+    )
+    business_decision_evidence_delta: list[BusinessDecisionEvidence] = Field(
         default_factory=list
     )
     program_exception_evidence_delta: list[ProgramExceptionEvidence] = Field(

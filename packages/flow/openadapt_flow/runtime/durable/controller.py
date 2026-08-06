@@ -35,8 +35,10 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 from openadapt_flow.bundle_validation import BundleIntegrityError
 from openadapt_flow.ir import (
+    BusinessDecisionEvidence,
     ProgramExceptionEvidence,
     ProgramTransitionEvidence,
+    StateKind,
     Step,
     StepResult,
     Workflow,
@@ -121,6 +123,12 @@ def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[s
         "this step onward; already-confirmed steps are not repeated)"
     )
     abort = "Abort the run and discard the pending escalation"
+
+    if "business decision" in lower:
+        return "business_decision", [
+            "Answer one declared finite option through the business decision surface",
+            abort,
+        ]
 
     if result.delivery_uncertainty is not None:
         return "delivery_uncertain", [
@@ -614,6 +622,9 @@ class DurableRun:
         program_transition_evidence_delta: Optional[
             list[ProgramTransitionEvidence]
         ] = None,
+        business_decision_evidence_delta: Optional[
+            list[BusinessDecisionEvidence]
+        ] = None,
         program_exception_evidence_delta: Optional[
             list[ProgramExceptionEvidence]
         ] = None,
@@ -654,6 +665,9 @@ class DurableRun:
             program_transition_evidence_delta=list(
                 program_transition_evidence_delta or []
             ),
+            business_decision_evidence_delta=list(
+                business_decision_evidence_delta or []
+            ),
             program_exception_evidence_delta=list(
                 program_exception_evidence_delta or []
             ),
@@ -663,7 +677,20 @@ class DurableRun:
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)
-        if workflow is not None:
+        issue_operational_capability = True
+        if workflow is not None and pending.program_frames:
+            leaf = pending.program_frames[-1]
+            graph = (
+                workflow.program
+                if leaf.graph_id == "__program__"
+                else workflow.subflows.get(leaf.graph_id)
+            )
+            pause_state = graph.states.get(leaf.state_id) if graph is not None else None
+            issue_operational_capability = not (
+                pause_state is not None
+                and pause_state.kind is StateKind.BUSINESS_DECISION
+            )
+        if workflow is not None and issue_operational_capability:
             from openadapt_flow.runtime.durable.attended import (
                 issue_attended_capability,
             )
@@ -680,6 +707,19 @@ class DurableRun:
             except BundleIntegrityError:
                 # Preserve the durable halt, but never issue attended mutation
                 # authority against a bundle that no longer matches its seal.
+                pass
+        elif workflow is not None:
+            from openadapt_flow.runtime.durable.attended import (
+                AttendedActionRefused,
+                AttendedActionStore,
+            )
+
+            try:
+                AttendedActionStore(self.store.run_dir).retire_current()
+            except AttendedActionRefused:
+                # The exact pause digest already makes an obsolete capability
+                # unusable. Preserve the safe halt if a damaged old capability
+                # cannot be archived for display cleanup.
                 pass
         self._sync_authority()
 

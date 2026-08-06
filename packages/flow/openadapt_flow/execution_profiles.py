@@ -394,6 +394,7 @@ def _program_action_trace(
     transition_evidence: list[Any] | None = None,
     exception_evidence: list[Any] | None = None,
     attended_transition_evidence: list[Any] | None = None,
+    business_decision_evidence: list[Any] | None = None,
     transition_evidence_root: Path | None = None,
     transition_predicate_vision: Any | None = None,
     governed_runtime_inputs_digest: str | None = None,
@@ -426,7 +427,9 @@ def _program_action_trace(
     )
 
     if transition_predicate_vision is None:
-        import openadapt_flow.vision as transition_predicate_vision
+        from openadapt_flow import vision as default_transition_predicate_vision
+
+        transition_predicate_vision = default_transition_predicate_vision
 
     graphs = {"__program__": workflow.program, **workflow.subflows}
     state_owner: dict[str, str] = {}
@@ -445,10 +448,21 @@ def _program_action_trace(
     evidence_cursor = 0
     exception_evidence_cursor = 0
     attended_evidence_cursor = 0
+    business_evidence_cursor = 0
     expected_evidence_decision_index = 0
     actions: list[_ProgramActionOccurrence] = []
     halted_at_requested_action = False
     evaluator_contract_sha256: str | None = None
+    trace_base_params = dict(runtime_params or {})
+    if business_decision_evidence:
+        if transition_evidence_root is None:
+            return None
+        from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+        manifest = CheckpointStore(transition_evidence_root).read_manifest()
+        if manifest is None:
+            return None
+        trace_base_params = dict(manifest.params)
 
     class _RequestedActionHalt(Exception):
         """The retained trace ended exactly at the requested action."""
@@ -826,6 +840,86 @@ def _program_action_trace(
         expected_evidence_decision_index += 1
         return True, item.target_state_id, item.action
 
+    def _validated_business_decision(
+        *,
+        graph_id: str,
+        state: Any,
+        scope: tuple[Any, ...],
+        current_params: dict[str, str],
+    ) -> str:
+        nonlocal business_evidence_cursor, expected_evidence_decision_index
+        evidence = business_decision_evidence or []
+        if business_evidence_cursor >= len(evidence):
+            raise ValueError("business decision lacks signed human evidence")
+        item = evidence[business_evidence_cursor]
+        spec = state.decision
+        if (
+            spec is None
+            or item.graph_id != graph_id
+            or item.state_id != state.id
+            or tuple(item.program_scope) != scope
+            or item.decision_index != expected_evidence_decision_index
+            or item.decision_contract_sha256 != spec.contract_sha256()
+            or item.governed_runtime_inputs_digest != governed_runtime_inputs_digest
+        ):
+            raise ValueError("business decision evidence binding differs")
+        if transition_evidence_root is None:
+            raise ValueError("business decision has no local evidence root")
+        from openadapt_flow.runtime.durable.business_decision import (
+            BusinessDecisionRefused,
+            BusinessDecisionStore,
+        )
+        from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+        from openadapt_flow.runtime.durable.program_checkpoint import (
+            bound_params_sha256,
+            bundle_version,
+        )
+
+        try:
+            store = BusinessDecisionStore(transition_evidence_root)
+            manifest = CheckpointStore(transition_evidence_root).read_manifest()
+            if manifest is None:
+                raise ValueError("business decision has no durable manifest")
+            expected_bundle = bundle_version(manifest.bundle_dir)
+            receipt = store.authenticate_evidence(
+                item,
+                workflow=workflow,
+                run_id=manifest.run_id,
+                expected_bundle_version=expected_bundle,
+                governed_runtime_inputs_digest=governed_runtime_inputs_digest,
+            )
+            request = store.authenticate_request(item.request_sha256)
+        except (OSError, ValueError, BusinessDecisionRefused) as exc:
+            raise ValueError("business decision signature does not verify") from exc
+        options = [option for option in spec.options if option.id == item.option_id]
+        if len(options) != 1:
+            raise ValueError("business decision chose an undeclared option")
+        option = options[0]
+        if (
+            request.digest != item.request_digest
+            or receipt.request_digest != request.digest
+            or request.workflow_name != workflow.name
+            or workflow_contract_digest is None
+            or request.workflow_contract_sha256 != workflow_contract_digest
+            or request.governed_runtime_inputs_digest != governed_runtime_inputs_digest
+            or request.program_scope != scope
+            or request.bound_params_sha256 != bound_params_sha256(dict(current_params))
+            or run_id_sha256 is None
+            or hashlib.sha256(request.run_id.encode("utf-8")).hexdigest()
+            != run_id_sha256
+            or manifest.run_id != request.run_id
+            or manifest.workflow_name != request.workflow_name
+            or request.bundle_version != expected_bundle
+            or item.output_param != spec.output_param
+            or item.output_value != option.value
+            or item.target_state_id != option.target
+        ):
+            raise ValueError("business decision receipt binding differs")
+        current_params[spec.output_param] = option.value
+        business_evidence_cursor += 1
+        expected_evidence_decision_index += 1
+        return option.target
+
     def _expected_non_action_exception_kind(
         state: Any,
         *,
@@ -895,7 +989,7 @@ def _program_action_trace(
 
     def _selected_transition_target(
         state: Any,
-        current_params: Mapping[str, str],
+        current_params: dict[str, str],
         *,
         graph_id: str,
         scope: tuple[Any, ...],
@@ -946,7 +1040,7 @@ def _program_action_trace(
         state: Any,
         graph: Any,
         occurrence_index: int | None,
-        current_params: Mapping[str, str],
+        current_params: dict[str, str],
         *,
         graph_id: str,
         scope: tuple[Any, ...],
@@ -1101,7 +1195,7 @@ def _program_action_trace(
         scope: tuple[Any, ...],
         *,
         depth: int,
-        current_params: Mapping[str, str],
+        current_params: dict[str, str],
     ) -> None:
         nonlocal cursor, halted_at_requested_action
         if depth > 64:
@@ -1136,6 +1230,14 @@ def _program_action_trace(
                 ):
                     halted_at_requested_action = True
                     raise _RequestedActionHalt
+            business_target: str | None = None
+            if state.kind is StateKind.BUSINESS_DECISION:
+                business_target = _validated_business_decision(
+                    graph_id=graph_id,
+                    state=state,
+                    scope=scope,
+                    current_params=current_params,
+                )
             if state.kind is StateKind.TERMINAL:
                 if (state.outcome or "success") != "success":
                     raise ValueError("successful trace reached a non-success terminal")
@@ -1181,13 +1283,17 @@ def _program_action_trace(
                 graph_id=graph_id,
                 scope=scope,
             )
+            if business_target is not None and state_id != business_target:
+                raise ValueError(
+                    "business decision transition did not match its signed answer"
+                )
 
     try:
         _consume_graph(
             "__program__",
             (ProgramExecutionScopeFrame(graph_id="__program__"),),
             depth=0,
-            current_params=runtime_params or {},
+            current_params=trace_base_params,
         )
     except _RequestedActionHalt:
         pass
@@ -1199,9 +1305,16 @@ def _program_action_trace(
         return None
     if attended_evidence_cursor != len(attended_transition_evidence or []):
         return None
+    if business_evidence_cursor != len(business_decision_evidence or []):
+        return None
     if cursor != len(visited_states) or (
         halted_at_step_id is not None and not halted_at_requested_action
     ):
+        return None
+    if business_decision_evidence and trace_base_params != dict(runtime_params or {}):
+        # Signed decision receipts are the authority for decision outputs.
+        # The run report cannot claim another value and then use that value to
+        # evaluate an action, identity, postcondition, or effect contract.
         return None
     return actions
 
@@ -1369,6 +1482,8 @@ def classify_execution_outcome(
             return ExecutionOutcome.COMPLETED_UNVERIFIED
         if report.attended_program_transition_evidence:
             return ExecutionOutcome.COMPLETED_UNVERIFIED
+        if report.business_decision_evidence:
+            return ExecutionOutcome.COMPLETED_UNVERIFIED
         if any(result.exception_handled for result in report.results):
             return ExecutionOutcome.COMPLETED_UNVERIFIED
         if fault_prefix_review:
@@ -1406,6 +1521,7 @@ def classify_execution_outcome(
             transition_evidence=report.program_transition_evidence,
             exception_evidence=report.program_exception_evidence,
             attended_transition_evidence=(report.attended_program_transition_evidence),
+            business_decision_evidence=report.business_decision_evidence,
             transition_evidence_root=transition_evidence_root,
             transition_predicate_vision=transition_predicate_vision,
             governed_runtime_inputs_digest=report.governed_runtime_inputs_digest,

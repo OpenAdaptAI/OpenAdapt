@@ -483,6 +483,7 @@
       "enum": [
         "action",
         "branch",
+        "business_decision",
         "loop",
         "subflow_call",
         "terminal"

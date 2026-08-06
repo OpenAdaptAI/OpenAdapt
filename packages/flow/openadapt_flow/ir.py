@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 from datetime import datetime, timezone
 from enum import Enum
@@ -1124,6 +1125,7 @@ class StateKind(str, Enum):
 
     ACTION = "action"  # perform a Step (today's hardened action leaf)
     BRANCH = "branch"  # pick an outgoing transition by guard; performs no action
+    BUSINESS_DECISION = "business_decision"  # typed, authorized human choice
     LOOP = "loop"  # iterate a worklist, running a body subflow per row
     SUBFLOW_CALL = "subflow_call"  # invoke a reusable named subflow
     TERMINAL = "terminal"  # end this (sub)graph: success | halt | escalate
@@ -1144,6 +1146,172 @@ class Transition(BaseModel):
     guard: Optional[Predicate] = None
     target: str = Field(description="Id of the state this edge leads to")
     label: str = Field(default="", description="Human-readable edge label")
+
+
+class BusinessDecisionEvidenceRequirement(BaseModel):
+    """One reviewed evidence item required before a business answer is valid.
+
+    The answer carries only a digest of the retained local artifact.  It does
+    not carry screenshots, record values, or free text across a trust boundary.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+    label: str = Field(min_length=1, max_length=240)
+
+
+class BusinessDecisionOption(BaseModel):
+    """One finite answer and its exact compiled successor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+    label: str = Field(min_length=1, max_length=240)
+    value: str = Field(min_length=1, max_length=512)
+    target: str = Field(min_length=1, max_length=128)
+    required_evidence: tuple[str, ...] = ()
+
+
+class BusinessDecisionSpec(BaseModel):
+    """A finite, reviewed human decision inside a workflow program.
+
+    This is not an identity or effect verifier.  It only selects a declared
+    branch and binds a declared output.  The successor action still runs the
+    normal fresh-frame, identity, policy, postcondition, and effect gates.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.business-decision/v1"] = (
+        "openadapt.business-decision/v1"
+    )
+    question: str = Field(min_length=1, max_length=500)
+    authorized_roles: tuple[str, ...] = Field(min_length=1)
+    output_param: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$")
+    options: tuple[BusinessDecisionOption, ...] = Field(min_length=2)
+    evidence_requirements: tuple[BusinessDecisionEvidenceRequirement, ...] = ()
+    expires_after_s: int = Field(default=3600, ge=30, le=7 * 24 * 3600)
+    revalidation: tuple[Predicate, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _closed_contract(self) -> "BusinessDecisionSpec":
+        if not self.question.strip() or self.question.strip() != self.question:
+            raise ValueError("business decision question must be trimmed and non-empty")
+        roles = tuple(role.strip() for role in self.authorized_roles)
+        if (
+            any(not role for role in roles)
+            or roles != self.authorized_roles
+            or len(set(roles)) != len(roles)
+            or any(len(role) > 128 for role in roles)
+        ):
+            raise ValueError(
+                "business decision roles must be unique, non-empty, and at "
+                "most 128 characters"
+            )
+        requirement_ids = tuple(item.id for item in self.evidence_requirements)
+        if len(set(requirement_ids)) != len(requirement_ids):
+            raise ValueError("business decision evidence ids must be unique")
+        option_ids = tuple(item.id for item in self.options)
+        option_labels = tuple(item.label.strip() for item in self.options)
+        option_values = tuple(item.value for item in self.options)
+        if len(set(option_ids)) != len(option_ids):
+            raise ValueError("business decision option ids must be unique")
+        if (
+            any(not label for label in option_labels)
+            or option_labels != tuple(item.label for item in self.options)
+            or len({label.casefold() for label in option_labels}) != len(option_labels)
+        ):
+            raise ValueError(
+                "business decision option labels must be trimmed, non-empty, "
+                "and unique without case"
+            )
+        if any(not value.strip() or value.strip() != value for value in option_values):
+            raise ValueError(
+                "business decision option values must be trimmed and non-empty"
+            )
+        if len(set(option_values)) != len(option_values):
+            raise ValueError("business decision option values must be unique")
+        known = set(requirement_ids)
+        for option in self.options:
+            if len(set(option.required_evidence)) != len(option.required_evidence):
+                raise ValueError(
+                    f"business decision option {option.id!r} repeats evidence ids"
+                )
+            unknown = set(option.required_evidence) - known
+            if unknown:
+                raise ValueError(
+                    f"business decision option {option.id!r} names unknown evidence"
+                )
+        if not any(
+            (predicate.kind is PredicateKind.TEXT_PRESENT and bool(predicate.text))
+            or (
+                predicate.kind is PredicateKind.ANCHOR_RESOLVES
+                and predicate.anchor is not None
+            )
+            for predicate in self.revalidation
+        ):
+            raise ValueError(
+                "business decision revalidation requires an affirmative live "
+                "frame predicate (TEXT_PRESENT or ANCHOR_RESOLVES); parameters, "
+                "the retained answer, absence checks, negation, and tautological "
+                "boolean expressions cannot authorize continuation"
+            )
+        return self
+
+    def contract_sha256(self) -> str:
+        payload = json.dumps(
+            self.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
+
+
+def business_decision_transition_guard(
+    spec: BusinessDecisionSpec,
+    option: BusinessDecisionOption,
+) -> Predicate:
+    """Return the exact guard that binds one answer to one live branch.
+
+    The parameter equality proves which finite answer was retained.  The
+    required predicates re-check the current application state immediately
+    before the successor is selected.  They are not identity or effect proof;
+    the successor action still runs those gates itself.
+    """
+
+    answer = Predicate(
+        kind=PredicateKind.PARAM_EQUALS,
+        param=spec.output_param,
+        value=option.value,
+        intent=f"selected business decision option {option.id}",
+    )
+    if not spec.revalidation:
+        return answer
+    return Predicate(
+        kind=PredicateKind.AND,
+        operands=[
+            answer,
+            *(predicate.model_copy(deep=True) for predicate in spec.revalidation),
+        ],
+        intent="business decision answer and live state still agree",
+    )
+
+
+def business_decision_transitions(
+    spec: BusinessDecisionSpec,
+) -> list[Transition]:
+    """Build the only transition shape admitted for a business decision."""
+
+    return [
+        Transition(
+            guard=business_decision_transition_guard(spec, option),
+            target=option.target,
+            label=option.label,
+        )
+        for option in spec.options
+    ]
 
 
 class Relation(BaseModel):
@@ -1192,11 +1360,13 @@ class State(BaseModel):
     """A node in the workflow-program graph (RFC §2.2).
 
     Its ``kind`` selects the payload: ``action`` carries a hardened Phase-1
-    :class:`Step`; ``branch`` picks an edge purely by guard; ``loop`` iterates a
-    worklist; ``subflow_call`` invokes a reusable subgraph; ``terminal`` ends the
-    (sub)graph. ``transitions`` are the outgoing edges (empty on a terminal, a
-    single unconditional edge on a degenerate linear node). ``on_exception``
-    routes a FAILED action to a local handler instead of aborting the whole run.
+    :class:`Step`; ``branch`` picks an edge purely by guard;
+    ``business_decision`` binds one authorized finite human choice; ``loop``
+    iterates a worklist; ``subflow_call`` invokes a reusable subgraph;
+    ``terminal`` ends the (sub)graph. ``transitions`` are the outgoing edges
+    (empty on a terminal, a single unconditional edge on a degenerate linear
+    node). ``on_exception`` routes a FAILED action to a local handler instead
+    of aborting the whole run.
     """
 
     id: str
@@ -1204,6 +1374,9 @@ class State(BaseModel):
     # kind == ACTION: the hardened Phase-1 Step to perform (unchanged leaf --
     # anchor resolution, identity gate, effects, risk all ride along on it).
     step: Optional[Step] = None
+    # kind == BUSINESS_DECISION: a finite authorized human answer.  The
+    # decision is control input only; it never supplies identity/effect proof.
+    decision: Optional[BusinessDecisionSpec] = None
     # kind == LOOP: the worklist + per-row body subflow.
     loop: Optional[LoopSpec] = None
     # kind == SUBFLOW_CALL: the reusable subflow to invoke, then continue.
@@ -1221,6 +1394,15 @@ class State(BaseModel):
     # run (success=False) -- the safe default for an underdetermined/failed path.
     outcome: Optional[Literal["success", "halt", "escalate"]] = None
     reason: str = ""
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Do not change the bytes of program states that predate decisions."""
+
+        data: dict[str, Any] = handler(self)
+        if self.decision is None:
+            data.pop("decision", None)
+        return data
 
 
 class ProgramGraph(BaseModel):
@@ -2388,6 +2570,63 @@ class ProgramGuardAssetEvidence(BaseModel):
         return self
 
 
+class BusinessDecisionEvidence(BaseModel):
+    """Authenticated control evidence for one finite human answer.
+
+    This evidence can select a compiled branch.  It cannot satisfy an action's
+    entity identity, postcondition, or business-effect contract.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.business-decision-evidence/v1"] = (
+        "openadapt.business-decision-evidence/v1"
+    )
+    decision_index: int = Field(ge=0)
+    graph_id: str = Field(min_length=1, max_length=128)
+    state_id: str = Field(min_length=1, max_length=128)
+    program_scope: list[ProgramExecutionScopeFrame] = Field(min_length=1)
+    decision_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    request_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    request_inventory_ref: str = Field(min_length=1, max_length=512)
+    request_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    receipt_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    receipt_inventory_ref: str = Field(min_length=1, max_length=512)
+    receipt_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    option_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+    output_param: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$")
+    output_value: str = Field(min_length=1, max_length=512)
+    target_state_id: str = Field(min_length=1, max_length=128)
+    operator_ref: str = Field(min_length=1, max_length=256)
+    authorized_role: str = Field(min_length=1, max_length=128)
+    authentication_context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence_artifact_sha256s: dict[str, str] = Field(default_factory=dict)
+    idempotency_key_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decided_at: str
+    governed_runtime_inputs_digest: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+
+    @model_validator(mode="after")
+    def _local_inventory_is_exact(self) -> "BusinessDecisionEvidence":
+        expected_request = f".business_decisions/requests/{self.request_sha256}.json"
+        expected_receipt = f".business_decisions/receipts/{self.receipt_sha256}.json"
+        if self.request_inventory_ref != expected_request:
+            raise ValueError(
+                "business decision request reference is not content-addressed"
+            )
+        if self.receipt_inventory_ref != expected_receipt:
+            raise ValueError(
+                "business decision receipt reference is not content-addressed"
+            )
+        if any(
+            not re.fullmatch(r"[0-9a-f]{64}", digest)
+            for digest in self.evidence_artifact_sha256s.values()
+        ):
+            raise ValueError("business decision artifact digest is invalid")
+        return self
+
+
 class ProgramTransitionEvidence(BaseModel):
     """Exact ordered evidence for one evaluated program transition.
 
@@ -3395,6 +3634,13 @@ class RunReport(BaseModel):
         description=(
             "Ordered guard evaluations retained by the program runtime. "
             "Frame-backed evidence refers to private local run artifacts."
+        ),
+    )
+    business_decision_evidence: list[BusinessDecisionEvidence] = Field(
+        default_factory=list,
+        description=(
+            "Ordered signed finite human answers used only for program control. "
+            "These records never satisfy entity identity or effect verification."
         ),
     )
     program_exception_evidence: list[ProgramExceptionEvidence] = Field(

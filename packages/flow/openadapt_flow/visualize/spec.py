@@ -42,6 +42,7 @@ class NodeKind(str, Enum):
 
     ACTION = "action"
     BRANCH = "branch"
+    BUSINESS_DECISION = "business_decision"
     LOOP = "loop"
     SUBFLOW_CALL = "subflow_call"
     TERMINAL = "terminal"

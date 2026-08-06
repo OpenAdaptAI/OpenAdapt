@@ -5,6 +5,12 @@ document is about the *delivery* of that question: which paths exist, how much
 each may carry, what a customer has to do to use one, and which designs were
 considered and not built.
 
+This path resolves an operational halt. A declared business-policy choice is a
+different contract. It uses a finite `business_decision` program state, an
+authorized role, an expiring signed request and receipt, and fresh live-state
+revalidation. See [`BUSINESS_DECISIONS.md`](BUSINESS_DECISIONS.md). Neither path
+can replace entity-identity or business-effect proof.
+
 The engine already grades **evidence** with `VerificationTier` — weaker evidence
 is recorded as weaker rather than concealed. This applies the same idea to
 **delivery**. A decision taken without seeing what broke is a different decision

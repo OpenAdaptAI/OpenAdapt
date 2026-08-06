@@ -52,6 +52,7 @@ from pydantic import BaseModel, Field, model_validator
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     ActionDeliveryUncertainty,
+    BusinessDecisionEvidence,
     EffectVerificationEvidence,
     FreshActuationEvent,
     HealEvent,
@@ -275,7 +276,9 @@ class PendingEscalation(BaseModel):
     #: ``effect_indeterminate``, ``effect_escalated``, ``placeholder_effect``,
     #: ``effect_unverifiable``, ``unmet_guard``, ``disambiguation``,
     #: ``identity``, ``postcondition``, ``resolution``, ``delivery_uncertain``,
-    #: ``human_required``, or ``halt``. ``human_required`` means CAPTCHA/MFA/
+    #: ``human_required``, ``business_decision``, or ``halt``.
+    #: ``business_decision`` has its own finite signed request and is not an
+    #: operational Continue/Skip/Teach capability. ``human_required`` means CAPTCHA/MFA/
     #: re-authentication must be completed by the present operator; no
     #: automation acts on the challenge.
     category: str
@@ -319,6 +322,9 @@ class PendingEscalation(BaseModel):
     program_history_delta: list[str] = Field(default_factory=list)
     #: Exact transition decisions since the last verified program checkpoint.
     program_transition_evidence_delta: list[ProgramTransitionEvidence] = Field(
+        default_factory=list
+    )
+    business_decision_evidence_delta: list[BusinessDecisionEvidence] = Field(
         default_factory=list
     )
     program_exception_evidence_delta: list[ProgramExceptionEvidence] = Field(

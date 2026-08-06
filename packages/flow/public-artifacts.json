@@ -5717,7 +5717,7 @@
     },
     {
       "path": "schemas/program-graph-v1.json",
-      "sha256": "bc54c5df18ef47d2c54f7eb822847d12ce7613d545ac7f3b3f77872e3cf9e742"
+      "sha256": "99facb6e1a726127c1623e0432e48fd7d96fe7747c835e5e069c68eae4ff2889"
     },
     {
       "path": "schemas/public-demo-evidence-v1.json",
