@@ -47,6 +47,9 @@ bindings) lives in :mod:`openadapt_flow.deployment`; the operator guide is
 from openadapt_flow.runtime.effects.adapter import (  # noqa: F401
     ENTRY_POINT_GROUP,
     AdapterResult,
+    CandidateEffectState,
+    CandidateEffectVerifier,
+    CandidatePreState,
     CollateralHook,
     ConnectionProbe,
     RedactingVerifier,
@@ -127,6 +130,9 @@ __all__ = [
     # adapter platform
     "ENTRY_POINT_GROUP",
     "AdapterResult",
+    "CandidateEffectState",
+    "CandidateEffectVerifier",
+    "CandidatePreState",
     "CollateralHook",
     "ConnectionProbe",
     "RedactingVerifier",

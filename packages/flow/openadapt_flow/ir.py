@@ -2805,6 +2805,13 @@ class EffectVerificationEvidence(BaseModel):
 
     effect_contract_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     substrate: str = Field(min_length=1)
+    #: Opaque digest of the exact deployment adapter configuration that
+    #: produced this evidence. Durable resume uses it with the retained tier to
+    #: refuse a changed verifier after restart. ``None`` remains valid for
+    #: checkpoints written before adapter binding was retained.
+    verifier_identity: Optional[str] = Field(
+        default=None, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
     verification_tier: Optional[int] = Field(default=None, ge=1, le=4)
     initial_verdict: Literal["confirmed", "refuted", "indeterminate"]
     final_verdict: Literal["confirmed", "refuted", "indeterminate"]

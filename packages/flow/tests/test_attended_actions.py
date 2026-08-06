@@ -102,6 +102,7 @@ from openadapt_flow.runtime.effects import (
     EffectVerdict,
     Verdict,
 )
+from openadapt_flow.runtime.effects.adapter import CandidateEffectVerifier
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.verification import VerificationTier
 from tests.test_replayer import (
@@ -928,6 +929,61 @@ def test_program_attended_verification_keeps_the_admitted_effect_tier(
     assert result.ok is False
     assert result.safety_halt is True
     assert target is None
+
+
+def test_program_attended_completion_uses_pinned_candidate_current_readback(tmp_path):
+    class PersistedReadback:
+        substrate = "persisted-readback"
+        verification_tier = VerificationTier.PERSISTED_STATE_REACQUISITION
+        _openadapt_verifier_identity = "sha256:" + "d" * 64
+
+        def __init__(self):
+            self.current_reads = 0
+
+        def capture_pre_state(self, context=None):
+            return EffectState(substrate=self.substrate, reachable=False)
+
+        def requires_readable_pre_state_for(self, effect):
+            return False
+
+        def verify(self, effect, before, context=None):
+            raise AssertionError("attended completion must use current-state readback")
+
+        def verify_current_state(self, effect, current, context=None):
+            self.current_reads += 1
+            return EffectVerdict(
+                verdict=Verdict.CONFIRMED,
+                kind=effect.kind,
+                substrate=self.substrate,
+            )
+
+    candidate = PersistedReadback()
+    result, target = Replayer(
+        FakeBackend(),
+        vision=FakeVision(),
+        effect_verifier=CandidateEffectVerifier([candidate]),
+    ).revalidate_attended_program_completion(
+        _attended_effect_program(),
+        graph_id="__program__",
+        state_id="human",
+        params={},
+        bundle_dir=tmp_path,
+        run_dir=tmp_path / "run",
+        run_id="run-program-current-readback",
+        transition_baseline=TransitionObservation(),
+        transition_digest=lambda field, value: f"{field}:{value}",
+    )
+
+    assert result.ok is True
+    assert target == "done"
+    assert candidate.current_reads == 1
+    assert (
+        result.effect_evidence[0].verifier_identity
+        == candidate._openadapt_verifier_identity
+    )
+    assert result.effect_evidence[0].verification_tier == int(
+        VerificationTier.PERSISTED_STATE_REACQUISITION
+    )
 
 
 def test_attended_final_persistence_callback_cannot_verify_changed_semantics(

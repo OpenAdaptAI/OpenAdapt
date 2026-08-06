@@ -46,7 +46,9 @@ from openadapt_flow.runtime.effects import (
     EffectKind,
     RestRecordVerifier,
 )
+from openadapt_flow.runtime.effects.adapter import CandidateEffectVerifier
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.verification import VerificationTier
 
 # Reuse the scripted fakes from the main replayer unit tests (pytest's prepend
 # import mode puts tests/ on sys.path).
@@ -171,6 +173,54 @@ class _UnavailableVerifier(RestRecordVerifier):
         raise RuntimeError("verifier unavailable")
 
 
+class _TrackingRestVerifier(RestRecordVerifier):
+    """Count candidate use and optionally fail only after delivery."""
+
+    def __init__(
+        self,
+        url,
+        *,
+        substrate,
+        tier,
+        fail_verify=False,
+        tier_after_verify=None,
+    ):
+        super().__init__(url)
+        self.substrate = substrate
+        self.verification_tier = tier
+        self.fail_verify = fail_verify
+        self.tier_after_verify = tier_after_verify
+        self.captures = 0
+        self.verifies = 0
+
+    def capture_pre_state(self, context=None):
+        self.captures += 1
+        return super().capture_pre_state(context)
+
+    def verify(self, expected, before, context=None):
+        self.verifies += 1
+        if self.fail_verify:
+            raise RuntimeError("selected verifier unavailable after delivery")
+        verdict = super().verify(expected, before, context)
+        if self.tier_after_verify is not None:
+            self.verification_tier = self.tier_after_verify
+        return verdict
+
+
+class _LegacyReachabilityState:
+    def __init__(self, reachable):
+        self.reachable = reachable
+
+
+class _LegacyReachabilityVerifier(RestRecordVerifier):
+    def __init__(self, url, reachable):
+        super().__init__(url)
+        self._reachable = reachable
+
+    def capture_pre_state(self):
+        return _LegacyReachabilityState(self._reachable)
+
+
 # -- ACTUATED + CONFIRMED: API performs the write, GUI is skipped -----------
 
 
@@ -247,6 +297,67 @@ def test_unreachable_api_halts_without_gui_fallback(tmp_path):
         stop()
 
 
+def test_unreachable_effect_pre_state_refuses_api_actuation(tmp_path):
+    """A readable pre-action proof is required before any API write."""
+    url, db, stop = _fault_server()
+    try:
+        backend = GuiWritingBackend(url)
+        workflow = _api_save_workflow(effects=[_record_written()])
+        bundle, run_dir = _dirs(tmp_path)
+        replayer = Replayer(
+            backend,
+            vision=_vision_that_confirms_saved(),
+            effect_verifier=RestRecordVerifier("http://127.0.0.1:1"),
+            api_actuator=ApiActuator(url),
+            poll_interval_s=0.01,
+        )
+
+        report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+
+        assert report.success is False
+        assert report.results[0].effect_verified is False
+        assert backend.actions == []
+        assert db.snapshot()["records"] == []
+    finally:
+        stop()
+
+
+def test_opaque_legacy_effect_pre_state_uses_its_existing_verification_path():
+    """The candidate guard does not reinterpret an older verifier snapshot."""
+    effect = _record_written()
+
+    assert (
+        Replayer._required_effect_pre_state_unreadable(object(), object(), [effect])
+        is False
+    )
+
+
+@pytest.mark.parametrize("reachable", [None, 0, "", False])
+def test_invalid_legacy_reachability_refuses_api_actuation_before_input(
+    tmp_path, reachable
+):
+    """A present legacy reachability member must be exactly True."""
+    url, db, stop = _fault_server()
+    try:
+        backend = GuiWritingBackend(url)
+        workflow = _api_save_workflow(effects=[_record_written()])
+        bundle, run_dir = _dirs(tmp_path)
+        report = Replayer(
+            backend,
+            vision=_vision_that_confirms_saved(),
+            effect_verifier=_LegacyReachabilityVerifier(url, reachable),
+            api_actuator=ApiActuator(url),
+            poll_interval_s=0.01,
+        ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+
+        assert report.success is False
+        assert report.results[0].effect_verified is False
+        assert backend.actions == []
+        assert db.snapshot()["records"] == []
+    finally:
+        stop()
+
+
 def test_post_send_protocol_error_is_proven_by_the_complete_contract(tmp_path):
     """A lost response after a committed API write is uncertain delivery.
 
@@ -281,6 +392,96 @@ def test_post_send_protocol_error_is_proven_by_the_complete_contract(tmp_path):
         assert result.delivery_uncertainty.resolved_by_contract is True
         assert session.requests == 1
         assert backend.actions == []
+        assert len(db.snapshot()["records"]) == 1
+    finally:
+        stop()
+
+
+def test_response_loss_refuses_selected_candidate_tier_change_after_input(tmp_path):
+    """A selected verifier cannot relabel its evidence after one API send."""
+    url, db, stop = _fault_server()
+    try:
+        strong = _TrackingRestVerifier(
+            url,
+            substrate="independent-records",
+            tier=VerificationTier.INDEPENDENT_SYSTEM,
+            tier_after_verify=VerificationTier.IMMEDIATE_SCREEN,
+        )
+        weak = _TrackingRestVerifier(
+            url,
+            substrate="screen-readback",
+            tier=VerificationTier.IMMEDIATE_SCREEN,
+        )
+        session = _ResponseLossSession()
+        bundle, run_dir = _dirs(tmp_path)
+        report = Replayer(
+            GuiWritingBackend(url),
+            vision=_vision_that_confirms_saved(),
+            effect_verifier=CandidateEffectVerifier([weak, strong]),
+            api_actuator=ApiActuator(url, session=session),
+            poll_interval_s=0.01,
+        ).run(
+            _api_save_workflow(effects=[_record_written()]),
+            bundle_dir=bundle,
+            run_dir=run_dir,
+        )
+
+        result = report.results[0]
+        assert report.success is False
+        assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+        assert result.delivery_uncertainty is not None
+        assert result.delivery_uncertainty.resolved_by_contract is False
+        assert result.effect_evidence == []
+        assert "binding changed after input" in (result.error or "")
+        assert session.requests == 1
+        assert strong.captures == 1
+        assert strong.verifies == 1
+        assert weak.captures == 0
+        assert weak.verifies == 0
+        assert len(db.snapshot()["records"]) == 1
+    finally:
+        stop()
+
+
+def test_response_loss_never_downgrades_an_unavailable_selected_candidate(tmp_path):
+    """A weaker verifier cannot convert uncertain delivery into success."""
+    url, db, stop = _fault_server()
+    try:
+        strong = _TrackingRestVerifier(
+            url,
+            substrate="independent-records",
+            tier=VerificationTier.INDEPENDENT_SYSTEM,
+            fail_verify=True,
+        )
+        weak = _TrackingRestVerifier(
+            url,
+            substrate="screen-readback",
+            tier=VerificationTier.IMMEDIATE_SCREEN,
+        )
+        session = _ResponseLossSession()
+        bundle, run_dir = _dirs(tmp_path)
+        report = Replayer(
+            GuiWritingBackend(url),
+            vision=_vision_that_confirms_saved(),
+            effect_verifier=CandidateEffectVerifier([strong, weak]),
+            api_actuator=ApiActuator(url, session=session),
+            poll_interval_s=0.01,
+        ).run(
+            _api_save_workflow(effects=[_record_written()]),
+            bundle_dir=bundle,
+            run_dir=run_dir,
+        )
+
+        result = report.results[0]
+        assert report.success is False
+        assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+        assert result.delivery_uncertainty is not None
+        assert result.delivery_uncertainty.resolved_by_contract is False
+        assert session.requests == 1
+        assert strong.captures == 1
+        assert strong.verifies == 1
+        assert weak.captures == 0
+        assert weak.verifies == 0
         assert len(db.snapshot()["records"]) == 1
     finally:
         stop()

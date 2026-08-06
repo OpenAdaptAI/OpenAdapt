@@ -286,6 +286,48 @@ class TestBackCompat:
         assert build_effect_verifier(DeploymentConfig().effects) is None
 
 
+class TestVerifierCandidates:
+    def test_selects_the_strongest_configured_candidate(self, tmp_path: Path):
+        """A file/export proof wins over a screen-consistency alternative."""
+        from openadapt_flow.runtime.effects.adapter import CandidateEffectVerifier
+
+        verifier = build_effect_verifier(
+            EffectsConfig(
+                candidates=[
+                    EffectsConfig(kind="onscreen"),
+                    EffectsConfig(kind="file", root=str(tmp_path)),
+                ]
+            )
+        )
+        assert isinstance(verifier, CandidateEffectVerifier)
+
+    def test_candidate_construction_never_skips_a_broken_stronger_proof(
+        self, monkeypatch, tmp_path: Path
+    ):
+        """A missing proof credential stops setup; it cannot silently downgrade."""
+        monkeypatch.delenv("MISSING_ORACLE_TOKEN", raising=False)
+        cfg = EffectsConfig(
+            candidates=[
+                EffectsConfig(
+                    kind="rest",
+                    base_url="https://oracle.invalid",
+                    auth={"bearer_env": "MISSING_ORACLE_TOKEN"},
+                ),
+                EffectsConfig(kind="file", root=str(tmp_path)),
+            ]
+        )
+        with pytest.raises(ValueError, match="MISSING_ORACLE_TOKEN"):
+            build_effect_verifier(cfg)
+
+    def test_candidates_reject_ambiguous_legacy_configuration(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            EffectsConfig(
+                kind="file",
+                root=str(tmp_path),
+                candidates=[EffectsConfig(kind="onscreen")],
+            )
+
+
 class TestOnScreenKitConfig:
     def test_onscreen_builds_unbound_readback_verifier(self):
         from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier

@@ -21,6 +21,8 @@ fully-local, zero-egress) deployment.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional
 
@@ -177,6 +179,20 @@ class EffectsConfig(BaseModel):
     #: LOWER-CONFIDENCE consistency tier, never independent proof.
     kind: str = "none"
 
+    #: Reviewed alternatives for the same effect contract.  This is useful
+    #: where the application exposes more than one read boundary (for example,
+    #: a file export and a separately authenticated read session) but no direct
+    #: database connection.  The runtime builds every candidate before input,
+    #: then uses the candidate with the strongest declared evidence tier
+    #: (lowest numeric tier; declaration order breaks a tie).  It never falls
+    #: back after actuation: an unavailable selected verifier is uncertain and
+    #: therefore halts or enters reconciliation.
+    #:
+    #: The legacy single ``kind`` form and this list are mutually exclusive.
+    #: Nested lists are refused to keep the selected verifier and its evidence
+    #: unambiguous.
+    candidates: list["EffectsConfig"] = Field(default_factory=list)
+
     # -- onscreen (no-API screen read-back; auto-derived per-effect region) ---
     #: Explicit read-back region ``(x, y, w, h)`` for a hand-configured
     #: deployment. Normally left None — the compiler auto-derives a per-effect
@@ -306,6 +322,26 @@ class EffectsConfig(BaseModel):
                 for k, val in v.items()
             }
         return v
+
+    @model_validator(mode="after")
+    def _validate_candidates(self) -> "EffectsConfig":
+        if not self.candidates:
+            return self
+        if (self.kind or "none").strip().lower() not in ("", "none"):
+            raise ValueError(
+                "effects.kind and effects.candidates are mutually exclusive"
+            )
+        for candidate in self.candidates:
+            if candidate.candidates:
+                raise ValueError("effects.candidates cannot contain nested candidates")
+            if (candidate.kind or "none").strip().lower() in ("", "none"):
+                raise ValueError(
+                    "every effects.candidates entry must configure a verifier kind"
+                )
+        return self
+
+
+EffectsConfig.model_rebuild()
 
 
 class ActuationConfig(BaseModel):
@@ -915,18 +951,69 @@ def build_effect_verifier(
 
     Resolution order for ``kind``: built-in adapters, then plugin factories registered under the
     ``openadapt_flow.effect_verifiers`` entry-point group or via
-    ``register_verifier_factory`` (the customer adapter SDK seam). When the
-    config sets ``evidence_redact_fields`` / ``evidence_keep_fields``, the
-    built verifier is wrapped so every verdict's evidence is minimized.
+    ``register_verifier_factory`` (the customer adapter SDK seam). ``candidates``
+    builds every reviewed alternative and selects the strongest declared tier;
+    it does not create a post-actuation fallback. When the config sets
+    ``evidence_redact_fields`` / ``evidence_keep_fields``, the built verifier
+    is wrapped so every verdict's evidence is minimized.
 
     Raises:
         ValueError: on an unknown ``kind``, a missing required field, an
             unresolved ``{param: ...}`` reference, or a missing secret env var
             (fail loud rather than wire a broken verifier).
     """
+    if cfg.candidates:
+        built = [
+            build_effect_verifier(candidate, params) for candidate in cfg.candidates
+        ]
+        for candidate in built:
+            if candidate is None:  # guarded by EffectsConfig, retained fail-closed
+                raise ValueError("effects.candidates entry did not build a verifier")
+            missing = [
+                name
+                for name in ("capture_pre_state", "verify")
+                if not callable(getattr(candidate, name, None))
+            ]
+            if missing:
+                raise ValueError(
+                    "effects.candidates entry is not an EffectVerifier; missing "
+                    + ", ".join(missing)
+                )
+            tier = getattr(candidate, "verification_tier", None)
+            tier_for = getattr(candidate, "verification_tier_for", None)
+            if isinstance(tier, bool) or (tier is None and not callable(tier_for)):
+                raise ValueError(
+                    "effects.candidates entry has no valid verification tier"
+                )
+        from openadapt_flow.runtime.effects.adapter import (
+            CandidateEffectVerifier,
+            set_verifier_identity,
+        )
+
+        candidate_selector = CandidateEffectVerifier(built)
+        set_verifier_identity(
+            candidate_selector,
+            _effect_verifier_config_identity(cfg, candidate_selector),
+        )
+        if cfg.evidence_redact_fields or cfg.evidence_keep_fields is not None:
+            from openadapt_flow.runtime.effects.adapter import (
+                RedactingVerifier,
+                RedactionPolicy,
+            )
+
+            policy = RedactionPolicy(
+                redact_fields=list(cfg.evidence_redact_fields),
+                keep_fields=cfg.evidence_keep_fields,
+            )
+            return RedactingVerifier(candidate_selector, policy)
+        return candidate_selector
+
     verifier = _build_effect_verifier_unredacted(cfg, params)
     if verifier is None:
         return None
+    from openadapt_flow.runtime.effects.adapter import set_verifier_identity
+
+    set_verifier_identity(verifier, _effect_verifier_config_identity(cfg, verifier))
     if cfg.evidence_redact_fields or cfg.evidence_keep_fields is not None:
         from openadapt_flow.runtime.effects.adapter import (
             RedactingVerifier,
@@ -939,6 +1026,41 @@ def build_effect_verifier(
         )
         return RedactingVerifier(verifier, policy)
     return verifier
+
+
+def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
+    """Hash the non-secret deployment fields that identify one verifier."""
+
+    sensitive = ("credential", "password", "secret", "token")
+
+    def sanitized(value: Any, *, key: str = "") -> Any:
+        lowered = key.lower()
+        if not lowered.endswith("_env") and any(
+            marker in lowered for marker in sensitive
+        ):
+            return "[secret-reference]"
+        if isinstance(value, dict):
+            return {
+                str(item_key): sanitized(item_value, key=str(item_key))
+                for item_key, item_value in value.items()
+            }
+        if isinstance(value, list):
+            return [sanitized(item) for item in value]
+        return value
+
+    payload = {
+        "schema": "openadapt.effect-verifier-identity/v1",
+        "implementation": (
+            f"{type(verifier).__module__}.{type(verifier).__qualname__}"
+        ),
+        "implementation_version": getattr(verifier, "adapter_version", None),
+        "substrate": getattr(verifier, "substrate", None),
+        "config": sanitized(cfg.model_dump(mode="json")),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"sha256:{digest}"
 
 
 def _build_effect_verifier_unredacted(
@@ -1142,11 +1264,16 @@ def _build_effect_verifier_unredacted(
 
     # Plugin seam: a customer adapter registered programmatically or under the
     # 'openadapt_flow.effect_verifiers' entry-point group serves its own kind.
-    from openadapt_flow.runtime.effects.adapter import resolve_verifier_factory
+    from openadapt_flow.runtime.effects.adapter import (
+        resolve_verifier_factory,
+        validate_verifier_adapter,
+    )
 
     factory = resolve_verifier_factory(kind)
     if factory is not None:
-        return factory(cfg, params)
+        verifier = factory(cfg, params)
+        validate_verifier_adapter(verifier)
+        return verifier
 
     raise ValueError(
         f"unknown effects.kind {cfg.kind!r} "

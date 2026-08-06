@@ -49,7 +49,7 @@ from __future__ import annotations
 import difflib
 from typing import Any, Optional
 
-from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
+from openadapt_flow.runtime.effects.adapter import ConnectionProbe, VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     MIN_RENAV_ACTIONS,
     Effect,
@@ -162,6 +162,11 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
             return VerificationTier.PERSISTED_STATE_REACQUISITION
         return VerificationTier.IMMEDIATE_SCREEN
 
+    @staticmethod
+    def requires_readable_pre_state_for(effect: Effect) -> bool:
+        """Read-back proof occurs after input and has no pre-action delta baseline."""
+        return False
+
     def __init__(
         self,
         backend: Any = None,
@@ -183,6 +188,34 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         """Attach the live replay backend (used by the auto-wired default path
         where the verifier is built before the backend exists)."""
         self._backend = backend
+
+    def test_connection(self, context: Any = None) -> ConnectionProbe:
+        """Prove that the local observation boundary can provide a fresh frame."""
+
+        screenshot = getattr(self._backend, "screenshot", None)
+        if not callable(screenshot):
+            return ConnectionProbe(
+                ok=False,
+                substrate=self.substrate,
+                reason="the live backend has no screenshot boundary",
+            )
+        try:
+            frame = screenshot()
+        except Exception as exc:  # noqa: BLE001 - a probe never escapes
+            return ConnectionProbe(
+                ok=False,
+                substrate=self.substrate,
+                reason=f"screenshot probe raised: {type(exc).__name__}",
+            )
+        return ConnectionProbe(
+            ok=isinstance(frame, bytes) and bool(frame),
+            substrate=self.substrate,
+            reason=(
+                "live observation boundary reachable"
+                if isinstance(frame, bytes) and bool(frame)
+                else "live observation boundary returned no frame"
+            ),
+        )
 
     # -- region read ---------------------------------------------------------
 
@@ -389,6 +422,13 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                 "reason": f"{verdict.reason} — {posture}",
             }
         )
+
+    def verify_current_state(
+        self, expected: Effect, current: EffectState, context: Any = None
+    ) -> EffectVerdict:
+        """Reacquire and verify persisted state after attended or durable input."""
+
+        return self.verify(expected, current, context)
 
     @staticmethod
     def _expected_text(expected: Effect, params: dict) -> Optional[str]:
