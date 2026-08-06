@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from openadapt_flow.ir import (
@@ -134,6 +136,38 @@ def test_in_memory_semantic_mutation_halts_before_action(tmp_path):
     assert backend.actions == []
     assert report.results[0].step_id == "<authorization>"
     assert "in-memory workflow semantics" in (report.results[0].error or "")
+
+
+def test_governed_drift_stages_repair_without_mutating_authorized_workflow(tmp_path):
+    first = click_step("first")
+    second = click_step("second")
+    workflow, bundle = _seal(
+        tmp_path, Workflow(name="governed-repair-candidate", steps=[first, second])
+    )
+    authorization = _authorization(workflow)
+    vision = FakeVision()
+    vision.template_results = [
+        None,
+        Match(point=(150, 125), region=(140, 120, 50, 20), confidence=0.99),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
+    ]
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=vision,
+        governed_authorization=authorization,
+    ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "run")
+
+    assert report.success is True
+    assert workflow.steps[0].anchor is not None
+    assert workflow.steps[0].anchor.region == (100, 100, 50, 20)
+    assert report.results[0].heal is not None
+    assert report.results[0].heal.applied is False
+    persisted = json.loads(
+        (tmp_path / "run" / "heals" / "first" / "patch.json").read_text()
+    )
+    assert persisted["status"] == "promotable"
 
 
 @pytest.mark.parametrize(

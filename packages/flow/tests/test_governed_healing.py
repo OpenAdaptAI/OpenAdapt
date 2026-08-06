@@ -383,6 +383,22 @@ def test_invariant_blocks_changed_pixel_identity_evidence(field, value):
     assert field in verdict.reason
 
 
+def test_invariant_allows_identifier_region_to_move_with_locator():
+    old = _template_armed_anchor()
+    new = old.model_copy(
+        update={
+            "region": (140, 180, 50, 20),
+            "click_point": (150, 185),
+            "identifier_region": (60, 180, 60, 20),
+        },
+        deep=True,
+    )
+
+    verdict = identity_preserved(old, new)
+
+    assert verdict.preserved is True
+
+
 # --------------------------------------------------------------------------- #
 # 2. HealPatch -- reviewable diff
 # --------------------------------------------------------------------------- #

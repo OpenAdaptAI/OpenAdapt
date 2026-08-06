@@ -209,6 +209,7 @@ class DockerX11RdpTransport:
         self._display = display
         self._w, self._h = width, height
         self._last_pointer: Optional[tuple[int, int]] = None
+        self._last_pointer_delivery: Optional[dict[str, object]] = None
 
     def _exec(self, args: list[str], *, binary: bool = False):
         cmd = ["docker", "exec", "-e", f"DISPLAY={self._display}", self._c, *args]
@@ -251,24 +252,46 @@ class DockerX11RdpTransport:
         img = self._grab()
         return img, img.width, img.height
 
-    def _focus_client(self) -> None:
-        """Focus the isolated FreeRDP window before injecting XTest input.
-
-        The fixture runs a minimal Openbox session. Focusing its only visible
-        FreeRDP window once is deterministic and remains entirely inside
-        display ``:1`` in the container.
-        """
-        self._exec(
+    def _client_window_id(self) -> int:
+        raw = self._exec(
             [
                 "xdotool",
                 "search",
                 "--onlyvisible",
                 "--name",
                 "^FreeRDP:",
-                "windowfocus",
-                "%@",
             ]
         )
+        try:
+            return int(raw.decode().splitlines()[0])
+        except (IndexError, ValueError) as exc:
+            raise RuntimeError("isolated FreeRDP window is unavailable") from exc
+
+    def _focus_client(self, window_id: Optional[int] = None) -> None:
+        """Focus the isolated FreeRDP window before injecting XTest input.
+
+        The fixture runs a minimal Openbox session. Focusing its only visible
+        FreeRDP window once is deterministic and remains entirely inside
+        display ``:1`` in the container.
+        """
+        client_window = window_id if window_id is not None else self._client_window_id()
+        self._exec(["xdotool", "windowfocus", str(client_window)])
+
+    def focus_input_surface(self) -> None:
+        """Restore the outer FreeRDP window before keyboard delivery."""
+
+        client_window = self._client_window_id()
+        try:
+            active_window = int(self._exec(["xdotool", "getactivewindow"]).decode())
+        except ValueError as exc:
+            raise RuntimeError("active X11 input window is unavailable") from exc
+        if active_window == client_window:
+            return
+        self._focus_client(client_window)
+        # Let the window manager and FreeRDP restore the keyboard grab before
+        # the next XTest key event. This delay is outside the production RDP
+        # transport. It makes the two-Xvfb qualification fixture deterministic.
+        time.sleep(0.1)
 
     def _remote_pointer(self) -> Optional[tuple[int, int]]:
         """Return the fixture server's cursor as a delivery acknowledgement.
@@ -301,6 +324,19 @@ class DockerX11RdpTransport:
         except (KeyError, ValueError):
             return None
 
+    def pointer_delivery_diagnostic(self) -> Optional[dict[str, object]]:
+        """Return only synthetic-fixture pointer delivery metadata.
+
+        This method exists for qualification diagnostics. It contains screen
+        coordinates and no application text, record data, or screenshot.
+        """
+
+        return (
+            dict(self._last_pointer_delivery)
+            if self._last_pointer_delivery is not None
+            else None
+        )
+
     def pointer(self, x: int, y: int, button: str, down: bool) -> None:
         btn = {"left": "1", "right": "3", "middle": "2"}.get(button, "1")
         self._last_pointer = (int(x), int(y))
@@ -313,7 +349,8 @@ class DockerX11RdpTransport:
             return
         target = (int(x), int(y))
         delivered = False
-        for _attempt in range(3):
+        observed: Optional[tuple[int, int]] = None
+        for attempt in range(1, 4):
             self._exec(
                 [
                     "xdotool",
@@ -324,12 +361,19 @@ class DockerX11RdpTransport:
             )
             deadline = time.monotonic() + 5.0
             while time.monotonic() < deadline:
-                if self._remote_pointer() == target:
+                observed = self._remote_pointer()
+                if observed == target:
                     delivered = True
                     break
                 time.sleep(0.1)
             if delivered:
                 break
+        self._last_pointer_delivery = {
+            "target": list(target),
+            "observed": list(observed) if observed is not None else None,
+            "attempts": attempt,
+            "delivered": delivered,
+        }
         if not delivered:
             raise RuntimeError(
                 f"RDP fixture did not acknowledge pointer motion to {target}"
@@ -351,6 +395,31 @@ class DockerX11RdpTransport:
             return
         verb = "keydown" if down else "keyup"
         self._exec(["xdotool", verb, "--clearmodifiers", keysym])
+
+    @staticmethod
+    def supports_bulk_text(text: str) -> bool:
+        """Use one X11 client for printable ASCII fixture parameters."""
+
+        return (
+            bool(text) and text.isascii() and all(" " <= char <= "~" for char in text)
+        )
+
+    def bulk_type_text(self, text: str) -> None:
+        """Type one value without losing the FreeRDP grab between characters."""
+
+        if not self.supports_bulk_text(text):
+            raise ValueError("RDP fixture bulk text must be printable ASCII")
+        self._exec(
+            [
+                "xdotool",
+                "type",
+                "--clearmodifiers",
+                "--delay",
+                "35",
+                "--",
+                text,
+            ]
+        )
 
     def wheel(self, dx: int, dy: int) -> None:
         if not dy:

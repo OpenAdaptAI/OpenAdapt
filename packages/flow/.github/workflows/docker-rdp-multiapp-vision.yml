@@ -1,0 +1,81 @@
+name: docker-rdp-multiapp-vision
+
+# This expensive real-protocol test runs only when its own campaign changes or
+# when a maintainer starts it. Core changes use the smaller RDP ladder during
+# pull-request feedback; release qualification can start this campaign once.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/docker-rdp-multiapp-vision.yml"
+      - "benchmark/rdp_multiapp/**"
+      - "tests/e2e/test_docker_rdp_multiapp_vision_e2e.py"
+      - "tests/test_rdp_multiapp_campaign_contract.py"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-rdp-multiapp-vision-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    # The acceptance contract runs 9 conditions x 3 trials through a real
+    # FreeRDP round trip. Keep one sequential job so conditions share the same
+    # qualified bundle and fixture lineage. Each trial has its own 10-minute
+    # fail-closed watchdog and writes an atomic checkpoint. The outer limit
+    # allows the complete 27-trial campaign to finish on a shared runner.
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the vision and RDP stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[rdp]"
+          pip check
+
+      - name: Build and start the RDP fixture
+        run: |
+          docker build -t oaflow-rdp-multiapp:latest benchmark/rdp_multiapp/fixture
+          mkdir -p "${RUNNER_TEMP}/rdp-multiapp-oracle"
+          docker run -d --name oaflow-rdp-multiapp --shm-size=1g \
+            -e RDP_MULTIAPP_ORACLE_ROOT=/oracle \
+            -v "${RUNNER_TEMP}/rdp-multiapp-oracle:/oracle" \
+            oaflow-rdp-multiapp:latest
+          sleep 22
+
+      - name: Run the real-RDP visual subset
+        run: |
+          mkdir -p "${RUNNER_TEMP}/rdp-multiapp-result"
+          python benchmark/rdp_multiapp/run_qualification.py \
+            --container oaflow-rdp-multiapp \
+            --oracle-root "${RUNNER_TEMP}/rdp-multiapp-oracle" \
+            --work-dir "${RUNNER_TEMP}/rdp-multiapp-work" \
+            --output "${RUNNER_TEMP}/rdp-multiapp-result/results.json"
+
+      - name: Upload exact result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rdp-multiapp-vision-subset
+          path: ${{ runner.temp }}/rdp-multiapp-result/
+          if-no-files-found: warn
+
+      - name: Print bounded fixture diagnostics
+        if: failure()
+        run: |
+          docker logs --tail 80 oaflow-rdp-multiapp || true
+          docker exec oaflow-rdp-multiapp sh -c \
+            'for path in /tmp/suite.log /tmp/client.log /tmp/shadow.log; do echo "== ${path} =="; tail -n 80 "${path}" 2>/dev/null || true; done'
+          ls -la "${RUNNER_TEMP}/rdp-multiapp-oracle" || true
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f oaflow-rdp-multiapp || true

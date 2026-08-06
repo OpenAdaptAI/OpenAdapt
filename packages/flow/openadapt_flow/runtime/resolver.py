@@ -151,6 +151,7 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         "template_ambiguity_suspicion_score": AMBIGUITY_SUSPICION_SCORE,
         "template_scales": list(DEFAULT_TEMPLATE_SCALES),
         "ambiguity": "unique-or-independent-retained-evidence",
+        "identity_armed_template_landmark_binding": "corroborate-and-snap",
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -544,6 +545,47 @@ def _select_geometry_estimates(
     return (px, py), confidence
 
 
+def _landmark_target_evidence(
+    anchor: Anchor,
+    screen_png: bytes,
+    vision: Any,
+) -> tuple[Optional[tuple[Point, float]], bool]:
+    """Return the target point established by retained landmark relations.
+
+    A template for an empty field can match at several horizontal offsets
+    inside the same control.  Moving an independently marked identity region
+    by that arbitrary template offset creates a false identity mismatch.  For
+    an identity-armed target, use unique retained labels to corroborate the
+    template and to recover the exact demonstrated action point.  Ambiguous
+    labels remain a typed refusal signal; absence remains an abstention.
+    """
+
+    estimates: list[Point] = []
+    confidences: list[float] = []
+    ambiguous = False
+    for landmark in anchor.landmarks:
+        try:
+            match = _find_landmark_text(vision, screen_png, landmark)
+        except AmbiguousOcrMatchError:
+            ambiguous = True
+            continue
+        if match is None:
+            continue
+        estimates.append(
+            _estimate_from_landmark(
+                landmark.relation,
+                (int(match.point[0]), int(match.point[1])),
+                landmark.distance_px,
+                landmark.dx_px,
+                landmark.dy_px,
+            )
+        )
+        confidences.append(float(match.confidence))
+    if not estimates:
+        return None, ambiguous
+    return _select_geometry_estimates(anchor, estimates, confidences), ambiguous
+
+
 def resolve(
     anchor: Anchor,
     screen_png: bytes,
@@ -602,6 +644,57 @@ def resolve(
     def elapsed_ms() -> float:
         return (time.monotonic() - t0) * 1000.0
 
+    landmark_evidence_loaded = False
+    landmark_evidence: Optional[tuple[Point, float]] = None
+    ambiguous_landmark = False
+
+    def identity_landmark_evidence() -> Optional[tuple[Point, float]]:
+        """Load landmark evidence once for this exact observed frame."""
+
+        nonlocal landmark_evidence_loaded, landmark_evidence, ambiguous_landmark
+        if not landmark_evidence_loaded:
+            landmark_evidence, ambiguous_landmark = _landmark_target_evidence(
+                anchor, screen_png, vision
+            )
+            landmark_evidence_loaded = True
+        return landmark_evidence
+
+    def identity_bound_template_point(
+        candidate: Point, candidate_region: Region
+    ) -> Optional[Point]:
+        """Corroborate and stabilize an identity-armed template candidate."""
+
+        if anchor.identifier_region is None or not anchor.landmarks:
+            return candidate
+        evidence = identity_landmark_evidence()
+        if evidence is None:
+            if ambiguous_landmark:
+                # An exact local template at the demonstrated action point
+                # does not translate the separate identifier region. A
+                # repeated nearby label is therefore irrelevant to that
+                # unchanged binding. Once the template point moves, however,
+                # those ambiguous relations are the only evidence that could
+                # justify moving the identity window, so refuse.
+                if candidate == anchor.click_point:
+                    return candidate
+                raise AmbiguousOcrMatchError(
+                    "OCR landmark evidence did not uniquely establish an "
+                    "identity-armed template target"
+                )
+            return candidate
+        landmark_point, _confidence = evidence
+        if (
+            math.hypot(
+                landmark_point[0] - candidate[0],
+                landmark_point[1] - candidate[1],
+            )
+            > GLOBAL_LANDMARK_TOLERANCE_PX
+        ):
+            return None
+        if not _point_in_region(landmark_point, candidate_region):
+            return None
+        return landmark_point
+
     # Rung 0: structural (DOM / UIA) — the strongest, deterministic evidence.
     # Tried FIRST, and only when a structural-capable backend is injected AND
     # the anchor carries a recorded structural locator. On a pixel-only
@@ -649,9 +742,17 @@ def resolve(
             prefer_near=(anchor.region[0], anchor.region[1]),
         )
         if match is not None:
+            bound_point = identity_bound_template_point(
+                _scaled_click_point(anchor, tuple(match.region)),
+                tuple(match.region),
+            )
+            if bound_point is None:
+                match = None
+        if match is not None:
+            assert bound_point is not None
             resolution = Resolution(
                 rung="template",
-                point=_scaled_click_point(anchor, tuple(match.region)),
+                point=bound_point,
                 confidence=float(match.confidence),
                 elapsed_ms=elapsed_ms(),
             )
@@ -676,7 +777,15 @@ def resolve(
             prefer_near=(anchor.region[0], anchor.region[1]),
         )
         if match is not None:
-            point = _scaled_click_point(anchor, tuple(match.region))
+            bound_point = identity_bound_template_point(
+                _scaled_click_point(anchor, tuple(match.region)),
+                tuple(match.region),
+            )
+            if bound_point is None:
+                match = None
+        if match is not None:
+            assert bound_point is not None
+            point = bound_point
             contradicted = _landmarks_contradict(anchor, point, screen_png, vision)
             if not contradicted:
                 resolution = Resolution(
@@ -751,36 +860,9 @@ def resolve(
             return resolution, tuple(match.region)
 
     # Rung 4: geometry from landmarks.
-    estimates: list[Point] = []
-    confidences: list[float] = []
-    ambiguous_landmark = False
-    for landmark in anchor.landmarks:
-        try:
-            lm_match = _find_landmark_text(vision, screen_png, landmark)
-        except AmbiguousOcrMatchError:
-            # An ambiguous landmark contributes no coordinate.  Other unique
-            # landmarks remain independently usable under the existing
-            # geometry contract, regardless of declaration order.
-            ambiguous_landmark = True
-            continue
-        if lm_match is None:
-            continue
-        estimates.append(
-            _estimate_from_landmark(
-                landmark.relation,
-                (int(lm_match.point[0]), int(lm_match.point[1])),
-                landmark.distance_px,
-                getattr(landmark, "dx_px", None),
-                getattr(landmark, "dy_px", None),
-            )
-        )
-        confidences.append(float(lm_match.confidence))
-    if estimates:
-        (px, py), geometry_confidence = _select_geometry_estimates(
-            anchor,
-            estimates,
-            confidences,
-        )
+    evidence = identity_landmark_evidence()
+    if evidence is not None:
+        (px, py), geometry_confidence = evidence
         region = _clamp_region_of_size(
             (px, py), (anchor.region[2], anchor.region[3]), viewport
         )

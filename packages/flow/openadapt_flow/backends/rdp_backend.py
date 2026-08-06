@@ -519,6 +519,24 @@ class FreeRDPBackend:
         """Bind app, version, and session from one fresh remote frame."""
 
         with self._input_lock:
+            # ``acquire_actuation_frame`` has already proved every configured
+            # environment marker against the exact PNG now leased for target
+            # resolution.  Re-running OCR here would add a second, potentially
+            # slow observation between resolution and input.  It cannot add
+            # evidence while the exact lease still holds; the input boundary
+            # below compares a newly captured canonical frame to this same
+            # lease.  Recheck the independent live session signal, then reuse
+            # the established environment tuple.
+            if (
+                self._actuation_lease_state == _LEASE_ARMED
+                and self._actuation_frame_png is not None
+                and self._qualification_environment is not None
+            ):
+                session = self._session_identity_from_frame(self._actuation_frame_png)
+                if session != self._qualification_environment[2]:
+                    self._invalidate_actuation_lease()
+                    return None
+                return self._qualification_environment
             png = self._fresh_identity_frame()
             if png is None:
                 return None
@@ -1062,6 +1080,7 @@ class FreeRDPBackend:
                 "RDP actuation lease was invalidated by another observation; "
                 "refusing input and requiring a fresh lease"
             )
+        exact_lease_ready = self._actuation_lease_state == _LEASE_ARMED
         if (
             self._readiness_probe is not None
             or self._actuation_lease_state == _LEASE_ARMED
@@ -1091,17 +1110,7 @@ class FreeRDPBackend:
                     "RDP session identity changed or became unverifiable after "
                     "capture; refusing input"
                 )
-            if self._qualification_environment is not None and (
-                self._qualification_environment_from_frame(current_png)
-                != self._qualification_environment
-            ):
-                self._invalidate_actuation_lease()
-                raise RuntimeError(
-                    "qualified application, version, environment, or session "
-                    "changed after "
-                    "target resolution; refusing input"
-                )
-            if self._actuation_lease_state == _LEASE_ARMED:
+            if exact_lease_ready:
                 digest = self._canonical_frame_digest(current_img)
                 if self._last_frame_digest is None or digest != self._last_frame_digest:
                     changed_pixel_count, changed_bbox = self._frame_difference(
@@ -1115,12 +1124,38 @@ class FreeRDPBackend:
                         changed_bbox=changed_bbox,
                         frame_size=current,
                     )
-                self._actuation_lease_state = _LEASE_NONE
-                self._actuation_frame_png = None
+                # The complete qualification environment was checked against
+                # this exact leased image in ``acquire_actuation_frame``.  The
+                # canonical-pixel comparison above proves that the current
+                # framebuffer is the same image.  Do not repeat OCR probes
+                # here: they can make the image stale after the final check,
+                # although no input has crossed the transport boundary.
+            elif self._qualification_environment is not None and (
+                self._qualification_environment_from_frame(current_png)
+                != self._qualification_environment
+            ):
+                self._invalidate_actuation_lease()
+                raise RuntimeError(
+                    "qualified application, version, environment, or session "
+                    "changed after "
+                    "target resolution; refusing input"
+                )
         # framebuffer/readiness work can block on the network; recheck at the
         # last common point before an input edge.
         if self._qualification_input_guard is not None:
             self._qualification_input_guard()
+        if exact_lease_ready:
+            # The guard may invalidate a lease (for example after a changed
+            # live session signal).  Consume it only after that final guard
+            # succeeds, so an RDP qualification observer can reuse its exact
+            # already-validated frame instead of recapturing and OCRing again.
+            if self._actuation_lease_state != _LEASE_ARMED:
+                raise RuntimeError(
+                    "RDP actuation lease was invalidated by the qualification "
+                    "input guard; refusing input"
+                )
+            self._actuation_lease_state = _LEASE_NONE
+            self._actuation_frame_png = None
         self._assert_frame_fresh()
 
     def set_qualification_input_guard(

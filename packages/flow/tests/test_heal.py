@@ -22,6 +22,7 @@ from openadapt_flow.ir import (
     Workflow,
 )
 from openadapt_flow.runtime.heal import build_heal_event, write_healed_bundle
+from openadapt_flow.runtime.identity_template import build_identity_template
 from openadapt_flow.runtime.replayer import Replayer
 
 VIEWPORT = (300, 200)
@@ -358,6 +359,59 @@ def test_build_heal_event_clamps_region_at_frame_edge():
     # Nothing recognized on the frame -> the healed anchor carries no
     # identity context (the check is honestly disabled, never stale).
     assert event.new_anchor.context_text is None
+
+
+def test_heal_translates_and_refreshes_marked_identifier_region():
+    step = ocr_anchored_step()
+    assert step.anchor is not None
+    step.anchor.identifier_crop = "templates/identifiers/s1.png"
+    step.anchor.identifier_region = (10, 90, 240, 40)
+    vision = FakeVision()
+    vision.ocr_lines = [
+        OcrLine("REQ-LIVE-2048", region=(20, 132, 90, 18), confidence=0.99),
+        OcrLine("REC-2048", region=(120, 132, 70, 18), confidence=0.99),
+        OcrLine("Unrelated", region=(20, 20, 70, 18), confidence=0.99),
+    ]
+    resolution = Resolution(
+        rung="template_global", point=(110, 145), confidence=0.99, elapsed_ms=1.0
+    )
+
+    event, _crop = build_heal_event(
+        step,
+        resolution,
+        (100, 140, 50, 20),
+        make_png(VIEWPORT),
+        vision,
+    )
+
+    assert event.new_anchor.identifier_region == (10, 130, 240, 40)
+    assert event.new_anchor.context_text == "REQ-LIVE-2048 REC-2048"
+
+
+def test_heal_keeps_phi_free_pixel_identity_without_plaintext_context():
+    step = ocr_anchored_step()
+    assert step.anchor is not None
+    step.anchor.context_text = None
+    step.anchor.identity_template = build_identity_template(
+        "REQ-LIVE-2048 REC-2048", salt_hex="11" * 16
+    )
+    step.anchor.identifier_crop = "templates/identifiers/s1.png"
+    step.anchor.identifier_region = (10, 90, 240, 40)
+    resolution = Resolution(
+        rung="template_global", point=(110, 145), confidence=0.99, elapsed_ms=1.0
+    )
+
+    event, _crop = build_heal_event(
+        step,
+        resolution,
+        (100, 140, 50, 20),
+        make_png(VIEWPORT),
+        FakeVision(),
+    )
+
+    assert event.new_anchor.identifier_region == (10, 130, 240, 40)
+    assert event.new_anchor.context_text is None
+    assert event.new_anchor.identity_template == step.anchor.identity_template
 
 
 def test_write_healed_bundle_direct(tmp_path):

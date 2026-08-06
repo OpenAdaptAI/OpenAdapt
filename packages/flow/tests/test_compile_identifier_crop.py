@@ -48,6 +48,7 @@ from openadapt_flow.ir import ActionKind, Resolution, Workflow
 from openadapt_flow.runtime import identity as identity_mod
 from openadapt_flow.runtime.identity_template import verify_template_identity
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.runtime.resolver import resolve
 from openadapt_flow.vision.ocr import OcrLine
 
 VIEWPORT = (1280, 800)
@@ -216,6 +217,49 @@ def test_event_marked_region_wins_and_forces_crop_despite_structured(
     assert step.identifier_crop_missing_reason is None
     assert anchor.identifier_region == tuple(marked)
     assert (bundle / anchor.identifier_crop).is_file()
+
+
+def test_action_scoped_identifier_region_produces_movable_visual_target(
+    tmp_path: Path,
+) -> None:
+    """A marked row resolves by a stable key after it moves on the screen."""
+
+    marked = [60, ROW_Y - 24, 1060, 40]
+    recording, bundle = _build_recording(
+        tmp_path, with_structured=False, event_identifier_region=marked
+    )
+
+    anchor = _click_step(
+        compile_recording(recording, bundle, name="complete-visual-target")
+    ).anchor
+
+    assert anchor is not None
+    assert anchor.identifier_crop is not None
+    assert anchor.template != anchor.identifier_crop
+    assert anchor.identifier_region == tuple(marked)
+    assert anchor.landmarks == []
+
+    rx, ry, rw, rh = anchor.region
+    mx, my, mw, mh = marked
+    assert mx <= rx < rx + rw <= mx + mw
+    assert my <= ry < ry + rh <= my + mh
+
+    shifted = _blank()
+    _draw_text(shifted, 80, ROW_Y + 88, IDENTITY_TEXT)
+    _draw_button(shifted, 980, ROW_Y + 58, 120, 44, "Open")
+    assert anchor.template is not None
+    resolved = resolve(
+        anchor,
+        _png(shifted),
+        vision,
+        template_png=(bundle / anchor.template).read_bytes(),
+    )
+
+    assert resolved is not None
+    resolution, _matched_region = resolved
+    assert resolution.rung in {"template", "template_global"}
+    assert abs(resolution.point[0] - 1040) <= 2
+    assert abs(resolution.point[1] - (ROW_Y + 80)) <= 2
 
 
 def test_meta_marked_region_applies_to_pixel_recording(tmp_path: Path) -> None:

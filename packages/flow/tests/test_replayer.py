@@ -21,6 +21,7 @@ from openadapt_flow.ir import (
     Landmark,
     Postcondition,
     PostconditionKind,
+    Resolution,
     RunReport,
     Step,
     Workflow,
@@ -735,6 +736,55 @@ def test_consequential_click_uses_lease_when_backend_has_no_typed_receipt(
     # production actuation path.
     assert report.results[0].actuation is None
     assert report.results[0].delivery_receipt is None
+
+
+def test_identity_armed_remote_click_retains_closed_guarded_actuation(
+    bundle, run_dir, monkeypatch
+):
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+    ]
+    step = click_step(risk="reversible")
+    step.identity_armed = True
+    assert step.anchor is not None
+    step.anchor.context_text = "Expected record"
+    workflow = Workflow(
+        name="wf", surface="rdp", execution_mode="external", steps=[step]
+    )
+    replayer = Replayer(backend, vision=vision)
+    monkeypatch.setattr(
+        replayer,
+        "_verify_identity",
+        lambda *args, **kwargs: IdentityCheck(
+            status="verified", expected="record", observed="record"
+        ),
+    )
+
+    report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+
+    assert report.success is True
+    assert report.results[0].actuation == "remote_guarded"
+    assert report.results[0].delivery_receipt is not None
+    assert backend.actions == [("click", 110, 105, False)]
+
+
+def test_identity_armed_browser_step_does_not_change_business_risk():
+    """Identity metadata alone must not make a reversible browser step a write."""
+
+    step = click_step(risk="reversible", ocr_text="Details")
+    step.identity_armed = True
+    assert step.anchor is not None
+    step.anchor.context_text = "Expected record"
+    workflow = Workflow(name="wf", surface="web", steps=[step])
+    replayer = Replayer(FakeBackend(), vision=FakeVision())
+
+    assert replayer._step_is_consequential(step, workflow) is False
+    assert replayer._step_needs_consequential_revalidation(step, workflow) is False
+    assert replayer._requires_atomic_identity_pointer(step, workflow) is False
 
 
 def test_consequential_lease_click_still_refuses_a_changed_frame(bundle, run_dir):
@@ -1948,6 +1998,97 @@ def test_scroll_step_scrolls_backend(bundle, run_dir):
     assert report.heal_count == 0
 
 
+def test_remote_scroll_acquires_fresh_one_use_frame_before_input(bundle, run_dir):
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    workflow = Workflow(name="wf", steps=[scroll_step()])
+
+    report = Replayer(backend, vision=FakeVision()).run(
+        workflow, bundle_dir=bundle, run_dir=run_dir
+    )
+
+    assert report.success is True
+    assert backend.acquire_count == 1
+    assert backend.actions == [("scroll", 0, 400)]
+
+
+def test_remote_scroll_preflight_refusal_sends_no_input(bundle, run_dir):
+    class RefusingRemoteScrollBackend(RemoteLeaseBackend):
+        def acquire_actuation_frame(self):
+            self.acquire_count += 1
+            raise RuntimeError("remote session changed")
+
+    frame = make_png()
+    backend = RefusingRemoteScrollBackend(initial_frame=frame, fresh_frame=frame)
+    workflow = Workflow(name="wf", steps=[scroll_step()])
+
+    report = Replayer(backend, vision=FakeVision()).run(
+        workflow, bundle_dir=bundle, run_dir=run_dir
+    )
+
+    assert report.success is False
+    assert backend.acquire_count == 1
+    assert backend.actions == []
+    assert report.results[0].delivery_attempted is False
+    assert report.results[0].error is not None
+
+
+def test_closed_loop_remote_scroll_orders_fresh_lease_before_final_gates(
+    bundle, run_dir, monkeypatch
+):
+    events = []
+
+    class OrderedRemoteScrollBackend(RemoteLeaseBackend):
+        def acquire_actuation_frame(self):
+            events.append("acquire")
+            return super().acquire_actuation_frame()
+
+        def scroll(self, dx, dy):
+            events.append("scroll")
+            return super().scroll(dx, dy)
+
+    backend = OrderedRemoteScrollBackend(
+        initial_frame=make_png(), fresh_frame=make_png()
+    )
+    replayer = Replayer(backend, vision=FakeVision())
+    monkeypatch.setattr(
+        replayer,
+        "_implicit_scroll_target_ready",
+        lambda *args, **kwargs: events.append("readiness") or False,
+    )
+    monkeypatch.setattr(
+        replayer,
+        "_delivery_authorization_refusal",
+        lambda *args, **kwargs: events.append("authorization") or None,
+    )
+    monkeypatch.setattr(
+        replayer,
+        "_require_qualification_environment_current",
+        lambda: events.append("environment"),
+    )
+
+    report = replayer.run(
+        Workflow(name="wf", steps=[scroll_step(), click_step()]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert events == [
+        "readiness",
+        "acquire",
+        "authorization",
+        "environment",
+        "scroll",
+        "readiness",
+        "acquire",
+        "authorization",
+        "environment",
+        "scroll",
+        "readiness",
+    ]
+
+
 def scroll_step(step_id="sc1", dx=0, dy=400) -> Step:
     return Step(
         id=step_id,
@@ -1982,6 +2123,28 @@ def test_closed_loop_scroll_stops_when_next_anchor_resolves(bundle, run_dir):
     assert report.rung_counts == {"template": 1}
 
 
+def test_closed_loop_scroll_waits_for_delayed_visual_transition(bundle, run_dir):
+    """A delayed remote wheel packet cannot make the old frame look settled."""
+
+    vision = FakeVision()
+    target = Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+    vision.template_results = [None, None, target, target]
+    vision.pixels_changed_results = [False, False, True]
+    backend = FakeBackend()
+    workflow = Workflow(name="wf", steps=[scroll_step(), click_step()])
+
+    report = Replayer(backend, vision=vision, poll_interval_s=0.001).run(
+        workflow, bundle_dir=bundle, run_dir=run_dir
+    )
+
+    assert report.success is True
+    assert backend.actions == [
+        ("scroll", 0, 400),
+        ("click", 110, 105, False),
+    ]
+    assert len(vision.pixels_changed_calls) >= 3
+
+
 def test_closed_loop_scroll_noops_when_anchor_already_in_view(bundle, run_dir):
     """The pre-scroll probe resolving means the target is already on screen:
     the SCROLL step must not scroll at all."""
@@ -1995,6 +2158,55 @@ def test_closed_loop_scroll_noops_when_anchor_already_in_view(bundle, run_dir):
     )
     assert report.success is True
     assert backend.actions == [("click", 110, 105, False)]
+
+
+def test_closed_loop_scroll_ocr_ambiguity_continues_but_click_halts(
+    bundle, run_dir, monkeypatch
+):
+    """Only the non-actuating readiness probe can treat ambiguity as not ready."""
+
+    target = (
+        Resolution(
+            rung="ocr",
+            point=(110, 105),
+            confidence=0.95,
+            elapsed_ms=1.0,
+        ),
+        (100, 100, 50, 20),
+    )
+    outcomes = iter(
+        [
+            AmbiguousOcrMatchError("two off-screen candidates"),
+            target,
+            AmbiguousOcrMatchError("two live click candidates"),
+        ]
+    )
+
+    def scripted_resolve(*args, **kwargs):
+        del args, kwargs
+        outcome = next(outcomes)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(
+        "openadapt_flow.runtime.replayer.resolve",
+        scripted_resolve,
+    )
+    backend = FakeBackend()
+    workflow = Workflow(name="wf", steps=[scroll_step(), click_step()])
+
+    report = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.actions == [("scroll", 0, 400)]
+    assert any(
+        "two live click candidates" in (result.error or "") for result in report.results
+    )
 
 
 def test_closed_loop_scroll_requires_armed_target_identity(
@@ -2106,7 +2318,8 @@ def test_consequential_remote_scroll_reacquires_each_wheel_edge(bundle, run_dir)
 
     assert report.success is False
     assert backend.actions == [("scroll", 0, -400), ("scroll", 0, -400)]
-    assert backend.acquire_count == 3  # outer preflight plus one per wheel edge
+    # One outer step preflight, then identity and final wheel leases per edge.
+    assert backend.acquire_count == 5
 
 
 def test_consecutive_scroll_steps_share_the_loop(bundle, run_dir):
@@ -2291,6 +2504,39 @@ def test_consequential_remote_reruns_identity_on_fresh_frame(bundle, run_dir):
     assert backend.actions == []
     assert report.results[0].identity.status == "mismatch"
     assert "Identity check failed" in report.results[0].error
+
+
+def test_fresh_pre_actuation_identity_loss_has_typed_refusal_and_zero_input(
+    bundle, run_dir
+):
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
+    ]
+    vision.ocr_results = [
+        [OcrLine("Jane Sample Knee pain referral High")],
+        [OcrLine("Taylor Duplicate Knee pain referral High")],
+    ]
+    step = context_click_step(
+        "Jane Sample Knee pain referral High", risk="irreversible"
+    )
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    result = report.results[0]
+    assert report.success is False
+    assert backend.actions == []
+    assert result.delivery_attempted is False
+    assert result.safety_refusal_evidence is not None
+    assert result.safety_refusal_evidence.stage == "identity_verification"
+    assert result.safety_refusal_evidence.code == "identity_conflict"
 
 
 def test_identity_verified_clicks_normally(bundle, run_dir):
@@ -3242,6 +3488,62 @@ def test_visual_click_crop_does_not_narrow_following_type_verification(bundle, r
     # Treating the visual template crop as field bounds would produce
     # (4, 4, 44, 40) here and hide the typed value.
     assert vision.pixels_changed_calls == [(0, 0, 300, 200)]
+
+
+def test_remote_visual_type_revalidation_does_not_use_template_crop_as_field_bounds(
+    bundle, run_dir
+):
+    """The final remote resolve retains target evidence, not field bounds.
+
+    A compact template can correctly locate a wide remote field while the
+    typed value renders outside that crop. The visual verifier must use the
+    point-centred readback window after the post-focus fresh-frame resolve.
+    """
+
+    class RegionAwareVision(FakeVision):
+        def ocr(self, screen_png, *, region=None):
+            del screen_png
+            if region == (0, 0, 300, 200):
+                return [OcrLine("Massachusetts")]
+            return []
+
+    vision = RegionAwareVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
+        for _ in range(3)
+    ]
+    vision.pixels_changed_results = [True]
+    frame = make_png()
+    backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
+    backend._text_value_supported = False
+    workflow = Workflow(
+        name="remote-visual-type",
+        surface="rdp",
+        execution_mode="external",
+        steps=[
+            Step(
+                id="t1",
+                intent="type the governed value",
+                action=ActionKind.TYPE,
+                text="Massachusetts",
+                anchor=click_step().anchor,
+                risk="irreversible",
+            )
+        ],
+    )
+
+    report = Replayer(backend, vision=vision).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is True
+    assert report.results[0].input_verified is True
+    assert backend.actions == [
+        ("click", 110, 105, False),
+        ("type", "Massachusetts"),
+    ]
 
 
 def test_type_verification_prefers_exact_structural_field_region() -> None:

@@ -332,6 +332,70 @@ def _best_target_text(
     return crop_text
 
 
+def _action_scoped_target_line(
+    frame_lines: list[OcrLine],
+    marked_region: Region,
+    *,
+    frame_size: tuple[int, int],
+    reference_date: Optional[date],
+) -> Optional[tuple[Region, str]]:
+    """Select one stable visual locator from an operator-marked action row.
+
+    A complete marked row is strong identity evidence, but it is often too
+    wide for strict template matching after the row moves. Prefer one unique,
+    stable OCR line inside the row as the visual template. Identifier-shaped
+    text wins when available. The recorded click keeps its offset from this
+    locator, so replay can find the row by its stable key and still actuate the
+    demonstrated control anywhere else inside that row.
+    """
+
+    rx, ry, rw, rh = marked_region
+    normalized_counts: Counter[str] = Counter(
+        normalize_text(line.text.strip())
+        for line in frame_lines
+        if line.confidence >= MIN_OCR_CONFIDENCE and line.text.strip()
+    )
+    candidates: list[tuple[tuple[int, int, int, float], OcrLine, str]] = []
+    for line in frame_lines:
+        text = line.text.strip()
+        if line.confidence < MIN_OCR_CONFIDENCE or not text:
+            continue
+        x, y, w, h = line.region
+        center_x = x + w // 2
+        center_y = y + h // 2
+        if not (rx <= center_x < rx + rw and ry <= center_y < ry + rh):
+            continue
+        if volatility.is_volatile_line(text, reference_date=reference_date):
+            continue
+        normalized = normalize_text(text)
+        if normalized_counts[normalized] != 1:
+            continue
+        compact = re.sub(r"\W+", "", text)
+        if len(compact) < MIN_TEXT_PRESENT_LEN:
+            continue
+        has_alpha = any(char.isalpha() for char in compact)
+        has_digit = any(char.isdigit() for char in compact)
+        score = (
+            int(has_alpha and has_digit),
+            int(has_digit),
+            len(compact),
+            float(line.confidence),
+        )
+        candidates.append((score, line, text))
+    if not candidates:
+        return None
+
+    _score, selected, text = max(candidates, key=lambda candidate: candidate[0])
+    x, y, w, h = selected.region
+    frame_w, frame_h = frame_size
+    pad = 4
+    x0 = max(0, rx, x - pad)
+    y0 = max(0, ry, y - pad)
+    x1 = min(frame_w, rx + rw, x + w + pad)
+    y1 = min(frame_h, ry + rh, y + h + pad)
+    return (x0, y0, x1 - x0, y1 - y0), text
+
+
 def _landmarks_for(
     frame_lines: list[OcrLine],
     crop_region: Region,
@@ -1756,6 +1820,7 @@ def compile_recording(
             # can segment or recognize identical pixels differently (notably
             # l/1 and O/0), while replacing the original row context can drop
             # names/DOBs on some OCR builds.
+            cropped_context: Optional[str] = None
             if identifier_region is not None:
                 cropped_context = identifier_text_from_lines(
                     frame_lines,
@@ -1765,15 +1830,44 @@ def compile_recording(
                 )
                 if cropped_context is not None:
                     context_text = cropped_context
+            anchor_template = template_rel
+            anchor_region = crop_region
+            anchor_ocr_text = ocr_text
+            anchor_landmarks = landmarks
+            if (
+                event_marked is not None
+                and identifier_crop_rel is not None
+                and identifier_region is not None
+            ):
+                rx, ry, rw, rh = identifier_region
+                if rx <= click[0] < rx + rw and ry <= click[1] < ry + rh:
+                    selected_target = _action_scoped_target_line(
+                        frame_lines,
+                        identifier_region,
+                        frame_size=(frame.shape[1], frame.shape[0]),
+                        reference_date=reference_date,
+                    )
+                    if selected_target is not None:
+                        anchor_region, anchor_ocr_text = selected_target
+                        (bundle / template_rel).write_bytes(
+                            _crop_png(before_png, anchor_region)
+                        )
+                    else:
+                        # A marked image-only row still provides a complete
+                        # visual target when no stable unique text is present.
+                        anchor_template = identifier_crop_rel
+                        anchor_region = identifier_region
+                        anchor_ocr_text = cropped_context or ocr_text
+                    anchor_landmarks = []
             anchor = Anchor(
-                template=template_rel,
-                region=crop_region,
+                template=anchor_template,
+                region=anchor_region,
                 click_point=click,
-                ocr_text=ocr_text,
+                ocr_text=anchor_ocr_text,
                 context_text=context_text,
                 structured_identity=structured_identity,
                 structural=structural,
-                landmarks=landmarks,
+                landmarks=anchor_landmarks,
                 identifier_crop=identifier_crop_rel,
                 identifier_region=identifier_region,
             )

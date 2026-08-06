@@ -42,6 +42,26 @@ def _default_band_verifier(recorded: str, observed: str) -> str:
     return identity_mod.verify_target_identity(recorded, observed).status
 
 
+def _identifier_region_geometry_preserved(
+    old_anchor: Anchor, new_anchor: Anchor
+) -> bool:
+    """Accept only a rigid locator translation of pixel identity evidence."""
+
+    old = old_anchor.identifier_region
+    new = new_anchor.identifier_region
+    if old == new:
+        return True
+    if old is None or new is None:
+        return False
+    ox, oy, ow, oh = old
+    nx, ny, nw, nh = new
+    return bool(
+        (ow, oh) == (nw, nh)
+        and ox - old_anchor.click_point[0] == nx - new_anchor.click_point[0]
+        and oy - old_anchor.click_point[1] == ny - new_anchor.click_point[1]
+    )
+
+
 class PreservationVerdict(BaseModel):
     """Whether a heal preserved the step's identity band."""
 
@@ -86,14 +106,17 @@ def identity_preserved(
     # A program-level revision checks every surviving step, including anchors
     # the revision did not touch.  An unchanged PHI-free identity template has
     # no readable band to feed through the live-verification path below, but it
-    # also cannot have been weakened.  Admit that narrow no-op case only when
-    # *all* identity-bearing anchor fields are value-identical.  Locator fields
-    # are deliberately excluded: moving the region/click point or refreshing
-    # locator text is the legitimate work of a heal.
+    # also cannot have been weakened. Admit that narrow case only when all
+    # identity evidence stays identical and an identifier region, if present,
+    # keeps its exact size and offset from the translated click point. Locator
+    # fields remain free to move or refresh.
+    unchanged_identity_fields = tuple(
+        field for field in IDENTITY_FIELDS if field != "identifier_region"
+    )
     if all(
         getattr(old_anchor, field) == getattr(new_anchor, field)
-        for field in IDENTITY_FIELDS
-    ):
+        for field in unchanged_identity_fields
+    ) and _identifier_region_geometry_preserved(old_anchor, new_anchor):
         return PreservationVerdict(
             preserved=True,
             reason="identity evidence unchanged",
@@ -128,12 +151,16 @@ def identity_preserved(
             reason="heal changed identity_template evidence",
         )
 
-    for field in ("identifier_crop", "identifier_region"):
-        if getattr(old_anchor, field) != getattr(new_anchor, field):
-            return PreservationVerdict(
-                preserved=False,
-                reason=f"heal changed {field} identity evidence",
-            )
+    if old_anchor.identifier_crop != new_anchor.identifier_crop:
+        return PreservationVerdict(
+            preserved=False,
+            reason="heal changed identifier_crop identity evidence",
+        )
+    if not _identifier_region_geometry_preserved(old_anchor, new_anchor):
+        return PreservationVerdict(
+            preserved=False,
+            reason="heal changed identifier_region identity evidence",
+        )
 
     # (2) structured identity may never be added, dropped, or changed by a
     # heal. Adding a new identity tier is still an identity revision and needs

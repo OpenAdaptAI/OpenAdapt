@@ -107,6 +107,8 @@ def _recontext(
     region: Region,
     click_point: Point,
     frame: tuple[int, int],
+    *,
+    identifier_region: Region | None = None,
 ) -> str | None:
     """Re-derive the anchor's identity context band from the live frame.
 
@@ -128,6 +130,12 @@ def _recontext(
         lines = vision.ocr(frame_png)
     except Exception:
         return None
+    if identifier_region is not None:
+        return identity_mod.identifier_text_from_lines(
+            lines,
+            region=identifier_region,
+            reference_date=date.today(),
+        )
     return identity_mod.context_from_lines(
         lines,
         exclude_region=region,
@@ -186,13 +194,40 @@ def build_heal_event(
 
     crop_png = _crop_png(frame_png, new_region)
     new_text = _reocr_text(vision, frame_png, new_region, click_y=resolution.point[1])
-    new_context = _recontext(vision, frame_png, new_region, resolution.point, frame)
+    translated_identifier_region = old_anchor.identifier_region
+    if translated_identifier_region is not None:
+        ix, iy, iw, ih = translated_identifier_region
+        translated_identifier_region = (
+            ix + resolution.point[0] - old_anchor.click_point[0],
+            iy + resolution.point[1] - old_anchor.click_point[1],
+            iw,
+            ih,
+        )
+    if (
+        old_anchor.context_text is None
+        and old_anchor.identity_template is not None
+        and old_anchor.identifier_crop is not None
+        and translated_identifier_region is not None
+    ):
+        # The PHI-free template and the unchanged pixel crop remain the
+        # identity evidence. Do not add live plaintext to the healed anchor.
+        new_context = None
+    else:
+        new_context = _recontext(
+            vision,
+            frame_png,
+            new_region,
+            resolution.point,
+            frame,
+            identifier_region=translated_identifier_region,
+        )
     new_anchor = old_anchor.model_copy(
         update={
             "region": new_region,
             "click_point": resolution.point,
             "ocr_text": new_text if new_text is not None else old_anchor.ocr_text,
             "context_text": new_context,
+            "identifier_region": translated_identifier_region,
         }
     )
     event = HealEvent(

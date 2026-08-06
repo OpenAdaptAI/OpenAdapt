@@ -1,0 +1,17 @@
+name: rdp-multiapp-qualified
+description: >-
+  Fail-closed policy for the synthetic real-RDP multi-window campaign. Every
+  consequential pointer action carries pixel identity, a screen postcondition,
+  an independent persisted-effect contract, and an idempotency key.
+
+prohibit_unarmed_clicks: true
+require_identity_for:
+  - entity_navigation
+  - write
+require_system_effects_for:
+  - write
+require_idempotency_key_for:
+  - write
+prohibit_unconfirmed_effect_bindings: true
+require_screen_postconditions_for:
+  - write

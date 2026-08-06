@@ -399,6 +399,47 @@ def test_rdp_qualification_environment_rechecks_version_on_actuation_frame() -> 
     assert transport.pointer_events == []
 
 
+def test_rdp_qualification_guard_reuses_exact_lease_before_input() -> None:
+    """A qualified RDP click must not spend its exact lease on repeat OCR."""
+
+    transport = FakeRDPTransport(app_screens())
+    probe_calls = {"application": 0, "version": 0, "environment": 0}
+
+    def probe(kind: str):
+        def check(_png: bytes) -> bool:
+            probe_calls[kind] += 1
+            return True
+
+        return check
+
+    backend = FreeRDPBackend(
+        transport,
+        application_marker="Accuro",
+        application_marker_probe=probe("application"),
+        application_version_marker="8.0.0.3",
+        application_version_marker_probe=probe("version"),
+        environment_marker="clinic-rdp-environment",
+        environment_marker_probe=probe("environment"),
+        session_marker="clinic-rdp-qualification",
+        session_marker_probe=lambda _png: True,
+    )
+    assert backend.qualification_environment_identity() is not None
+    leased = backend.acquire_actuation_frame()
+    calls_after_acquire = dict(probe_calls)
+    backend.set_qualification_input_guard(backend.qualification_environment_identity)
+
+    backend.click_guarded(
+        *BUTTON_CENTER,
+        expected_frame_sha256=hashlib.sha256(leased).hexdigest(),
+    )
+
+    assert probe_calls == calls_after_acquire
+    assert transport.pointer_events == [
+        (*BUTTON_CENTER, "left", True),
+        (*BUTTON_CENTER, "left", False),
+    ]
+
+
 def test_rdp_context_observation_is_bound_to_frame_then_refuses_mutated_input() -> None:
     transport = FakeRDPTransport(app_screens())
     backend = FreeRDPBackend(

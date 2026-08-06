@@ -25,10 +25,12 @@ approved write remains visibly unverified and still must pass its screen
 postconditions; direct API writes always require an independent verifier. This
 path makes ZERO model calls — effect verification reads the system of record.
 
-Steps that succeed via any rung other than ``template`` are healed: the
-anchor is refreshed from the live frame, the heal is recorded under
-``run_dir/heals/<step_id>/``, and — when ``save_healed_to`` is set — a full
-healed bundle is written.
+Steps that succeed via any rung other than ``template`` produce a governed
+repair. An ungoverned local run can apply the refreshed anchor in memory. An
+exactly authorized run records a promotable candidate without changing its
+admitted program. Repair evidence is written under
+``run_dir/heals/<step_id>/``; an explicit later lifecycle can qualify and
+promote a new bundle.
 """
 
 from __future__ import annotations
@@ -7415,6 +7417,35 @@ class Replayer:
             and authorization.requires_verified_identity(step.id)
         )
 
+    def _step_requires_remote_identity_binding(
+        self, step: Step, workflow: Workflow
+    ) -> bool:
+        """Whether an external opaque-remote step needs an identity lease.
+
+        ``identity_armed`` says that the remote action must remain bound to the
+        identity that was verified on the exact live frame. It does not change
+        the business-risk classification of the action on browser or native
+        surfaces.
+        """
+
+        return (
+            step.identity_armed is True
+            and workflow.surface in ("rdp", "citrix")
+            and workflow.execution_mode == "external"
+            and isinstance(self.backend, RemoteActuationBackend)
+        )
+
+    def _step_requires_remote_guarded_actuation(
+        self, step: Step, workflow: Workflow
+    ) -> bool:
+        """Whether a remote input edge must use the fresh-frame guard path."""
+
+        return isinstance(self.backend, RemoteActuationBackend) and (
+            self._step_is_consequential(step, workflow)
+            or self._step_requires_remote_identity_binding(step, workflow)
+            or self.qualification_fault_driver is not None
+        )
+
     def _selection_contract_error(
         self, step: Step, workflow: Workflow
     ) -> Optional[str]:
@@ -7498,10 +7529,11 @@ class Replayer:
             # fresh remote lease for those actions only during the fault run,
             # so ordinary demo replay keeps its reversible fast path.
             return True
-        return self._step_is_consequential(step, workflow) and (
-            isinstance(self.backend, RemoteActuationBackend)
-            or self._step_has_identity_contract(step, workflow)
-        )
+        if self._step_requires_remote_guarded_actuation(step, workflow):
+            return True
+        return self._step_is_consequential(
+            step, workflow
+        ) and self._step_has_identity_contract(step, workflow)
 
     def _requires_atomic_identity_pointer(self, step: Step, workflow: Workflow) -> bool:
         """Whether a pointer edge may not cross an unleased identity boundary.
@@ -7522,7 +7554,10 @@ class Replayer:
                 ActionKind.TYPE,
                 ActionKind.SELECT_OPTION,
             )
-            and self._step_is_consequential(step, workflow)
+            and (
+                self._step_is_consequential(step, workflow)
+                or self._step_requires_remote_identity_binding(step, workflow)
+            )
             and self._step_has_identity_contract(step, workflow)
         )
 
@@ -7539,7 +7574,10 @@ class Replayer:
                 ActionKind.TYPE,
                 ActionKind.SELECT_OPTION,
             )
-            and self._step_is_consequential(step, workflow)
+            and (
+                self._step_is_consequential(step, workflow)
+                or self._step_requires_remote_identity_binding(step, workflow)
+            )
             and self._step_has_identity_contract(step, workflow)
         )
 
@@ -7726,7 +7764,10 @@ class Replayer:
         )
         focused_element_backend = (
             arm_keyboard
-            and self._step_is_consequential(step, workflow)
+            and (
+                self._step_is_consequential(step, workflow)
+                or self._step_requires_remote_identity_binding(step, workflow)
+            )
             and isinstance(self.backend, RemoteActuationBackend)
             and isinstance(self.backend, FocusedElementActuationLeaseBackend)
         )
@@ -7934,6 +7975,17 @@ class Replayer:
                     result,
                     evidence_run_dir=run_dir,
                 )
+                if error is not None and result.identity is not None:
+                    code: Literal["identity_conflict", "identity_unverifiable"] = (
+                        "identity_conflict"
+                        if result.identity.status == "mismatch"
+                        else "identity_unverifiable"
+                    )
+                    result.safety_refusal_evidence = SafetyRefusalEvidence(
+                        stage="identity_verification",
+                        code=code,
+                        detector_input_sha256=sha256_bytes(fresh_png),
+                    )
             except Exception:
                 if guarded_coordinate:
                     self._cancel_guarded_coordinate()
@@ -8598,11 +8650,8 @@ class Replayer:
                 result.delivery_receipt = delivery_receipt
                 result.actuation = "uia" if delivery_receipt.native else "dom"
             else:
-                remote_consequential = isinstance(
-                    self.backend, RemoteActuationBackend
-                ) and (
-                    self._step_is_consequential(step, workflow)
-                    or self.qualification_fault_driver is not None
+                remote_consequential = self._step_requires_remote_guarded_actuation(
+                    step, workflow
                 )
                 typed_remote = isinstance(
                     self.backend,
@@ -8723,11 +8772,8 @@ class Replayer:
             requires_atomic_identity = self._requires_atomic_identity_pointer(
                 step, workflow
             )
-            remote_consequential = isinstance(
-                self.backend, RemoteActuationBackend
-            ) and (
-                self._step_is_consequential(step, workflow)
-                or self.qualification_fault_driver is not None
+            remote_consequential = self._step_requires_remote_guarded_actuation(
+                step, workflow
             )
             if remote_consequential and not isinstance(
                 self.backend,
@@ -8894,16 +8940,9 @@ class Replayer:
                     ),
                 )
                 result.actuation = "dom"
-            elif (
-                isinstance(self.backend, RemoteActuationBackend)
-                and (
-                    self._step_is_consequential(step, workflow)
-                    or self.qualification_fault_driver is not None
-                )
-                and (
-                    isinstance(self.backend, GuardedRemotePointerActionBackend)
-                    or self._typed_remote_receipt_required()
-                )
+            elif self._step_requires_remote_guarded_actuation(step, workflow) and (
+                isinstance(self.backend, GuardedRemotePointerActionBackend)
+                or self._typed_remote_receipt_required()
             ):
                 if not isinstance(
                     self.backend,
@@ -9232,7 +9271,26 @@ class Replayer:
                         resolution = refreshed
                         result.resolution = refreshed
                         field_point = refreshed.point
-                    field_region = refreshed_region
+                    # A visual match region is the retained template crop. It
+                    # is not the editable control's bounds. Treating that crop
+                    # as the typed-value readback region can exclude text that
+                    # renders at the left edge of a wide field. Keep exact
+                    # structural bounds when the backend supplies them;
+                    # otherwise use the point-centred visual readback window.
+                    if step.action is ActionKind.SELECT_OPTION:
+                        # Composite selection binds its type-ahead and commit
+                        # to the exact live resolved selection region.
+                        field_region = refreshed_region
+                    else:
+                        field_region = (
+                            refreshed.structural_handle.region
+                            if (
+                                refreshed is not None
+                                and refreshed.rung == "structural"
+                                and refreshed.structural_handle is not None
+                            )
+                            else None
+                        )
                 else:
                     before_png = self.backend.screenshot()
             elif self._prev_was_click(workflow, step_index, graph_ctx):
@@ -11673,16 +11731,23 @@ class Replayer:
             if self.use_structural and hasattr(self.backend, "locate_structural")
             else None
         )
-        resolved = resolve(
-            step.anchor,
-            frame_png,
-            self.vision,
-            None,  # scroll readiness must remain deterministic and model-free
-            step.intent,
-            template_png=template_png,
-            viewport=self.backend.viewport,
-            structural=structural,
-        )
+        try:
+            resolved = resolve(
+                step.anchor,
+                frame_png,
+                self.vision,
+                None,  # scroll readiness must remain deterministic and model-free
+                step.intent,
+                template_png=template_png,
+                viewport=self.backend.viewport,
+                structural=structural,
+            )
+        except OcrResolutionRefused:
+            # Readiness is a bounded, non-actuating probe. An ambiguous OCR
+            # candidate means that the target is not ready yet, so the scroll
+            # loop must continue. The later target action runs the full
+            # resolver again and still halts on the same ambiguity.
+            return False
         if resolved is None:
             return False
         resolution, _matched_region = resolved
@@ -11768,6 +11833,9 @@ class Replayer:
                 intent=next_step.intent,
             )
         if stop_pred is None or (dx == 0 and dy == 0):
+            remote_preflight_error = self._prepare_remote_scroll_input(step, result)
+            if remote_preflight_error is not None:
+                return remote_preflight_error
             refusal = self._delivery_authorization_refusal(
                 workflow, params, step, result
             )
@@ -11833,6 +11901,9 @@ class Replayer:
                     return scroll_error
                 if readiness_holds(fresh_scroll_frame):
                     return None
+            remote_preflight_error = self._prepare_remote_scroll_input(step, result)
+            if remote_preflight_error is not None:
+                return remote_preflight_error
             refusal = self._delivery_authorization_refusal(
                 workflow, params, step, result
             )
@@ -11844,7 +11915,7 @@ class Replayer:
                 lambda: self.backend.scroll(dx, dy),
             )
             scrolled += increment
-            frame = self.vision.wait_settled(self.backend)
+            frame = self._wait_for_scroll_transition_and_settle(before_png)
             before_png = frame
             holds = readiness_holds(frame)
             if self._governed_asset_mutation is not None:
@@ -11875,6 +11946,56 @@ class Replayer:
             f"{SCROLL_BUDGET_FACTOR}x the recorded distance) without "
             f"{target_desc} resolving — target never came into view; run aborted"
         )
+
+    def _wait_for_scroll_transition_and_settle(self, baseline_png: bytes) -> bytes:
+        """Wait for a delivered scroll to change the frame, then settle it.
+
+        A remote client can return two identical pre-action frames before the
+        wheel packet reaches the remote application. A generic settle poll can
+        therefore accept the old screen as stable. Require one visual
+        transition within the configured readiness window before applying the
+        normal settled-state check. At a real scroll boundary, return the last
+        unchanged frame after the bounded wait so the closed loop can continue
+        or refuse when its action budget is exhausted.
+        """
+
+        deadline = time.monotonic() + self.settle_readiness_timeout_s
+        frame = self.backend.screenshot()
+        while not self.vision.pixels_changed(baseline_png, frame):
+            if time.monotonic() >= deadline:
+                return frame
+            time.sleep(self.poll_interval_s)
+            frame = self.backend.screenshot()
+        return self.vision.wait_settled(self.backend)
+
+    def _prepare_remote_scroll_input(
+        self,
+        step: Step,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Bind one remote wheel edge to a fresh, one-use frame lease.
+
+        Target-readiness probes can take longer than a remote backend's frame
+        lease.  A wheel gesture has no coordinate to re-resolve, but it is
+        still real input into an opaque session.  Acquire the remote backend's
+        exact-content lease after readiness checks and before the final
+        authorization, environment, and delivery checks.  Do not extend the
+        allowed frame age or reuse the observation from the probe.
+        """
+
+        if not isinstance(self.backend, RemoteActuationBackend):
+            return None
+        try:
+            self.backend.acquire_actuation_frame()
+        except Exception as exc:  # noqa: BLE001 - backend boundary must halt
+            if self.governed_authorization is not None:
+                result.safety_halt = True
+            detail = _scrub_phi(str(exc)) or type(exc).__name__
+            return (
+                "Remote scroll preflight HALTED before input for step "
+                f"'{step.id}' ({step.intent}): {detail}"
+            )
+        return None
 
     @staticmethod
     def _next_anchored_step(workflow: Workflow, step_index: int) -> Optional[Step]:
@@ -12196,7 +12317,7 @@ class Replayer:
         run_dir: Path,
         new_crops: dict[str, bytes],
     ):
-        """Build, govern, and (if promoted) apply/persist a heal.
+        """Build, govern, and persist a repair candidate.
 
         A heal is a governed PATCH, not a silent bundle swap: the raw event is
         wrapped in a reviewable :class:`~openadapt_flow.runtime.healing.HealPatch`
@@ -12204,21 +12325,31 @@ class Replayer:
         it may touch the workflow. A patch that would weaken the step's
         identity band -- the reviewed context-drop bug -- is QUARANTINED
         (persisted under ``run_dir/heals/<step_id>/patch.json`` for review)
-        and NOT applied; the returned outcome's ``promoted`` is False and the
-        caller halts the run (refuse-rather-than-guess).
+        and NOT applied; the caller halts the run. A gate-passing local repair
+        can update the in-memory workflow. A gate-passing repair discovered
+        under exact authorization remains a promotable candidate, because the
+        running program cannot change after admission.
         """
         event, crop_png = heal_mod.build_heal_event(
             step, resolution, matched_region, frame_png, self.vision
         )
         outcome = healing_mod.govern_heal(step, event, run_dir=run_dir)
         if outcome.promoted:
-            heal_mod.apply_heal(workflow, event)
-            source = self._execution_workflow_source
-            if source is not None and source is not workflow:
-                heal_mod.apply_heal(source, event)
-            self._accept_healed_anchor_in_workflow_snapshot(workflow, event)
+            if self.governed_authorization is None:
+                heal_mod.apply_heal(workflow, event)
+                source = self._execution_workflow_source
+                if source is not None and source is not workflow:
+                    heal_mod.apply_heal(source, event)
+                self._accept_healed_anchor_in_workflow_snapshot(workflow, event)
+                new_crops[step.id] = crop_png
+            else:
+                # Exact authorization binds the admitted workflow semantics.
+                # Keep a gate-passing repair as a reviewable candidate for a
+                # later qualified bundle. Never change the program that is
+                # currently executing under that authorization.
+                outcome.patch.status = "promotable"
+                healing_mod.persist_patch(outcome.patch, run_dir)
             heal_mod.persist_heal(event, crop_png, frame_png, run_dir)
-            new_crops[step.id] = crop_png
         return outcome
 
     def _accept_healed_anchor_in_workflow_snapshot(
