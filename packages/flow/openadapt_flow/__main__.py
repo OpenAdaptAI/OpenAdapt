@@ -2464,17 +2464,22 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         QualificationCaseKind,
         QualificationCaseResult,
         QualificationOutcome,
+        QualifiedEntityLabel,
         RequalificationCondition,
         VerificationTier,
         add_case,
         add_requalification_condition,
         certify_project,
+        entity_label_options,
         init_project,
+        list_entity_labels,
         project_schema,
         record_case_results,
+        remove_entity_label,
         save_qualified_workflow,
         set_action_classification,
         set_effect_policy,
+        set_entity_label,
         set_identity_policy,
         set_trusted_runner_key,
     )
@@ -2487,6 +2492,62 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         return 0
 
     workflow = _qualification_workflow(args)
+
+    if verb == "label":
+        if args.label_cmd == "list":
+            print(
+                json.dumps(
+                    [
+                        label.model_dump(mode="json")
+                        for label in list_entity_labels(workflow)
+                    ],
+                    indent=2,
+                )
+            )
+            return 0
+        changed = False
+        if args.label_cmd == "set":
+            reviewed_fallback = next(
+                (
+                    option["fallback"]
+                    for option in entity_label_options()
+                    if option["label"] == args.label
+                ),
+                None,
+            )
+            if (
+                reviewed_fallback is not None
+                and args.fallback is not None
+                and args.fallback != reviewed_fallback
+            ):
+                raise SystemExit(
+                    f"{args.label!r} uses the reviewed fallback {reviewed_fallback!r}"
+                )
+            fallback = reviewed_fallback or args.fallback or "record"
+            try:
+                label = QualifiedEntityLabel(
+                    step_id=args.step, label=args.label, fallback=fallback
+                )
+            except ValueError as exc:
+                raise SystemExit(f"invalid entity label: {exc}") from exc
+            assert workflow.qualification is not None
+            changed = workflow.qualification.entity_labels.get(args.step) != label
+            set_entity_label(workflow, label)
+        elif args.label_cmd == "remove":
+            assert workflow.qualification is not None
+            changed = args.step in workflow.qualification.entity_labels
+            remove_entity_label(workflow, args.step)
+        else:  # pragma: no cover - argparse requires a known command.
+            raise SystemExit(f"unknown qualification label command {args.label_cmd!r}")
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        if changed:
+            print(
+                "Certification invalidated. Run `openadapt-flow qualify certify "
+                "<bundle> --evidence-root <path>` before production V2 tasks.",
+                file=sys.stderr,
+            )
+        return 0
 
     if verb == "init":
         environment = EnvironmentBoundary(
@@ -2524,6 +2585,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
                     else None
                 ),
                 "report": report.model_dump(mode="json"),
+                "entity_label_options": entity_label_options(),
             }
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
@@ -4299,6 +4361,43 @@ def build_parser() -> argparse.ArgumentParser:
 
     q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")
     q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "label",
+        help="Optionally set, remove, or list presentation-only entity labels",
+    )
+    label_sub = q.add_subparsers(dest="label_cmd", required=True)
+    label = label_sub.add_parser(
+        "set",
+        help="Set an optional presentation label for one qualified step",
+    )
+    label.add_argument("bundle", help="Workflow bundle directory")
+    label.add_argument("--step", required=True, help="Exact qualified workflow step ID")
+    label.add_argument(
+        "--label",
+        required=True,
+        help=(
+            "Local class label, for example: insurance claim. Reviewed labels "
+            "can cross a remote boundary; other labels use the neutral fallback."
+        ),
+    )
+    label.add_argument(
+        "--fallback",
+        choices=("record", "item"),
+        default=None,
+        help=(
+            "Neutral remote label for a custom class (default: record). "
+            "Reviewed labels use their canonical fallback."
+        ),
+    )
+    label.set_defaults(func=_cmd_qualify)
+    label = label_sub.add_parser("remove", help="Remove a step entity label")
+    label.add_argument("bundle", help="Workflow bundle directory")
+    label.add_argument("--step", required=True, help="Exact qualified workflow step ID")
+    label.set_defaults(func=_cmd_qualify)
+    label = label_sub.add_parser("list", help="List qualification-owned entity labels")
+    label.add_argument("bundle", help="Workflow bundle directory")
+    label.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser("init", help="Initialize a bundle's qualification project")
     q.add_argument("bundle", help="Workflow bundle directory")

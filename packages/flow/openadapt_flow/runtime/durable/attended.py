@@ -1101,12 +1101,32 @@ class AttendedActionStore:
             ) from exc
         return task.model_dump(mode="json")
 
+    def seal_human_decision_task_v2(self, unsigned: dict[str, Any]) -> dict[str, Any]:
+        """Sign the negotiated V2 task under its distinct Types domain."""
+        try:
+            from openadapt_types import sign_human_decision_task_v2_hmac
+
+            task = sign_human_decision_task_v2_hmac(
+                key=self._key(create=False),
+                fields=unsigned,
+            )
+        except (ImportError, ValueError) as exc:
+            raise AttendedActionRefused(
+                "the shared human decision V2 contract is unavailable or invalid"
+            ) from exc
+        return task.model_dump(mode="json")
+
     def verify_human_decision_task(self, task: dict[str, Any]) -> bool:
         """Verify a projected task without treating it as pause authority."""
         try:
-            from openadapt_types import HumanDecisionTaskV1
+            from openadapt_types import HumanDecisionTaskV1, HumanDecisionTaskV2
 
-            validated = HumanDecisionTaskV1.model_validate(task)
+            model = (
+                HumanDecisionTaskV2
+                if task.get("schema_version") == "openadapt.human-decision-task/v2"
+                else HumanDecisionTaskV1
+            )
+            validated = model.model_validate(task)
             return validated.verify_hmac(self._key(create=False))
         except (ImportError, ValueError, AttendedActionRefused):
             return False

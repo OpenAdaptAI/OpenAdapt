@@ -446,6 +446,14 @@ class RemoteHumanDecisionConfig(BaseModel):
     context_tier: Literal["remote_closed_context", "remote_identifiers"] = (
         "remote_closed_context"
     )
+    #: Exact schemas the authenticated remote peer advertised for this
+    #: deployment.  Empty means no V2 negotiation occurred, so Flow emits V1.
+    peer_task_schemas: list[
+        Literal[
+            "openadapt.human-decision-task/v1",
+            "openadapt.human-decision-task/v2",
+        ]
+    ] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _require_exact_remote_scope(self) -> "RemoteHumanDecisionConfig":
@@ -454,6 +462,8 @@ class RemoteHumanDecisionConfig(BaseModel):
                 "human_decisions.remote.enabled requires exact tenant_id and "
                 "runner_id bindings"
             )
+        if len(self.peer_task_schemas) != len(set(self.peer_task_schemas)):
+            raise ValueError("human decision peer task schemas must be unique")
         return self
 
 

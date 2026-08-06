@@ -47,12 +47,16 @@ from openadapt_flow.ir import (
     Transition,
     Workflow,
 )
+from openadapt_flow.policy import load_policy, policy_contract_sha256
 from openadapt_flow.privacy import reset_scrubbers, set_image_scrubber
 from openadapt_flow.qualification import (
     ActionRiskClassification,
     EnvironmentBoundary,
+    QualificationCertification,
+    QualifiedEntityLabel,
     init_project,
     set_action_classification,
+    set_entity_label,
     workflow_contract_sha256,
 )
 from openadapt_flow.runtime.authorization import (
@@ -317,7 +321,7 @@ def _request(capability, action="continue", key="request-key-0001"):
     )
 
 
-def _remote_deployment() -> DeploymentConfig:
+def _remote_deployment(**remote: object) -> DeploymentConfig:
     return DeploymentConfig.model_validate(
         {
             "human_decisions": {
@@ -325,6 +329,7 @@ def _remote_deployment() -> DeploymentConfig:
                     "enabled": True,
                     "tenant_id": "tenant_exact_01",
                     "runner_id": "runner_exact_01",
+                    **remote,
                 }
             }
         }
@@ -3183,6 +3188,291 @@ def test_remote_projection_is_explicit_aal2_phi_free_and_exactly_bound(tmp_path)
         str(run.parent / "bundle"),
     ):
         assert protected not in serialized
+
+
+def _v2_candidate_workflow(
+    *,
+    with_entity_label: bool = True,
+    entity_label: str = "patient record",
+) -> Workflow:
+    workflow = Workflow(name="attended-v2", steps=[_step("humanstep", "A")])
+    project = init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="qualified-app",
+            application_version="1",
+            environment_digest="a" * 64,
+            runtime_version="1.26.0",
+        ),
+    )
+    if with_entity_label:
+        set_entity_label(
+            workflow,
+            QualifiedEntityLabel(
+                step_id="humanstep",
+                label=entity_label,
+                fallback="record",
+            ),
+        )
+    policy = load_policy("permissive")
+    project.last_certification = QualificationCertification(
+        project_revision=project.revision,
+        project_contract_sha256=project.contract_sha256(),
+        workflow_contract_sha256=workflow_contract_sha256(workflow),
+        environment_contract_sha256=project.environment.contract_sha256(),
+        policy_name=policy.name,
+        policy_contract_sha256=policy_contract_sha256(policy),
+        policy_contract=policy.model_dump(mode="json"),
+        passed=True,
+        report_sha256="a" * 64,
+        case_evidence_contract_sha256="b" * 64,
+    )
+    return workflow
+
+
+def _accept_current_certification(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "openadapt_flow.qualification.current_certification_matches",
+        lambda _workflow, *, policy=None, policy_contract_digest=None: (
+            policy is None and policy_contract_digest is not None
+        ),
+    )
+
+
+def test_remote_v2_requires_explicit_peer_negotiation_and_exact_label_binding(
+    tmp_path, monkeypatch
+):
+    _accept_current_certification(monkeypatch)
+    workflow = _v2_candidate_workflow()
+    workflow, _bundle, run, _store, capability = _paused(tmp_path, workflow=workflow)
+    item = attention_item(run.parent, run)
+    assert item is not None
+
+    v1 = portable_remote_decision_task(run, item, deployment=_remote_deployment())
+    assert v1.task.schema_version == "openadapt.human-decision-task/v1"
+
+    deployment = _remote_deployment(
+        peer_task_schemas=["openadapt.human-decision-task/v2"]
+    )
+    v2 = portable_remote_decision_task(
+        run,
+        item,
+        deployment=deployment,
+    )
+    assert v2.task.schema_version == "openadapt.human-decision-task/v2"
+    assert v2.task.entity.label == "patient record"
+    assert v2.task.entity.fallback.value == "record"
+    assert v2.task.qualification_step_id == "humanstep"
+    assert v2.task.qualification_project_id == workflow.qualification.project_id
+    assert v2.task.qualification_contract_digest == (
+        "sha256:" + workflow.qualification.contract_sha256()
+    )
+    decision = execute_remote_attended_action(
+        run,
+        item,
+        _remote_request(v2, capability).model_copy(
+            update={"action": "escalate", "disposition": "needs_assistance"}
+        ),
+        deployment=deployment,
+        principal=_remote_principal(),
+        executor=_ResultExecutor(),
+    )
+    assert decision.status == "escalated"
+    assert decision.decided_by == "human"
+
+
+def test_remote_v2_uses_neutral_entity_when_optional_label_is_absent(
+    tmp_path, monkeypatch
+):
+    _accept_current_certification(monkeypatch)
+    workflow = _v2_candidate_workflow(with_entity_label=False)
+    workflow, _bundle, run, _store, _capability = _paused(tmp_path, workflow=workflow)
+    item = attention_item(run.parent, run)
+    assert item is not None
+    projection = portable_remote_decision_task(
+        run,
+        item,
+        deployment=_remote_deployment(
+            peer_task_schemas=["openadapt.human-decision-task/v2"]
+        ),
+    )
+    assert projection.task.schema_version == "openadapt.human-decision-task/v2"
+    assert projection.task.entity.label == "record"
+    assert projection.task.entity.fallback.value == "record"
+    assert projection.task.qualification_step_id == "humanstep"
+
+
+def test_remote_v2_falls_back_without_a_current_certification(tmp_path, monkeypatch):
+    _accept_current_certification(monkeypatch)
+    workflow = _v2_candidate_workflow()
+    assert workflow.qualification is not None
+    workflow.qualification.last_certification = None
+    _workflow, _bundle, run, _store, _capability = _paused(tmp_path, workflow=workflow)
+    item = attention_item(run.parent, run)
+    assert item is not None
+    projection = portable_remote_decision_task(
+        run,
+        item,
+        deployment=_remote_deployment(
+            peer_task_schemas=["openadapt.human-decision-task/v2"]
+        ),
+    )
+    assert projection.task.schema_version == "openadapt.human-decision-task/v1"
+
+
+@pytest.mark.parametrize("field", ("project_revision", "project_contract_sha256"))
+def test_remote_v2_falls_back_for_a_stale_certification(tmp_path, field, monkeypatch):
+    _accept_current_certification(monkeypatch)
+    workflow = _v2_candidate_workflow()
+    assert workflow.qualification is not None
+    certification = workflow.qualification.last_certification
+    assert certification is not None
+    if field == "project_revision":
+        certification.project_revision += 1
+    else:
+        certification.project_contract_sha256 = "0" * 64
+    _workflow, _bundle, run, _store, _capability = _paused(tmp_path, workflow=workflow)
+    item = attention_item(run.parent, run)
+    assert item is not None
+    projection = portable_remote_decision_task(
+        run,
+        item,
+        deployment=_remote_deployment(
+            peer_task_schemas=["openadapt.human-decision-task/v2"]
+        ),
+    )
+    assert projection.task.schema_version == "openadapt.human-decision-task/v1"
+
+
+def test_remote_v2_falls_back_when_a_current_certification_has_new_bundle_bytes(
+    tmp_path, monkeypatch
+):
+    _accept_current_certification(monkeypatch)
+    workflow = _v2_candidate_workflow()
+    workflow, bundle, run, _store, _capability = _paused(tmp_path, workflow=workflow)
+    assert workflow.qualification is not None
+    certification = workflow.qualification.last_certification
+    assert (
+        certification is not None and certification.policy_contract_sha256 is not None
+    )
+    # `certified_at` is not an input to qualification evaluation. This changes
+    # sealed bundle bytes while leaving the existing certification current.
+    certification.certified_at = "2026-07-30T00:00:00+00:00"
+    workflow.save(bundle)
+    current = Workflow.load(bundle)
+    from openadapt_flow import qualification
+
+    assert qualification.current_certification_matches(
+        current,
+        policy_contract_digest=certification.policy_contract_sha256,
+    )
+    item = attention_item(run.parent, run)
+    assert item is not None
+    projection = portable_remote_decision_task(
+        run,
+        item,
+        deployment=_remote_deployment(
+            peer_task_schemas=["openadapt.human-decision-task/v2"]
+        ),
+    )
+    assert projection.task.schema_version == "openadapt.human-decision-task/v1"
+
+
+def test_remote_v2_keeps_a_custom_entity_label_local(tmp_path, monkeypatch):
+    _accept_current_certification(monkeypatch)
+    workflow = _v2_candidate_workflow(entity_label="appointment request")
+    workflow, _bundle, run, _store, _capability = _paused(tmp_path, workflow=workflow)
+    item = attention_item(run.parent, run)
+    assert item is not None
+    projection = portable_remote_decision_task(
+        run,
+        item,
+        deployment=_remote_deployment(
+            peer_task_schemas=["openadapt.human-decision-task/v2"]
+        ),
+    )
+    assert projection.task.schema_version == "openadapt.human-decision-task/v2"
+    assert projection.task.entity.label == "record"
+    assert projection.task.entity.fallback.value == "record"
+    assert projection.task.qualification_step_id == "humanstep"
+
+
+def test_remote_v2_falls_back_when_report_step_differs_from_capability(tmp_path):
+    workflow = Workflow(
+        name="attended-v2",
+        steps=[_step("humanstep", "A"), _step("otherstep", "B")],
+    )
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="qualified-app",
+            application_version="1",
+            environment_digest="a" * 64,
+            runtime_version="1.26.0",
+        ),
+    )
+    for step_id in ("humanstep", "otherstep"):
+        set_entity_label(
+            workflow,
+            QualifiedEntityLabel(
+                step_id=step_id, label="patient record", fallback="record"
+            ),
+        )
+    _workflow, _bundle, run, _store, _capability = _paused(tmp_path, workflow=workflow)
+    report_path = run / "report.json"
+    report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+    report_payload["results"][0]["step_id"] = "otherstep"
+    report_path.write_text(json.dumps(report_payload), encoding="utf-8")
+    item = attention_item(run.parent, run)
+    assert item is not None
+    projection = portable_remote_decision_task(
+        run,
+        item,
+        deployment=_remote_deployment(
+            peer_task_schemas=["openadapt.human-decision-task/v2"]
+        ),
+    )
+    assert projection.task.schema_version == "openadapt.human-decision-task/v1"
+
+
+def test_remote_v2_falls_back_after_the_paused_bundle_changes(tmp_path):
+    workflow = Workflow(name="attended-v2", steps=[_step("humanstep", "A")])
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="qualified-app",
+            application_version="1",
+            environment_digest="a" * 64,
+            runtime_version="1.26.0",
+        ),
+    )
+    set_entity_label(
+        workflow,
+        QualifiedEntityLabel(
+            step_id="humanstep", label="patient record", fallback="record"
+        ),
+    )
+    workflow, bundle, run, _store, _capability = _paused(tmp_path, workflow=workflow)
+    set_entity_label(
+        workflow,
+        QualifiedEntityLabel(
+            step_id="humanstep", label="insurance claim", fallback="item"
+        ),
+    )
+    workflow.save(bundle)
+    item = attention_item(run.parent, run)
+    assert item is not None
+    projection = portable_remote_decision_task(
+        run,
+        item,
+        deployment=_remote_deployment(
+            peer_task_schemas=["openadapt.human-decision-task/v2"]
+        ),
+    )
+    assert projection.task.schema_version == "openadapt.human-decision-task/v1"
 
 
 def test_remote_response_refuses_scope_or_binding_drift(tmp_path):

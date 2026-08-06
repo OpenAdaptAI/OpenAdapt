@@ -33,8 +33,10 @@ from typing import Any, Literal, Optional
 
 from openadapt_types import (
     HUMAN_DECISION_TASK_SCHEMA,
+    HUMAN_DECISION_TASK_V2_SCHEMA,
     HumanDecisionReceiptV1,
     HumanDecisionTaskV1,
+    HumanDecisionTaskV2,
 )
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -232,7 +234,7 @@ class RemoteDecisionProjection(BaseModel):
     schema_version: Literal["openadapt.remote-decision-projection/v1"] = (
         "openadapt.remote-decision-projection/v1"
     )
-    task: HumanDecisionTaskV1
+    task: HumanDecisionTaskV1 | HumanDecisionTaskV2
     task_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     phase: Literal["paused"] = "paused"
     event_sequence: int = Field(ge=1)
@@ -389,6 +391,98 @@ def _remote_delivery_tier(
         raise AttendedActionRefused(str(exc)) from exc
 
 
+def _qualified_entity_v2_fields(
+    run_dir: Path,
+    *,
+    step_id: Optional[str],
+    capability: Any,
+) -> Optional[dict[str, Any]]:
+    """Read V2 bindings only from the current integrity-sealed project.
+
+    This deliberately reads no screenshots, OCR, accessibility observation,
+    parameters, application name, or model output. A missing optional domain
+    label uses the reviewed neutral ``record`` class without weakening the V2
+    qualification and step bindings. Any missing, unreadable, or mismatched
+    capability/bundle binding falls back to V1. This gate requires both bundle
+    integrity and current qualification certification.
+    """
+
+    if step_id is None or step_id != capability.step_id:
+        return None
+    try:
+        from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+        from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
+
+        manifest = CheckpointStore(run_dir).read_manifest()
+        if manifest is None:
+            return None
+        if bundle_version(manifest.bundle_dir) != capability.bundle_version:
+            return None
+        workflow, _ = data.load_workflow_safe(Path(manifest.bundle_dir))
+        project = workflow.qualification if workflow is not None else None
+        certification = project.last_certification if project is not None else None
+        if (
+            workflow is None
+            or project is None
+            or certification is None
+            or not certification.passed
+        ):
+            return None
+        from openadapt_flow.qualification import (
+            current_certification_matches,
+            remote_entity_label,
+            workflow_contract_sha256,
+        )
+
+        # Certification is the existing authority for qualification approval.
+        # Check its direct bindings before asking it to independently recompute
+        # the signed-case and policy decision from this exact sealed workflow.
+        if (
+            certification.project_revision != project.revision
+            or certification.project_contract_sha256 != project.contract_sha256()
+            or certification.workflow_contract_sha256
+            != workflow_contract_sha256(workflow)
+            or certification.policy_contract_sha256 is None
+            or not current_certification_matches(
+                workflow,
+                policy_contract_digest=certification.policy_contract_sha256,
+            )
+        ):
+            return None
+        entity = project.entity_labels.get(step_id)
+        entity_payload = remote_entity_label(entity)
+        return {
+            "qualification_project_id": project.project_id,
+            "qualification_revision_id": f"qualification_revision_{project.revision}",
+            "qualification_contract_digest": "sha256:" + project.contract_sha256(),
+            "qualification_step_id": step_id,
+            "entity": entity_payload,
+        }
+    except (OSError, ValueError, TypeError, AttendedActionRefused):
+        return None
+
+
+def _peer_negotiated_v2(deployment: Optional[DeploymentConfig]) -> bool:
+    """Return true only for an explicit authenticated-peer V2 declaration."""
+
+    return bool(
+        deployment is not None
+        and deployment.human_decisions.remote.enabled
+        and HUMAN_DECISION_TASK_V2_SCHEMA
+        in deployment.human_decisions.remote.peer_task_schemas
+    )
+
+
+def _task_model(
+    task: dict[str, Any],
+) -> type[HumanDecisionTaskV1 | HumanDecisionTaskV2]:
+    return (
+        HumanDecisionTaskV2
+        if task.get("schema_version") == HUMAN_DECISION_TASK_V2_SCHEMA
+        else HumanDecisionTaskV1
+    )
+
+
 def _task_and_presentation(
     run_dir: Path,
     item: AttentionItem,
@@ -540,8 +634,22 @@ def _task_and_presentation(
         ),
         "signature_algorithm": "hmac-sha256",
     }
-    task = AttendedActionStore(run_dir).seal_human_decision_task(unsigned)
-    task_digest = HumanDecisionTaskV1.model_validate(task).digest
+    qualified_v2 = (
+        _qualified_entity_v2_fields(
+            run_dir,
+            step_id=failed.step_id if failed is not None else None,
+            capability=capability,
+        )
+        if _peer_negotiated_v2(deployment)
+        else None
+    )
+    if qualified_v2 is not None:
+        unsigned.update(qualified_v2)
+        unsigned["schema_version"] = HUMAN_DECISION_TASK_V2_SCHEMA
+        task = AttendedActionStore(run_dir).seal_human_decision_task_v2(unsigned)
+    else:
+        task = AttendedActionStore(run_dir).seal_human_decision_task(unsigned)
+    task_digest = _task_model(task).model_validate(task).digest
     return task, task_digest, presentation
 
 
@@ -605,7 +713,7 @@ def portable_remote_decision_task(
         raise AttendedActionRefused(
             "the run has no current signed human decision task or pause capability"
         )
-    task = HumanDecisionTaskV1.model_validate(task_raw)
+    task = _task_model(task_raw).model_validate(task_raw)
     # The rest of `presentation` -- the screenshot artifact ids, the composed
     # question, the gated control label inside `halt` -- is still discarded.
     # Only the closed-vocabulary re-projection of `halt` may cross, and only at

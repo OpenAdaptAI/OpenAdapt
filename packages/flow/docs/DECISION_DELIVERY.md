@@ -54,13 +54,47 @@ evidence.
 a vocabulary the engine already owns — `Rung`, `ActionKind`, the console's halt
 categories, the ARIA/UIA role names, `RecheckKind` — or is a bounded integer or
 a boolean. A relay that stores this object is *structurally incapable* of
-representing a patient name, an MRN, an observed value, a path, or a workflow
-label.
+representing a person name, a record identifier, an observed value, a path, or
+a workflow label.
 
 That is the same kind of guarantee `HumanDecisionTaskV1` already gives, and it
 is checkable the same way: by reading a schema, not by trusting a detector. The
 hosted control plane enforces it a third time in Postgres, in the same style as
 `human_decision_task_contract_valid`.
+
+## V2: qualification-approved entity wording
+
+V1 uses only domain-neutral wording such as `record` or `item`. A negotiated V2
+task can carry one useful entity class that the exact qualification contract
+already approved. The remote emitter accepts only the reviewed remote-safe
+vocabulary.
+The canonical vocabulary and cross-vertical examples are in
+[Attended decisions and the halt-learn loop](https://docs.openadapt.ai/concepts/halt-learn-loop/#a-qualified-entity-label-not-a-guessed-domain).
+
+The entity class is optional. A person or a qualification agent can set it once
+for a workflow version. A reviewed class such as `insurance claim` can cross the
+remote boundary. A custom local class remains inside the bundle; the V2 task
+carries only its signed neutral `record` or `item` fallback. With no label, the
+task uses the signed neutral `record` class. This presentation choice does not
+block qualification, certification, or execution. A label change is a contract
+change and requires recertification before the new V2 task can be emitted.
+
+This is not runtime inference. The producer reads the label from the exact
+qualified step and binds the task to the qualification project, qualification
+revision, qualification contract digest, and bundle digest. The task has no
+field for a screenshot, OCR output, parameter, application name, observed
+identity value, or model input. A label says what class of entity the workflow
+handles; it never says which entity is on screen.
+
+The runner and client use V2 only after explicit schema negotiation. A peer that
+does not negotiate V2 receives the byte-compatible V1 task and renders `record`
+or `item`. Before any action continues, the customer-controlled runner reads
+the live application and revalidates the required identity and effect
+contracts.
+
+The V2 producer uses the released `openadapt-types` 0.9 contract. A consumer
+must explicitly negotiate that schema. Otherwise, Flow emits the byte-compatible
+V1 task.
 
 The one thing this tier gives up is `target_label` — the target control's own
 accessible name, which `halt_detail._safe_target_label` releases locally after

@@ -57,6 +57,38 @@ QUALIFICATION_SCHEMA: Final[Literal["openadapt.qualification-project/v1"]] = (
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _PARAM_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+_QUALIFIED_ENTITY_LABEL_RE = re.compile(r"^[a-z][a-z0-9]*(?:[ _-][a-z0-9]+){0,3}$")
+
+
+def entity_label_options() -> list[dict[str, str]]:
+    """Return the reviewed remote-safe class labels and their fallbacks.
+
+    This is the public, JSON-serializable source for Desktop and Flow. The
+    values are presentation classes only; no identity value or identifier may
+    enter this API.
+    """
+
+    return [
+        {"label": "patient record", "fallback": "record"},
+        {"label": "member record", "fallback": "record"},
+        {"label": "insurance claim", "fallback": "item"},
+        {"label": "loan application", "fallback": "item"},
+        {"label": "customer account", "fallback": "record"},
+        {"label": "service request", "fallback": "item"},
+        {"label": "case", "fallback": "item"},
+        {"label": "order", "fallback": "item"},
+        {"label": "invoice", "fallback": "item"},
+        {"label": "document", "fallback": "item"},
+        {"label": "record", "fallback": "record"},
+        {"label": "item", "fallback": "item"},
+    ]
+
+
+#: Derived compatibility view of :func:`entity_label_options` for callers that
+#: need only labels. Do not add an independent list of remote-safe classes.
+REMOTE_SAFE_ENTITY_LABELS: Final[tuple[str, ...]] = tuple(
+    option["label"] for option in entity_label_options()
+)
 
 
 def _qualification_identifier_sha256(value: str, *, kind: str) -> str:
@@ -730,6 +762,69 @@ def _default_fault_cases() -> list[QualificationCase]:
     ]
 
 
+class QualifiedEntityLabel(BaseModel):
+    """An optional local presentation label for one qualified step.
+
+    Qualification and execution do not require this label. Reviewed labels can
+    cross a remote boundary. A custom label remains local and remote consumers
+    receive its signed neutral ``record`` or ``item`` fallback.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    step_id: str = Field(pattern=_ID_RE.pattern)
+    label: str = Field(
+        min_length=1,
+        max_length=63,
+        json_schema_extra={
+            "examples": ["patient record", "insurance claim", "record"],
+            "x-openadapt-reviewed-remote-options": list(REMOTE_SAFE_ENTITY_LABELS),
+        },
+    )
+    fallback: Literal["record", "item"]
+
+    @field_validator("label")
+    @classmethod
+    def _safe_label(cls, value: str) -> str:
+        if _QUALIFIED_ENTITY_LABEL_RE.fullmatch(value) is None:
+            raise ValueError(
+                "entity label must be a lowercase class name of at most four words"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _canonical_fallback(self) -> "QualifiedEntityLabel":
+        expected = next(
+            (
+                option["fallback"]
+                for option in entity_label_options()
+                if option["label"] == self.label
+            ),
+            None,
+        )
+        if expected is not None and self.fallback != expected:
+            raise ValueError("entity fallback must match the reviewed class mapping")
+        return self
+
+
+def remote_entity_label(
+    entity: Optional[QualifiedEntityLabel],
+) -> dict[str, str]:
+    """Return the reviewed entity label that a remote V2 task can carry.
+
+    Custom qualification labels remain inside the local bundle. Their signed
+    neutral fallback crosses the remote boundary instead. A missing optional
+    label uses ``record`` without weakening any other V2 binding.
+    """
+
+    if entity is None:
+        return {"label": "record", "fallback": "record"}
+    payload = entity.model_dump(mode="json", exclude={"step_id"})
+    if payload in entity_label_options():
+        return payload
+    return {"label": entity.fallback, "fallback": entity.fallback}
+
+
 class QualificationProject(BaseModel):
     """Versioned qualification configuration sealed inside a Flow bundle."""
 
@@ -752,6 +847,10 @@ class QualificationProject(BaseModel):
     )
     identity_policies: dict[str, IdentityPolicy] = Field(default_factory=dict)
     effect_policies: list[EffectVerificationPolicy] = Field(default_factory=list)
+    #: Optional presentation-only names selected during qualification. They are
+    #: not safety evidence, observations, or runtime-derived values. An empty
+    #: mapping is valid and does not affect qualification admission.
+    entity_labels: dict[str, "QualifiedEntityLabel"] = Field(default_factory=dict)
     cases: list[QualificationCase] = Field(default_factory=_default_fault_cases)
     exclusions: list[str] = Field(default_factory=list)
     requalification_conditions: list[RequalificationCondition] = Field(
@@ -774,6 +873,12 @@ class QualificationProject(BaseModel):
                 raise ValueError(
                     f"action classification key {key!r} does not match step_id "
                     f"{classification.step_id!r}"
+                )
+        for key, entity in self.entity_labels.items():
+            if key != entity.step_id:
+                raise ValueError(
+                    f"entity label key {key!r} does not match step_id "
+                    f"{entity.step_id!r}"
                 )
         for key_kind, keys in (
             ("runner", self.trusted_runner_keys),
@@ -1288,6 +1393,55 @@ def set_minimum_effect_tier(
     _touch(project, previous)
     _invalidate_certification(workflow)
     return project
+
+
+def set_entity_label(
+    workflow: "Workflow", label: QualifiedEntityLabel
+) -> QualificationProject:
+    """Set one qualification-owned entity label and invalidate certification."""
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError(
+            "initialize qualification before setting an entity label"
+        )
+    if label.step_id not in _steps_by_id(workflow):
+        raise QualificationError(f"unknown step id {label.step_id!r}")
+    if project.entity_labels.get(label.step_id) == label:
+        return project
+    previous = project.revision_digest()
+    project.entity_labels[label.step_id] = label
+    _touch(project, previous)
+    _invalidate_certification(workflow)
+    return project
+
+
+def remove_entity_label(workflow: "Workflow", step_id: str) -> QualificationProject:
+    """Remove one qualification-owned entity label and invalidate certification."""
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError(
+            "initialize qualification before removing an entity label"
+        )
+    if step_id not in project.entity_labels:
+        raise QualificationError(f"no entity label is set for step id {step_id!r}")
+    previous = project.revision_digest()
+    del project.entity_labels[step_id]
+    _touch(project, previous)
+    _invalidate_certification(workflow)
+    return project
+
+
+def list_entity_labels(workflow: "Workflow") -> list[QualifiedEntityLabel]:
+    """Return qualification-owned labels in stable step-id order."""
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError(
+            "initialize qualification before listing entity labels"
+        )
+    return [project.entity_labels[key] for key in sorted(project.entity_labels)]
 
 
 def set_identity_policy(

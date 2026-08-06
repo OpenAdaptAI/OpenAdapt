@@ -58,6 +58,7 @@ from openadapt_flow.policy import (
     policy_contract_sha256,
 )
 from openadapt_flow.qualification import (
+    REMOTE_SAFE_ENTITY_LABELS,
     ActionRiskClass,
     ActionRiskClassification,
     EnvironmentBoundary,
@@ -73,19 +74,25 @@ from openadapt_flow.qualification import (
     QualificationError,
     QualificationOutcome,
     QualificationRefusalCode,
+    QualifiedEntityLabel,
     RequalificationCondition,
     VerificationTier,
     add_case,
     add_requalification_condition,
     certify_project,
     current_certification_matches,
+    entity_label_options,
     evaluate_qualification,
     init_project,
+    list_entity_labels,
+    project_schema,
     qualification_action_requirements,
     record_case_results,
+    remove_entity_label,
     set_action_classification,
     set_case_scope,
     set_effect_policy,
+    set_entity_label,
     set_identity_policy,
     set_minimum_effect_tier,
     set_trusted_fault_driver_key,
@@ -182,6 +189,119 @@ def _environment() -> EnvironmentBoundary:
         runtime_version="1.20.2",
         required_capabilities=["pixel_observation", "effect_verification"],
     )
+
+
+def test_entity_labels_are_qualification_contract_and_invalidate_certification():
+    workflow = _workflow()
+    project = init_project(workflow, environment=_environment())
+    before = project.contract_sha256()
+    certification = QualificationCertification(
+        project_revision=project.revision,
+        project_contract_sha256=before,
+        workflow_contract_sha256="a" * 64,
+        environment_contract_sha256="c" * 64,
+        policy_name="clinical-write",
+        policy_contract_sha256="b" * 64,
+        passed=True,
+        report_sha256="d" * 64,
+        certified_at="2026-07-01T00:00:00+00:00",
+    )
+    project.last_certification = certification
+
+    set_entity_label(
+        workflow,
+        QualifiedEntityLabel(step_id="save", label="patient record", fallback="record"),
+    )
+    assert project.entity_labels["save"].label == "patient record"
+    assert project.contract_sha256() != before
+    assert project.last_certification is None
+    assert list_entity_labels(workflow) == [project.entity_labels["save"]]
+
+    remove_entity_label(workflow, "save")
+    assert project.entity_labels == {}
+
+
+def test_entity_label_is_optional_for_certification(tmp_path: Path) -> None:
+    """Presentation metadata must never become a safety admission gate."""
+
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    assert workflow.qualification is not None
+    assert workflow.qualification.entity_labels == {}
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+
+    report = certify_project(
+        workflow,
+        policy=load_policy("clinical-write"),
+        evidence_root=evidence_root,
+    )
+
+    assert report.passed
+    assert workflow.qualification.entity_labels == {}
+
+
+def test_entity_label_options_are_ordered_and_derive_every_public_label() -> None:
+    options = entity_label_options()
+    assert options == [
+        {"label": "patient record", "fallback": "record"},
+        {"label": "member record", "fallback": "record"},
+        {"label": "insurance claim", "fallback": "item"},
+        {"label": "loan application", "fallback": "item"},
+        {"label": "customer account", "fallback": "record"},
+        {"label": "service request", "fallback": "item"},
+        {"label": "case", "fallback": "item"},
+        {"label": "order", "fallback": "item"},
+        {"label": "invoice", "fallback": "item"},
+        {"label": "document", "fallback": "item"},
+        {"label": "record", "fallback": "record"},
+        {"label": "item", "fallback": "item"},
+    ]
+    assert REMOTE_SAFE_ENTITY_LABELS == tuple(option["label"] for option in options)
+    label_schema = project_schema()["$defs"]["QualifiedEntityLabel"]["properties"][
+        "label"
+    ]
+    assert "enum" not in label_schema
+    assert label_schema["x-openadapt-reviewed-remote-options"] == list(
+        REMOTE_SAFE_ENTITY_LABELS
+    )
+
+
+@pytest.mark.parametrize("option", entity_label_options())
+def test_entity_label_accepts_each_reviewed_remote_safe_class(
+    option: dict[str, str],
+) -> None:
+    entity = QualifiedEntityLabel(step_id="save", **option)
+    assert entity.model_dump() == {"step_id": "save", **option}
+
+
+def test_entity_label_refuses_a_noncanonical_fallback() -> None:
+    with pytest.raises(ValueError, match="fallback"):
+        QualifiedEntityLabel(step_id="save", label="insurance claim", fallback="record")
+
+
+def test_entity_label_accepts_a_custom_local_class() -> None:
+    entity = QualifiedEntityLabel(
+        step_id="save", label="appointment request", fallback="item"
+    )
+    assert entity.label == "appointment request"
+    assert entity.fallback == "item"
+
+
+@pytest.mark.parametrize(
+    "label",
+    ("Patient Record", "record/class", "one two three four five"),
+)
+def test_entity_label_refuses_invalid_local_class_syntax(
+    label: str,
+) -> None:
+    with pytest.raises(ValueError, match="lowercase class name"):
+        QualifiedEntityLabel(step_id="save", label=label, fallback="record")
 
 
 def test_api_only_qualification_uses_only_executable_targets() -> None:
@@ -2872,6 +2992,75 @@ def test_cli_initializes_project_without_raw_manifest_editing(
     assert main(["qualify", "explain", str(bundle), "--json"]) == 2
     payload = capsys.readouterr().out
     assert '"representative_case_missing"' in payload
+    assert json.loads(payload)["entity_label_options"] == entity_label_options()
+
+
+def test_cli_entity_label_notice_tracks_real_mutations(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    init_project(workflow, environment=_environment())
+    workflow.save(bundle)
+
+    set_args = [
+        "qualify",
+        "label",
+        "set",
+        str(bundle),
+        "--step",
+        "save",
+        "--label",
+        "insurance claim",
+    ]
+    invalid_args = [*set_args]
+    invalid_args[invalid_args.index("insurance claim")] = "Patient Record"
+    with pytest.raises(SystemExit, match="invalid entity label"):
+        main(invalid_args)
+    assert Workflow.load(bundle).qualification.entity_labels == {}
+
+    assert main(set_args) == 0
+    first = capsys.readouterr()
+    assert json.loads(first.out)["entity_labels"]["save"]["label"] == "insurance claim"
+    assert first.err
+
+    assert main(set_args) == 0
+    unchanged = capsys.readouterr()
+    assert json.loads(unchanged.out)["entity_labels"]["save"]["fallback"] == "item"
+    assert not unchanged.err
+
+    assert (
+        main(
+            [
+                "qualify",
+                "label",
+                "set",
+                str(bundle),
+                "--step",
+                "save",
+                "--label",
+                "appointment request",
+                "--fallback",
+                "item",
+            ]
+        )
+        == 0
+    )
+    custom = capsys.readouterr()
+    custom_payload = json.loads(custom.out)["entity_labels"]["save"]
+    assert custom_payload == {
+        "step_id": "save",
+        "label": "appointment request",
+        "fallback": "item",
+    }
+    assert custom.err
+
+    assert main(["qualify", "label", "remove", str(bundle), "--step", "save"]) == 0
+    removed = capsys.readouterr()
+    assert json.loads(removed.out)["entity_labels"] == {}
+    assert removed.err
 
 
 def test_cli_identity_extract_pattern_round_trips_exactly(tmp_path: Path) -> None:

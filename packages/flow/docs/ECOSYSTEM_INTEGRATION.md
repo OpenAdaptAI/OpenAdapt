@@ -121,7 +121,7 @@ The string values are byte-identical, so a flow `Step` could emit/ingest an
 - `Resolution` — which ladder rung resolved the target (`template/…/grounder`), point,
   confidence, `elapsed_ms`.
 - `IdentityCheck` — the pre-click same-entity verdict (`verified/mismatch/abstain/
-  unreadable` × `structured/pixel/vlm/context/param`). This is the wrong-patient safety
+  unreadable` × `structured/pixel/vlm/context/param`). This is the wrong-entity safety
   core.
 - `HealEvent`, `StepResult`, `RunReport`, `UnarmedStep` — audit/telemetry.
 - `risk∈{reversible,irreversible}`, `identity_armed` — the halt-on-uncertainty gates.

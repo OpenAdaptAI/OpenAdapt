@@ -67,7 +67,7 @@ Cloud token creation is authenticated and organization-scoped in the dashboard.
   bundle binding.
 * **Up (to the control plane):** PHI-free status/metrics + a storage *path* into
   the customer's own store. **Never** the report body, screenshots, OCR text, or
-  a patient identifier.
+  a record identifier.
 * **The bundle and report bytes** are read from / written to the **customer's own
   storage** (`--storage-root`, a local encrypted volume). Our control plane holds
   no URL to them and signs no access.

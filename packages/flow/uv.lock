@@ -2243,9 +2243,9 @@ requires-dist = [
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
-    { name = "openadapt-types", marker = "extra == 'console'", specifier = ">=0.7.0,<0.8.0" },
-    { name = "openadapt-types", marker = "extra == 'dev'", specifier = ">=0.7.0,<0.8.0" },
-    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.7.0,<0.8.0" },
+    { name = "openadapt-types", marker = "extra == 'console'", specifier = ">=0.9.0,<0.10.0" },
+    { name = "openadapt-types", marker = "extra == 'dev'", specifier = ">=0.9.0,<0.10.0" },
+    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.9.0,<0.10.0" },
     { name = "opencv-python-headless", specifier = ">=4.9" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
@@ -2310,14 +2310,14 @@ presidio = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.7.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/bf/39ec24f545b3fc09bdff8cc61ca448bb968450c43a99f8a6808e538a3c57/openadapt_types-0.7.0.tar.gz", hash = "sha256:80a470aa4e8870d2a2b2645f2dbfac04ab9f158fb6d21b314d9eff0296a0ee2f", size = 126130, upload-time = "2026-07-29T19:32:31.082Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/a4/bac2263f9996248f0c1a4e1e62b3d0ff1a3cfe0a08cb3b1eaf4ae3a106f7/openadapt_types-0.9.0.tar.gz", hash = "sha256:e377750797c1999c6a74cd8730d9d952e22c68fe8078f8270d0d9c7ca21c84e8", size = 134336 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/39/b78fcd51096939884db01ea10bb4594a9e88aaa7d40c3eff537cfba8d971/openadapt_types-0.7.0-py3-none-any.whl", hash = "sha256:4805f2f97dbe46c15874d0fbf88dc9bf94a430b2b9a2f3e7ed24cddef013b7f2", size = 81743, upload-time = "2026-07-29T19:32:29.584Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/33/4fb8cd26708808e99c76ea4348fa8ba48bc0c9183ff457a4bec5b6b660c8/openadapt_types-0.9.0-py3-none-any.whl", hash = "sha256:cc7bd12a5d7203b75dd60d860e8393c315d4dd7e9406346859e0ce0aa05dda89", size = 88605 },
 ]
 
 [[package]]
