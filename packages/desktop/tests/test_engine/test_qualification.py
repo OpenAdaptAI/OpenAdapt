@@ -46,6 +46,7 @@ pytest.importorskip("openadapt_flow.qualification")
 from openadapt_flow.ir import (  # noqa: E402
     ActionKind,
     Anchor,
+    ApiBinding,
     Landmark,
     ParamKind,
     ParamSpec,
@@ -410,6 +411,135 @@ def test_desktop_binds_canonical_inputs_and_action_scope_before_case_run(
     assert [(target.step_id, target.actuation_path) for target in case.action_targets] == [
         ("save", "gui")
     ]
+
+
+def test_desktop_binds_one_exact_fault_target_in_a_two_action_scope(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="open", intent="Open", action=ActionKind.CLICK),
+        Step(
+            id="save",
+            intent="Save",
+            action=ActionKind.CLICK,
+            api_binding=ApiBinding(
+                url_template="/records/{record_id}",
+                body_template={"record_id": "{record_id}"},
+            ),
+        ),
+        params={"record_id": "example"},
+    )
+    initialized = _initialize(bundle)
+    fault_case = next(
+        item
+        for item in initialized["project"]["cases"]
+        if item["kind"] == "wrong_identity"
+    )
+    assert initialized["controls"]["actions"]["open"]["execution_paths"] == ["gui"]
+    assert initialized["controls"]["actions"]["save"]["execution_paths"] == ["api", "gui"]
+
+    parameters_path, _ = store_case_parameters(
+        tmp_path / "state",
+        workflow_id="wf-1",
+        case_id=fault_case["id"],
+        parameters_json='{"record_id":"case-1"}',
+    )
+    _inputs_path, inputs = stage_case_runtime_inputs(
+        tmp_path / "state",
+        workflow_id="wf-1",
+        case_id=fault_case["id"],
+        workflow=Workflow.load(bundle),
+        parameters_path=parameters_path,
+    )
+    set_local_qualification_case_scope(
+        bundle,
+        workflow_id="wf-1",
+        case_id=fault_case["id"],
+        runtime_input_bytes=inputs,
+        fault_target={"step_id": "save", "actuation_path": "api"},
+    )
+
+    project = Workflow.load(bundle).qualification
+    assert project is not None
+    case = next(item for item in project.cases if item.id == fault_case["id"])
+    assert [(target.step_id, target.actuation_path) for target in case.action_targets] == [
+        ("open", "gui"),
+        ("save", "api"),
+    ]
+    assert case.fault_target is not None
+    assert (case.fault_target.step_id, case.fault_target.actuation_path) == (
+        "save",
+        "api",
+    )
+
+
+def test_dispatcher_forwards_dual_path_fault_target_to_flow_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+    bundle = _bundle(
+        config.data_dir / "bundles" / "wf-1",
+        Step(id="open", intent="Open", action=ActionKind.CLICK),
+        Step(
+            id="save",
+            intent="Save",
+            action=ActionKind.CLICK,
+            api_binding=ApiBinding(
+                url_template="/records/{record_id}",
+                body_template={"record_id": "{record_id}"},
+            ),
+        ),
+        params={"record_id": "example"},
+    )
+    initialized = _initialize(bundle)
+    fault_case = next(
+        item
+        for item in initialized["project"]["cases"]
+        if item["kind"] == "wrong_identity"
+    )
+    db = IndexDB(tmp_path / "index.db")
+    db.initialize()
+    db.insert_bundle("wf-1", str(bundle))
+    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
+
+    def stop_after_scope(*_args, **_kwargs) -> None:
+        raise RuntimeError("stop after retained scope")
+
+    monkeypatch.setattr(
+        "engine.qualification.prepare_local_qualification_runner",
+        stop_after_scope,
+    )
+    try:
+        result = dispatcher.dispatch(
+            "run_qualification_case",
+            {
+                "workflow_id": "wf-1",
+                "case_id": fault_case["id"],
+                "parameters_json": '{"record_id":"case-1"}',
+                "fault_target": {"step_id": "save", "actuation_path": "api"},
+            },
+        )
+        retained = Workflow.load(bundle).qualification
+    finally:
+        db.close()
+
+    assert result == {
+        "ok": False,
+        "workflow_id": "wf-1",
+        "error": "stop after retained scope",
+    }
+    assert retained is not None
+    case = next(item for item in retained.cases if item.id == fault_case["id"])
+    assert [(target.step_id, target.actuation_path) for target in case.action_targets] == [
+        ("open", "gui"),
+        ("save", "api"),
+    ]
+    assert case.fault_target is not None
+    assert (case.fault_target.step_id, case.fault_target.actuation_path) == (
+        "save",
+        "api",
+    )
 
 
 def test_inspection_exposes_durable_target_evidence_without_flattening_to_coordinates(

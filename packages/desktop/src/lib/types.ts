@@ -199,6 +199,7 @@ export interface QualificationEditableEffect {
 
 export interface QualificationActionControls {
   step_id: string;
+  execution_paths: ("gui" | "api")[];
   classification?: {
     step_id: string;
     classification: QualificationRisk | "unknown";
@@ -290,6 +291,8 @@ export interface QualificationProject {
       input_ref?: string | null;
       expected_outcome: string;
       required: boolean;
+      action_targets?: { step_id: string; actuation_path: "gui" | "api" }[];
+      fault_target?: { step_id: string; actuation_path: "gui" | "api" } | null;
       results: {
         project_revision: number;
         runner_capabilities: string[];

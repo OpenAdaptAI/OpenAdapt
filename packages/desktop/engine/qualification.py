@@ -331,6 +331,8 @@ def _effect_view(index: int, effect, verification_policy) -> dict[str, Any]:
 def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
     """Project writable controls from the executable workflow and canonical project."""
 
+    from openadapt_flow.policy import executable_actuation_paths
+
     parameter_names = sorted(
         set(workflow.params) | set(workflow.param_specs) | set(workflow.secret_params)
     )
@@ -374,6 +376,7 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
         identity_policy = project.identity_policies.get(step.id) if project is not None else None
         actions[node["id"]] = {
             "step_id": step.id,
+            "execution_paths": sorted(executable_actuation_paths(step)),
             "classification": (classification.model_dump(mode="json") if classification else None),
             "identity": {
                 "can_arm": bool(sources),
@@ -1098,6 +1101,7 @@ def set_local_qualification_case_scope(
     workflow_id: str,
     case_id: str,
     runtime_input_bytes: bytes,
+    fault_target: dict[str, Any] | None = None,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
     bundle_key: str | None = None,
 ) -> dict:
@@ -1118,12 +1122,42 @@ def set_local_qualification_case_scope(
     if worklists:
         raise QualificationError("Desktop qualification cases do not yet support worklists")
     steps = {step.id: step for step in api["iter_workflow_steps"](workflow)}
+    selected_fault_target = None
+    if fault_target is not None:
+        if not isinstance(fault_target, dict) or set(fault_target) != {
+            "step_id",
+            "actuation_path",
+        }:
+            raise QualificationError("Fault target must name one exact action and actuation path")
+        try:
+            selected_fault_target = api["QualificationActionTarget"](
+                step_id=fault_target["step_id"],
+                actuation_path=fault_target["actuation_path"],
+            )
+        except (ValueError, TypeError) as exc:
+            raise QualificationError(
+                "Fault target must name one exact action and actuation path"
+            ) from exc
+        fault_step = steps.get(selected_fault_target.step_id)
+        if (
+            fault_step is None
+            or selected_fault_target.actuation_path
+            not in executable_actuation_paths(fault_step)
+        ):
+            raise QualificationError("Fault target is outside the executable case scope")
     targets = []
     for step_id, step in sorted(steps.items()):
         paths = executable_actuation_paths(step)
         if not paths:
             continue
-        path = "gui" if "gui" in paths else "api" if "api" in paths else None
+        if selected_fault_target is not None and selected_fault_target.step_id == step_id:
+            path = selected_fault_target.actuation_path
+        elif "gui" in paths:
+            path = "gui"
+        elif "api" in paths:
+            path = "api"
+        else:
+            path = None
         if path is None:
             raise QualificationError(f"Qualification action {step_id!r} has no executable path")
         targets.append(api["QualificationActionTarget"](step_id=step_id, actuation_path=path))
@@ -1133,6 +1167,7 @@ def set_local_qualification_case_scope(
             case_id=case_id,
             runtime_input_sha256=hashlib.sha256(runtime_input_bytes).hexdigest(),
             action_targets=targets,
+            fault_target=selected_fault_target,
         )
         _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:

@@ -1382,7 +1382,7 @@ export function Qualification({
                                             ? "64-character session digest"
                                             : signal.source === "application"
                                               ? "accuro or https://app.example"
-                                              : "patient-chart"
+                                              : "record-review"
                                         }
                                         spellCheck={false}
                                       />
@@ -1695,7 +1695,7 @@ export function Qualification({
                   {!parameters.length ? (
                     <Callout tone="warn" title="Workflow parameters required">
                       Add typed workflow parameters before binding a reusable effect.
-                      OpenAdapt will not seal a patient or account literal into this form.
+                      OpenAdapt will not seal a live identity value into this form.
                     </Callout>
                   ) : (
                     <>

@@ -15,6 +15,44 @@ import { Button, Callout, Card, CardHead, Field, Pill } from "../ui/primitives";
 
 const POLICY = "clinical-write";
 
+const GUIDED_FAULT_CASES: {
+  id: string;
+  kind: QualificationCaseKind;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: "ambiguity-1",
+    kind: "ambiguity",
+    label: "Ambiguous target",
+    description: "A competing target is present; the run must halt before actuation.",
+  },
+  {
+    id: "wrong-identity-1",
+    kind: "wrong_identity",
+    label: "Wrong record",
+    description: "The live record does not match the qualified identity; the run must halt.",
+  },
+  {
+    id: "stale-identity-1",
+    kind: "stale_identity",
+    label: "Stale record",
+    description: "Identity changes after resolution; the run must reacquire or halt.",
+  },
+  {
+    id: "weak-effect-1",
+    kind: "weak_effect",
+    label: "Weak effect evidence",
+    description: "The effect evidence is below the qualified tier; the run must halt.",
+  },
+  {
+    id: "missing-effect-1",
+    kind: "missing_effect",
+    label: "Missing effect",
+    description: "The intended persisted effect is absent; the run must halt.",
+  },
+];
+
 function secretEnvironmentReference(name: string): string {
   return `OPENADAPT_FLOW_SECRET_${name.replace(/[^a-zA-Z0-9]/g, "_").toUpperCase()}`;
 }
@@ -45,6 +83,10 @@ export function QualificationLifecycle({
     "Representative production-shaped case",
   );
   const [selectedCaseId, setSelectedCaseId] = useState("");
+  const [faultStepId, setFaultStepId] = useState("");
+  const [faultActuationPath, setFaultActuationPath] = useState<"gui" | "api" | "">(
+    "",
+  );
   const [parametersJson, setParametersJson] = useState("{}");
   const [parameterValues, setParameterValues] =
     useState<QualificationParameterValues>({});
@@ -59,6 +101,19 @@ export function QualificationLifecycle({
   const selectedCase = useMemo(
     () => cases.find((item) => item.id === selectedCaseId) || cases[0],
     [cases, selectedCaseId],
+  );
+  const actionControls = useMemo(
+    () =>
+      Object.values(project.controls.actions).sort((left, right) =>
+        left.step_id.localeCompare(right.step_id),
+      ),
+    [project.controls.actions],
+  );
+  const selectedFaultAction = actionControls.find(
+    (action) => action.step_id === faultStepId,
+  );
+  const selectedCaseNeedsFaultTarget = Boolean(
+    selectedCase && selectedCase.kind !== "representative",
   );
   const capabilityCoverageByCase = useMemo(
     () =>
@@ -91,6 +146,21 @@ export function QualificationLifecycle({
   }, [cases, selectedCaseId]);
 
   useEffect(() => setTarget(targetForProject(project)), [workflowId]);
+
+  useEffect(() => {
+    if (!selectedCase || selectedCase.kind === "representative") {
+      setFaultStepId("");
+      setFaultActuationPath("");
+      return;
+    }
+    const retainedTarget =
+      selectedCase.fault_target ||
+      (selectedCase.action_targets?.length === 1
+        ? selectedCase.action_targets[0]
+        : null);
+    setFaultStepId(retainedTarget?.step_id || "");
+    setFaultActuationPath(retainedTarget?.actuation_path || "");
+  }, [selectedCase?.id, workflowId]);
 
   useEffect(() => {
     setParameterValues(
@@ -163,6 +233,20 @@ export function QualificationLifecycle({
     );
   }
 
+  function selectGuidedFaultCase(
+    faultCase: (typeof GUIDED_FAULT_CASES)[number],
+  ) {
+    const existing = cases.find((item) => item.kind === faultCase.kind);
+    if (existing) {
+      setSelectedCaseId(existing.id);
+      setNotice(`${existing.id} selected for its exact fault target.`);
+      return;
+    }
+    setCaseId(faultCase.id);
+    setCaseKind(faultCase.kind);
+    setDescription(faultCase.description);
+  }
+
   async function runCase() {
     if (!selectedCase) return;
     const caseParametersJson = caseParameters();
@@ -173,6 +257,14 @@ export function QualificationLifecycle({
         case_id: selectedCase.id,
         parameters_json: caseParametersJson,
         target,
+        ...(selectedCaseNeedsFaultTarget
+          ? {
+              fault_target: {
+                step_id: faultStepId,
+                actuation_path: faultActuationPath,
+              },
+            }
+          : {}),
         ...(deploymentConfig.trim()
           ? { deployment_config: deploymentConfig.trim() }
           : {}),
@@ -368,6 +460,54 @@ export function QualificationLifecycle({
               idPrefix="qualification-case-target"
               disabled={Boolean(busy)}
             />
+            {selectedCaseNeedsFaultTarget && (
+              <div className="grid grid-2" style={{ marginTop: "var(--space-3)" }}>
+                <Field
+                  label="Fault action"
+                  hint="The exact workflow action where the deterministic fault is injected."
+                  htmlFor="qualification-fault-action"
+                >
+                  <select
+                    id="qualification-fault-action"
+                    className="input mono"
+                    value={faultStepId}
+                    onChange={(event) => {
+                      setFaultStepId(event.target.value);
+                      setFaultActuationPath("");
+                    }}
+                  >
+                    <option value="">Select an action</option>
+                    {actionControls.map((action) => (
+                      <option key={action.step_id} value={action.step_id}>
+                        {action.step_id}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
+                  label="Actuation path"
+                  hint="The exact executable path for the selected action."
+                  htmlFor="qualification-fault-actuation-path"
+                >
+                  <select
+                    id="qualification-fault-actuation-path"
+                    className="input mono"
+                    value={faultActuationPath}
+                    disabled={!selectedFaultAction}
+                    onChange={(event) =>
+                      setFaultActuationPath(event.target.value as "gui" | "api" | "")
+                    }
+                  >
+                    <option value="">Select a path</option>
+                    {(selectedFaultAction?.execution_paths || []).map((path) => (
+                      <option key={path} value={path}>
+                        {path}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            )}
             <Field
               label="Deployment config"
               hint="Optional local YAML/JSON with policy, verifier, and secret references."
@@ -500,7 +640,12 @@ export function QualificationLifecycle({
             <div className="row">
               <Button
                 variant="primary"
-                disabled={!selectedCase || Boolean(busy)}
+                disabled={
+                  !selectedCase ||
+                  Boolean(busy) ||
+                  (selectedCaseNeedsFaultTarget &&
+                    (!faultStepId || !faultActuationPath))
+                }
                 onClick={() => void runCase()}
               >
                 {busy === "run" ? "Running case…" : "Run and sign case"}
@@ -528,6 +673,32 @@ export function QualificationLifecycle({
 
         <details style={{ marginTop: "var(--space-5)" }}>
           <summary>Add another qualification case</summary>
+          <div className="advanced-target-body">
+            <strong>Guided fault cases</strong>
+            <p className="page-sub">
+              Select a fault condition to use its typed Flow case kind, neutral case
+              identifier, and expected HALTED outcome. The current runner still has
+              to produce and sign the evidence.
+            </p>
+            <div className="row">
+              {GUIDED_FAULT_CASES.map((faultCase) => {
+                const existing = cases.find(
+                  (item) => item.kind === faultCase.kind,
+                );
+                return (
+                  <Button
+                    key={faultCase.id}
+                    disabled={Boolean(busy)}
+                    onClick={() => selectGuidedFaultCase(faultCase)}
+                  >
+                    {existing
+                      ? `Select ${faultCase.label}`
+                      : `Use ${faultCase.label}`}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
           <div className="grid grid-2" style={{ marginTop: "var(--space-3)" }}>
             <Field label="Case id" htmlFor="qualification-new-case-id">
               <input

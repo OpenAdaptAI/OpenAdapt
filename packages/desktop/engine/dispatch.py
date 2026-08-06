@@ -1957,6 +1957,7 @@ class EngineDispatcher:
                 workflow_id=workflow_id,
                 case_id=case_id,
                 runtime_input_bytes=runtime_input_bytes,
+                fault_target=params.get("fault_target"),
                 policy_source=policy,
                 bundle_key=self._qualification_bundle_key(workflow_id),
             )

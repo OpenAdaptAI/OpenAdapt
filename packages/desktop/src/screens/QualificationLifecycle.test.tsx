@@ -75,6 +75,33 @@ function project(): QualificationProject {
   } as unknown as QualificationProject;
 }
 
+function twoActionFaultProject(): QualificationProject {
+  const value = project();
+  value.project!.cases.push({
+    id: "fault-wrong-identity",
+    kind: "wrong_identity",
+    description: "Deterministic wrong identity refusal case",
+    expected_outcome: "halted",
+    required: true,
+    results: [],
+  });
+  value.controls.actions = {
+    open: {
+      step_id: "open",
+      execution_paths: ["gui"],
+      identity: { can_arm: false, armed: false, sources: [], policy: null },
+      effects: [],
+    },
+    save: {
+      step_id: "save",
+      execution_paths: ["api", "gui"],
+      identity: { can_arm: false, armed: false, sources: [], policy: null },
+      effects: [],
+    },
+  };
+  return value;
+}
+
 describe("Qualification lifecycle", () => {
   beforeEach(() => {
     mockedEngineInvoke.mockReset();
@@ -124,5 +151,99 @@ describe("Qualification lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create working version" }));
     await waitFor(() => expect(onOpenWorkflow).toHaveBeenCalledWith("wf-2"));
+  });
+
+  it("prefills a typed fault case instead of requiring a hand-written case id", async () => {
+    render(
+      <QualificationLifecycle
+        workflowId="wf-1"
+        project={project()}
+        onProject={() => {}}
+        onOpenWorkflow={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Add another qualification case"));
+    fireEvent.click(screen.getByRole("button", { name: "Use Wrong record" }));
+
+    expect((screen.getByLabelText("Case id") as HTMLInputElement).value).toBe(
+      "wrong-identity-1",
+    );
+    expect((screen.getByLabelText("Case type") as HTMLSelectElement).value).toBe(
+      "wrong_identity",
+    );
+    expect((screen.getByLabelText("Description") as HTMLInputElement).value).toBe(
+      "The live record does not match the qualified identity; the run must halt.",
+    );
+
+    fireEvent.change(screen.getByLabelText("record id"), {
+      target: { value: "CASE-42" },
+    });
+    fireEvent.change(screen.getByLabelText("amount"), {
+      target: { value: "75.5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add case" }));
+    await waitFor(() =>
+      expect(mockedEngineInvoke).toHaveBeenCalledWith(
+        CMD.ADD_QUALIFICATION_CASE,
+        expect.objectContaining({
+          workflow_id: "wf-1",
+          case_id: "wrong-identity-1",
+          kind: "wrong_identity",
+          description:
+            "The live record does not match the qualified identity; the run must halt.",
+          parameters_json: JSON.stringify({
+            record_id: "CASE-42",
+            amount: 75.5,
+            priority: "routine",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("reuses a default fault case and sends its exact target for two actions", async () => {
+    const value = twoActionFaultProject();
+    render(
+      <QualificationLifecycle
+        workflowId="wf-1"
+        project={value}
+        onProject={() => {}}
+        onOpenWorkflow={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Add another qualification case"));
+    fireEvent.click(screen.getByRole("button", { name: "Select Wrong record" }));
+    expect(screen.getByText("Run fault-wrong-identity")).toBeTruthy();
+    expect(mockedEngineInvoke).not.toHaveBeenCalledWith(
+      CMD.ADD_QUALIFICATION_CASE,
+      expect.anything(),
+    );
+
+    fireEvent.change(screen.getByLabelText("Fault action"), {
+      target: { value: "save" },
+    });
+    fireEvent.change(screen.getByLabelText("Actuation path"), {
+      target: { value: "api" },
+    });
+    fireEvent.change(screen.getByLabelText("record id"), {
+      target: { value: "CASE-42" },
+    });
+    fireEvent.change(screen.getByLabelText("amount"), {
+      target: { value: "75.5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run and sign case" }));
+
+    await waitFor(() =>
+      expect(mockedEngineInvoke).toHaveBeenCalledWith(
+        CMD.RUN_QUALIFICATION_CASE,
+        expect.objectContaining({
+          workflow_id: "wf-1",
+          case_id: "fault-wrong-identity",
+          fault_target: { step_id: "save", actuation_path: "api" },
+        }),
+      ),
+    );
   });
 });
