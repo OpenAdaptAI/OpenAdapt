@@ -18,8 +18,10 @@ from scripts.native_release import (
     validate_release_set,
     validate_sbom,
     validate_tag,
+    validate_website_release_manifest,
     verify_checksums,
     write_checksums,
+    write_website_release_manifest,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,9 +64,13 @@ def test_native_workflows_are_pinned_and_preserve_beta_boundary() -> None:
     assert "upload-artifact: false" in release
     assert "upload-release-assets: false" in release
     assert "native_release.py validate-sbom" in release
-    assert release.index("anchore/sbom-action@") < release.index(
-        "native_release.py validate-sbom"
-    ) < release.index("- name: Generate and verify final checksums")
+    assert "native_release.py website-manifest" in release
+    assert "native_release.py validate-website-manifest" in release
+    assert (
+        release.index("anchore/sbom-action@")
+        < release.index("native_release.py validate-sbom")
+        < release.index("- name: Generate and verify final checksums")
+    )
     assert "attestations: write" in release
     assert "id-token: write" in release
     assert "contents: write" in release
@@ -107,9 +113,7 @@ def test_validate_sbom_requires_cyclonedx_generator_and_named_components(
                 "bomFormat": "CycloneDX",
                 "specVersion": "1.6",
                 "version": 1,
-                "metadata": {
-                    "tools": [{"vendor": "Anchore", "name": "Syft", "version": "1.44.0"}]
-                },
+                "metadata": {"tools": [{"vendor": "Anchore", "name": "Syft", "version": "1.44.0"}]},
                 "components": [
                     {
                         "type": "library",
@@ -167,8 +171,7 @@ def test_security_workflows_cover_all_languages_and_pin_every_dependency() -> No
     assert "GITLEAKS_VERSION: 8.30.1" in secret_scan
     assert (
         "GITLEAKS_SHA256: "
-        "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
-        in secret_scan
+        "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" in secret_scan
     )
     assert "sha256sum --check --strict" in secret_scan
 
@@ -424,9 +427,7 @@ def test_superseded_notes_is_idempotent_and_upgrades_to_newer_pointer() -> None:
 def test_installer_pointer_prepends_block_and_preserves_engine_notes() -> None:
     body = "## v0.5.0 (2026-07-26)\n\n### Bug Fixes\n\n- Something.\n"
 
-    updated = installer_pointer_notes(
-        body, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop"
-    )
+    updated = installer_pointer_notes(body, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop")
 
     assert updated is not None
     assert updated.startswith("<!-- openadapt-installer-pointer:start -->\n")
@@ -454,9 +455,7 @@ def test_installer_pointer_is_idempotent_and_retargets_a_newer_native_tag() -> N
     # Re-running the same publish must not append a second block.
     assert installer_pointer_notes(once, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop") is None
 
-    retargeted = installer_pointer_notes(
-        once, "desktop-v0.6.0", "OpenAdaptAI/openadapt-desktop"
-    )
+    retargeted = installer_pointer_notes(once, "desktop-v0.6.0", "OpenAdaptAI/openadapt-desktop")
     assert retargeted is not None
     assert retargeted.count("openadapt-installer-pointer:start") == 1
     assert retargeted.count("openadapt-installer-pointer:end") == 1
@@ -470,9 +469,7 @@ def test_installer_pointer_refuses_a_malformed_or_truncated_block() -> None:
 
     truncated = "<!-- openadapt-installer-pointer:start -->\nhalf a block\n"
     with pytest.raises(ValueError):
-        installer_pointer_notes(
-            truncated, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop"
-        )
+        installer_pointer_notes(truncated, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop")
 
 
 def test_native_release_workflow_points_latest_at_the_published_installers() -> None:
@@ -665,3 +662,169 @@ def test_validate_release_set_requires_every_platform_and_no_extra_files(tmp_pat
     (release / "unexpected.bin").write_bytes(b"unexpected")
     with pytest.raises(ValueError, match="release assets differ"):
         validate_release_set(release)
+
+
+def _stage_complete_release(tmp_path: Path) -> tuple[Path, Path, Path]:
+    specifications = [
+        ("macos", "arm64", "adhoc", ["dmg/app-arm.dmg"]),
+        ("macos", "x86_64", "adhoc", ["dmg/app-intel.dmg"]),
+        ("windows", "x86_64", "unsigned", ["msi/app.msi", "nsis/app-setup.exe"]),
+        ("linux", "x86_64", "unsigned", ["deb/app.deb", "appimage/app.AppImage"]),
+    ]
+    release = tmp_path / "release"
+    release.mkdir(parents=True)
+    for index, (platform, architecture, signing, files) in enumerate(specifications):
+        bundle = tmp_path / f"bundle-{index}"
+        for relative in files:
+            path = bundle / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(relative.encode())
+        for path in stage_artifacts(
+            bundle_root=bundle,
+            output=tmp_path / f"stage-{index}",
+            platform=platform,
+            architecture=architecture,
+            signing=signing,
+        ):
+            path.rename(release / path.name)
+    tag = f"desktop-v{native_version()}"
+    sbom = release / f"OpenAdapt-Desktop-{tag}.cyclonedx.json"
+    sbom.write_text(
+        json.dumps(
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.6",
+                "version": 1,
+                "metadata": {"tools": [{"name": "Syft"}]},
+                "components": [{"name": "openadapt-flow"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = write_website_release_manifest(release, tag=tag, sbom=sbom)
+    checksums = release / "SHA256SUMS"
+    write_checksums(release, checksums)
+    return release, output, checksums
+
+
+def test_website_release_manifest_is_an_honest_index_of_staged_bytes(tmp_path: Path) -> None:
+    _, output, checksums = _stage_complete_release(tmp_path)
+    assert validate_website_release_manifest(output, checksums=checksums) == 6
+    manifest = json.loads(output.read_text())
+    assert {asset["signing"] for asset in manifest["artifacts"]} == {"adhoc", "unsigned"}
+    assert manifest["verification"]["github_artifact_attestation"] == "required"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("sha256_manifest", "checksums.txt"),
+        ("github_artifact_attestation", "optional"),
+        ("installer_smoke", "install only"),
+        ("unexpected", "accepted"),
+    ],
+)
+def test_website_release_manifest_rejects_modified_verification_contract(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    release, output, checksums = _stage_complete_release(tmp_path)
+    manifest = json.loads(output.read_text())
+    manifest["verification"][field] = value
+    output.write_text(json.dumps(manifest), encoding="utf-8")
+    write_checksums(release, checksums)
+    with pytest.raises(ValueError, match="invalid verification contract"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+
+def test_website_release_manifest_rejects_modified_sbom_format(tmp_path: Path) -> None:
+    release, output, checksums = _stage_complete_release(tmp_path)
+    manifest = json.loads(output.read_text())
+    manifest["sbom"]["format"] = "SPDX"
+    output.write_text(json.dumps(manifest), encoding="utf-8")
+    write_checksums(release, checksums)
+    with pytest.raises(ValueError, match="invalid SBOM format"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+
+def test_website_release_manifest_rejects_duplicate_and_nonexistent_assets(
+    tmp_path: Path,
+) -> None:
+    _, output, checksums = _stage_complete_release(tmp_path)
+    manifest = json.loads(output.read_text())
+    manifest["artifacts"][1] = dict(manifest["artifacts"][0])
+    output.write_text(json.dumps(manifest), encoding="utf-8")
+    write_checksums(output.parent, checksums)
+    with pytest.raises(ValueError, match="invalid artifact digest|incomplete"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+    _, output, checksums = _stage_complete_release(tmp_path / "nonexistent")
+    manifest = json.loads(output.read_text())
+    manifest["artifacts"][0]["name"] = "OpenAdapt-Desktop-does-not-exist.dmg"
+    output.write_text(json.dumps(manifest), encoding="utf-8")
+    write_checksums(output.parent, checksums)
+    with pytest.raises(ValueError, match="invalid artifact digest"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+
+def test_website_release_manifest_rejects_hash_metadata_and_byte_tampering(
+    tmp_path: Path,
+) -> None:
+    _, output, checksums = _stage_complete_release(tmp_path)
+    manifest = json.loads(output.read_text())
+    manifest["artifacts"][0]["sha256"] = "0" * 64
+    output.write_text(json.dumps(manifest), encoding="utf-8")
+    write_checksums(output.parent, checksums)
+    with pytest.raises(ValueError, match="digest differs"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+    _, output, checksums = _stage_complete_release(tmp_path / "metadata")
+    manifest = json.loads(output.read_text())
+    manifest["artifacts"][0]["architecture"] = "mips64"
+    output.write_text(json.dumps(manifest), encoding="utf-8")
+    write_checksums(output.parent, checksums)
+    with pytest.raises(ValueError, match="platform metadata"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+    release, output, checksums = _stage_complete_release(tmp_path / "bytes")
+    manifest = json.loads(output.read_text())
+    (release / manifest["artifacts"][0]["name"]).write_bytes(b"tampered")
+    write_checksums(release, checksums)
+    with pytest.raises(ValueError, match="digest differs"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+
+def test_website_release_manifest_rejects_sbom_and_checksum_tampering(tmp_path: Path) -> None:
+    release, output, checksums = _stage_complete_release(tmp_path)
+    manifest = json.loads(output.read_text())
+    manifest["sbom"]["sha256"] = "f" * 64
+    output.write_text(json.dumps(manifest), encoding="utf-8")
+    write_checksums(release, checksums)
+    with pytest.raises(ValueError, match="SBOM digest"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+    release, output, checksums = _stage_complete_release(tmp_path / "checksum")
+    lines = checksums.read_text().splitlines()
+    checksums.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="exact release file set"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+    release, output, checksums = _stage_complete_release(tmp_path / "missing-sbom")
+    manifest = json.loads(output.read_text())
+    (release / manifest["sbom"]["name"]).unlink()
+    with pytest.raises(ValueError, match="missing SBOM"):
+        validate_website_release_manifest(output, checksums=checksums)
+
+
+def test_website_release_manifest_rejects_forged_metadata_checksum(tmp_path: Path) -> None:
+    _, output, checksums = _stage_complete_release(tmp_path)
+    lines = checksums.read_text(encoding="utf-8").splitlines()
+    metadata_index = next(
+        index for index, line in enumerate(lines) if line.endswith("-metadata.json")
+    )
+    _digest, separator, name = lines[metadata_index].partition("  ")
+    assert separator and name
+    lines[metadata_index] = f"{'0' * 64}  {name}"
+    checksums.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="SHA256SUMS digest differs"):
+        validate_website_release_manifest(output, checksums=checksums)

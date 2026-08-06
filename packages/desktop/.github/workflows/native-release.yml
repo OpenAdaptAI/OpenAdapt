@@ -520,6 +520,13 @@ jobs:
           python scripts/native_release.py validate-sbom
           --file release-assets/OpenAdapt-Desktop-${{ github.ref_name }}.cyclonedx.json
 
+      - name: Generate website-readable release manifest
+        run: >-
+          python scripts/native_release.py website-manifest
+          --directory release-assets
+          --tag "${{ github.ref_name }}"
+          --sbom release-assets/OpenAdapt-Desktop-${{ github.ref_name }}.cyclonedx.json
+
       - name: Generate and verify final checksums
         run: |
           python scripts/native_release.py checksums \
@@ -528,6 +535,12 @@ jobs:
           python scripts/native_release.py verify-checksums \
             --directory release-assets \
             --manifest release-assets/SHA256SUMS
+
+      - name: Validate website manifest against exact checksummed bytes
+        run: >-
+          python scripts/native_release.py validate-website-manifest
+          --file release-assets/openadapt-desktop-release-manifest.json
+          --checksums release-assets/SHA256SUMS
 
       - name: Attest the exact files named by SHA256SUMS
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4

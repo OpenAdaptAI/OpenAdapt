@@ -9,7 +9,7 @@ download, and how the lanes converge.
 | Lane | Tag | Trigger | Marked as | Assets |
 | --- | --- | --- | --- | --- |
 | Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from green protected `main` | Regular release ("Latest") | Wheel, sdist, PyPI publish attestations, **and a mirrored copy of the matching `desktop-vX.Y.Z` installer set** |
-| Native installers | `desktop-vX.Y.Z` | `desktop-v*` tag push (automated, see below) | Draft, then published **prerelease** | Beta DMG (macOS arm64/x86_64), MSI + NSIS (Windows x86_64), DEB + AppImage (Linux x86_64), per-platform metadata JSON, and one `SHA256SUMS` manifest with GitHub artifact attestations |
+| Native installers | `desktop-vX.Y.Z` | `desktop-v*` tag push (automated, see below) | Draft, then published **prerelease** | Beta DMG (macOS arm64/x86_64), MSI + NSIS (Windows x86_64), DEB + AppImage (Linux x86_64), per-platform metadata JSON, a website-readable release manifest, and one `SHA256SUMS` manifest with GitHub artifact attestations |
 
 The engine lane stays non-prerelease so GitHub's "Latest" pointer always names
 the canonical engine release. The native lane stays prerelease because its
@@ -144,6 +144,13 @@ alone:
   `<!-- installer-release -->` marker. Selection logic must keep matching on
   the marker plus the `desktop-v` prefix, so the mirror is invisible to it. The
   mirror exists for humans who land on `/releases/latest`.
+- `openadapt-desktop-release-manifest.json` is the website-readable index. It
+  lists each artifact name, platform, architecture, signing state, and SHA-256,
+  plus the checked CycloneDX SBOM. The release workflow recomputes the named
+  hashes and validates the complete file set against `SHA256SUMS` before it
+  creates the GitHub attestation. A consumer must still verify the checksums
+  and attestation; the manifest does not claim that unsigned artifacts are
+  signed.
 
 ## Convergence plan (post-signing)
 
