@@ -131,10 +131,58 @@ Phone delivery for operational halts is described in
 can use the same delivery infrastructure, but it must preserve the distinct
 business-decision request and receipt schema.
 
+### Portable mobile projection
+
+`openadapt_flow.interop.business_decision` projects a local signed request into
+the separate `openadapt.business-decision-task/v1` contract from
+`openadapt-types`. The projection carries opaque tenant, runner, run, pause,
+request, bundle, workflow, decision, role-policy, presentation, relay, expiry,
+and idempotency bindings. It carries finite option IDs and opaque successor
+digests. It does not carry the question, option labels, role names, values,
+screenshots, OCR text, or record identifiers.
+
+The mobile view resolves its static reviewed question and option copy from the
+exact presentation artifact that the signed delivery policy names. Each text
+field is either local-only or remote-safe with a positive egress-review digest.
+Projection compares the exact copy and its shared content digest with the
+authenticated Flow request before it signs a task. A remote task is valid only
+when all visible text has the one reviewed egress binding named by the policy.
+The delivery policy also binds the allowed opaque roles, authenticated routes,
+answer signing-key IDs, exact authentication profile, relay capability, and
+expiry. These fields are qualification output. A caller cannot select them when
+it projects a task.
+
+The projection replaces the local run and pause identifiers with keyed opaque
+aliases. The remote task does not carry local role names, live record values,
+or free-text runtime data. If the decision needs protected local evidence, the
+task is local-answer-only. A remote answer includes one option ID and one
+idempotency key. The authenticated route adds the principal, mapped role,
+authentication profile, route reference, and authentication-context reference
+before it signs the answer.
+
+The customer runner verifies both signatures, maps the opaque role back through
+the qualification-owned role map, and calls Flow's normal business-decision
+submission API. Flow derives its local idempotency binding from the exact signed
+portable answer, its client idempotency key, and the task scope. A new signed
+answer envelope cannot claim a receipt for an earlier answer. The mobile answer
+receipt can report that Flow retained the exact answer and will revalidate the
+live application. A retained receipt stays available after the answer window
+expires; expiry stops a new answer but does not remove accepted audit evidence.
+The portable receipt uses a separate schema from Flow's durable local receipt.
+It cannot report `VERIFIED`; only the later execution and effect receipt can
+prove the business result.
+
 ## Integration API
 
 The public engine exports:
 
+- `project_portable_business_decision_task()` to verify the reviewed
+  presentation and signed delivery policy before it creates a remote-safe
+  task;
+- `admit_portable_business_decision_answer()` to authenticate and map one
+  portable finite answer into Flow's local submission models;
+- `project_recorded_business_decision_answer_receipt()` to confirm that Flow
+  retained an answer and return a signed, non-success portable receipt;
 - `BusinessDecisionStore.read_active_request()` to read and authenticate the
   active request;
 - `BusinessDecisionStore.retain_evidence()` to retain local evidence by hash;
