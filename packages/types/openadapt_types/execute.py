@@ -16,7 +16,7 @@ import hashlib
 import hmac
 import json
 from enum import Enum
-from typing import Any, Literal, Mapping, TypeAlias
+from typing import Annotated, Any, Literal, Mapping, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -29,6 +29,7 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_types.business_decision import BusinessDecisionTaskV1
 from openadapt_types.human_decision import HumanDecisionTaskV1
 
 EXECUTE_REQUEST_SCHEMA = "openadapt.execute-request/v1"
@@ -246,12 +247,18 @@ class ExecuteTerminalWebhookV1(_SignedExecuteWebhookV1):
     receipt: ExecuteEvidenceReceiptV1
 
 
+ExecuteDecisionTaskV1: TypeAlias = Annotated[
+    HumanDecisionTaskV1 | BusinessDecisionTaskV1,
+    Field(discriminator="schema_version"),
+]
+
+
 class ExecuteDecisionRequiredWebhookV1(_SignedExecuteWebhookV1):
     event_type: Literal[ExecuteWebhookEventTypeV1.DECISION_REQUIRED] = (
         ExecuteWebhookEventTypeV1.DECISION_REQUIRED
     )
     execution_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
-    decision: HumanDecisionTaskV1
+    decision: ExecuteDecisionTaskV1
 
 
 ExecuteWebhookV1: TypeAlias = (

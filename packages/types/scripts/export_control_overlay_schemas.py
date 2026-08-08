@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from openadapt_types import (
+    BusinessDecisionAnswerReceiptV1,
+    BusinessDecisionAnswerV1,
+    BusinessDecisionDeliveryPolicyV1,
+    BusinessDecisionPresentationV1,
+    BusinessDecisionTaskV1,
     ControlOverlayFrameV1,
     ControlOverlayFrameV2,
     ControlOverlayTimelineV1,
@@ -24,6 +29,11 @@ from openadapt_types.execute_openapi import execute_openapi_document
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "openadapt_types" / "schemas"
 SCHEMAS = {
+    "business-decision-task-v1.json": BusinessDecisionTaskV1,
+    "business-decision-answer-v1.json": BusinessDecisionAnswerV1,
+    "business-decision-answer-receipt-v1.json": BusinessDecisionAnswerReceiptV1,
+    "business-decision-presentation-v1.json": BusinessDecisionPresentationV1,
+    "business-decision-delivery-policy-v1.json": BusinessDecisionDeliveryPolicyV1,
     "control-overlay-frame-v1.json": ControlOverlayFrameV1,
     "control-overlay-timeline-v1.json": ControlOverlayTimelineV1,
     "control-overlay-frame-v2.json": ControlOverlayFrameV2,

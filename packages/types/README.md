@@ -75,6 +75,8 @@ Documentation for the whole stack lives at
 | `ExecuteRequestV1` / `ExecuteStatusV1` | Async qualified-execution request and lifecycle contracts |
 | `ExecuteEvidenceReceiptV1` | Outcome receipt with contract proof and evidence identifiers |
 | `EffectStrengthV1` | Named effect-proof strength for consequential execution |
+| `BusinessDecisionTaskV1` / `BusinessDecisionAnswerV1` | Signed, finite business choices for authenticated mobile or local operator routes |
+| `BusinessDecisionAnswerReceiptV1` | Runner answer receipt that cannot claim a verified business effect |
 
 ## Quick start
 
@@ -203,6 +205,17 @@ Execute v1 contract. It defines asynchronous execution submission, lifecycle
 status, terminal evidence receipts, and signed decision and terminal webhooks.
 It keeps `waiting_for_reconciliation` as a lifecycle state and
 `reconciliation_required` as a terminal outcome.
+
+The separate `business-decision-*-v1.json` files define a finite human branch
+that the workflow declared before execution. They do not reuse the operational
+halt actions. They carry only opaque bindings, option IDs, digests, counts, and
+closed status values. The separate presentation artifact classifies each
+question and option label as `local_only` or `reviewed_remote_safe`. Remote
+delivery requires a positive egress-review digest for every field. The signed
+delivery policy binds the exact presentation and review digest. Screenshots,
+free-form notes, and live record values stay on the customer runner. An
+accepted answer only selects a compiled branch. The next action must still pass
+its live-state, identity, policy, and effect contracts.
 
 ## OpenAdapt Execute v1
 
