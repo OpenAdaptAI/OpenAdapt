@@ -131,8 +131,8 @@ contract cannot be established, it returns evidence and halts.
 A halted run can send one signed task to the OpenAdapt phone view. The task can
 ask about record identity, target ambiguity, a required human step, a saved
 result, uncertain delivery, or an optional step. The phone shows only the
-actions that the certified workflow permits. It does not click the application
-or declare success.
+actions that the current sealed pause capability permits. It does not click the
+application or declare success.
 
 After an answer, the customer-controlled runner reads the live application
 again. It checks the current pause, session, workflow state, identity, target,
