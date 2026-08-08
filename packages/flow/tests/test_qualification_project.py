@@ -38,18 +38,36 @@ from openadapt_flow.ir import (
     ApiBinding,
     ApiIdentityBinding,
     BundleManifest,
+    BusinessDecisionOption,
+    BusinessDecisionSpec,
     EffectVerificationEvidence,
     GovernedAuthorizationParameter,
     GovernedAuthorizationTemplate,
     IdentityCheck,
     Postcondition,
     PostconditionKind,
+    Predicate,
+    PredicateKind,
+    ProgramGraph,
     RunReport,
     SafetyRefusalEvidence,
+    State,
+    StateKind,
     Step,
     StepResult,
     VisualResolutionEvidence,
     Workflow,
+)
+from openadapt_flow.judgment_cases import (
+    JudgmentCaseProvenanceV1,
+    JudgmentCaseV1,
+    JudgmentDecisionBindingV1,
+    JudgmentDisposition,
+    JudgmentFactFieldV1,
+    JudgmentFactSchemaBindingV1,
+    JudgmentFactSchemaV1,
+    JudgmentFactType,
+    LocalEvidenceRefV1,
 )
 from openadapt_flow.policy import (
     Policy,
@@ -89,11 +107,14 @@ from openadapt_flow.qualification import (
     qualification_action_requirements,
     record_case_results,
     remove_entity_label,
+    save_qualified_workflow,
     set_action_classification,
+    set_business_decision,
     set_case_scope,
     set_effect_policy,
     set_entity_label,
     set_identity_policy,
+    set_judgment_cases,
     set_minimum_effect_tier,
     set_trusted_fault_driver_key,
     set_trusted_runner_key,
@@ -2815,6 +2836,117 @@ def test_persisted_certification_is_recomputed_and_policy_digest_bound(
     )
     project.last_certification.report_sha256 = forged_report.report_sha256()
     assert not current_certification_matches(workflow)
+    assert not current_certification_matches(workflow, policy=policy)
+
+
+def test_judgment_evidence_certification_reproduces_and_saves(
+    tmp_path: Path,
+) -> None:
+    workflow = _workflow()
+    workflow.subflows["review_subflow"] = ProgramGraph(
+        entry="done",
+        states={
+            "done": State(id="done", kind=StateKind.TERMINAL, outcome="success"),
+        },
+    )
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+
+    decision = BusinessDecisionSpec(
+        question="Which reviewed path should continue?",
+        authorized_roles=("operator",),
+        output_param="review_outcome",
+        options=(
+            BusinessDecisionOption(
+                id="priority", label="Priority", value="priority", target="done"
+            ),
+            BusinessDecisionOption(
+                id="standard", label="Standard", value="standard", target="done"
+            ),
+        ),
+        revalidation=(
+            Predicate(kind=PredicateKind.TEXT_PRESENT, text="Ready for review"),
+        ),
+    )
+    workflow = set_business_decision(
+        workflow,
+        graph_id="review_subflow",
+        state_id="review",
+        decision=decision,
+        insert_before_state_id="done",
+    )
+    schema = JudgmentFactSchemaV1(
+        fields={
+            "urgency": JudgmentFactFieldV1(
+                type=JudgmentFactType.ENUM,
+                allowed_values=("high", "normal"),
+            )
+        }
+    )
+    case_payload = b"reviewed judgment evidence"
+    case_ref = LocalEvidenceRefV1(
+        relative_path="judgment/human-1.json",
+        sha256=hashlib.sha256(case_payload).hexdigest(),
+        kind="report",
+    )
+    case = JudgmentCaseV1(
+        id="human-1",
+        decision=JudgmentDecisionBindingV1(
+            graph_id="review_subflow",
+            state_id="review",
+            workflow_contract_sha256=workflow_contract_sha256(workflow),
+            decision_contract_sha256=decision.contract_sha256(),
+        ),
+        fact_schema_sha256=schema.contract_sha256(),
+        facts={"urgency": "high"},
+        local_evidence=(case_ref,),
+        provenance=JudgmentCaseProvenanceV1(
+            source="policy_review",
+            source_ref_sha256="c" * 64,
+            reviewer_role="operator",
+            reviewer_principal_ref_sha256="d" * 64,
+        ),
+        disposition=JudgmentDisposition.HUMAN_NODE,
+    )
+    set_judgment_cases(
+        workflow,
+        schemas=(
+            JudgmentFactSchemaBindingV1(
+                graph_id="review_subflow",
+                state_id="review",
+                fact_schema=schema,
+            ),
+        ),
+        cases=(case,),
+    )
+
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+    judgment_dir = evidence_root / "judgment"
+    judgment_dir.mkdir(parents=True)
+    (judgment_dir / "human-1.json").write_bytes(case_payload)
+    policy = load_policy("clinical-write")
+    assert certify_project(
+        workflow,
+        policy=policy,
+        evidence_root=evidence_root,
+    ).passed
+    assert current_certification_matches(workflow, policy=policy)
+    save_qualified_workflow(workflow, bundle)
+
+    project = workflow.qualification
+    assert project is not None
+    project.judgment_cases = [
+        case.model_copy(
+            update={
+                "local_evidence": (case_ref.model_copy(update={"sha256": "0" * 64}),)
+            }
+        )
+    ]
     assert not current_certification_matches(workflow, policy=policy)
 
 

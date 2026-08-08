@@ -2454,6 +2454,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
 
     from pydantic import TypeAdapter
 
+    from openadapt_flow.judgment_cases import JudgmentCaseSetV1
     from openadapt_flow.qualification import (
         ActionRiskClass,
         ActionRiskClassification,
@@ -2471,6 +2472,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         add_requalification_condition,
         certify_project,
         entity_label_options,
+        evaluate_judgment_case_qualification,
         init_project,
         list_entity_labels,
         project_schema,
@@ -2481,6 +2483,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         set_effect_policy,
         set_entity_label,
         set_identity_policy,
+        set_judgment_cases,
         set_trusted_runner_key,
     )
 
@@ -2492,6 +2495,23 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         return 0
 
     workflow = _qualification_workflow(args)
+
+    if verb == "judgment-cases":
+        if args.check:
+            report = evaluate_judgment_case_qualification(workflow)
+        else:
+            if not args.input:
+                raise SystemExit("--input is required unless --check is used")
+            try:
+                payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+                case_set = JudgmentCaseSetV1.model_validate(payload)
+            except (OSError, ValueError) as exc:
+                raise SystemExit(f"invalid judgment case set: {exc}") from exc
+            set_judgment_cases(workflow, schemas=case_set.schemas, cases=case_set.cases)
+            save_qualified_workflow(workflow, args.bundle)
+            report = evaluate_judgment_case_qualification(workflow)
+        print(report.model_dump_json(indent=2))
+        return 0 if report.passed else 2
 
     if verb == "label":
         if args.label_cmd == "list":
@@ -4513,6 +4533,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Actuation path whose effect is being qualified (default: gui)",
     )
     q.add_argument("--tier", type=int, choices=(1, 2, 3, 4), required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "judgment-cases",
+        help=(
+            "Store or check reviewed local judgment cases; this command never "
+            "synthesizes an executable rule from examples"
+        ),
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument(
+        "--input",
+        metavar="JSON",
+        help="Local openadapt.judgment-case-set/v1 JSON file (required without --check)",
+    )
+    q.add_argument(
+        "--check",
+        action="store_true",
+        help="Evaluate the bundle's current stored cases without changing it",
+    )
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser("add-case", help="Add a representative or fault case")

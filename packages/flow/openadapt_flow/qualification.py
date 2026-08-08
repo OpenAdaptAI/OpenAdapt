@@ -22,7 +22,16 @@ from collections import Counter
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Literal, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Final,
+    Iterable,
+    Literal,
+    Optional,
+    Protocol,
+)
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -43,6 +52,13 @@ from openadapt_flow.identity_signals import (
     canonical_normalizers,
     parameterize_identity_text,
     signal_hash_key,
+)
+from openadapt_flow.judgment_cases import (
+    JudgmentCaseFindingCode,
+    JudgmentCaseQualificationReportV1,
+    JudgmentCaseV1,
+    JudgmentFactSchemaBindingV1,
+    evaluate_judgment_cases,
 )
 from openadapt_flow.verification import VerificationTier
 
@@ -851,6 +867,12 @@ class QualificationProject(BaseModel):
     #: not safety evidence, observations, or runtime-derived values. An empty
     #: mapping is valid and does not affect qualification admission.
     entity_labels: dict[str, "QualifiedEntityLabel"] = Field(default_factory=dict)
+    #: Local reviewed cases for graph decision nodes. They are not executable
+    #: rules. Each case binds to an exact workflow and decision contract.
+    judgment_fact_schemas: list[JudgmentFactSchemaBindingV1] = Field(
+        default_factory=list
+    )
+    judgment_cases: list[JudgmentCaseV1] = Field(default_factory=list)
     cases: list[QualificationCase] = Field(default_factory=_default_fault_cases)
     exclusions: list[str] = Field(default_factory=list)
     requalification_conditions: list[RequalificationCondition] = Field(
@@ -900,6 +922,14 @@ class QualificationProject(BaseModel):
         case_ids = [case.id for case in self.cases]
         if len(case_ids) != len(set(case_ids)):
             raise ValueError("qualification case ids must be unique")
+        judgment_case_ids = [case.id for case in self.judgment_cases]
+        if len(judgment_case_ids) != len(set(judgment_case_ids)):
+            raise ValueError("judgment case ids must be unique")
+        schema_nodes = [
+            (item.graph_id, item.state_id) for item in self.judgment_fact_schemas
+        ]
+        if len(schema_nodes) != len(set(schema_nodes)):
+            raise ValueError("judgment fact schemas must bind unique graph states")
         effect_refs = [
             (binding.step_id, binding.actuation_path, binding.effect_index)
             for binding in self.effect_policies
@@ -915,6 +945,10 @@ class QualificationProject(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.trusted_fault_driver_keys:
             data.pop("trusted_fault_driver_keys", None)
+        if not self.judgment_fact_schemas:
+            data.pop("judgment_fact_schemas", None)
+        if not self.judgment_cases:
+            data.pop("judgment_cases", None)
         return data
 
     def revision_digest(self) -> str:
@@ -967,6 +1001,11 @@ class QualificationRefusalCode(str, Enum):
     CASE_ENVIRONMENT_CHANGED = "case_environment_changed"
     CASE_RUNTIME_CHANGED = "case_runtime_changed"
     CASE_CAPABILITY_MISSING = "case_capability_missing"
+    JUDGMENT_CASE_BINDING_INVALID = "judgment_case_binding_invalid"
+    JUDGMENT_CASE_CONFLICT = "judgment_case_conflict"
+    JUDGMENT_CASE_CONTRAST_MISSING = "judgment_case_contrast_missing"
+    JUDGMENT_CASE_MORE_EVIDENCE_REQUIRED = "judgment_case_more_evidence_required"
+    JUDGMENT_CASE_EVIDENCE_UNVERIFIED = "judgment_case_evidence_unverified"
     POLICY_VIOLATION = "policy_violation"
 
 
@@ -1338,6 +1377,106 @@ def _invalidate_certification(workflow: "Workflow") -> None:
     provenance.certified_at = None
     provenance.expires_at = None
     provenance.governed_authorization_template = None
+
+
+def _judgment_decision_contracts(
+    workflow: "Workflow",
+) -> dict[tuple[str, str], tuple[str, tuple[str, ...]]]:
+    """Return current graph decision contracts without interpreting examples."""
+
+    from openadapt_flow.ir import StateKind
+
+    graphs = [("__program__", workflow.program), *workflow.subflows.items()]
+    return {
+        (graph_id, state_id): (
+            state.decision.contract_sha256(),
+            tuple(option.id for option in state.decision.options),
+        )
+        for graph_id, graph in graphs
+        if graph is not None
+        for state_id, state in graph.states.items()
+        if state.kind is StateKind.BUSINESS_DECISION and state.decision is not None
+    }
+
+
+def evaluate_judgment_case_qualification(
+    workflow: "Workflow",
+) -> "JudgmentCaseQualificationReportV1":
+    """Evaluate the local judgment-case layer without executing a workflow."""
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError(
+            "initialize qualification before evaluating judgment cases"
+        )
+    schemas = {
+        (item.graph_id, item.state_id): item.fact_schema
+        for item in project.judgment_fact_schemas
+    }
+    return evaluate_judgment_cases(
+        workflow_contract_sha256=workflow_contract_sha256(workflow),
+        decisions=_judgment_decision_contracts(workflow),
+        fact_schemas=schemas,
+        cases=project.judgment_cases,
+    )
+
+
+def set_judgment_cases(
+    workflow: "Workflow",
+    *,
+    schemas: Iterable[JudgmentFactSchemaBindingV1],
+    cases: Iterable[JudgmentCaseV1],
+) -> QualificationProject:
+    """Replace the local reviewed case set and invalidate certification.
+
+    This API deliberately accepts reviewed finite decisions only. It never
+    generates a rule from facts or promotes a written reason into execution.
+    """
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError(
+            "initialize qualification before setting judgment cases"
+        )
+    proposed_schemas = list(schemas)
+    proposed_cases = list(cases)
+    candidate = QualificationProject.model_validate(
+        {
+            **project.model_dump(mode="json"),
+            "judgment_fact_schemas": [
+                item.model_dump(mode="json") for item in proposed_schemas
+            ],
+            "judgment_cases": [item.model_dump(mode="json") for item in proposed_cases],
+        }
+    )
+    original_schemas = project.judgment_fact_schemas
+    original_cases = project.judgment_cases
+    project.judgment_fact_schemas = candidate.judgment_fact_schemas
+    project.judgment_cases = candidate.judgment_cases
+    report = evaluate_judgment_case_qualification(workflow)
+    project.judgment_fact_schemas = original_schemas
+    project.judgment_cases = original_cases
+    strict_codes = {
+        JudgmentCaseFindingCode.BINDING_MISMATCH,
+        JudgmentCaseFindingCode.FACT_SCHEMA_MISMATCH,
+    }
+    strict = [item for item in report.findings if item.code in strict_codes]
+    if strict:
+        raise QualificationError(
+            "invalid judgment case binding: "
+            + "; ".join(item.message for item in strict)
+        )
+    if (
+        project.judgment_fact_schemas == candidate.judgment_fact_schemas
+        and project.judgment_cases == candidate.judgment_cases
+    ):
+        return project
+    previous = project.revision_digest()
+    project.judgment_fact_schemas = candidate.judgment_fact_schemas
+    project.judgment_cases = candidate.judgment_cases
+    _touch(project, previous)
+    _invalidate_certification(workflow)
+    return project
 
 
 def _touch(project: QualificationProject, previous_digest: str) -> None:
@@ -2198,10 +2337,17 @@ def sign_case_result(
     )
 
 
+class _HashBoundEvidenceRef(Protocol):
+    """The fields required to verify any local evidence reference."""
+
+    relative_path: str
+    sha256: str
+
+
 def _read_evidence_bytes(
     *,
     root: Path,
-    evidence: EvidenceRef,
+    evidence: _HashBoundEvidenceRef,
 ) -> tuple[Optional[bytes], Optional[str]]:
     """Read one exact hash-bound file without following a symlink."""
 
@@ -4072,7 +4218,7 @@ def _case_result_integrity_error(
 def _case_evidence_contract_sha256(project: QualificationProject) -> str:
     """Digest the exact signed current case results and their evidence refs."""
 
-    payload = []
+    payload: list[dict[str, Any]] = []
     for case in sorted(project.cases, key=lambda item: item.id):
         if not case.required:
             continue
@@ -4085,9 +4231,68 @@ def _case_evidence_contract_sha256(project: QualificationProject) -> str:
                 ),
             }
         )
+    payload.append(
+        {
+            "judgment_cases": [
+                {
+                    "case_id": case.id,
+                    "local_evidence": [
+                        item.model_dump(mode="json") for item in case.local_evidence
+                    ],
+                    "review_note_ref": (
+                        case.review_note_ref.model_dump(mode="json")
+                        if case.review_note_ref is not None
+                        else None
+                    ),
+                }
+                for case in sorted(project.judgment_cases, key=lambda item: item.id)
+            ]
+        }
+    )
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+
+
+def _judgment_evidence_errors(
+    project: QualificationProject,
+    *,
+    evidence_root: Optional[Path | str],
+    evidence_preverified: bool = False,
+) -> list[tuple[str, str]]:
+    """Verify every local judgment artifact before certification.
+
+    The artifacts remain local. The sealed project stores only relative paths
+    and digests, which this check verifies under the declared local root.
+    """
+
+    if not project.judgment_cases:
+        return []
+    if evidence_root is None:
+        if evidence_preverified:
+            return []
+        return [
+            (
+                "qualification.judgment_cases",
+                "judgment-case certification requires the local evidence root",
+            )
+        ]
+    root = Path(evidence_root).resolve()
+    errors: list[tuple[str, str]] = []
+    for case in project.judgment_cases:
+        refs = [*case.local_evidence]
+        if case.review_note_ref is not None:
+            refs.append(case.review_note_ref)
+        for evidence in refs:
+            _payload, error = _read_evidence_bytes(root=root, evidence=evidence)
+            if error is not None:
+                errors.append(
+                    (
+                        f"qualification.judgment_cases.{case.id}.local_evidence",
+                        error,
+                    )
+                )
+    return errors
 
 
 def record_case_results(
@@ -4829,6 +5034,55 @@ def evaluate_qualification(
                     details={"rule": violation.rule},
                 )
             )
+
+    judgment_report = evaluate_judgment_case_qualification(workflow)
+    judgment_refusal_codes = {
+        JudgmentCaseFindingCode.BINDING_MISMATCH: (
+            QualificationRefusalCode.JUDGMENT_CASE_BINDING_INVALID,
+            "judgment case binding is invalid",
+        ),
+        JudgmentCaseFindingCode.FACT_SCHEMA_MISMATCH: (
+            QualificationRefusalCode.JUDGMENT_CASE_BINDING_INVALID,
+            "judgment case fact schema is invalid",
+        ),
+        JudgmentCaseFindingCode.CONFLICT: (
+            QualificationRefusalCode.JUDGMENT_CASE_CONFLICT,
+            "judgment cases conflict",
+        ),
+        JudgmentCaseFindingCode.MISSING_CONTRAST_COVERAGE: (
+            QualificationRefusalCode.JUDGMENT_CASE_CONTRAST_MISSING,
+            "judgment automatic rule lacks contrast coverage",
+        ),
+        JudgmentCaseFindingCode.MORE_EVIDENCE_REQUIRED: (
+            QualificationRefusalCode.JUDGMENT_CASE_MORE_EVIDENCE_REQUIRED,
+            "judgment case requires more evidence",
+        ),
+    }
+    for finding in judgment_report.findings:
+        mapped = judgment_refusal_codes.get(finding.code)
+        if mapped is None:
+            # Retained human authority is a result, not a certification failure.
+            continue
+        refusals.append(
+            QualificationRefusal(
+                code=mapped[0],
+                path="qualification.judgment_cases",
+                case_id=finding.case_id,
+                message=f"{mapped[1]}: {finding.message}",
+            )
+        )
+    for path, message in _judgment_evidence_errors(
+        project,
+        evidence_root=evidence_root,
+        evidence_preverified=evidence_preverified,
+    ):
+        refusals.append(
+            QualificationRefusal(
+                code=QualificationRefusalCode.JUDGMENT_CASE_EVIDENCE_UNVERIFIED,
+                path=path,
+                message=message,
+            )
+        )
 
     return QualificationReport(
         workflow_name=workflow.name,
