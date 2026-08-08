@@ -461,6 +461,36 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime:
   name / DOB / MRN band, so a compiled bundle need carry no readable PHI while
   still enforcing identity (`openadapt_flow/runtime/identity_template.py`).
 
+### Answer a halt from a phone
+
+An attended run can project one signed operational-halt task to an
+authenticated phone view. The task identifies one exact tenant, runner, run,
+pause, capability, bundle, event sequence, expiry, and idempotency scope. A
+negotiated V2 task also binds the qualification project, revision, contract,
+and exact step. It carries only closed enums, bounded counts, digests, and a
+reviewed remote-safe entity class. A custom or missing class becomes the
+signed neutral `record` or `item` label. The runtime does not infer that label
+from a screenshot, OCR, a parameter, an application name, or a model.
+
+The phone shows only the actions in the sealed pause capability. Depending on
+the exact halt, those can include verify and resume, skip, reject, teach,
+escalate, or reconcile. A tap does not actuate the target application and does
+not prove success. The hosted route supplies an AAL2-authenticated principal
+bound to the exact tenant and runner. The customer-controlled runner matches
+the current pause again, acquires the action lease, reads a fresh live state,
+and repeats the required session, identity, target, postcondition, and effect
+checks before it continues. Reconcile performs a read-only effect check after
+uncertain delivery; it never repeats the possibly completed action.
+
+The hosted lane uses outbound HTTPS and sends no screenshot. The separate
+Desktop portal can show protected evidence through a customer-operated HTTPS
+boundary. Try the shared hosted interface with synthetic application data at
+[app.openadapt.ai/demo/attention](https://app.openadapt.ai/demo/attention), and
+read the exact delivery and data-boundary contract in
+[`docs/DECISION_DELIVERY.md`](docs/DECISION_DELIVERY.md). A declared finite
+business-policy choice is a different state and receipt contract; see
+[`docs/BUSINESS_DECISIONS.md`](docs/BUSINESS_DECISIONS.md).
+
 ### What `visualize` shows
 
 This is the actual Mermaid that `visualize` emits for the bundled MockMed
@@ -776,9 +806,13 @@ openadapt-flow report-break runs/replay-… \          # PHI-free break diagnost
 
 To pair this machine with a launched Cloud tenant from a desktop deep link, use
 `openadapt-flow connect`. The operator console (`openadapt-flow console`, needs
-the `console` extra) serves a localhost-only, read-only web UI over compiled
-bundles, run reports, halt evidence, and skill-library lineage. The sanitizer
-uses the optional `privacy` extra; hosted transport uses `httpx`.
+the `console` extra) serves a localhost operator UI over compiled bundles, run
+reports, halt evidence, and skill-library lineage. It is read-only by default.
+An explicit `--attend --allow-actions --config deployment.yaml` starts the
+deployment-bound action service. Add `--remote-decisions` for the outbound
+phone lane when `human_decisions.remote.enabled` names the exact tenant and
+runner and the authenticated runner token is present. The sanitizer uses the
+optional `privacy` extra; hosted transport uses `httpx`.
 
 ## Development
 

@@ -16,6 +16,54 @@ is recorded as weaker rather than concealed. This applies the same idea to
 **delivery**. A decision taken without seeing what broke is a different decision
 from one taken with it, and the system should be able to say which it got.
 
+## What the operator sees
+
+The authenticated hosted queue and the public simulator use the same mobile
+request and result component. A live request shows one question, the action
+delivery state, the check that failed, what the runner will check next, and only
+the actions in the signed capability. The hosted task contains no screenshot.
+Protected frames stay on the customer runner. The separate runner-local Desktop
+portal can show them through a customer-operated HTTPS boundary.
+
+The public simulator at
+[`app.openadapt.ai/demo/attention`](https://app.openadapt.ai/demo/attention)
+lets a reader try the six operator views with synthetic OpenEMR data. It can
+show a synthetic retained frame to explain the product. It does not submit a
+production decision. The signed-in queue uses the same inner mobile component
+with real signed task data and its production action route.
+
+The six public views group the operational requests by what the person must do:
+
+| View | Why Flow stopped | What the person prepares |
+| --- | --- | --- |
+| Record identity | The required entity identity did not match or could not be proved | The intended record in the live application |
+| Target ambiguity | More than one target matched, or no unique target passed | One unambiguous target |
+| Human-only step | The application requires an authorized person, such as for sign-in | The required human step |
+| Saved-result check | The UI action finished but the configured effect was not proved | The persisted record or independent verifier for another read |
+| Delivery uncertainty | An action might already have arrived | The live result for a read-only reconciliation, never a retry |
+| Optional step | A qualified non-consequential step can follow an explicit skip policy | Whether to skip, stop, teach, or escalate that exact step |
+
+The sentences do not come from an LLM or VLM. Flow emits a closed task kind and
+template code from the typed halt. The client maps that code to fixed
+user-facing copy. A V2 task can add one signed, qualification-approved entity
+class, such as `insurance claim`. If that metadata is missing, custom, or not
+negotiated, the client says `record` or `item`.
+
+The exact action set varies with the sealed pause:
+
+| Action | Result |
+| --- | --- |
+| Verify and resume | The runner rechecks the live state and resumes only if all required checks pass |
+| Skip | The runner skips only an exact step whose qualified policy permits it |
+| Reject | The run ends and cannot resume; this is withheld when an action might already have arrived |
+| Teach | The run stays paused while Desktop opens the governed correction path; a future version still requires qualification |
+| Escalate | The run stays paused for another authorized operator |
+| Reconcile | The runner checks the possible effect without sending the earlier action again |
+
+A terminal receipt replaces the request with a distinct result. The result
+reports a closed state and reason code. It does not use the operator's answer as
+effect evidence and it cannot turn a human statement into `VERIFIED`.
+
 ## The ladder
 
 | Tier | Carries | Reachable from a phone |
@@ -318,21 +366,27 @@ says the frame is triage context rather than the source of any answer. Building
 the crypto before a pilot has told us the closed context is insufficient would
 be building the expensive half of the answer first.
 
-## What is not done yet
+## Current integration status
 
-Stated plainly, because a half-wired lane that reads as finished is worse than
-an honest gap.
-
-- **Desktop does not pass `--remote-decisions` yet.** `engine/portal/service.py`
-  spawns `openadapt-flow console --attend --allow-actions`; adding the flag is a
-  small change, but the installer bundles a pinned frozen Flow, so the pin has
-  to move to a release containing the flag first. Until then the lane is
-  available from the CLI and not from the Desktop toggle.
-- **The hosted side must be deployed.** The control plane has to accept the two
-  new projection fields before the lane carries context; without that it still
-  publishes and answers, at `remote_identifiers`.
-- **`max_remote_decision_tier` is not yet discriminating** (see above). It
-  becomes load-bearing when a tier exists that some profile must refuse.
+- Flow runs the outbound operational-decision supervisor from
+  `console --attend --allow-actions --remote-decisions`. It publishes every
+  current pause under the configured runs root and consumes signed answers.
+- Desktop reads `human_decisions.remote.enabled` from the exact staged
+  deployment configuration. It checks the registered runner and compatible
+  Flow version before it passes `--remote-decisions`; a missing credential or
+  mismatched runner stops startup instead of silently starting a local-only
+  lane.
+- OpenAdapt Cloud accepts the closed-context projection and presents it through
+  the signed-in mobile queue. The public simulator shares the same request and
+  result component, but uses synthetic scenarios and makes no production action
+  request.
+- Flow has a separate runtime contract for finite, role-bound business
+  decisions. The mobile surface described here handles operational halt tasks.
+  A consumer must implement the distinct business-decision request, principal,
+  role, option, and receipt contract before it can present that state.
+- `max_remote_decision_tier` does not yet distinguish the shipped profiles.
+  Every current profile permits `remote_closed_context`. The field becomes a
+  restrictive gate when a new tier has data that a profile must refuse.
 
 ## What is deliberately not claimed
 

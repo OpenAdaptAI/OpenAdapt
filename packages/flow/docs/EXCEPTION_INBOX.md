@@ -36,10 +36,17 @@ step's semantics:
 - **Skip / disposition:** resume only when the workflow already declares a
   non-consequential `on_unmet: skip` path and its guard is currently unmet.
   Otherwise the decision remains a recorded non-success disposition.
+- **Stop this run / Reject:** terminate the run and preserve the rejected pause
+  for audit. No later answer can resume it. Flow withholds this action when an
+  earlier application action may already have arrived, because stopping the
+  run cannot prove that the write did not occur.
 - **Teach the fix:** enter the existing governed teach/revision path. Regression
   and identity/effect/risk gates report accepted, banked progress, or refused;
   identity-evidence changes are never silently promoted.
 - **Needs more time:** record an escalation while preserving the durable pause.
+- **Reconcile:** when delivery is uncertain, perform a read-only check for the
+  possibly completed effect. Never send the earlier action again. Resume only
+  after the configured effect contract proves the result.
 
 Normal console and CLI capabilities remain available. Attended mode is an
 additional operator workflow, not a reduced product mode.
@@ -87,6 +94,20 @@ deadline has passed or cannot be parsed is acknowledged `expired`. Neither is
 executed. `console --attend --allow-actions --remote-decisions` starts it beside
 the loopback server, and every misconfiguration stops the console rather than
 disabling the lane silently.
+
+The signed-in Cloud queue presents these tasks through the mobile decision
+component. The public simulator at
+[`app.openadapt.ai/demo/attention`](https://app.openadapt.ai/demo/attention)
+uses the same request and result component with synthetic data and no
+production action request. It demonstrates identity, target ambiguity, a
+human-only step, a saved-result check, uncertain delivery, and an optional
+step. Flow emits a closed task kind and template code. The client maps that code
+to fixed copy; it does not call an LLM or VLM to write the prompt.
+
+A negotiated V2 task can display one remote-safe entity class from the exact
+qualification contract. If that label is absent, custom, or not negotiated,
+the signed task uses `record` or `item`. The task never infers a domain label
+from the screen, OCR, parameters, application name, or a model.
 
 After a returned Continue, OpenAdapt observes a newly settled live frame,
 rechecks the human-completed postcondition and configured effect, proves the
