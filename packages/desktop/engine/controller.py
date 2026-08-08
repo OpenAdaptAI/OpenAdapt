@@ -123,12 +123,20 @@ class RecordingController:
         """ID of the current capture session, or None if idle."""
         return self._current_capture_id
 
-    def start(self, quality: str | None = None, task_description: str = "") -> str:
+    def start(
+        self,
+        quality: str | None = None,
+        task_description: str = "",
+        *,
+        metadata: dict[str, object] | None = None,
+    ) -> str:
         """Start a new recording session.
 
         Args:
             quality: Override the default quality preset.
             task_description: Optional description of the recording task.
+            metadata: Optional Desktop-owned metadata that binds this capture
+                to a governed local operation. The recorder does not consume it.
 
         Returns:
             The capture ID for the new session.
@@ -155,6 +163,12 @@ class RecordingController:
             "task_description": task_description,
             "quality": quality or self.quality,
         }
+        if metadata:
+            reserved = set(meta) & set(metadata)
+            if reserved:
+                names = ", ".join(sorted(reserved))
+                raise ValueError(f"Recording metadata cannot replace reserved fields: {names}")
+            meta.update(metadata)
         (capture_dir / "meta.json").write_text(json.dumps(meta, indent=2))
 
         state_path = capture_dir / "state.json"
