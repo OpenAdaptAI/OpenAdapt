@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v0.10.0 (2026-08-08)
+
+### Documentation
+
+- Align entry commands and substrate maturity across repo READMEs
+  ([#24](https://github.com/OpenAdaptAI/openadapt-types/pull/24),
+  [`097d11d`](https://github.com/OpenAdaptAI/openadapt-types/commit/097d11d8a5bc4e66417c65f3147000efe61079e4))
+
+Adopt the canonical first-run path (pip install 'openadapt[browser]' + openadapt quickstart), keep
+  engine-direct commands as explicit variants of the same loop, use the shared substrate-maturity
+  table verbatim, name the tutorial fixture MockMed (a synthetic practice-management fixture) on
+  first mention, and show the cmd.exe double-quoted install form.
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+### Features
+
+- Add portable business decision contracts
+  ([#25](https://github.com/OpenAdaptAI/openadapt-types/pull/25),
+  [`826cbb3`](https://github.com/OpenAdaptAI/openadapt-types/commit/826cbb3ff80621e6391e9e5419f02d71943ab099))
+
+* feat: add portable business decision contracts
+
+* docs: clarify decision presentation trust
+
+* fix: bind reviewed business decision presentation
+
+
 ## v0.9.0 (2026-07-30)
 
 ### Features
