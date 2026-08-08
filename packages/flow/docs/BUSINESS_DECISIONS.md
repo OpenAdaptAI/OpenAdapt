@@ -109,6 +109,56 @@ If the application changes after the person answers, live revalidation halts
 before the selected successor action. If the successor is consequential, its
 own entity identity and effect contract must still pass.
 
+## Qualification authoring
+
+`set_business_decision()` is the scriptable authoring boundary for Desktop,
+CLI, API, and qualification-agent clients. The caller supplies the typed
+`BusinessDecisionSpec`, an exact graph and state, and, for a new node, one
+unambiguous insertion point. Flow derives the only admitted transition shape,
+creates the finite enum output parameter, validates the complete workflow, and
+invalidates the prior certification.
+
+The API does not submit an answer and does not grant runtime authority. It
+refuses an insertion that can silently redirect more than one path. It also
+refuses a decision that changes an existing output parameter into an
+incompatible contract. A client can therefore offer a guided editor without
+requiring a person to edit the workflow manifest.
+
+## Reviewed judgment cases
+
+Qualification can retain the institutional knowledge that explains when a
+human must choose a branch. `set_judgment_cases()` stores one local
+`openadapt.judgment-case-set/v1` contract. The same contract is available from:
+
+```text
+openadapt-flow qualify judgment-cases BUNDLE --input CASES.json
+openadapt-flow qualify judgment-cases BUNDLE --check
+```
+
+Each case binds:
+
+- a closed typed fact schema;
+- the exact workflow and decision contract;
+- local evidence and optional review-note hashes;
+- bounded reviewer provenance;
+- one treatment: `automatic_rule`, `human_node`, or
+  `more_evidence_required`.
+
+The evidence paths are local relative paths. Flow reads and hashes their bytes
+during certification. The exact case and evidence contract becomes part of the
+certification evidence digest. A changed case, review note, or evidence digest
+invalidates the match.
+
+An `automatic_rule` case names a reviewed rule identifier and one finite
+decision option. It requires a reciprocal contrasting case. This is a coverage
+check only. Flow never converts the facts or a review note into executable
+policy. The rule must be authored and qualified through the normal program
+path.
+
+A `human_node` case keeps the decision as a permanent runtime human choice. A
+`more_evidence_required` case refuses certification. Thus, a single historical
+answer never becomes production policy automatically.
+
 ## Operational halts are separate
 
 An operational halt means that Flow cannot prove a runtime condition. The

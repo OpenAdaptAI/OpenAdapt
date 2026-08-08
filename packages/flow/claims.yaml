@@ -139,7 +139,10 @@ claims:
       document-hash verifier configs with secret-isolated auth references and
       explicit run-parameter binding, a cross-substrate exactly-one-NEW-record
       duplicate guard, per-consequential-step effect-coverage lint/certify
-      gates, and typed reconciliation tasks on halt.
+      gates, and typed reconciliation tasks on halt. A deployment with multiple
+      reviewed read boundaries selects the strongest evidence tier before
+      actuation, retains that exact selection through durable resume, and never
+      downgrades to a weaker verifier after an action.
     surfaces: [docs]
     tier: validating
     evidence:
@@ -160,6 +163,12 @@ claims:
           loud when unset, run-parameter references resolve at build (and
           refuse to construct unresolved), and pre-kit configs build
           byte-identically.
+      - path: tests/test_effect_verifier_candidates.py
+        proves: >-
+          Required CI constructs and preflights all reviewed candidates before
+          input, pins the strongest verifier and its pre-state, preserves the
+          binding through durable resume, and refuses an unavailable selected
+          verifier rather than falling back after an action.
       - path: tests/test_effect_coverage_lint.py
         proves: >-
           lint warns per consequential step lacking an effect contract and
@@ -278,6 +287,111 @@ claims:
         Promotion is governed by a regression gate that blocks identity-
         weakening corrections; the loop refuses to guess when the fix is
         underdetermined.
+
+  # -------------------------------- typed human policy decisions in a program
+  - id: typed-business-decisions-supported
+    claim: >-
+      A qualification client can add or update a typed finite business-policy
+      decision without editing an internal manifest. The compiled workflow can
+      then pause at that decision, accept one authorized and attributed choice,
+      retain a signed durable receipt, revalidate the live application, and
+      continue only through the certified successor branch.
+    surfaces: [docs]
+    tier: supported
+    evidence:
+      - path: tests/test_business_decision.py
+        proves: >-
+          Required CI covers typed qualification authoring and replacement,
+          qualification-revision and certification invalidation, ambiguous
+          insertion refusal, the closed runtime decision contract, role and
+          evidence checks, expiry, renewal, idempotency, crash recovery, signed
+          branch authority, scoped outputs, fresh live-state revalidation,
+          normal downstream action gates, and repair-bypass refusal.
+      - path: docs/BUSINESS_DECISIONS.md
+        kind: doc
+        proves: >-
+          The public engine contract separates a declared business choice from
+          an operational halt and defines the Desktop, Cloud, and customer-local
+          integration boundary.
+    caveats:
+      - >-
+        The engine validates a principal and its roles; it does not authenticate
+        a self-asserted user. Desktop, Cloud, or a customer-local identity route
+        must supply the authenticated principal.
+      - >-
+        A human choice is control authority only. It cannot satisfy entity
+        identity, a postcondition, or effect verification, and it cannot turn a
+        screen statement or a human assertion into VERIFIED.
+
+  - id: reviewed-judgment-cases-supported
+    claim: >-
+      A qualification project can bind typed local facts, evidence hashes,
+      reviewer provenance, and the exact decision contract to reviewed examples
+      and counterfactuals. It can retain permanent human authority, record a
+      reviewed automatic-rule candidate, or refuse certification until more
+      evidence exists, without converting one historical choice into policy.
+    surfaces: [docs]
+    tier: supported
+    evidence:
+      - path: tests/test_judgment_cases.py
+        proves: >-
+          Required CI covers closed fact schemas, exact workflow and decision
+          bindings, local-only evidence references, conflict refusal,
+          reciprocal contrast coverage for automatic-rule candidates, retained
+          human authority, unresolved-evidence refusal, and the invariant that
+          case evaluation never edits or synthesizes the executable rule.
+      - path: tests/test_qualification_project.py
+        proves: >-
+          Required CI binds the reviewed local evidence bytes and review note
+          into certification, reproduces that exact contract when a qualified
+          workflow is saved, and refuses changed case or evidence digests.
+      - path: docs/BUSINESS_DECISIONS.md
+        kind: doc
+        proves: >-
+          The public contract separates qualification-time judgment capture
+          from one live runtime answer and describes the scriptable authoring
+          and judgment-case interfaces.
+    caveats:
+      - >-
+        An automatic-rule case names only a reviewed rule identifier and finite
+        option. Flow does not infer or generate executable policy from the case;
+        the rule must be authored and qualified through the normal program path.
+      - >-
+        A retained human-node case preserves runtime human authority. A
+        more-evidence-required case refuses certification instead of guessing.
+
+  - id: qualified-remote-decision-v2-supported
+    claim: >-
+      A negotiated V2 attended task binds optional reviewed entity wording to
+      the exact qualification, bundle, step, policy, and pause authority. An
+      unqualified or unrecognized entity class stays local and the remote task
+      uses the signed neutral record or item fallback.
+    surfaces: [docs]
+    tier: supported
+    evidence:
+      - path: tests/test_attended_actions.py
+        proves: >-
+          Required CI covers the V1-compatible and V2 signed envelopes,
+          provenance binding, remote-safe entity vocabulary, idempotent
+          decisions, and fresh revalidation before resumed actuation.
+      - path: tests/test_qualification_project.py
+        proves: >-
+          Required CI requires the current exact qualification contract before
+          the V2 producer can emit its reviewed presentation metadata.
+      - path: docs/DECISION_DELIVERY.md
+        kind: doc
+        proves: >-
+          The delivery contract defines explicit V2 negotiation, neutral V1
+          fallback, and the local boundary for actual entity identifiers.
+    caveats:
+      - >-
+        V2 requires openadapt-types 0.10.x and explicit peer negotiation. The
+        dependency does not upgrade a V1 consumer, and the byte-compatible V1
+        path remains available.
+      - >-
+        The entity class is presentation metadata only. Actual record identity
+        remains inside the customer-controlled runner and is revalidated before
+        any resumed action.
 
   # ------------------------------------------- MockMed benchmark (CI-reprod.)
   - id: mockmed-benchmark-ci-reproducible
@@ -436,6 +550,16 @@ claims:
         proves: >-
           CI covers the backend/transport contract, framebuffer conversion,
           pointer and keyboard delivery, and record-compile-replay conformance.
+      - path: tests/test_rdp_multiapp_campaign_contract.py
+        proves: >-
+          Required CI covers the bounded 27-trial FreeRDP campaign contract,
+          independent SQLite, CSV, and Maildir oracles, fail-closed visual
+          action preflight, uncertain-delivery handling, and result accounting.
+      - path: benchmark/rdp_multiapp/README.md
+        kind: doc
+        proves: >-
+          The public synthetic multi-window campaign defines the workflow,
+          faults, independent persisted surfaces, and acceptance denominator.
       - path: benchmark/rdp/results_82a658a_20260718.sanitized.json
         kind: benchmark
         proves: >-
@@ -445,6 +569,10 @@ claims:
       - >-
         Acceptance covers the named 1280x800 Windows Run/file task and exact VM
         environment, not arbitrary applications, identity policies, or Citrix.
+      - >-
+        The multi-window campaign uses deterministic synthetic applications.
+        It exercises the real FreeRDP pixel and input path but does not qualify
+        a named customer application or environment.
 
   # ------------------------------ Desktop recording via the CLI (validating)
   - id: substrate-runtime-validation-supported
@@ -574,6 +702,12 @@ claims:
           record->compile->replay trials and three severe-drift safe-halts over
           a no-DOM surface, with zero model calls, false completion, or silent
           incorrect success.
+      - path: tests/test_citrix_real_acceptance.py
+        proves: >-
+          Required CI validates the public real-ICA campaign preflight,
+          distinct authority keys, executable and oracle attestations, one-use
+          nonce journal, crash recovery, uncertain dispatch, and fail-closed
+          report contract without provisioning infrastructure.
       - path: benchmark/citrix_workspace/results.json
         kind: artifact
         proves: >-
@@ -597,6 +731,10 @@ claims:
         `OAFLOW_CITRIX_STANDIN_E2E=1`); neither live-window proof runs on
         default CI, and neither replaces a counted live ICA/HDX acceptance
         record.
+      - >-
+        The public real-acceptance harness contains no customer recipe,
+        credential, identifier, screenshot, or deployment-specific threshold.
+        A private qualified configuration supplies those exact bindings.
 
   # ------------------------ Windows-host window replay (mock-tested, roadmap)
   - id: win32-window-replay-roadmap

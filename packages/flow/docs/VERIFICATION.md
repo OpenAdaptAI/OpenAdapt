@@ -10,7 +10,7 @@
 
 ## What is CI-proven today vs. being validated
 
-- **CI-proven today (8):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`
+- **CI-proven today (11):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `typed-business-decisions-supported`, `reviewed-judgment-cases-supported`, `qualified-remote-decision-v2-supported`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`
 - **Being validated — opt-in / infra-gated or field (8):** `effect-verifier-kit`, `windows-desktop-validating`, `macos-native-validating`, `linux-native-validating`, `rdp-validating`, `desktop-recording-validating`, `citrix-pixel-validating`, `openemr-field-benchmark`
 - **Roadmap / research (1):** `win32-window-replay-roadmap`
 
@@ -71,7 +71,7 @@
 
 ### `effect-verifier-kit` — validating — opt-in / infra-gated or field test
 
-> The effect-verifier kit makes declaring and wiring effect verification a reviewed deployment-config exercise instead of bespoke per-deployment code: declarative REST / FHIR / read-only-SQL / file-arrival / document-hash verifier configs with secret-isolated auth references and explicit run-parameter binding, a cross-substrate exactly-one-NEW-record duplicate guard, per-consequential-step effect-coverage lint/certify gates, and typed reconciliation tasks on halt.
+> The effect-verifier kit makes declaring and wiring effect verification a reviewed deployment-config exercise instead of bespoke per-deployment code: declarative REST / FHIR / read-only-SQL / file-arrival / document-hash verifier configs with secret-isolated auth references and explicit run-parameter binding, a cross-substrate exactly-one-NEW-record duplicate guard, per-consequential-step effect-coverage lint/certify gates, and typed reconciliation tasks on halt. A deployment with multiple reviewed read boundaries selects the strongest evidence tier before actuation, retains that exact selection through durable resume, and never downgrades to a weaker verifier after an action.
 
 - Surfaces: docs
 - Strongest evidence strength: **supported** (tier is `validating`)
@@ -81,6 +81,7 @@
 | `tests/test_effect_sql.py` | test | ci (required PR gate (test)) | supported | The read-only SQL verifier's whitelist (mutation/stacking/comment smuggling refused at construction) and full verdict contract, plus the exact table-delta audit promoted from the Frappe Lending reference matrix — against LOCAL sqlite fixtures only. |
 | `tests/test_effect_file_arrival.py` | test | ci (required PR gate (test)) | supported | File-arrival verdicts (pattern / size>0 / mtime freshness / content probe / duplicate export) against real temp directories, and the SFTP path against an in-memory fake paramiko-shaped transport. |
 | `tests/test_effect_kit_config.py` | test | ci (required PR gate (test)) | supported | The declarative construction path: env-var auth references fail loud when unset, run-parameter references resolve at build (and refuse to construct unresolved), and pre-kit configs build byte-identically. |
+| `tests/test_effect_verifier_candidates.py` | test | ci (required PR gate (test)) | supported | Required CI constructs and preflights all reviewed candidates before input, pins the strongest verifier and its pre-state, preserves the binding through durable resume, and refuses an unavailable selected verifier rather than falling back after an action. |
 | `tests/test_effect_coverage_lint.py` | test | ci (required PR gate (test)) | supported | lint warns per consequential step lacking an effect contract and reports coverage %; certify fails the same gap only when the policy sets require_effects_for_irreversible (warn-vs-fail is policy-configurable). |
 | `tests/test_effect_reconciliation.py` | test | ci (required PR gate (test)) | supported | Every escalated verification failure emits a typed ReconciliationTask carrying the one-way contract hash and verdict evidence — never the resolved selector values. |
 | `docs/EFFECT_KIT.md` | doc | artifact (doc/benchmark) | roadmap | The operator-facing kit contract: config reference plus Frappe (REST/SQL) and OpenEMR (FHIR/SQL) worked examples targeting the reference fixtures. |
@@ -139,6 +140,59 @@
 **Caveats (honest limits):**
 
 - Promotion is governed by a regression gate that blocks identity- weakening corrections; the loop refuses to guess when the fix is underdetermined.
+
+### `typed-business-decisions-supported` — supported — CI-proven today
+
+> A qualification client can add or update a typed finite business-policy decision without editing an internal manifest. The compiled workflow can then pause at that decision, accept one authorized and attributed choice, retain a signed durable receipt, revalidate the live application, and continue only through the certified successor branch.
+
+- Surfaces: docs
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_business_decision.py` | test | ci (required PR gate (test)) | supported | Required CI covers typed qualification authoring and replacement, qualification-revision and certification invalidation, ambiguous insertion refusal, the closed runtime decision contract, role and evidence checks, expiry, renewal, idempotency, crash recovery, signed branch authority, scoped outputs, fresh live-state revalidation, normal downstream action gates, and repair-bypass refusal. |
+| `docs/BUSINESS_DECISIONS.md` | doc | artifact (doc/benchmark) | roadmap | The public engine contract separates a declared business choice from an operational halt and defines the Desktop, Cloud, and customer-local integration boundary. |
+
+**Caveats (honest limits):**
+
+- The engine validates a principal and its roles; it does not authenticate a self-asserted user. Desktop, Cloud, or a customer-local identity route must supply the authenticated principal.
+- A human choice is control authority only. It cannot satisfy entity identity, a postcondition, or effect verification, and it cannot turn a screen statement or a human assertion into VERIFIED.
+
+### `reviewed-judgment-cases-supported` — supported — CI-proven today
+
+> A qualification project can bind typed local facts, evidence hashes, reviewer provenance, and the exact decision contract to reviewed examples and counterfactuals. It can retain permanent human authority, record a reviewed automatic-rule candidate, or refuse certification until more evidence exists, without converting one historical choice into policy.
+
+- Surfaces: docs
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_judgment_cases.py` | test | ci (required PR gate (test)) | supported | Required CI covers closed fact schemas, exact workflow and decision bindings, local-only evidence references, conflict refusal, reciprocal contrast coverage for automatic-rule candidates, retained human authority, unresolved-evidence refusal, and the invariant that case evaluation never edits or synthesizes the executable rule. |
+| `tests/test_qualification_project.py` | test | ci (required PR gate (test)) | supported | Required CI binds the reviewed local evidence bytes and review note into certification, reproduces that exact contract when a qualified workflow is saved, and refuses changed case or evidence digests. |
+| `docs/BUSINESS_DECISIONS.md` | doc | artifact (doc/benchmark) | roadmap | The public contract separates qualification-time judgment capture from one live runtime answer and describes the scriptable authoring and judgment-case interfaces. |
+
+**Caveats (honest limits):**
+
+- An automatic-rule case names only a reviewed rule identifier and finite option. Flow does not infer or generate executable policy from the case; the rule must be authored and qualified through the normal program path.
+- A retained human-node case preserves runtime human authority. A more-evidence-required case refuses certification instead of guessing.
+
+### `qualified-remote-decision-v2-supported` — supported — CI-proven today
+
+> A negotiated V2 attended task binds optional reviewed entity wording to the exact qualification, bundle, step, policy, and pause authority. An unqualified or unrecognized entity class stays local and the remote task uses the signed neutral record or item fallback.
+
+- Surfaces: docs
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_attended_actions.py` | test | ci (required PR gate (test)) | supported | Required CI covers the V1-compatible and V2 signed envelopes, provenance binding, remote-safe entity vocabulary, idempotent decisions, and fresh revalidation before resumed actuation. |
+| `tests/test_qualification_project.py` | test | ci (required PR gate (test)) | supported | Required CI requires the current exact qualification contract before the V2 producer can emit its reviewed presentation metadata. |
+| `docs/DECISION_DELIVERY.md` | doc | artifact (doc/benchmark) | roadmap | The delivery contract defines explicit V2 negotiation, neutral V1 fallback, and the local boundary for actual entity identifiers. |
+
+**Caveats (honest limits):**
+
+- V2 requires openadapt-types 0.10.x and explicit peer negotiation. The dependency does not upgrade a V1 consumer, and the byte-compatible V1 path remains available.
+- The entity class is presentation metadata only. Actual record identity remains inside the customer-controlled runner and is revalidated before any resumed action.
 
 ### `mockmed-benchmark-ci-reproducible` — supported — CI-proven today
 
@@ -226,11 +280,14 @@
 |---|---|---|---|---|
 | `tests/e2e/test_parallels_rdp_e2e.py` | test | opt-in (OAFLOW_PARALLELS_RDP_E2E) | validating | Opt-in snapshot-safe real RDP qualification harness with exactly three trials, independent guest-tools oracle, failure taxonomy, and cleanup. |
 | `tests/test_rdp_backend.py` | test | ci (required PR gate (test)) | supported | CI covers the backend/transport contract, framebuffer conversion, pointer and keyboard delivery, and record-compile-replay conformance. |
+| `tests/test_rdp_multiapp_campaign_contract.py` | test | ci (required PR gate (test)) | supported | Required CI covers the bounded 27-trial FreeRDP campaign contract, independent SQLite, CSV, and Maildir oracles, fail-closed visual action preflight, uncertain-delivery handling, and result accounting. |
+| `benchmark/rdp_multiapp/README.md` | doc | artifact (doc/benchmark) | roadmap | The public synthetic multi-window campaign defines the workflow, faults, independent persisted surfaces, and acceptance denominator. |
 | `benchmark/rdp/results_82a658a_20260718.sanitized.json` | benchmark | artifact (doc/benchmark) | roadmap | Candidate 82a658a passed 3/3 at 51.845, 10.467, and 7.477 seconds, with zero failures, silent incorrect successes, over-halts, or model calls. |
 
 **Caveats (honest limits):**
 
 - Acceptance covers the named 1280x800 Windows Run/file task and exact VM environment, not arbitrary applications, identity policies, or Citrix.
+- The multi-window campaign uses deterministic synthetic applications. It exercises the real FreeRDP pixel and input path but does not qualify a named customer application or environment.
 
 ### `substrate-runtime-validation-supported` — supported — CI-proven today
 
@@ -283,6 +340,7 @@
 | `tests/test_cli_new_commands.py` | test | ci (required PR gate (test)) | supported | Required CI restores the recorded Citrix owner, exact title, and readiness binding through durable approve/resume, and refuses before backend construction when resumed configuration is incomplete. |
 | `tests/test_hosted.py` | test | ci (required PR gate (test)) | supported | Required CI binds a completed local Citrix report to the closed `citrix` execution token without copying target owner, title, or readiness values into the hosted summary. |
 | `tests/e2e/test_citrix_workspace_standin_e2e.py` | test | opt-in (OAFLOW_CITRIX_STANDIN_E2E) | validating | The dedicated Citrix backend passes three healthy effect-confirmed record->compile->replay trials and three severe-drift safe-halts over a no-DOM surface, with zero model calls, false completion, or silent incorrect success. |
+| `tests/test_citrix_real_acceptance.py` | test | ci (required PR gate (test)) | supported | Required CI validates the public real-ICA campaign preflight, distinct authority keys, executable and oracle attestations, one-use nonce journal, crash recovery, uncertain dispatch, and fail-closed report contract without provisioning infrastructure. |
 | `benchmark/citrix_workspace/results.json` | artifact | artifact (doc/benchmark) | roadmap | The retained six-trial record reports code_readiness_accepted=true and ica_hdx_accepted=false, keeping driver readiness distinct from a counted live ICA/HDX qualification. |
 | `docs/desktop/CITRIX_PIXEL.md` | doc | artifact (doc/benchmark) | roadmap | The Citrix driver model, reusable evidence, exact-deployment acceptance contract, independent-effect boundary, and customer-controlled posture. |
 
@@ -290,6 +348,7 @@
 
 - PIXEL-ONLY: no UIA/DOM crosses to the driver. On-screen OCR read-back is SAME-SURFACE, not an independent system-of-record check.
 - A Parallels VM window is a Citrix ANALOG; real HDX/latency/DPI/lock- screen drift is not simulated. OPT-IN + infra-gated (`OAFLOW_CITRIX_PIXEL_E2E=1` or `OAFLOW_CITRIX_STANDIN_E2E=1`); neither live-window proof runs on default CI, and neither replaces a counted live ICA/HDX acceptance record.
+- The public real-acceptance harness contains no customer recipe, credential, identifier, screenshot, or deployment-specific threshold. A private qualified configuration supplies those exact bindings.
 
 ### `win32-window-replay-roadmap` — roadmap — designed, not yet proven
 
