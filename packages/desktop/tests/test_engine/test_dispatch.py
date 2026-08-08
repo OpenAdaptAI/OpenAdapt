@@ -72,7 +72,12 @@ class FakeController:
     def current_capture_id(self):
         return self._current_capture_id
 
-    def start(self, task_description: str = "") -> str:
+    def start(
+        self,
+        task_description: str = "",
+        *,
+        metadata: dict[str, object] | None = None,
+    ) -> str:
         self.state = RecordingState.RECORDING
         self._current_capture_id = "cap1"
         self.capture_dir.mkdir(parents=True, exist_ok=True)
@@ -1020,7 +1025,10 @@ class TestLibraryCommands:
         retained = disp.dispatch("get_run_report", {"workflow_id": "bnd1"})
         assert retained["run_id"] == result["run_id"]
         assert retained["persistence"]["state"] == "degraded"
-        teach = disp.dispatch("teach_fix", {"workflow_id": "bnd1"})
+        teach = disp.dispatch(
+            "teach_fix",
+            {"workflow_id": "bnd1", "run_id": result["run_id"]},
+        )
         assert "not saved in local history" in teach["message"]
 
         monkeypatch.setattr(db, "insert_run", insert_run)
@@ -1181,14 +1189,23 @@ class TestLibraryCommands:
         class Bridge:
             calls: list[Path] = []
 
-            def teach(self, run_path, _bundle, out_dir):
+            def teach(self, run_path, _bundle, out_dir, *, fix):
                 self.calls.append(run_path)
+                assert fix.name.endswith(".json")
                 return FlowResult(ok=True, returncode=0, out_dir=out_dir)
 
         bridge = Bridge()
         disp.services._flow_bridge = bridge
 
-        result = disp.dispatch("teach_fix", {"workflow_id": "bnd1"})
+        result = disp.dispatch(
+            "teach_fix",
+            {
+                "workflow_id": "bnd1",
+                "run_id": "run-latest",
+                "mode": "describe",
+                "note": "dismiss the blocking dialog",
+            },
+        )
 
         assert result == {"promoted": True, "message": "Fix promoted."}
         assert bridge.calls == [latest_halt]
@@ -1218,10 +1235,118 @@ class TestLibraryCommands:
                 raise AssertionError("a stale halt must not be taught")
 
         disp.services._flow_bridge = Bridge()
-        result = disp.dispatch("teach_fix", {"workflow_id": "bnd1"})
+        result = disp.dispatch(
+            "teach_fix",
+            {
+                "workflow_id": "bnd1",
+                "run_id": "run-new-verified",
+                "mode": "describe",
+                "note": "dismiss the blocking dialog",
+            },
+        )
 
         assert result["promoted"] is False
         assert "latest run ended as VERIFIED" in result["message"]
+
+    def test_recorded_teach_correction_reaches_the_real_flow_cli_bridge(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Protect the Desktop recording -> Flow ``teach --fix`` contract."""
+
+        from engine.controller import RecordingController
+        from engine.storage_manager import StorageManager
+
+        config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+        storage = StorageManager(config)
+        storage.initialize()
+        db = storage.db
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        db.insert_bundle("bnd1", str(bundle), capture_id="base-capture")
+        run_dir = tmp_path / "run-halted"
+        run_dir.mkdir()
+        db.insert_run("run-halted", str(run_dir), bundle_id="bnd1", status="HALTED")
+        calls: list[list[str]] = []
+
+        def runner(command, **_kwargs):
+            calls.append(command)
+            return type(
+                "Process",
+                (),
+                {"returncode": 0, "stdout": "promoted", "stderr": ""},
+            )()
+
+        monkeypatch.setattr(
+            "engine.flow_bridge.shutil.which",
+            lambda _name: "/usr/bin/openadapt-flow",
+        )
+        monkeypatch.setattr("engine.dispatch.sys.platform", "linux")
+        bridge = FlowBridge(runner=runner)
+        controller = RecordingController(
+            captures_dir=config.data_dir / "captures",
+            storage_manager=storage,
+            flow_bridge=bridge,
+            db=db,
+            bundles_dir=config.data_dir / "bundles",
+        )
+        services = EngineServices(
+            config,
+            db=db,
+            storage=storage,
+            audit=FakeAudit(),
+            controller=controller,
+            flow_bridge=bridge,
+        )
+        disp = EngineDispatcher(config, services=services)
+
+        started = disp.dispatch(
+            "start_recording",
+            {
+                "purpose": "teach_fix",
+                "workflow_id": "bnd1",
+                "run_id": "run-halted",
+            },
+        )
+        assert started["capture_id"]
+        stopped = disp.dispatch("stop_recording", {})
+        correction = stopped["correction"]
+        assert "compile" not in stopped
+
+        result = disp.dispatch(
+            "teach_fix",
+            {
+                "workflow_id": "bnd1",
+                "run_id": "run-halted",
+                "mode": "record",
+                "fix_capture_id": correction["capture_id"],
+                "fix_path": correction["fix_path"],
+            },
+        )
+
+        assert result == {"promoted": True, "message": "Fix promoted."}
+        assert len(calls) == 1
+        command = calls[0]
+        assert command[1] == "teach"
+        assert command[2] == str(run_dir)
+        assert command[command.index("--fix") + 1] == correction["fix_path"]
+        assert command[command.index("--bundle") + 1] == str(bundle)
+
+        newer_run = tmp_path / "newer-halt"
+        newer_run.mkdir()
+        db.insert_run("newer-halt", str(newer_run), bundle_id="bnd1", status="HALTED")
+        stale = disp.dispatch(
+            "teach_fix",
+            {
+                "workflow_id": "bnd1",
+                "run_id": "run-halted",
+                "mode": "record",
+                "fix_capture_id": correction["capture_id"],
+                "fix_path": correction["fix_path"],
+            },
+        )
+        assert stale["promoted"] is False
+        assert "stale" in stale["message"]
+        assert len(calls) == 1
 
 
 class TestSyncCommands:

@@ -7,6 +7,19 @@ import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import type { RunPersistenceRetryResponse, RunReport } from "../lib/types";
 import { Button, Card, CardHead, Callout, Field } from "../ui/primitives";
 
+interface TeachCorrection {
+  schema: "openadapt.desktop-teach-correction/v1";
+  capture_id: string;
+  fix_path: string;
+  workflow_id: string;
+  run_id: string;
+}
+
+interface TeachRecordingResult {
+  capture_id?: string | null;
+  correction?: TeachCorrection;
+}
+
 export function Teach({
   workflowId,
   onDone,
@@ -20,6 +33,7 @@ export function Teach({
   const [phase, setPhase] = useState<"idle" | "recording" | "teaching">("idle");
   const [result, setResult] = useState<string | null>(null);
   const [retryingPersistence, setRetryingPersistence] = useState(false);
+  const [correction, setCorrection] = useState<TeachCorrection | null>(null);
 
   useEffect(() => {
     engineTry<RunReport | null>(
@@ -30,28 +44,61 @@ export function Teach({
   }, [workflowId]);
 
   async function recordFix() {
+    if (!report?.run_id) {
+      setResult("Open the halted run before you record a correction.");
+      return;
+    }
     setPhase("recording");
+    setResult(null);
+    setCorrection(null);
     try {
-      await engineInvoke(CMD.START_RECORDING, { purpose: "teach_fix" });
-    } catch {
+      await engineInvoke(CMD.START_RECORDING, {
+        purpose: "teach_fix",
+        workflow_id: workflowId,
+        run_id: report.run_id,
+      });
+    } catch (error) {
+      setResult(String(error));
       setPhase("idle");
     }
   }
   async function stopFix() {
     try {
-      await engineInvoke(CMD.STOP_RECORDING, {});
+      const stopped = await engineInvoke<TeachRecordingResult>(
+        CMD.STOP_RECORDING,
+        {},
+      );
+      if (stopped.correction) {
+        setCorrection(stopped.correction);
+        setResult("Correction recorded. Submit it when you are ready.");
+      } else {
+        setResult("Desktop could not bind this recording to the halted run.");
+      }
+    } catch (error) {
+      setResult(String(error));
     } finally {
       setPhase("idle");
     }
   }
 
   async function teach() {
+    if (!report?.run_id) {
+      setResult("Open the halted run before you submit a correction.");
+      return;
+    }
     setPhase("teaching");
     setResult(null);
     try {
       const r = await engineInvoke<{ promoted?: boolean; message?: string }>(
         CMD.TEACH_FIX,
-        { workflow_id: workflowId, note, mode },
+        {
+          workflow_id: workflowId,
+          run_id: report.run_id,
+          note,
+          mode,
+          fix_capture_id: correction?.capture_id,
+          fix_path: correction?.fix_path,
+        },
       );
       setResult(
         r?.promoted
@@ -176,7 +223,11 @@ export function Teach({
         <div className="row" style={{ marginTop: "var(--space-5)" }}>
           <Button
             variant="primary"
-            disabled={phase === "teaching"}
+            disabled={
+              phase !== "idle" ||
+              (mode === "record" && correction === null) ||
+              (mode === "describe" && note.trim() === "")
+            }
             onClick={teach}
           >
             {phase === "teaching" ? "Teaching…" : "Submit fix"}

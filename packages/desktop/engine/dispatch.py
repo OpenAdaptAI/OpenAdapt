@@ -59,6 +59,8 @@ _KNOWN_RUN_OUTCOMES = frozenset(
     }
 )
 _TEACHABLE_RUN_OUTCOMES = frozenset({"HALTED", "halt"})
+_TEACH_CORRECTION_SCHEMA = "openadapt.desktop-teach-correction/v1"
+_TEACH_CORRECTION_META_KEY = "teach_correction"
 
 
 def _noop_emit(event: str, data: dict) -> None:
@@ -351,6 +353,22 @@ class EngineDispatcher:
                 self.emit("recording_error", {"error": message})
                 raise ValueError(message) from None
 
+        task = str(params.get("purpose") or params.get("task") or params.get("name") or "")
+        recording_metadata: dict[str, object] | None = None
+        if task == "teach_fix":
+            workflow_id = str(params.get("workflow_id") or "")
+            run_id = str(params.get("run_id") or "")
+            run, error = self._teachable_run(workflow_id, expected_run_id=run_id)
+            if run is None:
+                raise ValueError(error or "The halted run is not available for Teach")
+            recording_metadata = {
+                _TEACH_CORRECTION_META_KEY: {
+                    "schema": _TEACH_CORRECTION_SCHEMA,
+                    "workflow_id": workflow_id,
+                    "run_id": run_id,
+                }
+            }
+
         needs_native_input = target is None or target.backend != "web"
         if (
             sys.platform == "darwin"
@@ -367,7 +385,6 @@ class EngineDispatcher:
                 )
                 self.emit("recording_error", {"error": message})
                 raise PermissionError(message)
-        task = str(params.get("purpose") or params.get("task") or params.get("name") or "")
         if target is not None:
             if target.backend == "web":
                 ensure_browser = getattr(
@@ -463,7 +480,10 @@ class EngineDispatcher:
             self.emit("status_update", self._status_dict(controller))
             return {"capture_id": capture_id, "recording": True}
 
-        capture_id = controller.start(task_description=str(task))
+        capture_id = controller.start(
+            task_description=str(task),
+            metadata=recording_metadata,
+        )
         self.services.audit.log("recording_started", capture_id=capture_id)
         self.emit("recording_started", {"capture_id": capture_id})
         self.emit("status_update", self._status_dict(controller))
@@ -486,6 +506,10 @@ class EngineDispatcher:
         self.emit("recording_stopped", metadata)
         self.emit("status_update", self._status_dict(controller))
         stopped = {"capture_id": metadata.get("id"), **metadata}
+        correction = self._stopped_teach_correction(stopped)
+        if correction is not None:
+            stopped["correction"] = correction
+            return stopped
         stopped["compile"] = self._compile_registered_capture(
             str(stopped["capture_id"]),
             automatic=True,
@@ -1477,52 +1501,160 @@ class EngineDispatcher:
 
     def teach_fix(self, **params: Any) -> dict:
         """Teach a fix for a halted workflow via ``openadapt-flow teach``."""
-        workflow_id = params.get("workflow_id")
+        workflow_id = str(params.get("workflow_id") or "")
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
             return {"promoted": False, "message": f"Unknown workflow {workflow_id}"}
-        # Teach is a response to the latest execution state, not a search for
-        # any historical halt. Selecting an older halt after a newer VERIFIED,
-        # FAILED, or otherwise terminal run would promote evidence against a
-        # stale application state.
+        run, error = self._teachable_run(
+            workflow_id,
+            expected_run_id=str(params.get("run_id") or ""),
+        )
+        if run is None:
+            return {"promoted": False, "message": error or "No halted run to teach against"}
+        try:
+            fix = self._teach_correction_path(params, workflow_id=workflow_id, run=run)
+        except ValueError as exc:
+            return {"promoted": False, "message": str(exc)}
+        out_dir = self.config.data_dir / "bundles" / f"{workflow_id}_taught_{uuid.uuid4().hex[:6]}"
+        try:
+            result = self.services.flow_bridge.teach(
+                Path(run["run_path"]),
+                bundle,
+                out_dir,
+                fix=fix,
+            )
+        except Exception as exc:
+            return {"promoted": False, "message": str(exc)}
+        message = "Fix promoted." if result.ok else (result.stderr or "Teach did not promote.")
+        return {"promoted": result.ok, "message": message}
+
+    def _teachable_run(
+        self,
+        workflow_id: str,
+        *,
+        expected_run_id: str,
+    ) -> tuple[dict | None, str | None]:
+        """Return the exact latest halted run or a safe refusal reason."""
+
+        if not workflow_id:
+            return None, "A workflow is required for Teach."
+        if not expected_run_id:
+            return None, "The halted run is required for Teach."
+        # Teach responds to the latest execution state. It must not search for
+        # an older halt after a newer VERIFIED, FAILED, or other terminal run.
         run = next(
-            (r for r in self.services.db.list_runs(limit=100) if r.get("bundle_id") == workflow_id),
+            (
+                item
+                for item in self.services.db.list_runs(limit=100)
+                if item.get("bundle_id") == workflow_id
+            ),
             None,
         )
-        pending = self._pending_run(str(workflow_id))
+        pending = self._pending_run(workflow_id)
         pending_matches_saved_run = bool(
             pending is not None
             and run is not None
             and pending[1].get("run_id") == run.get("run_id")
         )
         if pending_matches_saved_run or self._pending_run_is_newer(pending, run):
-            return {
-                "promoted": False,
-                "message": (
-                    "The latest run is not saved in local history. Retry the "
-                    "local history save before teaching a fix."
-                ),
-            }
+            return (
+                None,
+                "The latest run is not saved in local history. Retry the "
+                "local history save before teaching a fix.",
+            )
         if run is None:
-            return {"promoted": False, "message": "No halted run to teach against"}
+            return None, "No halted run to teach against"
+        if str(run.get("run_id") or "") != expected_run_id:
+            return None, "The selected halt is stale. Open the latest run before teaching."
         if run.get("status") not in _TEACHABLE_RUN_OUTCOMES:
             status = str(run.get("status") or "unknown")
-            return {
-                "promoted": False,
-                "message": f"The latest run ended as {status}, so it is not teachable.",
-            }
+            return None, f"The latest run ended as {status}, so it is not teachable."
         if not run.get("run_path"):
-            return {
-                "promoted": False,
-                "message": "The latest halted run has no evidence path",
-            }
-        out_dir = self.config.data_dir / "bundles" / f"{workflow_id}_taught_{uuid.uuid4().hex[:6]}"
+            return None, "The latest halted run has no evidence path"
+        return run, None
+
+    def _stopped_teach_correction(self, stopped: dict) -> dict | None:
+        """Expose the exact local correction artifact when Teach recorded it."""
+
+        capture_id = str(stopped.get("capture_id") or "")
+        if not capture_id:
+            return None
+        capture = self.services.db.get_capture(capture_id)
+        if not capture or capture.get("task_description") != "teach_fix":
+            return None
+        path, binding = self._validated_recorded_correction(capture_id)
+        return {
+            "schema": _TEACH_CORRECTION_SCHEMA,
+            "capture_id": capture_id,
+            "fix_path": str(path),
+            "workflow_id": binding["workflow_id"],
+            "run_id": binding["run_id"],
+        }
+
+    def _validated_recorded_correction(self, capture_id: str) -> tuple[Path, dict]:
+        """Resolve one completed correction capture and validate its run binding."""
+
+        capture = self.services.db.get_capture(capture_id)
+        if not capture or capture.get("task_description") != "teach_fix":
+            raise ValueError("The selected artifact is not a Teach correction recording.")
+        if not capture.get("stopped_at"):
+            raise ValueError("Stop the correction recording before you submit it.")
         try:
-            result = self.services.flow_bridge.teach(Path(run["run_path"]), bundle, out_dir)
-        except Exception as exc:
-            return {"promoted": False, "message": str(exc)}
-        message = "Fix promoted." if result.ok else (result.stderr or "Teach did not promote.")
-        return {"promoted": result.ok, "message": message}
+            path = self._presentation_capture_dir({"capture_id": capture_id})
+        except (OSError, ValueError) as exc:
+            raise ValueError("The correction recording is not available.") from exc
+        meta_path = path / "meta.json"
+        if not meta_path.is_file() or meta_path.is_symlink():
+            raise ValueError("The correction recording has no trusted metadata.")
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError("The correction recording metadata is invalid.") from exc
+        binding = meta.get(_TEACH_CORRECTION_META_KEY) if isinstance(meta, dict) else None
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != {"schema", "workflow_id", "run_id"}
+            or binding.get("schema") != _TEACH_CORRECTION_SCHEMA
+            or not isinstance(binding.get("workflow_id"), str)
+            or not isinstance(binding.get("run_id"), str)
+        ):
+            raise ValueError("The correction recording is not bound to a halted run.")
+        return path, binding
+
+    def _teach_correction_path(self, params: dict, *, workflow_id: str, run: dict) -> Path:
+        """Return the explicit fix artifact for the exact current halted run."""
+
+        mode = str(params.get("mode") or "record")
+        if mode == "describe":
+            note = str(params.get("note") or "").strip()
+            if not note:
+                raise ValueError("Describe the corrective action before you submit it.")
+            binding_key = hashlib.sha256(
+                f"{workflow_id}\0{run['run_id']}".encode("utf-8")
+            ).hexdigest()[:16]
+            correction_dir = self.config.data_dir / "corrections" / binding_key
+            correction_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            fix = correction_dir / f"{uuid.uuid4().hex}.json"
+            fix.write_text(
+                json.dumps({"resolution_steps": [{"intent": note}]}, indent=2),
+                encoding="utf-8",
+            )
+            fix.chmod(0o600)
+            return fix
+        if mode != "record":
+            raise ValueError("The Teach correction mode is not supported.")
+        capture_id = str(params.get("fix_capture_id") or "")
+        supplied_path = str(params.get("fix_path") or "")
+        if not capture_id or not supplied_path:
+            raise ValueError("Record and stop the corrective action before you submit it.")
+        fix, binding = self._validated_recorded_correction(capture_id)
+        if Path(supplied_path).resolve() != fix:
+            raise ValueError("The correction artifact path does not match the recorded capture.")
+        if binding["workflow_id"] != workflow_id or binding["run_id"] != str(
+            run.get("run_id") or ""
+        ):
+            raise ValueError("The correction recording belongs to a different halted run.")
+        return fix
 
     def _bundle_dir(self, bundle_id: str | None) -> Path | None:
         if not bundle_id:
