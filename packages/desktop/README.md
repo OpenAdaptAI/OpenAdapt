@@ -75,6 +75,36 @@ needs-attention break count, mirrored from the engine over events. In a plain
 dev checkout the shell renders an engine-offline state, because the frozen
 sidecar binary is built only in CI.
 
+### Attended decisions on a phone
+
+When a governed run needs a person, Desktop can pair a phone with a one-use QR
+code and a matching code. The phone receives one signed task, the evidence that
+the customer-controlled runner is allowed to show, and only the actions that
+Flow permits for that pause.
+
+<p align="center">
+  <img src="docs/assets/mobile-decision/request.png" width="260" alt="OpenAdapt Desktop phone portal showing an identity check, a retained synthetic OpenEMR frame, and four permitted actions">
+</p>
+
+This screen is a request. A tap does not approve a stale screen and does not
+prove a business effect by itself. The runner reacquires the live application,
+repeats the required state, identity, and target checks, and then returns a
+typed result. A refusal leaves the run paused. The detailed portal guide shows
+the corresponding result screen.
+
+The local portal can serve an approved retained raster frame through the
+customer-operated HTTPS origin, published by a reverse proxy or VPN. The
+hosted outbound lane carries a signed,
+remote-safe task without pixels. Device pairing authenticates the device
+session; it does not authenticate the named operator principal that a
+qualification policy can require for decision attribution.
+
+The screenshot above comes from the exact Desktop phone shell with synthetic
+data. See its [capture provenance](docs/assets/mobile-decision/provenance.json)
+and the complete [mobile decision portal contract](docs/DECISION_PORTAL.md),
+including pairing, evidence handling, optional-step decisions, reconciliation,
+teaching, escalation, and terminal receipts.
+
 ## Status
 
 | Area | Checked-out implementation | Status |
@@ -87,6 +117,7 @@ sidecar binary is built only in CI.
 | Tray IPC socket server | Token-authenticated loopback TCP server plus a `~/.openadapt/desktop_ipc.json` discovery file for `openadapt-tray` | Beta; not yet validated end to end against the shipped tray |
 | Desktop-to-flow handoff | `FlowBridge` launches the pinned Flow runtime embedded in the frozen sidecar as an isolated subprocess | Self-contained; no separate Python or Flow installation |
 | Hosted auth and push | Browser-PKCE and paste-token sign-in, keychain-stored credential, bundle push, and halted-run break reports to the hosted control plane | Beta |
+| Attended phone decisions | One-use QR pairing, protected local evidence, typed allowed actions, runner revalidation, receipts, device revocation, and an optional outbound hosted lane | Beta; device pairing does not replace the deployment's authenticated operator principal |
 | Build artifacts | Wheel/sdist, a self-contained PyInstaller engine+Flow runtime, and DMG/MSI/NSIS/DEB/AppImage native jobs | Native jobs prove the frozen browser lifecycle, structurally install/uninstall, and label every platform, architecture, and signing state |
 | Native installers | Distinct `desktop-v*` draft-prerelease workflow with final-byte checksums and GitHub provenance, auto-triggered at each engine release | Beta distribution lane; signing state is encoded in every filename and workflow qualification remains specific |
 | Code signing and updater | Apple Developer ID/notarization and Windows Authenticode are credential-gated and fail closed on partial configuration; the updater feed is disabled | In progress; not a supported release channel |

@@ -2,21 +2,25 @@
 
 When a governed run cannot confirm something, OpenAdapt halts instead of
 guessing. This portal is how that question reaches a staff member's phone with
-**full evidence** -- the screen crops, the gated control label, the whole halt
-detail -- without moving any of it off the runner.
+the approved local evidence -- raster screen crops, the gated control label,
+and the typed halt detail -- without sending that evidence to OpenAdapt Cloud.
+The phone fetches it through a customer-operated HTTPS origin, published by a
+reverse proxy or VPN.
 
-It is not the only way to reach a phone, and it is not the right one for a
-customer with no IT department. Serving full evidence to a phone requires an
-HTTPS origin the customer terminates themselves, which a dental practice will
-not stand up. For them, Flow's hosted lane dials **out** to the control plane
-and needs nothing on their network; it carries the signed PHI-free task and the
-closed halt context, never pixels. See
+Customers can use this full-evidence local portal or Flow's hosted outbound
+lane. The local portal needs a customer-operated HTTPS origin, published by a
+reverse proxy or VPN. The hosted lane dials **out** to the control plane and
+needs no inbound port; it
+carries the signed remote-safe task and the closed halt context, never pixels.
+See
 [Answering a halt with no ingress](#answering-a-halt-with-no-ingress).
 
 Desktop owns the **lifecycle, the network boundary, device pairing, and the
-generic notification**. It owns no decision semantics: the question, the
-evidence, the allowed actions, the revalidation, and the outcome all come from
-`openadapt-flow`'s attended console and are relayed unmodified.
+generic notification**. It owns no decision semantics. The task fields, the
+evidence references, the allowed actions, the revalidation contract, and the
+outcome all come from `openadapt-flow`'s attended console. Desktop relays those
+machine fields without rewriting them. The phone shell maps the closed enums to
+its reviewed operator copy.
 
 ## What it is (and is not)
 
@@ -28,6 +32,31 @@ evidence, the allowed actions, the revalidation, and the outcome all come from
   continues. An accepted tap is never a verified business effect.
 - **Loopback-only by default.** Publishing it to a phone is an explicit,
   documented customer decision.
+
+## Current interface
+
+The request and result are visually different. A request shows the typed reason
+for the pause, a retained application frame when the local evidence policy
+permits it, what the runner will recheck, and only the actions permitted by the
+signed task. The result replaces the request after the runner returns its typed
+receipt. It does not repeat the same screenshot as though it were new evidence.
+
+<table>
+  <tr>
+    <th>Request before an operator action</th>
+    <th>Result after the runner rechecks the live application</th>
+  </tr>
+  <tr>
+    <td><img src="assets/mobile-decision/request.png" width="320" alt="Phone decision request with a retained synthetic OpenEMR frame"></td>
+    <td><img src="assets/mobile-decision/result-checks-passed.png" width="320" alt="Phone decision result after live checks passed"></td>
+  </tr>
+</table>
+
+These images are deterministic renders of the exact Desktop shell at the
+commit recorded in
+[`assets/mobile-decision/provenance.json`](assets/mobile-decision/provenance.json).
+They use synthetic data and a public OpenEMR reference frame. They are not a
+customer run and do not claim that the complete workflow reached `VERIFIED`.
 
 ## Network boundary
 
@@ -125,6 +154,20 @@ Desktop shows a QR code; the phone shows a short code back. Following RFC
 - The QR is rendered locally as an inert `data:image/png` URI rather than raw
   SVG markup, so a secret-bearing value is never injected as HTML.
 
+### Operator identity and attribution
+
+Pairing authenticates one device session to one runner. It does not establish
+the human operator's name, role, or authority. A production deployment must
+supply its authenticated operator principal through the qualified deployment
+boundary before a policy that requires named decision attribution can accept a
+consequential continuation. The phone cannot supply a self-asserted name to
+weaken that requirement.
+
+The decision remains bound to the exact task digest, signature, pause, allowed
+action, and one-use idempotency key. After an accepted answer, Flow re-reads the
+live application and repeats its required state, identity, and target checks
+before any action continues.
+
 ## Protected evidence
 
 Task projections, decision outcomes, and evidence crops are served
@@ -148,10 +191,16 @@ with a portal session token bound to the runner and the approved pairing.
 
 ## What the phone says
 
-Flow sends closed enums and counts; the shell owns every sentence. That split
-is deliberate: a free-text explanation field on the wire is how protected
-content escapes a closed contract, so the runner never sends prose and the
-phone never renders a runner string.
+For the local full-evidence path, Flow sends the qualified presentation
+projection, evidence references, and closed enums. Desktop relays those fields
+without changing their meaning. The phone shell owns the fixed action-effect
+copy and the receipt copy that it derives from the closed result enums. It does
+not call a model to write a question or interpret an answer.
+
+The hosted outbound lane has a narrower remote-safe projection and does not
+carry the local evidence image. A custom entity class stays local unless it is
+in the reviewed remote-safe vocabulary; otherwise the remote task uses the
+signed neutral `record` or `item` fallback.
 
 The primary screen is intentionally short: one question, the delivery and risk
 signals, one retained application frame, and what OpenAdapt will check next.
@@ -254,6 +303,11 @@ uv run --extra build python scripts/capture_portal_scenarios.py \
 The retained frame is visible in each request image. Use only a public
 reference frame with synthetic data. The portal labels the frame as historical
 and tells the operator to use the live application before answering.
+
+The repository keeps two reviewed reference captures under
+`docs/assets/mobile-decision/`: one request and one result. Their provenance
+records the exact Desktop commit, generator, source frame, dimensions, and
+SHA-256 values. Regenerate and review them when the shipped phone shell changes.
 
 ## Notifications
 

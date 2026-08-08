@@ -1,0 +1,41 @@
+{
+  "schema_version": "openadapt.desktop-phone-capture-provenance/v1",
+  "generated_at": "2026-08-08",
+  "desktop": {
+    "repository": "https://github.com/OpenAdaptAI/openadapt-desktop",
+    "commit": "c149db9b81f96001bf92f95ebad2cf273cc6be69",
+    "generator": "scripts/capture_portal_scenarios.py",
+    "command": "uv run --extra build python scripts/capture_portal_scenarios.py --out /tmp/openadapt-desktop-phone-current --frame <public-openemr-poster>",
+    "viewport": {
+      "css_width": 390,
+      "css_height": 844,
+      "device_scale_factor": 2
+    }
+  },
+  "source_frame": {
+    "repository": "https://github.com/OpenAdaptAI/openadapt-web",
+    "commit": "36f643369c9b86c96b52ecdfe7f4a1c8b977cd08",
+    "path": "public/reference/openemr-patient-registration-standard-synthetic-v1/recording/openemr-source-recording.poster.png",
+    "sha256": "5d1f793fcbff2415a83ec894fecb45f6e129402731344b79216b2bba43b88b10",
+    "data_boundary": "Public synthetic OpenEMR reference data. No customer data."
+  },
+  "captures": [
+    {
+      "file": "request.png",
+      "source_output": "identity.png",
+      "state": "Identity decision request before an operator action",
+      "width": 780,
+      "height": 1688,
+      "sha256": "67fa5c2f6cbecb9a102a8719b4558f9ecfd1462c98004ab8ca98d9a13342c9c6"
+    },
+    {
+      "file": "result-checks-passed.png",
+      "source_output": "identity-verify_and_resume-result.png",
+      "state": "Runner result after the permitted check-and-continue request",
+      "width": 780,
+      "height": 1688,
+      "sha256": "a719b5d139dd80bee75b336a325b2c657ac0e4f4a0e6f03f728765734ee908dc"
+    }
+  ],
+  "semantic_scope": "Deterministic presentation fixture for the Desktop phone shell. It is not a customer run or a complete workflow effect-verification result."
+}

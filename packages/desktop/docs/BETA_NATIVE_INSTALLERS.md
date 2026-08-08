@@ -22,6 +22,10 @@ pinned by the bundled Playwright runtime unless an approved browser cache is
 pre-provisioned; native desktop, RDP, and Citrix workflows never enter that
 setup path.
 
+The [mobile decision portal](DECISION_PORTAL.md) shows the current phone
+interface, one-use pairing flow, local evidence boundary, hosted outbound lane,
+runner revalidation, and typed result contract.
+
 Desktop keeps separately licensed media and vision components outside its MIT
 installer. On first use, it downloads the exact release-reviewed component for
 the current platform, verifies the pinned URL, byte count, and SHA-256, installs

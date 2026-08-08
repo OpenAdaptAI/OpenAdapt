@@ -122,8 +122,8 @@ export function DecisionPortal() {
       <header className="page-head">
         <h2>Decisions on a phone</h2>
         <span className="page-sub">
-          When a run halts, staff answer the question from their phone. The
-          question, the evidence, and the outcome stay on this computer.
+          When a run halts, a paired staff device can review the signed task.
+          The runner checks the live application again before an action resumes.
         </span>
       </header>
 
@@ -174,8 +174,8 @@ export function DecisionPortal() {
       {!published && (
         <Callout tone="info">
           The portal is available on this computer only. To let a phone reach
-          it, publish it through your organization&rsquo;s own HTTPS or VPN
-          ingress: set <code>portal_ingress_mode</code> to{" "}
+          it, publish it as your organization&rsquo;s own HTTPS origin through a
+          reverse proxy or VPN: set <code>portal_ingress_mode</code> to{" "}
           <code>customer_ingress</code>, set <code>portal_public_origin</code> to
           the https hostname your reverse proxy serves, and set{" "}
           <code>portal_ingress_acknowledged</code> to true. OpenAdapt will not
@@ -290,7 +290,14 @@ export function DecisionPortal() {
       </Card>
 
       <Card>
-        <CardHead eyebrow="Paired phones" title="Devices" />
+        <CardHead
+          eyebrow="Paired phones"
+          title="Devices"
+          sub={
+            "Pairing authenticates this device. It does not authenticate the " +
+            "operator identity that your policy can require."
+          }
+        />
         {status.devices.length === 0 ? (
           <EmptyState
             title="No phones paired"
