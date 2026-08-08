@@ -792,13 +792,21 @@ class FlowBridge:
         run_dir: Path,
         bundle_dir: Path,
         out_dir: Path,
-        fix: Path | None = None,
+        *,
+        fix: Path,
         timeout: float | None = None,
     ) -> FlowResult:
         """Teach a fix for a halted run, producing a promoted bundle in ``out_dir``."""
-        args = ["teach", str(run_dir), "--bundle", str(bundle_dir), "--out", str(out_dir)]
-        if fix:
-            args += ["--fix", str(fix)]
+        args = [
+            "teach",
+            str(run_dir),
+            "--fix",
+            str(fix),
+            "--bundle",
+            str(bundle_dir),
+            "--out",
+            str(out_dir),
+        ]
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
     # --- report / halt parsing (halt is read from report.json, not exit code) ---
