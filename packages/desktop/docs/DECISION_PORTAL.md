@@ -58,6 +58,31 @@ commit recorded in
 They use synthetic data and a public OpenEMR reference frame. They are not a
 customer run and do not claim that the complete workflow reached `VERIFIED`.
 
+## Add a human decision during qualification
+
+A workflow does not need a separate policy author or manual JSON edit. In the
+Desktop qualification cockpit, an operator can add a decision before an
+existing workflow step. The form records:
+
+- one reviewed question;
+- the roles that can answer it;
+- two to four finite answers;
+- the exact qualified successor for each answer;
+- optional local evidence that an answer requires;
+- the answer expiry; and
+- the live application check that must still pass before execution continues.
+
+Desktop sends these fields to Flow's canonical
+`openadapt.business-decision/v1` contract. Flow derives the guarded graph
+transitions. Saving the change advances the qualification revision and
+invalidates the prior certification. The qualification cases must pass again
+before production use.
+
+This decision is optional. A workflow that has no institutional-knowledge
+branch does not need one. One signed answer selects one qualified branch for
+one run. It does not prove the business effect and it does not change the
+workflow policy for later runs.
+
 ## Network boundary
 
 | Setting | Default | Meaning |

@@ -16,6 +16,7 @@ from engine.qualification import (
     QualificationError,
     add_qualification_case,
     arm_action_identity,
+    author_business_decision,
     bind_action_effect,
     certify_bundle,
     environment_digest_from_identifier,
@@ -136,6 +137,66 @@ def test_environment_identifier_digest_is_reproducible_but_explicitly_operator_d
         required_capabilities=[],
     )
     assert result["project"]["environment"]["environment_digest"] == exact_measured_digest
+
+
+def test_business_decision_form_authors_the_flow_contract_without_raw_json(
+    tmp_path: Path,
+) -> None:
+    import openadapt_flow.qualification as flow_qualification
+
+    if getattr(flow_qualification, "set_business_decision", None) is None:
+        pytest.skip("the pinned Flow runtime does not have the authoring mutation yet")
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="prepare", intent="Prepare the reviewed item", action=ActionKind.WAIT),
+    )
+    initialized = _initialize(bundle)
+
+    result = author_business_decision(
+        bundle,
+        workflow_id="wf-1",
+        graph_id="__program__",
+        state_id="review_decision",
+        question="Which reviewed path should continue?",
+        authorized_roles=["operator", "supervisor"],
+        output_param="review_outcome",
+        options=[
+            {
+                "id": "continue",
+                "label": "Continue",
+                "value": "continue",
+                "target": "s::prepare",
+                "required_evidence": ["local_context"],
+            },
+            {
+                "id": "stop",
+                "label": "Stop",
+                "value": "stop",
+                "target": "__end__",
+                "required_evidence": [],
+            },
+        ],
+        evidence_requirements=[
+            {
+                "id": "local_context",
+                "label": "Review the retained local context",
+            }
+        ],
+        expires_after_s=900,
+        revalidation_kind="text_present",
+        revalidation_text="Ready for review",
+        insert_before_state_id="s::prepare",
+    )
+
+    persisted = Workflow.load(bundle)
+    assert result["project"]["revision"] == initialized["project"]["revision"] + 1
+    assert result["controls"]["business_decisions"]["available"] is True
+    assert persisted.program is not None
+    decision = persisted.program.states["review_decision"].decision
+    assert decision is not None
+    assert decision.output_param == "review_outcome"
+    assert [option.target for option in decision.options] == ["s::prepare", "__end__"]
+    assert decision.options[0].required_evidence == ("local_context",)
 
 
 def test_inspection_projects_typed_case_inputs_without_secret_values(

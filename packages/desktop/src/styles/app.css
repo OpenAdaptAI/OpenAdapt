@@ -475,6 +475,24 @@ a:hover {
 .grid-3 {
   grid-template-columns: repeat(3, 1fr);
 }
+.card-inset {
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  padding: var(--space-3);
+}
+.checkbox-row {
+  align-items: center;
+  display: inline-flex;
+  font-size: var(--fs-sm);
+  gap: var(--space-1);
+}
+@media (max-width: 760px) {
+  #qualification-business-decisions-section .grid-2,
+  #qualification-business-decisions-section .grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* -----------------------------------------------------------------------------
    Pills / status

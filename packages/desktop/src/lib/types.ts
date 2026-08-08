@@ -252,6 +252,50 @@ export interface QualificationNode {
   badges: string[];
 }
 
+export interface QualificationBusinessDecisionOption {
+  id: string;
+  label: string;
+  value: string;
+  target: string;
+  required_evidence: string[];
+}
+
+export interface QualificationBusinessDecisionContract {
+  schema_version: "openadapt.business-decision/v1";
+  question: string;
+  authorized_roles: string[];
+  output_param: string;
+  options: QualificationBusinessDecisionOption[];
+  evidence_requirements: { id: string; label: string }[];
+  expires_after_s: number;
+  revalidation: {
+    kind: "text_present" | "anchor_resolves";
+    text: string | null;
+    state_id: string | null;
+  } | null;
+  editable: boolean;
+}
+
+export interface QualificationBusinessDecisionState {
+  id: string;
+  kind: string;
+  title: string;
+  has_revalidation_anchor: boolean;
+  can_insert_before: boolean;
+  decision: QualificationBusinessDecisionContract | null;
+}
+
+export interface QualificationBusinessDecisionControls {
+  available: boolean;
+  required_flow_capability: "qualification.set_business_decision";
+  graphs: {
+    id: string;
+    label: string;
+    entry: string;
+    states: QualificationBusinessDecisionState[];
+  }[];
+}
+
 export interface QualificationViolation {
   rule: string;
   step_id?: string | null;
@@ -387,6 +431,7 @@ export interface QualificationProject {
   controls: {
     parameters: QualificationParameter[];
     actions: Record<string, QualificationActionControls>;
+    business_decisions: QualificationBusinessDecisionControls;
   };
 }
 

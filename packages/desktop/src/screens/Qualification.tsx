@@ -15,6 +15,7 @@ import type {
 } from "../lib/types";
 import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
 import { QualificationJourney } from "../ui/QualificationJourney";
+import { BusinessDecisionAuthoring } from "../ui/BusinessDecisionAuthoring";
 import { QualificationLifecycle } from "./QualificationLifecycle";
 
 const POLICY = "clinical-write";
@@ -1015,6 +1016,14 @@ export function Qualification({
               </tbody>
             </table>
           </Card>
+
+          {project.project && (
+            <BusinessDecisionAuthoring
+              workflowId={workflowId}
+              project={project}
+              onProject={setProject}
+            />
+          )}
 
           <Card id="qualification-actions-section">
             <CardHead

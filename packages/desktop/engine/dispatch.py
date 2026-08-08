@@ -239,6 +239,7 @@ class EngineDispatcher:
             "bind_qualification_effect": self.bind_qualification_effect,
             "set_qualification_effect_verification": (self.set_qualification_effect_verification),
             "set_qualification_minimum_effect_tier": (self.set_qualification_minimum_effect_tier),
+            "author_qualification_business_decision": (self.author_qualification_business_decision),
             "add_qualification_case": self.add_qualification_case,
             "run_qualification_case": self.run_qualification_case,
             "import_qualification_results": self.import_qualification_results,
@@ -1959,6 +1960,66 @@ class EngineDispatcher:
                     "certified" if result.get("certification_current") else "qualification_pending"
                 ),
             )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def author_qualification_business_decision(self, **params: Any) -> dict:
+        """Add or update one Flow-owned typed decision from form fields."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            author_business_decision,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_roles = params.get("authorized_roles") or []
+        raw_options = params.get("options") or []
+        raw_requirements = params.get("evidence_requirements") or []
+        try:
+            if not isinstance(raw_roles, list):
+                raise ValueError("authorized_roles must be a list")
+            if not isinstance(raw_options, list) or not all(
+                isinstance(item, dict) for item in raw_options
+            ):
+                raise ValueError("options must be a list of decision option objects")
+            if not isinstance(raw_requirements, list) or not all(
+                isinstance(item, dict) for item in raw_requirements
+            ):
+                raise ValueError("evidence_requirements must be a list of evidence objects")
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = author_business_decision(
+                bundle,
+                workflow_id=workflow_id,
+                graph_id=str(params.get("graph_id") or ""),
+                state_id=str(params.get("state_id") or ""),
+                question=str(params.get("question") or ""),
+                authorized_roles=[str(item) for item in raw_roles],
+                output_param=str(params.get("output_param") or ""),
+                options=raw_options,
+                evidence_requirements=raw_requirements,
+                expires_after_s=int(params.get("expires_after_s", 3600)),
+                revalidation_kind=str(params.get("revalidation_kind") or ""),
+                revalidation_text=(
+                    str(params["revalidation_text"])
+                    if params.get("revalidation_text") is not None
+                    else None
+                ),
+                revalidation_state_id=(
+                    str(params["revalidation_state_id"])
+                    if params.get("revalidation_state_id") is not None
+                    else None
+                ),
+                insert_before_state_id=(
+                    str(params["insert_before_state_id"])
+                    if params.get("insert_before_state_id") is not None
+                    else None
+                ),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
             return result
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}

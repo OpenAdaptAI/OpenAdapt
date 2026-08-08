@@ -122,6 +122,7 @@ def _flow_api() -> dict[str, Any]:
         "set_effect_policy": set_effect_policy,
         "set_identity_policy": set_identity_policy,
         "set_minimum_effect_tier": set_minimum_effect_tier,
+        "set_business_decision": getattr(flow_qualification, "set_business_decision", None),
         "workflow_contract_sha256": workflow_contract_sha256,
     }
 
@@ -393,7 +394,134 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
                 for index, effect in enumerate(step.effects)
             ],
         }
-    return {"parameters": parameters, "actions": actions}
+    return {
+        "parameters": parameters,
+        "actions": actions,
+        "business_decisions": _business_decision_controls(workflow),
+    }
+
+
+def _business_decision_controls(workflow) -> dict[str, Any]:
+    """Project Flow's exact decision contracts and safe graph choices.
+
+    The projection is unavailable on older frozen Flow builds.  It never
+    invents a Desktop decision schema and it does not expose action anchors or
+    live values.  Authoring remains available for the other qualification
+    controls when this one capability is absent.
+    """
+
+    setter = _flow_api().get("set_business_decision")
+    try:
+        from openadapt_flow.ir import StateKind, lift_to_program
+
+        business_kind = StateKind.BUSINESS_DECISION
+    except (ImportError, AttributeError):
+        return {
+            "available": False,
+            "required_flow_capability": "qualification.set_business_decision",
+            "graphs": [],
+        }
+    if setter is None:
+        return {
+            "available": False,
+            "required_flow_capability": "qualification.set_business_decision",
+            "graphs": [],
+        }
+
+    main_program = workflow.program or lift_to_program(workflow)
+    graphs = []
+    for graph_id, program in [("__program__", main_program)] + list(workflow.subflows.items()):
+        if program is None:
+            continue
+        inbound_counts = {state_id: 0 for state_id in program.states}
+        for state in program.states.values():
+            for transition in state.transitions:
+                if transition.target in inbound_counts:
+                    inbound_counts[transition.target] += 1
+        states = []
+        for state_id, state in program.states.items():
+            if state.kind.value == "action" and state.step is not None:
+                title = state.step.intent or f"{state.step.action.value} action"
+                has_anchor = state.step.anchor is not None
+            elif state.kind is business_kind and state.decision is not None:
+                title = state.decision.question
+                has_anchor = False
+            elif state.kind.value == "terminal":
+                title = f"{state.outcome or 'terminal'} outcome"
+                has_anchor = False
+            else:
+                title = state.kind.value.replace("_", " ")
+                has_anchor = False
+            decision_view = None
+            if state.kind is business_kind and state.decision is not None:
+                predicates = list(state.decision.revalidation)
+                revalidation_view: dict[str, Any] | None = None
+                if len(predicates) == 1:
+                    predicate = predicates[0]
+                    if predicate.kind.value == "text_present" and predicate.text:
+                        revalidation_view = {
+                            "kind": "text_present",
+                            "text": predicate.text,
+                            "state_id": None,
+                        }
+                    elif predicate.kind.value == "anchor_resolves" and predicate.anchor:
+                        matching_states = [
+                            candidate_id
+                            for candidate_id, candidate in program.states.items()
+                            if candidate.step is not None
+                            and candidate.step.anchor == predicate.anchor
+                        ]
+                        if len(matching_states) == 1:
+                            revalidation_view = {
+                                "kind": "anchor_resolves",
+                                "text": None,
+                                "state_id": matching_states[0],
+                            }
+                decision_view = {
+                    "schema_version": state.decision.schema_version,
+                    "question": state.decision.question,
+                    "authorized_roles": list(state.decision.authorized_roles),
+                    "output_param": state.decision.output_param,
+                    "options": [item.model_dump(mode="json") for item in state.decision.options],
+                    "evidence_requirements": [
+                        item.model_dump(mode="json")
+                        for item in state.decision.evidence_requirements
+                    ],
+                    "expires_after_s": state.decision.expires_after_s,
+                    "revalidation": revalidation_view,
+                    "editable": (
+                        revalidation_view is not None and 2 <= len(state.decision.options) <= 4
+                    ),
+                }
+            states.append(
+                {
+                    "id": state_id,
+                    "kind": state.kind.value,
+                    "title": title,
+                    "has_revalidation_anchor": has_anchor,
+                    "can_insert_before": (
+                        state.kind is not business_kind
+                        and (
+                            (program.entry == state_id and inbound_counts[state_id] == 0)
+                            or (program.entry != state_id and inbound_counts[state_id] == 1)
+                        )
+                    ),
+                    "decision": decision_view,
+                }
+            )
+        graphs.append(
+            {
+                "id": graph_id,
+                "label": "Main workflow" if graph_id == "__program__" else graph_id,
+                "entry": program.entry,
+                "states": states,
+            }
+        )
+    return {
+        "available": True,
+        "required_flow_capability": "qualification.set_business_decision",
+        "graphs": graphs,
+    }
 
 
 def _capability_coverage(
@@ -887,6 +1015,139 @@ def set_project_minimum_effect_tier(
         )
         _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
+def author_business_decision(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    graph_id: str,
+    state_id: str,
+    question: str,
+    authorized_roles: list[str],
+    output_param: str,
+    options: list[dict[str, Any]],
+    evidence_requirements: list[dict[str, Any]],
+    expires_after_s: int,
+    revalidation_kind: str,
+    revalidation_text: str | None = None,
+    revalidation_state_id: str | None = None,
+    insert_before_state_id: str | None = None,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Author one typed Flow decision without raw workflow JSON.
+
+    The Desktop request contains only form fields.  Flow constructs and
+    validates the exact IR contract, derives all option transitions, advances
+    the qualification revision, and invalidates prior certification.
+    """
+
+    api = _flow_api()
+    setter = api.get("set_business_decision")
+    if setter is None:
+        raise QualificationError(
+            "This Desktop build needs a Flow runtime with "
+            "qualification.set_business_decision before it can author typed "
+            "business decisions. Other qualification controls remain available."
+        )
+    try:
+        from openadapt_flow.ir import (
+            BusinessDecisionEvidenceRequirement,
+            BusinessDecisionOption,
+            BusinessDecisionSpec,
+            Predicate,
+            PredicateKind,
+            lift_to_program,
+        )
+    except (ImportError, AttributeError) as exc:
+        raise QualificationError(
+            "The bundled Flow runtime does not include the typed business-decision IR."
+        ) from exc
+
+    workflow = _load(bundle_dir, key=bundle_key)
+    if graph_id == "__program__":
+        graph = workflow.program or lift_to_program(workflow)
+    else:
+        graph = workflow.subflows.get(graph_id)
+    if graph is None:
+        raise QualificationError(f"Unknown executable graph {graph_id!r}")
+
+    if revalidation_kind == "text_present":
+        text = (revalidation_text or "").strip()
+        if not text:
+            raise QualificationError("Visible revalidation text is required")
+        revalidation = Predicate(
+            kind=PredicateKind.TEXT_PRESENT,
+            text=text,
+            intent="the reviewed application state remains visible",
+        )
+    elif revalidation_kind == "anchor_resolves":
+        source_state = graph.states.get(revalidation_state_id or "")
+        anchor = (
+            source_state.step.anchor
+            if source_state is not None and source_state.step is not None
+            else None
+        )
+        if anchor is None:
+            raise QualificationError(
+                "Choose an action that has a retained target for live revalidation"
+            )
+        revalidation = Predicate(
+            kind=PredicateKind.ANCHOR_RESOLVES,
+            anchor=anchor.model_copy(deep=True),
+            intent="the reviewed target still resolves in the live application",
+        )
+    else:
+        raise QualificationError("revalidation_kind must be text_present or anchor_resolves")
+
+    try:
+        requirements = tuple(
+            BusinessDecisionEvidenceRequirement(
+                id=str(item.get("id") or "").strip(),
+                label=str(item.get("label") or "").strip(),
+            )
+            for item in evidence_requirements
+        )
+        exact_options = tuple(
+            BusinessDecisionOption(
+                id=str(item.get("id") or "").strip(),
+                label=str(item.get("label") or "").strip(),
+                value=str(item.get("value") or "").strip(),
+                target=str(item.get("target") or "").strip(),
+                required_evidence=tuple(
+                    str(value).strip() for value in (item.get("required_evidence") or [])
+                ),
+            )
+            for item in options
+        )
+        decision = BusinessDecisionSpec(
+            question=question.strip(),
+            authorized_roles=tuple(role.strip() for role in authorized_roles),
+            output_param=output_param.strip(),
+            options=exact_options,
+            evidence_requirements=requirements,
+            expires_after_s=expires_after_s,
+            revalidation=(revalidation,),
+        )
+        authored = setter(
+            workflow,
+            graph_id=graph_id,
+            state_id=state_id.strip(),
+            decision=decision,
+            insert_before_state_id=(
+                insert_before_state_id.strip() if insert_before_state_id else None
+            ),
+        )
+        _save(authored, bundle_dir, key=bundle_key)
+    except (QualificationError, ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     return inspect_bundle(
         bundle_dir,
