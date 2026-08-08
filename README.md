@@ -126,6 +126,25 @@ state, record identity, target uniqueness, and the fresh application view.
 Afterward it waits for settled state and evaluates the declared effect. If the
 contract cannot be established, it returns evidence and halts.
 
+### A focused question when a person is needed
+
+A halted run can send one signed task to the OpenAdapt phone view. The task can
+ask about record identity, target ambiguity, a required human step, a saved
+result, uncertain delivery, or an optional step. The phone shows only the
+actions that the current sealed pause capability permits. It does not click the
+application or declare success.
+
+After an answer, the customer-controlled runner reads the live application
+again. It checks the current pause, session, workflow state, identity, target,
+and effect requirements before it continues. Protected screenshots stay on the
+runner. The hosted path carries closed status values and counts; a customer-run
+local portal can show the full evidence inside the customer's boundary.
+
+[Try the interactive mobile decision demo](https://app.openadapt.ai/demo/attention)
+with synthetic application data. A domain label in the demo comes from that
+fixture. A production workflow uses the reviewed entity class in its exact
+qualification contract, or the neutral `record` or `item` label.
+
 ### Deterministic healthy runs
 
 The compiler retains structural, accessibility, visual, OCR, spatial, and
