@@ -47,7 +47,7 @@ from openadapt_flow.identity_signals import (
 from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:  # pragma: no cover
-    from openadapt_flow.ir import IdentityTemplate, Step, Workflow
+    from openadapt_flow.ir import BusinessDecisionSpec, IdentityTemplate, Step, Workflow
     from openadapt_flow.policy import Policy
 
 
@@ -1431,6 +1431,235 @@ def remove_entity_label(workflow: "Workflow", step_id: str) -> QualificationProj
     _touch(project, previous)
     _invalidate_certification(workflow)
     return project
+
+
+def set_business_decision(
+    workflow: "Workflow",
+    *,
+    graph_id: str,
+    state_id: str,
+    decision: "BusinessDecisionSpec",
+    insert_before_state_id: Optional[str] = None,
+) -> "Workflow":
+    """Add or update one reviewed typed decision in an executable graph.
+
+    This is the canonical qualification-authoring mutation for Desktop and API
+    clients.  It consumes the exact IR model, derives the only admitted
+    transition shape, and advances the qualification revision once.  It does
+    not submit an answer, prove an effect, or change production decision
+    semantics.
+
+    A new node is inserted immediately before one existing state.  The target
+    must be the graph entry or have exactly one normal inbound transition.  The
+    narrow insertion rule prevents an authoring client from silently changing
+    several paths that happen to converge on the same state.
+    """
+
+    from openadapt_flow.bundle_validation import validate_workflow
+    from openadapt_flow.ir import (
+        BusinessDecisionSpec,
+        ParamKind,
+        ParamSpec,
+        ProgramGraph,
+        State,
+        StateKind,
+        Workflow,
+        business_decision_transitions,
+        lift_to_program,
+    )
+
+    if workflow.qualification is None:
+        raise QualificationError(
+            "initialize qualification before authoring a business decision"
+        )
+    if not isinstance(decision, BusinessDecisionSpec):
+        raise QualificationError("decision must use Flow's BusinessDecisionSpec")
+    if not _ID_RE.fullmatch(state_id):
+        raise QualificationError("business decision state id is invalid")
+    if not 2 <= len(decision.options) <= 4:
+        raise QualificationError("a business decision must have 2 to 4 options")
+
+    candidate = workflow.model_copy(deep=True)
+    graph: Optional[ProgramGraph]
+    if graph_id == "__program__":
+        if candidate.program is None:
+            candidate.program = lift_to_program(candidate)
+        graph = candidate.program
+    else:
+        graph = candidate.subflows.get(graph_id)
+    if graph is None:
+        raise QualificationError(f"unknown executable graph {graph_id!r}")
+
+    existing_state = graph.states.get(state_id)
+    if existing_state is not None:
+        if insert_before_state_id is not None:
+            raise QualificationError(
+                "insert_before_state_id is valid only when adding a decision"
+            )
+        if (
+            existing_state.kind is not StateKind.BUSINESS_DECISION
+            or existing_state.decision is None
+        ):
+            raise QualificationError(
+                f"state {state_id!r} exists and is not a business decision"
+            )
+        if existing_state.decision.output_param != decision.output_param:
+            raise QualificationError(
+                "an existing business decision cannot change its output parameter"
+            )
+    else:
+        if not insert_before_state_id:
+            raise QualificationError(
+                "insert_before_state_id is required when adding a decision"
+            )
+        if insert_before_state_id not in graph.states:
+            raise QualificationError(
+                f"unknown insertion state {insert_before_state_id!r}"
+            )
+        inbound = [
+            (source, transition)
+            for source in graph.states.values()
+            for transition in source.transitions
+            if transition.target == insert_before_state_id
+        ]
+        if graph.entry == insert_before_state_id:
+            if inbound:
+                raise QualificationError(
+                    "the graph entry also has inbound transitions; choose an "
+                    "unambiguous insertion point"
+                )
+            graph.entry = state_id
+        else:
+            if len(inbound) != 1:
+                raise QualificationError(
+                    "the insertion state must have exactly one normal inbound "
+                    "transition"
+                )
+            predecessor, transition = inbound[0]
+            if predecessor.kind is StateKind.BUSINESS_DECISION:
+                predecessor_decision = predecessor.decision
+                if predecessor_decision is None:
+                    raise QualificationError(
+                        "the predecessor business decision has no decision contract"
+                    )
+                matching_options = [
+                    option
+                    for option in predecessor_decision.options
+                    if option.target == insert_before_state_id
+                ]
+                if len(matching_options) != 1:
+                    raise QualificationError(
+                        "the predecessor business decision contract does not match "
+                        "its transition"
+                    )
+                matching_id = matching_options[0].id
+                updated_options = tuple(
+                    option.model_copy(update={"target": state_id})
+                    if option.id == matching_id
+                    else option
+                    for option in predecessor_decision.options
+                )
+                updated_predecessor_decision = predecessor_decision.model_copy(
+                    update={"options": updated_options}
+                )
+                graph.states[predecessor.id] = predecessor.model_copy(
+                    update={
+                        "decision": updated_predecessor_decision,
+                        "transitions": business_decision_transitions(
+                            updated_predecessor_decision
+                        ),
+                    }
+                )
+            else:
+                transition.target = state_id
+
+    target_ids = {option.target for option in decision.options}
+    unknown_targets = sorted(target_ids - set(graph.states))
+    if unknown_targets:
+        raise QualificationError(
+            "business decision options name unknown successor states: "
+            + ", ".join(unknown_targets)
+        )
+    if state_id in target_ids:
+        raise QualificationError("a business decision cannot target itself")
+    if decision.output_param in candidate.secret_params:
+        raise QualificationError("a business decision output cannot be a secret")
+
+    values = [option.value for option in decision.options]
+    other_decisions = [
+        state.decision
+        for candidate_graph_id, candidate_graph in [
+            ("__program__", candidate.program),
+            *candidate.subflows.items(),
+        ]
+        if candidate_graph is not None
+        for candidate_state_id, state in candidate_graph.states.items()
+        if state.kind is StateKind.BUSINESS_DECISION
+        and state.decision is not None
+        and state.decision.output_param == decision.output_param
+        and (candidate_graph_id, candidate_state_id) != (graph_id, state_id)
+    ]
+    if any(
+        {option.value for option in other.options} != set(values)
+        for other in other_decisions
+    ):
+        raise QualificationError(
+            "cannot change business decision output choices while another "
+            "decision shares the output parameter"
+        )
+    current_param = candidate.param_specs.get(decision.output_param)
+    if existing_state is None and current_param is not None:
+        raise QualificationError(
+            "the business decision output conflicts with an existing parameter"
+        )
+    if current_param is None:
+        if decision.output_param in candidate.params:
+            raise QualificationError(
+                "the business decision output conflicts with an existing parameter"
+            )
+        candidate.param_specs[decision.output_param] = ParamSpec(
+            name=decision.output_param,
+            type=ParamKind.ENUM,
+            required=False,
+            choices=values,
+        )
+    elif current_param.type is not ParamKind.ENUM or current_param.required:
+        raise QualificationError(
+            "the business decision output parameter must be an optional enum"
+        )
+    else:
+        candidate.param_specs[decision.output_param] = current_param.model_copy(
+            update={"choices": values}
+        )
+
+    graph.states[state_id] = State(
+        id=state_id,
+        kind=StateKind.BUSINESS_DECISION,
+        decision=decision,
+        transitions=business_decision_transitions(decision),
+    )
+
+    project = candidate.qualification
+    assert project is not None
+    previous = project.revision_digest()
+    _touch(project, previous)
+    _invalidate_certification(candidate)
+    try:
+        validated = Workflow.model_validate(candidate.model_dump(mode="python"))
+    except ValueError as exc:
+        raise QualificationError(
+            f"the authored business decision makes the workflow invalid: {exc}"
+        ) from exc
+    validation = validate_workflow(validated)
+    if not validation.structural_ok:
+        details = "; ".join(
+            issue.render() for issue in validation.by_category("structure")
+        )
+        raise QualificationError(
+            "the authored business decision makes the workflow structurally "
+            f"invalid: {details}"
+        )
+    return validated
 
 
 def list_entity_labels(workflow: "Workflow") -> list[QualifiedEntityLabel]:

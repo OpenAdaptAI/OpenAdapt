@@ -36,6 +36,12 @@ from openadapt_flow.ir import (
     business_decision_transitions,
 )
 from openadapt_flow.learning.gate import program_regression_gate
+from openadapt_flow.qualification import (
+    EnvironmentBoundary,
+    QualificationError,
+    init_project,
+    set_business_decision,
+)
 from openadapt_flow.runtime.durable import CheckpointStore, resume
 from openadapt_flow.runtime.durable.attended import issue_attended_capability
 from openadapt_flow.runtime.durable.business_decision import (
@@ -166,6 +172,324 @@ def _principal(*roles: str) -> BusinessDecisionPrincipal:
         authenticated_by="test-aal2-route",
         authentication_context_sha256="a" * 64,
     )
+
+
+def _qualification_environment() -> EnvironmentBoundary:
+    return EnvironmentBoundary(
+        target_kind="rdp",
+        application="Qualified application",
+        application_identity="qualified-app",
+        application_version="1",
+        environment_observer_id="fixture-observer",
+        environment_observer_contract_sha256="c" * 64,
+        environment_digest="b" * 64,
+        runtime_version="1.30.0",
+        required_capabilities=["pixel_observation", "effect_verification"],
+    )
+
+
+def _authoring_workflow() -> Workflow:
+    return Workflow(
+        name="decision-authoring",
+        program=ProgramGraph(
+            entry="prepare",
+            states={
+                "prepare": State(
+                    id="prepare",
+                    kind=StateKind.ACTION,
+                    step=Step(
+                        id="prepare",
+                        intent="prepare the decision",
+                        action=ActionKind.WAIT,
+                    ),
+                    transitions=[Transition(target="accept")],
+                ),
+                "accept": State(
+                    id="accept",
+                    kind=StateKind.ACTION,
+                    step=Step(
+                        id="accept",
+                        intent="continue the accepted path",
+                        action=ActionKind.KEY,
+                        key="A",
+                    ),
+                    transitions=[Transition(target="done")],
+                ),
+                "reject": State(
+                    id="reject",
+                    kind=StateKind.ACTION,
+                    step=Step(
+                        id="reject",
+                        intent="continue the rejected path",
+                        action=ActionKind.KEY,
+                        key="R",
+                    ),
+                    transitions=[Transition(target="done")],
+                ),
+                "done": State(id="done", kind=StateKind.TERMINAL, outcome="success"),
+            },
+        ),
+    )
+
+
+def _authoring_spec(
+    *,
+    accept_label: str = "Accept",
+    accept_value: str = "accepted",
+    output_param: str = "review_outcome",
+) -> BusinessDecisionSpec:
+    return BusinessDecisionSpec(
+        question="Which reviewed path should continue?",
+        authorized_roles=("operator", "supervisor"),
+        output_param=output_param,
+        options=(
+            BusinessDecisionOption(
+                id="accept",
+                label=accept_label,
+                value=accept_value,
+                target="accept",
+            ),
+            BusinessDecisionOption(
+                id="reject",
+                label="Reject",
+                value="rejected",
+                target="reject",
+            ),
+        ),
+        expires_after_s=300,
+        revalidation=(
+            Predicate(
+                kind=PredicateKind.TEXT_PRESENT,
+                text="Ready for reviewed action",
+                intent="the reviewed application state remains ready",
+            ),
+        ),
+    )
+
+
+def test_qualification_authoring_adds_one_typed_decision_and_advances_revision():
+    workflow = _authoring_workflow()
+    project = init_project(workflow, environment=_qualification_environment())
+    revision = project.revision
+
+    authored = set_business_decision(
+        workflow,
+        graph_id="__program__",
+        state_id="review",
+        decision=_authoring_spec(),
+        insert_before_state_id="accept",
+    )
+
+    assert workflow.program is not None
+    assert workflow.program.states["prepare"].transitions[0].target == "accept"
+    assert authored.program is not None
+    assert authored.program.states["prepare"].transitions[0].target == "review"
+    decision = authored.program.states["review"]
+    assert decision.kind is StateKind.BUSINESS_DECISION
+    assert [edge.target for edge in decision.transitions] == ["accept", "reject"]
+    assert authored.param_specs["review_outcome"] == ParamSpec(
+        name="review_outcome",
+        type=ParamKind.ENUM,
+        required=False,
+        choices=["accepted", "rejected"],
+    )
+    assert authored.qualification is not None
+    assert authored.qualification.revision == revision + 1
+    assert authored.qualification.last_certification is None
+
+
+def test_qualification_authoring_lifts_a_linear_workflow_before_insertion():
+    workflow = Workflow(
+        name="linear-decision-authoring",
+        steps=[
+            Step(
+                id="prepare",
+                intent="prepare the reviewed item",
+                action=ActionKind.WAIT,
+            ),
+            Step(
+                id="accept",
+                intent="continue the accepted path",
+                action=ActionKind.KEY,
+                key="A",
+            ),
+        ],
+    )
+    init_project(workflow, environment=_qualification_environment())
+
+    authored = set_business_decision(
+        workflow,
+        graph_id="__program__",
+        state_id="review",
+        decision=BusinessDecisionSpec(
+            question="Which reviewed path should continue?",
+            authorized_roles=("operator",),
+            output_param="review_outcome",
+            options=(
+                BusinessDecisionOption(
+                    id="accept",
+                    label="Continue",
+                    value="accepted",
+                    target="s::accept",
+                ),
+                BusinessDecisionOption(
+                    id="stop",
+                    label="Stop",
+                    value="stopped",
+                    target="__end__",
+                ),
+            ),
+            revalidation=(
+                Predicate(
+                    kind=PredicateKind.TEXT_PRESENT,
+                    text="Ready for reviewed action",
+                ),
+            ),
+        ),
+        insert_before_state_id="s::accept",
+    )
+
+    assert workflow.program is None
+    assert authored.program is not None
+    assert authored.program.states["s::prepare"].transitions[0].target == "review"
+    assert authored.program.states["review"].transitions[0].target == "s::accept"
+
+
+def test_qualification_authoring_updates_the_exact_decision_contract_once():
+    workflow = _authoring_workflow()
+    init_project(workflow, environment=_qualification_environment())
+    authored = set_business_decision(
+        workflow,
+        graph_id="__program__",
+        state_id="review",
+        decision=_authoring_spec(),
+        insert_before_state_id="accept",
+    )
+    assert authored.qualification is not None
+    revision = authored.qualification.revision
+
+    updated = set_business_decision(
+        authored,
+        graph_id="__program__",
+        state_id="review",
+        decision=_authoring_spec(accept_label="Continue approved path"),
+    )
+
+    assert updated.qualification is not None
+    assert updated.qualification.revision == revision + 1
+    assert updated.program is not None
+    assert updated.program.states["review"].transitions[0].label == (
+        "Continue approved path"
+    )
+
+
+def test_qualification_authoring_inserts_after_a_decision_without_contract_drift():
+    workflow = _authoring_workflow()
+    init_project(workflow, environment=_qualification_environment())
+    first = set_business_decision(
+        workflow,
+        graph_id="__program__",
+        state_id="review",
+        decision=_authoring_spec(),
+        insert_before_state_id="accept",
+    )
+    assert first.qualification is not None
+    revision = first.qualification.revision
+
+    second = set_business_decision(
+        first,
+        graph_id="__program__",
+        state_id="confirm",
+        decision=_authoring_spec(
+            accept_label="Confirm accepted path",
+            output_param="confirmation_outcome",
+        ),
+        insert_before_state_id="accept",
+    )
+
+    assert first.program is not None
+    assert first.program.states["review"].decision is not None
+    assert first.program.states["review"].decision.options[0].target == "accept"
+    assert second.program is not None
+    predecessor = second.program.states["review"]
+    assert predecessor.decision is not None
+    assert predecessor.decision.options[0].target == "confirm"
+    assert predecessor.transitions == business_decision_transitions(
+        predecessor.decision
+    )
+    assert second.program.states["confirm"].decision is not None
+    assert second.program.states["confirm"].decision.options[0].target == "accept"
+    assert second.qualification is not None
+    assert second.qualification.revision == revision + 1
+    assert validate_workflow(second).structural_ok
+
+
+def test_qualification_authoring_refuses_shared_output_choice_drift():
+    workflow = _authoring_workflow()
+    init_project(workflow, environment=_qualification_environment())
+    authored = set_business_decision(
+        workflow,
+        graph_id="__program__",
+        state_id="review",
+        decision=_authoring_spec(),
+        insert_before_state_id="accept",
+    )
+    assert authored.program is not None
+    predecessor = authored.program.states["review"]
+    assert predecessor.decision is not None
+    redirected_options = tuple(
+        option.model_copy(update={"target": "confirm"})
+        if option.id == "accept"
+        else option
+        for option in predecessor.decision.options
+    )
+    redirected_spec = predecessor.decision.model_copy(
+        update={"options": redirected_options}
+    )
+    authored.program.states["review"] = predecessor.model_copy(
+        update={
+            "decision": redirected_spec,
+            "transitions": business_decision_transitions(redirected_spec),
+        }
+    )
+    shared_spec = _authoring_spec(accept_label="Confirm accepted path")
+    authored.program.states["confirm"] = State(
+        id="confirm",
+        kind=StateKind.BUSINESS_DECISION,
+        decision=shared_spec,
+        transitions=business_decision_transitions(shared_spec),
+    )
+    assert validate_workflow(authored).structural_ok
+    before = authored.model_dump(mode="json")
+
+    with pytest.raises(QualificationError, match="shares the output parameter"):
+        set_business_decision(
+            authored,
+            graph_id="__program__",
+            state_id="review",
+            decision=_authoring_spec(accept_value="approved"),
+        )
+
+    assert authored.model_dump(mode="json") == before
+
+
+def test_qualification_authoring_refuses_an_ambiguous_insertion_without_mutation():
+    workflow = _authoring_workflow()
+    assert workflow.program is not None
+    workflow.program.states["reject"].transitions = [Transition(target="accept")]
+    init_project(workflow, environment=_qualification_environment())
+    before = workflow.model_dump(mode="json")
+
+    with pytest.raises(QualificationError, match="exactly one normal inbound"):
+        set_business_decision(
+            workflow,
+            graph_id="__program__",
+            state_id="review",
+            decision=_authoring_spec(),
+            insert_before_state_id="accept",
+        )
+
+    assert workflow.model_dump(mode="json") == before
 
 
 @pytest.mark.parametrize(
