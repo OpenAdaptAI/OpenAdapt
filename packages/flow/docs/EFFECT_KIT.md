@@ -26,9 +26,12 @@ from the reference apps.
    at-most-once counts, idempotency keys, and `{param: ...}` references that
    bind to the run's governed parameters. Contracts are substrate-neutral.
 2. **The deployment declares WHERE truth lives** — the `effects:` section of
-   `deployment.yaml` wires exactly one `EffectVerifier` (REST / GraphQL /
-   FHIR / SQL / file / email / document / document-hash, or a registered
-   plugin adapter) plus its secret-isolated auth.
+   `deployment.yaml` wires one `EffectVerifier` (REST / GraphQL / FHIR / SQL /
+   file / email / document / document-hash, or a registered plugin adapter)
+   plus its secret-isolated auth. When more than one reviewed read boundary is
+   available, `candidates:` selects the strongest evidence tier for each resolved
+   effect before input. It does not downgrade after input. An unavailable
+   selected proof halts or enters reconciliation.
 3. **The runtime refuses to guess.** Every verdict is CONFIRMED / REFUTED /
    INDETERMINATE; both non-confirmed verdicts HALT. A step that declares
    effects with no verifier configured HALTs. An escalated failure emits a
@@ -122,6 +125,39 @@ Per-kind required fields:
 Any kind additionally accepts the evidence-minimization fields
 `evidence_redact_fields` / `evidence_keep_fields` (see "Evidence minimization"
 below).
+
+### Candidate selection when there is no database connection
+
+A database connection is not required. Configure the strongest qualified
+read boundary that the workflow has: REST/FHIR/GraphQL, read-only SQL, a file
+or report export, a separately authenticated read-only session through a
+plugin, or a persisted-state re-acquisition. Do not configure a same-surface
+screen read-back as proof of a consequential write.
+
+For more than one reviewed boundary, use `effects.candidates` instead of
+`effects.kind`. Each candidate has the normal `EffectsConfig` fields. Flow
+constructs every candidate before actuation, then selects the lowest numeric
+`VerificationTier` for each resolved effect; declaration order resolves a tie.
+This makes the choice deterministic and reviewable. A missing secret, an
+invalid config, or an invalid plugin tier refuses the run before input. The
+on-screen candidate is tier 3 only for that exact effect when its read-back
+reopens persisted state through a different path. It is tier 4 for a
+same-surface read-back. After the action, Flow does not fall back to a weaker
+candidate if the selected verifier is unavailable. It records the unavailable
+proof and halts or creates the normal reconciliation task.
+
+```yaml
+effects:
+  candidates:
+    - kind: document             # independent export arrival (tier 1)
+      root: /secure/exports
+      file_pattern: "confirmation-*.json"
+      document_format: json
+    - kind: onscreen             # lower-tier persisted-state read-back
+```
+
+The single `kind:` form remains the recommended configuration when one
+qualified verifier exists and remains fully compatible with prior deployments.
 
 The `sql` kind refuses to construct unless `sql_query` passes the read-only
 statement filter (single statement, `SELECT`/`WITH` leading keyword, no

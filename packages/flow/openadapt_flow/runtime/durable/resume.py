@@ -1014,6 +1014,7 @@ def _resume_under_lease(
             workflow=workflow,
             step=step,
             actuation_path=("api" if checkpoint.actuation == "api" else "gui"),
+            retained_evidence=list(checkpoint.effect_evidence),
         )
     if last_linear is not None and last_linear.next_step_index < len(workflow.steps):
         replayer.revalidate_linear_checkpoint_state(
