@@ -127,6 +127,7 @@ def test_template_rung_hit_uses_padded_search_region(screen, anchor):
     assert matched == (100, 100, 50, 20)
     assert resolution.confidence == pytest.approx(0.95)
     assert resolution.elapsed_ms >= 0.0
+    assert resolution.resolution_evidence_regions == ((70, 70, 110, 80),)
     # Local search region = anchor.region padded by search_pad, clamped.
     assert vision.template_calls == [(70, 70, 110, 80)]
 
@@ -156,6 +157,7 @@ def test_identity_armed_template_snaps_to_unique_landmark_point(screen):
     assert resolution.rung == "template"
     assert resolution.point == (110, 105)
     assert matched == (105, 100, 50, 20)
+    assert resolution.resolution_evidence_regions == ((0, 0, 300, 200),)
 
 
 def test_identity_armed_template_rejects_landmark_contradiction(screen):
@@ -284,6 +286,7 @@ def test_template_global_fallback_with_scaled_click_point(screen, anchor):
     # Offset (10, 5) inside the anchor region scales by (2.0, 2.0).
     assert resolution.point == (220, 210)
     assert matched == (200, 200, 100, 40)
+    assert resolution.resolution_evidence_regions == ((0, 0, 400, 400),)
     assert len(vision.template_calls) == 2
     assert vision.template_calls[1] is None  # full-frame search
 
@@ -390,6 +393,7 @@ def test_ocr_rung_uses_match_point_directly(screen, anchor):
     assert resolution.point == (150, 60)
     assert matched == (140, 55, 40, 12)
     assert vision.text_calls == ["Save"]
+    assert resolution.resolution_evidence_regions == ((70, 70, 110, 80),)
 
 
 def test_template_rungs_skipped_without_template_bytes(screen, anchor):
@@ -435,6 +439,7 @@ def test_geometry_rung_single_landmark(screen):
     # Matched region is anchor-region-sized, centered on the estimate.
     assert matched == (115, 40, 50, 20)
     assert resolution.confidence == pytest.approx(0.7 * 0.9)
+    assert resolution.resolution_evidence_regions == ((0, 0, 300, 200),)
 
 
 def test_exact_field_label_resolves_open_select_and_duplicate_label_refuses(screen):
@@ -552,6 +557,7 @@ def test_grounder_rung_last_and_receives_intent(screen, anchor):
     assert resolution.rung == "grounder"
     assert resolution.point == (33, 44)
     assert matched == (20, 40, 26, 8)
+    assert resolution.resolution_evidence_regions == ((0, 0, 300, 200),)
     assert grounder.calls == [("click 'Save'", "Save")]
 
 

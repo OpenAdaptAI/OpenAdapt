@@ -196,6 +196,7 @@ def _build_rdp_backend(
             application_version_marker=cfg.rdp_application_version_marker,
             environment_marker=cfg.rdp_environment_marker,
             session_marker=cfg.rdp_session_marker,
+            remote_frame_contract=cfg.remote_frame_contract,
         )
 
     if rdp_transport is not None or has_host:
@@ -220,6 +221,7 @@ def _build_rdp_backend(
             application_version_marker=cfg.rdp_application_version_marker,
             environment_marker=cfg.rdp_environment_marker,
             session_marker=cfg.rdp_session_marker,
+            remote_frame_contract=cfg.remote_frame_contract,
         )
 
     if window_client is not None or has_window:
@@ -236,6 +238,7 @@ def _build_rdp_backend(
         kwargs["application_version_marker"] = cfg.rdp_application_version_marker
         kwargs["environment_marker"] = cfg.rdp_environment_marker
         kwargs["session_marker"] = cfg.rdp_session_marker
+        kwargs["remote_frame_contract"] = cfg.remote_frame_contract
         return RemoteDisplayBackend(window_client, **kwargs)
 
     raise ValueError(

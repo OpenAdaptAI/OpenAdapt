@@ -2230,6 +2230,15 @@ class Resolution(BaseModel):
     elapsed_ms: float
     structural_handle: Optional[StructuralHandle] = None
     visual_evidence: Optional["VisualResolutionEvidence"] = None
+    resolution_evidence_regions: tuple[Region, ...] = Field(
+        default_factory=tuple,
+        exclude=True,
+        max_length=128,
+        description=(
+            "Live pixel regions whose content and candidate set established this "
+            "resolution. Remote comparison masks must not overlap them before input."
+        ),
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:

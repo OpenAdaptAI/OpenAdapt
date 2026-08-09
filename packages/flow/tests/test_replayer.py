@@ -33,6 +33,7 @@ from openadapt_flow.qualification import (
     init_project,
     set_identity_policy,
 )
+from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     runtime_inputs_digest,
@@ -425,6 +426,24 @@ class RemoteLeaseBackend(FakeBackend):
         )
 
 
+class RemoteMaskedLeaseBackend(RemoteLeaseBackend):
+    """Remote lease that enforces one reviewed comparison mask."""
+
+    def __init__(self, *, frame: bytes, volatile_region):
+        super().__init__(initial_frame=frame, fresh_frame=frame)
+        self.remote_frame_contract = RemoteFrameContract(
+            frame_width=VIEWPORT[0],
+            frame_height=VIEWPORT[1],
+            volatile_regions=(volatile_region,),
+            protected_regions=((100, 100, 50, 20),),
+        )
+        self.protected_region_calls: list[tuple] = []
+
+    def arm_remote_frame_contract(self, *, protected_regions):
+        self.protected_region_calls.append(protected_regions)
+        self.remote_frame_contract.arm(protected_regions)
+
+
 class FreshMismatchRemoteBackend(RemoteLeaseBackend):
     """Remote fake that proves a bounded number of zero-edge mismatches."""
 
@@ -701,6 +720,32 @@ def test_consequential_remote_click_re_resolves_on_fresh_frame(bundle, run_dir):
     assert backend.acquire_count == 1
     assert backend.actions == [("click", 110, 105, False)]
     assert report.results[0].resolution.point == (110, 105)
+
+
+def test_remote_mask_cannot_hide_a_changed_target_search_region(bundle, run_dir):
+    frame = make_png()
+    # The mask is outside the final target rectangle, but inside the padded
+    # local search region that established target uniqueness.
+    backend = RemoteMaskedLeaseBackend(frame=frame, volatile_region=(25, 25, 5, 5))
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95),
+    ]
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="reversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert backend.actions == []
+    assert backend.protected_region_calls
+    assert (20, 20, 210, 180) in backend.protected_region_calls[-1]
+    assert "remote frame mask overlaps protected evidence" in (
+        report.results[0].error or ""
+    )
 
 
 def test_consequential_click_uses_lease_when_backend_has_no_typed_receipt(

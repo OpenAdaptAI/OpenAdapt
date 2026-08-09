@@ -63,6 +63,7 @@ from openadapt_flow.backend import (
     GuardedSelectOptionBackend,
     PreparedPointerActuationBackend,
     RemoteActuationBackend,
+    RemoteFrameContractBackend,
     RichPointerActionBackend,
     SelectOptionBackend,
     StructuralResolutionRefused,
@@ -8611,6 +8612,40 @@ class Replayer:
                 self._cancel_guarded_keyboard()
             if error is not None and focused_element_backend:
                 self._cancel_guarded_keyboard()
+            if error is None and isinstance(self.backend, RemoteFrameContractBackend):
+                protected: list[Region] = list(
+                    fresh_resolution.resolution_evidence_regions
+                    if fresh_resolution is not None
+                    else ()
+                )
+                if fresh_region is not None:
+                    protected.append(fresh_region)
+                elif fresh_resolution is not None:
+                    x, y = fresh_resolution.point
+                    protected.append((x - 1, y - 1, 3, 3))
+                protected.extend(
+                    pc.region for pc in step.expect if pc.region is not None
+                )
+                if workflow.qualification is not None:
+                    policy = workflow.qualification.identity_policies.get(step.id)
+                    if policy is not None:
+                        protected.extend(
+                            s.region for s in policy.signals if s.region is not None
+                        )
+                try:
+                    self.backend.arm_remote_frame_contract(
+                        protected_regions=tuple(protected)
+                    )
+                except Exception as exc:
+                    return (
+                        fresh_resolution,
+                        fresh_region,
+                        fresh_png,
+                        (
+                            "Actuation preflight HALTED because the remote frame mask "
+                            f"overlaps protected evidence: {type(exc).__name__}"
+                        ),
+                    )
         # Retain the exact observation that authorizes the next input edge.
         # Composite TYPE/SELECT_OPTION and retry paths can re-resolve inside
         # ``_act`` after the outer scope captured its initial geometry. A typed

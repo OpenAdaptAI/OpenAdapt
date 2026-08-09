@@ -28,6 +28,8 @@ from typing import Any, Callable, Literal, Mapping, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from openadapt_flow.remote_frame_contract import RemoteFrameContract
+
 # Import-light (pydantic only): the effect CONTRACT types double as the
 # declarative config vocabulary, so a deployment YAML binds run parameters
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
@@ -143,6 +145,9 @@ class BackendConfig(BaseModel):
     #: Optional exact case-insensitive title. Zero or multiple exact matches are
     #: refused; the backend never selects a largest partial match.
     rdp_window_title: Optional[str] = None
+    # Exact reviewed geometry for derived remote settle comparisons. The
+    # enclosing DeploymentConfig serialization binds this value at admission.
+    remote_frame_contract: Optional[RemoteFrameContract] = None
 
 
 class EffectsConfig(BaseModel):

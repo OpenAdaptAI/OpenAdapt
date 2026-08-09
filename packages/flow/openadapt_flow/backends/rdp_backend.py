@@ -69,6 +69,7 @@ from openadapt_flow.backend import (
     StructuralResolutionRefused,
 )
 from openadapt_flow.ir import ActionDeliveryReceipt, Point
+from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
 
 # What a transport may hand back as the current frame: a PIL image, or raw
@@ -307,8 +308,10 @@ class FreeRDPBackend:
         session_marker: Optional[str] = None,
         session_marker_probe: Optional[Callable[[bytes], bool]] = None,
         session_identity_observer: Optional[Callable[[], Optional[str]]] = None,
+        remote_frame_contract: Optional["RemoteFrameContract"] = None,
     ) -> None:
         self._transport = transport
+        self._remote_frame_contract = remote_frame_contract
         self._viewport = viewport
         self._max_frame_age_s = float(max_frame_age_s)
         if self._max_frame_age_s <= 0:
@@ -357,6 +360,7 @@ class FreeRDPBackend:
         self._session_identity_observer = session_identity_observer
         self._last_frame_monotonic: Optional[float] = None
         self._last_frame_digest: Optional[bytes] = None
+        self._last_comparison_digest: Optional[bytes] = None
         self._last_session_identity: Optional[str] = None
         self._qualification_environment: Optional[tuple[str, str, str, str]] = None
         self._qualification_input_guard: Optional[Callable[[], None]] = None
@@ -398,8 +402,15 @@ class FreeRDPBackend:
             # and screenshot can never disagree.
             self._viewport = img.size
             png = self._png_bytes(img)
+            if self._remote_frame_contract is not None:
+                self._remote_frame_contract.require_geometry(img.size)
             self._last_frame_monotonic = time.monotonic()
             self._last_frame_digest = self._canonical_frame_digest(img)
+            self._last_comparison_digest = (
+                self._remote_frame_contract.comparison_digest(png)
+                if self._remote_frame_contract is not None
+                else self._last_frame_digest
+            )
             self._last_session_identity = self._session_identity_from_frame(png)
             if self._actuation_lease_state == _LEASE_ARMED:
                 self._invalidate_actuation_lease()
@@ -443,6 +454,12 @@ class FreeRDPBackend:
             self._actuation_frame_png = png
             self._actuation_lease_state = _LEASE_ARMED
             return png
+
+    def arm_remote_frame_contract(
+        self, *, protected_regions: tuple[tuple[int, int, int, int], ...]
+    ) -> None:
+        if self._remote_frame_contract is not None:
+            self._remote_frame_contract.arm(protected_regions)
 
     def reset_fresh_actuation_state(self) -> None:
         """Reset only a typed zero-input content invalidation.
@@ -1111,8 +1128,16 @@ class FreeRDPBackend:
                     "capture; refusing input"
                 )
             if exact_lease_ready:
-                digest = self._canonical_frame_digest(current_img)
-                if self._last_frame_digest is None or digest != self._last_frame_digest:
+                raw_digest = self._canonical_frame_digest(current_img)
+                digest = (
+                    self._remote_frame_contract.comparison_digest(current_png)
+                    if self._remote_frame_contract is not None
+                    else raw_digest
+                )
+                if (
+                    self._last_comparison_digest is None
+                    or digest != self._last_comparison_digest
+                ):
                     changed_pixel_count, changed_bbox = self._frame_difference(
                         self._actuation_frame_png,
                         current_img,

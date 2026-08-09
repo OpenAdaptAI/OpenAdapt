@@ -37,6 +37,7 @@ from openadapt_flow.backends.rdp_backend import (
     RDPTransport,
     normalize_chord,
 )
+from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
 
 VIEWPORT = (1280, 800)
@@ -663,6 +664,67 @@ def test_bound_actuation_refuses_same_session_content_change_before_input() -> N
     assert raised.value.operation == "rdp_click"
     assert raised.value.changed_pixel_count == 1
     assert raised.value.changed_bbox == (0, 0, 1, 1)
+    assert raised.value.frame_size == VIEWPORT
+
+
+def test_bound_actuation_allows_only_qualified_rdp_volatile_change() -> None:
+    transport = FakeRDPTransport(app_screens())
+    contract = RemoteFrameContract(
+        frame_width=VIEWPORT[0],
+        frame_height=VIEWPORT[1],
+        volatile_regions=((0, 0, 32, 32),),
+        protected_regions=(BUTTON,),
+    )
+    backend = FreeRDPBackend(
+        transport,
+        readiness_probe=lambda _png: True,
+        remote_frame_contract=contract,
+    )
+    backend.acquire_actuation_frame()
+    backend.arm_remote_frame_contract(protected_regions=(BUTTON,))
+    leased_raw_digest = backend._last_frame_digest
+    changed = transport.screens[0].copy()
+    changed.putpixel((1, 1), (0, 0, 0))
+    transport.screens[0] = changed
+
+    assert leased_raw_digest is not None
+    assert backend._canonical_frame_digest(changed) != leased_raw_digest
+
+    backend.click(*BUTTON_CENTER)
+
+    assert transport.pointer_events == [
+        (*BUTTON_CENTER, "left", True),
+        (*BUTTON_CENTER, "left", False),
+    ]
+    assert backend._last_frame_digest == leased_raw_digest
+
+
+def test_bound_actuation_refuses_rdp_change_outside_qualified_volatile_region() -> None:
+    transport = FakeRDPTransport(app_screens())
+    contract = RemoteFrameContract(
+        frame_width=VIEWPORT[0],
+        frame_height=VIEWPORT[1],
+        volatile_regions=((0, 0, 32, 32),),
+        protected_regions=(BUTTON,),
+    )
+    backend = FreeRDPBackend(
+        transport,
+        readiness_probe=lambda _png: True,
+        remote_frame_contract=contract,
+    )
+    backend.acquire_actuation_frame()
+    backend.arm_remote_frame_contract(protected_regions=(BUTTON,))
+    changed = transport.screens[0].copy()
+    changed.putpixel((50, 50), (0, 0, 0))
+    transport.screens[0] = changed
+
+    with pytest.raises(FreshActuationRequired) as raised:
+        backend.click(*BUTTON_CENTER)
+
+    assert transport.pointer_events == []
+    assert raised.value.operation == "rdp_click"
+    assert raised.value.changed_pixel_count == 1
+    assert raised.value.changed_bbox == (50, 50, 1, 1)
     assert raised.value.frame_size == VIEWPORT
 
 

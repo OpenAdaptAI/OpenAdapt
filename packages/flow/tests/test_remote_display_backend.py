@@ -34,9 +34,11 @@ from openadapt_flow.backends.remote_display import (
     RemoteDisplayBackend,
     RemoteDisplayError,
     WindowInfo,
+    _canonical_rgb_digest,
     _split_chord,
     resolve_mac_key,
 )
+from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
 
 
@@ -72,6 +74,7 @@ class FakeClient:
         self._key_window_id = key_window_id
         self._hit_window_id = hit_window_id
         self.frame_color = (11, 22, 33)
+        self.frame_overrides: dict[tuple[int, int], tuple[int, int, int]] = {}
         self.png_kwargs = {}
         self.calls: list[tuple] = []
 
@@ -99,6 +102,8 @@ class FakeClient:
 
     def capture(self, window_id):
         img = Image.new("RGB", self.px, self.frame_color)
+        for point, color in self.frame_overrides.items():
+            img.putpixel(point, color)
         buf = io.BytesIO()
         img.save(buf, format="PNG", **self.png_kwargs)
         return buf.getvalue(), self.px[0], self.px[1]
@@ -671,6 +676,69 @@ def test_bound_actuation_refuses_same_window_content_change_before_input() -> No
     assert raised.value.operation == "remote_click"
     assert raised.value.changed_pixel_count == client.px[0] * client.px[1]
     assert raised.value.changed_bbox == (0, 0, client.px[0], client.px[1])
+    assert raised.value.frame_size == client.px
+
+
+def _remote_frame_contract_backend() -> tuple[RemoteDisplayBackend, FakeClient]:
+    size = (300, 200)
+    client = FakeClient(
+        window=WindowInfo(
+            window_id=1,
+            owner="Parallels Desktop",
+            title="Windows 11",
+            pid=99,
+            bounds=(0.0, 0.0, float(size[0]), float(size[1])),
+            on_screen=True,
+        ),
+        px=size,
+    )
+    contract = RemoteFrameContract(
+        frame_width=size[0],
+        frame_height=size[1],
+        volatile_regions=((0, 0, 32, 32),),
+        protected_regions=((90, 90, 20, 20),),
+    )
+    backend = RemoteDisplayBackend(
+        client=client,
+        settle_s=0.0,
+        readiness_probe=lambda _png: True,
+        remote_frame_contract=contract,
+    )
+    backend.screenshot()
+    backend.prepare_pointer_actuation(100, 100)
+    backend.acquire_actuation_frame()
+    backend.arm_remote_frame_contract(protected_regions=((90, 90, 20, 20),))
+    return backend, client
+
+
+def test_bound_actuation_allows_only_qualified_remote_display_volatile_change() -> None:
+    backend, client = _remote_frame_contract_backend()
+    leased_raw_digest = backend._last_frame_digest
+    client.frame_overrides[(1, 1)] = (0, 0, 0)
+    current_png, _, _ = client.capture(client.window.window_id)
+
+    assert leased_raw_digest is not None
+    assert _canonical_rgb_digest(current_png) != leased_raw_digest
+
+    backend.click(100, 100)
+
+    assert len([call for call in client.calls if call[0] == "mouse"]) == 2
+    assert backend._last_frame_digest == leased_raw_digest
+
+
+def test_bound_actuation_refuses_remote_display_change_outside_volatile_region() -> (
+    None
+):
+    backend, client = _remote_frame_contract_backend()
+    client.frame_overrides[(50, 50)] = (0, 0, 0)
+
+    with pytest.raises(FreshActuationRequired) as raised:
+        backend.click(100, 100)
+
+    assert not any(call[0] == "mouse" for call in client.calls)
+    assert raised.value.operation == "remote_click"
+    assert raised.value.changed_pixel_count == 1
+    assert raised.value.changed_bbox == (50, 50, 1, 1)
     assert raised.value.frame_size == client.px
 
 

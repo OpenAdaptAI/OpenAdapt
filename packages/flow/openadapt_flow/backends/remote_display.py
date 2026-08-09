@@ -73,6 +73,7 @@ from openadapt_flow.backend import (
     StructuralResolutionRefused,
 )
 from openadapt_flow.ir import ActionDeliveryReceipt
+from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -526,8 +527,10 @@ class RemoteDisplayBackend:
         session_marker: Optional[str] = None,
         session_marker_probe: Optional[Callable[[bytes], bool]] = None,
         session_identity_observer: Optional[Callable[[], Optional[str]]] = None,
+        remote_frame_contract: Optional["RemoteFrameContract"] = None,
     ) -> None:
         self._client = client if client is not None else _default_window_client()
+        self._remote_frame_contract = remote_frame_contract
         self._owner_substr = owner_substr
         self._title_substr = title_substr
         self._require_input_trust = require_input_trust
@@ -589,6 +592,7 @@ class RemoteDisplayBackend:
         self._frame_window: Optional[WindowInfo] = None
         self._last_frame_monotonic: Optional[float] = None
         self._last_frame_digest: Optional[bytes] = None
+        self._last_comparison_digest: Optional[bytes] = None
         self._actuation_frame_png: Optional[bytes] = None
         self._last_session_identity: Optional[str] = None
         self._qualification_environment: Optional[tuple[str, str, str, str]] = None
@@ -714,11 +718,18 @@ class RemoteDisplayBackend:
                     f"({scale_x:.4f}x vs {scale_y:.4f}y); refusing uncalibrated input"
                 )
             self._viewport = (w, h)
+            if self._remote_frame_contract is not None:
+                self._remote_frame_contract.require_geometry(self._viewport)
             self._scale_x, self._scale_y = scale_x, scale_y
             self._scale = scale_x  # compatibility for existing diagnostics
             self._frame_window = win
             self._last_frame_monotonic = time.monotonic()
             self._last_frame_digest = _canonical_rgb_digest(png)
+            self._last_comparison_digest = (
+                self._remote_frame_contract.comparison_digest(png)
+                if self._remote_frame_contract is not None
+                else self._last_frame_digest
+            )
             self._last_session_identity = self._session_identity_from_frame(png)
             # An ordinary observation is not permission to perform a
             # consequential remote action.  Only acquire_actuation_frame arms
@@ -797,6 +808,12 @@ class RemoteDisplayBackend:
             self._actuation_lease_state = _LEASE_ARMED
             self._actuation_frame_png = png
             return png
+
+    def arm_remote_frame_contract(
+        self, *, protected_regions: tuple[tuple[int, int, int, int], ...]
+    ) -> None:
+        if self._remote_frame_contract is not None:
+            self._remote_frame_contract.arm(protected_regions)
 
     def reset_fresh_actuation_state(self) -> None:
         """Reset only a typed zero-input content invalidation.
@@ -1281,8 +1298,9 @@ class RemoteDisplayBackend:
         hover/cursor update reaches the remote framebuffer.  Sampling one frame
         after a fixed sleep can therefore arm a lease on the old pixels and
         invalidate it moments later.  This gate waits for consecutive,
-        byte-decoded RGB-identical frames; it never masks cursor regions or
-        weakens the exact post-resolution digest used at the delivery edge.
+        byte-decoded RGB-identical frames outside any reviewed volatile regions.
+        The contract applies only to derived comparisons. It never changes the
+        exact raw frame evidence or learns regions from ordinary runs.
         """
 
         deadline = time.monotonic() + self._pointer_settle_timeout_s
@@ -1291,7 +1309,7 @@ class RemoteDisplayBackend:
         poll_s = max(0.01, self._settle_s)
         while time.monotonic() < deadline:
             self.screenshot()
-            digest = self._last_frame_digest
+            digest = self._last_comparison_digest
             if digest is not None and digest == previous_digest:
                 stable_frames += 1
             else:
@@ -1422,8 +1440,16 @@ class RemoteDisplayBackend:
                 # Consume once before the first input edge.  A double click or
                 # multi-character type is one gesture and must not invalidate
                 # itself after its first state-changing edge.
-                digest = _canonical_rgb_digest(png)
-                if self._last_frame_digest is None or digest != self._last_frame_digest:
+                raw_digest = _canonical_rgb_digest(png)
+                digest = (
+                    self._remote_frame_contract.comparison_digest(png)
+                    if self._remote_frame_contract is not None
+                    else raw_digest
+                )
+                if (
+                    self._last_comparison_digest is None
+                    or digest != self._last_comparison_digest
+                ):
                     changed_pixel_count, changed_bbox = self._frame_difference(
                         self._actuation_frame_png,
                         png,

@@ -640,6 +640,7 @@ def resolve(
     t0 = time.monotonic()
     if viewport is None:
         viewport = png_size(screen_png)
+    full_frame_region: Region = (0, 0, int(viewport[0]), int(viewport[1]))
 
     def elapsed_ms() -> float:
         return (time.monotonic() - t0) * 1000.0
@@ -728,6 +729,7 @@ def resolve(
                     confidence=float(getattr(handle, "confidence", 1.0)),
                     elapsed_ms=elapsed_ms(),
                     structural_handle=handle,
+                    resolution_evidence_regions=(region,),
                 )
                 return resolution, region
 
@@ -755,6 +757,11 @@ def resolve(
                 point=bound_point,
                 confidence=float(match.confidence),
                 elapsed_ms=elapsed_ms(),
+                resolution_evidence_regions=(
+                    full_frame_region
+                    if anchor.identifier_region is not None and anchor.landmarks
+                    else search_region,
+                ),
             )
             return resolution, tuple(match.region)
 
@@ -793,6 +800,7 @@ def resolve(
                     point=point,
                     confidence=float(match.confidence),
                     elapsed_ms=elapsed_ms(),
+                    resolution_evidence_regions=(full_frame_region,),
                 )
                 return resolution, tuple(match.region)
 
@@ -833,6 +841,11 @@ def resolve(
                     point=point,
                     confidence=float(match.confidence),
                     elapsed_ms=elapsed_ms(),
+                    resolution_evidence_regions=(
+                        full_frame_region
+                        if ocr_region is None or anchor.landmarks
+                        else ocr_region,
+                    ),
                 )
                 return resolution, tuple(match.region)
             try:
@@ -856,6 +869,11 @@ def resolve(
                 point=point,
                 confidence=float(match.confidence),
                 elapsed_ms=elapsed_ms(),
+                resolution_evidence_regions=(
+                    full_frame_region
+                    if ocr_region is None or anchor.landmarks
+                    else ocr_region,
+                ),
             )
             return resolution, tuple(match.region)
 
@@ -871,6 +889,7 @@ def resolve(
             point=(px, py),
             confidence=geometry_confidence * _GEOMETRY_CONFIDENCE_SCALE,
             elapsed_ms=elapsed_ms(),
+            resolution_evidence_regions=(full_frame_region,),
         )
         return resolution, region
 
@@ -891,6 +910,7 @@ def resolve(
                 point=(int(match.point[0]), int(match.point[1])),
                 confidence=float(match.confidence),
                 elapsed_ms=elapsed_ms(),
+                resolution_evidence_regions=(full_frame_region,),
             )
             return resolution, tuple(match.region)
 
