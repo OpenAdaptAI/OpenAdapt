@@ -315,6 +315,17 @@ selected successor action.
 4. stores the answer in Flow's durable business-decision journal;
 5. returns the signed portable receipt and runner transport attestation.
 
+`BusinessDecisionSupervisor` owns the same transport for a directory that can
+contain many paused runs. It publishes each unanswered qualified task, polls
+the runner queue once, and routes a leased answer by the exact task ID,
+revision, and digest. A task key that names two local runs is refused. An answer
+that names no current local task is not applied to another run.
+
+The supervisor records the answer only. It does not resume the program and it
+does not actuate the application. The customer runner can then start the normal
+durable continuation. That continuation consumes the signed answer and performs
+the fresh state, identity, action, postcondition, and effect checks.
+
 An uncertain receipt request does not repeat the decision. Flow retains the
 same local answer. The runner can submit the same receipt again when Cloud
 redelivers the signed answer. The receipt still means only `answer_recorded` and

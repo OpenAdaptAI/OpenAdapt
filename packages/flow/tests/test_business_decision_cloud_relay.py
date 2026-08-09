@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -16,6 +17,10 @@ from openadapt_flow.interop.business_decision_cloud import (
     BusinessDecisionCloudRefused,
     BusinessDecisionCloudRelay,
     build_qualified_business_decision_cloud_relay,
+    refuse_unmatched_business_decision_cloud_answer,
+)
+from openadapt_flow.interop.business_decision_supervisor import (
+    BusinessDecisionSupervisor,
 )
 from openadapt_flow.qualification import (
     EnvironmentBoundary,
@@ -31,7 +36,8 @@ from openadapt_flow.qualified_business_decisions import (
     business_decision_delivery_review_digest,
 )
 from openadapt_flow.runtime.durable.business_decision import BusinessDecisionStore
-from tests.test_business_decision import _pause
+from openadapt_flow.runtime.replayer import Replayer
+from tests.test_business_decision import _decision_workflow, _pause
 from tests.test_interop_business_decision import (
     ANSWER_KEY,
     POLICY_KEY,
@@ -45,8 +51,10 @@ from tests.test_interop_business_decision import (
     _presentation,
     _project,
 )
+from tests.test_replayer import FakeBackend, FakeVision
 
 EGRESS_REVIEW_DIGEST = "sha256:" + "0" * 64
+CHECKPOINT_KEY = "correct horse battery staple"
 
 
 @dataclass
@@ -490,3 +498,328 @@ def test_qualification_refuses_a_stale_mobile_decision_binding(tmp_path) -> None
         refusal.code is QualificationRefusalCode.BUSINESS_DECISION_DELIVERY_INVALID
         for refusal in report.refusals
     )
+
+
+@dataclass
+class _SharedQueueTransport:
+    tasks: list[Any] = field(default_factory=list)
+    unmatched: bool = False
+    lease_seconds: int | None = None
+    receipt_uncertain_once: bool = False
+    answer_signing_key: bytes = ANSWER_KEY
+    receipts: list[BusinessDecisionAnswerReceiptV1] = field(default_factory=list)
+
+    def post(
+        self, path: str, payload: dict[str, Any], *, timeout_s: float
+    ) -> tuple[int, dict[str, Any]]:
+        from openadapt_types import (
+            BusinessDecisionAnswerReceiptV1,
+            BusinessDecisionTaskV1,
+            sign_business_decision_answer_hmac,
+        )
+
+        assert timeout_s > 0
+        if path == REGISTRATIONS_PATH:
+            task = BusinessDecisionTaskV1.model_validate(payload["task"])
+            self.tasks.append(task)
+            return 201, {
+                "accepted": True,
+                "created": True,
+                "state": "open",
+                "task_id": task.task_id,
+                "task_revision": task.task_revision,
+                "task_digest": task.digest,
+                "presentation_digest": task.presentation_digest,
+                "one_use_scope_digest": task.idempotency_scope_digest,
+                "answer_authority": "withheld_until_authenticated_choice",
+                "local_evidence": "not_accepted_by_cloud",
+            }
+        if path == ANSWERS_POLL_PATH:
+            task = self.tasks[-1]
+            answer = sign_business_decision_answer_hmac(
+                key=self.answer_signing_key,
+                fields={
+                    "task_id": (
+                        "unmatched_task_0001" if self.unmatched else task.task_id
+                    ),
+                    "task_revision": task.task_revision,
+                    "task_digest": (
+                        "sha256:" + "9" * 64 if self.unmatched else task.digest
+                    ),
+                    "request_digest": task.request_digest,
+                    "option_id": "accept",
+                    "idempotency_key": "shared_queue_answer_0001",
+                    "authenticated_principal_ref": "principal_cloud_01",
+                    "authenticated_role_ref": "authz_role_0001",
+                    "authn_assurance": "aal2",
+                    "authenticated_route_ref": "cloud_aal2_route",
+                    "role_mapping_digest": task.role_mapping_digest,
+                    "authentication_context_digest": "sha256:" + "4" * 64,
+                    "answered_at": _plus_one_second(task.created_at),
+                    "issuer_key_id": "cloud_signer_001",
+                },
+            )
+            return 200, {
+                "delivery": {
+                    "answer_id": "answer_shared_queue_01",
+                    "answer": answer.model_dump(mode="json"),
+                    "answer_digest": answer.digest,
+                    "lease_id": "lease_shared_queue_01",
+                    "lease_attempt": 1,
+                    "lease_expires_at": (
+                        (
+                            datetime.fromisoformat(task.created_at)
+                            + timedelta(seconds=self.lease_seconds)
+                        ).isoformat()
+                        if self.lease_seconds is not None
+                        else task.expires_at
+                    ),
+                },
+                "one_use": True,
+                "runner_revalidation_required": True,
+                "effect_outcome": "not_reported_by_answer_delivery",
+            }
+        if path.endswith("/receipt"):
+            receipt = BusinessDecisionAnswerReceiptV1.model_validate(payload["receipt"])
+            self.receipts.append(receipt)
+            if self.receipt_uncertain_once:
+                self.receipt_uncertain_once = False
+                raise RelayUncertain("the refusal receipt may have arrived")
+            return 200, {
+                "accepted": True,
+                "created": True,
+                "state": receipt.state.value,
+                "reason_code": receipt.reason_code.value,
+                "receipt_digest": receipt.digest,
+                "verified_effect": False,
+            }
+        raise AssertionError(f"unexpected Cloud path {path}")
+
+
+def _supervisor_components(
+    tmp_path,
+    monkeypatch,
+    *,
+    run_keys: tuple[str | None, str | None] = (None, None),
+    resolved_keys: tuple[str | None, str | None] | None = None,
+):
+    workflows: dict[str, Any] = {}
+    stores: list[BusinessDecisionStore] = []
+    issued_at: list[str] = []
+    key_by_run: dict[str, str | None] = {}
+    for index, name in enumerate(("one", "two")):
+        checkpoint_key = run_keys[index]
+        if checkpoint_key is None:
+            workflow, store, _backend, _request = _pause(
+                tmp_path / name, required_evidence=False
+            )
+        else:
+            workflow = _decision_workflow(required_evidence=False)
+            bundle_dir = tmp_path / name / "bundle"
+            run_dir = tmp_path / name / "run"
+            workflow.save(bundle_dir)
+            report = Replayer(
+                FakeBackend(),
+                vision=FakeVision(),
+                durable=True,
+                checkpoint_key=checkpoint_key,
+                poll_interval_s=0.0,
+            ).run(workflow, bundle_dir=bundle_dir, run_dir=run_dir)
+            assert report.success is False
+            store = BusinessDecisionStore(run_dir, checkpoint_key=checkpoint_key)
+        init_project(
+            workflow,
+            environment=EnvironmentBoundary(
+                target_kind="web",
+                application="Reference application",
+                application_version="1",
+                environment_digest="1" * 64,
+                runtime_version="test",
+            ),
+        )
+        set_business_decision_deliveries(workflow, [_qualified_delivery(workflow)])
+        workflows[str(store.run_dir)] = workflow
+        stores.append(store)
+        key_by_run[str(store.run_dir)] = (
+            resolved_keys[index] if resolved_keys is not None else checkpoint_key
+        )
+        issued_at.append(store.read_active_request()[0].issued_at)
+    monkeypatch.setattr(
+        "openadapt_flow.qualification.current_certification_matches",
+        lambda _workflow, *, policy: True,
+    )
+
+    def factory(run_dir, store, shared_transport, at):
+        return build_qualified_business_decision_cloud_relay(
+            workflows[str(run_dir)],
+            object(),
+            store,
+            shared_transport,
+            runner_token=RUNNER_BEARER,
+            tenant_id="tenant_example_01",
+            runner_id="runner_example_01",
+            keys=BusinessDecisionCloudKeys(
+                task_signing_key=TASK_KEY,
+                task_issuer_key_id="runner_signer_01",
+                qualification_signing_key=POLICY_KEY,
+                qualification_issuer_key_id="qualification_signer_01",
+                answer_signing_key=ANSWER_KEY,
+                answer_issuer_key_id="cloud_signer_001",
+                receipt_signing_key=TASK_KEY,
+                receipt_issuer_key_id="runner_signer_01",
+                role_mapping_key=ROLE_MAPPING_KEY,
+            ),
+            privacy_key=b"v" * 32,
+            at=at,
+        )
+
+    def resolve_key(run_dir):
+        return key_by_run[str(run_dir)]
+
+    def refuser(transport, delivery, at):
+        return refuse_unmatched_business_decision_cloud_answer(
+            transport,
+            delivery,
+            runner_token=RUNNER_BEARER,
+            tenant_id="tenant_example_01",
+            runner_id="runner_example_01",
+            answer_signing_key=ANSWER_KEY,
+            expected_answer_issuer_key_id="cloud_signer_001",
+            receipt_signing_key=TASK_KEY,
+            receipt_issuer_key_id="runner_signer_01",
+            at=at,
+        )
+
+    return factory, resolve_key, refuser, stores, issued_at
+
+
+def test_supervisor_routes_shared_queue_answer_to_exact_local_run(
+    tmp_path, monkeypatch
+) -> None:
+    factory, resolve_key, refuser, stores, issued_at = _supervisor_components(
+        tmp_path, monkeypatch
+    )
+    transport = _SharedQueueTransport()
+    report = BusinessDecisionSupervisor(
+        tmp_path,
+        transport=transport,
+        relay_factory=factory,
+        checkpoint_key_resolver=resolve_key,
+        unmatched_refuser=lambda delivery, at: refuser(transport, delivery, at),
+        now=lambda: datetime.fromisoformat(max(issued_at)) + timedelta(seconds=2),
+    ).serve_once(wait_s=0)
+
+    retained = [
+        store.read_receipt(store.read_active_request()[0].digest) for store in stores
+    ]
+    assert report.publishes.published == 2
+    assert report.answer_matched is True
+    assert report.answer_recorded is True
+    assert sum(item is not None for item in retained) == 1
+
+
+def test_supervisor_uses_fresh_time_after_poll_and_refuses_expired_lease(
+    tmp_path, monkeypatch
+) -> None:
+    factory, resolve_key, refuser, stores, issued_at = _supervisor_components(
+        tmp_path, monkeypatch
+    )
+    transport = _SharedQueueTransport(lease_seconds=2)
+    created = datetime.fromisoformat(max(issued_at))
+    times = iter((created + timedelta(seconds=1), created + timedelta(seconds=3)))
+    supervisor = BusinessDecisionSupervisor(
+        tmp_path,
+        transport=transport,
+        relay_factory=factory,
+        checkpoint_key_resolver=resolve_key,
+        unmatched_refuser=lambda delivery, at: refuser(transport, delivery, at),
+        now=lambda: next(times),
+    )
+
+    with pytest.raises(BusinessDecisionCloudRefused, match="lease expired"):
+        supervisor.serve_once(wait_s=0)
+
+    assert all(
+        store.read_receipt(store.read_active_request()[0].digest) is None
+        for store in stores
+    )
+
+
+def test_supervisor_isolates_an_unreadable_encrypted_run(tmp_path, monkeypatch) -> None:
+    factory, resolve_key, refuser, stores, issued_at = _supervisor_components(
+        tmp_path,
+        monkeypatch,
+        run_keys=(CHECKPOINT_KEY, CHECKPOINT_KEY),
+        resolved_keys=(CHECKPOINT_KEY, "wrong key"),
+    )
+    transport = _SharedQueueTransport()
+    report = BusinessDecisionSupervisor(
+        tmp_path,
+        transport=transport,
+        relay_factory=factory,
+        checkpoint_key_resolver=resolve_key,
+        unmatched_refuser=lambda delivery, at: refuser(transport, delivery, at),
+        now=lambda: datetime.fromisoformat(max(issued_at)) + timedelta(seconds=2),
+    ).serve_once(wait_s=0)
+
+    assert report.publishes.not_projectable == 1
+    assert report.publishes.published == 1
+    assert report.answer_recorded is True
+    assert stores[0].read_receipt(stores[0].read_active_request()[0].digest) is not None
+
+
+@pytest.mark.parametrize("uncertain", [False, True])
+def test_supervisor_closes_an_unmatched_leased_answer_without_local_authority(
+    tmp_path, monkeypatch, uncertain
+) -> None:
+    factory, resolve_key, refuser, stores, issued_at = _supervisor_components(
+        tmp_path, monkeypatch
+    )
+    transport = _SharedQueueTransport(
+        unmatched=True,
+        receipt_uncertain_once=uncertain,
+    )
+    report = BusinessDecisionSupervisor(
+        tmp_path,
+        transport=transport,
+        relay_factory=factory,
+        checkpoint_key_resolver=resolve_key,
+        unmatched_refuser=lambda delivery, at: refuser(transport, delivery, at),
+        now=lambda: datetime.fromisoformat(max(issued_at)) + timedelta(seconds=2),
+    ).serve_once(wait_s=0)
+
+    assert report.answer_received is True
+    assert report.answer_matched is False
+    assert report.answer_recorded is False
+    assert report.unmatched_refusal_confirmed is (not uncertain)
+    assert transport.receipts[0].state.value == "refused"
+    assert transport.receipts[0].reason_code.value == "authorization_refused"
+    assert all(
+        store.read_receipt(store.read_active_request()[0].digest) is None
+        for store in stores
+    )
+
+
+def test_supervisor_does_not_sign_a_refusal_for_an_untrusted_answer(
+    tmp_path, monkeypatch
+) -> None:
+    factory, resolve_key, refuser, _stores, issued_at = _supervisor_components(
+        tmp_path, monkeypatch
+    )
+    transport = _SharedQueueTransport(
+        unmatched=True,
+        answer_signing_key=b"untrusted-cloud-answer-key-00001",
+    )
+    supervisor = BusinessDecisionSupervisor(
+        tmp_path,
+        transport=transport,
+        relay_factory=factory,
+        checkpoint_key_resolver=resolve_key,
+        unmatched_refuser=lambda delivery, at: refuser(transport, delivery, at),
+        now=lambda: datetime.fromisoformat(max(issued_at)) + timedelta(seconds=2),
+    )
+
+    with pytest.raises(BusinessDecisionCloudRefused, match="signature is not trusted"):
+        supervisor.serve_once(wait_s=0)
+
+    assert transport.receipts == []
