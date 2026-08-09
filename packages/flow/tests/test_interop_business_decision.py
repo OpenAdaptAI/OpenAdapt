@@ -16,6 +16,8 @@ from openadapt_types import (
 from openadapt_flow.interop.business_decision import (
     admit_portable_business_decision_answer,
     business_decision_role_mapping_digest,
+    create_runner_business_decision_receipt_attestation,
+    create_runner_business_decision_signature_attestation,
     project_portable_business_decision_task,
     project_recorded_business_decision_answer_receipt,
 )
@@ -32,6 +34,7 @@ ROLE_REFS = {
     "supervisor": "authz_role_0002",
 }
 EGRESS_REVIEW_DIGEST = "sha256:" + "7" * 64
+RUNNER_BEARER = "oar_runner_attestation_token_00000001"
 
 
 def _plus_one_second(value: str) -> str:
@@ -213,6 +216,86 @@ def test_projection_reuses_mobile_lane_without_relaying_runner_text(tmp_path) ->
     )
     assert portable_receipt.runner_decision_receipt_digest == local_receipt.digest
     assert portable_receipt.succeeded is False
+
+
+def test_runner_attestations_bind_the_exact_cloud_envelope_and_receipt(
+    tmp_path,
+) -> None:
+    _workflow, store, _backend, request = _pause(tmp_path, required_evidence=False)
+    task = _project(store)
+    presentation = _presentation(request)
+    policy = _policy(request, presentation)
+    role_policy = {
+        "schema_version": "openadapt.cloud-business-decision-role-policy/v1",
+        "policy_ref": "cloud_role_policy_01",
+        "task_digest": task.digest,
+    }
+    verified_at = _plus_one_second(request.issued_at)
+    attestation = create_runner_business_decision_signature_attestation(
+        task,
+        presentation,
+        policy,
+        role_policy,
+        task_signing_key=TASK_KEY,
+        expected_task_issuer_key_id="runner_signer_01",
+        qualification_signing_key=POLICY_KEY,
+        expected_qualification_issuer_key_id="qualification_signer_01",
+        expected_tenant_id="tenant_example_01",
+        expected_runner_id="runner_example_01",
+        runner_bearer=RUNNER_BEARER,
+        verified_at=verified_at,
+    )
+    assert attestation["verified_signature_kinds"] == [
+        "business_decision_task",
+        "business_decision_delivery_policy",
+    ]
+    assert attestation["signature"].startswith("hmac-sha256:")
+
+    answer = _answer(task, request)
+    submission, principal = _admit(store, task, answer)
+    BusinessDecisionStore(store.run_dir).submit(
+        submission,
+        principal=principal,
+        now=datetime.fromisoformat(verified_at),
+    )
+    receipt = project_recorded_business_decision_answer_receipt(
+        store,
+        task,
+        answer,
+        task_signing_key=TASK_KEY,
+        expected_task_issuer_key_id="runner_signer_01",
+        answer_signing_key=ANSWER_KEY,
+        expected_answer_issuer_key_id="cloud_signer_001",
+        signing_key=TASK_KEY,
+        issuer_key_id="runner_signer_01",
+        expected_tenant_id="tenant_example_01",
+        expected_runner_id="runner_example_01",
+        role_refs=ROLE_REFS,
+        role_mapping_key=ROLE_MAPPING_KEY,
+        at=verified_at,
+    )
+    receipt_attestation = create_runner_business_decision_receipt_attestation(
+        receipt,
+        receipt_signing_key=TASK_KEY,
+        expected_receipt_issuer_key_id="runner_signer_01",
+        answer_id="answer_12345678",
+        expected_tenant_id="tenant_example_01",
+        expected_runner_id="runner_example_01",
+        runner_bearer=RUNNER_BEARER,
+    )
+    assert receipt_attestation.startswith("hmac-sha256:")
+
+    changed = receipt.model_copy(update={"signature": "hmac-sha256:" + "0" * 64})
+    with pytest.raises(ValueError, match="receipt signature is invalid"):
+        create_runner_business_decision_receipt_attestation(
+            changed,
+            receipt_signing_key=TASK_KEY,
+            expected_receipt_issuer_key_id="runner_signer_01",
+            answer_id="answer_12345678",
+            expected_tenant_id="tenant_example_01",
+            expected_runner_id="runner_example_01",
+            runner_bearer=RUNNER_BEARER,
+        )
 
 
 def test_remote_projection_refuses_protected_evidence(tmp_path) -> None:

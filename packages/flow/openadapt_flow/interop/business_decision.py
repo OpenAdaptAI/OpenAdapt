@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 from collections.abc import Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -48,6 +49,13 @@ _OPAQUE_ALIAS_DOMAIN = b"openadapt.business-decision-opaque-alias/v1\x00"
 _PORTABLE_IDEMPOTENCY_DOMAIN = (
     b"openadapt.business-decision-portable-idempotency/v1\x00"
 )
+_RUNNER_SIGNATURE_ATTESTATION_DOMAIN = (
+    b"openadapt.runner-business-decision-signature-attestation/v1\x00"
+)
+_RUNNER_RECEIPT_ATTESTATION_DOMAIN = (
+    b"openadapt.runner-business-decision-receipt-attestation/v1\x00"
+)
+_RUNNER_BEARER = re.compile(r"^oar_[A-Za-z0-9_-]{16,200}$")
 
 
 def _canonical_json(payload: Any) -> bytes:
@@ -61,6 +69,119 @@ def _canonical_json(payload: Any) -> bytes:
 
 def _digest(payload: Any) -> str:
     return "sha256:" + hashlib.sha256(_canonical_json(payload)).hexdigest()
+
+
+def _json_value(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+def _runner_hmac(token: str, domain: bytes, payload: Any) -> str:
+    if not isinstance(token, str) or not _RUNNER_BEARER.fullmatch(token):
+        raise ValueError("the runner bearer is invalid")
+    return (
+        "hmac-sha256:"
+        + hmac.new(
+            token.encode("utf-8"), domain + _canonical_json(payload), hashlib.sha256
+        ).hexdigest()
+    )
+
+
+def create_runner_business_decision_signature_attestation(
+    task: PortableBusinessDecisionTaskV1,
+    presentation: PortableBusinessDecisionPresentationV1,
+    delivery_policy: PortableBusinessDecisionDeliveryPolicyV1,
+    role_policy: Mapping[str, Any],
+    *,
+    task_signing_key: bytes,
+    expected_task_issuer_key_id: str,
+    qualification_signing_key: bytes,
+    expected_qualification_issuer_key_id: str,
+    expected_tenant_id: str,
+    expected_runner_id: str,
+    runner_bearer: str,
+    verified_at: str,
+) -> dict[str, Any]:
+    """Attest that the exact customer signatures passed on this runner."""
+
+    from openadapt_types import validate_business_decision_delivery
+
+    if task.issuer_key_id != expected_task_issuer_key_id:
+        raise ValueError("the portable task signing key id is not trusted")
+    if delivery_policy.issuer_key_id != expected_qualification_issuer_key_id:
+        raise ValueError("the qualification signing key id is not trusted")
+    if task.tenant_id != expected_tenant_id or task.runner_id != expected_runner_id:
+        raise ValueError("the portable task names another tenant or runner")
+    _parse(verified_at)
+    validate_business_decision_delivery(
+        task,
+        presentation,
+        delivery_policy,
+        task_signing_key=task_signing_key,
+        qualification_signing_key=qualification_signing_key,
+        at=verified_at,
+    )
+    envelope = {
+        "task": _json_value(task),
+        "delivery_policy": _json_value(delivery_policy),
+        "presentation": _json_value(presentation),
+        "role_policy": _json_value(role_policy),
+    }
+    unsigned = {
+        "schema_version": (
+            "openadapt.runner-business-decision-signature-attestation/v1"
+        ),
+        "org_id": expected_tenant_id,
+        "runner_id": expected_runner_id,
+        "envelope_digest": _digest(envelope),
+        "verified_signature_kinds": [
+            "business_decision_task",
+            "business_decision_delivery_policy",
+        ],
+        "verified_at": verified_at,
+        "signature_algorithm": "hmac-sha256",
+    }
+    return {
+        **unsigned,
+        "signature": _runner_hmac(
+            runner_bearer, _RUNNER_SIGNATURE_ATTESTATION_DOMAIN, unsigned
+        ),
+    }
+
+
+def create_runner_business_decision_receipt_attestation(
+    receipt: PortableBusinessDecisionAnswerReceiptV1,
+    *,
+    receipt_signing_key: bytes,
+    expected_receipt_issuer_key_id: str,
+    answer_id: str,
+    expected_tenant_id: str,
+    expected_runner_id: str,
+    runner_bearer: str,
+) -> str:
+    """Bind one signed portable receipt to the authenticated runner route."""
+
+    if receipt.issuer_key_id != expected_receipt_issuer_key_id:
+        raise ValueError("the portable receipt signing key id is not trusted")
+    if not receipt.verify_hmac(receipt_signing_key):
+        raise ValueError("the portable receipt signature is invalid")
+    receipt_payload = _json_value(receipt)
+    receipt_payload.pop("signature")
+    return _runner_hmac(
+        runner_bearer,
+        _RUNNER_RECEIPT_ATTESTATION_DOMAIN,
+        {
+            "answer_id": answer_id,
+            "org_id": expected_tenant_id,
+            "receipt_digest": _digest(receipt_payload),
+            "runner_id": expected_runner_id,
+        },
+    )
 
 
 def _prefixed_digest(value: str) -> str:
@@ -504,6 +625,8 @@ def project_recorded_business_decision_answer_receipt(
 __all__ = [
     "admit_portable_business_decision_answer",
     "business_decision_role_mapping_digest",
+    "create_runner_business_decision_receipt_attestation",
+    "create_runner_business_decision_signature_attestation",
     "project_portable_business_decision_task",
     "project_recorded_business_decision_answer_receipt",
 ]
