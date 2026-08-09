@@ -2448,11 +2448,14 @@ def test_minimum_effect_tier_versions_round_trips_and_invalidates_certification(
 def test_full_campaign_certifies_through_existing_policy_and_round_trips(
     tmp_path: Path,
 ) -> None:
+    from openadapt_flow.compiler.codegen import render_workflow_py
+
     workflow = _workflow()
     bundle = tmp_path / "bundle"
     (bundle / "templates").mkdir(parents=True)
     (bundle / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
     workflow.save(bundle)
+    (bundle / "workflow.py").write_text(render_workflow_py(workflow), encoding="utf-8")
     workflow = Workflow.load(bundle)
     _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
     evidence_root = tmp_path / "evidence"
@@ -2472,6 +2475,9 @@ def test_full_campaign_certifies_through_existing_policy_and_round_trips(
 
     save_qualified_workflow(workflow, bundle)
     loaded = Workflow.load(bundle)
+    assert (bundle / "workflow.py").read_text(encoding="utf-8") == (
+        render_workflow_py(loaded)
+    )
     assert loaded.qualification is not None
     assert loaded.qualification.schema_version == "openadapt.qualification-project/v1"
     assert loaded.qualification.last_certification is not None

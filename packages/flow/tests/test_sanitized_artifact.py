@@ -32,6 +32,7 @@ from openadapt_flow.sanitized_artifact import (
     APPROVAL_NAME,
     MANIFEST_NAME,
     SanitizationError,
+    _bundle_string_is_structural,
     _review_content_length,
     _valid_review_host,
     add_manual_image_redaction,
@@ -79,6 +80,24 @@ class SyntaxHostileScrubber:
 
     def scrub_image(self, image, fill_color=None):
         return image
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("qualification", "cases", 0, "evidence", 0, "sha256"), "a" * 64),
+        (("steps", 0, "id"), "step_000"),
+        (("qualification", "identity_policies", "step_000", "step_id"), "step_000"),
+        (("qualification", "project_id"), "f6d239d0-0b5e-440f-b794-bbe69cc01115"),
+        (
+            ("qualification", "environment", "environment_observer_id"),
+            "backend:PlaywrightBackend",
+        ),
+        (("steps", 0, "anchor", "landmarks", 0, "relation"), "left_of"),
+    ],
+)
+def test_bundle_machine_contract_strings_are_not_sent_to_phi_ner(path, value):
+    assert _bundle_string_is_structural(path, value)
 
 
 @pytest.fixture(autouse=True)

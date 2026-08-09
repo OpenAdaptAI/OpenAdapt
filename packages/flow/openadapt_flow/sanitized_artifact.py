@@ -310,9 +310,21 @@ def _bundle_string_is_structural(path: tuple[str | int, ...], value: str) -> boo
     key = path[-1] if path and isinstance(path[-1], str) else ""
     if key.endswith(("_sha256", "_digest", "_hash", "_version")):
         return True
+    if key == "sha256" and re.fullmatch(r"[0-9a-f]{64}", value):
+        return True
     if key.endswith("_at") and value:
         return True
-    if key in {"recording_id", "id"} and _OPAQUE_MACHINE_ID.fullmatch(value):
+    if key in {"recording_id", "id", "step_id"} and _OPAQUE_MACHINE_ID.fullmatch(value):
+        return True
+    if key.endswith("_id") and re.fullmatch(
+        r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", value, re.IGNORECASE
+    ):
+        return True
+    if key == "environment_observer_id" and re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", value
+    ):
+        return True
+    if key == "relation" and value in {"left_of", "right_of", "above", "below"}:
         return True
     if key in {"c", "r", "phash", "salt", "structured"} and re.fullmatch(
         r"[0-9a-f]{16,}", value
