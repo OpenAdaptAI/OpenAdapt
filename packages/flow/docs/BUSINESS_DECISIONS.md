@@ -282,10 +282,47 @@ The public engine exports:
 - `BusinessDecisionStore.authenticate_evidence()` to verify retained decision
   evidence before it changes restored parameters.
 
-The API is the correct integration boundary for Desktop, Cloud, and
-customer-controlled operator services. A future CLI must consume a trusted
-principal from a configured local identity policy. It must not let a user
-self-assert an authorized production role.
+The API is the integration boundary for Desktop, Cloud, and customer-controlled
+operator services. The relay CLI consumes only the identity and role that the
+authenticated Cloud answer carries. It does not let a user self-assert an
+authorized production role.
+
+### Customer-runner service
+
+Add one local secret-file reference to the runner trust manifest:
+
+```toml
+[business_decisions]
+key_file = "/opt/openadapt/secrets/business-decisions.json"
+```
+
+The referenced JSON file uses
+`openadapt.business-decision-runner-keys/v1`. It contains the task,
+qualification, answer, receipt, role-map, privacy, and optional checkpoint key
+material that the deployment provisioned. On POSIX, the current service
+identity must own the file and its mode must be exactly `0600`. Flow opens the
+file without following a link. Keep the file outside the bundle and source
+repository.
+
+Run the shared customer-runner queue with:
+
+```bash
+openadapt-flow business-decisions serve \
+  --runs /var/lib/openadapt/runs \
+  --runner-config /etc/openadapt/runner.toml \
+  --profile production
+```
+
+The command loads each active run through its durable manifest. It accepts only
+a sealed bundle and policy already named by `runner.toml`. It publishes
+qualified tasks, records one signed answer in the exact matching local journal,
+and returns a signed non-success receipt. Its JSON health output contains only
+counts and fixed state names.
+
+This service does not import a backend, resume a run, observe an application,
+or actuate an action. The normal durable continuation remains a separate
+operation. It must reacquire the live state and pass the required identity,
+target, postcondition, and effect checks before it can act.
 
 ### Customer-runner transport attestations
 

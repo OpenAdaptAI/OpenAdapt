@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Callable, Optional, Protocol
 
 from openadapt_flow.console import data
-from openadapt_flow.console.decision_relay import RelayTransport
 from openadapt_flow.crypto import CryptoError
 from openadapt_flow.interop.business_decision_cloud import (
     BusinessDecisionCloudDelivery,
@@ -22,6 +21,7 @@ from openadapt_flow.interop.business_decision_cloud import (
     BusinessDecisionCloudRelay,
     poll_business_decision_cloud_answer,
 )
+from openadapt_flow.interop.decision_relay_transport import RelayTransport
 from openadapt_flow.runtime.durable.business_decision import (
     BusinessDecisionRefused,
     BusinessDecisionStore,

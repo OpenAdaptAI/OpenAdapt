@@ -93,7 +93,7 @@ console = [
     "openadapt-types>=0.10.0,<0.11.0",
 ]
 # WindowsBackend: HTTP client for the WAA (Windows Agent Arena) server.
-windows = ["requests>=2.31"]
+windows = ["requests>=2.31", "pywin32>=312; platform_system == 'Windows'"]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [

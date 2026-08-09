@@ -106,6 +106,13 @@ class TrustedBundle:
 
 
 @dataclass(frozen=True)
+class BusinessDecisionServiceConfig:
+    """Local-only secret reference for the typed-decision relay service."""
+
+    key_file: Path
+
+
+@dataclass(frozen=True)
 class RunnerConfig:
     """Parsed trust manifest."""
 
@@ -116,6 +123,7 @@ class RunnerConfig:
     #: Capability advertisement (deployment.yaml backend kinds this machine
     #: can drive) for the future register/poll payloads. Advisory only.
     backends: tuple[str, ...] = ("web",)
+    business_decisions: Optional[BusinessDecisionServiceConfig] = None
 
 
 def _parse_param_patterns(raw: object, index: int) -> dict[str, str]:
@@ -208,10 +216,32 @@ def load_runner_config(path: Optional[Path] = None) -> RunnerConfig:
             allow_unencrypted=bool(entry.get("allow_unencrypted", False)),
         )
 
+    decision_tbl = data.get("business_decisions")
+    business_decisions = None
+    if decision_tbl is not None:
+        if not isinstance(decision_tbl, dict):
+            raise RunnerConfigError("[business_decisions] must be a table")
+        unknown = set(decision_tbl) - {"key_file"}
+        if unknown:
+            raise RunnerConfigError(
+                "[business_decisions] has unknown keys: "
+                + ", ".join(sorted(str(key) for key in unknown))
+            )
+        raw_key_file = str(decision_tbl.get("key_file") or "").strip()
+        if not raw_key_file:
+            raise RunnerConfigError("business_decisions.key_file is required")
+        key_file = Path(raw_key_file).expanduser()
+        if not key_file.is_file():
+            raise RunnerConfigError(
+                "business_decisions.key_file is not an existing file"
+            )
+        business_decisions = BusinessDecisionServiceConfig(key_file=key_file)
+
     return RunnerConfig(
         name=name,
         host=host,
         profiles=profiles,
         bundles=bundles,
         backends=tuple(str(b).strip() for b in backends_raw),
+        business_decisions=business_decisions,
     )

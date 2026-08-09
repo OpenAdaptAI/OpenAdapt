@@ -25,67 +25,111 @@ Import-light by design (pydantic + json + pathlib): no vision, no backend, no
 model call.
 """
 
-from openadapt_flow.runtime.durable.approval import (  # noqa: F401
-    ApprovalRecord,
-    ApprovalRequired,
-    BundleMismatch,
-    PauseExpired,
-    ResumeRefused,
-    StateDiverged,
-    approval_pause_digest,
-    enforce_resume_authorization,
-    issue_resume_approval,
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
+
+_LAZY_EXPORTS = {
+    name: "openadapt_flow.runtime.durable.approval"
+    for name in (
+        "ApprovalRecord",
+        "ApprovalRequired",
+        "BundleMismatch",
+        "PauseExpired",
+        "ResumeRefused",
+        "StateDiverged",
+        "approval_pause_digest",
+        "enforce_resume_authorization",
+        "issue_resume_approval",
+    )
+}
+_LAZY_EXPORTS.update(
+    {
+        name: "openadapt_flow.runtime.durable.attended"
+        for name in (
+            "AttendedActionRefused",
+            "AttendedActionRequest",
+            "AttendedActionStore",
+            "AttendedDecision",
+            "AttendedExecutionResult",
+            "AttendedPauseCapability",
+            "AttendedRelayBinding",
+            "BoundAttendedExecutor",
+            "SignedTransitionBaseline",
+            "TransitionObservation",
+            "execute_attended_action",
+            "issue_attended_capability",
+        )
+    }
 )
-from openadapt_flow.runtime.durable.attended import (  # noqa: F401
-    AttendedActionRefused,
-    AttendedActionRequest,
-    AttendedActionStore,
-    AttendedDecision,
-    AttendedExecutionResult,
-    AttendedPauseCapability,
-    BoundAttendedExecutor,
-    SignedTransitionBaseline,
-    TransitionObservation,
-    execute_attended_action,
-    issue_attended_capability,
+_LAZY_EXPORTS.update(
+    {
+        name: "openadapt_flow.runtime.durable.attended_service"
+        for name in ("AttendedActionService", "AttendedExecutorTimeout")
+    }
 )
-from openadapt_flow.runtime.durable.attended_service import (  # noqa: F401
-    AttendedActionService,
-    AttendedExecutorTimeout,
+_LAZY_EXPORTS.update(
+    {
+        name: "openadapt_flow.runtime.durable.business_decision"
+        for name in (
+            "BusinessDecisionPrincipal",
+            "BusinessDecisionReceipt",
+            "BusinessDecisionRefused",
+            "BusinessDecisionRequest",
+            "BusinessDecisionStore",
+            "BusinessDecisionSubmission",
+            "submit_business_decision",
+        )
+    }
 )
-from openadapt_flow.runtime.durable.business_decision import (  # noqa: F401
-    BusinessDecisionPrincipal,
-    BusinessDecisionReceipt,
-    BusinessDecisionRefused,
-    BusinessDecisionRequest,
-    BusinessDecisionStore,
-    BusinessDecisionSubmission,
-    submit_business_decision,
+_LAZY_EXPORTS.update(
+    {
+        name: "openadapt_flow.runtime.durable.checkpoint"
+        for name in (
+            "CheckpointStore",
+            "PendingEscalation",
+            "RunCheckpoint",
+            "RunManifest",
+        )
+    }
 )
-from openadapt_flow.runtime.durable.checkpoint import (  # noqa: F401
-    CheckpointStore,
-    PendingEscalation,
-    RunCheckpoint,
-    RunManifest,
+_LAZY_EXPORTS.update(
+    {
+        name: "openadapt_flow.runtime.durable.controller"
+        for name in ("DurableRun", "classify_halt", "resumed_step_results")
+    }
 )
-from openadapt_flow.runtime.durable.controller import (  # noqa: F401
-    DurableRun,
-    classify_halt,
-    resumed_step_results,
+_LAZY_EXPORTS.update(
+    {
+        name: "openadapt_flow.runtime.durable.program_checkpoint"
+        for name in (
+            "TOP_GRAPH_ID",
+            "GraphFrame",
+            "LoopCursor",
+            "ProgramCheckpoint",
+            "ProgramTransitionReceipt",
+            "bundle_version",
+            "control_frames_hash",
+        )
+    }
 )
-from openadapt_flow.runtime.durable.program_checkpoint import (  # noqa: F401
-    TOP_GRAPH_ID,
-    GraphFrame,
-    LoopCursor,
-    ProgramCheckpoint,
-    ProgramTransitionReceipt,
-    bundle_version,
-    control_frames_hash,
+_LAZY_EXPORTS.update(
+    {
+        name: "openadapt_flow.runtime.durable.resume"
+        for name in ("resume", "resume_point")
+    }
 )
-from openadapt_flow.runtime.durable.resume import (  # noqa: F401
-    resume,
-    resume_point,
-)
+
+
+def __getattr__(name: str) -> Any:
+    module_name = _LAZY_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value
+    return value
+
 
 __all__ = [
     "CheckpointStore",

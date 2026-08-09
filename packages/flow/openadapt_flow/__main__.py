@@ -5646,6 +5646,34 @@ def build_parser() -> argparse.ArgumentParser:
     _add_deployment_flags(p)
     p.set_defaults(func=_cmd_console)
 
+    p = sub.add_parser(
+        "business-decisions",
+        help="Customer-runner typed-decision relay; it never resumes or acts.",
+    )
+    bdsub = p.add_subparsers(dest="business_decisions_cmd", required=True)
+    ps = bdsub.add_parser("serve", help="Serve the outbound-only non-actuating relay")
+    ps.add_argument("--runs", required=True, help="Customer-local durable run root")
+    ps.add_argument(
+        "--runner-config", default=None, help="Operator-authored runner.toml"
+    )
+    ps.add_argument(
+        "--profile", required=True, help="Named deployment profile from runner.toml"
+    )
+    ps.add_argument(
+        "--cloud-origin",
+        default=None,
+        metavar="URL",
+        help="Outbound HTTPS control-plane origin",
+    )
+    ps.add_argument(
+        "--poll-wait-seconds",
+        type=float,
+        default=25.0,
+        help="Cloud long-poll wait (0 through 25; default: 25)",
+    )
+    ps.add_argument("--once", action="store_true", help="Run one relay cycle and exit")
+    ps.set_defaults(func=_cmd_business_decisions_serve)
+
     # --- connector: the BYOC (bring-your-own-cloud) outbound-pull daemon -------
     p = sub.add_parser(
         "connector",
@@ -5959,6 +5987,40 @@ def _cmd_connector(args: argparse.Namespace) -> int:
         )
     finally:
         client.close()
+
+
+def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:
+    """Run typed-decision transport only; no workflow can continue here."""
+
+    from openadapt_flow.interop.decision_relay_transport import RelayRefused
+    from openadapt_flow.runner.business_decision_service import (
+        BusinessDecisionServiceLoop,
+        build_business_decision_supervisor,
+        resolve_business_decision_origin,
+    )
+    from openadapt_flow.runner.config import RunnerConfigError, load_runner_config
+
+    try:
+        config = load_runner_config(
+            Path(args.runner_config) if args.runner_config else None
+        )
+        origin = resolve_business_decision_origin(args.cloud_origin)
+        supervisor = build_business_decision_supervisor(
+            runs_root=Path(args.runs),
+            runner_config=config,
+            profile=args.profile,
+            origin=origin,
+        )
+        loop = BusinessDecisionServiceLoop(supervisor, wait_s=args.poll_wait_seconds)
+    except (RelayRefused, RunnerConfigError, OSError, ValueError) as exc:
+        print(f"business decisions: {exc}", file=sys.stderr)
+        return 2
+    if args.once:
+        health = loop.serve_once()
+        print(health.as_json())
+        return 0 if health.state == "ready" else 1
+    loop.run(lambda health: print(health.as_json(), flush=True))
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:

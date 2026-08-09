@@ -13,27 +13,40 @@ Public surface:
   healed-bundle writing.
 """
 
-from openadapt_flow.runtime.grounder import (  # noqa: F401
-    AnthropicGrounder,
-    FallbackGrounder,
-    Grounder,
-    GrounderMatch,
-    NullGrounder,
-    OCRAnchorGrounder,
-    build_grounder,
-)
-from openadapt_flow.runtime.heal import (  # noqa: F401
-    apply_heal,
-    build_heal_event,
-    persist_heal,
-    write_healed_bundle,
-)
-from openadapt_flow.runtime.replayer import Replayer  # noqa: F401
-from openadapt_flow.runtime.resolver import (  # noqa: F401
-    RUNG_ORDER,
-    is_below_ocr,
-    resolve,
-)
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
+
+# Keep the established package-level API without importing the execution stack
+# whenever a transport-only service needs one lightweight runtime submodule.
+_LAZY_EXPORTS = {
+    "AnthropicGrounder": "openadapt_flow.runtime.grounder",
+    "FallbackGrounder": "openadapt_flow.runtime.grounder",
+    "Grounder": "openadapt_flow.runtime.grounder",
+    "GrounderMatch": "openadapt_flow.runtime.grounder",
+    "NullGrounder": "openadapt_flow.runtime.grounder",
+    "OCRAnchorGrounder": "openadapt_flow.runtime.grounder",
+    "build_grounder": "openadapt_flow.runtime.grounder",
+    "apply_heal": "openadapt_flow.runtime.heal",
+    "build_heal_event": "openadapt_flow.runtime.heal",
+    "persist_heal": "openadapt_flow.runtime.heal",
+    "write_healed_bundle": "openadapt_flow.runtime.heal",
+    "Replayer": "openadapt_flow.runtime.replayer",
+    "RUNG_ORDER": "openadapt_flow.runtime.resolver",
+    "is_below_ocr": "openadapt_flow.runtime.resolver",
+    "resolve": "openadapt_flow.runtime.resolver",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_name = _LAZY_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value
+    return value
+
 
 __all__ = [
     "AnthropicGrounder",

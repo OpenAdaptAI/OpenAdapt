@@ -19,16 +19,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
-from openadapt_flow.console.decision_relay import (
-    RelayTransport,
-    RelayUncertain,
-    resolve_runner_token,
-)
 from openadapt_flow.interop.business_decision import (
     admit_portable_business_decision_answer,
     create_runner_business_decision_receipt_attestation,
     create_runner_business_decision_signature_attestation,
     project_recorded_business_decision_answer_receipt,
+)
+from openadapt_flow.interop.decision_relay_transport import (
+    RelayTransport,
+    RelayUncertain,
+    resolve_runner_token,
 )
 from openadapt_flow.runtime.durable.business_decision import BusinessDecisionStore
 
