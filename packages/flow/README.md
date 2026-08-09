@@ -83,6 +83,20 @@ believing the screen. The caught fault's evidence is a clearly-labeled local
 `run-broken/REPORT.md`; no shareable receipt is emitted for it, because only
 `VERIFIED` runs may use the success rail.
 
+For a live walkthrough, perform the demonstration yourself and then watch the
+compiled replay at a visible pace:
+
+```bash
+openadapt-flow tutorial --guided
+```
+
+The recording browser closes after OpenAdapt observes the saved record through
+the separate read-only interface. OpenAdapt then compiles, certifies, and
+replays what you demonstrated. If you prefer a fully automatic presentation, use
+`openadapt-flow tutorial --headed --presentation-delay 1`. The delay applies
+only to this bundled tutorial. The ordinary `tutorial`, `replay`, and `run`
+paths keep their normal execution speed.
+
 That receipt is generated from a closed allow-list — outcomes, counts, digests,
 and validated package versions — so it can carry no screenshot, OCR text,
 typed value, parameter, URL, hostname, coordinate, operator text, or free-form

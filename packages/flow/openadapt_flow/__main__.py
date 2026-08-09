@@ -926,6 +926,7 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
     from datetime import datetime, timezone
 
     from openadapt_flow.tutorial import (
+        GUIDED_PRESENTATION_DELAY_S,
         TUTORIAL_WORKFLOW_NAME,
         TutorialError,
         run_tutorial,
@@ -937,12 +938,18 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
         else Path("tutorials")
         / ("tutorial-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"))
     )
+    interactive_record = bool(args.interactive_record or args.guided)
+    presentation_delay_s = args.presentation_delay
+    if presentation_delay_s is None:
+        presentation_delay_s = GUIDED_PRESENTATION_DELAY_S if args.guided else 0.0
     try:
         result = run_tutorial(
             out,
-            headed=args.headed,
+            headed=bool(args.headed or args.guided),
             name=args.name or TUTORIAL_WORKFLOW_NAME,
             emit_receipt=not args.no_receipt,
+            interactive_record=interactive_record,
+            presentation_delay_s=presentation_delay_s,
             echo=print,
             break_it=args.break_it,
         )
@@ -953,10 +960,14 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
     if result.break_it is not None:
         print("\n--- clean run: the certified bundle, against an honest backend ---")
     print(f"\n{result.execution_outcome}: {result.run_dir / 'REPORT.md'}")
-    print(
-        f"  transaction     {result.transaction_outcome} "
-        f"(billable: {'yes' if result.transaction_billable else 'no'})"
+    print(f"  transaction     {result.transaction_outcome}")
+    metering_class = "billable" if result.transaction_billable else "not billable"
+    local_charge = (
+        "reported"
+        if result.reported_to_metering
+        else "this local tutorial was not reported or charged"
     )
+    print(f"  metering class  {metering_class} ({local_charge})")
     print(f"  profile         {result.execution_profile}")
     print(f"  model calls     {result.model_calls}")
     print(
@@ -3871,6 +3882,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Workflow name for the compiled bundle (default: local-quickstart)",
     )
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.add_argument(
+        "--guided",
+        action="store_true",
+        help=(
+            "Presentation mode: record the demonstration yourself, then watch "
+            "a visibly paced governed replay"
+        ),
+    )
+    p.add_argument(
+        "--interactive-record",
+        action="store_true",
+        help=(
+            "Perform the tutorial demonstration yourself in a headed browser; "
+            "the browser closes after the saved record is observed"
+        ),
+    )
+    p.add_argument(
+        "--presentation-delay",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "Tutorial-only pause before each scripted recording action and "
+            "replay step (0-5 seconds; guided default: 1)"
+        ),
+    )
     p.add_argument(
         "--no-receipt",
         action="store_true",

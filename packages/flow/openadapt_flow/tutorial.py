@@ -53,6 +53,13 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 from urllib.request import Request, urlopen
 
+#: The guided tutorial pauses before each scripted demonstration action and
+#: each replay step. The fast tutorial keeps a zero delay.
+GUIDED_PRESENTATION_DELAY_S = 1.0
+
+#: A tutorial delay is a presentation aid, not an unbounded runtime wait.
+MAX_PRESENTATION_DELAY_S = 5.0
+
 #: The note typed during the tutorial.  Synthetic, constant, and free of
 #: anything that could be mistaken for a real clinical note.
 TUTORIAL_NOTE = "Synthetic follow-up in two weeks"
@@ -133,6 +140,9 @@ class TutorialResult:
     effect_tier: Optional[int]
     bundle_digest: Optional[str]
     system_of_record_records: int
+    # The report can classify a VERIFIED production-profile transaction as
+    # billable. This local-only tutorial never reports usage to Cloud.
+    reported_to_metering: bool = False
     receipt_paths: dict[str, Path] = field(default_factory=dict)
     #: Present only when the tutorial ran with ``break_it=True``: the same
     #: certified bundle, rerun against a backend that lies, and the engine's
@@ -171,11 +181,47 @@ def _center(page: Any, selector: str) -> tuple[int, int]:
     return int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
 
 
+def _validated_presentation_delay(value: float) -> float:
+    delay = float(value)
+    if not 0.0 <= delay <= MAX_PRESENTATION_DELAY_S:
+        raise TutorialError(
+            "presentation delay must be between 0 and "
+            f"{MAX_PRESENTATION_DELAY_S:g} seconds"
+        )
+    return delay
+
+
+def _presentation_pause(
+    delay_s: float, *, sleep: Callable[[float], None] = time.sleep
+) -> None:
+    """Pause one tutorial stage without changing production runtime timing."""
+
+    delay = _validated_presentation_delay(delay_s)
+    if delay:
+        sleep(delay)
+
+
+def _presentation_replayer_type(replayer_type: type[Any], delay_s: float) -> type[Any]:
+    """Return a tutorial-only replayer type that pauses once per IR step."""
+
+    delay = _validated_presentation_delay(delay_s)
+    if not delay:
+        return replayer_type
+
+    class PresentationReplayer(replayer_type):
+        def _run_step(self, *args: Any, **kwargs: Any) -> Any:
+            _presentation_pause(delay)
+            return super()._run_step(*args, **kwargs)
+
+    return PresentationReplayer
+
+
 def record_tutorial(
     base_url: str,
     recording_dir: Path,
     *,
     headed: bool = False,
+    presentation_delay_s: float = 0.0,
 ) -> Path:
     """Record the triage demonstration WITH system-of-record observation.
 
@@ -189,6 +235,7 @@ def record_tutorial(
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.recorder import Recorder
 
+    delay = _validated_presentation_delay(presentation_delay_s)
     _http_json(f"{base_url.rstrip('/')}/api/reset", method="POST", body={})
     entry_url = f"{base_url.rstrip('/')}/{TUTORIAL_ENTRY_QUERY}"
     backend, close = PlaywrightBackend.launch(entry_url, headless=not headed)
@@ -200,17 +247,51 @@ def record_tutorial(
             app_url=entry_url,
             system_of_record_reader=lambda: _records(base_url),
         )
-        recorder.click(*_center(page, ".open-btn"))
-        recorder.click(*_center(page, "#new-encounter"))
-        recorder.click(*_center(page, "#type-triage"))
-        recorder.click(*_center(page, "#note"))
-        recorder.type_text(TUTORIAL_NOTE, param="note")
-        recorder.click(*_center(page, "#save-encounter"))
+
+        def demonstrate(action: Callable[[], None]) -> None:
+            _presentation_pause(delay)
+            action()
+
+        demonstrate(lambda: recorder.click(*_center(page, ".open-btn")))
+        demonstrate(lambda: recorder.click(*_center(page, "#new-encounter")))
+        demonstrate(lambda: recorder.click(*_center(page, "#type-triage")))
+        demonstrate(lambda: recorder.click(*_center(page, "#note")))
+        demonstrate(lambda: recorder.type_text(TUTORIAL_NOTE, param="note"))
+        demonstrate(lambda: recorder.click(*_center(page, "#save-encounter")))
         page.wait_for_selector("#saved-banner", state="visible")
         page.wait_for_timeout(250)
         return recorder.finish()
     finally:
         close()
+
+
+def record_tutorial_interactive(base_url: str, recording_dir: Path) -> Path:
+    """Record the bundled workflow from a real human browser demonstration."""
+
+    from openadapt_flow.interactive_recorder import record_interactive
+
+    _http_json(f"{base_url.rstrip('/')}/api/reset", method="POST", body={})
+    baseline_records = len(_records(base_url))
+    entry_url = f"{base_url.rstrip('/')}/{TUTORIAL_ENTRY_QUERY}"
+    print(
+        "\nGuided recording\n"
+        "  1. Open the first task.\n"
+        "  2. Select New encounter, then Triage.\n"
+        "  3. Select the Note field and type a short synthetic note.\n"
+        "  4. Select Save encounter.\n"
+        "  5. Wait for the saved message. The recording browser closes "
+        "automatically.\n"
+        "\nOpenAdapt records your actions and observes the separate local "
+        "system of record."
+    )
+    return record_interactive(
+        entry_url,
+        recording_dir,
+        param_fields=("note",),
+        headless=False,
+        system_of_record_reader=lambda: _records(base_url),
+        stop_when=lambda: len(_records(base_url)) > baseline_records,
+    )
 
 
 def consequential_step(workflow: Any) -> Any:
@@ -275,6 +356,7 @@ def run_tutorial_workflow(
     run_dir: Path,
     headed: bool = False,
     entry_query: Optional[str] = None,
+    presentation_delay_s: float = 0.0,
 ) -> Any:
     """Admit and execute the tutorial under the ``standard`` profile.
 
@@ -296,6 +378,7 @@ def run_tutorial_workflow(
 
     if entry_query is None:
         entry_query = TUTORIAL_ENTRY_QUERY
+    delay = _validated_presentation_delay(presentation_delay_s)
     _http_json(f"{base_url.rstrip('/')}/api/reset", method="POST", body={})
     entry_url = f"{base_url.rstrip('/')}/{entry_query}"
 
@@ -322,16 +405,20 @@ def run_tutorial_workflow(
             "the standard run gate REFUSED the tutorial bundle; nothing was "
             f"executed:\n{gate.render()}"
         )
+    replay_params = {
+        "note": str(getattr(workflow, "params", {}).get("note", TUTORIAL_NOTE))
+    }
     authorization = build_runtime_authorization(
         workflow,
         gate,
         approval_source="openadapt-flow-tutorial",
-        params={"note": TUTORIAL_NOTE},
+        params=replay_params,
     )
 
     backend, close = PlaywrightBackend.launch(entry_url, headless=not headed)
     try:
-        return Replayer(
+        replayer_type = _presentation_replayer_type(Replayer, delay)
+        return replayer_type(
             backend,
             effect_verifier=verifier,
             governed_authorization=authorization,
@@ -339,7 +426,7 @@ def run_tutorial_workflow(
             require_settled=True,
         ).run(
             workflow.model_copy(deep=True),
-            params={"note": TUTORIAL_NOTE},
+            params=replay_params,
             bundle_dir=bundle_dir,
             run_dir=run_dir,
             execution_target_kind="web",
@@ -356,6 +443,8 @@ def run_tutorial(
     headed: bool = False,
     name: str = TUTORIAL_WORKFLOW_NAME,
     emit_receipt: bool = True,
+    interactive_record: bool = False,
+    presentation_delay_s: float = 0.0,
     echo: Optional[Callable[[str], None]] = None,
     break_it: bool = False,
 ) -> TutorialResult:
@@ -383,6 +472,7 @@ def run_tutorial(
     from openadapt_flow.report import render_run_report
 
     say = echo or (lambda message: None)
+    delay = _validated_presentation_delay(presentation_delay_s)
     root = Path(work_dir)
     root.mkdir(parents=True, exist_ok=True)
     recording_dir = root / "recording"
@@ -391,8 +481,17 @@ def run_tutorial(
 
     base_url, _db, stop = serve()
     try:
+        visible = headed or interactive_record or delay > 0
         say("[1/5] Record the demonstration against a real persistence boundary")
-        record_tutorial(base_url, recording_dir, headed=headed)
+        if interactive_record:
+            record_tutorial_interactive(base_url, recording_dir)
+        else:
+            record_tutorial(
+                base_url,
+                recording_dir,
+                headed=visible,
+                presentation_delay_s=delay,
+            )
 
         say("[2/5] Compile, mining the effect contract from the observed delta")
         workflow = compile_recording(
@@ -414,7 +513,8 @@ def run_tutorial(
             workflow=workflow,
             bundle_dir=bundle_dir,
             run_dir=run_dir,
-            headed=headed,
+            headed=visible,
+            presentation_delay_s=delay,
         )
         render_run_report(run_dir)
         elapsed = time.monotonic() - started

@@ -382,6 +382,10 @@ class InteractiveRecorder:
         settle_stable_frames: int = 2,
         settle_interval_s: float = 0.15,
         viewport: tuple[int, int] = (1280, 800),
+        system_of_record_reader: Optional[
+            Callable[[], Optional[list[dict[str, Any]]]]
+        ] = None,
+        stop_when: Optional[Callable[[], bool]] = None,
     ) -> None:
         self._url = url
         self._out_dir = Path(out_dir)
@@ -391,6 +395,12 @@ class InteractiveRecorder:
         self._headless = headless
         self._poll_ms = poll_ms
         self._viewport = viewport
+        # Recording-only, read-only observation. This does not add an effect
+        # verifier to the browser backend or grant the later runtime authority.
+        self._system_of_record_reader = system_of_record_reader
+        # Optional recording completion condition. It is evaluated only after
+        # queued browser events have been persisted, while the page is open.
+        self._stop_when = stop_when
         self._settle = dict(
             settle_timeout_s=settle_timeout_s,
             settle_stable_frames=settle_stable_frames,
@@ -450,18 +460,30 @@ class InteractiveRecorder:
             pass
         self.backend = PlaywrightBackend(self.page)
         self.recorder = Recorder(
-            self.backend, self._out_dir, app_url=self._url, **self._settle
+            self.backend,
+            self._out_dir,
+            app_url=self._url,
+            system_of_record_reader=self._system_of_record_reader,
+            **self._settle,
         )
         self._last_frame = self.recorder._wait_settled()
         self._last_structural = self._structural_state()
 
     def run(self) -> Path:
-        """Human loop: pump until the user stops (Ctrl-C / closes the window),
-        then flush and finish."""
+        """Pump until completion, an operator stop, or a closed window."""
+        if self._stop_when is None:
+            finish_instruction = (
+                "Press Ctrl-C here (or close the browser window) to finish."
+            )
+        else:
+            finish_instruction = (
+                "Complete the workflow. Recording stops automatically after "
+                "the configured result is observed. Press Ctrl-C only to stop early."
+            )
         print(
             f"Recording {self._url}\n"
             "  Perform your workflow in the browser window.\n"
-            "  Press Ctrl-C here (or close the browser window) to finish."
+            f"  {finish_instruction}"
         )
         try:
             while not self.done:
@@ -502,6 +524,8 @@ class InteractiveRecorder:
         return self._pump()
 
     def _pump(self) -> bool:
+        if self.done:
+            return False
         try:
             self.page.wait_for_timeout(self._poll_ms)
         except Exception:
@@ -515,10 +539,10 @@ class InteractiveRecorder:
             # is NOT idle-flushed (a mid-word pause must not split it) — it
             # flushes on the next boundary event or at finish().
             self._flush_scroll()
-            return True
+            return not self._stop_condition_reached()
         for ev in batch:
             self._process(ev)
-        return True
+        return not self._stop_condition_reached()
 
     def _process(self, ev: dict[str, Any]) -> None:
         kind = ev.get("kind")
@@ -735,7 +759,25 @@ class InteractiveRecorder:
                 value = None
             if value is not None:
                 state[key] = value
+        if self._system_of_record_reader is not None:
+            try:
+                records = self._system_of_record_reader()
+            except Exception:
+                records = None
+            if records is not None:
+                state["sor"] = records
         return state
+
+    def _stop_condition_reached(self) -> bool:
+        if self._stop_when is None:
+            return False
+        try:
+            done = bool(self._stop_when())
+        except Exception:
+            done = False
+        if done:
+            self.done = True
+        return done
 
 
 def record_interactive(
@@ -747,6 +789,10 @@ def record_interactive(
     identifier_fields: tuple[str, ...] = (),
     headless: bool = False,
     script: Optional[Callable[[Any, Callable[[], None]], None]] = None,
+    system_of_record_reader: Optional[
+        Callable[[], Optional[list[dict[str, Any]]]]
+    ] = None,
+    stop_when: Optional[Callable[[], bool]] = None,
     **kwargs: Any,
 ) -> Path:
     """Record a live demonstration the user drives against ``url``.
@@ -773,6 +819,13 @@ def record_interactive(
             a human recording is headed).
         script: Test hook — ``script(page, pump)`` drives synthetic input and
             pumps the loop; when given, the human wait loop is skipped.
+        system_of_record_reader: Optional read-only observation of the
+            authoritative records. The recorder retains the observed
+            before/after state so compilation can propose effect contracts.
+            This observer is recording-only and does not become a runtime
+            verifier.
+        stop_when: Optional recording completion condition. It is evaluated
+            after queued events are persisted and before the browser closes.
 
     Returns:
         The recording directory.
@@ -784,6 +837,8 @@ def record_interactive(
         param_fields=param_fields,
         identifier_fields=identifier_fields,
         headless=headless,
+        system_of_record_reader=system_of_record_reader,
+        stop_when=stop_when,
         **kwargs,
     )
     session.start()

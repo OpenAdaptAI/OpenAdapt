@@ -108,6 +108,9 @@ def test_free_path_terminates_verified_with_independent_effect_evidence(
     # COMPLETED_UNVERIFIED is never billable; VERIFIED under a production
     # profile is the only outcome that is.
     assert free_path.transaction_billable is True
+    # The classification remains available for production accounting, but the
+    # local tutorial never sends a usage event and cannot create a charge.
+    assert free_path.reported_to_metering is False
     # A healthy run makes no model calls.
     assert free_path.model_calls == 0
     # The evidence that did not exist before: every declared effect confirmed,

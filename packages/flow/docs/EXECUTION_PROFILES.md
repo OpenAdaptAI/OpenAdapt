@@ -71,6 +71,32 @@ The tutorial also omits the login screen: typing a credential into a recording
 produces an artifact whose plaintext value is a secret carrier for no
 evidentiary gain, and the demonstration proves exactly as much without it.
 
+The fast command remains suitable for a quickstart and CI:
+
+```bash
+openadapt-flow tutorial
+```
+
+For a guided presentation, the operator can perform the same demonstration in
+the browser. The interactive recorder retains the separate read-only
+system-of-record snapshots needed for effect mining. The recording browser
+closes after OpenAdapt observes the saved record through that separate
+read-only interface. OpenAdapt then compiles, certifies, and replays the result
+at a visible pace:
+
+```bash
+openadapt-flow tutorial --guided
+```
+
+The automatic alternative is:
+
+```bash
+openadapt-flow tutorial --headed --presentation-delay 1
+```
+
+The delay is bounded to the bundled tutorial. It does not change ordinary
+`replay`, `run`, or production runtime timing.
+
 The result is checkable rather than asserted: run the same bundle against an
 injected backend fault and it does not verify. Both injected faults terminate
 `HALTED` / `RECONCILIATION_REQUIRED`, and both are pinned in
