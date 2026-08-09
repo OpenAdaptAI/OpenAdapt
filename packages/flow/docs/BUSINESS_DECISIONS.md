@@ -198,6 +198,32 @@ business-decision request and receipt schema.
 
 ### Portable mobile projection
 
+The qualification project stores one optional
+`openadapt.qualified-business-decision-delivery/v1` binding for each decision
+that can reach a phone. The binding contains only reviewed static presentation
+copy and exact policy references. It contains no key, token, screenshot, OCR
+text, record value, or person identifier.
+
+`set_business_decision_deliveries()` is the scriptable authoring boundary for
+Desktop, CLI, API, and qualification-agent clients. It binds the exact graph,
+state, decision-contract digest, mobile context cards, finite option detail,
+role mapping, authenticated route, key IDs, and relay-capability digest. The
+operation increments the qualification revision and removes the old
+certification. Certification refuses a stale decision binding.
+
+At an active durable pause,
+`build_qualified_business_decision_cloud_relay()` reads that binding from the
+certified bundle. It combines it with deployment-owned key bytes, tenant and
+runner identities, and the runner token. It then creates and validates the
+presentation, signed delivery policy, signed portable task, and Cloud relay.
+The caller does not construct these internal contracts for each run.
+
+The build refuses when the certification cannot be reproduced, the active
+request differs from the qualified decision, a key ID changed, or the decision
+has protected local evidence. A remote answer still grants only one finite
+branch choice. The runner performs live state checks before any successor
+action.
+
 `openadapt_flow.interop.business_decision` projects a local signed request into
 the separate `openadapt.business-decision-task/v1` contract from
 `openadapt-types`. The projection carries opaque tenant, runner, run, pause,

@@ -40,6 +40,9 @@ if TYPE_CHECKING:
         BusinessDecisionTaskV1,
     )
 
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.policy import Policy
+
 
 REGISTRATIONS_PATH = "/api/business-decisions/registrations"
 ANSWERS_POLL_PATH = "/api/business-decisions/answers/poll"
@@ -422,6 +425,233 @@ class BusinessDecisionCloudRelay:
         return None if delivery is None else self.record(delivery, at=at)
 
 
+def build_qualified_business_decision_cloud_relay(
+    workflow: "Workflow",
+    policy: "Policy",
+    store: BusinessDecisionStore,
+    transport: RelayTransport,
+    *,
+    runner_token: str,
+    tenant_id: str,
+    runner_id: str,
+    keys: BusinessDecisionCloudKeys,
+    privacy_key: bytes,
+    at: str,
+) -> BusinessDecisionCloudRelay:
+    """Build one relay from the certified bundle and active durable request.
+
+    Presentation copy, role mapping, routes, authentication strength, key IDs,
+    and relay capability come from the qualification project. Secret key bytes,
+    the runner token, and tenant scope come from the deployment boundary. No
+    caller constructs a portable task or policy by hand.
+    """
+
+    from openadapt_types import (
+        BusinessDecisionContextCardV1,
+        BusinessDecisionContextKind,
+        BusinessDecisionJudgmentReason,
+        BusinessDecisionPresentationClassification,
+        BusinessDecisionPresentationOptionV1,
+        BusinessDecisionPresentationTextV1,
+        BusinessDecisionPresentationV1,
+        sign_business_decision_delivery_policy_hmac,
+    )
+
+    from openadapt_flow.interop.business_decision import (
+        business_decision_role_mapping_digest,
+        project_portable_business_decision_task,
+    )
+    from openadapt_flow.qualification import (
+        current_certification_matches,
+        workflow_contract_sha256,
+    )
+    from openadapt_flow.qualified_business_decisions import (
+        resolve_qualified_business_decision,
+    )
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+    from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
+
+    project = workflow.qualification
+    if project is None or not current_certification_matches(workflow, policy=policy):
+        raise BusinessDecisionCloudRefused(
+            "the workflow has no current reproducible certification"
+        )
+    request, _request_sha256 = store.read_active_request()
+    manifest = CheckpointStore(store.run_dir, key=store.checkpoint_key).read_manifest()
+    if manifest is None:
+        raise BusinessDecisionCloudRefused(
+            "the active decision has no durable run manifest"
+        )
+    if (
+        request.run_id != manifest.run_id
+        or request.workflow_name != manifest.workflow_name
+        or request.workflow_name != workflow.name
+        or request.workflow_contract_sha256 != workflow_contract_sha256(workflow)
+        or request.bundle_version != bundle_version(manifest.bundle_dir)
+    ):
+        raise BusinessDecisionCloudRefused(
+            "the certified workflow differs from the active durable run"
+        )
+    matches = [
+        item
+        for item in project.business_decision_deliveries
+        if item.graph_id == request.graph_id and item.state_id == request.state_id
+    ]
+    if len(matches) != 1:
+        raise BusinessDecisionCloudRefused(
+            "the active decision has no unique qualified delivery binding"
+        )
+    binding = matches[0]
+    try:
+        decision = resolve_qualified_business_decision(workflow, binding)
+    except ValueError as exc:
+        raise BusinessDecisionCloudRefused(str(exc)) from exc
+    if request.decision.contract_sha256() != decision.contract_sha256():
+        raise BusinessDecisionCloudRefused(
+            "the active request differs from the qualified decision"
+        )
+    expected_key_ids = {
+        "task": (keys.task_issuer_key_id, binding.task_issuer_key_id),
+        "qualification": (
+            keys.qualification_issuer_key_id,
+            binding.qualification_issuer_key_id,
+        ),
+        "answer": (keys.answer_issuer_key_id, binding.answer_issuer_key_id),
+        "receipt": (keys.receipt_issuer_key_id, binding.receipt_issuer_key_id),
+    }
+    for purpose, (actual, expected) in expected_key_ids.items():
+        if actual != expected:
+            raise BusinessDecisionCloudRefused(
+                f"the deployment {purpose} key id differs from qualification"
+            )
+
+    classification = BusinessDecisionPresentationClassification.REVIEWED_REMOTE_SAFE
+    egress = binding.egress_review_digest
+
+    def text(value: str) -> BusinessDecisionPresentationTextV1:
+        return BusinessDecisionPresentationTextV1(
+            text=value,
+            classification=classification,
+            egress_review_digest=egress,
+        )
+
+    context_cards = tuple(
+        BusinessDecisionContextCardV1(
+            context_id=card.context_id,
+            kind=BusinessDecisionContextKind(card.kind),
+            label=text(card.label),
+            value=text(card.value),
+        )
+        for card in binding.context_cards
+    )
+    option_presentations: list[BusinessDecisionPresentationOptionV1] = []
+    for option in decision.options:
+        copy = binding.option_copy.get(option.id)
+        detail = (
+            text(copy.detail) if copy is not None and copy.detail is not None else None
+        )
+        consequence = (
+            text(copy.consequence)
+            if copy is not None and copy.consequence is not None
+            else None
+        )
+        option_presentations.append(
+            BusinessDecisionPresentationOptionV1(
+                option_id=option.id,
+                label=text(option.label),
+                detail=detail,
+                consequence=consequence,
+            )
+        )
+
+    presentation = BusinessDecisionPresentationV1(
+        presentation_ref=binding.presentation_ref,
+        presentation_revision=binding.presentation_revision,
+        decision_contract_digest="sha256:" + binding.decision_contract_sha256,
+        decision_contract_revision=binding.decision_contract_revision,
+        category=text(binding.category) if binding.category is not None else None,
+        title=text(binding.title) if binding.title is not None else None,
+        role_label=(
+            text(binding.role_label) if binding.role_label is not None else None
+        ),
+        question=text(decision.question),
+        why_judgment_needed=(
+            text(binding.why_judgment_needed)
+            if binding.why_judgment_needed is not None
+            else None
+        ),
+        context_cards=context_cards,
+        options=tuple(option_presentations),
+        reason_codes=tuple(
+            BusinessDecisionJudgmentReason(value) for value in binding.reason_codes
+        ),
+        review_contract_digest=binding.review_contract_digest,
+    )
+    role_mapping_digest = business_decision_role_mapping_digest(
+        binding.role_refs, key=keys.role_mapping_key
+    )
+    delivery_policy = sign_business_decision_delivery_policy_hmac(
+        key=keys.qualification_signing_key,
+        fields={
+            "policy_ref": binding.policy_ref,
+            "policy_revision": binding.policy_revision,
+            "decision_contract_digest": presentation.decision_contract_digest,
+            "decision_contract_revision": binding.decision_contract_revision,
+            "presentation_ref": presentation.presentation_ref,
+            "presentation_digest": presentation.digest,
+            "presentation_egress_review_digest": egress,
+            "authorized_role_refs": tuple(
+                binding.role_refs[role] for role in decision.authorized_roles
+            ),
+            "authorized_route_refs": binding.authorized_route_refs,
+            "authorized_answer_issuer_key_ids": (binding.answer_issuer_key_id,),
+            "role_mapping_digest": role_mapping_digest,
+            "required_authn": binding.required_authn,
+            "delivery_mode": "remote_answerable",
+            "relay_capability_digest": binding.relay_capability_digest,
+            "created_at": request.issued_at,
+            "expires_at": request.expires_at,
+            "issuer_key_id": binding.qualification_issuer_key_id,
+        },
+    )
+    task = project_portable_business_decision_task(
+        store,
+        signing_key=keys.task_signing_key,
+        tenant_id=tenant_id,
+        runner_id=runner_id,
+        presentation=presentation,
+        delivery_policy=delivery_policy,
+        delivery_policy_signing_key=keys.qualification_signing_key,
+        expected_delivery_policy_issuer_key_id=(binding.qualification_issuer_key_id),
+        role_refs=binding.role_refs,
+        role_mapping_key=keys.role_mapping_key,
+        privacy_key=privacy_key,
+        active_relay_capability_digest=binding.relay_capability_digest,
+        issuer_key_id=binding.task_issuer_key_id,
+        at=at,
+    )
+    route_ref = binding.registration_route_ref
+    role_policy = {
+        "schema_version": "openadapt.cloud-business-decision-role-policy/v1",
+        "policy_ref": binding.policy_ref,
+        "task_digest": task.digest,
+    }
+    return BusinessDecisionCloudRelay(
+        transport,
+        runner_token=runner_token,
+        store=store,
+        task=task,
+        presentation=presentation,
+        delivery_policy=delivery_policy,
+        role_policy=role_policy,
+        role_refs=binding.role_refs,
+        route_ref=route_ref,
+        tenant_id=tenant_id,
+        runner_id=runner_id,
+        keys=keys,
+    )
+
+
 __all__ = [
     "ANSWERS_POLL_PATH",
     "REGISTRATIONS_PATH",
@@ -430,4 +660,5 @@ __all__ = [
     "BusinessDecisionCloudKeys",
     "BusinessDecisionCloudRefused",
     "BusinessDecisionCloudRelay",
+    "build_qualified_business_decision_cloud_relay",
 ]

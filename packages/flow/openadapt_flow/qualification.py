@@ -60,6 +60,11 @@ from openadapt_flow.judgment_cases import (
     JudgmentFactSchemaBindingV1,
     evaluate_judgment_cases,
 )
+from openadapt_flow.qualified_business_decisions import (
+    QualifiedBusinessDecisionDelivery,
+    qualified_business_decision_delivery_errors,
+    resolve_qualified_business_decision,
+)
 from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -873,6 +878,11 @@ class QualificationProject(BaseModel):
         default_factory=list
     )
     judgment_cases: list[JudgmentCaseV1] = Field(default_factory=list)
+    #: Reviewed static mobile presentation and delivery policy for exact graph
+    #: decisions. Keys and live values remain outside the bundle.
+    business_decision_deliveries: list[QualifiedBusinessDecisionDelivery] = Field(
+        default_factory=list
+    )
     cases: list[QualificationCase] = Field(default_factory=_default_fault_cases)
     exclusions: list[str] = Field(default_factory=list)
     requalification_conditions: list[RequalificationCondition] = Field(
@@ -930,6 +940,13 @@ class QualificationProject(BaseModel):
         ]
         if len(schema_nodes) != len(set(schema_nodes)):
             raise ValueError("judgment fact schemas must bind unique graph states")
+        delivery_nodes = [
+            (item.graph_id, item.state_id) for item in self.business_decision_deliveries
+        ]
+        if len(delivery_nodes) != len(set(delivery_nodes)):
+            raise ValueError(
+                "business decision deliveries must bind unique graph states"
+            )
         effect_refs = [
             (binding.step_id, binding.actuation_path, binding.effect_index)
             for binding in self.effect_policies
@@ -949,6 +966,8 @@ class QualificationProject(BaseModel):
             data.pop("judgment_fact_schemas", None)
         if not self.judgment_cases:
             data.pop("judgment_cases", None)
+        if not self.business_decision_deliveries:
+            data.pop("business_decision_deliveries", None)
         return data
 
     def revision_digest(self) -> str:
@@ -1006,6 +1025,7 @@ class QualificationRefusalCode(str, Enum):
     JUDGMENT_CASE_CONTRAST_MISSING = "judgment_case_contrast_missing"
     JUDGMENT_CASE_MORE_EVIDENCE_REQUIRED = "judgment_case_more_evidence_required"
     JUDGMENT_CASE_EVIDENCE_UNVERIFIED = "judgment_case_evidence_unverified"
+    BUSINESS_DECISION_DELIVERY_INVALID = "business_decision_delivery_invalid"
     POLICY_VIOLATION = "policy_violation"
 
 
@@ -1474,6 +1494,46 @@ def set_judgment_cases(
     previous = project.revision_digest()
     project.judgment_fact_schemas = candidate.judgment_fact_schemas
     project.judgment_cases = candidate.judgment_cases
+    _touch(project, previous)
+    _invalidate_certification(workflow)
+    return project
+
+
+def set_business_decision_deliveries(
+    workflow: "Workflow",
+    bindings: Iterable[QualifiedBusinessDecisionDelivery],
+) -> QualificationProject:
+    """Replace reviewed mobile delivery bindings and invalidate certification.
+
+    This operation stores no key or live application value. It also does not
+    make a local decision remotely answerable by itself. The customer runner
+    must supply the exact deployment key bindings and build a signed task from
+    an active durable request.
+    """
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError(
+            "initialize qualification before setting business decision delivery"
+        )
+    proposed = list(bindings)
+    for binding in proposed:
+        try:
+            resolve_qualified_business_decision(workflow, binding)
+        except ValueError as exc:
+            raise QualificationError(str(exc)) from exc
+    candidate = QualificationProject.model_validate(
+        {
+            **project.model_dump(mode="json"),
+            "business_decision_deliveries": [
+                item.model_dump(mode="json") for item in proposed
+            ],
+        }
+    )
+    if project.business_decision_deliveries == candidate.business_decision_deliveries:
+        return project
+    previous = project.revision_digest()
+    project.business_decision_deliveries = candidate.business_decision_deliveries
     _touch(project, previous)
     _invalidate_certification(workflow)
     return project
@@ -5079,6 +5139,14 @@ def evaluate_qualification(
         refusals.append(
             QualificationRefusal(
                 code=QualificationRefusalCode.JUDGMENT_CASE_EVIDENCE_UNVERIFIED,
+                path=path,
+                message=message,
+            )
+        )
+    for path, message in qualified_business_decision_delivery_errors(workflow):
+        refusals.append(
+            QualificationRefusal(
+                code=(QualificationRefusalCode.BUSINESS_DECISION_DELIVERY_INVALID),
                 path=path,
                 message=message,
             )
