@@ -124,6 +124,21 @@ refuses a decision that changes an existing output parameter into an
 incompatible contract. A client can therefore offer a guided editor without
 requiring a person to edit the workflow manifest.
 
+The CLI uses the same boundary:
+
+```text
+openadapt-flow qualify business-decision BUNDLE --input DECISION.json
+openadapt-flow qualify business-decision BUNDLE --check
+```
+
+`DECISION.json` uses `openadapt.business-decision-authoring/v1`. It names one
+graph, one state, the optional unambiguous insertion state, and one exact
+`BusinessDecisionSpec`. A qualification agent can prepare this file. A person
+can review it in a client before the client calls the command. The command
+derives the transitions, creates the finite output parameter, validates the
+complete workflow, saves the new qualification revision, and invalidates the
+prior certification. It does not submit a runtime answer.
+
 ## Reviewed judgment cases
 
 Qualification can retain the institutional knowledge that explains when a

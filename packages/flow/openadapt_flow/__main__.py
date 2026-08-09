@@ -2454,6 +2454,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
 
     from pydantic import TypeAdapter
 
+    from openadapt_flow.ir import BusinessDecisionSpec, StateKind
     from openadapt_flow.judgment_cases import JudgmentCaseSetV1
     from openadapt_flow.qualification import (
         ActionRiskClass,
@@ -2480,6 +2481,7 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         remove_entity_label,
         save_qualified_workflow,
         set_action_classification,
+        set_business_decision,
         set_effect_policy,
         set_entity_label,
         set_identity_policy,
@@ -2495,6 +2497,85 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         return 0
 
     workflow = _qualification_workflow(args)
+
+    if verb == "business-decision":
+        if not args.check:
+            if not args.input:
+                raise SystemExit("--input is required unless --check is used")
+            try:
+                payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("authoring input must be an object")
+                allowed = {
+                    "schema_version",
+                    "graph_id",
+                    "state_id",
+                    "insert_before_state_id",
+                    "decision",
+                }
+                required = {"schema_version", "graph_id", "state_id", "decision"}
+                if set(payload) - allowed or required - set(payload):
+                    raise ValueError("authoring input has an unknown or missing field")
+                if (
+                    payload["schema_version"]
+                    != "openadapt.business-decision-authoring/v1"
+                ):
+                    raise ValueError("authoring schema is not supported")
+                graph_id = payload["graph_id"]
+                state_id = payload["state_id"]
+                insert_before = payload.get("insert_before_state_id")
+                if not isinstance(graph_id, str) or not isinstance(state_id, str):
+                    raise ValueError("graph_id and state_id must be strings")
+                if insert_before is not None and not isinstance(insert_before, str):
+                    raise ValueError("insert_before_state_id must be a string or null")
+                decision = BusinessDecisionSpec.model_validate(payload["decision"])
+            except (OSError, ValueError) as exc:
+                raise SystemExit(
+                    f"invalid business decision authoring input: {exc}"
+                ) from exc
+            workflow = set_business_decision(
+                workflow,
+                graph_id=graph_id,
+                state_id=state_id,
+                decision=decision,
+                insert_before_state_id=insert_before,
+            )
+            save_qualified_workflow(workflow, args.bundle)
+
+        decisions = []
+        graphs = [("__program__", workflow.program), *workflow.subflows.items()]
+        for graph_id, graph in graphs:
+            if graph is None:
+                continue
+            for state_id, state in sorted(graph.states.items()):
+                if (
+                    state.kind is not StateKind.BUSINESS_DECISION
+                    or state.decision is None
+                ):
+                    continue
+                decisions.append(
+                    {
+                        "graph_id": graph_id,
+                        "state_id": state_id,
+                        "contract_digest": f"sha256:{state.decision.contract_sha256()}",
+                        "output_param": state.decision.output_param,
+                        "option_ids": [option.id for option in state.decision.options],
+                        "successor_state_ids": [
+                            option.target for option in state.decision.options
+                        ],
+                    }
+                )
+        print(
+            json.dumps(
+                {
+                    "schema_version": "openadapt.business-decision-authoring-report/v1",
+                    "decisions": decisions,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
 
     if verb == "judgment-cases":
         if args.check:
@@ -4533,6 +4614,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Actuation path whose effect is being qualified (default: gui)",
     )
     q.add_argument("--tier", type=int, choices=(1, 2, 3, 4), required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "business-decision",
+        help=(
+            "Add, update, or inspect one reviewed finite business decision "
+            "without editing the workflow manifest"
+        ),
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument(
+        "--input",
+        metavar="JSON",
+        help=(
+            "Local openadapt.business-decision-authoring/v1 JSON file "
+            "(required without --check)"
+        ),
+    )
+    q.add_argument(
+        "--check",
+        action="store_true",
+        help="List the bundle's current typed decisions without changing it",
+    )
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(

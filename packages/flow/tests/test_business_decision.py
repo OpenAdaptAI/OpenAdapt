@@ -6,14 +6,17 @@ operator-facing copy or component markup.
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
+from openadapt_flow.__main__ import main
 from openadapt_flow.bundle_validation import validate_workflow
 from openadapt_flow.execution_profiles import _program_action_trace
 from openadapt_flow.ir import (
@@ -296,6 +299,66 @@ def test_qualification_authoring_adds_one_typed_decision_and_advances_revision()
     assert authored.qualification is not None
     assert authored.qualification.revision == revision + 1
     assert authored.qualification.last_certification is None
+
+
+def test_qualification_cli_authors_and_inspects_one_exact_decision(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workflow = _authoring_workflow()
+    init_project(workflow, environment=_qualification_environment())
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    authoring = tmp_path / "decision.json"
+    authoring.write_text(
+        json.dumps(
+            {
+                "schema_version": "openadapt.business-decision-authoring/v1",
+                "graph_id": "__program__",
+                "state_id": "review",
+                "insert_before_state_id": "accept",
+                "decision": _authoring_spec().model_dump(mode="json"),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "qualify",
+                "business-decision",
+                str(bundle),
+                "--input",
+                str(authoring),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["schema_version"] == (
+        "openadapt.business-decision-authoring-report/v1"
+    )
+    assert report["decisions"] == [
+        {
+            "contract_digest": ("sha256:" + _authoring_spec().contract_sha256()),
+            "graph_id": "__program__",
+            "option_ids": ["accept", "reject"],
+            "output_param": "review_outcome",
+            "state_id": "review",
+            "successor_state_ids": ["accept", "reject"],
+        }
+    ]
+    loaded = Workflow.load(bundle)
+    assert loaded.program is not None
+    assert loaded.program.states["prepare"].transitions[0].target == "review"
+    assert loaded.qualification is not None
+    revision = loaded.qualification.revision
+
+    assert main(["qualify", "business-decision", str(bundle), "--check"]) == 0
+    checked = json.loads(capsys.readouterr().out)
+    assert checked == report
+    assert Workflow.load(bundle).qualification.revision == revision
 
 
 def test_qualification_authoring_lifts_a_linear_workflow_before_insertion():
