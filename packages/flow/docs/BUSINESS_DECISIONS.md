@@ -264,3 +264,18 @@ These transport attestations do not replace Flow admission. The runner still
 verifies the exact task and Cloud answer again before it submits the local
 decision. The runner still performs fresh live-state revalidation before any
 selected successor action.
+
+`BusinessDecisionCloudRelay` connects these boundaries for one paused run. It:
+
+1. verifies and registers the exact qualified task;
+2. polls one answer leased to the same tenant and runner;
+3. verifies the Cloud answer and maps its opaque role through the local role
+   map;
+4. stores the answer in Flow's durable business-decision journal;
+5. returns the signed portable receipt and runner transport attestation.
+
+An uncertain receipt request does not repeat the decision. Flow retains the
+same local answer. The runner can submit the same receipt again when Cloud
+redelivers the signed answer. The receipt still means only `answer_recorded` and
+`recorded_pending_revalidation`. It does not mean that a successor action ran or
+that the business effect is `VERIFIED`.
