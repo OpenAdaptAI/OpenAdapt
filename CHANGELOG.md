@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v1.12.1 (2026-08-11)
+
+### Bug Fixes
+
+- **deps**: Bump h2 to 4.4.1 to resolve request-smuggling advisory
+  ([#1092](https://github.com/OpenAdaptAI/OpenAdapt/pull/1092),
+  [`c6fbd75`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c6fbd7535a638514d0366da1dcbe201244d30ea8))
+
+### Chores
+
+- Regenerate platform manifest for flow 1.31.0
+  ([#1092](https://github.com/OpenAdaptAI/OpenAdapt/pull/1092),
+  [`c6fbd75`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c6fbd7535a638514d0366da1dcbe201244d30ea8))
+
+- **release**: Reconcile platform manifest
+  ([`b57c25c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b57c25ccce503ecf6807a094fda881b038fc50e7))
+
+### Documentation
+
+- Bind mobile actions to the pause capability
+  ([#1091](https://github.com/OpenAdaptAI/OpenAdapt/pull/1091),
+  [`78133ba`](https://github.com/OpenAdaptAI/OpenAdapt/commit/78133ba63996985a0b050656e7521326019b0d73))
+
+- Explain the mobile decision path ([#1091](https://github.com/OpenAdaptAI/OpenAdapt/pull/1091),
+  [`78133ba`](https://github.com/OpenAdaptAI/OpenAdapt/commit/78133ba63996985a0b050656e7521326019b0d73))
+
+
 ## v1.12.0 (2026-08-05)
 
 ### Bug Fixes
