@@ -122,7 +122,11 @@ _CONTRACTS = {
         require_identity_coverage=True,
         require_consequential_postconditions=True,
         require_effect_contracts=True,
-        minimum_effect_tier=VerificationTier.PERSISTED_STATE_REACQUISITION,
+        # Regulated demands INDEPENDENT evidence: a persisted-state re-read
+        # (tier 3) shares the application surface the actuation drove, so it
+        # can never prove a consequential write to a regulated reviewer.
+        # Standard keeps the tier-3 floor above.
+        minimum_effect_tier=VerificationTier.INDEPENDENT_SESSION,
         require_approval_for_unverified_effects=False,
         allow_unverified_write_approval=False,
         require_encryption=True,

@@ -535,6 +535,75 @@ def test_regulated_requires_encryption_and_strictly_sealed_assets(tmp_path):
     assert admitted.passed, admitted.render()
 
 
+def test_regulated_refuses_persisted_readback_only_evidence(tmp_path):
+    """An irreversible write with only tier-3 evidence is refused under Regulated.
+
+    The same persisted-state verifier the Standard profile admits must fail
+    the Regulated approval gate, and the runtime pre-actuation recheck must
+    refuse (governed_refusal / HALTED) before any backend action.
+    """
+
+    class _PersistedStateVerifier(_TieredVerifier):
+        verification_tier = VerificationTier.PERSISTED_STATE_REACQUISITION
+
+    workflow, bundle = _sealed(tmp_path, _workflow(), encrypted=True)
+    standard = _gate(
+        workflow,
+        bundle,
+        ExecutionProfile.STANDARD,
+        verifier=_PersistedStateVerifier(),
+        durable=True,
+    )
+    assert standard.gate(GATE_APPROVAL).passed is True
+    refused = _gate(
+        workflow,
+        bundle,
+        ExecutionProfile.REGULATED,
+        verifier=_PersistedStateVerifier(),
+        durable=True,
+    )
+    assert not refused.passed
+    approval = refused.gate(GATE_APPROVAL)
+    assert approval.passed is False
+    assert "persisted-state-reacquisition" in approval.detail
+    assert "independent-session" in approval.detail
+
+    # Runtime fail-safe: admission with an independent-system verifier, then a
+    # weaker tier-3 verifier at run time, must refuse before actuation.
+    runtime_workflow, runtime_bundle = _sealed(
+        tmp_path / "runtime",
+        _key_workflow("regulated-tier-floor", with_effect=True),
+        encrypted=True,
+    )
+    gate = _gate(
+        runtime_workflow,
+        runtime_bundle,
+        ExecutionProfile.REGULATED,
+        verifier=_TieredVerifier(),
+        durable=True,
+    )
+    assert gate.passed, gate.render()
+    authorization = build_runtime_authorization(runtime_workflow, gate)
+    backend = FakeBackend()
+    report = Replayer(
+        backend,
+        vision=_ReadyVision(),
+        effect_verifier=_PersistedStateVerifier(),
+        governed_authorization=authorization,
+        durable=True,
+        checkpoint_key=_KEY,
+        require_settled=True,
+    ).run(
+        runtime_workflow,
+        bundle_dir=runtime_bundle,
+        run_dir=tmp_path / "regulated-tier-floor-run",
+    )
+
+    assert report.execution_outcome == ExecutionOutcome.HALTED.value
+    assert report.results[0].failure_category == "governed_refusal"
+    assert backend.actions == []
+
+
 def test_production_profiles_never_verify_screen_only_consequential_result():
     workflow = _workflow()
     unverified = RunReport(
@@ -598,10 +667,6 @@ def test_production_profiles_never_verify_screen_only_consequential_result():
             is ExecutionOutcome.VERIFIED
         )
         assert (
-            classify_execution_outcome(persisted, workflow, profile)
-            is ExecutionOutcome.VERIFIED
-        )
-        assert (
             classify_execution_outcome(immediate, workflow, profile)
             is ExecutionOutcome.COMPLETED_UNVERIFIED
         )
@@ -613,6 +678,18 @@ def test_production_profiles_never_verify_screen_only_consequential_result():
             classify_execution_outcome(missing_identity, workflow, profile)
             is ExecutionOutcome.COMPLETED_UNVERIFIED
         )
+    # Persisted-state reacquisition (tier 3) remains the Standard floor, but
+    # the Regulated profile requires INDEPENDENT evidence (tier 2 or
+    # stronger): an on-screen re-read of an irreversible write can never
+    # grade VERIFIED under Regulated.
+    assert (
+        classify_execution_outcome(persisted, workflow, ExecutionProfile.STANDARD)
+        is ExecutionOutcome.VERIFIED
+    )
+    assert (
+        classify_execution_outcome(persisted, workflow, ExecutionProfile.REGULATED)
+        is ExecutionOutcome.COMPLETED_UNVERIFIED
+    )
     missing_postcondition = workflow.model_copy(deep=True)
     missing_postcondition.steps[0].expect = []
     assert (
