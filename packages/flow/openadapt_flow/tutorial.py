@@ -150,6 +150,22 @@ class TutorialResult:
     break_it: Optional[BreakItResult] = None
 
 
+def _next_steps_block() -> str:
+    """The closing block the CLI prints after a plain VERIFIED tutorial run.
+
+    Only the success rail earns it: a halt or a ``--break-it`` rerun ends on
+    its own narrative instead.  The links match the flagship OpenAdapt
+    README so every surface points at the same three destinations.
+    """
+
+    return (
+        "That run made no model call and sent nothing off this computer.\n"
+        "  What it proves        https://openadapt.ai/execute\n"
+        "  Run it on your work   https://openadapt.ai/qualify\n"
+        "  Community             https://discord.gg/yF527cQbDG"
+    )
+
+
 def _http_json(url: str, *, method: str = "GET", body: Any = None) -> Any:
     data = None if body is None else json.dumps(body).encode("utf-8")
     request = Request(  # noqa: S310 - loopback only, built from serve()'s URL

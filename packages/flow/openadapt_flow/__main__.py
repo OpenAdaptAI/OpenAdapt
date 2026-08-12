@@ -929,6 +929,7 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
         GUIDED_PRESENTATION_DELAY_S,
         TUTORIAL_WORKFLOW_NAME,
         TutorialError,
+        _next_steps_block,
         run_tutorial,
     )
 
@@ -987,6 +988,7 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
             "\nNext: rerun this same bundle against a backend that lies -- and "
             "watch the engine halt:\n  openadapt-flow tutorial --break-it"
         )
+        print(f"\n{_next_steps_block()}")
     if result.execution_outcome != "VERIFIED":
         return 1
     return 0
