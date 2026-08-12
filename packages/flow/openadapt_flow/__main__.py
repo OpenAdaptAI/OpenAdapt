@@ -645,6 +645,7 @@ def _finish_replay(
         )
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
+    _maybe_attest_run(run_dir, report, args)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
@@ -1273,6 +1274,10 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation=operation)
     if refused is not None:
         return refused
+    # Opt-in attest pre-state snapshot: the earliest point where the run is
+    # ADMITTED (every gate above passed) and the run directory is final, but
+    # NO actuation has begun on either the desktop or the web path below.
+    _maybe_attest_pre_state(run_dir, args)
     if _normalize_kind(backend_cfg.kind) != "web":
         return _replay_desktop(
             args,
@@ -1831,6 +1836,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         args,
         backend_kind=_report_backend_kind(backend_cfg.kind),
     )
+    _maybe_attest_run(run_dir, report, args)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
@@ -3436,6 +3442,38 @@ def _maybe_report_run(
         print(f"(run summary report skipped: {e})")
 
 
+def _maybe_attest_pre_state(run_dir: Path, args=None) -> None:
+    """Opt-in pre-actuation hook: snapshot the system of record for attest.
+
+    Delegates to :mod:`openadapt_flow.attest_bridge` (a silent no-op without
+    ``--attest-contract`` / ``OPENADAPT_FLOW_ATTEST_CONTRACT``). Wrapped so
+    even an import failure cannot affect the run (WRAP-not-rewrite, mirrors
+    ``_maybe_report_break``).
+    """
+    try:
+        from openadapt_flow.attest_bridge import maybe_capture_pre_state
+
+        maybe_capture_pre_state(run_dir, args)
+    except Exception as e:  # noqa: BLE001 — a proof hook must never fail a run
+        print(f"(attest pre-state capture skipped: {e})")
+
+
+def _maybe_attest_run(run_dir: Path, report, args=None) -> None:
+    """Opt-in post-run hook: verify the claimed effect via openadapt-attest.
+
+    Delegates to :mod:`openadapt_flow.attest_bridge`, which lazy-imports the
+    separate ``openadapt_attest`` sidecar and degrades to one printed line
+    when it is not installed. Wrapped so no exception can ever change the
+    run's outcome, report, or exit code (mirrors ``_maybe_report_run``).
+    """
+    try:
+        from openadapt_flow.attest_bridge import maybe_attest_run
+
+        maybe_attest_run(run_dir, report, args)
+    except Exception as e:  # noqa: BLE001 — a proof hook must never fail a run
+        print(f"(attest receipt skipped: {e})")
+
+
 def _cmd_teach(args: argparse.Namespace) -> int:
     """Self-serve HALT -> LEARN -> RESOLVE for a halted run + a fix demo.
 
@@ -3689,6 +3727,54 @@ def _add_deployment_flags(
                 "sole loop relation."
             ),
         )
+
+
+def _add_attest_flags(p: argparse.ArgumentParser) -> None:
+    """Add the opt-in openadapt-attest proof-sidecar flags to a replay-family
+    subparser. Attest is a SEPARATE, privately distributed package; without it
+    these flags print a notice and do nothing (see docs/ATTEST_BRIDGE.md)."""
+    p.add_argument(
+        "--attest-contract",
+        default=None,
+        metavar="PATH",
+        help=(
+            "OPT-IN: effect-contract YAML for the openadapt-attest proof "
+            "sidecar. After the run it verifies the claimed effect against "
+            "the system of record and writes a SIGNED receipt "
+            "(attest_receipt.json) into the run directory. Never changes the "
+            "run outcome or exit code. Env fallback: "
+            "OPENADAPT_FLOW_ATTEST_CONTRACT"
+        ),
+    )
+    p.add_argument(
+        "--attest-sign-key",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Signing key for the attest receipt (env fallback: "
+            "OPENADAPT_FLOW_ATTEST_SIGN_KEY)"
+        ),
+    )
+    p.add_argument(
+        "--attest-audit-log",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Append-only audit log the attest sidecar writes to (env "
+            "fallback: OPENADAPT_FLOW_ATTEST_AUDIT_LOG)"
+        ),
+    )
+    p.add_argument(
+        "--attest-pre-state",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Existing pre-actuation system-of-record snapshot for delta "
+            "checks. When omitted, replay captures one into the run "
+            "directory (attest_pre_state.json) before actuation begins (env "
+            "fallback: OPENADAPT_FLOW_ATTEST_PRE_STATE)"
+        ),
+    )
 
 
 def _package_version() -> str:
@@ -4132,6 +4218,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_backend_flags(p)
     _add_deployment_flags(p, worklist=True)
+    _add_attest_flags(p)
     p.set_defaults(func=_cmd_replay)
 
     p = sub.add_parser(
@@ -4200,6 +4287,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_backend_flags(p)
     _add_deployment_flags(p, worklist=True)
+    _add_attest_flags(p)
     # Fail-closed admission-gate controls (see openadapt_flow.run_gate).
     p.add_argument(
         "--policy",
@@ -4322,6 +4410,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_backend_flags(p)
     _add_deployment_flags(p)
+    _add_attest_flags(p)
     p.set_defaults(func=_cmd_resume)
 
     p = sub.add_parser(

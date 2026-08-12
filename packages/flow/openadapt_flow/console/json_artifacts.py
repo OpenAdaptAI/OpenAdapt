@@ -29,6 +29,8 @@ ArtifactFormat = Literal["json", "jsonl"]
 _RUN_ROOT_FILES = {
     "approval.json",
     "attended_decisions.json",
+    "attest_claim.json",
+    "attest_receipt.json",
     "governed_policy.json",
     "pending_escalation.json",
     "report.json",
@@ -45,6 +47,8 @@ _ROOT_LABELS = {
     "annotations.json": "Workflow annotations",
     "approval.json": "Operator approval",
     "attended_decisions.json": "Attended decisions",
+    "attest_claim.json": "Attest effect claim",
+    "attest_receipt.json": "Attest signed receipt",
     "governed_policy.json": "Governed policy",
     "manifest.json": "Bundle manifest",
     "param_proposals.json": "Flagged parameter proposals",
