@@ -14,7 +14,7 @@ jobs:
       # v4 currently sends a mismatched Content-Length for this payload on
       # GitHub-hosted runners. Keep the last verified release until upstream
       # resolves the regression.
-      - uses: peter-evans/repository-dispatch@v3
+      - uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.DOCS_DISPATCH_TOKEN }}
           repository: OpenAdaptAI/openadapt-maintenance
