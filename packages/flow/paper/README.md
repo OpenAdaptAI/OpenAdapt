@@ -16,24 +16,31 @@ These five require a human decision and cannot be discharged by an agent. Every
 other checklist item is either closed with evidence or is an open *evidence*
 gap that requires new experiments, not a decision.
 
-1. **Authorship.** Final author list, order, ORCIDs, affiliations, and
-   corresponding author. Currently `Richard Abrich, OpenAdapt.AI (MLDSAI Inc.),
-   richard@openadapt.ai` (`paper/main.tex:36`, also `pdfauthor`). If the list
-   changes, update both.
+1. **Authorship — DECIDED 2026-08-13.** Solo: `Richard Abrich, OpenAdapt.AI
+   (MLDSAI Inc.), richard@openadapt.ai`, ORCID `0000-0002-9556-4491` (now in
+   `main.tex`). Revisit a co-author only for the ICML merge, and only for a
+   substantive contributor.
 2. **arXiv primary category, cross-lists, and endorsement.** Recommendation and
    justification below. arXiv requires endorsement for a first submission to a
    category; check your account before the deadline you care about, because
    obtaining endorsement is not instant.
-3. **arXiv licence.** Recommendation below.
-4. **Funding and conflict-of-interest statement.** The paper currently has none.
+3. **arXiv licence — DECIDED 2026-08-13.** CC BY 4.0, per the
+   recommendation below.
+4. **Funding and conflict-of-interest statement — DECIDED 2026-08-13.**
+   Added to `main.tex`: page-1 footnote plus an unnumbered section before the
+   bibliography. Original note: the paper previously had none.
    The author develops the evaluated system; `06_limitations.tex` already says
    so in the threats-to-validity paragraph, but a formal COI/funding statement
    is a separate, venue-facing decision (footnote on page 1 vs. an unnumbered
    section before the bibliography).
-5. **Venue intent.** The workshop condensation
-   (`paper/workshop/main.tex`) is written venue-neutral and uses `article`.
-   Retarget its document class once a specific workshop is chosen; the full
-   report is formatted for arXiv rather than for any camera-ready style.
+5. **Venue intent — DECIDED 2026-08-13.** Target: NeurIPS 2026 workshop
+   "Who Verifies the Agents?" (verify-agents-workshop.github.io; verified
+   non-archival, dual-submission welcome, 4-9 pages, deadline 29 Aug 2026
+   AoE, notification 29 Sep, Sydney 11-12 Dec; in-person travel approved).
+   The condensation leads with the pre-registered SWAR measurement
+   (openadapt-attest-bench) with the engine as apparatus. Retarget
+   `paper/workshop/main.tex` to the workshop's required style when the
+   condensation is rewritten; the full report stays arXiv-formatted.
 
 ### Recommended arXiv categories
 
