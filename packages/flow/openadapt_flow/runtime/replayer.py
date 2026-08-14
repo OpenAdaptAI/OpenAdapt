@@ -4653,7 +4653,7 @@ class Replayer:
                         "statement cannot replace independent verification"
                     )
                     break
-                if effect.count_new_only or effect.forbid_collateral_loss:
+                if effect.requires_baseline or effect.forbid_collateral_loss:
                     result.effect_verified = False
                     result.error = (
                         "the effect requires a pre-delivery delta or collateral-"
@@ -7377,11 +7377,22 @@ class Replayer:
         else:
             from openadapt_flow.runtime.effects._common import judge_records
 
+            # An effect whose CLAIM is a delta (``exact_new_set``) cannot be
+            # judged against a synthesized empty baseline: every record in
+            # scope would read as an addition, so the verdict would be
+            # fabricated rather than proved. Mark the synthetic baseline
+            # UNREACHABLE for those effects and let the judge return its own
+            # structured INDETERMINATE refusal. Every pre-existing kind keeps
+            # the readable empty baseline and is judged exactly as before.
+            needs_baseline = bool(candidate.requires_baseline)
+            detail: dict[str, Any] = {"current_state_readback": True}
+            if needs_baseline:
+                detail["baseline_unavailable_for_delta"] = True
             baseline = EffectState(
                 substrate=current.substrate,
-                reachable=True,
+                reachable=not needs_baseline,
                 records=[],
-                detail={"current_state_readback": True},
+                detail=detail,
             )
             verdict = judge_records(
                 candidate,
@@ -7415,7 +7426,7 @@ class Replayer:
                 required = (
                     bool(requirement(effect))
                     if callable(requirement)
-                    else bool(effect.count_new_only or effect.forbid_collateral_loss)
+                    else bool(effect.requires_baseline or effect.forbid_collateral_loss)
                 )
             state = cls._effect_pre_state_for(before, effect)
             # Legacy in-process verifiers may retain an opaque pre-state for

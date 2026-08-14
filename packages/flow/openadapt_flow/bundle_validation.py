@@ -50,6 +50,7 @@ from pydantic import BaseModel, Field
 from openadapt_flow.ir import (
     BundleManifest,
     BundleProvenance,
+    Effect,
     Interstitial,
     ParamKind,
     ParamSpec,
@@ -181,6 +182,26 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             reason=(
                 "absent composite-selection readback evidence predates its v2 "
                 "field; a populated band remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Effect,
+            field_name="new_records",
+            omitted_values=([],),
+            reason=(
+                "the empty declared-addition set predates the v2 field; only "
+                "an exact_new_set effect populates it, and a populated set is "
+                "the whole over-write contract and remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Effect,
+            field_name="identity_field",
+            omitted_values=("id",),
+            reason=(
+                "the 'id' default predates the v2 field and is inert on every "
+                "kind but exact_new_set; a contract naming ANY other identity "
+                "column remains sealed content"
             ),
         ),
     ),

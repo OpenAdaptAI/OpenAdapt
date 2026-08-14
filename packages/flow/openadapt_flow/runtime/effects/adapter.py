@@ -734,13 +734,13 @@ class CandidateEffectVerifier:
         requirement = getattr(candidate, "requires_readable_pre_state_for", None)
         if callable(requirement):
             return bool(requirement(effect))
-        return bool(effect.count_new_only or effect.forbid_collateral_loss)
+        return bool(effect.requires_baseline or effect.forbid_collateral_loss)
 
     @staticmethod
     def _pre_state_requirement(candidate: Any, effect: Effect) -> bool:
         requirement = getattr(candidate, "requires_readable_pre_state_for", None)
         if not callable(requirement):
-            return bool(effect.count_new_only or effect.forbid_collateral_loss)
+            return bool(effect.requires_baseline or effect.forbid_collateral_loss)
         isolated = effect.model_copy(deep=True)
         original = isolated.model_dump(mode="json")
         required = bool(requirement(isolated))

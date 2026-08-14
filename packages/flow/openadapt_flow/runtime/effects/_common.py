@@ -3,9 +3,10 @@ system-of-record records.
 
 Every substrate (REST, FHIR, filesystem) normalizes its system of record into
 a list of plain dicts and calls :func:`judge_records`, so the *decision* logic
--- at-most-once counting, idempotency-key de-duplication, field read-back, and
-collateral-loss detection -- lives in exactly ONE place (the same
-single-source-of-truth discipline the fault-model study uses for ``classify``).
+-- at-most-once counting, idempotency-key de-duplication, field read-back,
+collateral-loss detection, and the ``exact_new_set`` over-write guard -- lives
+in exactly ONE place (the same single-source-of-truth discipline the
+fault-model study uses for ``classify``).
 """
 
 from __future__ import annotations
@@ -78,6 +79,9 @@ def judge_records(
             unavailable=True,
         )
 
+    if effect.kind is EffectKind.EXACT_NEW_SET:
+        return _judge_exact_new_set(effect, before, current, substrate)
+
     matched = [r for r in current if record_matches(r, effect.match)]
     if effect.idempotency_key is not None:
         matched = [
@@ -104,6 +108,146 @@ def judge_records(
     if effect.kind is EffectKind.FIELD_EQUALS:
         return _judge_field_equals(effect, matched, substrate)
     return _judge_record_written(effect, before, current, matched, substrate)
+
+
+#: How many offending records one refutation reason names before it stops
+#: listing them. The COUNT is always exact; the sample keeps an audit line
+#: readable when an agent added dozens of unintended rows.
+_SAMPLE_LIMIT = 5
+
+
+def _selector_text(selector: dict[str, Any]) -> str:
+    return "{" + ", ".join(f"{k}={v}" for k, v in sorted(selector.items())) + "}"
+
+
+def _judge_exact_new_set(
+    effect: Effect,
+    before: EffectState,
+    current: list[dict[str, Any]],
+    substrate: str,
+) -> EffectVerdict:
+    """Judge the ``exact_new_set`` over-write guard.
+
+    The claim: the records ADDED to the scoped read set by this action are
+    EXACTLY ``effect.new_records`` -- each declared member added exactly as
+    many times as it is declared, and NO record added that no member names.
+    ``effect.match`` is the SCOPE (empty = the whole read set), not a target
+    selector.
+
+    Refuses (INDETERMINATE) rather than guesses when the added set cannot be
+    enumerated: an unreachable baseline, or any record on either side missing
+    ``effect.identity_field``.
+    """
+    if not before.reachable:
+        return _indeterminate(
+            effect,
+            substrate,
+            "exact_new_set requires a readable pre-state baseline, but the "
+            "system of record was unreachable before the action -- the set of "
+            "records this action ADDED cannot be enumerated; HALT",
+        )
+
+    identity = effect.identity_field
+    for label, records in (("pre-state", before.records), ("current", current)):
+        missing = sum(1 for r in records if r.get(identity, None) is None)
+        if missing:
+            return _indeterminate(
+                effect,
+                substrate,
+                f"exact_new_set cannot enumerate the added set: {missing} "
+                f"{label} record(s) carry no {identity!r} value. Supply an "
+                "identity_field that every record of the read set carries "
+                "(widen the query to return a stable identity column), or "
+                "remove this guard -- newness is never guessed",
+            )
+
+    before_identities = {str(r[identity]) for r in before.records}
+    in_scope = [r for r in current if record_matches(r, effect.match)]
+    added = [r for r in in_scope if str(r[identity]) not in before_identities]
+
+    reasons: list[str] = []
+
+    # (1) The headline: how many records the action added versus how many it
+    # was allowed to add.
+    if len(added) != effect.expected_count:
+        reasons.append(
+            f"the action added {len(added)} record(s) to the scoped read set "
+            f"but the contract declares exactly {effect.expected_count}"
+        )
+
+    # (2) Per declared member: present exactly as many times as declared.
+    declared: dict[str, tuple[dict[str, Any], int]] = {}
+    for selector in effect.new_records:
+        plain = {k: str(v) for k, v in selector.items()}
+        key = _selector_text(plain)
+        found, multiplicity = declared.get(key, (plain, 0))
+        declared[key] = (found, multiplicity + 1)
+    for key, (selector, multiplicity) in sorted(declared.items()):
+        observed = sum(1 for r in added if record_matches(r, selector))
+        if observed != multiplicity:
+            reasons.append(
+                f"declared new record {key} was added {observed} time(s), "
+                f"expected {multiplicity}"
+            )
+
+    # (3) THE GUARD: a record the action added that no declared member names.
+    extra = [
+        r
+        for r in added
+        if not any(
+            record_matches(r, {k: str(v) for k, v in selector.items()})
+            for selector in effect.new_records
+        )
+    ]
+    if extra:
+        sample = ", ".join(
+            _selector_text({k: str(v) for k, v in r.items() if k != identity})
+            for r in extra[:_SAMPLE_LIMIT]
+        )
+        hidden = len(extra) - _SAMPLE_LIMIT
+        more = "" if hidden <= 0 else f", and {hidden} more"
+        reasons.append(
+            f"{len(extra)} record(s) the action added are NOT in the declared "
+            f"set -- unintended write(s) to the system of record: {sample}{more}"
+        )
+
+    # (4) Removals inside the scope this effect speaks for.
+    if effect.forbid_collateral_loss:
+        current_identities = {str(r[identity]) for r in current}
+        lost = [
+            r
+            for r in before.records
+            if record_matches(r, effect.match)
+            and str(r[identity]) not in current_identities
+        ]
+        if lost:
+            reasons.append(
+                f"{len(lost)} pre-existing record(s) inside the declared scope "
+                "vanished -- collateral loss"
+            )
+
+    if reasons:
+        return EffectVerdict(
+            verdict=Verdict.REFUTED,
+            kind=effect.kind,
+            substrate=substrate,
+            reason="; ".join(reasons),
+            observed_count=len(added),
+            expected_count=effect.expected_count,
+            matched_records=added,
+        )
+    return EffectVerdict(
+        verdict=Verdict.CONFIRMED,
+        kind=effect.kind,
+        substrate=substrate,
+        reason=(
+            f"the action added exactly the {effect.expected_count} declared "
+            "record(s) to the scoped read set, and nothing else"
+        ),
+        observed_count=len(added),
+        expected_count=effect.expected_count,
+        matched_records=added,
+    )
 
 
 def _judge_record_written(

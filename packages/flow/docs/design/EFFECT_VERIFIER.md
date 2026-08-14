@@ -35,8 +35,10 @@ class EffectVerifier(Protocol):
 ```
 
 - **`Effect`** is the RFC's typed effect. Kinds: `record_written` (a record
-  matching a selector exists *exactly* `expected_count` times — at-most-once)
-  and `field_equals` (a read-back of one field). Substrate-neutral: the SAME
+  matching a selector exists *exactly* `expected_count` times — at-most-once),
+  `field_equals` (a read-back of one field), and `exact_new_set` (the records
+  ADDED inside a scope are EXACTLY the declared set — the over-write guard;
+  see [`docs/EFFECT_KIT.md`](../EFFECT_KIT.md)). Substrate-neutral: the SAME
   `Effect` is checked by every verifier.
 - **`capture_pre_state`** snapshots the system of record *before* the action —
   a baseline for delta/at-most-once counting and for collateral-loss

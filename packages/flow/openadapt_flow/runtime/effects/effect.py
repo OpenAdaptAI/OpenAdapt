@@ -166,6 +166,15 @@ class EffectKind(str, Enum):
     #: (and catches a partial save); for a read-only workflow it independently
     #: verifies the declared business outcome against the system of record.
     FIELD_EQUALS = "field_equals"
+    #: The set of records ADDED to the read set (scoped by :attr:`Effect.match`)
+    #: must be EXACTLY the declared set :attr:`Effect.new_records` -- every
+    #: declared record present once, and NO additional new record. This is the
+    #: over-write guard: a per-record ``record_written`` effect answers "is my
+    #: record there?" and is silent about the records it never named, so an
+    #: agent that wrote the 6 intended rows AND 31 unintended ones satisfies
+    #: every per-record contract. Requires a REAL pre-state baseline (a set
+    #: delta against an unknown baseline is never guessed -> INDETERMINATE).
+    EXACT_NEW_SET = "exact_new_set"
 
 
 #: A screen region ``(x, y, w, h)`` in the recorded/live frame's pixel space.
@@ -274,7 +283,28 @@ class Effect(BaseModel):
     value: Optional[ValueExpr] = None
     #: ``record_written`` only: how many matching records must exist. 1 is the
     #: at-most-once contract for a consequential write; 0 asserts absence.
+    #: ``exact_new_set``: the declared CARDINALITY of the added set, which must
+    #: equal ``len(new_records)`` (validated) -- an explicit, hashed number so
+    #: a hand edit that deletes one member of the set fails loud instead of
+    #: silently weakening the contract.
     expected_count: int = 1
+    #: ``exact_new_set`` only: the declared set of records the action may add,
+    #: one selector per intended record (same matching rules as :attr:`match`,
+    #: each value a literal or a run-``param`` reference). Repeating an
+    #: identical selector declares that many identical additions. Empty with
+    #: ``expected_count: 0`` is the meaningful assertion "this action adds
+    #: NOTHING to this read set".
+    new_records: list[dict[str, ValueExpr]] = Field(default_factory=list)
+    #: ``exact_new_set`` only: the record field whose value gives a record its
+    #: stable identity, used to tell records ADDED by the action from records
+    #: that were already there. It must be present on every record of both
+    #: snapshots; a record missing it makes the verdict INDETERMINATE (the
+    #: added set cannot be enumerated, so it is never guessed). An
+    #: environment-assigned surrogate key is the RIGHT choice here even though
+    #: it is the wrong thing to pin in a selector: it cannot identify the
+    #: INTENDED record across runs, but it does distinguish a new row from an
+    #: old one within one run.
+    identity_field: str = "id"
     #: Optional idempotency / at-most-once key. When set, ``record_written``
     #: counts records bearing THIS key (via :attr:`key_field`) and requires
     #: exactly :attr:`expected_count` -- so a duplicate submission that reused
@@ -310,7 +340,11 @@ class Effect(BaseModel):
     #: pre-state (``before``) and does NOT match :attr:`match` has since
     #: vanished -- collateral loss. This is what catches a stale / lost-update
     #: (last-write-wins) fault: our row lands (count 1, looks fine) while a
-    #: concurrent actor's row was silently destroyed.
+    #: concurrent actor's row was silently destroyed. On an ``exact_new_set``
+    #: effect :attr:`match` is a SCOPE rather than a target, so the rule reads
+    #: the other way round: a pre-state record INSIDE the scope that has
+    #: vanished is the collateral loss (an exact-set claim about additions
+    #: must not quietly tolerate removals inside the same scope).
     forbid_collateral_loss: bool = True
     #: Consequential-write flag (mirrors ``Step.risk`` / RFC ``State.risk``).
     #: Compensation (``effects.compensation``) only fires for irreversible
@@ -373,6 +407,20 @@ class Effect(BaseModel):
     def _coerce_value(cls, v: Any) -> Any:
         return cls._coerce_expr(v)
 
+    @field_validator("new_records", mode="before")
+    @classmethod
+    def _coerce_new_records(cls, v: Any) -> Any:
+        if isinstance(v, list):
+            return [
+                (
+                    {k: cls._coerce_expr(val) for k, val in selector.items()}
+                    if isinstance(selector, dict)
+                    else selector
+                )
+                for selector in v
+            ]
+        return v
+
     @model_validator(mode="after")
     def _count_new_only_scope(self) -> "Effect":
         """``count_new_only`` is a ``record_written`` guard; refuse (fail
@@ -380,9 +428,56 @@ class Effect(BaseModel):
         if self.count_new_only and self.kind is not EffectKind.RECORD_WRITTEN:
             raise ValueError(
                 "count_new_only applies only to record_written effects "
-                "(a field_equals read-back has no newness delta)"
+                "(a field_equals read-back has no newness delta; an "
+                "exact_new_set effect always counts new records only)"
             )
         return self
+
+    @model_validator(mode="after")
+    def _exact_new_set_shape(self) -> "Effect":
+        """Refuse an ``exact_new_set`` whose declared set is unusable, and
+        refuse ``new_records`` on any other kind rather than ignore it."""
+        if self.kind is not EffectKind.EXACT_NEW_SET:
+            if self.new_records:
+                raise ValueError(
+                    "new_records applies only to exact_new_set effects "
+                    f"(this effect is {self.kind.value})"
+                )
+            return self
+        for position, selector in enumerate(self.new_records, start=1):
+            if not selector:
+                raise ValueError(
+                    f"exact_new_set member {position} has an EMPTY selector, "
+                    "which matches every record -- every member must name at "
+                    "least one field"
+                )
+        if self.expected_count != len(self.new_records):
+            raise ValueError(
+                "an exact_new_set declares expected_count == len(new_records) "
+                f"(got expected_count={self.expected_count} for "
+                f"{len(self.new_records)} declared record(s)); the cardinality "
+                "is stated explicitly so an edit that drops a member of the "
+                "set fails loud instead of silently weakening the contract"
+            )
+        if not self.identity_field:
+            raise ValueError(
+                "an exact_new_set requires a non-empty identity_field naming "
+                "the record field that distinguishes a new record from a "
+                "pre-existing one"
+            )
+        return self
+
+    @property
+    def requires_baseline(self) -> bool:
+        """Whether judging this effect needs a REAL pre-action snapshot.
+
+        True for a ``count_new_only`` delta and for every ``exact_new_set``
+        guard: both answer "what did THIS action add?", which is unanswerable
+        against an unknown or synthetic-empty baseline. Callers that would
+        otherwise supply a post-hoc empty baseline (``check.run_check``, the
+        gate) must refuse instead -- a set delta is never guessed.
+        """
+        return self.count_new_only or self.kind is EffectKind.EXACT_NEW_SET
 
     # -- run-time parameter binding (P0-3) -----------------------------------
     def resolve(
@@ -403,6 +498,10 @@ class Effect(BaseModel):
             deep=True,
             update={
                 "match": {k: v.resolved(params) for k, v in self.match.items()},
+                "new_records": [
+                    {k: v.resolved(params) for k, v in selector.items()}
+                    for selector in self.new_records
+                ],
                 "value": None if self.value is None else self.value.resolved(params),
                 "idempotency_key": (
                     None
@@ -473,6 +572,14 @@ class Effect(BaseModel):
         }
         if self.count_new_only:
             payload["count_new_only"] = True
+        # Bound ONLY on the new kind, so every pre-existing effect's digest
+        # (and every ledger entry that pins it) stays byte-identical.
+        if self.kind is EffectKind.EXACT_NEW_SET:
+            payload["new_records"] = [
+                {k: value(v) for k, v in sorted(selector.items())}
+                for selector in self.new_records
+            ]
+            payload["identity_field"] = self.identity_field
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -481,7 +588,12 @@ class Effect(BaseModel):
     def referenced_params(self) -> set[str]:
         """Return the parameter names that determine this effect contract."""
 
-        expressions = [*self.match.values(), self.value, self.idempotency_key]
+        expressions = [
+            *self.match.values(),
+            *(expr for selector in self.new_records for expr in selector.values()),
+            self.value,
+            self.idempotency_key,
+        ]
         return {
             expression.param
             for expression in expressions
@@ -530,6 +642,12 @@ class Effect(BaseModel):
         # its hash — PR #129) keeps its exact digest.
         if self.count_new_only:
             payload["count_new_only"] = True
+        if self.kind is EffectKind.EXACT_NEW_SET:
+            payload["new_records"] = [
+                {k: str(v) for k, v in sorted(selector.items())}
+                for selector in self.new_records
+            ]
+            payload["identity_field"] = self.identity_field
         return payload
 
     def _semantic_contract_sha256(self) -> str:

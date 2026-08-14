@@ -22,7 +22,8 @@ from the reference apps.
 
 1. **The bundle declares WHAT must be true** — typed `Effect` contracts on
    each consequential step (`record_written` for mutations; `field_equals`
-   for a unique persisted field or independently read business outcome),
+   for a unique persisted field or independently read business outcome;
+   `exact_new_set` for the full set of records an action may add),
    at-most-once counts, idempotency keys, and `{param: ...}` references that
    bind to the run's governed parameters. Contracts are substrate-neutral.
 2. **The deployment declares WHERE truth lives** — the `effects:` section of
@@ -58,8 +59,8 @@ from the reference apps.
 
 All substrates share one judge (`runtime/effects/_common.py`), so
 at-most-once counting, idempotency-key de-duplication, field read-back,
-collateral-loss detection, and the duplicate-write guard below behave
-identically everywhere.
+collateral-loss detection, the duplicate-write guard, and the `exact_new_set`
+over-write guard below behave identically everywhere.
 
 ### The duplicate-write / idempotency guard (`count_new_only`)
 
@@ -69,6 +70,63 @@ NEW matching record was created by this action."* Use it when the selector
 legitimately matches pre-existing rows (e.g. "an encounter for this patient").
 It requires a readable pre-state — an unreachable baseline is INDETERMINATE →
 HALT, never a guess. Available on every substrate.
+
+### The over-write guard (`exact_new_set`) — opt-in, and why you want it
+
+Every other kind answers **"is my record there?"**. None of them answers
+**"and nothing else?"**. A contract set that declares one `record_written`
+per intended new record is silent about the records it never named, so an
+actuation that writes the 6 intended rows **and 31 unintended ones** satisfies
+every declared contract: the runtime CONFIRMS while the system of record holds
+writes nobody asked for. That is a **false pass** — the one error direction
+this design must never take. (The 6-vs-37 case is not hypothetical: it was
+measured in a 150-trial benchmark study of an agent asked to download 6
+records.)
+
+`Effect(kind=exact_new_set, ...)` closes it. One **table-scoped** effect
+declares the FULL set of records the action may add:
+
+```yaml
+effects:
+  - kind: exact_new_set
+    # `match` is the SCOPE, not a target selector. Empty = the whole read set.
+    match: {user_id: "32"}
+    # One selector per intended record. Repeat a selector to declare that many
+    # identical additions. Values may be literals or {param: ...} references.
+    new_records:
+      - {user_id: "32", song_id: "199"}
+      - {user_id: "32", song_id: "9"}
+    # Must equal len(new_records). Stated explicitly so an edit that drops a
+    # member fails loud instead of silently weakening the contract.
+    expected_count: 2
+    # How a record ADDED by this action is told apart from one already there.
+    # A surrogate key is the RIGHT choice here even though it is the wrong
+    # thing to pin in a selector.
+    identity_field: id
+```
+
+It REFUTES: an addition no member names (the guard), a missing or duplicated
+member, a wrong cardinality, and collateral loss inside the same scope. It
+requires a **real pre-action baseline**: with an unreachable baseline, or a
+record on either side carrying no `identity_field` value, the added set cannot
+be enumerated and the verdict is INDETERMINATE → HALT. Newness is never
+guessed. `new_records: []` with `expected_count: 0` is the meaningful
+assertion *"this action adds NOTHING to this read set."*
+
+Available on every substrate (it runs in the shared judge). It is judged
+against the pre-action snapshot, so the current-state read-back paths (durable
+resume, attended qualified read-back) refuse it rather than judge it against a
+synthesized empty baseline.
+
+**Backward compatibility and the honest boundary.** This kind is **additive
+and opt-in**. Flow contracts are operator-authored — there is no derivation
+step that could turn the guard on for you — so every contract written before
+this option judges **exactly** as it did before, and its `contract_hash` is
+byte-identical (the new fields enter the digest only on the new kind).
+The boundary follows directly: **an existing contract does not detect an
+over-write unless the operator declares an `exact_new_set` effect for that
+read set.** Declare one on any step where an unintended extra write would
+matter.
 
 ### The SQL table-delta audit
 

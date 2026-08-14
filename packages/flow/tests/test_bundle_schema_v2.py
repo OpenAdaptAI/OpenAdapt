@@ -105,6 +105,12 @@ _SYNTHETIC_LEGACY_DIGESTS = {
     "program-encrypted": (
         "3173669a4a0c649a6cb8922306f3a30886b35cd73061484d2384a10900899986"
     ),
+    # A step carrying ONE pre-existing record_written contract. This digest was
+    # computed by the engine as it stood BEFORE the exact_new_set fields were
+    # added, so the regression cannot merely agree with the new code.
+    "linear-effect": (
+        "89f3648282f337a085891bf2d9deaa23b70f3037d6427ff008a848fafbeccaf6"
+    ),
 }
 _SYNTHETIC_BUNDLE_KEY = "synthetic-sealed-v2-compatibility-key"
 
@@ -151,6 +157,16 @@ def _step_payloads(content: dict, shape: str) -> list[dict]:
     ]
 
 
+def _effect_payloads(content: dict, shape: str) -> list[dict]:
+    """The exact Effect JSON objects owned by the steps in either IR shape."""
+
+    return [
+        effect
+        for step in _step_payloads(content, shape)
+        for effect in step.get("effects", [])
+    ]
+
+
 def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
     """Render the digest content emitted immediately before frame_path existed.
 
@@ -173,6 +189,12 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         assert step.pop("drag_end_anchor") is None
         assert step.pop("selection_commit_key") is None
         assert step.pop("selection_region") is None
+    for effect in _effect_payloads(content, shape):
+        # Reviewed v2 omission: the exact_new_set over-write guard postdates
+        # these seals. Navigated to the exact owning Effect, never stripped by
+        # key name -- see the note above.
+        assert effect.pop("new_records") == []
+        assert effect.pop("identity_field") == "id"
     return content
 
 
@@ -219,6 +241,9 @@ def _write_synthetic_pre_field_bundle(
         assert step.pop("field_label") is None
         assert step.pop("selection_commit_key") is None
         assert step.pop("selection_region") is None
+    for effect in _effect_payloads(raw, shape):
+        assert effect.pop("new_records") == []
+        assert effect.pop("identity_field") == "id"
     serialized = json.dumps(raw, sort_keys=True).encode("utf-8")
 
     if encrypted:
@@ -388,8 +413,105 @@ def test_pre_field_encrypted_certified_bundle_loads_with_original_digest(tmp_pat
     assert loaded.decrypted_template("templates/btn.png") is not None
 
 
-def test_sealed_empty_defaults_do_not_implicitly_cross_schema_versions():
+def _effect_workflow(effects) -> Workflow:
+    """A linear structural workflow whose single step carries ``effects``."""
+
     wf = _structural_workflow("linear")
+    wf.steps[0].effects = list(effects)
+    return wf
+
+
+def test_default_exact_new_set_fields_preserve_pre_field_sealed_v2_digest(tmp_path):
+    """A bundle sealed BEFORE the over-write guard existed still validates.
+
+    Its steps carry effect contracts, so the additive ``new_records`` /
+    ``identity_field`` fields land inside the sealed content unless the
+    reviewed v2 omission rules apply. Without them every customer bundle with
+    a declared effect would fail integrity verification.
+    """
+    b = _write_bundle_dir(tmp_path)
+    wf = _effect_workflow(
+        [
+            Effect(
+                kind=EffectKind.RECORD_WRITTEN,
+                match={"patient_id": "p1"},
+                expected_count=1,
+            )
+        ]
+    )
+
+    file_hashes = bv.compute_file_hashes(wf, b)
+    legacy_digest = _synthetic_legacy_digest(wf, "linear", file_hashes)
+    assert legacy_digest == _SYNTHETIC_LEGACY_DIGESTS["linear-effect"]
+    assert bv.compute_content_digest(wf, file_hashes) == legacy_digest
+    assert (
+        _write_synthetic_pre_field_bundle(b, wf, "linear", encrypted=False)
+        == legacy_digest
+    )
+
+    loaded = Workflow.load(b, verify_integrity=True)
+    assert loaded.manifest is not None
+    assert loaded.manifest.content_digest == legacy_digest
+    assert loaded.steps[0].effects[0].kind is EffectKind.RECORD_WRITTEN
+
+
+def test_a_declared_exact_new_set_is_sealed_content(tmp_path):
+    """The omission must not weaken the digest for a contract USING the guard.
+
+    The rules fire only at the semantically-empty default. A declared
+    over-write guard, and any identity column other than the default, are
+    ordinary sealed content: editing either changes the digest.
+    """
+    b = _write_bundle_dir(tmp_path)
+
+    def _guard(new_records, identity_field="id"):
+        return _effect_workflow(
+            [
+                Effect(
+                    kind=EffectKind.EXACT_NEW_SET,
+                    new_records=new_records,
+                    expected_count=len(new_records),
+                    identity_field=identity_field,
+                )
+            ]
+        )
+
+    declared = [{"user_id": "32", "song_id": "199"}]
+    wf = _guard(declared)
+    file_hashes = bv.compute_file_hashes(wf, b)
+    digest = bv.compute_content_digest(wf, file_hashes)
+
+    # The declared set survives canonicalization -- the rule did NOT fire.
+    effect = _effect_payloads(bv._workflow_content(wf), "linear")[0]
+    assert len(effect["new_records"]) == 1
+    # The rules are VALUE-scoped, exactly like every other entry in the
+    # registry: the 'id' default is omitted even here. That does not weaken
+    # this contract, because `kind`, `expected_count` and the declared set are
+    # all sealed, and no other identity column can reach the default.
+    assert "identity_field" not in effect
+
+    # A different declared set is different sealed content.
+    altered = _guard([{"user_id": "32", "song_id": "9"}])
+    assert bv.compute_content_digest(altered, file_hashes) != digest
+
+    # So is a second, undeclared addition.
+    widened = _guard([*declared, {"user_id": "32", "song_id": "9"}])
+    assert bv.compute_content_digest(widened, file_hashes) != digest
+
+    # And so is a non-default identity column.
+    rekeyed = _guard(declared, identity_field="row_id")
+    assert bv.compute_content_digest(rekeyed, file_hashes) != digest
+    rekeyed_effect = _effect_payloads(bv._workflow_content(rekeyed), "linear")[0]
+    assert rekeyed_effect["identity_field"] == "row_id"
+
+    # A guard declaring "this action adds NOTHING" is still distinguishable
+    # from the pre-field record_written seal: its kind is sealed content.
+    empty_guard = _guard([])
+    assert bv.compute_content_digest(empty_guard, file_hashes) != digest
+
+
+def test_sealed_empty_defaults_do_not_implicitly_cross_schema_versions():
+    wf = _effect_workflow([Effect(kind=EffectKind.RECORD_WRITTEN, match={"a": "b"})])
     rendered = wf.model_dump(mode="json", exclude={"manifest"})
 
     bv._apply_sealed_canonical_omissions(wf, rendered, schema_version=3)
@@ -399,6 +521,9 @@ def test_sealed_empty_defaults_do_not_implicitly_cross_schema_versions():
     step = _step_payloads(rendered, "linear")[0]
     assert "selection_commit_key" in step
     assert "selection_region" in step
+    effect = _effect_payloads(rendered, "linear")[0]
+    assert "new_records" in effect
+    assert "identity_field" in effect
 
 
 def test_legacy_landmark_without_match_mode_keeps_digest_and_loads_fuzzy(tmp_path):

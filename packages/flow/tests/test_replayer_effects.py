@@ -421,3 +421,46 @@ def test_no_effects_bundle_replays_unchanged(tmp_path):
     assert r.effect_verified is None
     assert r.effect_results == []
     assert ("press", "Enter") in backend.actions
+
+
+# -- exact_new_set: a delta claim is never judged against a fabricated
+# -- baseline (current-state read-back path) --------------------------------
+
+
+def test_current_state_readback_refuses_to_judge_an_exact_new_set():
+    """``_verify_current_effect`` synthesizes an EMPTY baseline for adapters
+    with no ``verify_current_state``. For a kind whose CLAIM is a delta every
+    in-scope record would then read as an addition, so the verdict would be
+    fabricated. The judge must refuse (INDETERMINATE) instead."""
+    from openadapt_flow.runtime.effects.effect import EffectState, Verdict
+
+    effect = Effect(
+        kind=EffectKind.EXACT_NEW_SET,
+        new_records=[{"song_id": "199"}],
+        expected_count=1,
+    )
+    current = EffectState(
+        substrate="test",
+        reachable=True,
+        records=[{"id": 1, "song_id": "199"}, {"id": 2, "song_id": "9"}],
+    )
+    verdict = Replayer._verify_current_effect(object(), effect, current)
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "readable pre-state baseline" in verdict.reason
+
+
+def test_current_state_readback_still_judges_pre_existing_kinds():
+    """The same path is unchanged for every kind that existed before."""
+    from openadapt_flow.runtime.effects.effect import EffectState, Verdict
+
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"song_id": "199"},
+        expected_count=1,
+        forbid_collateral_loss=False,
+    )
+    current = EffectState(
+        substrate="test", reachable=True, records=[{"id": 1, "song_id": "199"}]
+    )
+    verdict = Replayer._verify_current_effect(object(), effect, current)
+    assert verdict.verdict is Verdict.CONFIRMED
