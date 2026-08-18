@@ -200,14 +200,15 @@ jobs:
 
       - name: Commit the reconciled manifest
         run: |
-          if git diff --quiet -- platform-manifest.json; then
-            echo "platform-manifest.json already matches the published release."
+          if git diff --quiet -- \
+            platform-manifest.json docs/platform-compatibility-report.md; then
+            echo "The platform BOM already matches the published release."
             exit 0
           fi
           git config user.name "OpenAdapt Bot"
           git config user.email "bot@openadapt.ai"
-          git add platform-manifest.json
-          git commit -m "chore(release): reconcile platform manifest"
+          git add platform-manifest.json docs/platform-compatibility-report.md
+          git commit -m "chore(release): reconcile platform BOM"
           git push origin HEAD:main
 
   report-release-failure:
