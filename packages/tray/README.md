@@ -197,13 +197,11 @@ Running the process requires a graphical desktop/session. Without a compatible
 desktop IPC server or hosted token it may correctly remain offline, fail local
 actions, or open only browser routes.
 
-For a runnable OpenAdapt workflow, use the canonical engine separately:
+For a runnable OpenAdapt workflow, use the canonical launcher separately:
 
 ```bash
-pip install openadapt-flow
-openadapt-flow demo-record --out rec
-openadapt-flow compile rec --out bundle --name my-task
-openadapt-flow replay bundle
+pip install 'openadapt[browser]'
+openadapt quickstart
 ```
 
 ## Configuration
