@@ -11,6 +11,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import sqlite3
 import sys
@@ -432,6 +433,65 @@ def test_qualification_workflow_is_path_filtered_manual_and_fail_loud() -> None:
     assert "|| pip install" not in workflow
     assert 'pip install -e ".[rdp]"' in workflow
     assert "pip check" in workflow
+
+
+def test_workflow_separates_required_evidence_from_optional_presentation() -> None:
+    workflow = (
+        REPO / ".github" / "workflows" / "docker-rdp-vision-ladder.yml"
+    ).read_text()
+    required_start = workflow.index("\n  docker-rdp-vision-ladder:")
+    presentation_start = workflow.index("\n  rdp-presentation:")
+    required = workflow[required_start:presentation_start]
+    presentation = workflow[presentation_start:]
+
+    assert "timeout-minutes: 45" in required
+    assert "run_rdp_ladder_qualification.py" in required
+    qualification_start = required.index("- name: Run the vision-ladder qualification")
+    qualification_end = required.index("\n\n", qualification_start)
+    qualification_step = required[qualification_start:qualification_end]
+    assert "timeout-minutes: 15" in qualification_step
+    assert "Upload fail-closed qualification evidence" in required
+    assert "name: rdp-ladder-qualification" in required
+    assert "if-no-files-found: error" in required
+    assert "Render the paced RDP presentation" not in required
+    assert "render_presentation.py" not in required
+    assert required.index("Upload fail-closed qualification evidence") < required.index(
+        "- name: Tear down"
+    )
+    teardown = required[required.index("- name: Tear down") :]
+    assert "if: always()" in teardown
+    assert "timeout-minutes: 2" in teardown
+
+    # Every step in the required job is bounded. Their complete maximum is
+    # 39 minutes. The 45-minute job leaves six minutes for runner and action
+    # overhead, and the qualification timeout leaves 28 minutes for setup,
+    # evidence upload, and the separately bounded teardown.
+    step_timeouts = [
+        int(value) for value in re.findall(r"timeout-minutes: (\d+)", required)
+    ]
+    assert step_timeouts == [45, 3, 3, 7, 5, 2, 15, 2, 2]
+    job_timeout, *bounded_steps = step_timeouts
+    assert sum(bounded_steps) + 5 <= job_timeout
+    qualification_timeout = 15
+    teardown_timeout = 2
+    assert job_timeout - qualification_timeout - teardown_timeout >= 8
+
+    assert "needs: docker-rdp-vision-ladder" in presentation
+    assert "github.event_name == 'workflow_dispatch'" in presentation
+    assert "github.ref == 'refs/heads/main'" in presentation
+    assert "timeout-minutes: 22" in presentation
+    assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in (
+        presentation
+    )
+    assert "name: rdp-ladder-qualification" in presentation
+    assert "run_rdp_ladder_qualification.py" not in presentation
+    assert "render_presentation.py" in presentation
+    assert "timeout-minutes: 15" in presentation
+    assert "name: rdp-ladder-presentation" in presentation
+    assert "openadapt-rdp-demo.timeline.json" in presentation
+    assert "openadapt-rdp-demo.manifest.json" in presentation
+    assert "Tear down presentation workspace" in presentation
+    assert "timeout-minutes: 1" in presentation
 
 
 def test_fixture_policy_keeps_identity_effect_and_idempotency_gates() -> None:

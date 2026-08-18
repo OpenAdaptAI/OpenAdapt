@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from scripts import install_playwright_browser
+
 ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / ".github/workflows/ci.yml"
 QUICKSTART = ROOT / ".github/workflows/quickstart-lifecycle.yml"
@@ -21,6 +23,175 @@ def test_playwright_version_probes_are_valid_python() -> None:
     assert workflow.count("- name: Resolve Playwright version") == 3
     assert workflow.count(probe) == 3
     assert r"m.version(\"playwright\")" not in workflow
+
+
+def test_playwright_installs_and_enclosing_jobs_are_bounded() -> None:
+    """PR browser delivery avoids apt; release qualification owns OS deps."""
+    workflow = CI.read_text(encoding="utf-8")
+    test_start = workflow.index("\n  test:")
+    e2e_start = workflow.index("\n  e2e-browser:")
+    linux_start = workflow.index("\n  linux-atspi-x11:")
+    matrix_start = workflow.index("\n  test-matrix:")
+    windows_start = workflow.index("\n  windows-mock:")
+
+    test_job = workflow[test_start:e2e_start]
+    e2e_job = workflow[e2e_start:linux_start]
+    matrix_job = workflow[matrix_start:windows_start]
+    standard_invocation = (
+        "python scripts/install_playwright_browser.py\n"
+        "          --attempts 2 --attempt-timeout-seconds 270"
+    )
+    qualification_invocation = (
+        "python scripts/install_playwright_browser.py\n"
+        "          --attempts 2 --attempt-timeout-seconds 600\n"
+        "          --with-system-deps"
+    )
+
+    for job, timeout in (
+        (test_job, "timeout-minutes: 55"),
+        (e2e_job, "timeout-minutes: 50"),
+    ):
+        assert timeout in job
+        install_start = job.index("- name: Install and launch Playwright browser")
+        install_end = job.index("\n\n", install_start)
+        install_step = job[install_start:install_end]
+        assert "timeout-minutes: 12" in install_step
+        assert standard_invocation in install_step
+        assert "--with-system-deps" not in install_step
+
+    assert "timeout-minutes: 75" in matrix_job
+    matrix_install_start = matrix_job.index("- name: Install Playwright browser")
+    matrix_install_end = matrix_job.index("\n\n", matrix_install_start)
+    matrix_install_step = matrix_job[matrix_install_start:matrix_install_end]
+    assert "timeout-minutes: 24" in matrix_install_step
+    assert qualification_invocation in matrix_install_step
+
+    assert workflow.count(standard_invocation) == 2
+    assert workflow.count(qualification_invocation) == 1
+    assert "run: playwright install --with-deps chromium" not in workflow
+
+    # The privileged cleanup proof runs before browser delivery and does not
+    # depend on an apt mirror. The full suite excludes only that duplicate.
+    assert "Linux retained installer process group (non-injecting)" in test_job
+    assert "pytest -q tests/test_install_playwright_browser.py" in test_job
+    assert "--ignore=tests/test_install_playwright_browser.py" in test_job
+    assert "coverage report --fail-under=85" in test_job
+    assert "pytest -q tests/e2e/test_free_path_e2e.py" in e2e_job
+    assert "pytest -q tests/e2e \\" in e2e_job
+    assert "--ignore=tests/e2e/test_free_path_e2e.py" in e2e_job
+    assert "pytest -q --basetemp=runs/ci" in matrix_job
+
+
+def test_standard_browser_step_covers_cleanup_and_launch_worst_cases() -> None:
+    attempts = 2
+    attempt_timeout_seconds = 270
+    retry_delay_seconds = 5
+    step_timeout_seconds = 12 * 60
+    launch_timeout_seconds = (
+        install_playwright_browser.BROWSER_LAUNCH_TIMEOUT_MILLISECONDS / 1000
+    )
+
+    # POSIX can spend one bounded sudo call and one bounded group-exit wait at
+    # each of TERM, KILL, and the final exact-PGID privileged KILL fallback.
+    posix_cleanup_per_attempt = 3 * (
+        install_playwright_browser.SUDO_SIGNAL_TIMEOUT_SECONDS
+        + install_playwright_browser.PROCESS_EXIT_TIMEOUT_SECONDS
+    )
+    # Windows can wait for job accounting to reach zero and then reap the
+    # gated wrapper before it closes the retained Job Object handle.
+    windows_cleanup_per_attempt = 2 * (
+        install_playwright_browser.PROCESS_EXIT_TIMEOUT_SECONDS
+    )
+
+    posix_worst_case = (
+        attempts * (attempt_timeout_seconds + posix_cleanup_per_attempt)
+        + retry_delay_seconds
+        + install_playwright_browser.BROWSER_LAUNCH_PROBE_TIMEOUT_SECONDS
+        + posix_cleanup_per_attempt
+    )
+    windows_worst_case = (
+        attempts * (attempt_timeout_seconds + windows_cleanup_per_attempt)
+        + retry_delay_seconds
+        + install_playwright_browser.BROWSER_LAUNCH_PROBE_TIMEOUT_SECONDS
+        + windows_cleanup_per_attempt
+    )
+
+    assert launch_timeout_seconds == 30
+    assert install_playwright_browser.BROWSER_LAUNCH_PROBE_TIMEOUT_SECONDS == 35
+    assert (
+        launch_timeout_seconds
+        < install_playwright_browser.BROWSER_LAUNCH_PROBE_TIMEOUT_SECONDS
+    )
+    assert posix_worst_case == 670
+    assert windows_worst_case == 610
+    assert max(posix_worst_case, windows_worst_case) < step_timeout_seconds
+
+
+def test_release_browser_step_covers_system_dependency_cleanup() -> None:
+    attempts = 2
+    attempt_timeout_seconds = 600
+    retry_delay_seconds = 5
+    step_timeout_seconds = 24 * 60
+    posix_cleanup_per_attempt = 3 * (
+        install_playwright_browser.SUDO_SIGNAL_TIMEOUT_SECONDS
+        + install_playwright_browser.PROCESS_EXIT_TIMEOUT_SECONDS
+    )
+    windows_cleanup_per_attempt = 2 * (
+        install_playwright_browser.PROCESS_EXIT_TIMEOUT_SECONDS
+    )
+
+    posix_worst_case = (
+        attempts * (attempt_timeout_seconds + posix_cleanup_per_attempt)
+        + retry_delay_seconds
+        + install_playwright_browser.BROWSER_LAUNCH_PROBE_TIMEOUT_SECONDS
+        + posix_cleanup_per_attempt
+    )
+    windows_worst_case = (
+        attempts * (attempt_timeout_seconds + windows_cleanup_per_attempt)
+        + retry_delay_seconds
+        + install_playwright_browser.BROWSER_LAUNCH_PROBE_TIMEOUT_SECONDS
+        + windows_cleanup_per_attempt
+    )
+
+    assert posix_worst_case == 1330
+    assert windows_worst_case == 1270
+    assert max(posix_worst_case, windows_worst_case) < step_timeout_seconds
+
+
+def test_windows_required_job_proves_retained_installer_job_object() -> None:
+    workflow = CI.read_text(encoding="utf-8")
+    windows_start = workflow.index("\n  windows-mock:")
+    wheel_start = workflow.index("\n  wheel:")
+    windows_job = workflow[windows_start:wheel_start]
+
+    assert "Windows retained installer Job Object (non-injecting)" in windows_job
+    assert "pytest -q tests/test_install_playwright_browser.py" in windows_job
+
+
+def test_required_linux_atspi_qualification_is_bounded() -> None:
+    workflow = CI.read_text(encoding="utf-8")
+    linux_start = workflow.index("\n  linux-atspi-x11:")
+    matrix_start = workflow.index("\n  test-matrix:")
+    linux_job = workflow[linux_start:matrix_start]
+
+    assert "runs-on: ubuntu-24.04\n    timeout-minutes: 30" in linux_job
+    step_limits = (
+        ("Install isolated X11, D-Bus, GTK3, and AT-SPI", 15),
+        ("Qualify GTK workflow on real AT-SPI", 10),
+        ("Upload Linux AT-SPI qualification evidence", 2),
+    )
+    for step_name, timeout_minutes in step_limits:
+        step_start = linux_job.index(f"- name: {step_name}")
+        step_end = linux_job.index("\n\n", step_start)
+        step = linux_job[step_start:step_end]
+        assert f"timeout-minutes: {timeout_minutes}" in step
+
+    assert sum(timeout for _name, timeout in step_limits) <= 30
+    assert linux_job.index("sudo apt-get update") < linux_job.index(
+        "scripts/qualify_linux_atspi.py"
+    )
+    assert "--output runs/linux-atspi/results.json" in linux_job
+    assert "if-no-files-found: error" in linux_job
 
 
 def test_full_matrix_can_be_dispatched_on_an_exact_branch() -> None:

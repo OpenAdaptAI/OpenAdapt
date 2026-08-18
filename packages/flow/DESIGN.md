@@ -402,9 +402,14 @@ with the same action methods plus `type_text(text, param=None)` and
   `emit-mcp` (thin wrappers over the module APIs above). `replay --run-dir`
   is optional and defaults to `runs/replay-<UTC timestamp>`.
 - CI (`.github/workflows/ci.yml`): ubuntu-latest, py3.12,
-  `pip install -e .[dev]`, `playwright install --with-deps chromium`,
-  `pytest -q --basetemp=runs/ci` (temp dirs pinned inside the workspace so
-  run artifacts survive), upload `runs/**/REPORT.md` + PNGs as artifacts.
+  `pip install -e .[dev]`, a bounded `playwright install chromium`, a real
+  headless Chromium launch, and `pytest -q --basetemp=runs/ci` (temp dirs
+  pinned inside the workspace so run artifacts survive). The standard browser
+  test and browser E2E jobs use runner-provided system libraries and do not
+  refresh apt indexes. The real Linux AT-SPI job separately installs its
+  required accessibility packages inside explicit time limits. The
+  clean-machine/release qualification gate runs the browser installer with
+  `--with-system-deps`. CI uploads `runs/**/REPORT.md` + PNGs as artifacts.
 
 ## Test policy
 
