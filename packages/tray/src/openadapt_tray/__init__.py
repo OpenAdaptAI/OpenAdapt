@@ -1,6 +1,6 @@
 """OpenAdapt Tray - System tray application for OpenAdapt."""
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 from openadapt_tray.app import TrayApplication, main
 from openadapt_tray.config import TrayConfig
