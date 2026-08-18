@@ -86,9 +86,11 @@ system of record before and after the action, never the screen:
 ```python
 class EffectVerifier(Protocol):
     substrate: str
+
     def capture_pre_state(self, context: Any = None) -> EffectState: ...
-    def verify(self, expected: Effect, before: EffectState,
-               context: Any = None) -> EffectVerdict: ...
+    def verify(
+        self, expected: Effect, before: EffectState, context: Any = None
+    ) -> EffectVerdict: ...
 ```
 
 The in-memory reference oracle (the generalized `fault_model` DB-state oracle):
@@ -96,6 +98,7 @@ The in-memory reference oracle (the generalized `fault_model` DB-state oracle):
 ```python
 class RecordSnapshotOracle:
     substrate = "snapshot"
+
     def __init__(
         self,
         read_records: Callable[[], Optional[list[dict[str, Any]]]],
@@ -115,7 +118,9 @@ class TrueEffectState(str, Enum):
     ABSENT = "absent"
     UNREADABLE = "unreadable"
 
+
 def effect_state(verdict: EffectVerdict) -> TrueEffectState: ...
+
 
 def combine_true_states(
     record_state: TrueEffectState, *field_states: TrueEffectState
@@ -131,6 +136,7 @@ def classify_outcome(
     true_state: TrueEffectState,
     correct_action_available: bool,
 ) -> tuple[OutcomeLabel, SwerVariant, str]: ...
+
 
 def score_episode(
     *,
@@ -174,24 +180,25 @@ attestations the adversarial red-team pass signs off on:
 
 ```python
 class AgentReport(BaseModel):
-    reported_success: bool      # the deceptive witness — never trusted for scoring
+    reported_success: bool  # the deceptive witness — never trusted for scoring
     halted: bool = False
     message: str = ""
+
 
 class EpisodeRecord(BaseModel):
     episode_id: str
     task_id: str
-    arm: str                    # "claude_cu" / "openai_cua" / "compiler" / ...
+    arm: str  # "claude_cu" / "openai_cua" / "compiler" / ...
     trial: int
-    substrate: Substrate        # web / desktop / remote_display
+    substrate: Substrate  # web / desktop / remote_display
     category: DivergenceCategory  # C1..C7 / control
     seed: Optional[int]
     expected_effect_hash: str
     correct_action_available: bool
     agent: AgentReport
-    oracle: OracleVerdict       # the independent reading of the true effect
+    oracle: OracleVerdict  # the independent reading of the true effect
     outcome: OutcomeLabel
-    swer_variant: SwerVariant   # wrong_write / phantom / none
+    swer_variant: SwerVariant  # wrong_write / phantom / none
     reason: str
     model_calls: list[ModelCall]
     cost_usd: float

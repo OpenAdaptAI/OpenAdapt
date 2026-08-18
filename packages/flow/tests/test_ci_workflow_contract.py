@@ -15,6 +15,20 @@ PIXEL_E2E = ROOT / "tests/e2e/test_citrix_pixel_e2e.py"
 DESKTOP_E2E = ROOT / "tests/e2e/test_parallels_desktop_e2e.py"
 
 
+def test_lint_job_rejects_a_stale_dependency_lock() -> None:
+    workflow = CI.read_text(encoding="utf-8")
+    lint_start = workflow.index("\n  lint:")
+    compatibility_start = workflow.index("\n  python-compatibility:")
+    lint_job = workflow[lint_start:compatibility_start]
+
+    assert (
+        "uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9" in lint_job
+    )
+    assert 'version: "0.12.5"' in lint_job
+    assert "run: uv lock --locked" in lint_job
+    assert lint_job.index("run: uv lock --locked") < lint_job.index("- name: Install\n")
+
+
 def test_playwright_version_probes_are_valid_python() -> None:
     workflow = CI.read_text(encoding="utf-8")
     probe = (

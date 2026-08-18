@@ -20,10 +20,12 @@ An **arm** is one agent under test. It implements a single method:
 
 ```python
 class AgentArm(Protocol):
-    name: str          # "compiler" / "screen_only" / "claude_cu" / ...
-    live: bool         # True = executes here; False = scaffolded external baseline
-    def run(self, task: TaskSpec, session: SubstrateSession,
-            *, params: Mapping[str, str]) -> ArmResult: ...
+    name: str  # "compiler" / "screen_only" / "claude_cu" / ...
+    live: bool  # True = executes here; False = scaffolded external baseline
+
+    def run(
+        self, task: TaskSpec, session: SubstrateSession, *, params: Mapping[str, str]
+    ) -> ArmResult: ...
 ```
 
 - The arm is handed **only** the task's natural-language `goal` (intent — *never*
