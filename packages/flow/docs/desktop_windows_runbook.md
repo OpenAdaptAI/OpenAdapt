@@ -2,8 +2,8 @@
 
 How to bring the **desktop** path to parity with the **web** path — record →
 compile → replay with the structural (UIA) + vision ladder, identity, and
-effect verification — and run the **snapshot-safe live proof** in one pass on a
-machine with the Parallels Windows 11 VM.
+effect verification — and run the **snapshot-safe live proof** in three counted
+trials on a machine with the Parallels Windows 11 VM.
 
 This is the operator runbook. The design/rationale lives in
 `openadapt_flow/backends/win_agent/README.md` (the agent) and
@@ -126,25 +126,37 @@ fire.
 
 ---
 
-## 4. Run the snapshot-safe live proof (one pass)
+## 4. Run the snapshot-safe live proof (three counted trials)
 
 The opt-in e2e (`tests/e2e/test_parallels_desktop_e2e.py`) does the whole loop
-against the built-in Windows **Calculator** (deterministic, no PHI): snapshot →
-ensure VM up → launch the agent in session 1 → record→compile→replay via
-`WindowsBackend` → assert the UIA structural rung fires and the run completes →
-**revert to the snapshot**.
+against the deterministic Patient Notes fixture: prove one exact configured
+base snapshot is current → persist one private exact-base recovery journal →
+revert to that base → ensure the VM is running → launch the typed agent in
+session 1 → record→compile→replay via `WindowsBackend` → assert the UIA
+structural rung and independent database oracle → restore and verify the
+configured base → suspend and verify the VM. It repeats this contract three
+times. It creates no ephemeral trial snapshot.
 
 ```bash
 # On the Mac with the Parallels VM:
-OAFLOW_PARALLELS_E2E=1 pytest -q tests/e2e/test_parallels_desktop_e2e.py
-# Optional: OAFLOW_PARALLELS_VM_UUID='{...}' to target a different VM.
+export OAFLOW_PARALLELS_E2E=1
+export OAFLOW_PARALLELS_VM_UUID='{exact-vm-uuid}'
+export OAFLOW_PARALLELS_BASE_SNAPSHOT_ID='{exact-base-snapshot-uuid}'
+export OAFLOW_WINDOWS_UIA_CANDIDATE_COMMIT='40-character-git-commit'
+export OAFLOW_PARALLELS_STORAGE_PATH="$PWD"
+export OAFLOW_PARALLELS_RECOVERY_JOURNAL='/absolute/private/path/parallels-recovery.json'
+pytest -q tests/e2e/test_parallels_desktop_e2e.py
 ```
 
-**Snapshot safety, guaranteed:** the test takes a **fresh** snapshot before it
-touches the guest and reverts to it in a `finally` block. It **never deletes**
-the VM or any snapshot, and it is **skipped entirely** unless
-`OAFLOW_PARALLELS_E2E=1`. Always confirm your VM has a known-good snapshot before
-running anything against it.
+**Snapshot safety contract:** the test refuses before mutation unless the exact
+configured base exists and is current. It writes the recovery journal before
+the first VM mutation. Normal cleanup, the workflow's unconditional cleanup
+step, and the next run all use that record to revert the exact VM to the exact
+base and verify its suspended state. The record remains after a failed recovery
+and disappears only after all checks pass. A restore, verification,
+evidence-write, or final suspend failure rejects the trial. The harness never
+uses a snapshot name, wildcard, snapshot delete, child-recursive delete, or VM
+delete operation. It is skipped entirely unless `OAFLOW_PARALLELS_E2E=1`.
 
 ---
 

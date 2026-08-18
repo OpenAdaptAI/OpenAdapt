@@ -374,7 +374,16 @@ jobs:
           pytest -q --ignore=tests/e2e \
             --ignore=tests/test_install_playwright_browser.py \
             --basetemp=runs/ci \
+            --junitxml=runs/unit-claims-junit.xml \
             --cov=openadapt_flow --cov-report=
+
+      # A supported claim is not a function of file existence. Bind every
+      # cited unit-test file to this job's real Pytest result. Missing and
+      # all-skipped files fail closed even when another test passed.
+      - name: Validate passing unit claim evidence
+        run: |
+          python scripts/validate_claims.py --check \
+            --ci-job test --junit runs/unit-claims-junit.xml
 
       # Enforced RATCHET floor on the safety-critical path (branch-inclusive).
       # Scoped via --include to exactly the safety modules (compiler, identity,
@@ -400,6 +409,7 @@ jobs:
             runs/**/BENCH.md
             runs/**/report.json
             runs/**/*.png
+            runs/unit-claims-junit.xml
           if-no-files-found: warn
 
   # --- Browser record -> compile -> replay E2E (REQUIRED on PRs) -----------
@@ -470,7 +480,15 @@ jobs:
           mkdir -p runs
           pytest -q tests/e2e \
             --ignore=tests/e2e/test_free_path_e2e.py \
+            --junitxml=runs/e2e-claims-junit.xml \
             --basetemp=runs/ci
+
+      # The browser maturity claims cite the record/compile/replay E2E file.
+      # Require that file to appear and pass in this required job's own JUnit.
+      - name: Validate passing browser claim evidence
+        run: |
+          python scripts/validate_claims.py --check \
+            --ci-job e2e-browser --junit runs/e2e-claims-junit.xml
 
       - name: Upload run artifacts
         if: always()
@@ -482,6 +500,7 @@ jobs:
             runs/**/BENCH.md
             runs/**/report.json
             runs/**/*.png
+            runs/e2e-claims-junit.xml
           if-no-files-found: warn
 
   # --- Native Linux: real GTK3 + AT-SPI under isolated X11 (REQUIRED) ------

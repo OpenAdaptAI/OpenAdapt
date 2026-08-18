@@ -13,7 +13,8 @@
 # -----------------------------------------------------
 # Evidence strength is derived from the repo, not asserted here:
 #   * a test file with NO module-level env skipif, that exists      -> "supported"
-#     (it actually runs, and can be green, in CI)
+#     candidate evidence; its required `test` or `e2e-browser` job must bind the
+#     file to at least one passing case in that job's real JUnit result
 #   * a test file gated by a module-level `pytestmark` env skipif    -> "validating"
 #     (opt-in / infra-gated: grounded, but never runs on default CI)
 #   * a doc / benchmark artifact (.md or a benchmark dir)            -> "roadmap"
@@ -24,7 +25,7 @@
 # result that is not CI-reproducible is never presented as "supported").
 #
 # TIERS
-#   supported  — CI-proven today on the default (non-opt-in) suite.
+#   supported  — bound to a real passing result in required default CI.
 #   validating — grounded in a REAL opt-in/infra-gated proof or a field test;
 #                being validated (incl. with design partners). NOT "supported".
 #   roadmap    — designed/specified, not yet proven by a running test.

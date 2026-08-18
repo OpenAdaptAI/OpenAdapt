@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -734,6 +735,26 @@ def _windows_lock_is_available(lock_path: Path) -> bool:
     return True
 
 
+def _wait_for_windows_lock_release(lock_path: Path) -> bool:
+    """Allow bounded Windows teardown while still rejecting a live child."""
+
+    deadline = (
+        time.monotonic() + install_playwright_browser.PROCESS_EXIT_TIMEOUT_SECONDS
+    )
+    while True:
+        if _windows_lock_is_available(lock_path):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(
+            min(
+                install_playwright_browser.PROCESS_GROUP_POLL_INTERVAL_SECONDS,
+                remaining,
+            )
+        )
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="real Windows Job Object proof")
 @pytest.mark.parametrize("leader_return_code", [0, 7])
 def test_windows_job_kills_child_after_normal_leader_exit(
@@ -786,7 +807,7 @@ raise SystemExit(int(sys.argv[4]))
     child_pid = int(pid_path.read_text(encoding="utf-8"))
     try:
         assert result == leader_return_code
-        assert _windows_lock_is_available(lock_path)
+        assert _wait_for_windows_lock_release(lock_path)
     finally:
         subprocess.run(
             ["taskkill", "/PID", str(child_pid), "/T", "/F"],
@@ -845,7 +866,7 @@ time.sleep(30)
     child_pid = int(pid_path.read_text(encoding="utf-8"))
     try:
         assert result == 124
-        assert _windows_lock_is_available(lock_path)
+        assert _wait_for_windows_lock_release(lock_path)
     finally:
         subprocess.run(
             ["taskkill", "/PID", str(child_pid), "/T", "/F"],

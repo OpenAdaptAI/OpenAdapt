@@ -1,7 +1,10 @@
 {
   "generated_at": "committed registry state (regenerate: scripts/validate_claims.py --report)",
   "green_check_run": false,
+  "green_check_job": null,
+  "green_check_scope": [],
   "ok": true,
+  "validation_errors": [],
   "claims": [
     {
       "id": "web-supported",
@@ -27,6 +30,7 @@
           "gating": "ci (required PR gate (e2e-browser))",
           "node": null,
           "node_found": null,
+          "ci_job": "e2e-browser",
           "junit_status": null,
           "proves": "Records the MockMed browser demo once, compiles it, and replays it under baseline + theme/move/rename drift and parameter substitution through the headless-browser Backend."
         },
@@ -38,6 +42,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The reference browser demo app and its drift screens render deterministically (no CSS transitions), so replay is repeatable."
         },
@@ -49,6 +54,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The deterministic replayer resolves steps, substitutes parameters, enforces postconditions and the risk gate \u2014 no model in the loop."
         }
@@ -78,6 +84,7 @@
           "gating": "ci (required PR gate (e2e-browser))",
           "node": null,
           "node_found": null,
+          "ci_job": "e2e-browser",
           "junit_status": null,
           "proves": "Baseline replay x3 resolves every step on the `template` rung with 0 heals and 0 model calls; healed bundles replay clean afterward."
         },
@@ -89,6 +96,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The replayer is a deterministic resolution ladder; the VLM rung is a fallback, not on the default path \u2014 the core runtime is model-free."
         },
@@ -100,6 +108,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "CI-reproducible MockMed run artifact: 100/100 compiled replays at 4.9s p50 with zero model calls, measured 2026-07-08 on Flow 0.1.0 (pre-v0.2.0 source build); field/artifact reference."
         }
@@ -128,6 +137,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The REST/FHIR/document-hash verifiers confirm exactly-one write and refute duplicate / missing / partial / collateral-loss writes."
         },
@@ -139,6 +149,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Each silent-wrong-action class is silent under the screen-only oracle and is CAUGHT once effects are declared and verified."
         },
@@ -150,6 +161,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The FHIR effect verifier's read/confirm/refute/indeterminate contract (the live-OpenEMR smoke is a separate opt-in function in this file)."
         },
@@ -161,6 +173,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The 7-class transactional fault-model study: 5/7 classes silently mishandled by screen-only, all 5 halt through the real replayer."
         }
@@ -188,6 +201,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The read-only SQL verifier's whitelist (mutation/stacking/comment smuggling refused at construction) and full verdict contract, plus the exact table-delta audit promoted from the Frappe Lending reference matrix \u2014 against LOCAL sqlite fixtures only."
         },
@@ -199,6 +213,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "File-arrival verdicts (pattern / size>0 / mtime freshness / content probe / duplicate export) against real temp directories, and the SFTP path against an in-memory fake paramiko-shaped transport."
         },
@@ -210,6 +225,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The declarative construction path: env-var auth references fail loud when unset, run-parameter references resolve at build (and refuse to construct unresolved), and pre-kit configs build byte-identically."
         },
@@ -221,6 +237,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI constructs and preflights all reviewed candidates before input, pins the strongest verifier and its pre-state, preserves the binding through durable resume, and refuses an unavailable selected verifier rather than falling back after an action."
         },
@@ -232,6 +249,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "lint warns per consequential step lacking an effect contract and reports coverage %; certify fails the same gap only when the policy sets require_effects_for_irreversible (warn-vs-fail is policy-configurable)."
         },
@@ -243,6 +261,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Every escalated verification failure emits a typed ReconciliationTask carrying the one-way contract hash and verdict evidence \u2014 never the resolved selector values."
         },
@@ -254,6 +273,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The operator-facing kit contract: config reference plus Frappe (REST/SQL) and OpenEMR (FHIR/SQL) worked examples targeting the reference fixtures."
         }
@@ -282,6 +302,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Wrong-entity / near-name sibling / generic-band / param-in-band probes: the identity check refuses to verify a mismatched target and never arms on non-discriminative bands."
         },
@@ -293,6 +314,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Underdetermined targets surface as explicit disambiguation rather than a guessed click."
         },
@@ -304,6 +326,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Public property-based checks preserve the never-false-accept invariant for collapsible identifiers while requiring clean identifiers to remain verifiable."
         },
@@ -315,6 +338,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The identity resolution ladder (structural/template/OCR) escalation."
         }
@@ -343,6 +367,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Synthetic-fixture proof of the emission mechanism: a pixel-only recording compiles WITH a crop under templates/identifiers/ (sealed + manifest-hashed like every image crop); a structured recording writes NO identity pixels and records why; explicit --identifier markings (event rect / meta region) win; encrypted save seals the crop and the sealed crop still reaches the tier; the compiled crop drives a wrong-MRN MISMATCH through the real replayer ladder while pixel VERIFY stays hard-gated off (zero-false-accept preserved)."
         },
@@ -354,6 +379,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Lint coverage surfacing: identity-armed steps with vs without crops (missing_identifier_crop findings carry the compiler's degrade reason; warn on band-only identity, info under structured identity)."
         }
@@ -382,6 +408,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "A surprise modal halts and emits a learnable trace; teaching promotes a guarded dismiss branch that replays without regression; an underdetermined correction is refused."
         },
@@ -393,6 +420,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The `teach` CLI resolves a halt via a correction spec or a recording, refuses an underdetermined fix, and errors on a non-halted run."
         }
@@ -421,6 +449,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI covers typed qualification authoring and replacement, qualification-revision and certification invalidation, ambiguous insertion refusal, the closed runtime decision contract, role and evidence checks, expiry, renewal, idempotency, crash recovery, signed branch authority, scoped outputs, fresh live-state revalidation, normal downstream action gates, and repair-bypass refusal."
         },
@@ -432,6 +461,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The public engine contract separates a declared business choice from an operational halt and defines the Desktop, Cloud, and customer-local integration boundary."
         }
@@ -460,6 +490,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI covers closed fact schemas, exact workflow and decision bindings, local-only evidence references, conflict refusal, reciprocal contrast coverage for automatic-rule candidates, retained human authority, unresolved-evidence refusal, and the invariant that case evaluation never edits or synthesizes the executable rule."
         },
@@ -471,6 +502,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI binds the reviewed local evidence bytes and review note into certification, reproduces that exact contract when a qualified workflow is saved, and refuses changed case or evidence digests."
         },
@@ -482,6 +514,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The public contract separates qualification-time judgment capture from one live runtime answer and describes the scriptable authoring and judgment-case interfaces."
         }
@@ -510,6 +543,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI covers the V1-compatible and V2 signed envelopes, provenance binding, remote-safe entity vocabulary, idempotent decisions, and fresh revalidation before resumed actuation."
         },
@@ -521,6 +555,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI requires the current exact qualification contract before the V2 producer can emit its reviewed presentation metadata."
         },
@@ -532,6 +567,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The delivery contract defines explicit V2 negotiation, neutral V1 fallback, and the local boundary for actual entity identifiers."
         }
@@ -560,6 +596,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The MockMed app + drift screens are deterministic and reachable, the substrate the benchmark replays against."
         },
@@ -571,6 +608,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The benchmark harness / report accounting that produces the numbers."
         },
@@ -582,6 +620,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "Full numbers, methodology, and caveats for the CI-reproducible MockMed comparison (dated run artifact)."
         }
@@ -612,6 +651,7 @@
           "gating": "opt-in (OAFLOW_PARALLELS_E2E)",
           "node": null,
           "node_found": null,
+          "ci_job": "validating",
           "junit_status": null,
           "proves": "OPT-IN live proof on a real Win11-ARM VM: record->compile->replay through WindowsBackend with the structural rung resolving every click by AutomationId (armed_coverage == 1.0)."
         },
@@ -623,6 +663,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The 4-method Backend protocol on Windows against a MOCKED WAA server (runs in CI post-merge; proves the wire, not a live desktop)."
         },
@@ -634,6 +675,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "Desktop drift benchmark: the structural rung resolved 21/21 targets where visual replay alone managed 6/21."
         },
@@ -645,6 +687,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "Accepted candidate 20260717-candidate-56759c8-v2: 3/3 exact task and SQLite effects, 12 UIA receipts, and 3/3 stale plus 3/3 ambiguity refusals with zero silent incorrect success, over-halt, or model calls."
         }
@@ -675,6 +718,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "CI covers unique-window binding, foreground/focus proof, exact-element text delivery, and refusal before physical input when proof fails."
         },
@@ -686,6 +730,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "CI validates the qualification oracle, failure taxonomy, evidence hashes, cleanup adjudication, and ambiguity-refusal accounting."
         },
@@ -697,6 +742,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "Candidate b1b61a5 completed 3/3 exact-byte TextEdit effects and refused two ambiguous windows without modifying either file."
         }
@@ -726,6 +772,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Default CI covers exact app/window binding, bounded candidate enumeration, ambiguity and stale-target refusal, native invoke/focus and editable-text delivery, window-scoped capture, physical-input opt-in, and Wayland portal refusal through an injected Linux client."
         },
@@ -737,6 +784,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Default CI enforces the live qualification's fixed three-trial matrix, independent exact-file and absence oracles, and separate silent-incorrect-success, over-halt, and refusal-failure accounting."
         },
@@ -748,6 +796,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The required linux-atspi-x11 job drives the real GTK3 fixture through AT-SPI on an isolated Xvfb display and session D-Bus, emitting a per-trial JSON evidence artifact."
         },
@@ -759,6 +808,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The operator contract, X11 and Wayland boundaries, configuration, delivery-only receipt semantics, and required real GTK/AT-SPI CI qualification contract."
         }
@@ -789,6 +839,7 @@
           "gating": "opt-in (OAFLOW_PARALLELS_RDP_E2E)",
           "node": null,
           "node_found": null,
+          "ci_job": "validating",
           "junit_status": null,
           "proves": "Opt-in snapshot-safe real RDP qualification harness with exactly three trials, independent guest-tools oracle, failure taxonomy, and cleanup."
         },
@@ -800,6 +851,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "CI covers the backend/transport contract, framebuffer conversion, pointer and keyboard delivery, and record-compile-replay conformance."
         },
@@ -811,6 +863,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI covers the bounded 27-trial FreeRDP campaign contract, independent SQLite, CSV, and Maildir oracles, fail-closed visual action preflight, uncertain-delivery handling, and result accounting."
         },
@@ -822,6 +875,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The public synthetic multi-window campaign defines the workflow, faults, independent persisted surfaces, and acceptance denominator."
         },
@@ -833,6 +887,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "Candidate 82a658a passed 3/3 at 51.845, 10.467, and 7.477 seconds, with zero failures, silent incorrect successes, over-halts, or model calls."
         }
@@ -862,6 +917,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI exercises all six target kinds, validates v3 against its closed JSON Schema, refuses a Standard or Regulated activation without an exact template, binds the template SHA to the HMAC, preserves web URL/host checks, keeps native/remote execution empty, verifies the canonical HMAC vector, and retains signed v1/v2 compatibility."
         },
@@ -873,6 +929,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI carries the resolved web, Windows, and Citrix backend token through durable resume into the new run report rather than trusting an upload-time relabel."
         },
@@ -884,6 +941,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The public closed envelope requires target_kind and the governed authorization template SHA, and conditionally permits browser execution fields only for web."
         }
@@ -914,6 +972,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The live-capture orchestration + CLI wiring (record --backend windows|macos|linux|rdp|citrix -> openadapt-capture -> convert_capture), and that a desktop-shaped recording COMPILES into a bundle and REPLAYS to completion through the desktop backend path, resolving each click to its recorded target (runs on default CI)."
         },
@@ -925,6 +984,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The capture->recording bridge over a REAL openadapt-capture session (its own event-processing pipeline + frame extraction) feeding the UNMODIFIED compiler (runs on default CI: the `test` job installs the `capture` extra; openadapt-capture >=0.5.4 imports clean headless)."
         },
@@ -936,6 +996,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The capture-assisted and live-observer paths, fail-closed secret handling, RDP coordinate binding, and reuse of openadapt-capture + the capture adapter."
         }
@@ -967,6 +1028,7 @@
           "gating": "opt-in (OAFLOW_CITRIX_PIXEL_E2E)",
           "node": null,
           "node_found": null,
+          "ci_job": "validating",
           "junit_status": null,
           "proves": "OPT-IN pixel-only proof: structural_armed_coverage == 0, replay resolves on template/ocr/geometry only, on-screen OCR read-back verifies the write, the identity gate HALTs on a look-alike patient, and render drift triggers halt-on-ambiguity."
         },
@@ -978,6 +1040,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The pixel-substrate identity probe behind the on-pixels identity gate."
         },
@@ -989,6 +1052,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI covers the dedicated backend preset, exact owner/title overrides, readiness probe construction, pixel-only capability boundary, backend factory, and product CLI selectors."
         },
@@ -1000,6 +1064,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI refuses governed Citrix execution before action when its readiness binding is absent or blank, admits a sealed bundle carrying a recorded readiness binding, and reports only the resolved backend token rather than sensitive target strings."
         },
@@ -1011,6 +1076,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI restores the recorded Citrix owner, exact title, and readiness binding through durable approve/resume, and refuses before backend construction when resumed configuration is incomplete."
         },
@@ -1022,6 +1088,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI binds a completed local Citrix report to the closed `citrix` execution token without copying target owner, title, or readiness values into the hosted summary."
         },
@@ -1033,6 +1100,7 @@
           "gating": "opt-in (OAFLOW_CITRIX_STANDIN_E2E)",
           "node": null,
           "node_found": null,
+          "ci_job": "validating",
           "junit_status": null,
           "proves": "The dedicated Citrix backend passes three healthy effect-confirmed record->compile->replay trials and three severe-drift safe-halts over a no-DOM surface, with zero model calls, false completion, or silent incorrect success."
         },
@@ -1044,6 +1112,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "Required CI validates the public real-ICA campaign preflight, distinct authority keys, executable and oracle attestations, one-use nonce journal, crash recovery, uncertain dispatch, and fail-closed report contract without provisioning infrastructure."
         },
@@ -1055,6 +1124,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The retained six-trial record reports code_readiness_accepted=true and ica_hdx_accepted=false, keeping driver readiness distinct from a counted live ICA/HDX qualification."
         },
@@ -1066,6 +1136,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The Citrix driver model, reusable evidence, exact-deployment acceptance contract, independent-effect boundary, and customer-controlled posture."
         }
@@ -1093,6 +1164,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "MOCK-ONLY conformance: the win32 WindowClient implements the remote-display WindowClient seam (exact process/title/class selection with ambiguity halt, client-area coordinate mapping under per-monitor DPI awareness, PrintWindow-then-BitBlt capture fallback, focus-verification refusal, and the UIPI elevation guard) against a scripted Win32 API \u2014 never against a real Windows host."
         },
@@ -1104,6 +1176,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The remote-display contract the client implements and the evidence ladder for qualifying it (Parallels/RDP client-window analog first, then a counted live Citrix host run)."
         }
@@ -1134,6 +1207,7 @@
           "gating": "ci (required PR gate (test))",
           "node": null,
           "node_found": null,
+          "ci_job": "test",
           "junit_status": null,
           "proves": "The CI-reproducible half: the saved-message-row verifier, its unsaved-entry-form rejection, and the intent-not-coordinates task prompt that both benchmark arms use."
         },
@@ -1145,6 +1219,7 @@
           "gating": "opt-in (OPENADAPT_OPENEMR_FINALS_DIR)",
           "node": null,
           "node_found": null,
+          "ci_job": "validating",
           "junit_status": null,
           "proves": "When the local-only retained final frames are mounted, the guard replays all 30 with the current verifier and requires 19/20 compiled, 10/10 agent, and exactly one corrected legacy false success."
         },
@@ -1156,6 +1231,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The corrected field-test numbers, saved-row screen-oracle contract, methodology, and cost caps for the 20-vs-10 head-to-head run."
         },
@@ -1167,6 +1243,7 @@
           "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
+          "ci_job": null,
           "junit_status": null,
           "proves": "The correctness-only field findings (fresh browsers, zero model calls, closed-loop scrolling)."
         }

@@ -6,6 +6,7 @@ these run anywhere (CI included) and pin the parsing/So the sequencing logic.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import types
 
@@ -14,9 +15,12 @@ import pytest
 from openadapt_flow.backends import parallels_vm as pv
 from openadapt_flow.backends.parallels_vm import (
     ParallelsError,
+    ParallelsRecoveryJournal,
     ParallelsVM,
     SnapshotInfo,
+    recover_parallels_vm,
 )
+from tests.e2e.test_citrix_pixel_e2e import _restore_pixel_vm
 
 UUID = "{d4f9c29a-52e1-4793-9334-7e971c3d0ab3}"
 
@@ -55,6 +59,14 @@ def test_status_parses_running(monkeypatch):
     assert ParallelsVM(UUID).status() == "running"
 
 
+def test_status_rejects_failed_command_even_with_plausible_stdout(monkeypatch):
+    out = f"STATUS   UUID\nrunning  {UUID}\n"
+    _mock_run(monkeypatch, {"list": _completed(out, returncode=1, stderr="failed")})
+
+    with pytest.raises(ParallelsError, match="rc=1"):
+        ParallelsVM(UUID).status()
+
+
 def test_snapshot_parses_id(monkeypatch):
     out = (
         "Creating the snapshot...\n"
@@ -84,6 +96,18 @@ def test_list_snapshots_marks_current(monkeypatch):
     assert snaps[0].current is False
     assert snaps[1].current is True
     assert snaps[1].snapshot_id == "{516f223f-7e3a-48f4-90d0-f69f9aaa7644}"
+
+
+def test_snapshot_proof_rejects_failed_command_with_plausible_stdout(monkeypatch):
+    base = "{35dba943-a22d-473c-b1b0-44fa6326e626}"
+    out = f"PARENT_SNAPSHOT_ID  SNAPSHOT_ID\n                    *{base}\n"
+    _mock_run(
+        monkeypatch,
+        {"snapshot-list": _completed(out, returncode=1, stderr="failed")},
+    )
+
+    with pytest.raises(ParallelsError, match="rc=1"):
+        ParallelsVM(UUID).require_current_snapshot(base)
 
 
 def test_host_free_space_preflight_refuses_before_vm_command(monkeypatch):
@@ -169,6 +193,132 @@ def test_restore_refusal_never_deletes_when_base_is_not_current(monkeypatch):
             owned_snapshot_id=owned,
         )
     assert deleted == []
+
+
+def test_require_current_snapshot_accepts_only_exact_current_base(monkeypatch):
+    vm = ParallelsVM(UUID)
+    base = "{35dba943-a22d-473c-b1b0-44fa6326e626}"
+    other = "{516f223f-7e3a-48f4-90d0-f69f9aaa7644}"
+    monkeypatch.setattr(
+        vm,
+        "list_snapshots",
+        lambda: [SnapshotInfo(base, True), SnapshotInfo(other, False)],
+    )
+
+    vm.require_current_snapshot(base)
+
+    with pytest.raises(ParallelsError, match="not current"):
+        vm.require_current_snapshot(other)
+    with pytest.raises(ParallelsError, match="missing"):
+        vm.require_current_snapshot("{b8199a93-ef44-439f-a70b-eaf5bd1d771b}")
+    with pytest.raises(ValueError, match="exact braced UUID"):
+        vm.require_current_snapshot("base")
+
+
+def test_recovery_journal_is_private_atomic_and_refuses_overwrite(tmp_path) -> None:
+    base = "{35dba943-a22d-473c-b1b0-44fa6326e626}"
+    path = tmp_path / "recovery.json"
+    journal = ParallelsRecoveryJournal(path)
+
+    journal.begin(vm_uuid=UUID, base_snapshot_id=base)
+
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o777 == 0o600
+    assert journal.load() == pv.ParallelsRecoveryRecord(UUID, base)
+    with pytest.raises(ParallelsError, match="unresolved"):
+        journal.begin(vm_uuid=UUID, base_snapshot_id=base)
+    journal.clear()
+    assert journal.load() is None
+
+
+def test_recovery_journal_rejects_relative_path_and_invalid_identifier(
+    tmp_path,
+) -> None:
+    with pytest.raises(ValueError, match="absolute"):
+        ParallelsRecoveryJournal("recovery.json")
+    journal = ParallelsRecoveryJournal(tmp_path / "recovery.json")
+    with pytest.raises(ValueError, match="vm_uuid"):
+        journal.begin(vm_uuid="Windows 11", base_snapshot_id=UUID)
+
+
+class _RecoveryVM:
+    def __init__(self, base: str, *, revert_error: Exception | None = None) -> None:
+        self.base = base
+        self.revert_error = revert_error
+        self.state = "running"
+        self.calls: list[tuple[str, ...]] = []
+
+    def list_snapshots(self) -> list[SnapshotInfo]:
+        self.calls.append(("list-snapshots",))
+        return [SnapshotInfo(self.base, False)]
+
+    def revert(self, snapshot_id: str) -> None:
+        self.calls.append(("revert", snapshot_id))
+        if self.revert_error is not None:
+            raise self.revert_error
+
+    def require_current_snapshot(self, snapshot_id: str) -> None:
+        self.calls.append(("require-current", snapshot_id))
+
+    def status(self) -> str:
+        self.calls.append(("status", self.state))
+        return self.state
+
+    def suspend(self) -> None:
+        self.calls.append(("suspend",))
+        self.state = "suspended"
+
+    def start(self) -> None:
+        self.calls.append(("start",))
+        self.state = "running"
+
+
+def test_durable_recovery_reverts_exact_base_suspends_and_clears(
+    monkeypatch, tmp_path
+) -> None:
+    base = "{35dba943-a22d-473c-b1b0-44fa6326e626}"
+    path = tmp_path / "recovery.json"
+    journal = ParallelsRecoveryJournal(path)
+    journal.begin(vm_uuid=UUID, base_snapshot_id=base)
+    fake = _RecoveryVM(base)
+    monkeypatch.setattr(pv, "ParallelsVM", lambda *_a, **_k: fake)
+
+    assert recover_parallels_vm(path) is True
+
+    assert fake.calls == [
+        ("list-snapshots",),
+        ("revert", base),
+        ("require-current", base),
+        ("status", "running"),
+        ("suspend",),
+        ("status", "suspended"),
+        ("require-current", base),
+    ]
+    assert not path.exists()
+
+
+def test_failed_recovery_retains_journal_for_reserved_or_next_run(
+    monkeypatch, tmp_path
+) -> None:
+    base = "{35dba943-a22d-473c-b1b0-44fa6326e626}"
+    path = tmp_path / "recovery.json"
+    journal = ParallelsRecoveryJournal(path)
+    journal.begin(vm_uuid=UUID, base_snapshot_id=base)
+    fake = _RecoveryVM(base, revert_error=ParallelsError("restore failed"))
+    monkeypatch.setattr(pv, "ParallelsVM", lambda *_a, **_k: fake)
+
+    with pytest.raises(ParallelsError, match="restore failed"):
+        recover_parallels_vm(path)
+
+    assert journal.load() == pv.ParallelsRecoveryRecord(UUID, base)
+
+
+def test_pixel_cleanup_requires_the_expected_durable_record(monkeypatch) -> None:
+    monkeypatch.setattr(pv, "recover_parallels_vm", lambda _path: False)
+
+    with pytest.raises(RuntimeError, match="record disappeared"):
+        _restore_pixel_vm("/private/tmp/recovery.json", journal_started=True)
+    _restore_pixel_vm("/private/tmp/recovery.json", journal_started=False)
 
 
 def test_guest_ip_skips_apipa(monkeypatch):

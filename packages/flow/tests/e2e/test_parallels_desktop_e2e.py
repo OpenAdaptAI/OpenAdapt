@@ -38,10 +38,11 @@ Safety / isolation (the user's VM is sacred):
     * OPT-IN ONLY. Skipped unless ``OAFLOW_PARALLELS_E2E=1`` -- it is collected
       but never runs on CI or any machine without the env var, so ``pytest
       --ignore=tests/e2e`` (macOS CI) and a plain run both stay green.
-    * SNAPSHOT-FIRST, RESTORE-BASE, DELETE-OWNED. A fresh per-trial snapshot is
-      taken before anything touches the guest. ``finally`` switches to the
-      explicitly named preserved base, proves it is current, and deletes only
-      the exact snapshot id this trial created. No snapshot accumulates.
+    * RECOVERY-JOURNAL-FIRST. Before any VM mutation, the harness writes one
+      private durable record that binds the exact VM to its preserved base.
+      ``finally``, a reserved workflow step, and the next run all use the same
+      recovery function. It reverts the exact base and verifies suspension.
+      The validating tests create no ephemeral snapshot.
     * A host-free-space preflight runs before VM mutation. The harness never
       deletes the VM or a pre-existing snapshot, and never runs unless the
       maintainer explicitly opts in. CI never does.
@@ -92,6 +93,7 @@ MATRIX_ID_ENV = "OAFLOW_WINDOWS_UIA_MATRIX_ID"
 BASE_SNAPSHOT_ENV = "OAFLOW_PARALLELS_BASE_SNAPSHOT_ID"
 HOST_STORAGE_PATH_ENV = "OAFLOW_PARALLELS_STORAGE_PATH"
 CANDIDATE_COMMIT_ENV = "OAFLOW_WINDOWS_UIA_CANDIDATE_COMMIT"
+RECOVERY_JOURNAL_ENV = "OAFLOW_PARALLELS_RECOVERY_JOURNAL"
 
 
 def _failure_category(error: Exception) -> str:
@@ -358,8 +360,9 @@ def test_desktop_record_compile_replay_structural(tmp_path, trial: int) -> None:
     )
     from openadapt_flow.backends.parallels_vm import (
         DEFAULT_VM_UUID,
-        ParallelsError,
+        ParallelsRecoveryJournal,
         ParallelsVM,
+        recover_parallels_vm,
     )
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.ir import Workflow
@@ -368,7 +371,16 @@ def test_desktop_record_compile_replay_structural(tmp_path, trial: int) -> None:
     uuid = os.environ.get("OAFLOW_PARALLELS_VM_UUID", DEFAULT_VM_UUID)
     base_snapshot_id = os.environ.get(BASE_SNAPSHOT_ENV)
     candidate_commit = os.environ.get(CANDIDATE_COMMIT_ENV)
+    journal_path = os.environ.get(RECOVERY_JOURNAL_ENV)
+    if not journal_path:
+        raise RuntimeError(
+            f"{RECOVERY_JOURNAL_ENV} is required for crash-safe qualification"
+        )
+    # Recover a record left by a timeout, cancellation, or runner restart before
+    # this trial makes a new mutation.
+    recover_parallels_vm(journal_path)
     vm = ParallelsVM(uuid)
+    journal = ParallelsRecoveryJournal(journal_path)
     token = secrets.token_hex(16)
     started_at = datetime.now(timezone.utc).isoformat()
     evidence_row: dict[str, Any] = {
@@ -392,13 +404,12 @@ def test_desktop_record_compile_replay_structural(tmp_path, trial: int) -> None:
         "ambiguity_refusal_passed": False,
         "clean_restore_passed": False,
         "base_snapshot_current_after": False,
-        "trial_snapshot_deleted": False,
+        "ephemeral_snapshot_created": False,
         "failure_category": None,
         "failure_categories": [],
     }
 
-    snap_id: str | None = None
-    vm_touched = False
+    journal_started = False
     active_error: Exception | None = None
     try:
         if not base_snapshot_id:
@@ -416,15 +427,15 @@ def test_desktop_record_compile_replay_structural(tmp_path, trial: int) -> None:
         evidence_row["host_free_bytes_before"] = vm.require_host_free_space(
             storage_path=storage_path
         )
-        vm_touched = True
+        # Refuse before the first mutation when this dedicated VM is not already
+        # bound to the reviewed base. Reverting that same current id then proves
+        # the live working state starts from the exact preserved snapshot.
+        vm.require_current_snapshot(base_snapshot_id)
+        journal.begin(vm_uuid=uuid, base_snapshot_id=base_snapshot_id)
+        journal_started = True
+        vm.revert(base_snapshot_id)
+        vm.require_current_snapshot(base_snapshot_id)
         vm.ensure_running()
-        # Snapshot before any guest deployment/recording. This id is retained
-        # in memory and is the only snapshot the trial may later delete.
-        snap_id = vm.snapshot(
-            f"oaflow-e2e-t{trial}-{int(time.time())}",
-            description=f"openadapt-flow typed UIA qualification trial {trial}/3",
-        )
-        evidence_row["trial_snapshot_id"] = snap_id
         endpoint = vm.launch_agent(token=token)
         # launch_agent auto-provisions the per-run TLS cert into the guest and
         # returns the pin fingerprint, so the client is encrypted + pinned end to
@@ -594,42 +605,14 @@ def test_desktop_record_compile_replay_structural(tmp_path, trial: int) -> None:
         )
         raise
     finally:
-        # Restore the explicit preserved base. Only after proving it current may
-        # the harness delete the exact per-trial snapshot id it just created.
-        # A failure makes the row rejected and stops cleanup before any broader
-        # mutation; no names, wildcards, or child-recursive deletion are used.
+        # Use the same exact-base recovery as the reserved workflow step and the
+        # next run. A failure retains the journal and rejects this evidence row.
         cleanup_errors: list[Exception] = []
-        if base_snapshot_id and snap_id is not None:
-            try:
-                vm.restore_base_and_delete_owned_snapshot(
-                    base_snapshot_id=base_snapshot_id,
-                    owned_snapshot_id=snap_id,
-                )
-                evidence_row["trial_snapshot_deleted"] = True
-            except Exception as exc:
-                cleanup_errors.append(exc)
-        elif base_snapshot_id and vm_touched:
-            try:
-                vm.revert(base_snapshot_id)
-            except Exception as exc:
-                cleanup_errors.append(exc)
         try:
-            state = vm.status()
-            if state in {"running", "paused"}:
-                vm.suspend()
-                state = vm.status()
-            if state != "suspended":
-                raise ParallelsError(
-                    f"preserved base did not finish suspended (state={state!r})"
-                )
-            if base_snapshot_id:
-                snapshots = vm.list_snapshots()
-                evidence_row["base_snapshot_current_after"] = any(
-                    item.snapshot_id == base_snapshot_id and item.current
-                    for item in snapshots
-                )
-                if not evidence_row["base_snapshot_current_after"]:
-                    raise ParallelsError("preserved base is not current after trial")
+            recovered = recover_parallels_vm(journal_path)
+            if journal_started and not recovered:
+                raise RuntimeError("durable Parallels recovery record disappeared")
+            evidence_row["base_snapshot_current_after"] = recovered
         except Exception as exc:
             cleanup_errors.append(exc)
         evidence_row["clean_restore_passed"] = not cleanup_errors

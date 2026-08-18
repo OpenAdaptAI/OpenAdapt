@@ -28,14 +28,18 @@ from __future__ import annotations
 
 import functools
 import http.server
+import json
 import os
 import re
 import shutil
 import socketserver
+import stat
 import subprocess
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -115,6 +119,150 @@ class ParallelsError(RuntimeError):
     """A ``prlctl`` invocation failed."""
 
 
+_EXACT_UUID_PATTERN = re.compile(
+    r"\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}"
+)
+
+
+def _require_exact_uuid(value: str, *, field: str) -> None:
+    if _EXACT_UUID_PATTERN.fullmatch(value) is None:
+        raise ValueError(f"{field} must be one exact braced UUID")
+
+
+@dataclass(frozen=True)
+class ParallelsRecoveryRecord:
+    """Durable binding for one VM that must return to one preserved base."""
+
+    vm_uuid: str
+    base_snapshot_id: str
+
+
+class ParallelsRecoveryJournal:
+    """Persist exact VM recovery authority before the first VM mutation.
+
+    The validating runner stores this file outside the checked-out repository.
+    A test process, job timeout, runner restart, or manual cancellation can then
+    leave the record for the reserved cleanup step or the next run. The record
+    never grants snapshot deletion authority; recovery only switches to the
+    configured preserved base and suspends that exact VM.
+    """
+
+    VERSION = 1
+
+    def __init__(self, path: str | os.PathLike[str]) -> None:
+        candidate = Path(path)
+        if not candidate.is_absolute():
+            raise ValueError("recovery journal path must be absolute")
+        self.path = Path(os.path.abspath(candidate))
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        if os.name == "nt":  # Windows cannot open directories this way.
+            return
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def begin(self, *, vm_uuid: str, base_snapshot_id: str) -> None:
+        """Create one durable record without replacing an earlier recovery."""
+
+        _require_exact_uuid(vm_uuid, field="vm_uuid")
+        _require_exact_uuid(base_snapshot_id, field="base_snapshot_id")
+        parent = self.path.parent
+        parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        payload = (
+            json.dumps(
+                {
+                    "version": self.VERSION,
+                    "vm_uuid": vm_uuid,
+                    "base_snapshot_id": base_snapshot_id,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            + b"\n"
+        )
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{self.path.name}.", dir=parent
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            if hasattr(os, "fchmod"):
+                os.fchmod(descriptor, 0o600)
+            else:  # pragma: no cover - Windows compatibility for unit imports
+                os.chmod(temporary_path, 0o600)
+            with os.fdopen(descriptor, "wb") as stream:
+                descriptor = -1
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                # A hard link publishes the complete record atomically and
+                # refuses to overwrite an unresolved record from an older run.
+                os.link(temporary_path, self.path)
+            except FileExistsError as exc:
+                raise ParallelsError(
+                    f"unresolved Parallels recovery journal exists: {self.path}"
+                ) from exc
+            self._fsync_directory(parent)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            temporary_path.unlink(missing_ok=True)
+
+    def load(self) -> ParallelsRecoveryRecord | None:
+        """Read and validate one closed-schema, owner-private record."""
+
+        try:
+            metadata = self.path.lstat()
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+            raise ParallelsError("recovery journal must be a regular file")
+        if hasattr(os, "getuid") and metadata.st_uid != os.getuid():
+            raise ParallelsError("recovery journal must be owned by the runner user")
+        if os.name != "nt" and metadata.st_mode & 0o077:
+            raise ParallelsError("recovery journal must not grant group/other access")
+        if metadata.st_size > 4096:
+            raise ParallelsError("recovery journal is too large")
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(self.path, flags)
+            with os.fdopen(descriptor, encoding="utf-8") as stream:
+                value = json.load(stream)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ParallelsError("recovery journal is unreadable") from exc
+        expected_keys = {"version", "vm_uuid", "base_snapshot_id"}
+        if not isinstance(value, dict) or set(value) != expected_keys:
+            raise ParallelsError("recovery journal schema is invalid")
+        if value["version"] != self.VERSION:
+            raise ParallelsError("recovery journal version is unsupported")
+        vm_uuid = value["vm_uuid"]
+        base_snapshot_id = value["base_snapshot_id"]
+        if not isinstance(vm_uuid, str) or not isinstance(base_snapshot_id, str):
+            raise ParallelsError("recovery journal identifiers must be strings")
+        try:
+            _require_exact_uuid(vm_uuid, field="vm_uuid")
+            _require_exact_uuid(base_snapshot_id, field="base_snapshot_id")
+        except ValueError as exc:
+            raise ParallelsError("recovery journal identifier is invalid") from exc
+        return ParallelsRecoveryRecord(
+            vm_uuid=vm_uuid,
+            base_snapshot_id=base_snapshot_id,
+        )
+
+    def clear(self) -> None:
+        """Remove a record only after exact recovery verification succeeds."""
+
+        self.path.unlink()
+        self._fsync_directory(self.path.parent)
+
+
 class ParallelsVM:
     """Thin, fully-programmatic wrapper over ``prlctl`` for one VM.
 
@@ -162,12 +310,12 @@ class ParallelsVM:
 
     def status(self) -> str:
         """Return the VM power state (running/paused/suspended/stopped)."""
-        proc = self._run(["list", "--all", "-o", "status,uuid"], check=False)
+        proc = self._run(["list", "--all", "-o", "status,uuid"])
         for line in proc.stdout.splitlines():
             if self.uuid in line:
                 return line.split()[0].strip()
         # Fall back to name match.
-        proc = self._run(["list", "--all"], check=False)
+        proc = self._run(["list", "--all"])
         for line in proc.stdout.splitlines():
             if self.uuid in line:
                 return line.split()[1].strip()
@@ -265,7 +413,7 @@ class ParallelsVM:
 
     def list_snapshots(self) -> list[SnapshotInfo]:
         """Return all snapshots (``*`` marks the current one)."""
-        proc = self._run(["snapshot-list", self.uuid], check=False)
+        proc = self._run(["snapshot-list", self.uuid])
         out: list[SnapshotInfo] = []
         for line in proc.stdout.splitlines():
             # Columns are PARENT_SNAPSHOT_ID then SNAPSHOT_ID; the current
@@ -277,6 +425,24 @@ class ParallelsVM:
                 star, sid = matches[-1]
                 out.append(SnapshotInfo(snapshot_id=sid, current=bool(star)))
         return out
+
+    def require_current_snapshot(self, snapshot_id: str) -> None:
+        """Prove one exact preserved snapshot exists and is current.
+
+        Qualification callers use this read-only check before they resume,
+        focus, snapshot, deploy, or actuate on a dedicated VM. It prevents a
+        run from preserving and later deleting an unrelated current state.
+        """
+
+        _require_exact_uuid(snapshot_id, field="snapshot_id")
+        snapshots = self.list_snapshots()
+        match = next(
+            (item for item in snapshots if item.snapshot_id == snapshot_id), None
+        )
+        if match is None:
+            raise ParallelsError("preserved base snapshot is missing")
+        if not match.current:
+            raise ParallelsError("preserved base snapshot is not current")
 
     def revert(self, snapshot_id: str) -> None:
         """Revert to a snapshot (the per-run clean-state reset)."""
@@ -290,12 +456,7 @@ class ParallelsVM:
         and must first switch to their preserved base with
         :meth:`restore_base_and_delete_owned_snapshot`.
         """
-        snapshot_pattern = (
-            r"\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}"
-        )
-        if re.fullmatch(snapshot_pattern, snapshot_id) is None:
-            raise ValueError("snapshot_id must be one exact braced UUID")
+        _require_exact_uuid(snapshot_id, field="snapshot_id")
         self._run(["snapshot-delete", self.uuid, "-i", snapshot_id])
 
     def restore_base_and_delete_owned_snapshot(
@@ -684,3 +845,44 @@ class ParallelsVM:
             return r.status_code == 200 and r.json().get("status") == "ok"
         except Exception:  # noqa: BLE001
             return False
+
+
+def recover_parallels_vm(
+    journal_path: str | os.PathLike[str],
+    *,
+    prlctl: str = DEFAULT_PRLCTL,
+) -> bool:
+    """Restore and suspend the exact VM in a durable recovery record.
+
+    Returns ``False`` when no record exists. The record remains present after
+    any command or verification failure, so a reserved cleanup step or a later
+    run can retry. It is removed only after the exact base is current and the
+    VM has reported a verified suspended state through successful ``prlctl``
+    commands.
+    """
+
+    journal = ParallelsRecoveryJournal(journal_path)
+    record = journal.load()
+    if record is None:
+        return False
+    vm = ParallelsVM(record.vm_uuid, prlctl=prlctl)
+    snapshots = vm.list_snapshots()
+    if not any(item.snapshot_id == record.base_snapshot_id for item in snapshots):
+        raise ParallelsError("preserved recovery base snapshot is missing")
+    # Switch even when Parallels marks this snapshot current. The guest can have
+    # modified working state after that marker, and recovery must discard it.
+    vm.revert(record.base_snapshot_id)
+    vm.require_current_snapshot(record.base_snapshot_id)
+    state = vm.status()
+    if state in {"running", "paused"}:
+        vm.suspend()
+    elif state == "stopped":
+        vm.start()
+        vm.suspend()
+    elif state != "suspended":
+        raise ParallelsError(f"cannot recover VM from state {state!r}")
+    if vm.status() != "suspended":
+        raise ParallelsError("recovered VM did not report suspended state")
+    vm.require_current_snapshot(record.base_snapshot_id)
+    journal.clear()
+    return True

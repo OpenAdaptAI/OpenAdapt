@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / ".github/workflows/ci.yml"
 QUICKSTART = ROOT / ".github/workflows/quickstart-lifecycle.yml"
 VALIDATE_CLAIMS = ROOT / ".github/workflows/validate-claims.yml"
+PIXEL_E2E = ROOT / "tests/e2e/test_citrix_pixel_e2e.py"
+DESKTOP_E2E = ROOT / "tests/e2e/test_parallels_desktop_e2e.py"
 
 
 def test_playwright_version_probes_are_valid_python() -> None:
@@ -293,6 +295,66 @@ def test_exhaustive_identity_ladder_corpus_runs_in_the_slow_lane_only() -> None:
     assert flag not in workflow[fast_start:fast_end]
     # exactly one opt-in: the canonical Ubuntu matrix leg
     assert workflow.count(f'{flag}: "1"') == 1
+
+
+def test_supported_claims_consume_their_required_jobs_real_junit() -> None:
+    """The two required test jobs must fail when cited evidence did not run."""
+
+    workflow = CI.read_text(encoding="utf-8")
+    unit_start = workflow.index("- name: Test (fast unit suite)")
+    unit_end = workflow.index("- name: Coverage (whole-package visibility)")
+    unit = workflow[unit_start:unit_end]
+    assert "--junitxml=runs/unit-claims-junit.xml" in unit
+    assert "--ci-job test --junit runs/unit-claims-junit.xml" in unit
+
+    browser_start = workflow.index("- name: E2E (browser record -> compile -> replay)")
+    browser_end = workflow.index("- name: Upload run artifacts", browser_start)
+    browser = workflow[browser_start:browser_end]
+    assert "--junitxml=runs/e2e-claims-junit.xml" in browser
+    assert "--ci-job e2e-browser --junit runs/e2e-claims-junit.xml" in browser
+
+    claims = VALIDATE_CLAIMS.read_text(encoding="utf-8")
+    assert "validate_claims.py --check --structure-only" in claims
+
+
+def test_validating_refresh_uses_exact_macos_parallels_substrate_and_scope() -> None:
+    """A green validating report cannot come from Ubuntu or skipped evidence."""
+
+    claims = VALIDATE_CLAIMS.read_text(encoding="utf-8")
+    start = claims.index("  refresh-validating-evidence:")
+    refresh = claims[start:]
+
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in claims
+    assert "runs-on: [self-hosted, macos, arm64, openadapt-parallels]" in refresh
+    assert "OPENADAPT_PARALLELS_VALIDATION_ENABLED" in refresh
+    assert "group: openadapt-parallels-validation" in refresh
+    assert "cancel-in-progress: false" in refresh
+    assert "runs-on: ubuntu-latest" not in refresh
+    assert "oa-vm" not in refresh
+    assert "command -v prlctl" in refresh
+    assert "OAFLOW_PARALLELS_BASE_SNAPSHOT_ID" in refresh
+    assert "OAFLOW_PARALLELS_RECOVERY_JOURNAL" in refresh
+    assert "${{ github.workspace }}/../.openadapt-flow/" in refresh
+    assert "vm.require_current_snapshot" in refresh
+    assert refresh.count("scripts/reconcile_parallels_recovery.py") == 2
+    assert "if: ${{ always() }}" in refresh
+    assert "timeout-minutes: 110" in refresh
+    assert "timeout-minutes: 90" in refresh
+    assert "--ci-job validating --junit runs/validating-junit.xml" in refresh
+    assert refresh.index("tests/e2e/test_citrix_pixel_e2e.py") < refresh.index(
+        "tests/e2e/test_parallels_desktop_e2e.py"
+    )
+    for path in (
+        "tests/e2e/test_parallels_desktop_e2e.py",
+        "tests/e2e/test_citrix_pixel_e2e.py",
+    ):
+        assert f"--evidence-path {path}" in refresh
+
+    for test_path in (PIXEL_E2E, DESKTOP_E2E):
+        source = test_path.read_text(encoding="utf-8")
+        assert "journal.begin(" in source
+        assert source.index("journal.begin(") < source.index("vm.revert(")
+        assert "vm.snapshot(" not in source
 
 
 def test_clean_machine_lifecycle_declares_utf8_on_every_os() -> None:

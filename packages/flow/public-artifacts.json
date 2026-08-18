@@ -72,6 +72,10 @@
       "sha256": "bb032fd5942477be558870dbf2c6615d258b6600ac2b389c5c4bf7c55b856da6"
     },
     {
+      "path": ".github/actionlint.yaml",
+      "sha256": "f58f146d55a022c530f1dd35e5da6a2e9ea0cd5cbcac0e6b0e50995a8b45cf20"
+    },
+    {
       "path": ".github/dependabot.yml",
       "sha256": "40a11fc00e1010db80d8788ee8c6125b51b14d642be018cddb761ea209f66095"
     },
@@ -89,7 +93,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "2910e528f63e328b281d233ccacf3a4483601cf147d7e9336edbd07f33cb8d4a"
+      "sha256": "c562a53c3222a5db05a123d78875379162c056bc2573f7d01f03dcf4df9e42f2"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
@@ -121,7 +125,7 @@
     },
     {
       "path": ".github/workflows/validate-claims.yml",
-      "sha256": "085faf897b2c9f31afe4b1297454606bec8af3ac0165616a6351f06e9ce1fe6a"
+      "sha256": "5cfeab8e231b79bbeacb106f069a331ee46f007631b9d28f9aca4239553afdbc"
     },
     {
       "path": ".pre-commit-config.yaml",
@@ -601,7 +605,7 @@
     },
     {
       "path": "claims.yaml",
-      "sha256": "bf33b2ef84654c8563937828e38e389e065efcea5ec2654d4888423c1ede0142"
+      "sha256": "5423f4f10ef289dc3e232630c8558f12a76b3f11ebbb497feb923a928dc230b7"
     },
     {
       "path": "deploy/on-prem/docker-compose.yml",
@@ -1809,7 +1813,7 @@
     },
     {
       "path": "docs/verification.json",
-      "sha256": "b27d6f6a848d1dd75149155bc5f33dc4b797634def65da5ffe4f62fe0053f44e"
+      "sha256": "538fc0a2dc392a10617da96522191d03aa3d3cbe0288bd4891cd14e1de274f97"
     },
     {
       "path": "openadapt_flow/console/static/console.css",
