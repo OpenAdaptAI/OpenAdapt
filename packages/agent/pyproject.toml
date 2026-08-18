@@ -32,7 +32,12 @@ keywords = ["mcp", "agent-skills", "gui", "automation", "workflow", "openadapt",
 dependencies = [
     # Governed workflow compiler/runtime this package bridges. Execution
     # shells out to its CLI; bundle metadata loads via its IR.
-    "openadapt-flow>=1.18.1,<2",
+    # FLOOR IS LOAD-BEARING. `reject`, its `rejected_by_operator` disposition,
+    # and the `decided_by` provenance keyword are named symbols that only exist
+    # from 1.26.0. A resolver satisfied by 1.25.x fails at CALL time, inside the
+    # attended decision path, with a TypeError rather than at resolve. Raise
+    # this with every new symbol taken from Flow's attended contract.
+    "openadapt-flow>=1.26.0,<2",
     # Official Model Context Protocol SDK (stdio server transport).
     "mcp>=1.28,<2",
     # Structured concurrency runtime the mcp SDK already uses; we call

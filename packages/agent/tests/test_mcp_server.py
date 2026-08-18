@@ -61,6 +61,29 @@ def test_server_read_only_when_run_not_allowed(bundles_root, runner_config):
     ]
 
 
+def test_server_exports_reject_as_a_destructive_local_mutation(
+    bundles_root,
+    runner_config,
+):
+    bridge = AgentBridge(
+        bundles_root,
+        runner_config,
+        allow_attended_actions=True,
+    )
+    server = build_server(bridge)
+
+    async def reject_tool():
+        handler = server.request_handlers[types.ListToolsRequest]
+        result = await handler(types.ListToolsRequest(method="tools/list"))
+        return next(tool for tool in result.root.tools if tool.name == "reject_attention")
+
+    annotations = anyio.run(reject_tool).annotations
+    assert annotations.readOnlyHint is False
+    assert annotations.destructiveHint is True
+    assert annotations.idempotentHint is True
+    assert annotations.openWorldHint is False
+
+
 def test_bridge_refusals_are_mcp_error_results(bundles_root, runner_config):
     runner_config.runs_dir.mkdir()
     bridge = AgentBridge(bundles_root, runner_config)
@@ -197,6 +220,21 @@ def test_attended_action_requires_protocol_native_human_confirmation():
     )
     message, schema, request_id = session.calls[0]
     assert "person must already have completed" in message
+    assert schema["properties"]["confirmed"]["type"] == "boolean"
+    assert request_id == "request-123"
+
+
+def test_reject_requires_protocol_native_terminal_confirmation():
+    session = ElicitationSession()
+    anyio.run(
+        _confirm_attended_action,
+        ElicitationServer(session),
+        "reject_attention",
+    )
+    message, schema, request_id = session.calls[0]
+    assert "end this run" in message
+    assert "dispatches no new action" in message
+    assert "earlier run actions may have effects" in message
     assert schema["properties"]["confirmed"]["type"] == "boolean"
     assert request_id == "request-123"
 

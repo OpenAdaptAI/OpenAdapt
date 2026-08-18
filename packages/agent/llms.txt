@@ -5,13 +5,14 @@
 ## What it provides
 
 - `openadapt-agent serve --bundles <dir> [--allow-run]`: a local MCP stdio server. `list_workflows`, `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item` are always available as PHI-safe read-only projections. `run_workflow_<opaque-id>` tools require `--allow-run`.
-- `--allow-attended-actions` adds exact Teach and Escalate tools for signed durable pauses. With a qualified Flow `--config`, the same server also exposes Continue and Skip through Flow's deployment-bound live verifier and deterministic resume path.
+- `--allow-attended-actions` adds exact Reject, Teach, and Escalate tools for signed durable pauses. With a qualified Flow `--config`, the same server also exposes Continue and Skip through Flow's deployment-bound live verifier and deterministic resume path.
 - `openadapt-agent emit-skill <bundle> --out <dir>` wraps Flow's skill emitter and appends MCP, halt, and attended-action guidance.
 
 ## Attended actions
 
 - `continue_attention`: after the local operator completes the paused task, Flow verifies the exact outcome and resumes without actuating that task again.
 - `skip_attention`: applies only a compiled, non-consequential skip that Flow revalidates at decision time.
+- `reject_attention`: terminates this run and dispatches no new action. Earlier run actions may have effects, so review the protected local report and transaction outcome. Use escalation when a qualified operator can still continue the run.
 - `teach_attention`: records an audited corrective-demonstration request; Flow's revision and regression gates still decide promotion.
 - `escalate_attention`: records escalation and preserves the exact durable pause.
 

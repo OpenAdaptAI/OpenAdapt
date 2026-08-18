@@ -107,7 +107,7 @@
     "allow_attended_actions": {
       "type": "boolean",
       "title": "Allow Needs Attention decisions",
-      "description": "Add Teach and Escalate. A qualified deployment config also enables Continue and Skip with live revalidation.",
+      "description": "Add Reject, Teach, and Escalate. Reject dispatches no new action, but earlier run effects still require protected local review. A qualified deployment config also enables Continue and Skip with live revalidation.",
       "required": false,
       "default": false
     },

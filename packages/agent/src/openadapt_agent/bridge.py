@@ -223,7 +223,7 @@ class AgentBridge:
                     input_schema=action_input_schema(tool),
                     annotations={
                         "readOnlyHint": False,
-                        "destructiveHint": tool.action in {"continue", "skip"},
+                        "destructiveHint": tool.action in {"continue", "skip", "reject"},
                         "idempotentHint": True,
                         "openWorldHint": tool.action in {"continue", "skip"},
                     },

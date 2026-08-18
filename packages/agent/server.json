@@ -47,7 +47,7 @@
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
-      "notes": "PHI-safe inspection and Needs Attention tools are available by default. Run tools require --allow-run. Continue, Skip, Teach, and Escalate require --allow-attended-actions; Continue and Skip additionally require a qualified deployment --config. See docs/DISTRIBUTION.md."
+      "notes": "PHI-safe inspection and Needs Attention tools are available by default. Run tools require --allow-run. Reject, Teach, and Escalate require --allow-attended-actions; Continue and Skip also require --allow-attended-actions and a qualified deployment --config. Reject dispatches no new action, but earlier run actions may have effects and require review of the protected local outcome. See docs/DISTRIBUTION.md."
     }
   }
 }

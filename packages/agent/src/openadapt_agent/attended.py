@@ -46,6 +46,16 @@ _SAFE_DECISION_MESSAGES = {
         "The escalation was recorded and the durable pause remains available "
         "for qualified assistance."
     ),
+    # Deliberately not worded like the escalation above. That one says the
+    # pause remains; this one says the run is over. A caller told the wrong
+    # one of those acts on it.
+    "rejected": (
+        "The rejection was recorded and the run is terminal. This rejection "
+        "dispatched no new action. Earlier run actions may have effects; review "
+        "the protected local report and transaction outcome. No approval can "
+        "resume the run. The durable pause is retained only as the audit record "
+        "of what was rejected."
+    ),
 }
 
 
@@ -130,6 +140,24 @@ ATTENDED_TOOLS: dict[str, AttendedTool] = {
             "pause for a qualified operator."
         ),
     ),
+    "reject_attention": AttendedTool(
+        action="reject",
+        confirmation="confirm_run_must_not_proceed",
+        disposition="rejected_by_operator",
+        description=(
+            "End this run because it must not proceed. Use it only after "
+            "reading the live application and concluding OpenAdapt was RIGHT "
+            "to stop. This TERMINATES the run: no approval resumes it, and "
+            "the durable pause is kept only as the audit record. It is not "
+            "escalate_attention, which parks the run for a colleague who can "
+            "still continue it, and it is not teach_attention, which changes "
+            "future runs. It asserts nothing about the saved workflow and "
+            "dispatches no new action. Earlier run actions can still have "
+            "effects, so inspect the protected report and transaction outcome. "
+            "Flow independently refuses a rejection whose delivery may already "
+            "have landed."
+        ),
+    ),
 }
 
 
@@ -206,9 +234,22 @@ class AttendedBridge:
         return self.allow_actions and self.service is not None
 
     def enabled_action_tools(self) -> tuple[str, ...]:
+        """Which action tools this bridge exposes, and why reject is not gated.
+
+        ``reject_attention`` sits with teach and escalate rather than behind
+        ``live_actions_ready``. That gate exists because continue and skip need
+        Flow's deployment-bound live executor to re-read the application and
+        act on it. Reject dispatches no new action and resumes nothing, so it
+        has nothing to gate on -- the same reason Flow's own ``_allowed_actions``
+        offers it at a pause carrying no resolvable action step at all.
+
+        Withholding it would also leave this bridge able to say "proceed" --
+        which writes to the system of record -- while unable to say "stop".
+        The only thing removed by that configuration is the brake.
+        """
         if not self.allow_actions:
             return ()
-        tools = ["teach_attention", "escalate_attention"]
+        tools = ["reject_attention", "teach_attention", "escalate_attention"]
         if self.live_actions_ready:
             tools[0:0] = ["continue_attention", "skip_attention"]
         return tuple(tools)
@@ -327,17 +368,24 @@ class AttendedBridge:
             disposition=tool.disposition,
         )
         try:
+            # This bridge submits on behalf of a MODEL, and it derives
+            # `operator` from the same local OS identity a person's own console
+            # uses -- so the identity alone cannot tell the two apart. Declared
+            # here, at the one place that knows, so an agreement rate computed
+            # over Flow's journal can filter to decisions people actually made.
             if self.service is not None:
                 decision = self.service.execute(
                     path,
                     request,
                     operator=self.operator,
+                    decided_by="automation",
                 )
             else:
                 decision = execute_attended_action(
                     path,
                     request,
                     operator=self.operator,
+                    decided_by="automation",
                 )
         except (ApprovalRequired, AttendedActionRefused, ResumeRefused) as exc:
             _LOG.info(

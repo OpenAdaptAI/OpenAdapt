@@ -82,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-attended-actions",
         action="store_true",
         help=(
-            "Register governed Teach/Escalate tools for signed durable pauses. "
+            "Register governed Reject/Teach/Escalate tools for signed durable pauses. "
             "With --config, also register Continue/Skip through Flow's "
             "deployment-bound live verifier and deterministic resume path."
         ),

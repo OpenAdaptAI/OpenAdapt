@@ -53,6 +53,10 @@ that matches their explicit decision:
   the paused task in the live application. Flow revalidates the outcome
   and resumes after it; it never performs that completed action again.
 - `skip_attention` only for an allowed, declared skip.
+- `reject_attention` to terminate this run without dispatching a new
+  action. Earlier run actions may have effects. Review the protected local
+  report and transaction outcome. Use escalation if a qualified operator
+  can still continue the run.
 - `teach_attention` to request a corrective demonstration.
 - `escalate_attention` to preserve the pause for qualified assistance.
 

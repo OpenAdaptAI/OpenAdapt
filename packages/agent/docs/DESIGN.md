@@ -90,7 +90,7 @@ operation:
   use demonstrated values. It requires run authority and is only for
   synthetic demos; it never places those values in a tool schema.
 
-`--allow-attended-actions` registers Teach and Escalate. Continue and
+`--allow-attended-actions` registers Reject, Teach, and Escalate. Continue and
 Skip are registered only when a deployment configuration lets Flow
 construct its bound live executor.
 
@@ -160,9 +160,11 @@ person clicked, nor identity proof. Flow separately records the effective
 local OS account as the operator. A client that does not advertise
 form elicitation cannot execute attended mutations through MCP; the
 operator uses Flow's existing attended console/CLI instead, where all
-four capabilities remain available. This is a transport authorization
+five capabilities remain available. This is a transport authorization
 choice, not a read-only conversion. Tool annotations also mark Continue
-and Skip as destructive, idempotent, and open-world so the host can apply
+and Skip as destructive, idempotent, and open-world. Reject is destructive
+and idempotent but not open-world because it dispatches no new application
+action. These hints let the host apply
 its own approval policy. Annotations and elicitation do not replace
 Flow's signed capability, live revalidation, idempotency, or durable
 audit.
@@ -189,6 +191,14 @@ Skip is not a generic bypass. It exists only when the signed capability
 and compiled workflow declare a safe, non-consequential skip. Flow
 rechecks that guard against current state. Consequential, stale,
 ambiguous, or undeclared skips are refused.
+
+### Reject
+
+Reject terminates the current run and permanently prevents resume. The
+rejection dispatches no new application action. Earlier steps in the run can
+still have effects, so the operator must inspect the protected local report
+and transaction outcome. Use Escalate instead when a qualified operator can
+still inspect and continue the run.
 
 ### Teach
 
@@ -262,7 +272,7 @@ Tests cover:
 - PHI-safe queue projections and path traversal refusal;
 - stale capability, unknown field, and false-confirmation refusal;
 - idempotent Continue without re-actuation;
-- Teach and Escalate without a live service;
+- Reject, Teach, and Escalate without a live service;
 - delegation to Flow's public service context;
 - compatibility with Flow's public, thread-owned attended service;
 - success/halt/refusal/timeout outcome mapping;

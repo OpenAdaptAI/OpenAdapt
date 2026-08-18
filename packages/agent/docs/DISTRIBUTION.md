@@ -34,9 +34,9 @@ default install yields PHI-safe inspection and Needs Attention tools only
 (`list_workflows`, `get_workflow`, `get_run_report`,
 `list_needs_attention`, and `get_attention_item`). Enabling workflow runs
 adds the dynamic `run_workflow_<opaque-id>` tools; enabling attended actions
-adds Teach and Escalate, while a qualified deployment config also makes
+adds Reject, Teach, and Escalate, while a qualified deployment config also makes
 Continue and Skip available. Clients without MCP form elicitation use Flow's
-attended console/CLI, where all four capabilities remain available. This
+attended console/CLI, where all five capabilities remain available. This
 matches the security model in [`DESIGN.md`](DESIGN.md).
 
 > There is intentionally **no** hosted, multi-tenant "official OpenAdapt
@@ -68,7 +68,7 @@ and [`../manifest.json`](../manifest.json).
   - `get_run_report` — PHI-safe status and count summary; raw evidence stays local unless protected export was explicitly enabled.
   - `list_needs_attention` / `get_attention_item` — PHI-safe durable-pause cards and current signed-capability metadata.
   - `run_workflow_<opaque-id>` — execute through the governed `openadapt-flow run` CLI when `--allow-run`; returns `success` | `halt` | `refused` | `timeout` | `error`.
-  - `continue_attention` / `skip_attention` / `teach_attention` / `escalate_attention` — exact, elicited attended decisions under Flow's capability, idempotency, verification, and audit contract.
+  - `continue_attention` / `skip_attention` / `reject_attention` / `teach_attention` / `escalate_attention` — exact, elicited attended decisions under Flow's capability, idempotency, verification, and audit contract.
 - **Categories/tags:** mcp, agent-skills, automation, workflow, gui, governed, healthcare, rpa
 
 ## 3. Release automation vs. founder one-time actions

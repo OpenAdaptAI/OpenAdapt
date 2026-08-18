@@ -48,6 +48,13 @@ _CONFIRMATION_COPY = {
         "Confirm that OpenAdapt should record an audited escalation and preserve "
         "the exact durable pause for qualified assistance."
     ),
+    "reject_attention": (
+        "Confirm that OpenAdapt must end this run without resuming it. This rejection "
+        "dispatches no new action, but earlier run actions may have effects. Review the "
+        "protected local report and transaction outcome. The durable pause remains only "
+        "as the audit record. Use escalation instead when a qualified colleague must "
+        "inspect and possibly continue the run."
+    ),
 }
 
 
@@ -101,6 +108,8 @@ def build_server(bridge: AgentBridge) -> Server:
             "plus protocol-native operator elicitation, an exact signed "
             "capability, live revalidation, and a stable idempotency key; they "
             "never re-actuate the human-completed step. "
+            "Reject terminates the run and dispatches no new action, but earlier "
+            "run effects still require review of the protected local outcome. "
             "Never report a halted, refused, or timed-out run as a success."
         ),
     )

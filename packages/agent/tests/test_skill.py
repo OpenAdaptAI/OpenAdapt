@@ -45,3 +45,5 @@ def test_appendix_names_the_mcp_tool_and_params(bundle_dir, tmp_path):
     assert "NOTHING was executed" in text
     assert "continue_attention" in text
     assert "never performs that completed action again" in text
+    assert "reject_attention" in text
+    assert "Earlier run actions may have effects" in text

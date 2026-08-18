@@ -119,6 +119,7 @@ Attended actions are separate, exact tools:
 | --- | --- |
 | `continue_attention` | The operator confirms they completed the paused task in the live app. Flow revalidates its postconditions and independent effects, checkpoints it as human-completed, and resumes after it. It does not perform the completed action again. |
 | `skip_attention` | Flow applies only an already-declared, non-consequential skip. A stale, undeclared, consequential, or ambiguous skip is refused. |
+| `reject_attention` | Terminates this run and dispatches no new action. Earlier run actions can still have effects, so review the protected local report and transaction outcome. Use Escalate if a qualified operator can still continue the run. |
 | `teach_attention` | Records an audited request for a corrective demonstration. Flow's existing revision and regression gates decide what can be promoted. |
 | `escalate_attention` | Records an audited escalation and leaves the exact durable pause intact for a qualified operator. |
 
@@ -136,7 +137,7 @@ confirmation signal, not cryptographic proof that a particular person
 clicked it or proof of that person's identity. Flow separately records
 the effective local OS account as the operator. Clients without form
 elicitation cannot execute attended actions through this MCP bridge; the same
-Continue, Skip, Teach, and Escalate capabilities remain available through
+Continue, Skip, Reject, Teach, and Escalate capabilities remain available through
 Flow's attended console/CLI. MCP destructive/idempotent/open-world
 annotations give the host an additional approval signal. Neither those
 hints nor the elicitation replaces Flow's signed capability, live
@@ -161,7 +162,7 @@ Retries with the same idempotency key return the prior terminal decision
 instead of repeating it.
 
 With `--allow-attended-actions` but no deployment `--config`, the safe
-Teach and Escalate transitions remain available; Continue and Skip are
+Reject, Teach, and Escalate transitions remain available; Continue and Skip are
 not registered until Flow can construct the deployment-bound live
 verifier and backend.
 
@@ -175,7 +176,7 @@ verifier and backend.
 | `list_needs_attention` | Always |
 | `get_attention_item` | Always |
 | `run_workflow_<opaque-id>` | `--allow-run` |
-| `teach_attention`, `escalate_attention` | `--allow-attended-actions` |
+| `reject_attention`, `teach_attention`, `escalate_attention` | `--allow-attended-actions` |
 | `continue_attention`, `skip_attention` | `--allow-attended-actions` plus a qualified deployment `--config` |
 
 ## Run outcomes

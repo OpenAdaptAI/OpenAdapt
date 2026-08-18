@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from openadapt_agent.cli import build_parser, main
 
 
@@ -28,6 +30,14 @@ def test_attended_flags_parse_as_server_fixed_configuration(tmp_path):
     assert args.allow_synthetic_recorded_defaults is True
     assert args.config == "deployment.yaml"
     assert args.headed is True
+
+
+def test_attended_help_names_the_no_config_reject_capability(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        build_parser().parse_args(["serve", "--help"])
+
+    assert exc_info.value.code == 0
+    assert "Reject/Teach/Escalate" in capsys.readouterr().out
 
 
 def test_custom_flow_cli_is_refused_when_attended_actions_are_enabled(tmp_path, capsys):
