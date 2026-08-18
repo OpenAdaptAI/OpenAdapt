@@ -121,7 +121,7 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "d986d5fd270150366769a7ea89b0f97f1e6a3a8a722aa0d6627c1d891fd2c16c"
+      "sha256": "0a184edbc125ce120296808b76d4984e3f7921c7759916405fe0c113ad444bd1"
     },
     {
       "path": ".github/workflows/validate-claims.yml",
