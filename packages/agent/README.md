@@ -43,18 +43,16 @@ Python 3.10–3.12 is supported. The package installs a compatible
 
 ## Serve compiled workflows
 
-Compile a workflow with Flow, then serve its bundle directory:
+Create a governed local tutorial bundle through the canonical launcher, then
+serve that bundle directory:
 
 ```bash
-openadapt-flow demo-record --out /tmp/recording
-openadapt-flow compile /tmp/recording \
-  --out /tmp/bundles/triage \
-  --name "Demo Triage"
+python -m pip install --upgrade 'openadapt[browser]'
+openadapt quickstart --out /tmp/openadapt-agent-demo
 
 openadapt-agent serve \
-  --bundles /tmp/bundles \
-  --runs-dir /tmp/openadapt-runs \
-  --allow-run
+  --bundles /tmp/openadapt-agent-demo/bundle \
+  --runs-dir /tmp/openadapt-runs
 ```
 
 For example, register it with an MCP client that accepts a local stdio
@@ -63,17 +61,19 @@ command:
 ```bash
 claude mcp add openadapt-workflows -- \
   openadapt-agent serve \
-    --bundles /tmp/bundles \
-    --runs-dir /tmp/openadapt-runs \
-    --allow-run
+    --bundles /tmp/openadapt-agent-demo/bundle \
+    --runs-dir /tmp/openadapt-runs
 ```
 
-The client receives `list_workflows`, `get_workflow`,
-`get_run_report`, `list_needs_attention`, `get_attention_item`, and one
-typed `run_workflow_<opaque-id>` tool per loadable bundle. Declared
-parameters are required; recorded demonstration values never appear in
-the schema and are not silently reused. Omit `--allow-run` when the
-client should be able to inspect workflows but not start them.
+The client receives the read-only `list_workflows`, `get_workflow`,
+`get_run_report`, `list_needs_attention`, and `get_attention_item` tools. The
+quickstart stops its synthetic application after the verified tutorial run, so
+this retained bundle is an inspection example, not a second runnable tutorial.
+
+The deployment-configured example below adds `--allow-run`. It registers one
+typed `run_workflow_<opaque-id>` tool per loadable bundle. Declared parameters
+are required; recorded demonstration values never appear in the schema and are
+not silently reused.
 
 By default every MCP response is safe to render outside the protected
 workflow-data boundary. Workflow labels and intents, recorded values,
@@ -201,7 +201,7 @@ success.
 
 ```bash
 openadapt-agent emit-skill \
-  /tmp/bundles/triage \
+  /tmp/openadapt-agent-demo/bundle \
   --out ~/.claude/skills
 ```
 
