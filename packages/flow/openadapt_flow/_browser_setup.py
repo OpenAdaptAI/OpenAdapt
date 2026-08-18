@@ -26,9 +26,11 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import subprocess
 import sys
 import threading
+from pathlib import Path
 
 #: Environment variable that disables the auto-install (air-gapped / CI that
 #: pre-provisions the browser itself). Any non-empty value opts out.
@@ -74,18 +76,34 @@ def _opted_out() -> bool:
 def _chromium_present() -> bool:
     """Return whether Playwright's Chromium browser binary is installed.
 
-    Playwright always reports the *expected* executable path for the pinned
-    browser revision (even when it has never been downloaded), so the presence
-    of the file on disk is the reliable signal -- we do not rely on catching a
-    launch error. Any failure to determine the path is treated as "not present"
-    so the (idempotent) install is attempted rather than wrongly skipped.
+    Ask Playwright's non-actuating CLI for the exact install locations and
+    require each completion marker. Do not start ``sync_playwright()`` only to
+    inspect ``chromium.executable_path``. Playwright 1.62 can leave its driver
+    connection task pending when that short-lived probe exits, which prints a
+    false-success-shaped ``TargetClosedError`` after an otherwise healthy CLI
+    command on Linux, macOS, and Windows.
+
+    Any failure to determine the locations is treated as "not present" so the
+    idempotent install is attempted rather than wrongly skipped.
     """
     require_browser_support()
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as p:
-        path = p.chromium.executable_path
-    return bool(path) and os.path.exists(path)
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "--dry-run", "chromium"],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+    )
+    locations = [
+        Path(match.group(1).strip())
+        for match in re.finditer(
+            r"(?m)^\s*Install location:\s*(.+?)\s*$", result.stdout
+        )
+    ]
+    return bool(locations) and all(
+        (location / "INSTALLATION_COMPLETE").is_file() for location in locations
+    )
 
 
 def _install_chromium() -> None:

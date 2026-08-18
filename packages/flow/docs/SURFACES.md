@@ -43,31 +43,41 @@ as before.
 
 Each surface has an equivalent record -> compile -> replay path:
 
+| Workflow surface | Exact install |
+|---|---|
+| Browser | `pip install 'openadapt-flow[browser]'` |
+| Native Windows | `pip install 'openadapt-flow[capture,windows]'` |
+| Native macOS | `pip install 'openadapt-flow[capture,macos]'` |
+| Native Linux | `pip install 'openadapt-flow[capture,linux]'` plus the AT-SPI system packages in [`desktop/LINUX_NATIVE.md`](desktop/LINUX_NATIVE.md) |
+| Network RDP | Recorder: `pip install 'openadapt-flow[capture]'` inside the demonstrated session; runner: `pip install 'openadapt-flow[rdp]'` |
+| Local RDP/Citrix client window | macOS host: `pip install 'openadapt-flow[capture,macos]'`; Windows host: `pip install 'openadapt-flow[capture,windows]'` |
+
 ```bash
 # Browser (Playwright / Chromium)
 openadapt-flow record --backend web --url https://your.app --out rec
 openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --url https://your.app
 
-# Windows (native UI Automation via the in-guest WAA agent)
-openadapt-flow record --backend windows --agent-url http://localhost:5001 --out rec
+# Windows: Capture records the local window; the in-guest WAA agent replays it.
+openadapt-flow record --backend windows --window "Target App" --out rec
 openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --agent-url http://localhost:5001
 
-# macOS (accessibility, one app window)
-openadapt-flow record --backend macos --macos-app TextEdit --out rec
+# macOS: the app and title scope the local Capture window.
+openadapt-flow record --backend macos --macos-app TextEdit \
+  --macos-window-title notes.txt --out rec
 openadapt-flow compile rec --out bundle --name my-task
-openadapt-flow replay bundle --macos-app TextEdit
+openadapt-flow replay bundle --macos-app TextEdit \
+  --macos-window-title notes.txt
 
-# Linux (AT-SPI, one exact app window)
-openadapt-flow record --backend linux --linux-app gedit \
-  --linux-window-title "Untitled Document 1" --out rec
+# Linux: Capture records the local desktop; AT-SPI selects the replay target.
+openadapt-flow record --backend linux --out rec
 openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --linux-app gedit \
   --linux-window-title "Untitled Document 1"
 
-# RDP (network session, or a local remote-desktop client window)
-openadapt-flow record --backend rdp --rdp-host 10.0.0.5 --out rec
+# Network RDP: run record inside the demonstrated remote session.
+openadapt-flow record --backend rdp --out rec
 openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --rdp-host 10.0.0.5
 
@@ -81,10 +91,14 @@ openadapt-flow replay bundle --rdp-window "Citrix Viewer" \
 ```
 
 The bound surface is the replay default, so `--backend` may be omitted on
-`replay`/`run` for a bound bundle; the target flags (`--agent-url`,
-`--macos-app`, ...) still name the concrete window/host. `run ... --config
-deploy.yaml --profile standard|regulated` wires the same selection for a real
-deployment.
+`replay`/`run` for a bound bundle. During record, `--macos-app` /
+`--macos-window-title` scope the macOS Capture window, and the local
+RDP/Citrix flags `--rdp-window` / `--rdp-window-title` scope Capture and enter
+the bundle's existing replay-binding metadata. `--agent-url`, `--linux-app`,
+`--linux-window-title`, and `--rdp-host` are replay targets. The local Capture
+session cannot control them, so `record` refuses them instead of accepting an
+unused flag. Pass them to `replay`/`run`; `run ... --config deploy.yaml
+--profile standard|regulated` wires the same selection for a real deployment.
 
 ## The two remote execution modes
 

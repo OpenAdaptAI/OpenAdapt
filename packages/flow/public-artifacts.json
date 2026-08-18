@@ -89,7 +89,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "34f47a2752dda1e3502e90d32f443f07d27c5452af8e89e78931b507323e9bf4"
+      "sha256": "6ababed7e1d90cbc63b681011712ddf5c335429044508836bdd47a113d7331f8"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
@@ -109,7 +109,7 @@
     },
     {
       "path": ".github/workflows/quickstart-lifecycle.yml",
-      "sha256": "01c504f7038b156cd2747fd8f5de385492633a42f61a62923406903ec7758dda"
+      "sha256": "34edc8580648b5aeeb3cbd1860681567694a6b5c9ea337b6bb504509ea644b07"
     },
     {
       "path": ".github/workflows/release-health.yml",
@@ -601,7 +601,7 @@
     },
     {
       "path": "claims.yaml",
-      "sha256": "0663daa2a910cf9844d094c8e62f5cfd85defa6a7787ba5d209c1a63bd054e65"
+      "sha256": "bf33b2ef84654c8563937828e38e389e065efcea5ec2654d4888423c1ede0142"
     },
     {
       "path": "deploy/on-prem/docker-compose.yml",
@@ -1809,7 +1809,7 @@
     },
     {
       "path": "docs/verification.json",
-      "sha256": "2a561c44799c49066619ef422a4384ef7cf2b9b80153c8bd70e743a7adaa92b1"
+      "sha256": "b27d6f6a848d1dd75149155bc5f33dc4b797634def65da5ffe4f62fe0053f44e"
     },
     {
       "path": "openadapt_flow/console/static/console.css",

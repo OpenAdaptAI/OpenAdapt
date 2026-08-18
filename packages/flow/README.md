@@ -149,7 +149,7 @@ governed lifecycle (`openadapt-flow repair`: reviewed diff, replay + fault
 campaigns, human approval, staged canary, one-command rollback). See
 [docs/REPAIR_LIFECYCLE.md](docs/REPAIR_LIFECYCLE.md).
 
-The nightly clean-machine test runs this complete install-to-uninstall journey
+The weekly clean-machine test runs this complete install-to-uninstall journey
 on Linux, macOS, and Windows. See the
 [capability and qualification matrix](docs/PRODUCT_STATUS.md) for the accepted
 scope of each substrate.
@@ -169,25 +169,49 @@ to the browser, and it prints a visible notice when it does. See
 [docs/SURFACES.md](docs/SURFACES.md) for the per-surface first-workflow paths
 and the two remote execution modes.
 
+Install the Capture component together with the runtime for the surface that
+will replay the workflow:
+
+| Workflow surface | Exact install |
+|---|---|
+| Browser | `pip install 'openadapt-flow[browser]'` |
+| Native Windows | `pip install 'openadapt-flow[capture,windows]'` |
+| Native macOS | `pip install 'openadapt-flow[capture,macos]'` |
+| Native Linux | `pip install 'openadapt-flow[capture,linux]'` plus the AT-SPI system packages in [the Linux guide](docs/desktop/LINUX_NATIVE.md) |
+| Network RDP | Recorder: `pip install 'openadapt-flow[capture]'` inside the demonstrated session; runner: `pip install 'openadapt-flow[rdp]'` |
+| Local RDP/Citrix client window | macOS host: `pip install 'openadapt-flow[capture,macos]'`; Windows host: `pip install 'openadapt-flow[capture,windows]'` |
+
 ```bash
 # Browser (Playwright / Chromium): the app is a URL.
 openadapt-flow record --backend web --url https://your.app --out rec
 openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --backend web --url https://your.app
 
-# Native Windows (UI Automation via the in-guest WAA agent).
-openadapt-flow record --backend windows --agent-url http://localhost:5001 \
+# Native Windows: Capture records the local target window. WAA drives replay.
+openadapt-flow record --backend windows --window "Target App" \
   --task "add a patient note" --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --backend windows \
+  --agent-url http://localhost:5001
 
-# Native macOS (accessibility, one app window).
-openadapt-flow record --backend macos --macos-app TextEdit --out rec
+# Native macOS: --macos-app scopes Capture and selects the replay app.
+openadapt-flow record --backend macos --macos-app TextEdit \
+  --macos-window-title notes.txt --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --backend macos --macos-app TextEdit \
+  --macos-window-title notes.txt
 
-# Native Linux (AT-SPI, one exact app window).
-openadapt-flow record --backend linux --linux-app gedit \
-  --linux-window-title "Untitled Document 1" --out rec
+# Native Linux: Capture records the local desktop; AT-SPI selects replay target.
+openadapt-flow record --backend linux --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --backend linux --linux-app gedit \
+  --linux-window-title "Untitled Document 1"
 
-# RDP remote display (pixel-only vision ladder over the network session).
-openadapt-flow record --backend rdp --rdp-host 10.0.0.5 --out rec
+# Network RDP: run record inside the demonstrated remote session. The host is
+# a replay target, so it is supplied only when the runner connects.
+openadapt-flow record --backend rdp --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --backend rdp --rdp-host 10.0.0.5
 
 # Citrix / VDI (one exact local Citrix Workspace window).
 openadapt-flow record --backend citrix \
@@ -196,14 +220,23 @@ openadapt-flow record --backend citrix \
   --rdp-window-title "Ward A" \
   --rdp-readiness-text "Appointments" \
   --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --backend citrix \
+  --rdp-window "Citrix Viewer" \
+  --rdp-window-title "Ward A" \
+  --rdp-readiness-text "Appointments"
 ```
 
 `--backend web` is browser-first (the app is a `--url`). For
-`windows`, `macos`, `linux`, `rdp`, and `citrix` the capture has no field identity, so the
-target is the app window or host: `--agent-url` for Windows, `--macos-app`,
-`--linux-app` plus `--linux-window-title`, and `--rdp-host` (or a configured
-exact `rdp_window` / `rdp_window_title` for Citrix Workspace). Pass the same `--backend`
-plus target flags to `replay`, or drive a real deployment with
+`windows`, `macos`, `linux`, `rdp`, and `citrix`, the Capture component records
+local screen, mouse, keyboard, timing, and available action-time structure.
+`--macos-app` / `--macos-window-title` scope the macOS Capture window.
+`--window` / `--window-title` scope a Windows-hosted local capture, and
+`--rdp-window` / `--rdp-window-title` bind a local RDP or Citrix client window
+to both capture and replay. In contrast, `--agent-url`, `--linux-app`,
+`--linux-window-title`, and `--rdp-host` name replay targets that the local
+Capture session cannot control. `record` refuses those flags instead of
+ignoring them; pass them to `replay` or `run`. Drive a real deployment with
 `openadapt-flow run bundle --config deploy.yaml`, which reads the backend,
 effects, actuation, durable, and policy sections from one config. Recorded
 parameter values are the defaults, and `--param` overrides them at replay.

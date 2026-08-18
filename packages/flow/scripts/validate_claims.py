@@ -270,7 +270,7 @@ def _classify_evidence(
         else:
             strength = STRENGTH_CI
             stage = (
-                "post-merge/nightly full suite"
+                "required PR gate (e2e-browser)"
                 if path.startswith("tests/e2e/")
                 else "required PR gate (test)"
             )

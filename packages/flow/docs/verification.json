@@ -16,7 +16,7 @@
       "strongest_evidence": "supported",
       "caveats": [
         "\"Supported\" is scoped to the reference headless-browser backend in this registry. Desktop and remote-display workflows use the separately scoped acceptance and code-qualified claims below.",
-        "The full record->compile->replay e2e runs in the post-merge/nightly full suite; the fast required PR gate covers the replayer + demo units."
+        "The full record->compile->replay browser suite runs in the required e2e-browser PR gate and repeats in the weekly compatibility matrix."
       ],
       "evidence": [
         {
@@ -24,7 +24,7 @@
           "kind": "test",
           "exists": true,
           "strength": "supported",
-          "gating": "ci (post-merge/nightly full suite)",
+          "gating": "ci (required PR gate (e2e-browser))",
           "node": null,
           "node_found": null,
           "junit_status": null,
@@ -75,7 +75,7 @@
           "kind": "test",
           "exists": true,
           "strength": "supported",
-          "gating": "ci (post-merge/nightly full suite)",
+          "gating": "ci (required PR gate (e2e-browser))",
           "node": null,
           "node_found": null,
           "junit_status": null,

@@ -49,6 +49,7 @@ jobs:
           --work-dir "runs/lifecycle"
           --install-browser
           --browser-with-deps
+          --source-revision "${{ github.sha }}"
 
       - name: Full lifecycle (macOS / Windows)
         if: runner.os != 'Linux'
@@ -57,6 +58,7 @@ jobs:
           --wheel "lifecycle-dist/*.whl"
           --work-dir "runs/lifecycle"
           --install-browser
+          --source-revision "${{ github.sha }}"
 
       - name: Upload lifecycle evidence
         if: always()

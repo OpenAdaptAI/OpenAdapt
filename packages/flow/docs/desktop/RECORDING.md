@@ -128,10 +128,13 @@ demonstration recorded here is already in the pixel space the `rdp` backend
 replays in (`CaptureSession.window_capture`, `coordinate_space:
 window_pixels`). The capture adapter stamps the window identity into
 `meta.json` under `window_capture` (target + resolved owner/title, plus the
-resolved `resolved_pid` / `resolved_window_id` OS handle where available) and
-emits closed `backend_hints` (`backend`, `rdp_window`, `rdp_window_title`, and
-optional `rdp_readiness_text`) so compile preserves the target and an unflagged
-replay resolves the same client window. Capture selectors are intentionally
+resolved `resolved_pid` / `resolved_window_id` OS handle where available).
+When the operator selected RDP or Citrix, the desktop recording orchestration
+also emits closed `backend_hints` (`backend`, `rdp_window`,
+`rdp_window_title`, and optional `rdp_readiness_text`) so compile preserves the
+target and an unflagged replay resolves the same client window. Native Windows
+and macOS window recordings keep their native surface identity and do not get
+remote hints. Capture selectors are intentionally
 substring-based; replay selectors are exact. Use `--window` to find the window
 during recording and `--rdp-window` / `--rdp-window-title` to pin the exact
 replay identity. The resolved exact owner/title is used when the explicit replay

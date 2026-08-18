@@ -88,14 +88,11 @@ This adapter detects such a session and:
     silently lose a demonstrated action; keeping it would compile a
     wrong-target step);
   * stamps the output ``meta.json`` with the recorded scoping
-    (``window_capture``) plus ``backend_hints`` naming the recorded target
-    owner/title in ``BackendConfig`` terms (``rdp_window`` /
-    ``rdp_window_title``). Live ``record --backend rdp|citrix`` orchestration
-    seals these hints, the compiler carries them in ``Workflow.backend_hints``,
-    and replay uses them unless explicit deployment config or CLI flags
-    override them. Direct offline conversion cannot infer Citrix versus another
-    remote-display client, so it retains the generic ``backend: rdp`` identity
-    for backward compatibility.
+    (``window_capture``), but does not infer an execution surface from window
+    scope alone. Live ``record --backend rdp|citrix`` orchestration adds the
+    exact ``backend_hints`` (``rdp_window`` / ``rdp_window_title``). Native
+    Windows and macOS recording uses the same window primitive without remote
+    hints, so the compiler receives one consistent surface identity.
 
 A window-scoped session that declares a coordinate space this adapter does
 not understand is refused loudly rather than converted with guessed scaling.
@@ -834,9 +831,10 @@ def convert_capture(
     pass through unscaled (they are already captured-frame pixels), the
     viewport/timeline/frame-size contract is verified, every mouse action is
     screened against it (an out-of-window action refuses conversion), and the
-    output ``meta.json`` additionally carries ``window_capture`` provenance
-    plus ``backend_hints`` (``rdp_window`` / ``rdp_window_title``) naming the
-    recorded target window for ``replay --backend rdp``.
+    output ``meta.json`` additionally carries ``window_capture`` provenance.
+    The orchestration layer adds replay hints only when the operator selected
+    an RDP or Citrix surface. A window alone does not prove that the captured
+    surface is remote.
 
     Args:
         capture_dir: An openadapt-capture session directory (contains
@@ -994,14 +992,12 @@ def convert_capture(
             "task_description": session.task_description,
         }
         if window_capture is not None:
-            # Additive provenance + replay hints (the compiler ignores unknown
-            # meta.json keys; a non-window session's meta is unchanged). The
-            # hints carry the recorded TARGET owner/title substrings — the
-            # user's proven-to-resolve intent, stabler across replays than the
-            # resolved window's live title — in BackendConfig terms
-            # (rdp_window / rdp_window_title), so `replay --backend rdp` can
-            # resolve the same client window. Resolved values are kept as
-            # provenance and used only when the target carried neither field.
+            # Additive window provenance (the compiler ignores unknown
+            # meta.json keys; a non-window session's meta is unchanged).
+            # Do not infer an RDP backend from window scope. Native Windows and
+            # macOS recordings use the same Capture primitive. The desktop
+            # orchestration layer adds exact replay hints only for an explicit
+            # RDP or Citrix recording.
             assert window_selectors is not None
             owner, title, resolved_owner, resolved_title = window_selectors
             meta["window_capture"] = {
@@ -1021,12 +1017,6 @@ def convert_capture(
                 meta["window_capture"]["resolved_pid"] = resolved_pid
             if resolved_window_id is not None:
                 meta["window_capture"]["resolved_window_id"] = resolved_window_id
-            hints: dict[str, Any] = {"backend": "rdp"}
-            if owner:
-                hints["rdp_window"] = owner
-            if title:
-                hints["rdp_window_title"] = title
-            meta["backend_hints"] = hints
         (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
         return out_dir
     finally:

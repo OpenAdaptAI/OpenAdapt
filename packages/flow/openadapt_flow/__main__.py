@@ -112,6 +112,141 @@ def _parse_identifier_region_arg(
     return (region[0], region[1], region[2], region[3])
 
 
+_RECORD_TARGET_FLAGS: tuple[tuple[str, str], ...] = (
+    ("agent_url", "--agent-url"),
+    ("macos_app", "--macos-app"),
+    ("macos_window_title", "--macos-window-title"),
+    ("linux_app", "--linux-app"),
+    ("linux_window_title", "--linux-window-title"),
+    ("linux_allow_physical_input", "--linux-allow-physical-input"),
+    ("rdp_host", "--rdp-host"),
+    ("rdp_window", "--rdp-window"),
+    ("rdp_window_title", "--rdp-window-title"),
+    ("rdp_readiness_text", "--rdp-readiness-text"),
+)
+
+
+def _record_flag_is_set(args: argparse.Namespace, attr: str) -> bool:
+    value = getattr(args, attr, None)
+    if isinstance(value, bool):
+        return value
+    return value is not None
+
+
+def _reject_unbound_record_target_flags(args: argparse.Namespace, backend: str) -> None:
+    """Refuse target flags that cannot affect this capture session.
+
+    The backend flags are shared with replay/run.  A record command must not
+    accept one unless it either scopes the live Capture session or is retained
+    by the existing recording schema as a replay binding.  Otherwise the CLI
+    would appear to record the named app/host while actually recording an
+    unrelated local desktop.
+    """
+    allowed: dict[str, set[str]] = {
+        "web": set(),
+        "windows": set(),
+        "macos": {"macos_app", "macos_window_title"},
+        "linux": set(),
+        "rdp": {"rdp_window", "rdp_window_title", "rdp_readiness_text"},
+        "citrix": {"rdp_window", "rdp_window_title", "rdp_readiness_text"},
+    }
+    for attr, flag in _RECORD_TARGET_FLAGS:
+        if not _record_flag_is_set(args, attr) or attr in allowed[backend]:
+            continue
+        if backend == "windows" and attr == "agent_url":
+            reason = (
+                "the local Capture session cannot bind to a WAA endpoint. "
+                "Scope the local recording with --window/--window-title, then "
+                "pass --agent-url to replay or run"
+            )
+        elif backend == "linux" and attr in {
+            "linux_app",
+            "linux_window_title",
+            "linux_allow_physical_input",
+        }:
+            reason = (
+                "the current Capture component has no Linux window-scoping "
+                "primitive. Record the local Linux desktop without this flag, "
+                "then pass it to replay or run"
+            )
+        elif backend == "rdp" and attr == "rdp_host":
+            reason = (
+                "Capture cannot connect to a network RDP endpoint. Record "
+                "inside the remote session, or scope a local client with "
+                "--window/--rdp-window, then pass --rdp-host to replay or run"
+            )
+        else:
+            reason = f"this target flag does not apply to the {backend} recorder"
+        raise SystemExit(
+            f"record --backend {backend}: {flag} was not applied: {reason}. "
+            "Nothing was recorded."
+        )
+
+
+def _merge_record_window_selector(
+    generic_value: Optional[str],
+    target_value: Optional[str],
+    *,
+    generic_flag: str,
+    target_flag: str,
+    backend: str,
+) -> Optional[str]:
+    """Merge generic and surface-specific Capture selectors without guessing."""
+    if generic_value is None:
+        return target_value
+    if target_value is None:
+        return generic_value
+    if generic_value.strip().casefold() != target_value.strip().casefold():
+        raise SystemExit(
+            f"record --backend {backend}: {generic_flag} and {target_flag} "
+            "name different capture targets. Give one target, or give the "
+            "same value to both. Nothing was recorded."
+        )
+    return generic_value
+
+
+def _resolve_record_capture_window(
+    args: argparse.Namespace, backend: str
+) -> Optional[dict[str, Optional[str]]]:
+    """Resolve the exact window that the local Capture session will record."""
+    _reject_unbound_record_target_flags(args, backend)
+
+    owner = getattr(args, "window", None)
+    title = getattr(args, "window_title", None)
+    if backend == "linux" and (owner is not None or title is not None):
+        raise SystemExit(
+            "record --backend linux: --window/--window-title cannot be applied "
+            "because the current Capture component has no Linux "
+            "window-scoping primitive. Record the local Linux desktop without "
+            "these flags. Nothing was recorded."
+        )
+    if backend == "macos":
+        owner = _merge_record_window_selector(
+            owner,
+            getattr(args, "macos_app", None),
+            generic_flag="--window",
+            target_flag="--macos-app",
+            backend=backend,
+        )
+        title = _merge_record_window_selector(
+            title,
+            getattr(args, "macos_window_title", None),
+            generic_flag="--window-title",
+            target_flag="--macos-window-title",
+            backend=backend,
+        )
+    elif backend in ("rdp", "citrix"):
+        # The capture selector is a local owner/title substring. The replay
+        # selector can be an exact process identity (for example ``wfica32``),
+        # so the two values can legitimately differ. A dedicated --window
+        # value controls Capture; otherwise the replay selector also scopes it.
+        owner = owner or getattr(args, "rdp_window", None)
+        title = title or getattr(args, "rdp_window_title", None)
+    if owner is None and title is None:
+        return None
+    return {"owner": owner, "title": title}
+
+
 def _replay_params(
     pairs: Sequence[str] | None,
     params_file: str | None = None,
@@ -776,6 +911,7 @@ def _cmd_record(args: argparse.Namespace) -> int:
             "backends (--backend windows/macos/linux/rdp/citrix); --backend web "
             "records the Playwright page given by --url."
         )
+    _reject_unbound_record_target_flags(args, "web")
 
     if not args.url:
         raise SystemExit(
@@ -821,6 +957,23 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
     full-screen the client) so coordinates align; a cross-machine coordinate
     remap is a documented follow-up (docs/desktop/RECORDING.md).
     """
+    if getattr(args, "url", None) is not None:
+        raise SystemExit(
+            f"record --backend {backend}: --url applies only to --backend web. "
+            "Nothing was recorded."
+        )
+    if getattr(args, "headless", False):
+        raise SystemExit(
+            f"record --backend {backend}: --headless applies only to --backend "
+            "web. Nothing was recorded."
+        )
+
+    # Resolve and validate every target flag before importing or starting
+    # Capture. Surface-specific flags either scope this exact recording (macOS
+    # and local RDP/Citrix windows), enter the existing remote-display binding
+    # schema, or fail loud. None can be accepted and then ignored.
+    window = _resolve_record_capture_window(args, backend)
+
     if args.secret:
         # Field-level secret redaction relies on DOM field geometry (the
         # browser recorder blacks out the field rect). A pixel/desktop capture
@@ -845,17 +998,6 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
     identifier_region = _parse_identifier_region_arg(
         getattr(args, "identifier", None) or (), backend=backend
     )
-
-    # Window-scoping (optional): capture ONE window in its own pixel space.
-    # Selectors are case-insensitive substrings (owner app / window title),
-    # matching openadapt-capture's WindowTarget; None means full-screen capture.
-    window_owner = getattr(args, "window", None) or getattr(args, "rdp_window", None)
-    window_title = getattr(args, "window_title", None) or getattr(
-        args, "rdp_window_title", None
-    )
-    window: Optional[dict[str, Optional[str]]] = None
-    if window_owner or window_title:
-        window = {"owner": window_owner, "title": window_title}
 
     from openadapt_flow.desktop_record import record_desktop_capture
 
@@ -3538,12 +3680,10 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             "Backend to drive: 'web' (default; Playwright/Chromium), 'windows' "
-            "(native Windows via the WAA HTTP agent — needs --agent-url), "
-            "'macos' (one native Mac app window — needs --macos-app), or "
-            "'linux' (one exact AT-SPI app window — needs --linux-app and "
-            "--linux-window-title), or "
-            "'rdp' (pixel-only network or local remote desktop — needs "
-            "--rdp-host or a configured rdp_window), or 'citrix' (the local "
+            "(native Windows via the WAA HTTP agent at replay), 'macos' (one "
+            "native Mac app window), 'linux' (one exact AT-SPI app window at "
+            "replay), 'rdp' (pixel-only network or local remote desktop), or "
+            "'citrix' (the local "
             "Citrix Workspace window; its owner defaults by host OS and a "
             "configured rdp_window may override it). Overrides backend.kind "
             "from --config."
@@ -3555,7 +3695,9 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         metavar="URL",
         help=(
             "Base URL of the in-guest Windows (WAA) agent for --backend windows "
-            "(e.g. http://localhost:5001). Overrides backend.agent_url."
+            "(e.g. http://localhost:5001). Replay/run only: desktop record "
+            "refuses this flag because local Capture cannot bind to a WAA "
+            "endpoint. Overrides backend.agent_url."
         ),
     )
     p.add_argument(
@@ -3563,8 +3705,9 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         default=None,
         metavar="APP",
         help=(
-            "Owner application for --backend macos (e.g. TextEdit). Overrides "
-            "backend.macos_app."
+            "Owner application for --backend macos (e.g. TextEdit). During "
+            "record this scopes Capture to that local app window; during "
+            "replay/run it overrides backend.macos_app."
         ),
     )
     p.add_argument(
@@ -3573,7 +3716,8 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         metavar="TITLE",
         help=(
             "Window-title substring for --backend macos. Ambiguous matches "
-            "are refused. Overrides backend.macos_window_title."
+            "are refused. During record this scopes Capture; during replay/run "
+            "it overrides backend.macos_window_title."
         ),
     )
     p.add_argument(
@@ -3582,7 +3726,8 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         metavar="APP",
         help=(
             "Exact AT-SPI application name for --backend linux (e.g. gedit). "
-            "Overrides backend.linux_app."
+            "Replay/run only: the current Capture path records the local Linux "
+            "desktop and refuses this flag. Overrides backend.linux_app."
         ),
     )
     p.add_argument(
@@ -3591,7 +3736,9 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         metavar="TITLE",
         help=(
             "Exact top-level window title for --backend linux. Zero or "
-            "multiple matches are refused. Overrides backend.linux_window_title."
+            "multiple matches are refused. Replay/run only: the current "
+            "Capture path records the local Linux desktop and refuses this "
+            "flag. Overrides backend.linux_window_title."
         ),
     )
     p.add_argument(
@@ -3599,7 +3746,8 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         action="store_true",
         help=(
             "Explicitly allow window-bound X11 pointer/keyboard fallback for "
-            "--backend linux when native AT-SPI actuation is unavailable."
+            "--backend linux replay/run when native AT-SPI actuation is "
+            "unavailable. Record refuses this replay-only flag."
         ),
     )
     p.add_argument(
@@ -3608,8 +3756,9 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         metavar="HOST",
         help=(
             "RDP host/IP for --backend rdp (network RDP via FreeRDP). Overrides "
-            "backend.rdp_host. For a local client window use --rdp-window "
-            "instead."
+            "backend.rdp_host. Replay/run only: record cannot connect local "
+            "Capture to this endpoint. Record inside the remote session, or "
+            "capture a local client with --window/--rdp-window."
         ),
     )
     p.add_argument(
@@ -3620,7 +3769,8 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
             "Exact local remote-display window owner/process for --backend "
             "rdp or citrix. On Windows this is the process basename (for "
             "example wfica32); on macOS it is the app owner (for example "
-            "'Citrix Viewer'). Overrides backend.rdp_window."
+            "'Citrix Viewer'). During record it also scopes local Capture to "
+            "that window; during replay/run it overrides backend.rdp_window."
         ),
     )
     p.add_argument(
@@ -3629,7 +3779,8 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         metavar="TITLE",
         help=(
             "Exact local remote-display window title used to disambiguate "
-            "multiple matching RDP/Citrix client windows. Overrides "
+            "multiple matching RDP/Citrix client windows. During record it "
+            "also scopes local Capture; during replay/run it overrides "
             "backend.rdp_window_title."
         ),
     )
@@ -3814,8 +3965,8 @@ def build_parser() -> argparse.ArgumentParser:
         "record",
         help=(
             "Record YOUR workflow interactively: a headed browser "
-            "(--backend web --url), or a native Windows desktop "
-            "(--backend windows --agent-url) capturing the operator's real input"
+            "(--backend web --url), or the operator's real local desktop input "
+            "through openadapt-capture (--backend windows/macos/linux/rdp/citrix)"
         ),
     )
     p.add_argument(

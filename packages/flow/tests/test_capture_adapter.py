@@ -25,6 +25,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import shutil
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -755,8 +756,10 @@ def test_window_mode_frames_taken_as_is(window_converted: Path) -> None:
     assert (window_converted / "frames" / "0000_before.png").is_file()
 
 
-def test_window_mode_meta_stamps_backend_hints(window_converted: Path) -> None:
-    """meta.json carries the scoping provenance + rdp replay hints."""
+def test_window_mode_meta_stamps_provenance_without_guessing_surface(
+    window_converted: Path,
+) -> None:
+    """Window scope alone does not imply that the target is RDP."""
     import json
 
     meta = json.loads((window_converted / "meta.json").read_text())
@@ -771,9 +774,31 @@ def test_window_mode_meta_stamps_backend_hints(window_converted: Path) -> None:
         "resolved_pid": 4242,
         "resolved_window_id": 42,
     }
-    # The recorded TARGET had owner only (title=None): hints carry exactly the
-    # user's proven-to-resolve substrings, not the volatile resolved title.
-    assert meta["backend_hints"] == {"backend": "rdp", "rdp_window": WINDOW_OWNER}
+    assert "backend_hints" not in meta
+
+
+@pytest.mark.parametrize("surface", ["windows", "macos"])
+def test_native_window_recording_compiles_with_its_exact_surface(
+    window_converted: Path, tmp_path: Path, surface: str
+) -> None:
+    """The native CLI surface stamp cannot conflict with remote hints."""
+    from openadapt_flow.compiler import compile_recording
+
+    recording = tmp_path / f"{surface}-window-recording"
+    shutil.copytree(window_converted, recording)
+    meta_path = recording / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    meta["surface"] = surface
+    meta_path.write_text(json.dumps(meta, indent=2))
+
+    workflow = compile_recording(
+        recording,
+        tmp_path / f"{surface}-window-bundle",
+        name=f"{surface}-window",
+    )
+
+    assert workflow.surface == surface
+    assert workflow.backend_hints is None
 
 
 def test_window_mode_identity_omitted_when_absent(tmp_path: Path) -> None:

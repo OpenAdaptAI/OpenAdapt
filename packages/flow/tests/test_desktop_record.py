@@ -523,6 +523,150 @@ def test_cli_record_web_requires_url(tmp_path: Path) -> None:
         _run_cli(["record", "--out", str(tmp_path / "r")])
 
 
+@pytest.mark.parametrize(
+    ("backend", "flags", "message"),
+    [
+        (
+            "windows",
+            ["--agent-url", "http://localhost:5001"],
+            "local Capture session cannot bind to a WAA endpoint",
+        ),
+        (
+            "linux",
+            ["--linux-app", "gedit"],
+            "no Linux window-scoping primitive",
+        ),
+        (
+            "linux",
+            ["--linux-window-title", "Untitled Document 1"],
+            "no Linux window-scoping primitive",
+        ),
+        (
+            "linux",
+            ["--linux-allow-physical-input"],
+            "no Linux window-scoping primitive",
+        ),
+        (
+            "rdp",
+            ["--rdp-host", "10.0.0.5"],
+            "Capture cannot connect to a network RDP endpoint",
+        ),
+        (
+            "windows",
+            ["--macos-app", "TextEdit"],
+            "does not apply to the windows recorder",
+        ),
+        (
+            "web",
+            ["--url", "https://example.test", "--macos-app", "TextEdit"],
+            "does not apply to the web recorder",
+        ),
+        (
+            "windows",
+            ["--url", "https://example.test"],
+            "--url applies only to --backend web",
+        ),
+        (
+            "windows",
+            ["--headless"],
+            "--headless applies only to --backend web",
+        ),
+    ],
+)
+def test_cli_record_refuses_unapplied_flags_before_capture(
+    tmp_path: Path,
+    monkeypatch,
+    backend: str,
+    flags: list[str],
+    message: str,
+) -> None:
+    """A record target flag must affect Capture/metadata or stop up front."""
+    capture_started = False
+
+    def fail_if_capture_starts(*args, **kwargs):
+        nonlocal capture_started
+        capture_started = True
+        raise AssertionError("Capture must not start")
+
+    monkeypatch.setattr(
+        "openadapt_flow.desktop_record.record_desktop_capture",
+        fail_if_capture_starts,
+    )
+    out = tmp_path / "rec"
+    with pytest.raises(SystemExit, match=message):
+        _run_cli(["record", "--backend", backend, "--out", str(out), *flags])
+    assert capture_started is False
+    assert not out.exists()
+
+
+def test_cli_record_macos_target_scopes_capture(tmp_path: Path, monkeypatch) -> None:
+    """macOS target flags bind the exact local Capture window."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        "openadapt_flow.desktop_record.record_desktop_capture",
+        _fake_desktop_record(captured),
+    )
+    rc = _run_cli(
+        [
+            "record",
+            "--backend",
+            "macos",
+            "--macos-app",
+            "TextEdit",
+            "--macos-window-title",
+            "notes.txt",
+            "--out",
+            str(tmp_path / "rec"),
+        ]
+    )
+    assert rc == 0
+    assert captured["window"] == {"owner": "TextEdit", "title": "notes.txt"}
+
+
+@pytest.mark.parametrize(
+    ("backend", "generic_flags", "target_flags"),
+    [
+        ("macos", ["--window", "Notes"], ["--macos-app", "TextEdit"]),
+        (
+            "macos",
+            ["--window-title", "notes.txt"],
+            ["--macos-window-title", "draft.txt"],
+        ),
+    ],
+)
+def test_cli_record_refuses_conflicting_capture_targets_before_capture(
+    tmp_path: Path,
+    monkeypatch,
+    backend: str,
+    generic_flags: list[str],
+    target_flags: list[str],
+) -> None:
+    capture_started = False
+
+    def fail_if_capture_starts(*args, **kwargs):
+        nonlocal capture_started
+        capture_started = True
+        raise AssertionError("Capture must not start")
+
+    monkeypatch.setattr(
+        "openadapt_flow.desktop_record.record_desktop_capture",
+        fail_if_capture_starts,
+    )
+    with pytest.raises(SystemExit, match="name different capture targets"):
+        _run_cli(
+            [
+                "record",
+                "--backend",
+                backend,
+                "--out",
+                str(tmp_path / "rec"),
+                *generic_flags,
+                *target_flags,
+            ]
+        )
+    assert capture_started is False
+
+
 # -- Window-scoped recording (--window) --------------------------------------
 
 

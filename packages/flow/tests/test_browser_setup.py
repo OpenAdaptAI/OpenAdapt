@@ -55,6 +55,60 @@ def test_noop_when_browser_present(monkeypatch):
     assert calls == []
 
 
+def test_presence_probe_uses_non_actuating_cli_and_completion_markers(
+    monkeypatch, tmp_path
+):
+    """The readiness probe must not start a Playwright driver connection."""
+    chromium = tmp_path / "chromium-1234"
+    ffmpeg = tmp_path / "ffmpeg-1011"
+    shell = tmp_path / "chromium_headless_shell-1234"
+    for location in (chromium, ffmpeg, shell):
+        location.mkdir()
+        (location / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=(
+                f"Install location: {chromium}\n"
+                f"  Install location:    {ffmpeg}\n"
+                f"Install location: {shell}\n"
+            ),
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert bs._chromium_present() is True
+    assert calls[0][0][1:] == [
+        "-m",
+        "playwright",
+        "install",
+        "--dry-run",
+        "chromium",
+    ]
+    assert calls[0][1]["stdout"] is subprocess.PIPE
+    assert calls[0][1]["stderr"] is subprocess.STDOUT
+
+
+def test_presence_probe_refuses_a_partial_install(monkeypatch, tmp_path):
+    chromium = tmp_path / "chromium-1234"
+    chromium.mkdir()
+
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(
+            cmd, 0, stdout=f"Install location: {chromium}\n"
+        ),
+    )
+
+    assert bs._chromium_present() is False
+
+
 def test_missing_browser_extra_refuses_before_network_or_subprocess(monkeypatch):
     """A non-browser base install gets one exact install action, not an import trace."""
     monkeypatch.setattr(bs, "browser_support_installed", lambda: False)

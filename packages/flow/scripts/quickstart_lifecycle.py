@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import subprocess
@@ -18,6 +19,13 @@ import sys
 import venv
 from pathlib import Path
 from typing import Sequence
+
+_UNHANDLED_RUNTIME_MARKERS = (
+    "Task was destroyed but it is pending!",
+    "Task exception was never retrieved",
+    "Future exception was never retrieved",
+    "TargetClosedError",
+)
 
 
 def _run(
@@ -50,6 +58,13 @@ def _run(
     print(result.stdout, end="", flush=True)
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(f"$ {printable}\n\n{result.stdout}", encoding="utf-8")
+    marker = next(
+        (item for item in _UNHANDLED_RUNTIME_MARKERS if item in result.stdout), None
+    )
+    if marker is not None:
+        raise RuntimeError(
+            f"{printable} emitted an unhandled runtime error ({marker}); see {log}"
+        )
     if result.returncode != expected:
         raise RuntimeError(
             f"{printable} exited {result.returncode}; expected {expected} (see {log})"
@@ -231,6 +246,7 @@ def run_lifecycle(
     *,
     install_browser: bool,
     browser_with_deps: bool,
+    source_revision: str | None = None,
 ) -> dict[str, object]:
     """Run install through uninstall, returning the evidence summary."""
     if work_dir.exists():
@@ -255,7 +271,9 @@ def run_lifecycle(
     installed = False
     summary: dict[str, object] = {
         "wheel": wheel.name,
+        "wheel_sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
         "platform": sys.platform,
+        "source_revision": source_revision or "local-unbound",
     }
 
     try:
@@ -282,10 +300,13 @@ def run_lifecycle(
             log=logs / "02-cli-help.log",
         )
 
-        if install_browser:
+        # Linux needs host libraries that the ordinary unprivileged first-run
+        # download cannot install. Pre-provision them only in that lane. The
+        # macOS and Windows lanes leave Chromium absent here so the first Flow
+        # command proves the public lazy auto-install contract.
+        if browser_with_deps:
             browser_command = [str(python), "-m", "playwright", "install"]
-            if browser_with_deps:
-                browser_command.append("--with-deps")
+            browser_command.append("--with-deps")
             browser_command.append("chromium")
             _run(
                 browser_command,
@@ -422,12 +443,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--install-browser",
         action="store_true",
-        help="Install Playwright Chromium before running the lifecycle",
+        help=(
+            "Install the wheel's browser extra; Chromium remains lazy unless "
+            "--browser-with-deps pre-provisions it"
+        ),
     )
     parser.add_argument(
         "--browser-with-deps",
         action="store_true",
-        help="Also install Linux browser system dependencies",
+        help=(
+            "Pre-provision Chromium and its Linux host dependencies; without "
+            "this flag the first Flow command must auto-install Chromium"
+        ),
+    )
+    parser.add_argument(
+        "--source-revision",
+        default=None,
+        help="Exact source revision that produced the supplied wheel",
     )
     return parser
 
@@ -442,6 +474,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         Path(args.work_dir).resolve(),
         install_browser=args.install_browser,
         browser_with_deps=args.browser_with_deps,
+        source_revision=args.source_revision,
     )
     return 0
 

@@ -12,7 +12,7 @@ name: CI
 #       e2e-browser (the GOLDEN TASK first -- the whole free path to VERIFIED,
 #         pinned against tests/golden/tutorial_run.json -- then record ->
 #         compile -> replay in a headless browser; no OS permissions needed, so
-#         it runs on PRs, NOT just nightly),
+#         it runs on PRs, NOT just weekly),
 #       linux-atspi-x11 (real GTK/AT-SPI actuation inside Xvfb + session D-Bus),
 #       wheel (clean-venv wheel install + CLI smoke),
 #       windows-mock (non-injecting Win32 ABI + fake behavior contract).
@@ -44,7 +44,7 @@ name: CI
 #   - wheel
 #   - gate
 # `gate` comes from the separate Validate claims workflow.
-#   (test-matrix remains nightly/explicit release qualification.)
+#   (test-matrix remains weekly/explicit release qualification.)
 on:
   pull_request:
   push:
@@ -65,7 +65,7 @@ concurrency:
 
 jobs:
   # --- Lint + type check (ruff + mypy) -------------------------------------
-  # Runs on PRs (and post-merge/nightly). Deliberately a SEPARATE job from the
+  # Runs on PRs (and post-merge/weekly). Deliberately a SEPARATE job from the
   # required `test` gate: it must NOT be wired as a dependency of `test` (that
   # would leave `test` reporting a compound context and break branch
   # protection, whose required context is exactly `test`). Add `lint` as its
@@ -94,7 +94,7 @@ jobs:
         run: mypy
 
   # --- Supported Python lower bound (required on PRs) ----------------------
-  # The full cross-platform matrix remains post-merge/nightly, but the oldest
+  # The full cross-platform matrix remains post-merge/weekly, but the oldest
   # supported interpreter must install and execute the release-consistency gate
   # before merge. This specifically prevents Python 3.11-only stdlib imports or
   # dependency metadata drift from reaching PyPI unnoticed.
@@ -351,7 +351,7 @@ jobs:
       # when a drift/heal test fails in CI. --ignore=tests/e2e drops the slow
       # browser/OCR end-to-end suite from the fast required gate (it runs in the
       # required `e2e-browser` job instead). The complete suite is repeated
-      # across supported interpreters/OSes nightly and for explicit release
+      # across supported interpreters/OSes weekly and for explicit release
       # qualification. --cov collects coverage into
       # .coverage for the enforced safety floor in the next step.
       - name: Test (fast unit suite)
@@ -390,7 +390,7 @@ jobs:
   # The end-to-end record -> compile -> replay-under-drift suite. It drives a
   # HEADLESS Playwright browser against the bundled MockMed app, so it needs no
   # OS-level input permissions and runs deterministically on a Linux runner --
-  # which is exactly why it is a REQUIRED PR check here, not a nightly-only one.
+  # which is exactly why it is a REQUIRED PR check here, not a weekly-only one.
   # The desktop/Citrix/Parallels legs under tests/e2e self-skip when their
   # macOS/VM backends are absent (i.e. on this Linux runner), so running the
   # whole directory exercises every browser scenario and skips the rest.

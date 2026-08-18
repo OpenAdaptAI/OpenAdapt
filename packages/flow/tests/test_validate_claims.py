@@ -131,6 +131,22 @@ def test_supported_with_ci_backing_passes() -> None:
     assert vc.validate_claim(_claim()).ok
 
 
+def test_browser_e2e_evidence_names_its_required_pr_gate() -> None:
+    result = vc.validate_claim(
+        _claim(
+            evidence=[
+                {
+                    "path": "tests/e2e/test_record_compile_replay.py",
+                    "proves": "x",
+                }
+            ]
+        )
+    )
+
+    assert result.ok
+    assert result.evidence[0].gating == "ci (required PR gate (e2e-browser))"
+
+
 def test_field_result_cannot_be_supported() -> None:
     """A not-CI-reproducible field result may not be labeled `supported`, even
     with a real CI unit test attached."""

@@ -25,14 +25,14 @@
 
 | Backing evidence | Kind | Gating / CI stage | Strength | Proves |
 |---|---|---|---|---|
-| `tests/e2e/test_record_compile_replay.py` | test | ci (post-merge/nightly full suite) | supported | Records the MockMed browser demo once, compiles it, and replays it under baseline + theme/move/rename drift and parameter substitution through the headless-browser Backend. |
+| `tests/e2e/test_record_compile_replay.py` | test | ci (required PR gate (e2e-browser)) | supported | Records the MockMed browser demo once, compiles it, and replays it under baseline + theme/move/rename drift and parameter substitution through the headless-browser Backend. |
 | `tests/test_mockmed.py` | test | ci (required PR gate (test)) | supported | The reference browser demo app and its drift screens render deterministically (no CSS transitions), so replay is repeatable. |
 | `tests/test_replayer.py` | test | ci (required PR gate (test)) | supported | The deterministic replayer resolves steps, substitutes parameters, enforces postconditions and the risk gate — no model in the loop. |
 
 **Caveats (honest limits):**
 
 - "Supported" is scoped to the reference headless-browser backend in this registry. Desktop and remote-display workflows use the separately scoped acceptance and code-qualified claims below.
-- The full record->compile->replay e2e runs in the post-merge/nightly full suite; the fast required PR gate covers the replayer + demo units.
+- The full record->compile->replay browser suite runs in the required e2e-browser PR gate and repeats in the weekly compatibility matrix.
 
 ### `deterministic-zero-model-replay` — supported — CI-proven today
 
@@ -43,7 +43,7 @@
 
 | Backing evidence | Kind | Gating / CI stage | Strength | Proves |
 |---|---|---|---|---|
-| `tests/e2e/test_record_compile_replay.py` | test | ci (post-merge/nightly full suite) | supported | Baseline replay x3 resolves every step on the `template` rung with 0 heals and 0 model calls; healed bundles replay clean afterward. |
+| `tests/e2e/test_record_compile_replay.py` | test | ci (required PR gate (e2e-browser)) | supported | Baseline replay x3 resolves every step on the `template` rung with 0 heals and 0 model calls; healed bundles replay clean afterward. |
 | `tests/test_replayer.py` | test | ci (required PR gate (test)) | supported | The replayer is a deterministic resolution ladder; the VLM rung is a fallback, not on the default path — the core runtime is model-free. |
 | `benchmark/BENCHMARK.md` | benchmark | artifact (doc/benchmark) | roadmap | CI-reproducible MockMed run artifact: 100/100 compiled replays at 4.9s p50 with zero model calls, measured 2026-07-08 on Flow 0.1.0 (pre-v0.2.0 source build); field/artifact reference. |
 
