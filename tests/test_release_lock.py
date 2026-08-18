@@ -96,7 +96,7 @@ def test_release_workflow_pins_actions_and_separates_permissions():
     action_refs = re.findall(r"(?m)^\s*uses:\s+\S+@([^\s#]+)", workflow)
     assert action_refs
     assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs)
-    assert 'requires = ["hatchling==1.31.0"]' in metadata
+    assert 'requires = ["hatchling==1.32.0"]' in metadata
 
     assert document["permissions"] == {"contents": "read"}
     jobs = document["jobs"]
