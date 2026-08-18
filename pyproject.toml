@@ -40,15 +40,18 @@ dependencies = [
 # Individual packages
 browser = [
     # Web recording/replay only. The base launcher stays lightweight for
-    # native desktop, RDP, and Citrix users; Chromium remains lazy on first use.
-    "playwright>=1.44",
+    # native desktop, RDP, and Citrix users. Select Flow's browser contract
+    # instead of duplicating its current driver dependency here, so future
+    # browser-runtime changes remain compatible across the package boundary.
+    # Chromium remains lazy on first use.
+    "openadapt-flow[browser]>=1.29.0,<2.0.0",
 ]
 # Local human desktop recording. Flow owns the supported capture adapter
 # contract; the direct floor prevents an already-installed pre-1.0 Capture
 # from satisfying the launcher's public recording path. FFmpeg remains a
 # separately provisioned executable, not a Python-package dependency.
 capture = [
-    "openadapt-capture>=1.0.4,<2.0.0",
+    "openadapt-capture>=1.2.0,<2.0.0",
     "openadapt-flow[capture]>=1.29.0,<2.0.0",
 ]
 # Replay substrate dependencies stay separate from capture: recording observes

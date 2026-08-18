@@ -1,138 +1,78 @@
 # openadapt-capture
 
-Demonstration collection, observation-action capture, and storage.
+**Lifecycle: Beta.** `openadapt-capture` is the canonical OpenAdapt component
+for native screen, mouse, keyboard, timing, window-scope, and media capture. It
+is not an experimental prototype.
 
-**Repository**: [OpenAdaptAI/openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture)
+Repository:
+[`OpenAdaptAI/openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture)
 
-## Installation
+## Install
 
 ```bash
-pip install openadapt[capture]
-# or
-pip install openadapt-capture
+python -m pip install 'openadapt[capture]'
 ```
 
-## Overview
+Add the replay surface extra when the workflow needs one:
 
-The capture package collects human demonstrations from desktop and web GUIs, including:
+```bash
+python -m pip install 'openadapt[capture,windows]'
+python -m pip install 'openadapt[capture,macos]'
+python -m pip install 'openadapt[capture,linux]'
+python -m pip install 'openadapt[capture,rdp]'
+```
 
-- Observations (screenshots) at configurable intervals
-- Actions: mouse events (clicks, movement, scrolling)
-- Actions: keyboard events (key presses, text input)
-- Window and application context
-- Timing information for trajectory reconstruction
+## Product role
 
-## CLI Commands
+Flow uses Capture for native and remote-display demonstrations. The Flow
+adapter consumes Capture's public `CaptureSession` API and converts each
+action, aligned frame, window hint, and optional structural observation into
+the recording contract that the compiler accepts.
 
-### Start Demonstration Collection
+```bash
+openadapt flow record --backend macos --window TextEdit --out rec
+openadapt flow compile rec --out bundle --name my-task
+```
+
+Use the exact backend and target options from the installed engine:
+
+```bash
+openadapt flow record --help
+openadapt flow replay --help
+```
+
+Capture needs an interactive desktop and the applicable operating system
+permissions. RDP and Citrix capture the visible local client window. They do
+not claim access to a remote accessibility tree.
+
+## Direct raw session
+
+The compatibility launcher can start a raw Capture session:
 
 ```bash
 openadapt capture start --name my-task
 ```
 
-Options:
+Stop it with Ctrl-C in the same terminal. The separate `openadapt capture stop`
+command does not control another process and returns non-success. Use
+`openadapt flow record` when the output must compile directly.
 
-- `--name` - Name for the capture session (required)
-- `--interval` - Screenshot interval in seconds (default: 0.1)
-- `--no-screenshots` - Disable screenshot capture
-- `--no-keyboard` - Disable keyboard capture
+## Storage and privacy
 
-### Stop Demonstration Collection
+A session stores structured events plus time-aligned media in its capture
+directory. Consumers must use `CaptureSession.load()`, `.actions()`, and
+`.get_frame_at()` instead of reading the private database schema.
 
-```bash
-openadapt capture stop
-```
+Raw screenshots and typed values can contain sensitive data. Keep the source
+inside its trusted boundary. Compilation does not make it safe to upload. Use
+the local sanitize, review, and exact-hash approval path before any artifact
+crosses a boundary.
 
-Or press `Ctrl+C` in the capture terminal.
+## Evidence boundary
 
-### List Demonstrations
-
-```bash
-openadapt capture list
-```
-
-### View a Demonstration Trajectory
-
-```bash
-openadapt capture view my-task
-```
-
-### Delete a Demonstration
-
-```bash
-openadapt capture delete my-task
-```
-
-## Python API
-
-```python
-from openadapt_capture import CaptureSession, Recorder
-
-# Create a capture session
-session = CaptureSession(name="my-task")
-
-# Start recording
-recorder = Recorder(session)
-recorder.start()
-
-# ... user demonstrates the task ...
-
-# Stop recording
-recorder.stop()
-
-# Access captured trajectory data
-actions = session.get_actions()
-observations = session.get_observations()  # screenshots
-```
-
-## Data Format
-
-Demonstrations are stored as JSON/Parquet files:
-
-```
-demonstrations/
-  my-task/
-    metadata.json       # Session metadata
-    actions.parquet     # Action data (observation-action pairs)
-    observations/       # Screenshot images (observations)
-      0001.png
-      0002.png
-      ...
-```
-
-### Action Schema
-
-```python
-{
-    "timestamp": float,        # Unix timestamp
-    "action_type": str,        # "click", "type", "scroll", etc.
-    "data": {
-        # Action-specific data
-    },
-    "observation_id": int      # Reference to observation (screenshot)
-}
-```
-
-## Key Exports
-
-| Export | Description |
-|--------|-------------|
-| `CaptureSession` | Manages a demonstration collection session |
-| `Recorder` | Captures observation-action pairs |
-| `Action` | Represents a user action |
-| `Observation` | Represents an observation (screenshot) |
-| `Trajectory` | Sequence of observation-action pairs |
-
-## Platform Support
-
-| Platform | Status |
-|----------|--------|
-| macOS | Full support (requires [permissions](../getting-started/permissions.md)) |
-| Windows | Full support |
-| Linux | Full support |
-
-## Related Packages
-
-- [openadapt-privacy](privacy.md) - Scrub PII/PHI from demonstrations
-- [openadapt-viewer](viewer.md) - Visualize trajectories
-- [openadapt-ml](ml.md) - Learn policies from demonstrations
+Required CI validates the released Capture API, action conversion, frame
+alignment, coordinate scaling, secret exclusion, structural observations, and
+all Flow desktop selectors. Native actuation evidence remains bound to a named
+task, application, operating system, and verifier. Review the
+[current capability matrix](https://docs.openadapt.ai/get-started/what-works-today/)
+before a deployment claim.

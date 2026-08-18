@@ -1,138 +1,85 @@
-# Quick Start
+# Run the OpenAdapt quickstart
 
-This guide walks you through collecting a demonstration, learning a policy, and evaluating the agent.
+> **Current product path.** The canonical walkthrough is at
+> [docs.openadapt.ai/get-started](https://docs.openadapt.ai/get-started/).
 
-## Prerequisites
+## Run the verified tutorial
 
-- OpenAdapt installed with required packages: `pip install openadapt[all]`
-- macOS users: [Grant required permissions](permissions.md)
-
-## 1. Collect a Demonstration
-
-Start capturing your screen and inputs:
+Use Python 3.10, 3.11, or 3.12:
 
 ```bash
-openadapt capture start --name my-task
+python -m pip install --upgrade 'openadapt[browser]'
+openadapt quickstart
 ```
 
-Now perform the task you want to automate:
+On Windows `cmd.exe`, use double quotes around the install target.
 
-1. Click on applications
-2. Type text
-3. Navigate menus
-4. Complete your workflow
+The command runs one complete local lifecycle against synthetic MockMed data:
 
-When finished, stop the capture:
+1. It records a demonstrated browser workflow.
+2. It compiles the recording into an inspectable bundle.
+3. It certifies the bundle with the shipped tutorial policy.
+4. It runs the bundle under the Standard profile.
+5. It verifies the saved record through a separate read-only interface.
+6. It writes a report and a privacy-safe synthetic receipt.
+
+The healthy run returns `VERIFIED`. It makes no model or Cloud call.
+
+Inspect the artifacts:
 
 ```bash
-# Press Ctrl+C in the terminal, or:
-openadapt capture stop
+openadapt flow visualize openadapt-quickstart/bundle --out graph.html
+openadapt flow lint openadapt-quickstart/bundle
 ```
 
-## 2. View the Trajectory
-
-Inspect what was captured:
+Run the same certified bundle against a fault-injecting backend:
 
 ```bash
-openadapt capture view my-task
+openadapt quickstart --break-it --out openadapt-quickstart-broken
 ```
 
-This opens a trajectory viewer showing:
+The application displays success, but the backend does not save the record.
+The independent effect verifier detects the mismatch and returns `HALTED`.
 
-- Observations (screenshots) at each step
-- Actions (mouse and keyboard events)
-- Timing information
+## Run the manual demo lifecycle
 
-## 3. List Your Demonstrations
-
-See all collected demonstrations:
+The engine command is `openadapt-flow`. The launcher provides the equivalent
+two-word form `openadapt flow`. There is no standalone `demo-record` command.
 
 ```bash
-openadapt capture list
+openadapt flow demo-record --out rec
+openadapt flow compile rec --out bundle --name my-task
+openadapt flow lint bundle --strict
+openadapt flow certify bundle --policy permissive
+openadapt flow replay bundle --run-dir run
 ```
 
-Output:
+The strict lint step returns a nonzero exit code. The bundled manual demo has
+an unarmed irreversible click. The permissive certification is only a smoke
+gate. The Demo replay returns `COMPLETED_UNVERIFIED`, not `VERIFIED`.
 
-```
-NAME         EVENTS   DURATION   DATE
-my-task      45       2m 30s     2026-01-16
-login-demo   23       1m 15s     2026-01-15
-```
+Use `openadapt quickstart` for the effect-verified first run. For a real
+workflow, add the application boundary, action risks, identity requirements,
+effect verifier, fault cases, and deployment policy before production use.
 
-## 4. Learn a Policy
-
-Learn an agent policy from your demonstration trajectory:
+## Record a browser workflow
 
 ```bash
-openadapt train start --capture my-task --model qwen3vl-2b
+openadapt flow record --backend web --url https://your-app.example --out rec
+openadapt flow compile rec --out bundle --name my-workflow
+openadapt flow replay bundle --backend web \
+  --url https://your-app.example --run-dir run
 ```
 
-Monitor policy learning progress:
+Password fields and fields declared with `--secret` exclude their values at
+record time. Read the
+[canonical recording guide](https://docs.openadapt.ai/guides/record-your-app/)
+before a real-data demonstration.
 
-```bash
-openadapt train status
-```
+## Product boundary
 
-Policy learning creates a checkpoint file in `training_output/`.
-
-## 5. Evaluate the Agent
-
-Test your trained policy on a benchmark:
-
-```bash
-openadapt eval run --checkpoint training_output/model.pt --benchmark waa
-```
-
-Or run a mock evaluation to verify the setup:
-
-```bash
-openadapt eval mock --tasks 10
-```
-
-## 6. Evaluate an API Agent
-
-Test API-based agents (Claude, GPT-4V):
-
-```bash
-# Set your API key
-export ANTHROPIC_API_KEY=your-key-here
-
-# Run evaluation
-openadapt eval run --agent api-claude --benchmark waa
-```
-
-## Complete Workflow Example
-
-Here is a complete example demonstrating the full pipeline:
-
-```bash
-# 1. Install OpenAdapt
-pip install openadapt[all]
-
-# 2. Check system requirements
-openadapt doctor
-
-# 3. Collect a demonstration
-openadapt capture start --name email-reply
-# ... perform the task ...
-# Press Ctrl+C to stop
-
-# 4. View the trajectory
-openadapt capture view email-reply
-
-# 5. Learn a policy
-openadapt train start --capture email-reply --model qwen3vl-2b
-
-# 6. Wait for policy learning to complete
-openadapt train status
-
-# 7. Evaluate the agent
-openadapt eval run --checkpoint training_output/model.pt --benchmark waa
-```
-
-## Next Steps
-
-- [CLI Reference](../cli.md) - Full command documentation
-- [Architecture](../architecture.md) - How OpenAdapt works
-- [Packages](../packages/index.md) - Explore individual packages
-- [Contributing](../contributing.md) - Help improve OpenAdapt
+The launcher and Flow engine are Beta. Browser workflows run end to end in the
+three-OS clean-machine lifecycle. Native and remote evidence is task- and
+environment-specific. Citrix support is code-qualified and still requires a
+real deployment qualification. A runnable workflow is not automatically a
+certified production workflow.

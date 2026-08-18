@@ -1,128 +1,81 @@
-# Installation
+# Install OpenAdapt
 
-This guide covers how to install OpenAdapt and its sub-packages.
+> **Current product path.** The canonical documentation is at
+> [docs.openadapt.ai](https://docs.openadapt.ai). This repository page keeps the
+> launcher install contract close to the package that implements it.
 
-## Requirements
+OpenAdapt supports Python 3.10, 3.11, and 3.12. Use a virtual environment for
+an isolated install.
 
-- **Python**: 3.10 or higher
-- **Operating System**: macOS, Windows, or Linux
-- **Platform-specific**: See [Permissions](permissions.md) for macOS requirements
+## Browser tutorial
 
-## Installation Options
-
-### Minimal CLI Only
-
-Install just the CLI without any sub-packages:
+Install the launcher with the browser capability:
 
 ```bash
-pip install openadapt
+python -m pip install --upgrade 'openadapt[browser]'
+openadapt quickstart
 ```
 
-This gives you the `openadapt` command with help and version information, but no actual functionality.
+On Windows `cmd.exe`, use double quotes:
 
-### Individual Packages
+```bat
+python -m pip install --upgrade "openadapt[browser]"
+openadapt quickstart
+```
 
-Install specific functionality as needed:
+The launcher installs the compatible `openadapt-flow` engine. Do not install
+the launcher and engine separately. The first browser action downloads the
+matching Chromium build once.
+
+The tutorial uses the bundled synthetic MockMed application. It records,
+compiles, certifies, and replays one workflow. A separate read-only interface
+verifies the saved record. The healthy result is `VERIFIED` under the Standard
+profile with no model or Cloud call.
+
+## Capability-specific installs
+
+The base install includes the launcher and the Flow engine. Add only the
+capabilities that the target workflow needs:
 
 ```bash
-pip install openadapt[capture]     # GUI capture/recording
-pip install openadapt[ml]          # ML training and inference
-pip install openadapt[evals]       # Benchmark evaluation
-pip install openadapt[viewer]      # HTML visualization
+python -m pip install 'openadapt[capture]'          # local human demonstration
+python -m pip install 'openadapt[capture,windows]'  # Windows UI Automation
+python -m pip install 'openadapt[capture,macos]'    # macOS Accessibility
+python -m pip install 'openadapt[capture,linux]'    # Linux AT-SPI
+python -m pip install 'openadapt[capture,rdp]'      # RDP transport
+python -m pip install 'openadapt[privacy]'          # PII/PHI scrubbing
 ```
 
-### Optional Packages
+These extras install platform bindings. They do not certify an arbitrary
+application. Qualify each workflow against its exact application, environment,
+identity rules, and independent effect verifier.
 
-For additional features:
-
-```bash
-pip install openadapt[grounding]   # UI element localization
-pip install openadapt[retrieval]   # Demo search/retrieval
-pip install openadapt[privacy]     # PII/PHI scrubbing
-```
-
-### Bundles
-
-Install common combinations:
-
-```bash
-pip install openadapt[core]        # capture + ml + evals + viewer
-pip install openadapt[all]         # Everything
-```
-
-## Verify Installation
-
-Check that OpenAdapt is installed correctly:
+## Verify the install
 
 ```bash
 openadapt version
+openadapt doctor --backend web
+openadapt flow --help
 ```
 
-This shows installed package versions:
+For the visual authoring and review interface, install
+[OpenAdapt Desktop](https://openadapt.ai/download).
 
-```
-openadapt: 1.0.0
-openadapt-capture: 1.0.0
-openadapt-ml: 1.0.0
-...
-```
-
-Run the system check:
-
-```bash
-openadapt doctor
-```
-
-This verifies system requirements and permissions.
-
-## Development Installation
-
-For contributing to OpenAdapt:
-
-### Main Package
+## Development install
 
 ```bash
 git clone https://github.com/OpenAdaptAI/OpenAdapt
 cd OpenAdapt
-pip install -e ".[dev]"
+python -m pip install -e '.[dev]'
 ```
 
-### Sub-packages
+The engine source is in
+[`OpenAdaptAI/openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+Read its `CONTRIBUTING.md` before a package or release change.
 
-Clone and install the specific sub-package you want to work on:
+## Next steps
 
-```bash
-git clone https://github.com/OpenAdaptAI/openadapt-ml  # or other sub-package
-cd openadapt-ml
-pip install -e ".[dev]"
-```
-
-## Troubleshooting
-
-### Permission Denied Errors (macOS)
-
-See the [Permissions Guide](permissions.md) for granting necessary permissions.
-
-### ImportError: No module named 'openadapt_capture'
-
-Install the required sub-package:
-
-```bash
-pip install openadapt[capture]
-```
-
-### Conflicts with Other Packages
-
-Use a virtual environment:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install openadapt[all]
-```
-
-## Next Steps
-
-- [Quick Start](quickstart.md) - Record your first demonstration
-- [Permissions](permissions.md) - Configure macOS permissions
-- [CLI Reference](../cli.md) - Full command reference
+- [Run the local tutorial](quickstart.md)
+- [Read the canonical first-workflow guide](https://docs.openadapt.ai/get-started/)
+- [Review current substrate evidence](https://docs.openadapt.ai/get-started/what-works-today/)
+- [Read the CLI reference](https://docs.openadapt.ai/reference/cli/)

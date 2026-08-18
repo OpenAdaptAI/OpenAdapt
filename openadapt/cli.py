@@ -49,68 +49,6 @@ class _FlowFirstGroup(click.Group):
         return sorted(commands, key=lambda name: (name != "flow", name))
 
 
-_FLOW_PASSTHROUGH_COMMANDS = {
-    "record": (
-        "Record a human demonstration on this interactive host (web browser "
-        "by default; --backend windows/macos/linux/rdp/citrix selects the "
-        "intended replay substrate)."
-    ),
-    "replay": (
-        "Replay a bundle through web/windows/macos/linux/rdp/citrix; all "
-        "engine backend, target, config, and governance flags pass through."
-    ),
-    "induce": "Induce a parameterized program from multiple recordings.",
-    "run": "Run a bundle under a fail-closed deployment configuration.",
-    "resume": "Resume a durably paused run from its verified checkpoint.",
-    "approve": "Authorize a durably paused run to resume.",
-    "bench": "Benchmark deterministic replay against the bundled fixture.",
-    "benchmark": "Compare replay with an optional computer-use agent arm.",
-    "disambiguate": "Resolve compile-time ambiguity without guessing.",
-    "emit-skill": "Emit an Agent Skills folder for a bundle.",
-    "emit-mcp": "Emit a standalone MCP server for a bundle.",
-    "teach": "Teach a governed correction after a halt.",
-    "connect": "Connect this computer to an authenticated Cloud workspace.",
-    "login": "Validate and store a hosted ingest token.",
-    "sanitize": "Create a verified sanitized derivative locally.",
-    "review-sanitized": "Review original and sanitized content locally.",
-    "approve-sanitized": "Approve and freeze exact sanitized bytes.",
-    "validate-hosted": "Bind local evidence to an expiring hosted challenge.",
-    "push": "Upload an approved sanitized derivative.",
-    "report-break": "Upload a schema-minimized halt diagnostic.",
-}
-
-
-class _FlowPassthroughGroup(click.Group):
-    """Delegate engine commands not wrapped by this compatibility launcher."""
-
-    def list_commands(self, ctx):
-        commands = set(super().list_commands(ctx))
-        commands.update(_FLOW_PASSTHROUGH_COMMANDS)
-        return sorted(commands)
-
-    def get_command(self, ctx, cmd_name):
-        command = super().get_command(ctx, cmd_name)
-        if command is not None:
-            return command
-
-        @click.command(
-            name=cmd_name,
-            help=_FLOW_PASSTHROUGH_COMMANDS.get(
-                cmd_name, "Delegate this command to openadapt-flow."
-            ),
-            context_settings={
-                "ignore_unknown_options": True,
-                "allow_extra_args": True,
-                "help_option_names": [],
-            },
-        )
-        @click.pass_context
-        def passthrough(command_ctx):
-            _run_flow([cmd_name, *command_ctx.args])
-
-        return passthrough
-
-
 @click.group(cls=_FlowFirstGroup)
 @click.version_option(version=__version__, prog_name="openadapt")
 def main():
@@ -123,10 +61,19 @@ def main():
 
     \b
     Quick Start:
+        python -m pip install --upgrade 'openadapt[browser]'
+        openadapt quickstart
+
+    \b
+    Manual Demo Lifecycle:
         openadapt flow demo-record --out rec
         openadapt flow compile rec --out bundle --name demo
-        openadapt flow lint bundle
+        openadapt flow lint bundle --strict
+        openadapt flow certify bundle --policy permissive
         openadapt flow replay bundle
+
+    The manual demo is runnable but not certified for consequential work.
+    Use `openadapt quickstart` for the effect-verified first run.
     """
     pass
 
@@ -263,6 +210,7 @@ def quickstart(out: Path, headed: bool, break_it: bool) -> None:
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 _SUPPORTED_FLOW_RANGE = ">=1.29.0,<2.0.0"
+_RDP_INSTALL_COMMAND = "python -m pip install 'openadapt[rdp]'"
 
 
 def _supported_flow_version(value: str) -> bool:
@@ -359,6 +307,15 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
                 "  [SETUP] install the web extra before recording or replay: "
                 "python -m pip install 'openadapt[browser]'"
             )
+    elif backend == "rdp":
+        if find_spec("aardwolf") is not None:
+            click.echo("  [OK] RDP transport dependency is installed")
+        else:
+            failures.append("rdp")
+            click.echo(
+                "  [MISSING] RDP transport dependency is not installed. Run: "
+                + _RDP_INSTALL_COMMAND
+            )
     else:
         click.echo(
             f"  [SETUP] {backend} readiness is checked by Flow when the "
@@ -432,31 +389,24 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     )
 
 
-@main.group(cls=_FlowPassthroughGroup)
-def flow():
-    """Record, compile, and replay workflows (the demonstration compiler).
+@main.command(
+    "flow",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # Flow owns its argparse help. Do not let Click consume --help first.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def flow(command_ctx: click.Context) -> None:
+    """Run the canonical demonstration compiler and governed runtime.
 
-    Compile a recording into deterministic local replay. Supported drift can
-    be re-resolved; configured identity and verification gates halt on failure.
-
-    \b
-    Examples:
-        openadapt flow demo-record --out rec
-        openadapt flow compile rec --out bundle --name demo
-        openadapt flow replay bundle
-        openadapt flow lint bundle
-        openadapt flow certify bundle --policy clinical-write
-        openadapt flow sanitize rec --kind recording --out rec-sanitized
-        openadapt flow review-sanitized rec-sanitized --original rec
-        openadapt flow approve-sanitized rec-sanitized --original rec --reviewer USER
-        openadapt flow login --token oai_ingest_...
-        openadapt flow push rec-sanitized --kind recording
-
-    \b
-    The standalone `openadapt-flow <verb>` command keeps working and behaves
-    identically; `openadapt flow <verb>` is the recommended path.
+    Every argument passes to openadapt-flow unchanged. This keeps the launcher
+    command list, help, options, validation, and exit codes identical to the
+    installed engine version.
     """
-    pass
+    _run_flow(list(command_ctx.args))
 
 
 @main.command("connect")
@@ -511,78 +461,6 @@ def connect(pairing, uri, host, device_name, destination_kind, trusted_host):
     for value in trusted_host:
         argv += ["--trusted-host", value]
     _run_flow(argv)
-
-
-# NOTE: `record` and `replay` are intentionally NOT wrapped with explicit
-# click options. They delegate through _FlowPassthroughGroup so every engine
-# option (--backend web/windows/macos/linux/rdp/citrix, --config, --agent-url,
-# --macos-app, --linux-app, --rdp-host, ...) forwards verbatim and new engine
-# options never need a launcher release. Earlier explicit wrappers hid backend
-# options or drifted behind the engine.
-
-
-@flow.command("demo-record")
-@click.option("--out", required=True, help="Recording output directory")
-@click.option(
-    "--note-text",
-    default="Follow-up in 2 weeks; BP recheck.",
-    help="Note text typed during the demo (recorded as a parameter)",
-)
-@click.option("--param-name", default="note", help="Parameter name for the note")
-@click.option("--drift", default=None, help="Comma-separated MockMed drift modes")
-@click.option("--headed", is_flag=True, help="Run the browser headed")
-def flow_demo_record(out, note_text, param_name, drift, headed):
-    """Serve the bundled MockMed app and record the canonical triage demo."""
-    argv = [
-        "demo-record",
-        "--out",
-        out,
-        "--note-text",
-        note_text,
-        "--param-name",
-        param_name,
-    ]
-    if drift:
-        argv += ["--drift", drift]
-    if headed:
-        argv.append("--headed")
-    _run_flow(argv)
-
-
-@flow.command("compile")
-@click.argument("recording")
-@click.option("--out", required=True, help="Output bundle directory")
-@click.option("--name", required=True, help="Workflow name")
-def flow_compile(recording, out, name):
-    """Compile a recording directory into a workflow bundle."""
-    _run_flow(["compile", recording, "--out", out, "--name", name])
-
-
-@flow.command("lint")
-@click.argument("bundle")
-@click.option(
-    "--strict",
-    is_flag=True,
-    help="Exit nonzero on warnings too (default: only on errors)",
-)
-def flow_lint(bundle, strict):
-    """Report a bundle's coverage gaps; exits nonzero by severity."""
-    argv = ["lint", bundle]
-    if strict:
-        argv.append("--strict")
-    _run_flow(argv)
-
-
-@flow.command("certify")
-@click.argument("bundle")
-@click.option(
-    "--policy",
-    required=True,
-    help="Policy YAML path, or a built-in name (permissive, clinical-write)",
-)
-def flow_certify(bundle, policy):
-    """Enforce a safety policy on a bundle (refuse it if it fails)."""
-    _run_flow(["certify", bundle, "--policy", policy])
 
 
 # =============================================================================
@@ -649,10 +527,13 @@ def capture_start(name: str, video: bool, audio: bool):
 
 @capture.command("stop")
 def capture_stop():
-    """Stop the current capture session."""
-    click.echo("Stopping active capture session...")
-    # TODO: Implement stop via signal/file
-    click.echo("Note: Use Ctrl+C in the capture terminal to stop")
+    """Explain how to stop a capture started in another terminal."""
+    raise click.ClickException(
+        "No separate capture-stop control channel is available. Stop the capture "
+        "with Ctrl+C in the recorder terminal. A separate stop command will remain "
+        "unavailable until Capture provides an authenticated, owner-only local "
+        "control channel."
+    )
 
 
 @capture.command("list")
@@ -1067,8 +948,22 @@ def doctor(backend: str | None):
 
     from importlib.util import find_spec
 
+    failures = []
     click.echo("\nSelected execution surface:")
-    if backend and backend != "web":
+    if backend == "rdp":
+        if find_spec("aardwolf") is not None:
+            click.echo(
+                "  [OK] rdp: browser support is not required and the RDP "
+                "transport dependency is installed. Flow checks the target "
+                "and credentials when it opens the connection."
+            )
+        else:
+            failures.append("rdp")
+            click.echo(
+                "  [MISSING] rdp: the RDP transport dependency is not installed. "
+                "Run: " + _RDP_INSTALL_COMMAND
+            )
+    elif backend and backend != "web":
         click.echo(
             f"  [OK] {backend}: browser support is not required; "
             "no Playwright or Chromium setup will run. The selected "
@@ -1163,6 +1058,12 @@ def doctor(backend: str | None):
             click.echo(f"  [OK] {key} is set")
         else:
             click.echo(f"  [--] {key} not set")
+
+    if failures:
+        raise click.ClickException(
+            "System check failed. Install each required dependency shown as "
+            "[MISSING], and then run this command again."
+        )
 
 
 if __name__ == "__main__":

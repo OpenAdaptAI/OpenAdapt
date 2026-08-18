@@ -1,0 +1,55 @@
+name: Launcher quickstart lifecycle
+
+on:
+  schedule:
+    - cron: "15 8 * * 3" # Wednesdays 08:15 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: launcher-quickstart-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quickstart:
+    name: public launcher command (ubuntu-latest)
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Build launcher wheel
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir lifecycle-dist
+
+      - name: Run the public quickstart from a clean environment
+        run: >-
+          python scripts/quickstart_lifecycle.py
+          --launcher-wheel "lifecycle-dist/*.whl"
+          --work-dir "runs/launcher-lifecycle"
+          --browser-with-deps
+          --source-revision "${{ github.sha }}"
+
+      - name: Upload lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0 # v7.0.1
+        with:
+          name: launcher-quickstart-ubuntu
+          path: |
+            runs/launcher-lifecycle/summary.json
+            runs/launcher-lifecycle/logs/*.log
+            runs/launcher-lifecycle/artifacts/**/REPORT.md
+            runs/launcher-lifecycle/artifacts/**/report.json
+            runs/launcher-lifecycle/artifacts/**/receipt.json
+          if-no-files-found: warn

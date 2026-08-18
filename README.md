@@ -241,13 +241,18 @@ defines what can be claimed for a new deployment.
 - **[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow):**
   canonical compiler, governed runtime, CLI implementation, and conformance
   tests
+- **[`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture):**
+  Beta native screen, mouse, keyboard, timing, window-scope, and media capture
+  component used by the Flow desktop recording path
+- **[`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy):**
+  local sanitization and review mechanisms for approved derivatives
 - **[Documentation](https://docs.openadapt.ai):** installation, workflow
   authoring, qualification, operation, deployment, and reference material
 - **[Desktop](https://github.com/OpenAdaptAI/openadapt-desktop):** native
   record, inspect, qualify, execute, and review application
 
 The pre-1.0 monolith remains available under [`legacy/`](legacy/) for migration
-history. New product and engine development belongs in `openadapt-flow`.
+history. New compiler and runtime development belongs in `openadapt-flow`.
 
 <details>
 <summary><strong>Research and legacy history</strong></summary>
