@@ -1055,6 +1055,34 @@ FORBIDDEN_PUBLIC_SOURCE_PATHS = frozenset(
 )
 
 
+def _git_ignored(root: Path, candidates: set[str]) -> set[str]:
+    """Return the subset of ``candidates`` that git ignores.
+
+    A git-ignored path cannot reach the public repository, so it cannot be the
+    private-evidence leak this guard exists to catch. Local pytest output is the
+    common case: running the suite writes ``runs/ci/**/rows.jsonl`` under a
+    gitignored directory, which used to raise a boundary violation naming files
+    that CI, running from a clean checkout, never sees.
+
+    This fails CLOSED. If git is absent or the query fails, nothing is filtered
+    and every candidate stays a hit.
+    """
+    if not candidates or not (root / ".git").exists():
+        return set()
+    payload = "\0".join(sorted(candidates)).encode("utf-8")
+    result = subprocess.run(
+        ["git", "-C", str(root), "check-ignore", "-z", "--stdin"],
+        check=False,
+        capture_output=True,
+        input=payload,
+    )
+    # 0 = some paths ignored, 1 = none ignored. Anything else is an error, and
+    # an error must not silence the guard.
+    if result.returncode not in (0, 1):
+        return set()
+    return {path.decode("utf-8") for path in result.stdout.split(b"\0") if path}
+
+
 def validate_public_source_policy(root: Path = ROOT) -> None:
     """Refuse private paid-agent evidence and per-system recipes in source.
 
@@ -1067,16 +1095,19 @@ def validate_public_source_policy(root: Path = ROOT) -> None:
         for relative in FORBIDDEN_PUBLIC_SOURCE_PATHS
         if (root / relative).is_file()
     }
-    hits.update(
+    scanned = {
         path.relative_to(root).as_posix()
         for path in root.rglob("rows.jsonl")
         if ".git" not in path.parts
-    )
-    hits.update(
+    }
+    scanned.update(
         path.relative_to(root).as_posix()
         for path in root.glob("benchmark/**/agent-arm/**/*")
         if path.is_file()
     )
+    # An untracked path that git does NOT ignore stays a hit: it is one
+    # `git add` away from the public repository.
+    hits.update(scanned - _git_ignored(root, scanned))
     if hits:
         raise ValueError(
             "public source contains private paid-agent per-run evidence, "

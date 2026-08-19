@@ -20,16 +20,24 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A failing Azure apt mirror once held this job for 3h11m until the run
+    # limit killed it, because the TeX install has no bound of its own. A
+    # healthy install finishes in about 100 seconds, so 10 minutes is generous
+    # and still fails fast. PR #370 applied the same bound to ci.yml and the
+    # RDP workflow but did not reach this file.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - name: Check paper constants against benchmark artifacts
         run: python paper/check_artifacts.py
       - name: Install TeX
+        timeout-minutes: 10
         run: >-
           sudo apt-get update && sudo apt-get install -y
           latexmk texlive-latex-extra texlive-pictures texlive-science
           texlive-latex-recommended texlive-fonts-recommended
       - name: Build PDFs (full report + workshop condensation)
+        timeout-minutes: 10
         run: make -C paper
       - name: Upload full report PDF
         uses: actions/upload-artifact@v7
@@ -52,6 +60,7 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write # create/overwrite the release asset on the stable tag
     steps:
