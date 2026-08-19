@@ -11,12 +11,15 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      # v4 currently sends a mismatched Content-Length for this payload on
-      # GitHub-hosted runners. Keep the last verified release until upstream
-      # resolves the regression.
-      - uses: peter-evans/repository-dispatch@v4
+      # Pinned to v3.0.0 by commit. v4 (v4.0.1) sends a mismatched
+      # Content-Length for this payload on GitHub-hosted runners and fails with
+      # "Request body length does not match content-length header". #1053 pinned
+      # this back once already; a Dependabot bump (#1079) reverted it to v4 and
+      # broke the docs dispatch again. The ignore rule in dependabot.yml keeps
+      # that from recurring. Revisit when upstream ships a fixed v4.
+      - uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3.0.0
         with:
           token: ${{ secrets.DOCS_DISPATCH_TOKEN }}
-          repository: OpenAdaptAI/openadapt-maintenance
+          repository: OpenAdaptAI/openadapt-ops
           event-type: repo-updated
           client-payload: '{"repo": "${{ github.repository }}", "sha": "${{ github.sha }}"}'
