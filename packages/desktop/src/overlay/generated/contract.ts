@@ -1,4 +1,4 @@
-// Generated from openadapt-types 0.7.0. Do not edit by hand.
+// Generated from openadapt-types 0.10.0. Do not edit by hand.
 
 export const CONTROL_OVERLAY_FRAME_VERSION = "openadapt.control-overlay-frame/v2" as const;
 export const CONTROL_OVERLAY_TIMELINE_VERSION = "openadapt.control-overlay-timeline/v2" as const;

@@ -1,0 +1,53 @@
+name: Native Version Advance Guard
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - package.json
+      - package-lock.json
+      - src-tauri/Cargo.toml
+      - src-tauri/Cargo.lock
+      - src-tauri/tauri.conf.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-version-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-advance:
+    name: Reject a stale native version pull request
+    if: startsWith(github.head_ref, 'native-version/v')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Require an exact strict advance from the current PR base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "${BASE_SHA}"
+          git fetch origin main:refs/remotes/origin/main
+          current_base="$(git rev-parse refs/remotes/origin/main)"
+          if [ "${BASE_SHA}" != "${current_base}" ]; then
+            echo "error: native version pull request base is stale" >&2
+            exit 1
+          fi
+          version="$(python scripts/native_release.py version)"
+          python scripts/native_release.py validate-version-advance \
+            --base-ref "${BASE_SHA}" \
+            --candidate-ref "${HEAD_SHA}" \
+            --version "${version}"

@@ -445,15 +445,15 @@ def test_frozen_flow_pin_must_request_the_console_and_browser_extras(tmp_path: P
         return root
 
     version, extras = frozen_notices.bundled_flow_pin(build.ROOT)
-    assert version == "1.27.1"
+    assert version == "1.31.0"
     assert set(frozen_notices.FLOW_REQUIRED_EXTRAS) <= set(extras)
 
     with pytest.raises(ValueError, match="console"):
-        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow==1.27.1"))
+        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow==1.31.0"))
     with pytest.raises(ValueError, match="browser"):
-        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow[console]==1.27.1"))
+        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow[console]==1.31.0"))
     with pytest.raises(ValueError, match="exact openadapt-flow build pin"):
-        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow[browser,console]>=1.27.1"))
+        frozen_notices.bundled_flow_pin(_pyproject("openadapt-flow[browser,console]>=1.31.0"))
 
 
 def test_frozen_runtime_roots_carry_the_pinned_flow_extras() -> None:

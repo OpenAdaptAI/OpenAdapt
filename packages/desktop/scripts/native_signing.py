@@ -15,8 +15,10 @@ The release workflow reads two facts from this script:
   and signature verification are identical.
 
 Every credential set is complete-or-absent: a partial set fails the build
-instead of silently falling back to an unsigned artifact. When no set is
-configured the build falls back to exactly today's ad-hoc/unsigned behaviour.
+instead of silently falling back to an unsigned artifact. Regular CI can still
+report an explicit ad-hoc or unsigned plan when no set is configured. The
+native release workflow also supplies ``--require-mode`` and refuses those
+non-identity plans.
 """
 
 from __future__ import annotations
@@ -139,6 +141,23 @@ def signing_method(platform: str, environ: dict[str, str] | None = None) -> str:
     return "unsigned"
 
 
+def require_signing_mode(
+    platform: str,
+    required_mode: str,
+    environ: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """Return the signing plan or refuse a release without the required trust."""
+
+    mode = signing_mode(platform, environ)
+    method = signing_method(platform, environ)
+    if mode != required_mode:
+        raise ValueError(
+            f"{platform} release requires signing mode {required_mode!r}; "
+            f"configured mode is {mode!r}"
+        )
+    return mode, method
+
+
 def write_github_output(path: Path, mode: str, method: str) -> None:
     with path.open("a", encoding="utf-8") as output:
         output.write(f"mode={mode}\n")
@@ -207,6 +226,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     preflight = subparsers.add_parser("preflight")
     preflight.add_argument("--platform", choices=sorted(CREDENTIALS), required=True)
+    preflight.add_argument("--require-mode")
     preflight.add_argument("--github-output", type=Path)
     windows_config = subparsers.add_parser("windows-config")
     windows_config.add_argument("--output", type=Path, required=True)
@@ -220,8 +240,11 @@ def main() -> int:
 
     try:
         if args.command == "preflight":
-            mode = signing_mode(args.platform)
-            method = signing_method(args.platform)
+            if args.require_mode:
+                mode, method = require_signing_mode(args.platform, args.require_mode)
+            else:
+                mode = signing_mode(args.platform)
+                method = signing_method(args.platform)
             if args.github_output:
                 write_github_output(args.github_output, mode, method)
             print(f"{mode} ({method})")

@@ -9,6 +9,7 @@ from scripts.native_signing import (
     CREDENTIALS,
     WINDOWS_PFX_CREDENTIALS,
     WINDOWS_TRUSTED_SIGNING_CREDENTIALS,
+    require_signing_mode,
     signing_method,
     signing_mode,
     windows_plan,
@@ -54,6 +55,50 @@ def test_complete_trusted_signing_credentials_select_authenticode_via_azure() ->
     assert windows_plan(azure) == ("authenticode", "trusted-signing")
     assert signing_mode("windows", azure) == "authenticode"
     assert signing_method("windows", azure) == "trusted-signing"
+
+
+def test_release_gate_requires_macos_and_windows_trust_modes() -> None:
+    macos = {name: "configured" for name in CREDENTIALS["macos"]}
+    azure = {name: "configured" for name in WINDOWS_TRUSTED_SIGNING_CREDENTIALS}
+
+    assert require_signing_mode("macos", "developer-id-notarized", macos) == (
+        "developer-id-notarized",
+        "developer-id",
+    )
+    assert require_signing_mode("windows", "authenticode", azure) == (
+        "authenticode",
+        "trusted-signing",
+    )
+
+
+@pytest.mark.parametrize(
+    ("platform", "required"),
+    (("macos", "developer-id-notarized"), ("windows", "authenticode")),
+)
+def test_release_gate_refuses_missing_signing_credentials(platform: str, required: str) -> None:
+    with pytest.raises(ValueError, match="release requires signing mode"):
+        require_signing_mode(platform, required, {})
+
+
+def test_native_release_workflow_requires_protected_signing_environment() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[1] / ".github/workflows/native-release.yml"
+    ).read_text(encoding="utf-8")
+
+    assert workflow.count("environment: native-release") == 3
+    assert "--require-mode developer-id-notarized" in workflow
+    assert "--require-mode authenticode" in workflow
+    assert "--signing github-attested" in workflow
+    assert "openadapt-desktop-native-release-provenance.json" in workflow
+    # `gh attestation verify` refuses --cert-identity together with
+    # --signer-workflow, so the exact-identity flag must stand alone.
+    assert "--signer-workflow" not in workflow
+    assert "--cert-identity" in workflow
+    assert '--cert-oidc-issuer "https://token.actions.githubusercontent.com"' in workflow
+    assert "--deny-self-hosted-runners" in workflow
+    assert "validate-attestation" in workflow
+    for secret in WINDOWS_TRUSTED_SIGNING_CREDENTIALS:
+        assert f"{secret}: ${{{{ secrets.{secret} }}}}" in workflow
 
 
 def test_partial_trusted_signing_credentials_fail_closed() -> None:

@@ -41,9 +41,9 @@ dependencies = [
     "openadapt-privacy>=1.0.0",
     # Exact cross-surface status/target contract used by the presentation
     # exporter and by the generated TypeScript projection checked into src/.
-    # 0.7.0 carries the portable attended-reconciliation action used by the
+    # 0.10.0 carries the portable business-decision V2 contract used by the
     # Desktop phone portal and Flow's governed runner.
-    "openadapt-types==0.7.0",
+    "openadapt-types==0.10.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "PyYAML>=6.0,<7",
@@ -81,15 +81,15 @@ build = [
     # decision portal supervises ``openadapt-flow console --attend``; without
     # this extra the frozen sidecar carries no fastapi/uvicorn and the console
     # exits with an install hint instead of a capability banner, so the portal
-    # is dead in every signed installer.  1.27.1 carries the current signed
-    # attended-decision and reconciliation contract that the portal renders.
+    # is dead in every signed installer. 1.31.0 is the latest released Flow
+    # contract and matches the openadapt-types 0.10.0 projection above.
     #
     # ``browser`` is equally load-bearing: 1.25.0 moved Playwright from a core
     # Flow dependency to that extra, and Desktop freezes the browser driver on
     # purpose (see the pin below and the embedded ``-m playwright`` process
     # mode). Without it the driver becomes build-only and the artifact gate
     # correctly refuses the archive.
-    "openadapt-flow[browser,console]==1.27.1",
+    "openadapt-flow[browser,console]==1.31.0",
     # Desktop deliberately embeds the optional browser driver so selecting a
     # web workflow is one click. It does NOT bundle Chromium: that larger
     # runtime is fetched only after the operator chooses the browser surface.

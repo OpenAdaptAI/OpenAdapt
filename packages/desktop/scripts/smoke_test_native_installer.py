@@ -322,7 +322,13 @@ def _combined_output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(part for part in (result.stdout, result.stderr) if part)
 
 
-def _verify_macos_code_signature(path: Path, *, identity: str, timeout: float) -> None:
+def _verify_macos_code_signature(
+    path: Path,
+    *,
+    identity: str,
+    team_id: str | None,
+    timeout: float,
+) -> None:
     run_command(
         ["codesign", "--verify", "--deep", "--strict", "--verbose=2", path],
         timeout=timeout,
@@ -333,17 +339,31 @@ def _verify_macos_code_signature(path: Path, *, identity: str, timeout: float) -
         if "Signature=adhoc" not in lines:
             raise SmokeTestError(f"expected an ad-hoc code signature on {path}")
         return
-    if not any(line.startswith("Authority=Developer ID Application:") for line in lines):
-        raise SmokeTestError(f"expected a Developer ID Application authority on {path}")
-    if "TeamIdentifier=not set" in lines or not any(
-        line.startswith("TeamIdentifier=") for line in lines
-    ):
-        raise SmokeTestError(f"Developer ID signature has no team identifier: {path}")
+    if not team_id:
+        raise SmokeTestError("Developer ID verification requires the configured Apple Team ID")
+    if f"Authority={identity}" not in lines:
+        raise SmokeTestError(
+            f"Developer ID authority does not match the configured identity: {path}"
+        )
+    if f"TeamIdentifier={team_id}" not in lines:
+        raise SmokeTestError(f"Developer ID team does not match the configured Team ID: {path}")
 
 
-def _verify_macos_installed_signature(path: Path, *, signing_mode: str, timeout: float) -> None:
-    identity = "adhoc" if signing_mode == "adhoc" else "developer-id"
-    _verify_macos_code_signature(path, identity=identity, timeout=timeout)
+def _verify_macos_installed_signature(
+    path: Path,
+    *,
+    signing_mode: str,
+    identity: str,
+    team_id: str | None,
+    timeout: float,
+) -> None:
+    expected_identity = "adhoc" if signing_mode == "adhoc" else identity
+    _verify_macos_code_signature(
+        path,
+        identity=expected_identity,
+        team_id=team_id,
+        timeout=timeout,
+    )
     if signing_mode == "developer-id-notarized":
         run_command(
             ["spctl", "--assess", "--type", "execute", "--verbose=4", path],
@@ -351,8 +371,20 @@ def _verify_macos_installed_signature(path: Path, *, signing_mode: str, timeout:
         )
 
 
-def _verify_macos_release_artifact(artifact: Path, *, kind: str, timeout: float) -> None:
-    _verify_macos_code_signature(artifact, identity="developer-id", timeout=timeout)
+def _verify_macos_release_artifact(
+    artifact: Path,
+    *,
+    kind: str,
+    identity: str,
+    team_id: str,
+    timeout: float,
+) -> None:
+    _verify_macos_code_signature(
+        artifact,
+        identity=identity,
+        team_id=team_id,
+        timeout=timeout,
+    )
     if kind == "dmg":
         run_command(
             [
@@ -393,11 +425,17 @@ def _verify_authenticode(path: Path, *, fingerprint: str | None, timeout: float)
         "if ($signature.Status -ne 'Valid') { "
         "throw ('Authenticode status is ' + $signature.Status) }; "
         "if ($null -eq $signature.SignerCertificate) { throw 'Missing signer certificate' }; "
+        "if ($null -eq $signature.TimeStamperCertificate) { "
+        "throw 'Missing timestamp certificate' }; "
         "$thumbprint = $signature.SignerCertificate.Thumbprint.Replace(' ', '')"
         ".ToUpperInvariant(); "
         "if ($ExpectedThumbprint -and $thumbprint -ne $ExpectedThumbprint) { "
         "throw ('Signer thumbprint mismatch: ' + $thumbprint) }; "
-        "Write-Output ('VALIDSIGNER=' + $thumbprint) }"
+        "$timestampThumbprint = $signature.TimeStamperCertificate.Thumbprint.Replace(' ', '')"
+        ".ToUpperInvariant(); "
+        "if (-not $timestampThumbprint) { throw 'Missing timestamp certificate thumbprint' }; "
+        "Write-Output ('VALIDSIGNER=' + $thumbprint); "
+        "Write-Output ('VALIDTIMESTAMPER=' + $timestampThumbprint) }"
     )
     result = run_command(
         [
@@ -419,6 +457,13 @@ def _verify_authenticode(path: Path, *, fingerprint: str | None, timeout: float)
     ]
     if len(valid_lines) != 1 or not valid_lines[0].removeprefix("VALIDSIGNER="):
         raise SmokeTestError(f"PowerShell did not report a valid Authenticode signer: {path}")
+    timestamp_lines = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip().startswith("VALIDTIMESTAMPER=")
+    ]
+    if len(timestamp_lines) != 1 or not timestamp_lines[0].removeprefix("VALIDTIMESTAMPER="):
+        raise SmokeTestError(f"PowerShell did not report a valid Authenticode timestamp: {path}")
 
 
 def _terminate_process_tree(process: subprocess.Popen[bytes], timeout: float) -> None:
@@ -853,6 +898,8 @@ def _prepare_signature_verifier(
     artifact: Path,
     signing_mode: str,
     signing_fingerprint: str | None,
+    signing_identity: str | None,
+    signing_team_id: str | None,
     timeout: float,
 ) -> Callable[[Path], None]:
     if signing_mode not in SIGNING_MODES:
@@ -872,6 +919,10 @@ def _prepare_signature_verifier(
         raise SmokeTestError(
             "--signing-fingerprint is supported only with authenticode or gpg mode"
         )
+    if (signing_identity or signing_team_id) and signing_mode != "developer-id-notarized":
+        raise SmokeTestError(
+            "--signing-identity and --signing-team-id require developer-id-notarized mode"
+        )
     if signing_mode == "unsigned":
         return lambda path: None
     if signing_mode == "gpg":
@@ -886,13 +937,31 @@ def _prepare_signature_verifier(
             "raw gpg verification would not establish artifact integrity"
         )
     if signing_mode == "developer-id-notarized":
-        _verify_macos_release_artifact(artifact, kind=kind, timeout=timeout)
+        if not signing_identity or not signing_team_id:
+            raise SmokeTestError(
+                "Developer ID verification requires --signing-identity and --signing-team-id"
+            )
+        _verify_macos_release_artifact(
+            artifact,
+            kind=kind,
+            identity=signing_identity,
+            team_id=signing_team_id,
+            timeout=timeout,
+        )
         return lambda path: _verify_macos_installed_signature(
-            path, signing_mode=signing_mode, timeout=timeout
+            path,
+            signing_mode=signing_mode,
+            identity=signing_identity,
+            team_id=signing_team_id,
+            timeout=timeout,
         )
     if signing_mode == "adhoc":
         return lambda path: _verify_macos_installed_signature(
-            path, signing_mode=signing_mode, timeout=timeout
+            path,
+            signing_mode=signing_mode,
+            identity="adhoc",
+            team_id=None,
+            timeout=timeout,
         )
 
     _verify_authenticode(artifact, fingerprint=signing_fingerprint, timeout=timeout)
@@ -907,6 +976,8 @@ def smoke_test_installer(
     allow_system_install: bool = False,
     signing_mode: str = "unsigned",
     signing_fingerprint: str | None = None,
+    signing_identity: str | None = None,
+    signing_team_id: str | None = None,
     expected_architecture: str | None = None,
     timeout: float = 300.0,
     platform_value: str | None = None,
@@ -941,6 +1012,8 @@ def smoke_test_installer(
         artifact=artifact,
         signing_mode=signing_mode,
         signing_fingerprint=signing_fingerprint,
+        signing_identity=signing_identity,
+        signing_team_id=signing_team_id,
         timeout=timeout,
     )
 
@@ -1017,6 +1090,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional Authenticode certificate thumbprint or GPG fingerprint",
     )
     parser.add_argument(
+        "--signing-identity",
+        help="Exact Apple Developer ID Application identity for macOS verification",
+    )
+    parser.add_argument(
+        "--signing-team-id",
+        help="Exact Apple Team ID for macOS verification",
+    )
+    parser.add_argument(
         "--expected-architecture",
         choices=("arm64", "x86_64"),
         help="Require this machine type in the installed Mach-O, PE, or ELF executable",
@@ -1047,6 +1128,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             allow_system_install=args.allow_system_install,
             signing_mode=args.signing_mode,
             signing_fingerprint=args.signing_fingerprint,
+            signing_identity=args.signing_identity,
+            signing_team_id=args.signing_team_id,
             expected_architecture=args.expected_architecture,
             timeout=args.timeout,
             launch_seconds=args.launch_seconds,

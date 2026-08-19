@@ -10,7 +10,7 @@ only the fixed `openadapt://connect` action and forwards it to the sidecar's
 strict, transactional pairing flow.
 
 The canonical compiler and governed runtime remain in `openadapt-flow`. Each
-native installer freezes the exact `openadapt-flow[browser,console]==1.27.1`
+native installer freezes the exact `openadapt-flow[browser,console]==1.31.0`
 runtime and its `playwright==1.61.0` browser automation dependency into the
 Desktop sidecar. The `console` extra is what lets an installed application
 serve the attended decision console the mobile decision portal relays; the
@@ -41,14 +41,16 @@ remain the admission boundary.
 
 Native releases use a distinct `desktop-vX.Y.Z` tag and prerelease channel. The
 native version comes from `package.json`, `src-tauri/Cargo.toml`, and
-`src-tauri/tauri.conf.json`; the Native Installer Freshness workflow
-synchronizes those sources to each published engine release and pushes the
-matching `desktop-vX.Y.Z` tag, so the native prerelease number mirrors the
-engine release it was built from. When a newer native prerelease is published,
-older native prereleases receive a prominent "Superseded — do not use" notice;
-their assets are retained for provenance, and any deletion is a maintainer
-decision made outside CI. The full two-lane release policy and its planned
-convergence into a single release after code signing lands are documented in
+`src-tauri/tauri.conf.json`. The Native Installer Freshness workflow opens a
+pull request with the exact deterministic five-file version transform for each
+published engine release. The protected `main` branch must review and merge
+that pull request. A separate main-push job then verifies the complete tree
+against the immutable engine tag and creates the matching `desktop-vX.Y.Z` tag.
+The workflow never writes directly to `main`. When a native prerelease is
+published, the release workflow selects the highest published semantic version.
+All lower native prereleases receive a prominent "Superseded — do not use"
+notice. Their assets remain for provenance. The full two-lane release policy
+and its planned convergence into a single release are documented in
 [RELEASES.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/RELEASES.md).
 
 ## Artifact labels
@@ -58,12 +60,16 @@ architecture, and signing state. The initial matrix is:
 
 | Platform | Architectures | Packages | Signing labels |
 | --- | --- | --- | --- |
-| macOS | Apple Silicon (`arm64`), Intel (`x86_64`) | DMG | `adhoc` or `developer-id-notarized` |
-| Windows | `x86_64` | MSI and NSIS setup executable | `unsigned` or `authenticode` |
-| Linux | `x86_64` | DEB and AppImage | `unsigned` plus GitHub provenance |
+| macOS | Apple Silicon (`arm64`), Intel (`x86_64`) | DMG | `developer-id-notarized` required |
+| Windows | `x86_64` | MSI and NSIS setup executable | `authenticode` required |
+| Linux | `x86_64` | DEB and AppImage | `github-attested` exact bytes required |
 
-The build workflow installs and uninstalls every package on clean hosted
-runners, verifies executable architecture and the declared signing policy,
+The release workflow refuses ad-hoc or unsigned platform metadata. The build
+workflow installs and uninstalls every package on clean hosted runners. It
+verifies the executable architecture and the declared signing policy. macOS
+verification requires the exact configured Developer ID authority and Team ID.
+Windows verification requires a valid signer and a timestamp certificate on
+each installer, the installed executable, and the NSIS uninstaller. The workflow
 launches every installed application and requires the process to survive a
 20-second startup window (catching launch panics before they ship), and
 stages the exact tested bytes. The repository test matrix also checks that only
@@ -76,24 +82,39 @@ do not replace qualification of a complete real workflow.
 Release jobs stage the exact post-signing, smoke-tested files and scan that
 assembled installer set with Syft to publish a machine-readable CycloneDX JSON
 software bill of materials (SBOM). The workflow refuses an empty or malformed
-SBOM, includes it in the sorted `SHA256SUMS` manifest, verifies the manifest,
-and creates GitHub artifact attestations over every named file. Consumers can
-verify downloaded assets with:
+SBOM, includes it and the public build-provenance identity in the sorted
+`SHA256SUMS` manifest, verifies the exact inventory, and creates a GitHub
+artifact attestation over every named file. It also attests `SHA256SUMS` itself.
+The release verifier requires the signed subjects to equal that inventory. It
+binds the exact workflow, native tag commit, stable engine tag and release,
+run ID, run attempt, GitHub-hosted runner, and successful protected publish
+job. Consumers must authenticate `SHA256SUMS` before they trust its digests:
 
 ```bash
+native_tag=desktop-vX.Y.Z
+gh attestation verify SHA256SUMS \
+  --repo OpenAdaptAI/openadapt-desktop \
+  --cert-identity "https://github.com/OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/tags/${native_tag}" \
+  --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+  --deny-self-hosted-runners
 sha256sum -c SHA256SUMS
-for artifact in OpenAdapt-Desktop-Beta-*; do
-  gh attestation verify "$artifact" --repo OpenAdaptAI/openadapt-desktop
-done
+python verify-openadapt-native-release.py --directory . --manifest SHA256SUMS
 ```
+
+The final helper refuses missing, extra, linked, non-regular, duplicate, or
+digest-mismatched files. The canonical engine release also publishes an
+attested `openadapt-desktop-verified-release.json`. This closed, monotonic index
+identifies the exact native tag, engine release, source commits, workflow run,
+checksum digest, and complete asset set. A download service must verify this
+index attestation. It must not select a release from mutable release-note text.
 
 An attestation binds bytes to a build identity; it does not establish that the
 software is secure or functionally complete.
 
 ## External signing requirements
 
-The protected `native-release` GitHub environment may provide complete signing
-credential sets. Partial sets fail the build instead of falling back silently.
+The protected `native-release` GitHub environment must provide complete macOS
+and Windows signing credential sets. A missing or partial set fails the build.
 
 - macOS Developer ID and notarization: `APPLE_CERTIFICATE`,
   `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
@@ -106,14 +127,20 @@ credential sets. Partial sets fail the build instead of falling back silently.
   `TRUSTED_SIGNING_CERTIFICATE_PROFILE`) — the cheaper, token-free option for a
   startup. Configure one set, not both. Both produce a publicly trusted,
   timestamped `authenticode` artifact.
-- Linux AppImage GPG is intentionally disabled until the workflow pins an
-  external AppImage signature validator and publishes the corresponding public
-  key fingerprint through an authenticated channel. AppImage does not
-  self-verify; DEB/RPM repository metadata signing is also a separate boundary.
+- Linux uses the required GitHub OIDC exact-byte attestation above. It has no
+  founder-managed secret and is not described as native-signed.
 
-When no complete credential set is configured, the prerelease remains explicit
-about ad-hoc or unsigned status. The updater stays disabled until its independent
-public/private signing-key lifecycle and recovery procedure are established.
+When either native credential set is absent, the release stops. Historical
+prereleases keep their original trust labels. The updater stays disabled until
+its independent public/private signing-key lifecycle and recovery procedure are
+established.
+
+Before a release, the repository must also have a no-bypass pull-request
+ruleset for `main` and immutable release-tag rules for both `v*` and
+`desktop-v*`. The engine workflow can create `v*`. The native freshness
+workflow can create `desktop-v*`. Neither release identity can update or delete
+a tag. The historical `desktop-v0.15.0` prerelease does not satisfy the new
+trust contract.
 
 The founder activation runbook — exactly which certificates to buy, their costs,
 how to add each secret, and what each public surface may then truthfully claim —

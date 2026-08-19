@@ -168,6 +168,8 @@ def test_developer_id_mode_checks_codesign_gatekeeper_and_stapled_ticket(
         artifact,
         app_path,
         signing_mode="developer-id-notarized",
+        signing_identity="Developer ID Application: OpenAdapt AI (TEAMID1234)",
+        signing_team_id="TEAMID1234",
         platform_value="darwin",
         timeout=1,
     )
@@ -230,7 +232,10 @@ def test_authenticode_mode_checks_installer_and_installed_executable(
         command = [os.fspath(item) for item in args]  # type: ignore[union-attr]
         commands.append(command)
         if command[0] == "powershell.exe":
-            return _completed(command, stdout=f"VALIDSIGNER={thumbprint}\n")
+            return _completed(
+                command,
+                stdout=f"VALIDSIGNER={thumbprint}\nVALIDTIMESTAMPER={'B2' * 20}\n",
+            )
         if "/i" in command:
             app_path.parent.mkdir(parents=True)
             app_path.write_bytes(b"MZapp")
@@ -257,6 +262,81 @@ def test_authenticode_mode_checks_installer_and_installed_executable(
     assert os.fspath(app_path) in powershell_commands[1]
     assert thumbprint in powershell_commands[0]
     assert not app_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("identity", "team_id", "message"),
+    [
+        (
+            "Developer ID Application: A Different Company (TEAMID1234)",
+            "TEAMID1234",
+            "authority does not match",
+        ),
+        (
+            "Developer ID Application: OpenAdapt AI (TEAMID1234)",
+            "WRONGTEAM1",
+            "team does not match",
+        ),
+    ],
+)
+def test_developer_id_mode_rejects_the_wrong_configured_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    identity: str,
+    team_id: str,
+    message: str,
+) -> None:
+    artifact = _macos_app(tmp_path / "OpenAdapt Desktop.app")
+
+    def fake_run(
+        args: object, *, timeout: float, ok_returncodes: object = (0,)
+    ) -> subprocess.CompletedProcess[str]:
+        command = [os.fspath(item) for item in args]  # type: ignore[union-attr]
+        if command[:3] == ["codesign", "--display", "--verbose=4"]:
+            return _completed(
+                command,
+                stderr=(
+                    "Authority=Developer ID Application: OpenAdapt AI (TEAMID1234)\n"
+                    "TeamIdentifier=TEAMID1234\n"
+                ),
+            )
+        return _completed(command)
+
+    monkeypatch.setattr(smoke, "run_command", fake_run)
+    with pytest.raises(smoke.SmokeTestError, match=message):
+        smoke.smoke_test_installer(
+            artifact,
+            tmp_path / "installed" / "OpenAdapt Desktop.app",
+            signing_mode="developer-id-notarized",
+            signing_identity=identity,
+            signing_team_id=team_id,
+            platform_value="darwin",
+            timeout=1,
+        )
+
+
+def test_authenticode_mode_refuses_a_missing_timestamp_certificate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = _artifact(tmp_path / "OpenAdapt.msi", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
+
+    def fake_run(
+        args: object, *, timeout: float, ok_returncodes: object = (0,)
+    ) -> subprocess.CompletedProcess[str]:
+        command = [os.fspath(item) for item in args]  # type: ignore[union-attr]
+        return _completed(command, stdout=f"VALIDSIGNER={'A1' * 20}\n")
+
+    monkeypatch.setattr(smoke, "run_command", fake_run)
+    with pytest.raises(smoke.SmokeTestError, match="valid Authenticode timestamp"):
+        smoke.smoke_test_installer(
+            artifact,
+            tmp_path / "OpenAdapt Desktop.exe",
+            allow_system_install=True,
+            signing_mode="authenticode",
+            signing_fingerprint="A1" * 20,
+            platform_value="win32",
+            timeout=1,
+        )
 
 
 def test_msi_install_failure_still_attempts_uninstall(

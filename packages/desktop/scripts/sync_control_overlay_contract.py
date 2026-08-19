@@ -23,7 +23,7 @@ from openadapt_types import (
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "src" / "overlay" / "generated" / "contract.ts"
 SCHEMA_DIR = ROOT / "src" / "overlay" / "generated" / "schemas"
-PINNED_TYPES_VERSION = "0.7.0"
+PINNED_TYPES_VERSION = "0.10.0"
 SCHEMA_NAMES = (
     "control-overlay-frame-v2.json",
     "control-overlay-timeline-v2.json",

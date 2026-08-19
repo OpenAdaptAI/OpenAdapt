@@ -8,8 +8,10 @@
 > local authoring and teaching cockpit for OpenAdapt. The canonical compiler and
 > governed runtime live in
 > [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). This
-> repository builds unsigned or ad-hoc-signed Beta prereleases; it is not
-> yet a signed, generally available desktop product.
+> latest published native prerelease is historical and carries its original
+> ad-hoc/unsigned labels. The next native release is blocked until macOS has
+> Developer ID plus notarization, Windows has Authenticode, and the exact Linux
+> bytes pass GitHub OIDC attestation verification.
 
 ## What OpenAdapt is
 
@@ -196,12 +198,14 @@ Native packages are published under a distinct `desktop-vX.Y.Z` prerelease
 channel, separate from the engine's `vX.Y.Z` PyPI/GitHub releases. The native
 version is synchronized to each engine release by CI, so a native prerelease
 mirrors the engine version it was built from. A native prerelease is packaging
-evidence, and it is not a separate supported desktop release. They are unsigned
-or ad-hoc-signed Beta artifacts: their filenames carry the platform, architecture, and
-signing state, and CI installs, launches, and uninstalls each one on clean
-runners. Packaging structure is not workflow qualification.
+evidence, and it is not a separate supported desktop release. Historical
+prereleases retain their original trust labels. New release filenames require
+`developer-id-notarized` on macOS, `authenticode` on Windows, and
+`github-attested` for the exact Linux bytes. CI installs, launches, and
+uninstalls each package on clean runners. Packaging structure is not workflow
+qualification.
 
-On macOS, the ad-hoc lane uses an explicit non-hardened overlay because an
+On macOS, regular ad-hoc CI uses an explicit non-hardened overlay because an
 identity-less hardened launcher cannot load PyInstaller's identity-less embedded
 libraries. Developer ID builds keep hardened runtime and pass the same Apple
 identity into PyInstaller and Tauri. The installed-app smoke executes bundled
@@ -265,11 +269,13 @@ compiler or runtime. Those remain in `openadapt-flow`.
   real-application qualification remains workflow-specific.
 - The frozen `openadapt-engine` sidecar binary is produced only by CI. A plain
   dev checkout runs the shell in frontend-only mode.
-- Native packages are Beta and unsigned or ad-hoc-signed; structural
-  install/uninstall success is not evidence of a validated workflow.
-- Apple Developer ID/notarization and Windows Authenticode are credential-gated
-  and fail closed on partial configuration; the updater and rollback remain
-  disabled pending an independent signing-key lifecycle.
+- Native packages remain Beta. The latest published prerelease predates the
+  mandatory platform trust gate. Structural install/uninstall success is not
+  evidence of a validated workflow.
+- Apple Developer ID/notarization and Windows Authenticode credentials must be
+  provisioned before the next native release. A missing or partial set stops
+  the release. The updater and rollback remain disabled pending an independent
+  signing-key lifecycle.
 - This repository serves the tray's loopback IPC contract, but the desktop and
   the shipped tray client have not been validated together end to end.
 

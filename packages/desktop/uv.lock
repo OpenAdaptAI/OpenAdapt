@@ -1380,9 +1380,9 @@ requires-dist = [
     { name = "onnxruntime", marker = "(platform_machine != 'x86_64' and extra == 'build') or (sys_platform != 'darwin' and extra == 'build')", specifier = "==1.27.0" },
     { name = "openadapt-capture", specifier = ">=1.2.1" },
     { name = "openadapt-desktop", extras = ["enterprise"], marker = "extra == 'full'" },
-    { name = "openadapt-flow", extras = ["browser", "console"], marker = "extra == 'build'", specifier = "==1.27.1" },
+    { name = "openadapt-flow", extras = ["browser", "console"], marker = "extra == 'build'", specifier = "==1.31.0" },
     { name = "openadapt-privacy", specifier = ">=1.0.0" },
-    { name = "openadapt-types", specifier = "==0.7.0" },
+    { name = "openadapt-types", specifier = "==0.10.0" },
     { name = "packaging", specifier = ">=24" },
     { name = "playwright", marker = "extra == 'build'", specifier = ">=1.44" },
     { name = "psutil" },
@@ -1400,7 +1400,7 @@ requires-dist = [
 
 [[package]]
 name = "openadapt-flow"
-version = "1.27.1"
+version = "1.31.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -1413,9 +1413,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/af/99/709eeada43b5ab00da94a283d5018233c7511abb5ce33bbfd5e4b548c81f/openadapt_flow-1.27.1.tar.gz", hash = "sha256:aeabf2b11ae6151fe76c02ee783e8368d10ee984465f858f9d37429b17a15468", size = 19811791 }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/47/07ea24067eaa93cc2416a432df83508fe9d2f77bdf7955298580f2e1d35f/openadapt_flow-1.31.0.tar.gz", hash = "sha256:cf1fc356d14d267df82be188de3e9a3575734f18f46ef91ac8075438cc731540", size = 20005876 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/45/23/df60e9ad9a5dc82a4db551612de4f9b621bf20956bf5f0a34b6d8ca73953/openadapt_flow-1.27.1-py3-none-any.whl", hash = "sha256:99d8f3ef014481356f4bcfc65f694ed2fd47a75e2025c5ddfdae4bfab2194094", size = 1690362 },
+    { url = "https://files.pythonhosted.org/packages/a7/20/dd8ccd56afb0c3c369f13adb85695acf4f0495a0a61553f576ec0977ab19/openadapt_flow-1.31.0-py3-none-any.whl", hash = "sha256:81133db1528ad1bb1f26e3fcb6aea61b0651db6d905cf2e4943e8383c1f3d29c", size = 1774979 },
 ]
 
 [package.optional-dependencies]
@@ -1444,14 +1444,14 @@ wheels = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.7.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/bf/39ec24f545b3fc09bdff8cc61ca448bb968450c43a99f8a6808e538a3c57/openadapt_types-0.7.0.tar.gz", hash = "sha256:80a470aa4e8870d2a2b2645f2dbfac04ab9f158fb6d21b314d9eff0296a0ee2f", size = 126130 }
+sdist = { url = "https://files.pythonhosted.org/packages/0c/54/4cc84122fe9405fa3dbcd1521d252f92ba5d5c9d1eb367187aef06d0d4a3/openadapt_types-0.10.0.tar.gz", hash = "sha256:ea4d784da2d6dae15508d44a1e207a63539448312b3490d8c38110b4013710e8", size = 151235 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/39/b78fcd51096939884db01ea10bb4594a9e88aaa7d40c3eff537cfba8d971/openadapt_types-0.7.0-py3-none-any.whl", hash = "sha256:4805f2f97dbe46c15874d0fbf88dc9bf94a430b2b9a2f3e7ed24cddef013b7f2", size = 81743 },
+    { url = "https://files.pythonhosted.org/packages/28/6e/1efc97ed73c84205149b7e2a7474638afa0a1c29374b867c5a357bdff59e/openadapt_types-0.10.0-py3-none-any.whl", hash = "sha256:37317cc56968a88869cff8181179211365c3f772302e87ce76f95181565125b9", size = 105149 },
 ]
 
 [[package]]
