@@ -15,6 +15,7 @@ from openadapt_flow.execution_profiles import (
     classify_execution_outcome,
     execution_profile_contract,
     qualified_effect_requirements,
+    requires_signed_qualification_admission,
     stamp_execution_outcome,
 )
 from openadapt_flow.ir import (
@@ -431,6 +432,22 @@ def test_standard_requires_durability_and_independent_effects(tmp_path):
     assert admitted.gate(GATE_ENCRYPTION).passed
     authorization = build_runtime_authorization(workflow, admitted)
     assert authorization.execution_profile == "standard"
+
+
+@pytest.mark.parametrize(
+    "profile", [ExecutionProfile.STANDARD, ExecutionProfile.REGULATED]
+)
+def test_real_production_actuation_requires_signed_qualification(profile):
+    assert requires_signed_qualification_admission(profile, will_actuate=True)
+    assert not requires_signed_qualification_admission(profile, will_actuate=False)
+
+
+def test_demo_is_the_only_named_unsigned_actuation_profile():
+    assert not requires_signed_qualification_admission(
+        ExecutionProfile.DEMO,
+        will_actuate=True,
+    )
+    assert not requires_signed_qualification_admission(None, will_actuate=True)
 
 
 def test_production_gate_rejects_immediate_screen_but_accepts_persisted_readback(

@@ -167,6 +167,26 @@ def execution_profile_contract(
     return _CONTRACTS[resolve_execution_profile(value)]
 
 
+def requires_signed_qualification_admission(
+    value: ExecutionProfile | str | None,
+    *,
+    will_actuate: bool,
+) -> bool:
+    """Return whether this invocation must carry production qualification.
+
+    Recording, compilation, linting, qualification, and report-only simulation
+    do not cross an actuation boundary. They stay available without production
+    authority. Demo is the one named execution profile that can actuate without
+    a signed qualification admission. Every real Standard or Regulated action
+    requires that admission, independent of whether Cloud or the customer owns
+    the runner.
+    """
+
+    if not will_actuate or value is None:
+        return False
+    return execution_profile_contract(value).production
+
+
 def required_effect_tier(
     workflow: Workflow,
     profile: ExecutionProfile | str,

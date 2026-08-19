@@ -8,6 +8,7 @@ record-bearing field of a run report can reach the artifact.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -40,6 +41,19 @@ from openadapt_flow.receipt import (
     build_receipt,
     render_receipt_markdown,
     write_receipt,
+)
+from openadapt_flow.terminal_verification_v2 import (
+    ProductionDeliveryPermit,
+    ProductionDeliveryPermitChain,
+    ProductionTerminalVerificationError,
+    ProductionTerminalVerificationExpected,
+    ProductionTerminalVerificationPayload,
+    build_production_evidence_manifests,
+    evidence_runner_signer_sha256,
+    prepare_production_terminal_evidence,
+    sign_production_terminal_verification,
+    verify_production_terminal_verification,
+    verify_production_terminal_verification_from_report,
 )
 
 #: The complete set of keys a receipt may ever serialize.  Adding one is a
@@ -78,6 +92,252 @@ ALLOWED_FIELDS = {
     "receipt_digest",
     "generated_at",
 }
+
+
+def test_terminal_preparation_revalidates_exact_report_and_integer_receipt() -> None:
+    prepared = prepare_production_terminal_evidence(_report(run_id_sha256="f" * 64))
+    assert hashlib.sha256(prepared.report_bytes).hexdigest() == prepared.report_sha256
+    assert prepared.flow_run_id_sha256 == "f" * 64
+    assert prepared.run_receipt.est_cost_microusd == 0
+    assert prepared.run_receipt.source_schema_version == "openadapt.run-receipt/v2"
+    assert prepared.execution_outcome.qualification_evidence_only is False
+
+
+def test_terminal_evidence_manifests_recompute_from_retained_report() -> None:
+    prepared = prepare_production_terminal_evidence(_report(run_id_sha256="f" * 64))
+    permit_chain = ProductionDeliveryPermitChain.build(
+        (
+            ProductionDeliveryPermit(
+                execution_authority_id="authority:run:1",
+                execution_authority_sha256="1" * 64,
+                permit_id="permit:1",
+                permit_sha256="2" * 64,
+                run_request_sha256="3" * 64,
+                action_request_sha256="4" * 64,
+                admission_artifact_sha256="5" * 64,
+                evidence_identity_sha256="6" * 64,
+                environment_digest="7" * 64,
+                qualification_signer_registry_sha256="8" * 64,
+                qualification_signer_registry_revision=7,
+                qualification_signer_registry_checked_at="2026-08-18T11:59:00Z",
+                qualification_signer_registry_expires_at="2026-08-20T11:00:00Z",
+                input_edge_sequence=1,
+                authority_sequence=0,
+                runtime_delivery_sequence=9,
+                issued_at="2026-08-18T12:00:00Z",
+                delivered_at="2026-08-18T12:00:01Z",
+            ),
+        )
+    )
+    manifests = build_production_evidence_manifests(
+        prepared,
+        admission_policy_sha256="9" * 64,
+        environment_digest="7" * 64,
+        environment_contract_sha256="a" * 64,
+        runtime_environment_sha256="b" * 64,
+        identity_contract_sha256="c" * 64,
+        effect_contract_sha256="d" * 64,
+        admission_id="00000000-0000-4000-8000-000000000001",
+        admission_artifact_sha256="5" * 64,
+        execution_authority_id="authority:run:1",
+        execution_authority_sha256="1" * 64,
+        permit_chain=permit_chain,
+    )
+    assert manifests.identity.required == 1
+    assert (
+        manifests.postcondition.records
+        == prepared.execution_outcome.postcondition_evidence
+    )
+    assert manifests.effect.records[0].final_verdict == "confirmed"
+
+
+def _terminal_permit_chain() -> ProductionDeliveryPermitChain:
+    return ProductionDeliveryPermitChain.build(
+        (
+            ProductionDeliveryPermit(
+                execution_authority_id="authority:run:1",
+                execution_authority_sha256="1" * 64,
+                permit_id="permit:1",
+                permit_sha256="2" * 64,
+                run_request_sha256="3" * 64,
+                action_request_sha256="4" * 64,
+                admission_artifact_sha256="5" * 64,
+                evidence_identity_sha256="6" * 64,
+                environment_digest="7" * 64,
+                qualification_signer_registry_sha256="8" * 64,
+                qualification_signer_registry_revision=7,
+                qualification_signer_registry_checked_at="2026-08-18T11:59:00Z",
+                qualification_signer_registry_expires_at="2026-08-20T11:00:00Z",
+                input_edge_sequence=1,
+                authority_sequence=0,
+                runtime_delivery_sequence=9,
+                issued_at="2026-08-18T12:00:00Z",
+                delivered_at="2026-08-18T12:00:01Z",
+            ),
+        )
+    )
+
+
+def _terminal_key():
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    return Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+
+
+def _terminal_payload_from_report() -> tuple[
+    ProductionTerminalVerificationPayload, bytes
+]:
+    prepared = prepare_production_terminal_evidence(_report(run_id_sha256="f" * 64))
+    chain = _terminal_permit_chain()
+    manifests = build_production_evidence_manifests(
+        prepared,
+        admission_policy_sha256="9" * 64,
+        environment_digest="7" * 64,
+        environment_contract_sha256="a" * 64,
+        runtime_environment_sha256="b" * 64,
+        identity_contract_sha256="c" * 64,
+        effect_contract_sha256="d" * 64,
+        admission_id="00000000-0000-4000-8000-000000000001",
+        admission_artifact_sha256="5" * 64,
+        execution_authority_id="authority:run:1",
+        execution_authority_sha256="1" * 64,
+        permit_chain=chain,
+    )
+    from cryptography.hazmat.primitives import serialization
+
+    public_key = (
+        _terminal_key()
+        .public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+    )
+    payload = ProductionTerminalVerificationPayload(
+        run_id="00000000-0000-4000-8000-000000000002",
+        flow_run_id_sha256=prepared.flow_run_id_sha256,
+        tenant_id="00000000-0000-4000-8000-000000000003",
+        workflow_id="00000000-0000-4000-8000-000000000004",
+        workflow_version_id="00000000-0000-4000-8000-000000000005",
+        bundle_version_id="00000000-0000-4000-8000-000000000005",
+        bundle_artifact_sha256="b" * 64,
+        bundle_content_digest=prepared.bundle_content_digest,
+        environment_digest="7" * 64,
+        environment_contract_sha256="a" * 64,
+        runtime_environment_sha256="b" * 64,
+        identity_contract_sha256="c" * 64,
+        effect_contract_sha256="d" * 64,
+        runtime_validation_id="00000000-0000-4000-8000-000000000006",
+        runtime_substrate="web",
+        admission_id="00000000-0000-4000-8000-000000000001",
+        admission_artifact_sha256="5" * 64,
+        admission_policy_sha256="9" * 64,
+        evidence_identity_sha256="6" * 64,
+        admitted_runtime_build_sha256="0" * 64,
+        evidence_runner_signer_sha256=evidence_runner_signer_sha256(public_key),
+        qualification_signer_registry_sha256="8" * 64,
+        qualification_signer_registry_revision=7,
+        execution_authority_id="authority:run:1",
+        execution_authority_sha256="1" * 64,
+        permit_chain=chain,
+        permit_count=1,
+        final_authority_sequence=0,
+        final_runtime_delivery_sequence=9,
+        workflow_contract_sha256=prepared.execution_outcome.workflow_contract_sha256,
+        execution_outcome=prepared.execution_outcome,
+        execution_outcome_sha256=prepared.execution_outcome.artifact_sha256(),
+        run_receipt=prepared.run_receipt,
+        run_receipt_sha256=prepared.run_receipt_sha256,
+        run_report_sha256=prepared.report_sha256,
+        run_report_object_version="version:1",
+        run_report_object_sha256=prepared.report_sha256,
+        evidence_manifests=manifests,
+        verified_at="2026-08-18T12:00:02Z",
+        issued_at="2026-08-18T12:00:03Z",
+    )
+    return payload, prepared.report_bytes
+
+
+def _terminal_expected(
+    payload: ProductionTerminalVerificationPayload,
+) -> ProductionTerminalVerificationExpected:
+    values = {
+        field: getattr(payload, field)
+        for field in ProductionTerminalVerificationExpected.model_fields
+        if field != "permit_chain_sha256"
+    }
+    values["permit_chain_sha256"] = payload.permit_chain.permit_chain_sha256
+    return ProductionTerminalVerificationExpected.model_validate(values)
+
+
+def test_terminal_proof_verifies_when_derived_from_retained_report() -> None:
+    payload, report_bytes = _terminal_payload_from_report()
+    envelope = sign_production_terminal_verification(payload, _terminal_key())
+    digest = verify_production_terminal_verification_from_report(
+        envelope,
+        report_bytes=report_bytes,
+        expected=_terminal_expected(payload),
+        now=None,
+    )
+    assert digest == envelope.artifact_sha256()
+
+
+def test_terminal_proof_refuses_other_report_bytes() -> None:
+    payload, _report_bytes = _terminal_payload_from_report()
+    envelope = sign_production_terminal_verification(payload, _terminal_key())
+    other = prepare_production_terminal_evidence(
+        _report(run_id_sha256="f" * 64, total_ms=9999.0)
+    )
+    with pytest.raises(
+        ProductionTerminalVerificationError,
+        match="do not match the retained report object",
+    ):
+        verify_production_terminal_verification_from_report(
+            envelope,
+            report_bytes=other.report_bytes,
+            expected=_terminal_expected(payload),
+        )
+
+
+def test_terminal_proof_refuses_projection_not_derived_from_report() -> None:
+    """An internally consistent proof over foreign projections is refused.
+
+    The plain field comparison cannot catch a payload whose receipt digests are
+    self-consistent but did not come from the retained report; the from-report
+    verifier must.
+    """
+
+    payload, report_bytes = _terminal_payload_from_report()
+    foreign_receipt = payload.run_receipt.model_copy(update={"duration_ms": 1})
+    foreign = payload.model_copy(
+        update={
+            "run_receipt": foreign_receipt,
+            "run_receipt_sha256": hashlib.sha256(
+                json.dumps(
+                    foreign_receipt.model_dump(mode="json"),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest(),
+        }
+    )
+    envelope = sign_production_terminal_verification(foreign, _terminal_key())
+    # The plain verifier accepts it when the acceptor's expected state was
+    # (wrongly) copied from the proof itself...
+    verify_production_terminal_verification(
+        envelope, expected=_terminal_expected(foreign)
+    )
+    # ...the derivation from the retained report bytes refuses it.
+    with pytest.raises(
+        ProductionTerminalVerificationError,
+        match="does not derive from the retained report",
+    ):
+        verify_production_terminal_verification_from_report(
+            envelope,
+            report_bytes=report_bytes,
+            expected=_terminal_expected(foreign),
+        )
 
 
 def _postcondition_evidence(

@@ -28,7 +28,7 @@ import httpx
 
 from openadapt_flow.hosted import HostedError
 
-MANAGED_DELIVERY_AUTHORITY_CAPABILITY = "managed_delivery_authority_v1"
+MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY = "managed_qualification_authority_v2"
 
 
 class ConnectorClientError(HostedError):
@@ -93,7 +93,7 @@ class ConnectorClient:
             "/api/connector/poll",
             json={
                 "wait": wait_s,
-                "capabilities": [MANAGED_DELIVERY_AUTHORITY_CAPABILITY],
+                "capabilities": [MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY],
             },
             headers=self._bearer(),
         )

@@ -14,11 +14,15 @@ from __future__ import annotations
 
 import json
 import re
+from base64 import b64encode
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from openadapt_flow.ir import (
     HaltObservation,
@@ -27,6 +31,14 @@ from openadapt_flow.ir import (
     RunReport,
     StepResult,
     Workflow,
+)
+from openadapt_flow.qualification_admission import (
+    QualificationAdmissionPayload,
+    QualificationCampaignBinding,
+    QualificationCondition,
+    QualificationIssuer,
+    qualification_signer_key_id,
+    sign_qualification_admission,
 )
 from openadapt_flow.runner import commands, evidence, lease
 from openadapt_flow.runner.config import (
@@ -121,6 +133,71 @@ def mint_authorization(
         admitted_policy_name="clinical-write",
         approval_source="hosted:app.openadapt.ai:apr_test:user_test",
     )
+
+
+def qualification_admission():
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
+    public_key = private_key.public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    key_id = qualification_signer_key_id(public_key)
+    payload = QualificationAdmissionPayload(
+        admission_id="11111111-1111-4111-8111-111111111111",
+        tenant_id="22222222-2222-4222-8222-222222222222",
+        workflow_id="33333333-3333-4333-8333-333333333333",
+        workflow_version_id="44444444-4444-4444-8444-444444444444",
+        bundle_version_id="44444444-4444-4444-8444-444444444444",
+        runtime_validation_id="55555555-5555-4555-8555-555555555555",
+        bundle_artifact_sha256="1" * 64,
+        bundle_content_digest="2" * 64,
+        governed_authorization_template_sha256="3" * 64,
+        application_contract_sha256="4" * 64,
+        substrate_contract_sha256="5" * 64,
+        environment_contract_sha256="6" * 64,
+        runtime_environment_sha256="7" * 64,
+        runtime_contract_sha256="8" * 64,
+        input_policy_sha256="9" * 64,
+        action_policy_sha256="a" * 64,
+        network_policy_sha256="b" * 64,
+        identity_contract_sha256="c" * 64,
+        effect_contract_sha256="d" * 64,
+        operator_contract_sha256="e" * 64,
+        campaign=QualificationCampaignBinding(
+            artifact_sha256="f" * 64,
+            contract_sha256="0" * 64,
+            outcomes_sha256="1" * 64,
+            oracle_id="test-oracle",
+            oracle_contract_sha256="2" * 64,
+            tasks=(
+                QualificationCondition(
+                    task="test-task",
+                    condition="healthy",
+                    required_trials=3,
+                    observed_trials=3,
+                ),
+            ),
+            failure_taxonomy=("over_halt", "silent_incorrect_success"),
+        ),
+        issuer=QualificationIssuer(
+            key_id=key_id,
+            workflow="qualification.yml",
+            ref="refs/heads/main",
+        ),
+        issued_at=(now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+        not_before=(now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+        expires_at=(now + timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
+    )
+    admission = sign_qualification_admission(payload, private_key)
+    trust = {
+        key_id: {
+            "public_key": b64encode(public_key).decode("ascii"),
+            "allowed_workflows": ["qualification.yml"],
+            "allowed_ref_prefixes": ["refs/heads/"],
+        }
+    }
+    return admission, trust
 
 
 def dispatch_payload(workflow: Workflow, **overrides) -> dict:
@@ -256,7 +333,7 @@ class TestProtocol:
             dispatch_binding_sha256(
                 "11111111-1111-4111-8111-111111111111", authorization
             )
-            == "sha256:367411c4ff350c05d6dad465db3dd1f57e8d47d620d3c0f16b70adec0857047e"
+            == "sha256:efd01f7c8c56a0df02200d684a5ab6104e47ec769090b2d76eb090624cdcc272"
         )
 
     def test_dispatch_binding_refuses_changed_run_or_authorization(self, sealed):
@@ -1206,8 +1283,13 @@ class TestCommandMapping:
         workflow, bundle = sealed
         verdict = verified_or_refusal(workflow, config)
         assert not isinstance(verdict, Refusal)
+        admission, trust = qualification_admission()
         standard_authorization = verdict.payload.authorization.model_copy(
-            update={"execution_profile": "standard"}
+            update={
+                "execution_profile": "standard",
+                "qualification_admission": admission,
+                "qualification_admission_sha256": admission.artifact_sha256(),
+            }
         )
         managed_payload = verdict.payload.model_copy(
             update={
@@ -1252,6 +1334,15 @@ class TestCommandMapping:
             run_gate,
             "build_runtime_authorization",
             lambda *_args, **_kwargs: standard_authorization,
+        )
+        monkeypatch.setenv(
+            "OPENADAPT_QUALIFICATION_SIGNERS_JSON",
+            json.dumps(trust, sort_keys=True),
+        )
+        monkeypatch.setattr(
+            GovernedRunAuthorization,
+            "validate_workflow",
+            lambda _self, _workflow: None,
         )
         seen: list[object] = []
         monkeypatch.setattr(

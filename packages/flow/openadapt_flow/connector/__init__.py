@@ -19,7 +19,11 @@ CLI: create the token in Cloud settings, then ``openadapt-flow connector run``.
 ``connector enroll`` is retained for mock/development control planes.
 """
 
-from openadapt_flow.connector.client import ConnectorClient, ConnectorClientError
+from openadapt_flow.connector.client import (
+    MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY,
+    ConnectorClient,
+    ConnectorClientError,
+)
 from openadapt_flow.connector.config import (
     ConnectorConfigError,
     ConnectorSettings,
@@ -65,6 +69,7 @@ __all__ = [
     "GroundingModel",
     "InMemoryCustomerStorage",
     "LocalCustomerStorage",
+    "MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY",
     "build_run_argv",
     "build_storage",
     "connector_config_path",

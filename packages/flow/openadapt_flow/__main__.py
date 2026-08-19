@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -1566,6 +1567,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         resolve_execution_profile,
     )
     from openadapt_flow.ir import Workflow
+    from openadapt_flow.qualification_admission import (
+        QualificationAdmissionError,
+        expected_from_payload,
+        load_qualification_signer_trust,
+        verify_qualification_admission,
+    )
     from openadapt_flow.run_gate import (
         build_qualification_case_authorization,
         build_runtime_authorization,
@@ -1704,6 +1711,29 @@ def _cmd_run(args: argparse.Namespace) -> int:
         except ManagedDispatchEnvelopeError:
             print(
                 "run REFUSED: managed dispatch binding is invalid. Nothing was executed."
+            )
+            return 2
+        if authorization.qualification_admission is None:
+            print(
+                "run REFUSED: managed production dispatch has no signed "
+                "qualification admission. Nothing was executed."
+            )
+            return 2
+        try:
+            signer_trust = load_qualification_signer_trust(
+                os.environ.get("OPENADAPT_QUALIFICATION_SIGNERS_JSON", "")
+            )
+            verify_qualification_admission(
+                authorization.qualification_admission,
+                trusted_signers=signer_trust,
+                expected=expected_from_payload(
+                    authorization.qualification_admission.payload
+                ),
+            )
+        except QualificationAdmissionError:
+            print(
+                "run REFUSED: qualification admission is not signed by an "
+                "active trusted authority. Nothing was executed."
             )
             return 2
         local_authorization = build_runtime_authorization(

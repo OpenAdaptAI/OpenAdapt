@@ -33,6 +33,7 @@ from openadapt_flow.connector import (
     ConnectorSettings,
     ExecutionResult,
     InMemoryCustomerStorage,
+    MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY,
     build_run_argv,
     execute_job,
     load_settings,
@@ -762,7 +763,7 @@ def test_full_loop_dispatch_execute_callback_ack():
     )
     assert result["status"] == "success"
     assert cp.poll_bodies == [
-        {"wait": 0, "capabilities": ["managed_delivery_authority_v1"]}
+        {"wait": 0, "capabilities": [MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY]}
     ]
 
     # A PHI-free callback carrying the run-scoped token was posted.

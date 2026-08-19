@@ -20,6 +20,10 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from openadapt_flow.ir import Interstitial, QualifiedEffectRequirement, Step, Workflow
+from openadapt_flow.qualification_admission import (
+    QualificationAdmissionEnvelope,
+    contract_sha256,
+)
 from openadapt_flow.traversal import iter_workflow_steps
 
 _CONSUMED_IDS: set[str] = set()
@@ -222,6 +226,10 @@ class GovernedRunAuthorization(BaseModel):
         default_factory=tuple
     )
     approval_source: str = "local-cli-explicit-flag"
+    qualification_admission: QualificationAdmissionEnvelope | None = None
+    qualification_admission_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
     qualification_project_id: str | None = None
     qualification_project_revision: int | None = Field(default=None, ge=1)
     qualification_project_contract_sha256: str | None = Field(
@@ -268,6 +276,16 @@ class GovernedRunAuthorization(BaseModel):
 
     @model_validator(mode="after")
     def _qualification_binding_is_complete(self) -> "GovernedRunAuthorization":
+        if (self.qualification_admission is None) != (
+            self.qualification_admission_sha256 is None
+        ):
+            raise ValueError("qualification admission binding is incomplete")
+        if (
+            self.qualification_admission is not None
+            and self.qualification_admission.artifact_sha256()
+            != self.qualification_admission_sha256
+        ):
+            raise ValueError("qualification admission digest does not match")
         requirement_refs = [
             (item.step_id, item.actuation_path, item.effect_index)
             for item in self.qualified_effect_requirements
@@ -492,6 +510,33 @@ class GovernedRunAuthorization(BaseModel):
             )
         if workflow.manifest is None:
             return "governed run authorization requires a sealed manifest"
+        if self.qualification_admission is not None:
+            payload = self.qualification_admission.payload
+            template = workflow.manifest.provenance.governed_authorization_template
+            if template is None:
+                return "qualification admission requires a governed template"
+            effect_contract_digest = contract_sha256(
+                [
+                    item.model_dump(mode="json")
+                    for item in template.qualified_effect_requirements
+                ]
+            )
+            if (
+                payload.bundle_content_digest != self.bundle_content_digest
+                or payload.governed_authorization_template_sha256
+                != template.template_sha256
+                or payload.environment_contract_sha256
+                != template.qualification_environment_contract_sha256
+                or payload.input_policy_sha256 != template.parameter_contract_sha256
+                or payload.action_policy_sha256
+                != template.qualification_project_contract_sha256
+                or payload.identity_contract_sha256 != template.identity_contract_sha256
+                or payload.effect_contract_sha256 != effect_contract_digest
+            ):
+                return (
+                    "qualification admission does not bind the current governed "
+                    "workflow contracts"
+                )
         if self.execution_profile is not None and self.minimum_effect_tier is not None:
             from openadapt_flow.execution_profiles import required_effect_tier
 
