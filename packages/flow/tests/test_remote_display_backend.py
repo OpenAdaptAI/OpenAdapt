@@ -33,6 +33,7 @@ from openadapt_flow.backend import (
 from openadapt_flow.backends.remote_display import (
     RemoteDisplayBackend,
     RemoteDisplayError,
+    RemoteInputRefused,
     WindowInfo,
     _canonical_rgb_digest,
     _split_chord,
@@ -387,6 +388,34 @@ def test_viewport_and_scale_from_capture() -> None:
     assert backend.viewport == (3024, 1888)
     backend.screenshot()
     assert backend._scale == pytest.approx(2.0)  # 3024 px / 1512 pt window
+
+
+def test_new_capture_rebaselines_resize_and_cross_monitor_scale_between_actions() -> (
+    None
+):
+    backend, client = _backend(px=(3024, 1888))
+    backend.screenshot()
+    old = client.window
+
+    # Move the client to a left-side, non-Retina monitor and resize it. Negative
+    # desktop coordinates are valid on a multi-monitor host. A new capture
+    # establishes the new coordinate space before the next action.
+    client.window = WindowInfo(
+        window_id=old.window_id,
+        owner=old.owner,
+        title=old.title,
+        pid=old.pid,
+        bounds=(-1280.0, 100.0, 1280.0, 800.0),
+        on_screen=True,
+    )
+    client.windows = [client.window]
+    client.px = (1280, 800)
+    backend.screenshot()
+    backend.click(640, 400)
+
+    assert backend.viewport == (1280, 800)
+    downs = [call for call in client.calls if call[0] == "mouse" and call[4] is True]
+    assert downs[-1][1:3] == (-640.0, 500.0)
 
 
 def test_screenshot_returns_png() -> None:
@@ -966,6 +995,18 @@ def test_type_text_routes_to_keycodes() -> None:
     assert ("type", "Neil-1") in client.calls
 
 
+def test_type_failure_is_delivery_uncertain() -> None:
+    class FailingTypeClient(FakeClient):
+        def type_chars(self, text):
+            raise RuntimeError("host input failed after possible delivery")
+
+    backend = RemoteDisplayBackend(client=FailingTypeClient(), settle_s=0.0)
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        backend.type_text("Neil-1")
+    assert raised.value.operation == "remote_type_text"
+    assert raised.value.cause_type == "RuntimeError"
+
+
 def test_press_named_key_enter() -> None:
     backend, client = _backend()
     backend.press("Enter")
@@ -984,6 +1025,35 @@ def test_press_chord_ctrl_a_uses_control_flag() -> None:
     assert keys[0][2] is True and keys[-1][2] is False
 
 
+def test_press_failure_is_uncertain_and_still_attempts_release() -> None:
+    class FailingKeyClient(FakeClient):
+        def key(self, keycode, *, down, flags):
+            super().key(keycode, down=down, flags=flags)
+            if down:
+                raise RuntimeError("key failed after possible delivery")
+
+    client = FailingKeyClient()
+    backend = RemoteDisplayBackend(client=client, settle_s=0.0)
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        backend.press("Enter")
+    assert raised.value.operation == "remote_press"
+    assert [call[2] for call in client.calls if call[0] == "key"] == [True, False]
+
+
+def test_typed_pre_delivery_key_refusal_is_preserved() -> None:
+    class RefusingKeyClient(FakeClient):
+        def key(self, keycode, *, down, flags):
+            if down:
+                raise RemoteInputRefused("session policy refused before input")
+            super().key(keycode, down=down, flags=flags)
+
+    client = RefusingKeyClient()
+    backend = RemoteDisplayBackend(client=client, settle_s=0.0)
+    with pytest.raises(RemoteInputRefused):
+        backend.press("Enter")
+    assert [call[2] for call in client.calls if call[0] == "key"] == []
+
+
 def test_press_bare_char_types_it() -> None:
     backend, client = _backend()
     backend.press("x")
@@ -1000,6 +1070,17 @@ def test_scroll_dispatches() -> None:
     backend, client = _backend()
     backend.scroll(0, 120)
     assert any(c[0] == "scroll" for c in client.calls)
+
+
+def test_scroll_failure_is_delivery_uncertain() -> None:
+    class FailingScrollClient(FakeClient):
+        def scroll(self, dx, dy):
+            raise RuntimeError("scroll failed after possible delivery")
+
+    backend = RemoteDisplayBackend(client=FailingScrollClient(), settle_s=0.0)
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        backend.scroll(0, 120)
+    assert raised.value.operation == "remote_scroll"
 
 
 def test_fail_loud_when_not_accessibility_trusted() -> None:

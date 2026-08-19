@@ -304,7 +304,7 @@ def _collector(
     observed_at: datetime | None = None,
 ) -> dict:
     payload = {
-        "schema_version": "openadapt.citrix-independent-collector.v1",
+        "schema_version": mod.COLLECTOR_SCHEMA,
         "campaign_nonce": campaign.config["campaign_nonce"],
         "config_sha256": config_sha256,
         "execution_challenge": execution_challenge,
@@ -314,6 +314,7 @@ def _collector(
         "standin": False,
         "session_id_sha256": SHA_A,
         "transport_sha256": SHA_B,
+        "display": campaign.config["fingerprints"]["display"],
         "observed_at": (observed_at or datetime.now(timezone.utc)).isoformat(),
         "observed_components": campaign.trust_roots["components"],
         "diagnostic_evidence": _evidence(tmp_path, f"collector-{trial['id']}.json"),
@@ -333,6 +334,7 @@ def _receipt(trial: dict, collector_sha256: str) -> dict:
         "condition": trial["condition"],
         "delivery_state": delivery,
         "retry_count": 0,
+        "model_calls": 0,
         "reconciliation_required": trial["condition"] == "commit_timeout",
         "collector_evidence_sha256": collector_sha256,
     }
@@ -560,6 +562,31 @@ def test_collector_is_signed_fresh_and_campaign_bound(tmp_path: Path) -> None:
             consumed_challenges=set(),
         )
 
+    wrong_display = _collector(
+        campaign,
+        tmp_path,
+        trial,
+        digest,
+        execution_challenge=execution_challenge,
+        observation_challenge="3" * 64,
+    )
+    wrong_display["payload"]["display"] = {
+        **wrong_display["payload"]["display"],
+        "monitor_topology_sha256": SHA_D,
+    }
+    wrong_display = _signed(campaign.keys["collector"], wrong_display["payload"])
+    with pytest.raises(ValueError, match="display"):
+        mod._validate_collector_evidence(
+            _result(wrong_display),
+            trial=trial,
+            config=config,
+            config_sha256=digest,
+            trust_roots=campaign.trust_roots,
+            execution_challenge=execution_challenge,
+            observation_challenge="3" * 64,
+            consumed_challenges=set(),
+        )
+
 
 def test_runner_receipt_binds_collector_and_never_retries(tmp_path: Path) -> None:
     campaign = _campaign(tmp_path)
@@ -583,6 +610,53 @@ def test_runner_receipt_binds_collector_and_never_retries(tmp_path: Path) -> Non
         mod._validate_runner_receipt(
             _result(receipt), trial=trial, collector_evidence_sha256=SHA_C
         )
+    receipt = _receipt(trial, SHA_C)
+    receipt["model_calls"] = 1
+    with pytest.raises(ValueError, match="zero models"):
+        mod._validate_runner_receipt(
+            _result(receipt), trial=trial, collector_evidence_sha256=SHA_C
+        )
+
+
+def test_report_metrics_name_silent_success_over_halt_retries_and_models() -> None:
+    report = {
+        "trials": [
+            {
+                "condition": "healthy",
+                "expected": "VERIFIED",
+                "outcome": "HALTED",
+                "retry_count": 0,
+            },
+            {
+                "condition": "display_drift",
+                "expected": "HALTED",
+                "outcome": "VERIFIED",
+                "retry_count": 1,
+                "receipt": {"model_calls": 2},
+            },
+        ]
+    }
+    mod._refresh_report_metrics(report)
+    assert report["metrics"] == {
+        "trial_count": 2,
+        "condition_counts": {
+            "healthy": 1,
+            "wrong_session_or_entity": 0,
+            "ambiguity": 0,
+            "stale_state": 0,
+            "display_drift": 1,
+            "partial_effect": 0,
+            "reconnect": 0,
+            "commit_timeout": 0,
+        },
+        "verified_outcomes": 1,
+        "halted_outcomes": 1,
+        "halted_uncertain_outcomes": 0,
+        "silent_incorrect_successes": 1,
+        "over_halts": 1,
+        "delivery_retries": 1,
+        "model_calls": 2,
+    }
 
 
 def _scripted_run(

@@ -166,7 +166,10 @@ observation must return both challenges and a signed `observed_at` timestamp.
 The harness accepts the observation challenge once and rejects a stale, future,
 or replayed observation. A signed independent collector also binds its current
 OS observations of the runner, oracle, and collector principals and executable
-digests to the configuration, trial, session, and transport.
+digests to the configuration, trial, session, transport, and exact display.
+The display observation includes the viewport, DPI, scale, window mode, and a
+monitor-topology digest. A resize or monitor change outside the configured
+trial condition refuses before dispatch.
 
 Before each dispatch, a separately authenticated read-only oracle must report a
 signed `REFUTED` baseline for the exact trial, entity, and effect. The collector
@@ -192,6 +195,10 @@ outcome. The harness derives the outcome only from validated oracle evidence
 and the fixed condition contract. It emits `VERIFIED` only for a healthy trial
 whose complete oracle checks pass. A trial with `passed: false` is always
 `HALTED` or `HALTED_UNCERTAIN`; it is never `VERIFIED`.
+
+The runner receipt must also report zero retries and zero model calls. The
+terminal report includes explicit counts for every condition, verified and halt
+outcomes, silent incorrect success, over-halt, retries, and model calls.
 
 A commit timeout has the fixed result `HALTED_UNCERTAIN`. The runner reports
 uncertain delivery, zero retries, and required independent reconciliation. The

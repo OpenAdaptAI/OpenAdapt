@@ -35,7 +35,10 @@ from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
-from openadapt_flow.backends.remote_display import RemoteDisplayError, WindowInfo
+from openadapt_flow.backends.remote_display import (
+    RemoteInputRefused,
+    WindowInfo,
+)
 
 # -- fixed synthetic geometry (pixel space of the captured frame) --------------
 # Window bounds are screen POINTS; the captured frame is pixels. scale 2.0 (a
@@ -335,7 +338,7 @@ class SyntheticIcaWindowClient:
         if self.paste_blocked and "control" in flags:
             # Citrix policy disables the clipboard channel: fail LOUD rather
             # than let a no-op paste look like a completed action.
-            raise RemoteDisplayError(
+            raise RemoteInputRefused(
                 "clipboard redirection is disabled by session policy; paste "
                 "was not delivered (refusing to let a no-op look like success)"
             )

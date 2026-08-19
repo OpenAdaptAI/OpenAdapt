@@ -550,7 +550,10 @@ claims:
       - path: tests/test_rdp_backend.py
         proves: >-
           CI covers the backend/transport contract, framebuffer conversion,
-          pointer and keyboard delivery, and record-compile-replay conformance.
+          pointer and keyboard delivery, resize rebaseline between actions,
+          mid-lease geometry refusal, pre-delivery horizontal-scroll refusal,
+          typed uncertain transport failures, and record-compile-replay
+          conformance.
       - path: tests/test_rdp_multiapp_campaign_contract.py
         proves: >-
           Required CI covers the bounded 27-trial FreeRDP campaign contract,
@@ -707,8 +710,9 @@ claims:
         proves: >-
           Required CI validates the public real-ICA campaign preflight,
           distinct authority keys, executable and oracle attestations, one-use
-          nonce journal, crash recovery, uncertain dispatch, and fail-closed
-          report contract without provisioning infrastructure.
+          nonce journal, crash recovery, signed display and monitor-topology
+          observation, explicit reliability metrics, uncertain dispatch, and
+          fail-closed report contract without provisioning infrastructure.
       - path: benchmark/citrix_workspace/results.json
         kind: artifact
         proves: >-

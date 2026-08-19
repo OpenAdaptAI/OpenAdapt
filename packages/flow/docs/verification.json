@@ -853,7 +853,7 @@
           "node_found": null,
           "ci_job": "test",
           "junit_status": null,
-          "proves": "CI covers the backend/transport contract, framebuffer conversion, pointer and keyboard delivery, and record-compile-replay conformance."
+          "proves": "CI covers the backend/transport contract, framebuffer conversion, pointer and keyboard delivery, resize rebaseline between actions, mid-lease geometry refusal, pre-delivery horizontal-scroll refusal, typed uncertain transport failures, and record-compile-replay conformance."
         },
         {
           "path": "tests/test_rdp_multiapp_campaign_contract.py",
@@ -1114,7 +1114,7 @@
           "node_found": null,
           "ci_job": "test",
           "junit_status": null,
-          "proves": "Required CI validates the public real-ICA campaign preflight, distinct authority keys, executable and oracle attestations, one-use nonce journal, crash recovery, uncertain dispatch, and fail-closed report contract without provisioning infrastructure."
+          "proves": "Required CI validates the public real-ICA campaign preflight, distinct authority keys, executable and oracle attestations, one-use nonce journal, crash recovery, signed display and monitor-topology observation, explicit reliability metrics, uncertain dispatch, and fail-closed report contract without provisioning infrastructure."
         },
         {
           "path": "benchmark/citrix_workspace/results.json",

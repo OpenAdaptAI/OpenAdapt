@@ -29,8 +29,9 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 SCHEMA = "openadapt.citrix-real-acceptance.v3"
-REPORT_SCHEMA = "openadapt.citrix-real-acceptance-report.v3"
+REPORT_SCHEMA = "openadapt.citrix-real-acceptance-report.v4"
 TRUST_ROOT_SCHEMA = "openadapt.citrix-acceptance-trust-roots.v1"
+COLLECTOR_SCHEMA = "openadapt.citrix-independent-collector.v2"
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 NONCE_RE = re.compile(r"[0-9a-f]{32,128}")
 MAX_COLLECTOR_AGE_S = 300
@@ -664,6 +665,7 @@ def _validate_collector_evidence(
         "standin",
         "session_id_sha256",
         "transport_sha256",
+        "display",
         "observed_at",
         "observed_components",
         "diagnostic_evidence",
@@ -671,7 +673,7 @@ def _validate_collector_evidence(
     if not isinstance(proof, dict) or set(proof) != required:
         raise ValueError("collector evidence has incomplete or unknown fields")
     expected = {
-        "schema_version": "openadapt.citrix-independent-collector.v1",
+        "schema_version": COLLECTOR_SCHEMA,
         "campaign_nonce": config["campaign_nonce"],
         "config_sha256": config_sha256,
         "execution_challenge": execution_challenge,
@@ -681,6 +683,7 @@ def _validate_collector_evidence(
         "standin": False,
         "session_id_sha256": config["fingerprints"]["session"]["session_id_sha256"],
         "transport_sha256": config["fingerprints"]["ica_hdx"]["transport_sha256"],
+        "display": config["fingerprints"]["display"],
     }
     for key, value in expected.items():
         if proof[key] != value:
@@ -716,6 +719,7 @@ def _validate_runner_receipt(
         "condition",
         "delivery_state",
         "retry_count",
+        "model_calls",
         "collector_evidence_sha256",
         "reconciliation_required",
     }
@@ -725,8 +729,10 @@ def _validate_runner_receipt(
         raise ValueError("session runner receipt schema is invalid")
     if receipt["trial_id"] != trial["id"] or receipt["condition"] != trial["condition"]:
         raise ValueError("session runner receipt is not bound to the trial")
-    if receipt["retry_count"] != 0:
+    if type(receipt["retry_count"]) is not int or receipt["retry_count"] != 0:
         raise ValueError("a counted acceptance trial must not retry")
+    if type(receipt["model_calls"]) is not int or receipt["model_calls"] != 0:
+        raise ValueError("a counted healthy-path acceptance trial must use zero models")
     if receipt["collector_evidence_sha256"] != collector_evidence_sha256:
         raise ValueError("session runner receipt is not bound to collector evidence")
     required_delivery = {
@@ -979,6 +985,7 @@ def _write_terminal_report(
     *,
     require_primary: bool = False,
 ) -> None:
+    _refresh_report_metrics(report)
     report["journal"] = {
         "path": str(journal.path),
         "sha256": _sha256(journal.path),
@@ -991,6 +998,44 @@ def _write_terminal_report(
         _atomic_write_json(fallback, report)
         if require_primary:
             raise
+
+
+def _refresh_report_metrics(report: dict) -> None:
+    """Add explicit reliability counts from the retained terminal rows."""
+
+    rows = [row for row in report.get("trials", []) if isinstance(row, dict)]
+    condition_counts = {
+        condition: sum(row.get("condition") == condition for row in rows)
+        for condition in EXPECTED_OUTCOMES
+    }
+    report["metrics"] = {
+        "trial_count": len(rows),
+        "condition_counts": condition_counts,
+        "verified_outcomes": sum(row.get("outcome") == "VERIFIED" for row in rows),
+        "halted_outcomes": sum(row.get("outcome") == "HALTED" for row in rows),
+        "halted_uncertain_outcomes": sum(
+            row.get("outcome") == "HALTED_UNCERTAIN" for row in rows
+        ),
+        "silent_incorrect_successes": sum(
+            row.get("outcome") == "VERIFIED" and row.get("expected") != "VERIFIED"
+            for row in rows
+        ),
+        "over_halts": sum(
+            row.get("expected") == "VERIFIED" and row.get("outcome") != "VERIFIED"
+            for row in rows
+        ),
+        "delivery_retries": sum(
+            row.get("retry_count", 0)
+            for row in rows
+            if type(row.get("retry_count", 0)) is int
+        ),
+        "model_calls": sum(
+            row["receipt"].get("model_calls", 0)
+            for row in rows
+            if isinstance(row.get("receipt"), dict)
+            and type(row["receipt"].get("model_calls", 0)) is int
+        ),
+    }
 
 
 def _recover_reserved_campaign(binding: dict) -> dict:
@@ -1469,6 +1514,7 @@ def main() -> int:
         print(f"acceptance refused: {exc}", file=sys.stderr)
         return 2
     if not args.execute:
+        _refresh_report_metrics(report)
         _atomic_write_json(args.output, report)
     if not args.execute:
         print("preflight passed; no trial ran")

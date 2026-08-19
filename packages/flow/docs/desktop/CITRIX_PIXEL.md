@@ -35,6 +35,15 @@ chrome can over-halt. Any mask or protected-region relaxation is part of the
 specific application/environment qualification, not a permissive global
 default.
 
+The client window can move, resize, or cross monitors between actions. Each new
+capture resolves the exact window again and recalculates the pixel-to-screen
+mapping from its current bounds and captured dimensions. The Windows client
+requires per-monitor DPI awareness. The macOS client supports negative desktop
+coordinates and derives the current Retina scale. An anisotropic mapping, an
+unavailable DPI mode, or a geometry change during an actuation lease refuses
+input. The current evidence covers this driver contract. It does not claim a
+counted real Workspace multi-monitor result.
+
 `openadapt_flow/backends/remote_display.py` implements this contract on macOS
 (Quartz), and `openadapt_flow/backends/win32_window_client.py` provides the
 Windows-host client for the same backend (PrintWindow/BitBlt client-area
@@ -95,6 +104,12 @@ observable business result. The acceptance record names:
 - latency, reconnect, lock, and timeout conditions included in the test; and
 - run count, failure taxonomy, silent incorrect success, over-halt, operator
   intervention, model calls, and time-to-repair.
+
+The public real-acceptance harness requires a signed independent collector to
+observe the exact display fingerprint before each trial. That fingerprint
+includes width, height, DPI, scale, window mode, and a monitor-topology digest.
+The terminal report names trial counts, each condition count, verified and halt
+outcomes, silent incorrect success, over-halt, retries, and model calls.
 
 Qualification begins in shadow mode, moves to supervised production writes,
 and expands only after the fixed workflow meets its acceptance thresholds.

@@ -135,12 +135,13 @@ class RDPTransport(Protocol):
         """Send a wheel gesture by ``(dx, dy)`` framebuffer pixels (Backend
         convention: positive ``dy`` scrolls content up / view down).
 
-        A transport MAY only support vertical scrolling: the real
-        :class:`AardwolfTransport` drops a non-zero ``dx`` because aardwolf's
-        wheel API has no horizontal event. A transport that dispatches the
-        wheel at a cursor position SHOULD use the last pointer location (the
-        remote OS routes the wheel to the window under the cursor), not a fixed
-        origin.
+        A transport MAY only support vertical scrolling. It MUST advertise a
+        true ``supports_hwheel`` attribute before the backend sends a non-zero
+        ``dx``. The real :class:`AardwolfTransport` has no horizontal wheel
+        event and therefore receives no horizontal gesture. A transport that
+        dispatches the wheel at a cursor position SHOULD use the last pointer
+        location (the remote OS routes the wheel to the window under the
+        cursor), not a fixed origin.
         """
         ...
 
@@ -264,8 +265,8 @@ class FreeRDPBackend:
 
     Args:
         transport: The RDP transport to drive (real or fake).
-        viewport: Optional ``(width, height)`` override; when omitted it is
-            derived once from the first framebuffer and cached.
+        viewport: Optional initial ``(width, height)`` value. Every subsequent
+            screenshot replaces it with the dimensions of that exact frame.
         connect: When True (default) connect the transport on construction.
             Pass False if the caller manages the transport lifecycle.
         max_frame_age_s: Maximum age of the screenshot that established an
@@ -817,7 +818,16 @@ class FreeRDPBackend:
         with self._input_lock:
             self._focus_input_surface()
             self._ensure_input_ready(operation="rdp_type_text")
-            self._dispatch_text_locked(text)
+            try:
+                self._dispatch_text_locked(text, strict_release=True)
+            except ActionDeliveryUncertain:
+                raise
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="rdp_type_text",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'ControlOrMeta+a'``.
@@ -839,7 +849,29 @@ class FreeRDPBackend:
         with self._input_lock:
             self._focus_input_surface()
             self._ensure_input_ready(operation="rdp_press")
-            self._dispatch_key_locked(parts)
+            physical_key = getattr(self._transport, "physical_key", None)
+            supports_physical_key = getattr(
+                self._transport, "supports_physical_key", None
+            )
+            if callable(physical_key) and callable(supports_physical_key):
+                unsupported = [
+                    part for part in parts if not supports_physical_key(part)
+                ]
+                if unsupported:
+                    raise ValueError(
+                        "RDP transport cannot safely emit physical chord keys: "
+                        f"{unsupported!r}"
+                    )
+            try:
+                self._dispatch_key_locked(parts, strict_release=True)
+            except ActionDeliveryUncertain:
+                raise
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="rdp_press",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
 
     def select_option(self, text: str, commit_key: str) -> None:
         """Type and commit one demonstrated option under a single input lock.
@@ -1014,19 +1046,28 @@ class FreeRDPBackend:
     def scroll(self, dx: int, dy: int) -> None:
         """Dispatch a wheel gesture by ``(dx, dy)`` pixels.
 
-        Limitation — horizontal scroll: the real :class:`AardwolfTransport`
-        can only emit *vertical* wheel events (aardwolf's ``send_mouse``
-        exposes ``WHEEL_UP``/``WHEEL_DOWN`` but no horizontal ``HWHEEL``), so a
-        non-zero ``dx`` is silently dropped by that transport. This is a
-        documented capability gap, not a bug in this method; the in-repo
-        :class:`FakeRDPTransport` models the same drop so a test cannot pass on
-        a capability the live transport lacks.
+        The real :class:`AardwolfTransport` supports vertical wheel input only.
+        The backend refuses a horizontal component before any input unless the
+        selected transport explicitly advertises ``supports_hwheel``. It never
+        turns a demonstrated two-axis gesture into a partial action.
         """
         if dx == 0 and dy == 0:
             return
+        if dx != 0 and not bool(getattr(self._transport, "supports_hwheel", False)):
+            raise RuntimeError(
+                "RDP transport does not support horizontal wheel input; "
+                "refusing the complete scroll gesture before delivery"
+            )
         with self._input_lock:
             self._ensure_input_ready(operation="rdp_scroll")
-            self._transport.wheel(int(dx), int(dy))
+            try:
+                self._transport.wheel(int(dx), int(dy))
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="rdp_scroll",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -1389,6 +1430,8 @@ class AardwolfTransport:
             physical shortcut scancodes (default ``enus``).
         keyboard_layout_id: RDP handshake layout id (default 1033 / en-US).
     """
+
+    supports_hwheel = False
 
     def __init__(
         self,

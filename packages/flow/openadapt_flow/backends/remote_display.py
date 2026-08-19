@@ -87,6 +87,15 @@ class RemoteDisplayError(RuntimeError):
     """A remote-display capture/inject operation failed (or is not permitted)."""
 
 
+class RemoteInputRefused(RemoteDisplayError):
+    """A client proved that it emitted no input edge.
+
+    A ``WindowClient`` can raise this only for a completed pre-delivery check.
+    Other client exceptions remain delivery-uncertain because the host API can
+    fail after it starts an input operation.
+    """
+
+
 class _RemoteDisplayFreshActuationRequired(
     FreshActuationRequired,
     RemoteDisplayError,
@@ -1251,7 +1260,16 @@ class RemoteDisplayBackend:
             return
         with self._input_lock:
             self._ensure_input_ready(operation="remote_type_text")
-            self._client.type_chars(text)
+            try:
+                self._client.type_chars(text)
+            except RemoteInputRefused:
+                raise
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="remote_type_text",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'ControlOrMeta+a'``.
@@ -1266,7 +1284,16 @@ class RemoteDisplayBackend:
             self._ensure_input_ready(operation="remote_press")
             # A bare printable key with no modifiers: type it as a character.
             if len(final) == 1 and not mods:
-                self._client.type_chars(final)
+                try:
+                    self._client.type_chars(final)
+                except RemoteInputRefused:
+                    raise
+                except Exception as exc:
+                    raise ActionDeliveryUncertain(
+                        operation="remote_press",
+                        native=False,
+                        cause_type=type(exc).__name__,
+                    ) from exc
                 return
             # Named key, or a modified key: the CLIENT owns the keycode
             # namespace (macOS virtual key codes vs Windows VKs), so key
@@ -1276,10 +1303,25 @@ class RemoteDisplayBackend:
                 raise RemoteDisplayError(f"no key mapping for {final!r} in {key!r}")
             code, shift = resolved
             flags = list(mods) + (["shift"] if shift else [])
+            dispatch_error: Optional[Exception] = None
+            release_error: Optional[Exception] = None
             try:
                 self._client.key(code, down=True, flags=flags)
-            finally:
+            except RemoteInputRefused:
+                raise
+            except Exception as exc:  # noqa: BLE001 - host input boundary
+                dispatch_error = exc
+            try:
                 self._client.key(code, down=False, flags=flags)
+            except Exception as exc:  # noqa: BLE001 - best-effort release
+                release_error = exc
+            failure = dispatch_error or release_error
+            if failure is not None:
+                raise ActionDeliveryUncertain(
+                    operation="remote_press",
+                    native=False,
+                    cause_type=type(failure).__name__,
+                ) from failure
 
     def scroll(self, dx: int, dy: int) -> None:
         """Dispatch a wheel gesture by ``(dx, dy)`` pixels."""
@@ -1287,7 +1329,16 @@ class RemoteDisplayBackend:
             return
         with self._input_lock:
             self._ensure_input_ready(operation="remote_scroll")
-            self._client.scroll(int(dx), int(dy))
+            try:
+                self._client.scroll(int(dx), int(dy))
+            except RemoteInputRefused:
+                raise
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="remote_scroll",
+                    native=False,
+                    cause_type=type(exc).__name__,
+                ) from exc
 
     # -- internals -----------------------------------------------------------
 

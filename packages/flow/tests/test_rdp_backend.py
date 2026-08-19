@@ -568,6 +568,24 @@ def test_viewport_override(transport: FakeRDPTransport) -> None:
     assert b.viewport == (640, 480)
 
 
+def test_new_screenshot_rebaselines_a_resize_between_actions() -> None:
+    transport = FakeRDPTransport(app_screens())
+    backend = FreeRDPBackend(transport)
+    backend.screenshot()
+    backend.click(100, 100)
+
+    resized = transport.screens[0].resize((640, 480))
+    transport.screens = [resized]
+    backend.screenshot()
+    backend.click(320, 240)
+
+    assert backend.viewport == (640, 480)
+    assert transport.pointer_events[-2:] == [
+        (320, 240, "left", True),
+        (320, 240, "left", False),
+    ]
+
+
 # -- click ---------------------------------------------------------------------
 
 
@@ -1257,8 +1275,10 @@ def test_press_releases_all_keys_when_chord_key_raises() -> None:
     # wrong-action the fix targets (Ctrl+a wipes a field).
     t = RaisingRDPTransport(app_screens(), raise_on_key_down=frozenset({"a"}))
     b = FreeRDPBackend(t)
-    with pytest.raises(TransportError):
+    with pytest.raises(ActionDeliveryUncertain) as raised:
         b.press("ControlOrMeta+a")
+    assert raised.value.operation == "rdp_press"
+    assert raised.value.cause_type == "TransportError"
     assert held_keys(t.key_events) == []  # nothing latched down
     # Specifically: Ctrl went down and came back up.
     assert ("ctrl", True) in t.key_events
@@ -1271,8 +1291,9 @@ def test_press_releases_modifier_when_its_own_down_raises() -> None:
     # releases every part it attempted to press.
     t = RaisingRDPTransport(app_screens(), raise_on_key_down=frozenset({"ctrl"}))
     b = FreeRDPBackend(t)
-    with pytest.raises(TransportError):
+    with pytest.raises(ActionDeliveryUncertain) as raised:
         b.press("ControlOrMeta+a")
+    assert raised.value.operation == "rdp_press"
     assert held_keys(t.key_events) == []
     assert ("ctrl", False) in t.key_events  # released despite its down failing
 
@@ -1282,8 +1303,9 @@ def test_type_text_releases_char_when_key_raises() -> None:
     # must already be released and no key may be left held.
     t = RaisingRDPTransport(app_screens(), raise_on_key_down=frozenset({"b"}))
     b = FreeRDPBackend(t)
-    with pytest.raises(TransportError):
+    with pytest.raises(ActionDeliveryUncertain) as raised:
         b.type_text("ab")
+    assert raised.value.operation == "rdp_type_text"
     assert held_keys(t.key_events) == []
     assert ("a", True) in t.key_events and ("a", False) in t.key_events
 
@@ -1372,8 +1394,10 @@ def test_press_physical_path_releases_every_attempted_key_on_error() -> None:
 
     transport = _RaisingPhysicalTransport()
     backend = FreeRDPBackend(transport)
-    with pytest.raises(TransportError, match="physical r down failed"):
+    with pytest.raises(ActionDeliveryUncertain) as raised:
         backend.press("Meta+r")
+    assert raised.value.operation == "rdp_press"
+    assert raised.value.cause_type == "TransportError"
     assert transport.physical_events == [
         ("meta", True),
         ("r", True),
@@ -1392,13 +1416,11 @@ def test_scroll_sends_wheel(
     assert transport.wheel_events == [(0, 400)]
 
 
-def test_scroll_horizontal_dropped_matching_real_transport(
+def test_scroll_horizontal_refuses_before_delivery_matching_real_transport(
     transport: FakeRDPTransport, backend: FreeRDPBackend
 ) -> None:
-    # A horizontal-only scroll must record NOTHING: the real AardwolfTransport
-    # cannot emit horizontal wheel events (documented limitation), and the fake
-    # mirrors that so a test can't pass on a capability the live transport lacks.
-    backend.scroll(120, 0)
+    with pytest.raises(RuntimeError, match="does not support horizontal"):
+        backend.scroll(120, 0)
     assert transport.wheel_events == []
 
 
@@ -1412,13 +1434,24 @@ def test_scroll_horizontal_honored_only_when_transport_supports_it() -> None:
     assert t.wheel_events == [(120, 0)]
 
 
-def test_scroll_mixed_keeps_vertical_when_horizontal_unsupported(
+def test_scroll_mixed_refuses_instead_of_delivering_a_partial_gesture(
     transport: FakeRDPTransport, backend: FreeRDPBackend
 ) -> None:
-    # A diagonal scroll on the pixel-only transport keeps the vertical part and
-    # drops the horizontal part (rather than dropping the whole gesture).
-    backend.scroll(120, 400)
-    assert transport.wheel_events == [(0, 400)]
+    with pytest.raises(RuntimeError, match="does not support horizontal"):
+        backend.scroll(120, 400)
+    assert transport.wheel_events == []
+
+
+def test_scroll_transport_failure_is_delivery_uncertain() -> None:
+    class _FailingWheelTransport(FakeRDPTransport):
+        def wheel(self, dx: int, dy: int) -> None:
+            raise TransportError("wheel failed after possible delivery")
+
+    backend = FreeRDPBackend(_FailingWheelTransport(app_screens()))
+    with pytest.raises(ActionDeliveryUncertain) as raised:
+        backend.scroll(0, 400)
+    assert raised.value.operation == "rdp_scroll"
+    assert raised.value.cause_type == "TransportError"
 
 
 def test_scroll_zero_sends_nothing(

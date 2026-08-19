@@ -60,6 +60,10 @@ down/up (double = the sequence twice); `type_text` sends per-character key
 down/up; `press` decomposes a key/chord into ordered key down-then-reverse-up
 events; `scroll` sends a wheel gesture.
 
+The Aardwolf transport supports vertical wheel input only. The backend refuses
+any horizontal component before delivery. It never changes a two-axis
+demonstrated gesture into a partial vertical action.
+
 ### Coordinate space
 
 Everything is in **framebuffer pixels** — the same pixels the resolver emits
@@ -68,6 +72,18 @@ and the same pixels `screenshot()` encodes, because both come from
 MUST report the downsampled `(width, height)`, so screenshot pixels and click
 pixels stay in one space; no scaling happens in the backend. `AardwolfTransport`
 runs 1:1 (PIL video-out at the requested width/height).
+
+A resize or display change between actions is supported. The next screenshot
+replaces the prior viewport, and the runtime resolves the next target in that
+new framebuffer. A dimension change after target resolution and before input
+is refused before the first input edge. A qualification-bound remote-frame
+contract can deliberately pin one exact geometry; that contract refuses a
+resize until the workflow receives a new qualification.
+
+A transport can expose a multi-monitor remote session as one composite
+framebuffer. Its reported dimensions and pointer coordinates must describe
+that one bitmap. The accepted RDP batch used one 1280×800 display. It is not
+multi-monitor acceptance evidence.
 
 ### Identity model
 
@@ -91,6 +107,11 @@ halt. An intervening diagnostic capture invalidates rather than silently
 disarms the lease. After a successful check, the lease is consumed once, so a
 multi-character type or double-click remains one gesture and is never retried
 after an uncertain delivery.
+
+Pointer, keyboard, text, and wheel failures after a transport call starts have
+the typed `ActionDeliveryUncertain` result. The runtime does not retry them. It
+continues to the configured postcondition and independent effect checks. It
+reports `VERIFIED` only when the complete contract confirms the effect.
 
 The first contract intentionally binds the full framebuffer. Dynamic clocks,
 animations, or other volatile chrome can therefore cause a safe over-halt.
@@ -188,6 +209,10 @@ statistical reliability claim for every Windows application.
 For a production workflow, record and qualify the customer's exact application
 under its real account/session policy, DPI and scaling, disconnect/reconnect
 behavior, latency envelope, identity evidence, and independent effect oracle.
+Include every supported resize, full-screen transition, and monitor topology in
+that counted matrix. A topology outside the accepted matrix requires a fresh
+frame and target resolution. It can require a new qualification when the
+deployment pins exact geometry.
 Citrix ICA/HDX receives a separate counted qualification on its exact
 Workspace/server/application matrix; the RDP batch is not used as Citrix
 acceptance evidence.
