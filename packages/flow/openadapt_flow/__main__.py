@@ -55,11 +55,13 @@ configures backend / actuation / effects / runtime / policy for ``record`` /
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal, Optional, Sequence, cast
 from urllib.parse import urlsplit
+from uuid import UUID
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.backend import Backend
@@ -3201,6 +3203,452 @@ def _cmd_connect(args: argparse.Namespace) -> int:
     return 0
 
 
+_PUSH_JSON_SCHEMA = "openadapt.push-result/v1"
+_PUSH_RUNTIME_ATTESTATION_SCHEMAS = frozenset(
+    {
+        "openadapt.runtime-validation/v1",
+        "openadapt.runtime-validation/v2",
+        "openadapt.runtime-validation/v3",
+    }
+)
+
+
+def _push_json_base(status: str) -> dict[str, Any]:
+    """Return the complete V1 shape; phase-specific fields stay explicit nulls."""
+    return {
+        "schema": _PUSH_JSON_SCHEMA,
+        "status": status,
+        "workflow_id": None,
+        "artifact_ingest_id": None,
+        "review": None,
+        "attestation": None,
+        "binding": {
+            "kind": None,
+            "source_tree_sha256": None,
+            "derivative_tree_sha256": None,
+            "approved_archive_sha256": None,
+            "artifact_sha256": None,
+            "bundle_sha256": None,
+            "source_recording_sha256": None,
+            "sanitization_policy": None,
+            "certification_policy": None,
+            "certification_evidence_sha256": None,
+            "governed_authorization_template_sha256": None,
+            "parameter_schema_sha256": None,
+            "attested_run_report_sha256": None,
+            "resolves_run_id": None,
+            "organization_id": None,
+            "bundle_version_id": None,
+            "bundle_version": None,
+            "runtime_validation_id": None,
+        },
+        "next_action": None,
+        "dashboard_url": None,
+        "delivery": {"attempted": False, "certainty": "not_attempted"},
+        "error": None,
+    }
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+def _is_uuid(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = UUID(value)
+        return str(parsed) == value and parsed.version in {1, 2, 3, 4, 5, 6, 7, 8}
+    except ValueError:
+        return False
+
+
+def _is_runtime_attestation_schema(value: Any) -> bool:
+    return isinstance(value, str) and value in _PUSH_RUNTIME_ATTESTATION_SCHEMAS
+
+
+def _required_sha256(value: Any, *, field: str) -> str:
+    if not _is_sha256(value):
+        raise ValueError(f"invalid {field}")
+    return value
+
+
+def _push_json_failure(
+    *, uncertain: bool = False, context: Optional[dict[str, Any]] = None
+) -> dict[str, Any]:
+    status = "delivery_uncertain" if uncertain else "failed"
+    document = _push_json_base(status)
+    if uncertain:
+        document["next_action"] = "reconcile"
+        document["delivery"] = {"attempted": True, "certainty": "unknown"}
+        code = "delivery_uncertain"
+        message = (
+            "The upload did not return a trustworthy delivery result. Reconcile "
+            "the artifact in the hosted control plane before any retry."
+        )
+    else:
+        document["delivery"] = {
+            "attempted": None,
+            "certainty": "not_accepted",
+        }
+        code = "push_failed"
+        message = "The artifact was not accepted for ingest."
+    document["error"] = {"code": code, "message": message[:500]}
+    if uncertain and context:
+        local = context.get("local_binding")
+        sanitization = context.get("sanitization")
+        artifact = (
+            sanitization.get("artifact") if isinstance(sanitization, dict) else None
+        )
+        if isinstance(local, dict) and isinstance(artifact, dict):
+            binding = document["binding"]
+            values = {
+                "kind": artifact.get("kind"),
+                "source_tree_sha256": local.get("source_tree_sha256"),
+                "derivative_tree_sha256": local.get("derivative_tree_sha256"),
+                "approved_archive_sha256": local.get("approved_archive_sha256"),
+                "artifact_sha256": artifact.get("sha256"),
+                "sanitization_policy": local.get("sanitization_policy"),
+                "resolves_run_id": context.get("resolves_run_id"),
+            }
+            if (
+                values["kind"] in ("recording", "bundle")
+                and all(
+                    _is_sha256(values[key])
+                    for key in (
+                        "source_tree_sha256",
+                        "derivative_tree_sha256",
+                        "approved_archive_sha256",
+                        "artifact_sha256",
+                    )
+                )
+                and values["approved_archive_sha256"] == values["artifact_sha256"]
+                and isinstance(values["sanitization_policy"], str)
+                and (
+                    values["resolves_run_id"] is None
+                    or _is_uuid(values["resolves_run_id"])
+                )
+            ):
+                binding.update(values)
+                review_id = context.get("review_id")
+                if _is_sha256(review_id):
+                    document["review"] = {
+                        "id": review_id,
+                        "scope": "local_non_authoritative",
+                        "sanitized_path": None,
+                        "action": None,
+                        "original_path": None,
+                    }
+                attestation = context.get("attestation_binding")
+                if isinstance(attestation, dict):
+                    challenge_id = attestation.get("challenge_id")
+                    attestation_schema = attestation.get("schema")
+                    bundle_binding = {
+                        "bundle_sha256": attestation.get("bundle_sha256"),
+                        "source_recording_sha256": attestation.get(
+                            "source_recording_sha256"
+                        ),
+                        "certification_policy": attestation.get("policy"),
+                        "certification_evidence_sha256": attestation.get(
+                            "policy_evidence_sha256"
+                        ),
+                        "governed_authorization_template_sha256": attestation.get(
+                            "governed_authorization_template_sha256"
+                        ),
+                        "parameter_schema_sha256": attestation.get(
+                            "parameter_schema_sha256"
+                        ),
+                        "attested_run_report_sha256": attestation.get(
+                            "run_report_sha256"
+                        ),
+                    }
+                    template_sha = bundle_binding[
+                        "governed_authorization_template_sha256"
+                    ]
+                    has_complete_binding = (
+                        isinstance(challenge_id, str)
+                        and 1 <= len(challenge_id) <= 200
+                        and _is_runtime_attestation_schema(attestation_schema)
+                        and bundle_binding["bundle_sha256"] == values["artifact_sha256"]
+                        and all(
+                            _is_sha256(bundle_binding[key])
+                            for key in (
+                                "bundle_sha256",
+                                "source_recording_sha256",
+                                "certification_evidence_sha256",
+                                "parameter_schema_sha256",
+                                "attested_run_report_sha256",
+                            )
+                        )
+                        and isinstance(bundle_binding["certification_policy"], str)
+                        and bool(bundle_binding["certification_policy"])
+                        and (
+                            (
+                                attestation_schema == "openadapt.runtime-validation/v3"
+                                and _is_sha256(template_sha)
+                            )
+                            or (
+                                attestation_schema
+                                in {
+                                    "openadapt.runtime-validation/v1",
+                                    "openadapt.runtime-validation/v2",
+                                }
+                                and template_sha is None
+                            )
+                        )
+                    )
+                    if has_complete_binding:
+                        document["attestation"] = {
+                            "id": challenge_id,
+                            "schema": attestation_schema,
+                        }
+                        binding.update(bundle_binding)
+    return document
+
+
+def _push_json_invalid_response(context: dict[str, Any]) -> dict[str, Any]:
+    document = _push_json_failure(uncertain=True, context=context)
+    document["error"]["message"] = (
+        "The server response did not prove an exact accepted ingest. "
+        "Reconcile the artifact in the hosted control plane before any retry."
+    )
+    return document
+
+
+def _push_json_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Build a stable Desktop contract from verified local and server evidence."""
+    local_binding = result.get("local_binding")
+    if not isinstance(local_binding, dict):
+        raise ValueError("missing local binding")
+    source_sha = _required_sha256(
+        local_binding.get("source_tree_sha256"), field="source tree binding"
+    )
+    derivative_sha = _required_sha256(
+        local_binding.get("derivative_tree_sha256"),
+        field="derivative tree binding",
+    )
+    sanitization_policy = local_binding.get("sanitization_policy")
+    if not isinstance(sanitization_policy, str) or not sanitization_policy:
+        raise ValueError("missing sanitization policy")
+    review_id = _required_sha256(result.get("review_id"), field="review id")
+
+    if result.get("pending_review") is True and result.get("uploaded") is False:
+        kind = result.get("kind") or "recording"
+        if kind not in ("recording", "bundle"):
+            raise ValueError("invalid review kind")
+        sanitized_path = result.get("sanitized_path")
+        review_action = result.get("review_action")
+        original_path = result.get("original_path")
+        if not isinstance(sanitized_path, str) or not sanitized_path:
+            raise ValueError("missing sanitized review path")
+        if review_action != "review_sanitized":
+            raise ValueError("missing review action")
+        if not isinstance(original_path, str) or not original_path:
+            raise ValueError("missing original review path")
+        document = _push_json_base("paused_for_review")
+        document["review"] = {
+            "id": review_id,
+            "scope": "local_non_authoritative",
+            "sanitized_path": sanitized_path,
+            "action": review_action,
+            "original_path": original_path,
+        }
+        document["binding"].update(
+            {
+                "kind": kind,
+                "source_tree_sha256": source_sha,
+                "derivative_tree_sha256": derivative_sha,
+                "sanitization_policy": sanitization_policy,
+            }
+        )
+        document["next_action"] = "review_local"
+        return document
+
+    if result.get("uploaded") is not True:
+        raise ValueError("missing upload acknowledgment")
+    sanitization = result.get("sanitization")
+    artifact = sanitization.get("artifact") if isinstance(sanitization, dict) else None
+    if not isinstance(artifact, dict):
+        raise ValueError("missing sanitization binding")
+    kind = artifact.get("kind")
+    if kind not in ("recording", "bundle") or result.get("kind") != kind:
+        raise ValueError("ingest kind mismatch")
+    approved_sha = _required_sha256(
+        local_binding.get("approved_archive_sha256"),
+        field="approved archive binding",
+    )
+    artifact_sha = _required_sha256(
+        artifact.get("sha256"), field="local artifact binding"
+    )
+    if approved_sha != artifact_sha or result.get("artifact_sha256") != artifact_sha:
+        raise ValueError("server artifact binding mismatch")
+    artifact_ingest_id = result.get("artifact_ingest_id")
+    if not _is_uuid(artifact_ingest_id):
+        raise ValueError("missing server artifact ingest id")
+
+    document = _push_json_base("accepted_for_ingest")
+    document["artifact_ingest_id"] = artifact_ingest_id
+    document["review"] = {
+        "id": review_id,
+        "scope": "local_non_authoritative",
+        "sanitized_path": None,
+        "action": None,
+        "original_path": None,
+    }
+    document["binding"].update(
+        {
+            "kind": kind,
+            "source_tree_sha256": source_sha,
+            "derivative_tree_sha256": derivative_sha,
+            "approved_archive_sha256": approved_sha,
+            "artifact_sha256": artifact_sha,
+            "sanitization_policy": sanitization_policy,
+        }
+    )
+    document["delivery"] = {"attempted": True, "certainty": "accepted"}
+
+    if kind == "recording":
+        if result.get("workflow_id") is not None:
+            raise ValueError("recording ingest must not activate a workflow")
+        server_status = result.get("status")
+        if server_status == "needs_parameterization":
+            document["next_action"] = "parameterize"
+        elif server_status == "needs_runtime_validation":
+            document["next_action"] = "validate_runtime"
+        else:
+            raise ValueError("recording ingest has no governed next action")
+        return document
+
+    workflow_id = result.get("workflow_id")
+    if not _is_uuid(workflow_id):
+        raise ValueError("bundle ingest has no workflow id")
+    requested_workflow_id = result.get("requested_workflow_id")
+    if requested_workflow_id is not None and not _is_uuid(requested_workflow_id):
+        raise ValueError("invalid requested workflow binding")
+    if requested_workflow_id is not None and workflow_id != requested_workflow_id:
+        raise ValueError("accepted workflow does not match the requested workflow")
+    if result.get("status") != "accepted":
+        raise ValueError("bundle ingest is not accepted")
+    version = result.get("version")
+    if not isinstance(version, dict):
+        raise ValueError("bundle ingest has no retained version binding")
+    bundle_version_id = version.get("id")
+    organization_id = version.get("org_id")
+    version_workflow_id = version.get("workflow_id")
+    version_artifact_sha = version.get("artifact_sha256")
+    runtime_validation_id = version.get("runtime_validation_id")
+    version_resolves_run_id = version.get("promoted_from_run_id")
+    version_number = version.get("version")
+    if not _is_uuid(bundle_version_id):
+        raise ValueError("invalid retained bundle version id")
+    if not _is_uuid(organization_id):
+        raise ValueError("invalid retained organization binding")
+    if version_workflow_id != workflow_id:
+        raise ValueError("retained bundle version workflow mismatch")
+    if version_artifact_sha != artifact_sha:
+        raise ValueError("retained bundle version artifact mismatch")
+    if not _is_uuid(runtime_validation_id):
+        raise ValueError("invalid retained runtime validation binding")
+    if not isinstance(version_number, int) or isinstance(version_number, bool):
+        raise ValueError("invalid retained bundle version")
+    if version_number < 1:
+        raise ValueError("invalid retained bundle version")
+    attestation = result.get("attestation_binding")
+    if not isinstance(attestation, dict):
+        raise ValueError("bundle ingest has no attestation binding")
+    challenge_id = attestation.get("challenge_id")
+    schema = attestation.get("schema")
+    policy = attestation.get("policy")
+    if not isinstance(challenge_id, str) or not 1 <= len(challenge_id) <= 200:
+        raise ValueError("invalid attestation id")
+    if not _is_runtime_attestation_schema(schema):
+        raise ValueError("invalid attestation schema")
+    if not isinstance(policy, str) or not policy:
+        raise ValueError("invalid certification policy")
+    bundle_sha = _required_sha256(
+        attestation.get("bundle_sha256"), field="bundle binding"
+    )
+    if bundle_sha != approved_sha:
+        raise ValueError("attested bundle does not match approved archive")
+    policy_evidence_sha = _required_sha256(
+        attestation.get("policy_evidence_sha256"),
+        field="policy evidence binding",
+    )
+    parameter_schema_sha = _required_sha256(
+        attestation.get("parameter_schema_sha256"),
+        field="parameter schema binding",
+    )
+    run_report_sha = _required_sha256(
+        attestation.get("run_report_sha256"), field="run report binding"
+    )
+    source_recording_sha = _required_sha256(
+        attestation.get("source_recording_sha256"),
+        field="attested source recording binding",
+    )
+    template_sha = attestation.get("governed_authorization_template_sha256")
+    if template_sha is not None:
+        template_sha = _required_sha256(
+            template_sha, field="governed authorization template binding"
+        )
+    if schema == "openadapt.runtime-validation/v3" and template_sha is None:
+        raise ValueError("v3 attestation has no governed authorization template")
+    if (
+        schema
+        in {
+            "openadapt.runtime-validation/v1",
+            "openadapt.runtime-validation/v2",
+        }
+        and template_sha is not None
+    ):
+        raise ValueError("legacy attestation has an unexpected template binding")
+    resolves_run_id = result.get("resolves_run_id")
+    if resolves_run_id is not None and not _is_uuid(resolves_run_id):
+        raise ValueError("invalid resolved run binding")
+    if version_resolves_run_id != resolves_run_id:
+        raise ValueError("retained resolved run binding mismatch")
+    document["workflow_id"] = workflow_id
+    document["attestation"] = {"id": challenge_id, "schema": schema}
+    document["binding"].update(
+        {
+            "bundle_sha256": bundle_sha,
+            "source_recording_sha256": source_recording_sha,
+            "certification_policy": policy,
+            "certification_evidence_sha256": policy_evidence_sha,
+            "governed_authorization_template_sha256": template_sha,
+            "parameter_schema_sha256": parameter_schema_sha,
+            "attested_run_report_sha256": run_report_sha,
+            "resolves_run_id": resolves_run_id,
+            "organization_id": organization_id,
+            "bundle_version_id": bundle_version_id,
+            "bundle_version": version_number,
+            "runtime_validation_id": runtime_validation_id,
+        }
+    )
+    dashboard_url = result.get("dashboard_url")
+    destination_host = result.get("destination_host")
+    if not isinstance(dashboard_url, str) or not isinstance(destination_host, str):
+        raise ValueError("missing trusted dashboard binding")
+    dashboard = urlsplit(dashboard_url)
+    destination = urlsplit(destination_host)
+    if dashboard[:2] != destination[:2] or (
+        dashboard.path != f"/dashboard/workflows/{workflow_id}"
+        or dashboard.query
+        or dashboard.fragment
+    ):
+        raise ValueError("dashboard origin mismatch")
+    document["dashboard_url"] = dashboard_url
+    document["next_action"] = "open_dashboard"
+    return document
+
+
+def _print_push_json(document: dict[str, Any]) -> None:
+    print(json.dumps(document, sort_keys=True, separators=(",", ":")))
+
+
 def _cmd_push(args: argparse.Namespace) -> int:
     """Upload the exact approved sanitized archive to ``/api/ingest``.
 
@@ -3208,7 +3656,7 @@ def _cmd_push(args: argparse.Namespace) -> int:
     a derivative and pauses for review; approved input sends the exact frozen
     archive and prints the server-assigned workflow id/dashboard URL.
     """
-    from openadapt_flow.hosted import HostedError, push
+    from openadapt_flow.hosted import HostedDeliveryUncertain, HostedError, push
 
     try:
         result = push(
@@ -3227,23 +3675,62 @@ def _cmd_push(args: argparse.Namespace) -> int:
             auto_approve=args.auto_approve,
             validation_attestation=args.validation_attestation,
         )
+    except HostedDeliveryUncertain as e:
+        if args.json:
+            _print_push_json(_push_json_failure(uncertain=True, context=e.context))
+            return 1
+        reconciliation = _push_json_failure(uncertain=True, context=e.context)
+        artifact_sha256 = reconciliation["binding"]["artifact_sha256"]
+        print("Push delivery is uncertain. The server can have received the artifact.")
+        if artifact_sha256 is not None:
+            print(f"Artifact SHA-256: {artifact_sha256}")
+        print(
+            "Do not retry this upload. Reconcile the artifact in the hosted "
+            "control plane first."
+        )
+        return 1
     except HostedError as e:
+        if args.json:
+            _print_push_json(_push_json_failure())
+            return 1
         print(f"push failed: {e}")
         return 1
+    if args.json:
+        try:
+            document = _push_json_result(result)
+        except ValueError:
+            _print_push_json(_push_json_invalid_response(result))
+            return 1
+        _print_push_json(document)
+        return 0
     if result.get("pending_review"):
         print(f"Sanitized derivative created at {result['sanitized_path']}.")
         print(
             "Upload paused for local review; the original was not modified or uploaded."
         )
-        print(result["review_command"])
+        print(f"Review original: {result['original_path']}")
+        print(f"Sanitized derivative: {result['sanitized_path']}")
+        print(
+            "Review locally: openadapt-flow review-sanitized "
+            f"{result['sanitized_path']} --original {result['original_path']}"
+        )
         return 0
-    workflow_id = result.get("workflow_id", "<unknown>")
-    compile_status = (result.get("compile") or {}).get("status", "?")
-    print(
-        f"Pushed. workflow_id={workflow_id} "
-        f"(name={result.get('workflow_name')!r}, kind={result.get('kind')}, "
-        f"compile={compile_status})."
-    )
+    kind = result.get("kind")
+    server_status = result.get("status", "?")
+    if result.get("workflow_id"):
+        version = result.get("version")
+        version_number = version.get("version") if isinstance(version, dict) else None
+        detail = (
+            f"name={result.get('workflow_name')!r}, kind={kind}, status={server_status}"
+        )
+        if version_number is not None:
+            detail += f", version={version_number}"
+        print(f"Pushed. workflow_id={result['workflow_id']} ({detail}).")
+    else:
+        print(
+            f"Pushed. artifact_ingest_id={result.get('artifact_ingest_id')} "
+            f"(kind={kind}, status={server_status})."
+        )
     if result.get("dashboard_url"):
         print(f"Dashboard: {result['dashboard_url']}")
     return 0
@@ -5667,6 +6154,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ingest token (default: OPENADAPT_INGEST_TOKEN env, OS keychain, "
             "then an existing config migration token)"
+        ),
+    )
+    p.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "Emit one stable openadapt.push-result/v1 JSON object for Desktop "
+            "and other local controllers"
         ),
     )
     p.set_defaults(func=_cmd_push)

@@ -682,7 +682,34 @@ def test_bundle_push_requires_and_sends_validation_attestation(tmp_path, monkeyp
 
     def post(url, **kwargs):
         captured.update(kwargs)
-        return httpx.Response(201, json={"ingest": {"workflow_id": "wf-1"}})
+        artifact_sha256 = json.loads(kwargs["data"]["sanitization_manifest"])[
+            "artifact"
+        ]["sha256"]
+        return httpx.Response(
+            201,
+            json={
+                "ingest": {
+                    "workflow_id": "ec726a3e-dcaf-40cf-870a-867d104002dd",
+                    "artifact_ingest_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "kind": "bundle",
+                    "artifact_sha256": artifact_sha256,
+                    "status": "accepted",
+                    "version": {
+                        "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                        "org_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                        "workflow_id": "ec726a3e-dcaf-40cf-870a-867d104002dd",
+                        "version": 2,
+                        "artifact_sha256": artifact_sha256,
+                        "runtime_validation_id": (
+                            "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+                        ),
+                        "promoted_from_run_id": (
+                            "d3ecf64d-0d25-4df7-9264-77bf7d266d77"
+                        ),
+                    },
+                }
+            },
+        )
 
     monkeypatch.setattr(httpx, "post", post)
     result = hosted.push(

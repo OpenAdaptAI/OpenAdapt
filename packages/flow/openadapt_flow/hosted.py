@@ -37,6 +37,7 @@ dependency is introduced.
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import os
@@ -59,6 +60,7 @@ import idna
 __all__ = [
     "DEFAULT_HOST",
     "HostedError",
+    "HostedDeliveryUncertain",
     "config_path",
     "resolve_host",
     "resolve_token",
@@ -112,6 +114,14 @@ _API_TIMEOUT = 15.0
 
 class HostedError(RuntimeError):
     """A hosted-connectivity failure (auth, network, or a non-2xx response)."""
+
+
+class HostedDeliveryUncertain(HostedError):
+    """The upload request failed without a trustworthy delivery result."""
+
+    def __init__(self, message: str, *, context: dict[str, Any]):
+        super().__init__(message)
+        self.context = context
 
 
 @dataclass(frozen=True)
@@ -1098,6 +1108,119 @@ def login(
 # ---------------------------------------------------------------------------
 
 
+def _local_review_id(manifest: dict[str, Any]) -> str:
+    """Return a local, non-authoritative id bound to one review manifest."""
+    payload = json.dumps(
+        manifest,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return hashlib.sha256(b"openadapt.sanitized-review/v1\0" + payload).hexdigest()
+
+
+def _is_push_contract_uuid(value: Any) -> bool:
+    """Return whether *value* is a canonical RFC 9562 UUID (versions 1-8).
+
+    This matches the hosted control plane's own identifier check and the
+    ``_UUID_RE`` used for run reports, so a retained server id is never
+    refused only because of its version nibble.
+    """
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = UUID(value)
+    except ValueError:
+        return False
+    return str(parsed) == value and parsed.version in {1, 2, 3, 4, 5, 6, 7, 8}
+
+
+def _validate_ingest_acknowledgment(
+    ingest: dict[str, Any],
+    *,
+    expected_kind: str,
+    expected_artifact_sha256: str,
+    expected_workflow_id: Optional[str],
+    expected_resolves_run_id: Optional[str],
+) -> None:
+    """Require the complete server-owned identity chain for a 201 response.
+
+    A status code alone is not proof that the intended artifact was retained.
+    This check protects both the human CLI and the structured controller mode.
+    """
+    if not _is_push_contract_uuid(ingest.get("artifact_ingest_id")):
+        raise ValueError("artifact_ingest_id is missing or invalid")
+    if ingest.get("kind") != expected_kind:
+        raise ValueError("artifact kind does not match the approved archive")
+    if ingest.get("artifact_sha256") != expected_artifact_sha256:
+        raise ValueError("artifact hash does not match the approved archive")
+
+    workflow_id = ingest.get("workflow_id")
+    if expected_kind == "recording":
+        if workflow_id is not None:
+            raise ValueError("recording ingest cannot activate a workflow")
+        if ingest.get("status") not in {
+            "needs_parameterization",
+            "needs_runtime_validation",
+        }:
+            raise ValueError("recording ingest has no governed next action")
+        return
+
+    if ingest.get("status") != "accepted":
+        raise ValueError("bundle ingest is not accepted")
+    if not _is_push_contract_uuid(workflow_id):
+        raise ValueError("bundle workflow_id is missing or invalid")
+    if expected_workflow_id is not None and workflow_id != expected_workflow_id:
+        raise ValueError("bundle workflow_id does not match the requested workflow")
+    version = ingest.get("version")
+    if not isinstance(version, dict):
+        raise ValueError("retained bundle version is missing")
+    if not _is_push_contract_uuid(version.get("id")):
+        raise ValueError("retained bundle version id is invalid")
+    if not _is_push_contract_uuid(version.get("org_id")):
+        raise ValueError("retained organization id is invalid")
+    if version.get("workflow_id") != workflow_id:
+        raise ValueError("retained bundle workflow does not match")
+    if version.get("artifact_sha256") != expected_artifact_sha256:
+        raise ValueError("retained bundle artifact does not match")
+    if version.get("promoted_from_run_id") != expected_resolves_run_id:
+        raise ValueError("retained resolved-run binding does not match")
+    if not _is_push_contract_uuid(version.get("runtime_validation_id")):
+        raise ValueError("retained runtime validation id is invalid")
+    version_number = version.get("version")
+    if (
+        not isinstance(version_number, int)
+        or isinstance(version_number, bool)
+        or version_number < 1
+    ):
+        raise ValueError("retained bundle version number is invalid")
+
+
+def _verified_archive_snapshot(archive_path: Path, *, expected_sha256: str) -> Any:
+    """Copy the approved archive to a private file and verify those exact bytes.
+
+    The source path can be replaced after approval. The upload must therefore
+    use a verified file descriptor that is independent of that mutable path.
+    """
+    snapshot = tempfile.TemporaryFile(mode="w+b")
+    digest = hashlib.sha256()
+    try:
+        with archive_path.open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+                snapshot.write(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise HostedError(
+                "Approved immutable archive changed before upload; refusing egress"
+            )
+        snapshot.flush()
+        snapshot.seek(0)
+        return snapshot
+    except Exception:
+        snapshot.close()
+        raise
+
+
 def push(
     path: Optional[Any] = None,
     *,
@@ -1142,6 +1265,8 @@ def push(
             normalized_workflow_id = str(UUID(str(workflow_id).strip()))
         except (ValueError, AttributeError) as exc:
             raise HostedError("--workflow-id must be a valid UUID") from exc
+        if not _is_push_contract_uuid(normalized_workflow_id):
+            raise HostedError("--workflow-id must be a canonical RFC 9562 UUID")
     normalized_resolves_run_id: Optional[str] = None
     if resolves_run_id is not None:
         if requested_kind != "bundle" or normalized_workflow_id is None:
@@ -1152,6 +1277,8 @@ def push(
             normalized_resolves_run_id = str(UUID(str(resolves_run_id).strip()))
         except (ValueError, AttributeError) as exc:
             raise HostedError("--resolves-run-id must be a valid UUID") from exc
+        if not _is_push_contract_uuid(normalized_resolves_run_id):
+            raise HostedError("--resolves-run-id must be a canonical RFC 9562 UUID")
     resolved_host = resolve_host(host)
     resolved_token = resolve_token(token, host=resolved_host)
     lane = resolve_deployment_kind(deployment_kind)
@@ -1221,16 +1348,27 @@ def push(
                     automatic=True,
                 )
             else:
+                review_manifest = load_and_verify_derivative(derivative)
                 return {
                     "uploaded": False,
                     "pending_review": True,
                     "sanitized_path": str(derivative),
-                    "review_command": (
-                        f"openadapt-flow review-sanitized {derivative} --original {src}"
-                    ),
+                    "review_action": "review_sanitized",
+                    "original_path": str(src),
                     "destination_kind": destination.kind,
+                    "destination_host": resolved_host,
                     "deployment_kind": lane,
                     "phi_mode": _phi_mode(phi_mode),
+                    "kind": actual_kind,
+                    "review_id": _local_review_id(review_manifest),
+                    "local_binding": {
+                        "source_tree_sha256": review_manifest["source_tree_sha256"],
+                        "derivative_tree_sha256": review_manifest[
+                            "derivative_tree_sha256"
+                        ],
+                        "approved_archive_sha256": None,
+                        "sanitization_policy": review_manifest["policy_version"],
+                    },
                 }
         except SanitizationError as exc:
             raise HostedError(f"Artifact sanitization failed: {exc}") from exc
@@ -1257,6 +1395,7 @@ def push(
         data["workflow_id"] = normalized_workflow_id
     if normalized_resolves_run_id is not None:
         data["resolves_run_id"] = normalized_resolves_run_id
+    attestation: Optional[dict[str, Any]] = None
     if kind == "bundle":
         if validation_attestation is None:
             raise HostedError(
@@ -1326,8 +1465,50 @@ def push(
     data["sanitization_manifest"] = json.dumps(
         ingest_manifest, sort_keys=True, separators=(",", ":")
     )
+    local_result: dict[str, Any] = {
+        "sanitization": ingest_manifest,
+        "approval": approval,
+        "destination_kind": destination.kind,
+        "destination_host": resolved_host,
+        "review_id": _local_review_id(local_manifest),
+        "local_binding": {
+            "source_tree_sha256": local_manifest["source_tree_sha256"],
+            "derivative_tree_sha256": local_manifest["derivative_tree_sha256"],
+            "approved_archive_sha256": approval["approved_derivative_sha256"],
+            "sanitization_policy": local_manifest["policy_version"],
+        },
+        "resolves_run_id": normalized_resolves_run_id,
+        "requested_workflow_id": normalized_workflow_id,
+    }
+    if attestation is not None:
+        certification = attestation.get("certification") or {}
+        replay = attestation.get("replay") or {}
+        local_result["attestation_binding"] = {
+            "schema": attestation.get("schema"),
+            "challenge_id": attestation.get("challenge_id"),
+            "source_recording_sha256": attestation.get("source_recording_sha256"),
+            "bundle_sha256": attestation.get("bundle_sha256"),
+            "parameter_schema_sha256": attestation.get("parameter_schema_sha256"),
+            "policy": certification.get("policy"),
+            "policy_evidence_sha256": certification.get("evidence_sha256"),
+            "run_report_sha256": replay.get("report_sha256"),
+            "governed_authorization_template_sha256": attestation.get(
+                "governed_authorization_template_sha256"
+            ),
+        }
     try:
-        with archive_path.open("rb") as fh:
+        archive_snapshot = _verified_archive_snapshot(
+            archive_path,
+            expected_sha256=approval["approved_derivative_sha256"],
+        )
+    except HostedError:
+        raise
+    except OSError as exc:
+        raise HostedError(
+            "Approved immutable archive could not be prepared for upload"
+        ) from exc
+    try:
+        with archive_snapshot as fh:
             resp = httpx.post(
                 f"{resolved_host}/api/ingest",
                 headers=_auth_headers(resolved_token),
@@ -1343,23 +1524,64 @@ def push(
                 follow_redirects=False,
             )
     except httpx.HTTPError as exc:
-        raise HostedError(
-            f"Upload to {resolved_host}/api/ingest failed: {exc}"
+        raise HostedDeliveryUncertain(
+            f"Upload to {resolved_host}/api/ingest failed: {exc}",
+            context=local_result,
+        ) from exc
+    except OSError as exc:
+        raise HostedDeliveryUncertain(
+            f"Upload to {resolved_host}/api/ingest failed during dispatch",
+            context=local_result,
         ) from exc
     if resp.status_code == 401:
         raise HostedError("Ingest token was rejected (401).")
-    if resp.status_code != 201:
+    if 400 <= resp.status_code < 500 and resp.status_code not in {408, 409}:
         raise HostedError(
             f"Ingest returned {resp.status_code} (expected 201): {_body_snippet(resp)}"
         )
-    payload = resp.json()
-    ingest = payload.get("ingest", payload) if isinstance(payload, dict) else {}
+    if resp.status_code != 201:
+        # A timeout/conflict, redirect, or server failure is not proof that the
+        # hosted side rejected the artifact. The request body can have reached
+        # ingest before the response failed. Keep the exact local binding so a
+        # controller can reconcile it, and never invite a blind retry.
+        raise HostedDeliveryUncertain(
+            f"Ingest returned {resp.status_code} without a trustworthy "
+            f"acceptance result: {_body_snippet(resp)}",
+            context=local_result,
+        )
+    try:
+        payload = resp.json()
+    except ValueError as exc:
+        raise HostedDeliveryUncertain(
+            "Ingest returned 201 without a valid JSON acknowledgment",
+            context=local_result,
+        ) from exc
+    ingest = payload.get("ingest", payload) if isinstance(payload, dict) else None
+    if not isinstance(ingest, dict):
+        raise HostedDeliveryUncertain(
+            "Ingest returned 201 without a valid result object",
+            context=local_result,
+        )
+    try:
+        _validate_ingest_acknowledgment(
+            ingest,
+            expected_kind=kind,
+            expected_artifact_sha256=ingest_manifest["artifact"]["sha256"],
+            expected_workflow_id=normalized_workflow_id,
+            expected_resolves_run_id=normalized_resolves_run_id,
+        )
+    except ValueError as exc:
+        raise HostedDeliveryUncertain(
+            "Ingest returned 201 without a complete exact artifact acknowledgment",
+            context=local_result,
+        ) from exc
     workflow_id = ingest.get("workflow_id")
     result = dict(ingest)
+    # Never trust a dashboard URL supplied by the remote response. Construct it
+    # only from the already validated destination origin.
+    result.pop("dashboard_url", None)
     result["uploaded"] = True
-    result["sanitization"] = ingest_manifest
-    result["approval"] = approval
-    result["destination_kind"] = destination.kind
+    result.update(local_result)
     if workflow_id:
         result["dashboard_url"] = f"{resolved_host}/dashboard/workflows/{workflow_id}"
     return result

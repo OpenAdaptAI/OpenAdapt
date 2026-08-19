@@ -37,6 +37,11 @@ openadapt-flow push triage.bundle.sanitized/ --kind bundle \
   --validation-attestation triage.validation.json
 ```
 
+Desktop and other local controllers can add `--json` to receive the stable
+[`openadapt.push-result/v1`](PUSH_JSON.md) result. It distinguishes a local
+`paused_for_review` result from a server-acknowledged `accepted_for_ingest`
+result. Human-readable output remains the default.
+
 For an existing hosted workflow, add `--workflow-id <uuid>` to the bundle push.
 When the replacement repairs a specific hosted halt, also pass
 `--resolves-run-id <halted-run-uuid>`. Cloud locks that unresolved run in the

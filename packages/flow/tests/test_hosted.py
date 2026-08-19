@@ -18,6 +18,7 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
+import jsonschema
 import pytest
 
 from openadapt_flow import hosted, privacy
@@ -806,6 +807,31 @@ def _capture_post(recorder, status=201, json_body=None):
     return fake
 
 
+def _accepted_recording_post(recorder=None, *, status="needs_parameterization"):
+    """Return a server double with the complete recording-ingest contract."""
+
+    def fake(url, **kw):
+        if recorder is not None:
+            recorder["url"] = url
+            recorder["kw"] = kw
+        manifest = json.loads(kw["data"]["sanitization_manifest"])
+        artifact_sha256 = manifest["artifact"]["sha256"]
+        return httpx.Response(
+            201,
+            json={
+                "ingest": {
+                    "workflow_id": None,
+                    "artifact_ingest_id": _PUSH_INGEST_ID,
+                    "kind": "recording",
+                    "artifact_sha256": artifact_sha256,
+                    "status": status,
+                }
+            },
+        )
+
+    return fake
+
+
 class _FakeScrubber:
     """A fast text+image scrubber double (satisfies privacy.Scrubber).
 
@@ -830,18 +856,11 @@ def test_push_success(tmp_path, monkeypatch):
     rec = _make_recording(tmp_path, "rec")
     privacy.set_text_scrubber(_FakeScrubber())  # cloud recording => scrub before upload
     recorder: dict = {}
-    body = {
-        "ingest": {
-            "workflow_id": "wf_123",
-            "workflow_name": "Pushed recording",
-            "kind": "recording",
-            "compile": {"status": "compiled", "steps": 4},
-        }
-    }
-    monkeypatch.setattr(httpx, "post", _capture_post(recorder, 201, body))
+    monkeypatch.setattr(httpx, "post", _accepted_recording_post(recorder))
     result = hosted.push(rec, name="My flow", host="https://h.test", token="tok")
-    assert result["workflow_id"] == "wf_123"
-    assert result["dashboard_url"] == "https://h.test/dashboard/workflows/wf_123"
+    assert result["workflow_id"] is None
+    assert result["artifact_ingest_id"] == _PUSH_INGEST_ID
+    assert "dashboard_url" not in result
     assert recorder["url"] == "https://h.test/api/ingest"
     assert recorder["kw"]["data"]["kind"] == "recording"
     assert recorder["kw"]["data"]["name"] == "My flow"
@@ -862,10 +881,11 @@ def test_push_default_path_uses_latest(tmp_path, monkeypatch):
     monkeypatch.setattr(
         httpx,
         "post",
-        _capture_post(recorder, 201, {"ingest": {"workflow_id": "wf_9"}}),
+        _accepted_recording_post(recorder),
     )
     result = hosted.push(host="https://h.test", token="tok")
-    assert result["workflow_id"] == "wf_9"
+    assert result["workflow_id"] is None
+    assert result["artifact_ingest_id"] == _PUSH_INGEST_ID
 
 
 def test_push_bad_kind(tmp_path):
@@ -932,8 +952,34 @@ def test_push_non_201(tmp_path, monkeypatch):
     monkeypatch.setattr(
         httpx, "post", lambda url, **kw: httpx.Response(502, text="store down")
     )
-    with pytest.raises(hosted.HostedError, match="502"):
+    with pytest.raises(hosted.HostedDeliveryUncertain, match="502"):
         hosted.push(rec, token="tok", host="https://h.test")
+
+
+@pytest.mark.parametrize("status", [400, 403, 404, 413, 422, 429])
+def test_push_definite_client_rejection_is_not_delivery_uncertain(
+    tmp_path, monkeypatch, status
+):
+    rec = _make_recording(tmp_path, "rec")
+    privacy.set_text_scrubber(_FakeScrubber())
+    monkeypatch.setattr(
+        httpx, "post", lambda url, **kw: httpx.Response(status, text="rejected")
+    )
+    with pytest.raises(hosted.HostedError, match=str(status)) as raised:
+        hosted.push(rec, token="tok", host="https://h.test")
+    assert not isinstance(raised.value, hosted.HostedDeliveryUncertain)
+
+
+@pytest.mark.parametrize("status", [200, 302, 408, 409, 500, 502, 503])
+def test_push_ambiguous_response_is_delivery_uncertain(tmp_path, monkeypatch, status):
+    rec = _make_recording(tmp_path, "rec")
+    privacy.set_text_scrubber(_FakeScrubber())
+    monkeypatch.setattr(
+        httpx, "post", lambda url, **kw: httpx.Response(status, text="ambiguous")
+    )
+    with pytest.raises(hosted.HostedDeliveryUncertain, match=str(status)) as raised:
+        hosted.push(rec, token="tok", host="https://h.test")
+    assert raised.value.context["local_binding"]["approved_archive_sha256"]
 
 
 def test_push_401(tmp_path, monkeypatch):
@@ -942,6 +988,57 @@ def test_push_401(tmp_path, monkeypatch):
     monkeypatch.setattr(httpx, "post", lambda url, **kw: httpx.Response(401))
     with pytest.raises(hosted.HostedError, match="401"):
         hosted.push(rec, token="tok", host="https://h.test")
+
+
+def test_push_transport_error_has_uncertain_delivery_type(tmp_path, monkeypatch):
+    rec = _make_recording(tmp_path, "rec")
+    privacy.set_text_scrubber(_FakeScrubber())
+
+    def fail(*args, **kwargs):
+        raise httpx.ReadTimeout("response timed out")
+
+    monkeypatch.setattr(httpx, "post", fail)
+    with pytest.raises(hosted.HostedDeliveryUncertain) as raised:
+        hosted.push(rec, token="tok", host="https://h.test")
+    assert (
+        raised.value.context["sanitization"]["artifact"]["sha256"]
+        == (raised.value.context["local_binding"]["approved_archive_sha256"])
+    )
+
+
+def test_push_201_without_json_acknowledgment_is_delivery_uncertain(
+    tmp_path, monkeypatch
+):
+    rec = _make_recording(tmp_path, "rec")
+    privacy.set_text_scrubber(_FakeScrubber())
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *args, **kwargs: httpx.Response(201, text="not-json"),
+    )
+
+    with pytest.raises(hosted.HostedDeliveryUncertain) as raised:
+        hosted.push(rec, token="tok", host="https://h.test")
+    assert raised.value.context["local_binding"]["approved_archive_sha256"]
+
+
+def test_push_201_without_complete_exact_acknowledgment_is_delivery_uncertain(
+    tmp_path, monkeypatch
+):
+    rec = _make_recording(tmp_path, "rec")
+    privacy.set_text_scrubber(_FakeScrubber())
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *args, **kwargs: httpx.Response(
+            201,
+            json={"ingest": {"workflow_id": None, "kind": "recording"}},
+        ),
+    )
+
+    with pytest.raises(hosted.HostedDeliveryUncertain) as raised:
+        hosted.push(rec, token="tok", host="https://h.test")
+    assert raised.value.context["local_binding"]["approved_archive_sha256"]
 
 
 def test_push_bundle_requires_verified_sanitization_not_attestation(
@@ -1095,7 +1192,7 @@ def test_push_recording_on_byoc_is_sanitized_before_upload(tmp_path, monkeypatch
     monkeypatch.setattr(
         httpx,
         "post",
-        lambda *a, **k: httpx.Response(201, json={"ingest": {"workflow_id": "wf"}}),
+        _accepted_recording_post(),
     )
     result = hosted.push(
         rec, deployment_kind="byoc", host="https://h.test", token="tok"
@@ -1113,7 +1210,7 @@ def test_push_recording_under_phi_mode_is_sanitized_before_upload(
     monkeypatch.setattr(
         httpx,
         "post",
-        lambda *a, **k: httpx.Response(201, json={"ingest": {"workflow_id": "wf"}}),
+        _accepted_recording_post(),
     )
     result = hosted.push(
         rec, deployment_kind="cloud", host="https://h.test", token="tok"
@@ -1155,13 +1252,26 @@ def test_push_recording_scrubs_before_upload(tmp_path, monkeypatch):
     def fake_post(url, **kw):
         # Read the uploaded zip bytes so we can assert what actually shipped.
         captured["bytes"] = kw["files"]["file"][1].read()
-        return httpx.Response(201, json={"ingest": {"workflow_id": "wf_s"}})
+        manifest = json.loads(kw["data"]["sanitization_manifest"])
+        return httpx.Response(
+            201,
+            json={
+                "ingest": {
+                    "workflow_id": None,
+                    "artifact_ingest_id": _PUSH_INGEST_ID,
+                    "kind": "recording",
+                    "artifact_sha256": manifest["artifact"]["sha256"],
+                    "status": "needs_parameterization",
+                }
+            },
+        )
 
     monkeypatch.setattr(httpx, "post", fake_post)
     result = hosted.push(
         rec, deployment_kind="cloud", host="https://h.test", token="tok"
     )
-    assert result["workflow_id"] == "wf_s"
+    assert result["workflow_id"] is None
+    assert result["artifact_ingest_id"] == _PUSH_INGEST_ID
     # scrub path ran: text + image scrubbers were both invoked.
     assert fake.text_calls >= 1
     assert fake.image_calls == 3  # transform, stable second pass, approval rescan
@@ -2833,6 +2943,557 @@ def test_cli_push_dispatch(monkeypatch, capsys):
     assert "Dashboard" in out
 
 
+_PUSH_ARTIFACT_SHA = "a" * 64
+_PUSH_SOURCE_SHA = "b" * 64
+_PUSH_DERIVATIVE_SHA = "c" * 64
+_PUSH_REVIEW_ID = "d" * 64
+_PUSH_POLICY_SHA = "e" * 64
+_PUSH_PARAMETER_SHA = "f" * 64
+_PUSH_REPORT_SHA = "1" * 64
+_PUSH_RECORDING_SHA = "2" * 64
+_PUSH_TEMPLATE_SHA = "3" * 64
+_PUSH_INGEST_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+_PUSH_WORKFLOW_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+_PUSH_ORG_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+_PUSH_VERSION_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+_PUSH_RUNTIME_VALIDATION_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+
+
+def _push_json_schema():
+    return json.loads(
+        (
+            Path(__file__).resolve().parents[1] / "schemas" / "push-result-v1.json"
+        ).read_text(encoding="utf-8")
+    )
+
+
+def _assert_push_json_schema(value):
+    jsonschema.Draft202012Validator(_push_json_schema()).validate(value)
+
+
+def _json_push_base(*, kind="recording"):
+    return {
+        "uploaded": True,
+        "kind": kind,
+        "workflow_id": None,
+        "artifact_ingest_id": _PUSH_INGEST_ID,
+        "artifact_sha256": _PUSH_ARTIFACT_SHA,
+        "sanitization": {"artifact": {"kind": kind, "sha256": _PUSH_ARTIFACT_SHA}},
+        "local_binding": {
+            "source_tree_sha256": _PUSH_SOURCE_SHA,
+            "derivative_tree_sha256": _PUSH_DERIVATIVE_SHA,
+            "approved_archive_sha256": _PUSH_ARTIFACT_SHA,
+            "sanitization_policy": "outbound-phi-v1",
+        },
+        "review_id": _PUSH_REVIEW_ID,
+        "destination_host": "https://h.test",
+    }
+
+
+def test_push_parser_accepts_json_without_changing_other_arguments():
+    args = build_parser().parse_args(["push", "approved", "--kind", "bundle", "--json"])
+    assert args.path == "approved"
+    assert args.kind == "bundle"
+    assert args.json is True
+    assert args.func.__name__ == "_cmd_push"
+
+
+def test_cli_push_json_paused_for_review(monkeypatch, capsys):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: {
+            "uploaded": False,
+            "pending_review": True,
+            "kind": "recording",
+            "sanitized_path": "/safe/derivative",
+            "review_action": "review_sanitized",
+            "original_path": "/safe/source",
+            "review_id": _PUSH_REVIEW_ID,
+            "local_binding": {
+                "source_tree_sha256": _PUSH_SOURCE_SHA,
+                "derivative_tree_sha256": _PUSH_DERIVATIVE_SHA,
+                "approved_archive_sha256": None,
+                "sanitization_policy": "outbound-phi-v1",
+            },
+        },
+    )
+
+    assert main(["push", "raw", "--json"]) == 0
+    value = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(value)
+    assert value["schema"] == "openadapt.push-result/v1"
+    assert value["status"] == "paused_for_review"
+    assert value["workflow_id"] is None
+    assert value["artifact_ingest_id"] is None
+    assert value["review"] == {
+        "id": _PUSH_REVIEW_ID,
+        "scope": "local_non_authoritative",
+        "sanitized_path": "/safe/derivative",
+        "action": "review_sanitized",
+        "original_path": "/safe/source",
+    }
+    assert value["binding"]["source_tree_sha256"] == _PUSH_SOURCE_SHA
+    assert value["binding"]["approved_archive_sha256"] is None
+    assert value["next_action"] == "review_local"
+    assert value["delivery"] == {
+        "attempted": False,
+        "certainty": "not_attempted",
+    }
+    assert value["error"] is None
+
+
+def test_push_json_schema_rejects_dashboard_on_paused_review(monkeypatch, capsys):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: {
+            "uploaded": False,
+            "pending_review": True,
+            "kind": "recording",
+            "sanitized_path": "/safe/derivative",
+            "review_action": "review_sanitized",
+            "original_path": "/safe/source",
+            "review_id": _PUSH_REVIEW_ID,
+            "local_binding": {
+                "source_tree_sha256": _PUSH_SOURCE_SHA,
+                "derivative_tree_sha256": _PUSH_DERIVATIVE_SHA,
+                "approved_archive_sha256": None,
+                "sanitization_policy": "outbound-phi-v1",
+            },
+        },
+    )
+    assert main(["push", "raw", "--json"]) == 0
+    document = json.loads(capsys.readouterr().out)
+    document["dashboard_url"] = "https://evil.example/runs/x"
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+def test_push_json_schema_rejects_bundle_binding_on_paused_review(monkeypatch, capsys):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: {
+            "uploaded": False,
+            "pending_review": True,
+            "kind": "bundle",
+            "sanitized_path": "/safe/derivative",
+            "review_action": "review_sanitized",
+            "original_path": "/safe/source",
+            "review_id": _PUSH_REVIEW_ID,
+            "local_binding": {
+                "source_tree_sha256": _PUSH_SOURCE_SHA,
+                "derivative_tree_sha256": _PUSH_DERIVATIVE_SHA,
+                "approved_archive_sha256": None,
+                "sanitization_policy": "outbound-phi-v1",
+            },
+        },
+    )
+    assert main(["push", "raw", "--kind", "bundle", "--json"]) == 0
+    document = json.loads(capsys.readouterr().out)
+    document["binding"]["bundle_sha256"] = _PUSH_ARTIFACT_SHA
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+def test_push_json_schema_requires_sanitization_policy_on_paused_review(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: {
+            "uploaded": False,
+            "pending_review": True,
+            "kind": "recording",
+            "sanitized_path": "/safe/derivative",
+            "review_action": "review_sanitized",
+            "original_path": "/safe/source",
+            "review_id": _PUSH_REVIEW_ID,
+            "local_binding": {
+                "source_tree_sha256": _PUSH_SOURCE_SHA,
+                "derivative_tree_sha256": _PUSH_DERIVATIVE_SHA,
+                "approved_archive_sha256": None,
+                "sanitization_policy": "outbound-phi-v1",
+            },
+        },
+    )
+    assert main(["push", "raw", "--json"]) == 0
+    document = json.loads(capsys.readouterr().out)
+    document["binding"]["sanitization_policy"] = None
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+@pytest.mark.parametrize(
+    ("server_status", "next_action"),
+    [
+        ("needs_parameterization", "parameterize"),
+        ("needs_runtime_validation", "validate_runtime"),
+    ],
+)
+def test_cli_push_json_recording_accepted(
+    monkeypatch, capsys, server_status, next_action
+):
+    result = _json_push_base()
+    result["status"] = server_status
+    monkeypatch.setattr(hosted, "push", lambda *args, **kwargs: result)
+
+    assert main(["push", "approved", "--json"]) == 0
+    value = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(value)
+    assert value["status"] == "accepted_for_ingest"
+    assert value["workflow_id"] is None
+    assert value["artifact_ingest_id"] == _PUSH_INGEST_ID
+    assert value["next_action"] == next_action
+    assert value["binding"]["artifact_sha256"] == _PUSH_ARTIFACT_SHA
+    assert value["delivery"] == {"attempted": True, "certainty": "accepted"}
+
+
+def test_cli_push_json_bundle_accepted_with_exact_attestation_binding(
+    monkeypatch, capsys
+):
+    result = _json_push_base(kind="bundle")
+    result.update(
+        {
+            "workflow_id": _PUSH_WORKFLOW_ID,
+            "dashboard_url": (
+                f"https://h.test/dashboard/workflows/{_PUSH_WORKFLOW_ID}"
+            ),
+            "resolves_run_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "attestation_binding": {
+                "schema": "openadapt.runtime-validation/v3",
+                "challenge_id": "challenge-7",
+                "source_recording_sha256": _PUSH_RECORDING_SHA,
+                "bundle_sha256": _PUSH_ARTIFACT_SHA,
+                "parameter_schema_sha256": _PUSH_PARAMETER_SHA,
+                "policy": "clinical-write",
+                "policy_evidence_sha256": _PUSH_POLICY_SHA,
+                "run_report_sha256": _PUSH_REPORT_SHA,
+                "governed_authorization_template_sha256": _PUSH_TEMPLATE_SHA,
+            },
+            "status": "accepted",
+            "version": {
+                "id": _PUSH_VERSION_ID,
+                "org_id": _PUSH_ORG_ID,
+                "workflow_id": _PUSH_WORKFLOW_ID,
+                "version": 3,
+                "artifact_sha256": _PUSH_ARTIFACT_SHA,
+                "runtime_validation_id": _PUSH_RUNTIME_VALIDATION_ID,
+                "promoted_from_run_id": ("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+            },
+        }
+    )
+    monkeypatch.setattr(hosted, "push", lambda *args, **kwargs: result)
+
+    assert main(["push", "approved", "--kind", "bundle", "--json"]) == 0
+    value = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(value)
+    assert value["status"] == "accepted_for_ingest"
+    assert value["workflow_id"] == _PUSH_WORKFLOW_ID
+    assert value["artifact_ingest_id"] == _PUSH_INGEST_ID
+    assert value["attestation"] == {
+        "id": "challenge-7",
+        "schema": "openadapt.runtime-validation/v3",
+    }
+    assert value["binding"] == {
+        "kind": "bundle",
+        "source_tree_sha256": _PUSH_SOURCE_SHA,
+        "derivative_tree_sha256": _PUSH_DERIVATIVE_SHA,
+        "approved_archive_sha256": _PUSH_ARTIFACT_SHA,
+        "artifact_sha256": _PUSH_ARTIFACT_SHA,
+        "bundle_sha256": _PUSH_ARTIFACT_SHA,
+        "source_recording_sha256": _PUSH_RECORDING_SHA,
+        "sanitization_policy": "outbound-phi-v1",
+        "certification_policy": "clinical-write",
+        "certification_evidence_sha256": _PUSH_POLICY_SHA,
+        "governed_authorization_template_sha256": _PUSH_TEMPLATE_SHA,
+        "parameter_schema_sha256": _PUSH_PARAMETER_SHA,
+        "attested_run_report_sha256": _PUSH_REPORT_SHA,
+        "resolves_run_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "organization_id": _PUSH_ORG_ID,
+        "bundle_version_id": _PUSH_VERSION_ID,
+        "bundle_version": 3,
+        "runtime_validation_id": _PUSH_RUNTIME_VALIDATION_ID,
+    }
+    assert value["next_action"] == "open_dashboard"
+
+    missing_template = json.loads(json.dumps(value))
+    missing_template["binding"]["governed_authorization_template_sha256"] = None
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(missing_template)
+
+    legacy_with_template = json.loads(json.dumps(value))
+    legacy_with_template["attestation"]["schema"] = "openadapt.runtime-validation/v2"
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(legacy_with_template)
+
+    future_schema = json.loads(json.dumps(value))
+    future_schema["attestation"]["schema"] = "openadapt.runtime-validation/v999"
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(future_schema)
+
+    result["attestation_binding"]["schema"] = "openadapt.runtime-validation/v999"
+    assert main(["push", "approved", "--kind", "bundle", "--json"]) == 1
+    rejected = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(rejected)
+    assert rejected["status"] == "delivery_uncertain"
+    assert rejected["binding"]["kind"] == "bundle"
+    assert rejected["binding"]["artifact_sha256"] == _PUSH_ARTIFACT_SHA
+    assert rejected["attestation"] is None
+    assert rejected["binding"]["bundle_sha256"] is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("org_id", "not-a-uuid"),
+        ("workflow_id", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        ("artifact_sha256", "9" * 64),
+        ("runtime_validation_id", None),
+        ("promoted_from_run_id", "99999999-9999-4999-8999-999999999999"),
+    ],
+)
+def test_cli_push_json_refuses_mismatched_server_version_binding(
+    monkeypatch, capsys, field, value
+):
+    result = _json_push_base(kind="bundle")
+    result.update(
+        {
+            "workflow_id": _PUSH_WORKFLOW_ID,
+            "dashboard_url": (
+                f"https://h.test/dashboard/workflows/{_PUSH_WORKFLOW_ID}"
+            ),
+            "resolves_run_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "status": "accepted",
+            "version": {
+                "id": _PUSH_VERSION_ID,
+                "org_id": _PUSH_ORG_ID,
+                "workflow_id": _PUSH_WORKFLOW_ID,
+                "version": 3,
+                "artifact_sha256": _PUSH_ARTIFACT_SHA,
+                "runtime_validation_id": _PUSH_RUNTIME_VALIDATION_ID,
+                "promoted_from_run_id": ("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+            },
+            "attestation_binding": {
+                "schema": "openadapt.runtime-validation/v3",
+                "challenge_id": "challenge-7",
+                "source_recording_sha256": _PUSH_RECORDING_SHA,
+                "bundle_sha256": _PUSH_ARTIFACT_SHA,
+                "parameter_schema_sha256": _PUSH_PARAMETER_SHA,
+                "policy": "clinical-write",
+                "policy_evidence_sha256": _PUSH_POLICY_SHA,
+                "run_report_sha256": _PUSH_REPORT_SHA,
+                "governed_authorization_template_sha256": _PUSH_TEMPLATE_SHA,
+            },
+        }
+    )
+    result["version"][field] = value
+    monkeypatch.setattr(hosted, "push", lambda *args, **kwargs: result)
+
+    assert main(["push", "approved", "--kind", "bundle", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(document)
+    assert document["status"] == "delivery_uncertain"
+    assert document["error"]["code"] == "delivery_uncertain"
+    assert document["binding"]["artifact_sha256"] == _PUSH_ARTIFACT_SHA
+
+
+def test_cli_push_json_refuses_false_success_without_server_ingest_id(
+    monkeypatch, capsys
+):
+    result = _json_push_base()
+    result["status"] = "needs_parameterization"
+    result["artifact_ingest_id"] = None
+    monkeypatch.setattr(hosted, "push", lambda *args, **kwargs: result)
+
+    assert main(["push", "approved", "--json"]) == 1
+    value = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(value)
+    assert value["status"] == "delivery_uncertain"
+    assert value["error"]["code"] == "delivery_uncertain"
+    assert value["delivery"] == {"attempted": True, "certainty": "unknown"}
+    assert value["next_action"] == "reconcile"
+    assert value["binding"]["artifact_sha256"] == _PUSH_ARTIFACT_SHA
+
+
+def test_cli_push_json_transport_error_is_delivery_uncertain(monkeypatch, capsys):
+    def fail(*args, **kwargs):
+        raise hosted.HostedDeliveryUncertain(
+            "secret token and /private/source must not reach JSON",
+            context=_json_push_base(),
+        )
+
+    monkeypatch.setattr(hosted, "push", fail)
+    assert main(["push", "raw", "--json"]) == 1
+    value = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(value)
+    assert value["status"] == "delivery_uncertain"
+    assert value["next_action"] == "reconcile"
+    assert value["delivery"] == {"attempted": True, "certainty": "unknown"}
+    assert value["artifact_ingest_id"] is None
+    assert value["binding"]["artifact_sha256"] == _PUSH_ARTIFACT_SHA
+    assert "secret" not in value["error"]["message"]
+    assert "/private/source" not in value["error"]["message"]
+    assert len(value["error"]["message"]) <= 500
+
+
+def test_cli_push_json_preflight_error_is_bounded_and_nonzero(monkeypatch, capsys):
+    def fail(*args, **kwargs):
+        raise hosted.HostedError("/private/source " + "x" * 1000)
+
+    monkeypatch.setattr(hosted, "push", fail)
+    assert main(["push", "raw", "--json"]) == 1
+    value = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(value)
+    assert value["status"] == "failed"
+    assert value["error"] == {
+        "code": "push_failed",
+        "message": "The artifact was not accepted for ingest.",
+    }
+    assert value["delivery"] == {"attempted": None, "certainty": "not_accepted"}
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("error", None),
+        ("next_action", "open_dashboard"),
+    ],
+)
+def test_push_json_schema_rejects_conflicting_failed_state(
+    monkeypatch, capsys, field, value
+):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: (_ for _ in ()).throw(hosted.HostedError("private")),
+    )
+    assert main(["push", "raw", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    document[field] = value
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+def test_push_json_schema_rejects_accepted_certainty_on_failure(monkeypatch, capsys):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: (_ for _ in ()).throw(hosted.HostedError("private")),
+    )
+    assert main(["push", "raw", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    document["delivery"] = {"attempted": True, "certainty": "accepted"}
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+def test_push_json_schema_rejects_server_binding_on_failure(monkeypatch, capsys):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: (_ for _ in ()).throw(hosted.HostedError("private")),
+    )
+    assert main(["push", "raw", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    document["binding"]["runtime_validation_id"] = _PUSH_RUNTIME_VALIDATION_ID
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+def test_push_json_schema_rejects_local_binding_on_failure(monkeypatch, capsys):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: (_ for _ in ()).throw(hosted.HostedError("private")),
+    )
+    assert main(["push", "raw", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    document["binding"]["source_tree_sha256"] = _PUSH_SOURCE_SHA
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("error", None),
+        (
+            "error",
+            {"code": "push_failed", "message": "The upload is uncertain."},
+        ),
+    ],
+)
+def test_push_json_schema_rejects_conflicting_uncertain_state(
+    monkeypatch, capsys, field, value
+):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            hosted.HostedDeliveryUncertain("private", context=_json_push_base())
+        ),
+    )
+    assert main(["push", "raw", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    document[field] = value
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+def test_push_json_schema_rejects_server_binding_on_uncertain_state(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            hosted.HostedDeliveryUncertain("private", context=_json_push_base())
+        ),
+    )
+    assert main(["push", "raw", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    document["binding"]["organization_id"] = _PUSH_ORG_ID
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+def test_push_json_schema_requires_reconciliation_hash_on_uncertain_state(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            hosted.HostedDeliveryUncertain("private", context=_json_push_base())
+        ),
+    )
+    assert main(["push", "raw", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    document["binding"]["artifact_sha256"] = None
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
+def test_push_json_schema_rejects_obsolete_invalid_response_failure(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: (_ for _ in ()).throw(hosted.HostedError("private")),
+    )
+    assert main(["push", "raw", "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    document["next_action"] = "reconcile"
+    document["delivery"] = {"attempted": True, "certainty": "unknown"}
+    document["error"]["code"] = "invalid_ingest_response"
+    with pytest.raises(jsonschema.ValidationError):
+        _assert_push_json_schema(document)
+
+
 def test_cli_report_break_dispatch(monkeypatch, capsys):
     captured: dict = {}
 
@@ -3018,3 +3679,88 @@ def test_cli_push_error_returns_1(monkeypatch, capsys):
     rc = main(["push"])
     assert rc == 1
     assert "push failed" in capsys.readouterr().out
+
+
+def test_cli_push_uncertain_delivery_requires_hash_reconciliation(monkeypatch, capsys):
+    def fake_push(*args, **kwargs):
+        raise hosted.HostedDeliveryUncertain(
+            "secret token and /private/source must not reach output",
+            context=_json_push_base(),
+        )
+
+    monkeypatch.setattr(hosted, "push", fake_push)
+
+    assert main(["push", "raw"]) == 1
+    output = capsys.readouterr().out
+    assert "delivery is uncertain" in output
+    assert f"Artifact SHA-256: {_PUSH_ARTIFACT_SHA}" in output
+    assert "Do not retry" in output
+    assert "Reconcile" in output
+    assert "secret token" not in output
+    assert "/private/source" not in output
+
+
+def test_cli_push_human_recording_reports_ingest_id_not_workflow(monkeypatch, capsys):
+    result = _json_push_base()
+    result["status"] = "needs_parameterization"
+    monkeypatch.setattr(hosted, "push", lambda *args, **kwargs: result)
+
+    assert main(["push", "approved"]) == 0
+    output = capsys.readouterr().out
+    assert f"artifact_ingest_id={_PUSH_INGEST_ID}" in output
+    assert "status=needs_parameterization" in output
+    assert "workflow_id=None" not in output
+    assert "compile=" not in output
+
+
+def test_cli_push_human_paused_review_prints_local_review_command(monkeypatch, capsys):
+    monkeypatch.setattr(
+        hosted,
+        "push",
+        lambda *args, **kwargs: {
+            "uploaded": False,
+            "pending_review": True,
+            "kind": "recording",
+            "sanitized_path": "/safe/derivative",
+            "review_action": "review_sanitized",
+            "original_path": "/safe/source",
+            "review_id": _PUSH_REVIEW_ID,
+            "local_binding": {
+                "source_tree_sha256": _PUSH_SOURCE_SHA,
+                "derivative_tree_sha256": _PUSH_DERIVATIVE_SHA,
+                "approved_archive_sha256": None,
+                "sanitization_policy": "outbound-phi-v1",
+            },
+        },
+    )
+    assert main(["push", "raw"]) == 0
+    output = capsys.readouterr().out
+    assert "paused for local review" in output
+    assert (
+        "openadapt-flow review-sanitized /safe/derivative --original /safe/source"
+        in output
+    )
+
+
+def test_cli_push_json_accepts_rfc9562_v7_server_ids(monkeypatch, capsys):
+    """Server-owned ids match the hosted UUID contract (versions 1-8), not 1-5."""
+    result = _json_push_base()
+    result["status"] = "needs_parameterization"
+    result["artifact_ingest_id"] = "019194b0-1234-7abc-8def-0123456789ab"
+    monkeypatch.setattr(hosted, "push", lambda *args, **kwargs: result)
+
+    assert main(["push", "approved", "--json"]) == 0
+    value = json.loads(capsys.readouterr().out)
+    _assert_push_json_schema(value)
+    assert value["status"] == "accepted_for_ingest"
+    assert value["artifact_ingest_id"] == "019194b0-1234-7abc-8def-0123456789ab"
+
+
+def test_push_contract_uuid_rejects_nil_and_noncanonical_forms():
+    assert hosted._is_push_contract_uuid("019194b0-1234-7abc-8def-0123456789ab")
+    assert hosted._is_push_contract_uuid(_PUSH_INGEST_ID)
+    assert not hosted._is_push_contract_uuid("00000000-0000-0000-0000-000000000000")
+    assert not hosted._is_push_contract_uuid(_PUSH_INGEST_ID.upper())
+    assert not hosted._is_push_contract_uuid(_PUSH_INGEST_ID.replace("-", ""))
+    assert not hosted._is_push_contract_uuid("aaaaaaaa-aaaa-9aaa-8aaa-aaaaaaaaaaaa")
+    assert not hosted._is_push_contract_uuid(None)

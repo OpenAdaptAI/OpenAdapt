@@ -1,0 +1,570 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openadapt.ai/schemas/push-result-v1.json",
+  "title": "OpenAdapt push result V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "workflow_id",
+    "artifact_ingest_id",
+    "review",
+    "attestation",
+    "binding",
+    "next_action",
+    "dashboard_url",
+    "delivery",
+    "error"
+  ],
+  "properties": {
+    "schema": { "const": "openadapt.push-result/v1" },
+    "status": {
+      "enum": [
+        "paused_for_review",
+        "accepted_for_ingest",
+        "failed",
+        "delivery_uncertain"
+      ]
+    },
+    "workflow_id": { "$ref": "#/$defs/nullableUuid" },
+    "artifact_ingest_id": { "$ref": "#/$defs/nullableUuid" },
+    "review": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "scope",
+            "sanitized_path",
+            "action",
+            "original_path"
+          ],
+          "properties": {
+            "id": { "$ref": "#/$defs/sha256" },
+            "scope": { "const": "local_non_authoritative" },
+            "sanitized_path": { "type": ["string", "null"], "minLength": 1 },
+            "action": {
+              "oneOf": [
+                { "type": "null" },
+                { "const": "review_sanitized" }
+              ]
+            },
+            "original_path": { "type": ["string", "null"], "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "attestation": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "schema"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "schema": {
+              "enum": [
+                "openadapt.runtime-validation/v1",
+                "openadapt.runtime-validation/v2",
+                "openadapt.runtime-validation/v3"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source_tree_sha256",
+        "derivative_tree_sha256",
+        "approved_archive_sha256",
+        "artifact_sha256",
+        "bundle_sha256",
+        "source_recording_sha256",
+        "sanitization_policy",
+        "certification_policy",
+        "certification_evidence_sha256",
+        "governed_authorization_template_sha256",
+        "parameter_schema_sha256",
+        "attested_run_report_sha256",
+        "resolves_run_id",
+        "organization_id",
+        "bundle_version_id",
+        "bundle_version",
+        "runtime_validation_id"
+      ],
+      "properties": {
+        "kind": { "enum": ["recording", "bundle", null] },
+        "source_tree_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "derivative_tree_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "approved_archive_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "artifact_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "bundle_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "source_recording_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "sanitization_policy": { "type": ["string", "null"], "minLength": 1 },
+        "certification_policy": { "type": ["string", "null"], "minLength": 1 },
+        "certification_evidence_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "governed_authorization_template_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "parameter_schema_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "attested_run_report_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "resolves_run_id": { "$ref": "#/$defs/nullableUuid" },
+        "organization_id": { "$ref": "#/$defs/nullableUuid" },
+        "bundle_version_id": { "$ref": "#/$defs/nullableUuid" },
+        "bundle_version": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1 }
+          ]
+        },
+        "runtime_validation_id": { "$ref": "#/$defs/nullableUuid" }
+      }
+    },
+    "next_action": {
+      "enum": [
+        "review_local",
+        "parameterize",
+        "validate_runtime",
+        "open_dashboard",
+        "reconcile",
+        null
+      ]
+    },
+    "dashboard_url": {
+      "oneOf": [{ "type": "null" }, { "type": "string", "format": "uri" }]
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempted", "certainty"],
+      "properties": {
+        "attempted": { "type": ["boolean", "null"] },
+        "certainty": {
+          "enum": ["not_attempted", "not_accepted", "accepted", "unknown"]
+        }
+      }
+    },
+    "error": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "enum": ["push_failed", "delivery_uncertain"]
+            },
+            "message": { "type": "string", "minLength": 1, "maxLength": 500 }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nullableSha256": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+    },
+    "nullableUuid": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/uuid" }
+      ]
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "paused_for_review" } } },
+      "then": {
+        "properties": {
+          "workflow_id": { "type": "null" },
+          "artifact_ingest_id": { "type": "null" },
+          "review": {
+            "type": "object",
+            "properties": {
+              "sanitized_path": { "type": "string", "minLength": 1 },
+              "action": { "const": "review_sanitized" },
+              "original_path": { "type": "string", "minLength": 1 }
+            }
+          },
+          "attestation": { "type": "null" },
+          "next_action": { "const": "review_local" },
+          "dashboard_url": { "type": "null" },
+          "error": { "type": "null" },
+          "binding": {
+            "properties": {
+              "kind": { "enum": ["recording", "bundle"] },
+              "source_tree_sha256": { "$ref": "#/$defs/sha256" },
+              "derivative_tree_sha256": { "$ref": "#/$defs/sha256" },
+              "sanitization_policy": { "type": "string", "minLength": 1 },
+              "approved_archive_sha256": { "type": "null" },
+              "artifact_sha256": { "type": "null" },
+              "bundle_sha256": { "type": "null" },
+              "source_recording_sha256": { "type": "null" },
+              "certification_policy": { "type": "null" },
+              "certification_evidence_sha256": { "type": "null" },
+              "governed_authorization_template_sha256": { "type": "null" },
+              "parameter_schema_sha256": { "type": "null" },
+              "attested_run_report_sha256": { "type": "null" },
+              "resolves_run_id": { "type": "null" },
+              "organization_id": { "type": "null" },
+              "bundle_version_id": { "type": "null" },
+              "bundle_version": { "type": "null" },
+              "runtime_validation_id": { "type": "null" }
+            }
+          },
+          "delivery": {
+            "properties": {
+              "attempted": { "const": false },
+              "certainty": { "const": "not_attempted" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "accepted_for_ingest" } } },
+      "then": {
+        "properties": {
+          "artifact_ingest_id": { "$ref": "#/$defs/uuid" },
+          "review": {
+            "type": "object",
+            "properties": {
+              "sanitized_path": { "type": "null" },
+              "action": { "type": "null" },
+              "original_path": { "type": "null" }
+            }
+          },
+          "error": { "type": "null" },
+          "binding": {
+            "properties": {
+              "kind": { "enum": ["recording", "bundle"] },
+              "source_tree_sha256": { "$ref": "#/$defs/sha256" },
+              "derivative_tree_sha256": { "$ref": "#/$defs/sha256" },
+              "approved_archive_sha256": { "$ref": "#/$defs/sha256" },
+              "artifact_sha256": { "$ref": "#/$defs/sha256" },
+              "sanitization_policy": { "type": "string", "minLength": 1 }
+            }
+          },
+          "delivery": {
+            "properties": {
+              "attempted": { "const": true },
+              "certainty": { "const": "accepted" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "accepted_for_ingest" },
+          "binding": { "properties": { "kind": { "const": "recording" } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "workflow_id": { "type": "null" },
+          "attestation": { "type": "null" },
+          "next_action": { "enum": ["parameterize", "validate_runtime"] },
+          "dashboard_url": { "type": "null" },
+          "binding": {
+            "properties": {
+              "bundle_sha256": { "type": "null" },
+              "source_recording_sha256": { "type": "null" },
+              "certification_policy": { "type": "null" },
+              "certification_evidence_sha256": { "type": "null" },
+              "governed_authorization_template_sha256": { "type": "null" },
+              "parameter_schema_sha256": { "type": "null" },
+              "attested_run_report_sha256": { "type": "null" },
+              "resolves_run_id": { "type": "null" },
+              "organization_id": { "type": "null" },
+              "bundle_version_id": { "type": "null" },
+              "bundle_version": { "type": "null" },
+              "runtime_validation_id": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "accepted_for_ingest" },
+          "binding": { "properties": { "kind": { "const": "bundle" } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "workflow_id": { "$ref": "#/$defs/uuid" },
+          "attestation": { "type": "object" },
+          "next_action": { "const": "open_dashboard" },
+          "dashboard_url": { "type": "string", "format": "uri" },
+          "binding": {
+            "properties": {
+              "bundle_sha256": { "$ref": "#/$defs/sha256" },
+              "source_recording_sha256": { "$ref": "#/$defs/sha256" },
+              "certification_policy": { "type": "string", "minLength": 1 },
+              "certification_evidence_sha256": { "$ref": "#/$defs/sha256" },
+              "parameter_schema_sha256": { "$ref": "#/$defs/sha256" },
+              "attested_run_report_sha256": { "$ref": "#/$defs/sha256" },
+              "organization_id": { "$ref": "#/$defs/uuid" },
+              "bundle_version_id": { "$ref": "#/$defs/uuid" },
+              "bundle_version": { "type": "integer", "minimum": 1 },
+              "runtime_validation_id": { "$ref": "#/$defs/uuid" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": ["accepted_for_ingest", "delivery_uncertain"]
+          },
+          "attestation": {
+            "type": "object",
+            "properties": {
+              "schema": { "const": "openadapt.runtime-validation/v3" }
+            },
+            "required": ["schema"]
+          },
+          "binding": {
+            "properties": { "kind": { "const": "bundle" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "binding": {
+            "properties": {
+              "governed_authorization_template_sha256": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": ["accepted_for_ingest", "delivery_uncertain"]
+          },
+          "attestation": {
+            "type": "object",
+            "properties": {
+              "schema": {
+                "enum": [
+                  "openadapt.runtime-validation/v1",
+                  "openadapt.runtime-validation/v2"
+                ]
+              }
+            },
+            "required": ["schema"]
+          },
+          "binding": {
+            "properties": { "kind": { "const": "bundle" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "binding": {
+            "properties": {
+              "governed_authorization_template_sha256": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "failed" } } },
+      "then": {
+        "properties": {
+          "workflow_id": { "type": "null" },
+          "artifact_ingest_id": { "type": "null" },
+          "review": { "type": "null" },
+          "attestation": { "type": "null" },
+          "next_action": { "type": "null" },
+          "dashboard_url": { "type": "null" },
+          "binding": {
+            "properties": {
+              "kind": { "type": "null" },
+              "source_tree_sha256": { "type": "null" },
+              "derivative_tree_sha256": { "type": "null" },
+              "approved_archive_sha256": { "type": "null" },
+              "artifact_sha256": { "type": "null" },
+              "bundle_sha256": { "type": "null" },
+              "source_recording_sha256": { "type": "null" },
+              "sanitization_policy": { "type": "null" },
+              "certification_policy": { "type": "null" },
+              "certification_evidence_sha256": { "type": "null" },
+              "governed_authorization_template_sha256": { "type": "null" },
+              "parameter_schema_sha256": { "type": "null" },
+              "attested_run_report_sha256": { "type": "null" },
+              "resolves_run_id": { "type": "null" },
+              "organization_id": { "type": "null" },
+              "bundle_version_id": { "type": "null" },
+              "bundle_version": { "type": "null" },
+              "runtime_validation_id": { "type": "null" }
+            }
+          },
+          "delivery": {
+            "properties": {
+              "attempted": { "type": "null" },
+              "certainty": { "const": "not_accepted" }
+            }
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "const": "push_failed" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "delivery_uncertain" } } },
+      "then": {
+        "properties": {
+          "workflow_id": { "type": "null" },
+          "artifact_ingest_id": { "type": "null" },
+          "review": {
+            "type": "object",
+            "properties": {
+              "sanitized_path": { "type": "null" },
+              "action": { "type": "null" },
+              "original_path": { "type": "null" }
+            }
+          },
+          "next_action": { "const": "reconcile" },
+          "dashboard_url": { "type": "null" },
+          "binding": {
+            "properties": {
+              "kind": { "enum": ["recording", "bundle"] },
+              "source_tree_sha256": { "$ref": "#/$defs/sha256" },
+              "derivative_tree_sha256": { "$ref": "#/$defs/sha256" },
+              "approved_archive_sha256": { "$ref": "#/$defs/sha256" },
+              "artifact_sha256": { "$ref": "#/$defs/sha256" },
+              "sanitization_policy": { "type": "string", "minLength": 1 },
+              "organization_id": { "type": "null" },
+              "bundle_version_id": { "type": "null" },
+              "bundle_version": { "type": "null" },
+              "runtime_validation_id": { "type": "null" }
+            }
+          },
+          "delivery": {
+            "properties": {
+              "attempted": { "const": true },
+              "certainty": { "const": "unknown" }
+            }
+          },
+          "error": {
+            "type": "object",
+            "properties": { "code": { "const": "delivery_uncertain" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "delivery_uncertain" },
+          "binding": {
+            "properties": { "kind": { "const": "recording" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "attestation": { "type": "null" },
+          "binding": {
+            "properties": {
+              "bundle_sha256": { "type": "null" },
+              "source_recording_sha256": { "type": "null" },
+              "certification_policy": { "type": "null" },
+              "certification_evidence_sha256": { "type": "null" },
+              "governed_authorization_template_sha256": { "type": "null" },
+              "parameter_schema_sha256": { "type": "null" },
+              "attested_run_report_sha256": { "type": "null" },
+              "resolves_run_id": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "delivery_uncertain" },
+          "binding": {
+            "properties": { "kind": { "const": "bundle" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "oneOf": [
+          {
+            "properties": {
+              "attestation": { "type": "object" },
+              "binding": {
+                "properties": {
+                  "bundle_sha256": { "$ref": "#/$defs/sha256" },
+                  "source_recording_sha256": { "$ref": "#/$defs/sha256" },
+                  "certification_policy": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "certification_evidence_sha256": {
+                    "$ref": "#/$defs/sha256"
+                  },
+                  "parameter_schema_sha256": { "$ref": "#/$defs/sha256" },
+                  "attested_run_report_sha256": {
+                    "$ref": "#/$defs/sha256"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "attestation": { "type": "null" },
+              "binding": {
+                "properties": {
+                  "bundle_sha256": { "type": "null" },
+                  "source_recording_sha256": { "type": "null" },
+                  "certification_policy": { "type": "null" },
+                  "certification_evidence_sha256": { "type": "null" },
+                  "governed_authorization_template_sha256": { "type": "null" },
+                  "parameter_schema_sha256": { "type": "null" },
+                  "attested_run_report_sha256": { "type": "null" }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

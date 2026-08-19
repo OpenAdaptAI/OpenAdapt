@@ -764,10 +764,24 @@ def test_byoc_phi_mode_can_upload_exact_approved_sanitized_bytes(tmp_path, monke
     captured: dict = {}
 
     def post(url, **kwargs):
+        # The upload file is a private verified snapshot, not this mutable path.
+        approved_archive_path(dest).write_bytes(b"unapproved replacement")
         captured["url"] = url
         captured["archive"] = kwargs["files"]["file"][1].read()
         captured["data"] = kwargs["data"]
-        return httpx.Response(201, json={"ingest": {"workflow_id": "wf_1"}})
+        envelope = json.loads(kwargs["data"]["sanitization_manifest"])
+        return httpx.Response(
+            201,
+            json={
+                "ingest": {
+                    "workflow_id": None,
+                    "artifact_ingest_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "kind": "recording",
+                    "artifact_sha256": envelope["artifact"]["sha256"],
+                    "status": "needs_parameterization",
+                }
+            },
+        )
 
     monkeypatch.setattr(httpx, "post", post)
     result = hosted.push(
@@ -788,6 +802,30 @@ def test_byoc_phi_mode_can_upload_exact_approved_sanitized_bytes(tmp_path, monke
     assert envelope["artifact"]["sha256"] == hashlib.sha256(expected).hexdigest()
 
 
+def test_push_refuses_archive_replaced_after_approval_before_snapshot(
+    tmp_path, monkeypatch
+):
+    source = _recording(tmp_path)
+    dest = tmp_path / "sanitized"
+    sanitize_artifact(source, dest, kind="recording")
+    approve_derivative(dest, source=source, reviewer="privacy-officer")
+    real_snapshot = hosted._verified_archive_snapshot
+
+    def replace_then_snapshot(archive_path, *, expected_sha256):
+        archive_path.write_bytes(b"Jane Doe unapproved replacement")
+        return real_snapshot(archive_path, expected_sha256=expected_sha256)
+
+    monkeypatch.setattr(hosted, "_verified_archive_snapshot", replace_then_snapshot)
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *args, **kwargs: pytest.fail("changed bytes must not egress"),
+    )
+
+    with pytest.raises(hosted.HostedError, match="changed before upload"):
+        hosted.push(dest, host=hosted.DEFAULT_HOST, token="token")
+
+
 def test_upload_filename_and_workflow_name_do_not_leak_phi(tmp_path, monkeypatch):
     source = _recording(tmp_path)
     dest = tmp_path / "Jane Doe sanitized"
@@ -797,7 +835,19 @@ def test_upload_filename_and_workflow_name_do_not_leak_phi(tmp_path, monkeypatch
 
     def post(url, **kwargs):
         captured.update(kwargs)
-        return httpx.Response(201, json={"ingest": {"workflow_id": "wf_1"}})
+        envelope = json.loads(kwargs["data"]["sanitization_manifest"])
+        return httpx.Response(
+            201,
+            json={
+                "ingest": {
+                    "workflow_id": None,
+                    "artifact_ingest_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "kind": "recording",
+                    "artifact_sha256": envelope["artifact"]["sha256"],
+                    "status": "needs_parameterization",
+                }
+            },
+        )
 
     monkeypatch.setattr(httpx, "post", post)
     hosted.push(dest, name="Jane Doe intake", host=hosted.DEFAULT_HOST, token="token")
@@ -822,6 +872,17 @@ def test_raw_push_creates_derivative_and_pauses_for_review(tmp_path, monkeypatch
     )
 
     assert result["pending_review"] is True
+    assert result["review_action"] == "review_sanitized"
+    assert result["original_path"] == str(source)
+    assert "review_command" not in result
+    assert re.fullmatch(r"[a-f0-9]{64}", result["review_id"])
+    assert result["review_id"] != result["local_binding"]["derivative_tree_sha256"]
+    assert result["local_binding"] == {
+        "source_tree_sha256": result["local_binding"]["source_tree_sha256"],
+        "derivative_tree_sha256": result["local_binding"]["derivative_tree_sha256"],
+        "approved_archive_sha256": None,
+        "sanitization_policy": "outbound-phi-v1",
+    }
     assert Path(result["sanitized_path"], MANIFEST_NAME).is_file()
     assert source.name not in Path(result["sanitized_path"]).name
     again = hosted.push(
@@ -834,6 +895,7 @@ def test_raw_push_creates_derivative_and_pauses_for_review(tmp_path, monkeypatch
         token="token",
     )
     assert again["sanitized_path"] == result["sanitized_path"]
+    assert again["review_id"] == result["review_id"]
 
 
 def test_changed_bundle_is_not_uploaded_as_executable(tmp_path, monkeypatch):
@@ -868,6 +930,7 @@ def test_schema_files_are_valid_json():
         "runtime-validation-attestation-v1.json",
         "runtime-validation-attestation-v2.json",
         "runtime-validation-attestation-v3.json",
+        "push-result-v1.json",
     ):
         schema = json.loads((root / name).read_text())
         assert schema["$schema"].endswith("2020-12/schema")
