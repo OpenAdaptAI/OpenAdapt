@@ -338,12 +338,16 @@ jobs:
       - name: Generate and verify CI artifact checksums
         shell: bash
         run: |
+          # `verify-checksums` requires the manifest to be named exactly
+          # SHA256SUMS. Each matrix job owns its own dist/native directory and
+          # uploads under a distinct artifact name, so the plain name is
+          # unambiguous here.
           python scripts/native_release.py checksums \
             --directory dist/native \
-            --output dist/native/SHA256SUMS-${{ matrix.platform }}-${{ matrix.architecture }}
+            --output dist/native/SHA256SUMS
           python scripts/native_release.py verify-checksums \
             --directory dist/native \
-            --manifest dist/native/SHA256SUMS-${{ matrix.platform }}-${{ matrix.architecture }}
+            --manifest dist/native/SHA256SUMS
 
       - name: Upload native installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

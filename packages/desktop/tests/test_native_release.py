@@ -1744,6 +1744,26 @@ def test_public_download_verifier_uses_the_authenticated_checksum_bytes(
     ) == len(expected)
 
 
+def test_every_workflow_checksum_manifest_uses_the_exact_name() -> None:
+    """`verify_checksums` accepts only a manifest named exactly SHA256SUMS.
+
+    The native installer jobs are skipped on pull requests and run on `main`
+    pushes, so a manifest named anything else fails after merge rather than in
+    review. Check the contract as text instead.
+    """
+
+    checked = 0
+    for workflow in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        for line in workflow.read_text(encoding="utf-8").splitlines():
+            if "--output" not in line and "--manifest" not in line:
+                continue
+            value = line.removesuffix("\\").strip().split()[-1]
+            if "SHA256SUMS" in value:
+                assert value.endswith("SHA256SUMS"), f"{workflow.name}: {line.strip()}"
+                checked += 1
+    assert checked >= 2
+
+
 def test_release_workflow_attestation_checks_use_one_exact_identity_flag() -> None:
     """Every workflow attestation check must be a command `gh` can run.
 
