@@ -212,14 +212,29 @@ def validate_new_native_tag(candidate_tag: str, releases: object) -> str:
 
 
 def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
-    """Synchronize every native version source (and lockfiles) to ``version``."""
+    """Synchronize every native version source (and lockfiles) to ``version``.
+
+    This transformation must be byte-deterministic on every platform, because
+    :func:`validate_git_version_transform` reconstructs it and compares the
+    result with the Git blobs of the candidate tag. Text-mode I/O would break
+    that: on Windows it rewrites every ``\\n`` as ``\\r\\n``, and an omitted
+    encoding decodes with the locale default. All reads and writes below are
+    therefore explicit UTF-8 bytes with LF endings.
+    """
+
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError(f"native version must be X.Y.Z, got {version!r}")
 
+    def read_source(path: Path) -> str:
+        return path.read_bytes().decode("utf-8")
+
+    def write_source(path: Path, text: str) -> None:
+        path.write_bytes(text.encode("utf-8"))
+
     def rewrite_json(path: Path, mutate) -> None:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(read_source(path))
         mutate(data)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        write_source(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
     def set_lock_versions(lock: dict) -> None:
         lock["version"] = version
@@ -234,22 +249,22 @@ def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
 
     cargo_toml = root / "src-tauri" / "Cargo.toml"
     text, replaced = re.subn(
-        r'(?m)^version = "[^"]+"$', f'version = "{version}"', cargo_toml.read_text(), count=1
+        r'(?m)^version = "[^"]+"$', f'version = "{version}"', read_source(cargo_toml), count=1
     )
     if replaced != 1:
         raise ValueError(f"could not rewrite package version in {cargo_toml}")
-    cargo_toml.write_text(text, encoding="utf-8")
+    write_source(cargo_toml, text)
 
     cargo_lock = root / "src-tauri" / "Cargo.lock"
     text, replaced = re.subn(
         r'(name = "openadapt-desktop"\nversion = ")[^"]+(")',
         rf"\g<1>{version}\g<2>",
-        cargo_lock.read_text(),
+        read_source(cargo_lock),
         count=1,
     )
     if replaced != 1:
         raise ValueError(f"could not rewrite package version in {cargo_lock}")
-    cargo_lock.write_text(text, encoding="utf-8")
+    write_source(cargo_lock, text)
 
     synchronized = native_version(root)
     if synchronized != version:

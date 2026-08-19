@@ -409,12 +409,20 @@ def test_native_tag_is_distinct_from_python_release_channel() -> None:
         validate_tag("v0.3.2")
 
 
+def _write_source(path: Path, text: str) -> None:
+    """Write UTF-8 with LF endings, so a fixture is identical on every platform."""
+
+    path.write_bytes(text.encode("utf-8"))
+
+
 def _write_native_version_fixture(root: Path, version: str) -> None:
     (root / "src-tauri").mkdir()
-    (root / "package.json").write_text(
-        json.dumps({"name": "openadapt-desktop", "version": version}, indent=2) + "\n"
+    _write_source(
+        root / "package.json",
+        json.dumps({"name": "openadapt-desktop", "version": version}, indent=2) + "\n",
     )
-    (root / "package-lock.json").write_text(
+    _write_source(
+        root / "package-lock.json",
         json.dumps(
             {
                 "name": "openadapt-desktop",
@@ -427,19 +435,22 @@ def _write_native_version_fixture(root: Path, version: str) -> None:
             },
             indent=2,
         )
-        + "\n"
+        + "\n",
     )
-    (root / "src-tauri/tauri.conf.json").write_text(
-        json.dumps({"productName": "OpenAdapt Desktop", "version": version}, indent=2) + "\n"
+    _write_source(
+        root / "src-tauri/tauri.conf.json",
+        json.dumps({"productName": "OpenAdapt Desktop", "version": version}, indent=2) + "\n",
     )
-    (root / "src-tauri/Cargo.toml").write_text(
+    _write_source(
+        root / "src-tauri/Cargo.toml",
         f'[package]\nname = "openadapt-desktop"\nversion = "{version}"\nedition = "2021"\n'
-        '\n[dependencies]\nserde = { version = "1.0" }\n'
+        '\n[dependencies]\nserde = { version = "1.0" }\n',
     )
-    (root / "src-tauri/Cargo.lock").write_text(
+    _write_source(
+        root / "src-tauri/Cargo.lock",
         'version = 4\n\n[[package]]\nname = "openadapt-desktop"\n'
         f'version = "{version}"\ndependencies = []\n'
-        '\n[[package]]\nname = "serde"\nversion = "1.0.200"\n'
+        '\n[[package]]\nname = "serde"\nversion = "1.0.200"\n',
     )
 
 
@@ -461,6 +472,31 @@ def test_set_native_version_synchronizes_every_source_and_lockfile(tmp_path: Pat
     assert 'version = "0.5.0"' in cargo_toml
     assert 'serde = { version = "1.0" }' in cargo_toml
     assert validate_tag("desktop-v0.5.0", tmp_path) == "desktop-v0.5.0"
+
+
+def test_set_native_version_writes_utf8_lf_bytes_on_every_platform(tmp_path: Path) -> None:
+    """The transform must be byte-deterministic, not platform-dependent.
+
+    `validate_git_version_transform` reconstructs this transform and compares
+    the result with Git blobs, which store LF. Text-mode writes rewrite every
+    newline as CRLF on Windows and decode with the locale default, so the
+    comparison fails there for reasons that have nothing to do with the tag.
+    """
+
+    _write_native_version_fixture(tmp_path, "0.1.1")
+
+    set_native_version("0.5.0", tmp_path)
+
+    for relative in (
+        "package.json",
+        "package-lock.json",
+        "src-tauri/Cargo.toml",
+        "src-tauri/Cargo.lock",
+        "src-tauri/tauri.conf.json",
+    ):
+        raw = (tmp_path / relative).read_bytes()
+        assert b"\r\n" not in raw, relative
+        assert raw.decode("utf-8")
 
 
 def test_sync_native_version_from_engine_uses_python_release_version(tmp_path: Path) -> None:
@@ -500,6 +536,10 @@ def test_git_version_transform_requires_the_exact_reconstructed_tree(tmp_path: P
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.name", "Test")
     _git(tmp_path, "config", "user.email", "test@example.com")
+    # Store the fixture bytes verbatim. Git for Windows defaults to
+    # core.autocrlf=true, which would rewrite the blobs the transform is
+    # compared against.
+    _git(tmp_path, "config", "core.autocrlf", "false")
     _git(tmp_path, "add", ".")
     _git(tmp_path, "commit", "-qm", "base")
     base = _git(tmp_path, "rev-parse", "HEAD")
@@ -512,7 +552,7 @@ def test_git_version_transform_requires_the_exact_reconstructed_tree(tmp_path: P
 
     package = json.loads((tmp_path / "package.json").read_text())
     package["scripts"] = {"postinstall": "run-unreviewed-code"}
-    (tmp_path / "package.json").write_text(json.dumps(package, indent=2) + "\n")
+    _write_source(tmp_path / "package.json", json.dumps(package, indent=2) + "\n")
     _git(tmp_path, "add", "package.json")
     _git(tmp_path, "commit", "-qm", "tamper inside allowed file")
     tampered = _git(tmp_path, "rev-parse", "HEAD")
@@ -532,6 +572,10 @@ def test_git_version_advance_refuses_a_stale_or_equal_target(tmp_path: Path) -> 
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.name", "Test")
     _git(tmp_path, "config", "user.email", "test@example.com")
+    # Store the fixture bytes verbatim. Git for Windows defaults to
+    # core.autocrlf=true, which would rewrite the blobs the transform is
+    # compared against.
+    _git(tmp_path, "config", "core.autocrlf", "false")
     _git(tmp_path, "add", ".")
     _git(tmp_path, "commit", "-qm", "base")
     base = _git(tmp_path, "rev-parse", "HEAD")
