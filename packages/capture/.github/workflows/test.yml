@@ -28,8 +28,31 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install system dependencies
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently. On 2026-08-19 it hung this step
+          # for over an hour on main, because the step had no bound of its own.
+          # Prefer the canonical archive, and keep this best-effort.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
           sudo apt-get install -y ffmpeg libportaudio2
 
       - name: Install dependencies
