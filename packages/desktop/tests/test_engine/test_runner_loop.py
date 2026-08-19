@@ -1114,20 +1114,55 @@ class TestLeaseDiscipline:
         login()
         _bundle, digest = make_bundle(config)
         cloud.extend_status = 503
+
+        class OffsetClock(datetime):
+            """The real clock plus a test-controlled offset.
+
+            The lease must be alive at the pre-start check and dead during the
+            run. Expressing that as two short wall-clock sleeps races with slow
+            bundle staging or policy binding, so the run itself moves the clock
+            instead.
+            """
+
+            offset = timedelta()
+
+            @classmethod
+            def now(cls, tz=None):  # type: ignore[override]
+                return datetime.now(tz) + cls.offset
+
         job = make_job(digest)
         job["lease"] = {
             "job_id": "job_1",
             "visibility_timeout_s": 900,
-            "expires_at": (datetime.now(UTC) + timedelta(seconds=0.08)).isoformat(),
+            # Comfortably alive at start; only the offset below expires it.
+            "expires_at": (datetime.now(UTC) + timedelta(seconds=30)).isoformat(),
         }
         original_run = flow.run
 
         def slow_run(*args, **kwargs):
-            time.sleep(0.12)
+            # This body runs on a worker thread while the renew loop owns the
+            # event loop, so it can drive the sequence by observation instead
+            # of by sleeping for a guessed duration.
+            guard = time.monotonic() + 5.0
+            # 1. Let the renew loop attempt at least one extend against the
+            #    still-live lease. The fake cloud answers 503 every time.
+            while not cloud.extends and time.monotonic() < guard:
+                time.sleep(0.005)
+            # 2. Push every later engine.runner_loop clock read past the lease
+            #    deadline.
+            OffsetClock.offset = timedelta(seconds=60)
+            # 3. Hold the run open until the renew loop has seen the expiry and
+            #    returned, which it proves by attempting no further extend.
+            while time.monotonic() < guard:
+                attempts = len(cloud.extends)
+                time.sleep(0.05)
+                if len(cloud.extends) == attempts:
+                    break
             return original_run(*args, **kwargs)
 
         monkeypatch.setattr(flow, "run", slow_run)
         monkeypatch.setattr("engine.runner_loop.LEASE_EXTEND_INTERVAL_S", 0.01)
+        monkeypatch.setattr("engine.runner_loop.datetime", OffsetClock)
 
         async with svc._http_factory() as http:
             client = RunnerClient(http, token="oar_test")
