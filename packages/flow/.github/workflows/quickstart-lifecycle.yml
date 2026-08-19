@@ -41,6 +41,39 @@ jobs:
           python -m pip install build
           python -m build --wheel --outdir lifecycle-dist
 
+      # The Linux lane passes --browser-with-deps, so the harness shells out to
+      # `playwright install --with-deps`, and that runs apt on the hosted
+      # runner. Point apt at the canonical archive first, and prove the archive
+      # answers inside a bounded step, so a mirror fault fails here in seconds
+      # instead of stalling inside the lifecycle harness.
+      - name: Prefer the canonical Ubuntu archive (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and every failure costs minutes of
+          # apt retries before the canonical archive is tried. Keep this
+          # best-effort: if the file is absent or already canonical, the run
+          # continues unchanged.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+
       - name: Full lifecycle (Linux)
         if: runner.os == 'Linux'
         run: >-

@@ -529,7 +529,32 @@ jobs:
       - name: Install isolated X11, D-Bus, GTK3, and AT-SPI
         timeout-minutes: 15
         run: |
-          sudo apt-get update
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and every failure costs minutes of
+          # apt retries before the canonical archive is tried. The step timeout
+          # then expires on retries alone. Prefer the canonical archive up
+          # front. Keep this best-effort: if the file is absent or already
+          # canonical, the run continues unchanged.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          # A transient mirror fault must not fail this required job outright.
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
           sudo apt-get install -y \
             at-spi2-core \
             dbus-x11 \
