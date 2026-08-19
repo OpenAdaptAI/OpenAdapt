@@ -123,6 +123,10 @@ def _flow_api() -> dict[str, Any]:
         "set_identity_policy": set_identity_policy,
         "set_minimum_effect_tier": set_minimum_effect_tier,
         "set_business_decision": getattr(flow_qualification, "set_business_decision", None),
+        "set_judgment_cases": getattr(flow_qualification, "set_judgment_cases", None),
+        "evaluate_judgment_case_qualification": getattr(
+            flow_qualification, "evaluate_judgment_case_qualification", None
+        ),
         "workflow_contract_sha256": workflow_contract_sha256,
     }
 
@@ -398,6 +402,7 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
         "parameters": parameters,
         "actions": actions,
         "business_decisions": _business_decision_controls(workflow),
+        "judgment_cases": _judgment_case_controls(workflow),
     }
 
 
@@ -521,6 +526,83 @@ def _business_decision_controls(workflow) -> dict[str, Any]:
         "available": True,
         "required_flow_capability": "qualification.set_business_decision",
         "graphs": graphs,
+    }
+
+
+def _judgment_case_controls(workflow) -> dict[str, Any]:
+    """Project Flow-owned local judgment cases without exposing their artifacts.
+
+    This capability is additive. Older embedded Flow builds retain all direct
+    decision authoring controls and return a precise upgrade state here.
+    """
+
+    api = _flow_api()
+    setter = api.get("set_judgment_cases")
+    evaluator = api.get("evaluate_judgment_case_qualification")
+    if setter is None or evaluator is None or workflow.qualification is None:
+        return {
+            "available": False,
+            "required_flow_capability": "qualification.set_judgment_cases",
+            "contexts": [],
+            "report": None,
+        }
+    try:
+        from openadapt_flow.ir import StateKind, lift_to_program
+    except (ImportError, AttributeError):
+        return {
+            "available": False,
+            "required_flow_capability": "qualification.set_judgment_cases",
+            "contexts": [],
+            "report": None,
+        }
+
+    project = workflow.qualification
+    schemas = {
+        (item.graph_id, item.state_id): item.fact_schema
+        for item in project.judgment_fact_schemas
+    }
+    cases = list(project.judgment_cases)
+    workflow_digest = api["workflow_contract_sha256"](workflow)
+    main_program = workflow.program or lift_to_program(workflow)
+    contexts = []
+    for graph_id, graph in [("__program__", main_program), *workflow.subflows.items()]:
+        if graph is None:
+            continue
+        for state_id, state in graph.states.items():
+            if state.kind is not StateKind.BUSINESS_DECISION or state.decision is None:
+                continue
+            schema = schemas.get((graph_id, state_id))
+            if schema is None:
+                continue
+            contexts.append(
+                {
+                    "decision": {
+                        "graph_id": graph_id,
+                        "state_id": state_id,
+                        "workflow_contract_sha256": workflow_digest,
+                        "decision_contract_sha256": state.decision.contract_sha256(),
+                    },
+                    "fact_schema": schema.model_dump(mode="json"),
+                    "fact_schema_sha256": schema.contract_sha256(),
+                    "options": [item.model_dump(mode="json") for item in state.decision.options],
+                    "authorized_roles": list(state.decision.authorized_roles),
+                    "cases": [
+                        item.model_dump(mode="json")
+                        for item in cases
+                        if item.decision.graph_id == graph_id
+                        and item.decision.state_id == state_id
+                    ],
+                }
+            )
+    try:
+        report = evaluator(workflow).model_dump(mode="json")
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(f"Cannot evaluate local judgment cases: {exc}") from exc
+    return {
+        "available": True,
+        "required_flow_capability": "qualification.set_judgment_cases",
+        "contexts": contexts,
+        "report": report,
     }
 
 
@@ -1147,6 +1229,54 @@ def author_business_decision(
             ),
         )
         _save(authored, bundle_dir, key=bundle_key)
+    except (QualificationError, ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
+def set_judgment_cases(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    schemas: list[dict[str, Any]],
+    cases: list[dict[str, Any]],
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Persist only Flow-validated local judgment cases and fact schemas.
+
+    The caller supplies reviewed local references. This function never accepts
+    screenshot bytes, record values outside declared facts, a generated rule,
+    or a runtime answer.
+    """
+
+    api = _flow_api()
+    setter = api.get("set_judgment_cases")
+    if setter is None:
+        raise QualificationError(
+            "This Desktop build needs a Flow runtime with "
+            "qualification.set_judgment_cases before it can save judgment cases."
+        )
+    try:
+        from openadapt_flow.judgment_cases import (
+            JudgmentCaseV1,
+            JudgmentFactSchemaBindingV1,
+        )
+    except ImportError as exc:
+        raise QualificationError(
+            "The bundled Flow runtime does not include local judgment-case qualification."
+        ) from exc
+    try:
+        workflow = _load(bundle_dir, key=bundle_key)
+        exact_schemas = [JudgmentFactSchemaBindingV1.model_validate(item) for item in schemas]
+        exact_cases = [JudgmentCaseV1.model_validate(item) for item in cases]
+        setter(workflow, schemas=exact_schemas, cases=exact_cases)
+        _save(workflow, bundle_dir, key=bundle_key)
     except (QualificationError, ValueError, TypeError) as exc:
         raise QualificationError(str(exc)) from exc
     return inspect_bundle(

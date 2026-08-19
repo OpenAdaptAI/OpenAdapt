@@ -206,4 +206,91 @@ describe("Qualification effect requirements", () => {
       ),
     );
   });
+
+  it("saves an atomic reciprocal automatic-rule pair through the Flow-owned case command", async () => {
+    const project = projectWithTiers({ review: 3, submit: 2 });
+    (project.controls as Record<string, unknown>).judgment_cases = {
+      available: true,
+      required_flow_capability: "qualification.set_judgment_cases",
+      report: null,
+      contexts: [{
+        decision: {
+          graph_id: "__program__",
+          state_id: "review_decision",
+          workflow_contract_sha256: "a".repeat(64),
+          decision_contract_sha256: "b".repeat(64),
+        },
+        fact_schema: {
+          schema_version: "openadapt.judgment-fact-schema/v1",
+          fields: { urgent: { type: "boolean" } },
+        },
+        fact_schema_sha256: "c".repeat(64),
+        options: [
+          { id: "priority_review", label: "Priority review" },
+          { id: "supervisor", label: "Supervisor" },
+        ],
+        authorized_roles: ["supervisor"],
+        cases: [],
+      }],
+    };
+    mockedEngineInvoke.mockResolvedValue(project);
+
+    render(<Qualification workflowId="wf-1" onBack={() => {}} />);
+
+    await screen.findByText("Capture reviewed examples before you automate a choice");
+    fireEvent.change(screen.getByLabelText("Local source SHA-256"), {
+      target: { value: "d".repeat(64) },
+    });
+    fireEvent.change(screen.getByLabelText("Local reviewer reference SHA-256"), {
+      target: { value: "e".repeat(64) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Rule candidate" }));
+    fireEvent.change(screen.getByLabelText("Qualified branch for a rule candidate"), {
+      target: { value: "priority_review" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewed rule id"), {
+      target: { value: "urgent_policy" },
+    });
+    fireEvent.click(screen.getByLabelText("Add a contrasting reviewed case now"));
+    fireEvent.change(screen.getAllByLabelText("urgent")[1], { target: { value: "true" } });
+    fireEvent.change(screen.getByLabelText("Qualified branch for contrasting case"), {
+      target: { value: "supervisor" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add local evidence" }));
+    fireEvent.change(screen.getByLabelText("Evidence reference 1 local path"), {
+      target: { value: "evidence/policy.pdf" },
+    });
+    fireEvent.change(screen.getByLabelText("Evidence reference 1 SHA-256"), {
+      target: { value: "f".repeat(64) },
+    });
+    fireEvent.click(screen.getByTestId("capture-judgment-case"));
+
+    await waitFor(() =>
+      expect(mockedEngineInvoke).toHaveBeenCalledWith(
+        CMD.SET_QUALIFICATION_JUDGMENT_CASES,
+        expect.objectContaining({
+          workflow_id: "wf-1",
+          schemas: [expect.objectContaining({ state_id: "review_decision" })],
+          cases: [
+            expect.objectContaining({
+              disposition: "automatic_rule",
+              option_id: "priority_review",
+              contrast_case_ids: [expect.any(String)],
+            }),
+            expect.objectContaining({
+              disposition: "automatic_rule",
+              option_id: "supervisor",
+              contrast_case_ids: [expect.any(String)],
+            }),
+          ],
+        }),
+      ),
+    );
+    const call = mockedEngineInvoke.mock.calls.find(
+      ([command]) => command === CMD.SET_QUALIFICATION_JUDGMENT_CASES,
+    );
+    const cases = call?.[1]?.cases as { id: string; contrast_case_ids: string[] }[];
+    expect(cases[0].contrast_case_ids).toEqual([cases[1].id]);
+    expect(cases[1].contrast_case_ids).toEqual([cases[0].id]);
+  });
 });

@@ -46,6 +46,7 @@ export const CMD = {
     "set_qualification_minimum_effect_tier",
   AUTHOR_QUALIFICATION_BUSINESS_DECISION:
     "author_qualification_business_decision",
+  SET_QUALIFICATION_JUDGMENT_CASES: "set_qualification_judgment_cases",
   ADD_QUALIFICATION_CASE: "add_qualification_case",
   RUN_QUALIFICATION_CASE: "run_qualification_case",
   IMPORT_QUALIFICATION_RESULTS: "import_qualification_results",

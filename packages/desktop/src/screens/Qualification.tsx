@@ -16,6 +16,7 @@ import type {
 import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
 import { QualificationJourney } from "../ui/QualificationJourney";
 import { BusinessDecisionAuthoring } from "../ui/BusinessDecisionAuthoring";
+import { JudgmentCaseCapture } from "../ui/JudgmentCaseCapture";
 import { QualificationLifecycle } from "./QualificationLifecycle";
 
 const POLICY = "clinical-write";
@@ -1023,6 +1024,48 @@ export function Qualification({
               project={project}
               onProject={setProject}
             />
+          )}
+
+          {project.project && project.controls.judgment_cases?.available && (
+            <>
+              {project.controls.judgment_cases.contexts.map((context) => (
+                <JudgmentCaseCapture
+                  key={`${context.decision.graph_id}-${context.decision.state_id}`}
+                  context={context}
+                  onCapture={async (caseItems) => {
+                    const schemas = project.controls.judgment_cases.contexts.map((item) => ({
+                      graph_id: item.decision.graph_id,
+                      state_id: item.decision.state_id,
+                      fact_schema: item.fact_schema,
+                    }));
+                    const cases = [
+                      ...project.controls.judgment_cases.contexts.flatMap((item) => item.cases),
+                      ...caseItems,
+                    ];
+                    const response = await engineInvoke<QualificationResponse>(
+                      CMD.SET_QUALIFICATION_JUDGMENT_CASES,
+                      {
+                        workflow_id: workflowId,
+                        policy: project.policy,
+                        schemas,
+                        cases,
+                      },
+                    );
+                    if (!response.ok) throw new Error(response.error);
+                    setProject(response);
+                  }}
+                />
+              ))}
+              {project.controls.judgment_cases.contexts.length === 0 && (
+                <Card id="qualification-judgment-cases-section">
+                  <CardHead
+                    eyebrow="Judgment cases"
+                    title="Add a reviewed fact schema before you capture cases"
+                    sub="The decision branch is ready. Flow needs a closed local fact vocabulary before it can bind examples or counterfactuals."
+                  />
+                </Card>
+              )}
+            </>
           )}
 
           <Card id="qualification-actions-section">

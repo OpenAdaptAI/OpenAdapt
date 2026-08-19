@@ -260,6 +260,7 @@ class EngineDispatcher:
             "set_qualification_effect_verification": (self.set_qualification_effect_verification),
             "set_qualification_minimum_effect_tier": (self.set_qualification_minimum_effect_tier),
             "author_qualification_business_decision": (self.author_qualification_business_decision),
+            "set_qualification_judgment_cases": (self.set_qualification_judgment_cases),
             "add_qualification_case": self.add_qualification_case,
             "run_qualification_case": self.run_qualification_case,
             "import_qualification_results": self.import_qualification_results,
@@ -2036,6 +2037,41 @@ class EngineDispatcher:
                     if params.get("insert_before_state_id") is not None
                     else None
                 ),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_judgment_cases(self, **params: Any) -> dict:
+        """Save Flow-owned local judgment cases. No runtime decision is created."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_judgment_cases,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_schemas = params.get("schemas") or []
+        raw_cases = params.get("cases") or []
+        try:
+            if not isinstance(raw_schemas, list) or not all(
+                isinstance(item, dict) for item in raw_schemas
+            ):
+                raise ValueError("schemas must be a list of local fact-schema objects")
+            if not isinstance(raw_cases, list) or not all(
+                isinstance(item, dict) for item in raw_cases
+            ):
+                raise ValueError("cases must be a list of local judgment-case objects")
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_judgment_cases(
+                bundle,
+                workflow_id=workflow_id,
+                schemas=raw_schemas,
+                cases=raw_cases,
                 policy_source=policy,
                 bundle_key=self._qualification_bundle_key(workflow_id),
             )
