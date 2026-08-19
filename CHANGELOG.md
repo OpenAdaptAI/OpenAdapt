@@ -2,6 +2,71 @@
 
 <!-- version list -->
 
+## v1.13.0 (2026-08-19)
+
+### Build System
+
+- **deps**: Bump actions/attest from 4.2.0 to 4.2.1
+  ([#1080](https://github.com/OpenAdaptAI/OpenAdapt/pull/1080),
+  [`12fe8e3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/12fe8e399ce541090221716a8e1d92cd10d6b011))
+
+- **deps**: Bump actions/attest from 4.2.1 to 4.2.2
+  ([#1094](https://github.com/OpenAdaptAI/OpenAdapt/pull/1094),
+  [`1c9fccd`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1c9fccd18d38253d13ba930ec3bc53148af720b3))
+
+- **deps**: Bump astral-sh/setup-uv from 9.0.0 to 10.0.0
+  ([#1095](https://github.com/OpenAdaptAI/OpenAdapt/pull/1095),
+  [`c80b691`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c80b691efddb12716973897b03dade35e26f0b87))
+
+- **deps**: Bump github/codeql-action from 4.37.3 to 4.37.6
+  ([#1090](https://github.com/OpenAdaptAI/OpenAdapt/pull/1090),
+  [`2689884`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2689884a625736fa79bc79f42b22d389665c434c))
+
+- **deps**: Bump github/codeql-action/analyze from 4.37.3 to 4.37.6
+  ([#1090](https://github.com/OpenAdaptAI/OpenAdapt/pull/1090),
+  [`2689884`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2689884a625736fa79bc79f42b22d389665c434c))
+
+- **deps**: Bump peter-evans/repository-dispatch from 3 to 4
+  ([#1079](https://github.com/OpenAdaptAI/OpenAdapt/pull/1079),
+  [`49499c1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/49499c1275aa2c5933893fbf311b0c02db5dd2e1))
+
+- **deps**: Bump pypa/gh-action-pypi-publish from 1.14.1 to 1.14.2
+  ([#1078](https://github.com/OpenAdaptAI/OpenAdapt/pull/1078),
+  [`94733b0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/94733b08971121a6ad0a1ee853852a5c9f4eba34))
+
+- **deps-dev**: Bump hatchling from 1.31.0 to 1.32.0
+  ([#1093](https://github.com/OpenAdaptAI/OpenAdapt/pull/1093),
+  [`2e6c57e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2e6c57e4a0cf018f0af4e5232cbbc1ae7a25b5b6))
+
+### Chores
+
+- **release**: Reconcile platform manifest
+  ([`c5b75b0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c5b75b0dc47cd23d81f71544dbf43468ceab01ce))
+
+### Continuous Integration
+
+- Update CodeQL actions atomically ([#1090](https://github.com/OpenAdaptAI/OpenAdapt/pull/1090),
+  [`2689884`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2689884a625736fa79bc79f42b22d389665c434c))
+
+### Documentation
+
+- Align Desktop lifecycle in hero diagram
+  ([`770e40f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/770e40f0a164f12c4073b2e30e0d1b8c62b8e340))
+
+- Keep Capture at its canonical Experimental lifecycle
+  ([`770e40f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/770e40f0a164f12c4073b2e30e0d1b8c62b8e340))
+
+### Features
+
+- Define current platform BOM ([#1097](https://github.com/OpenAdaptAI/OpenAdapt/pull/1097),
+  [`49287fd`](https://github.com/OpenAdaptAI/OpenAdapt/commit/49287fdf59ececc477a54422ba47327d6d3d673e))
+
+### Testing
+
+- Align Hatchling release pin ([#1093](https://github.com/OpenAdaptAI/OpenAdapt/pull/1093),
+  [`2e6c57e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2e6c57e4a0cf018f0af4e5232cbbc1ae7a25b5b6))
+
+
 ## v1.12.1 (2026-08-11)
 
 ### Bug Fixes
