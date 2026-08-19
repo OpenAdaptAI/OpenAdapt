@@ -109,7 +109,7 @@
     },
     {
       "path": ".github/workflows/paper.yml",
-      "sha256": "4bd7904c18b1c29926f0fc6eff21a7401b8f3c41aa239622fba8f2dcbc362790"
+      "sha256": "6446edb96cddea116abe931611360122d8c4e3cba32e55c5ceab1f1e5209302a"
     },
     {
       "path": ".github/workflows/quickstart-lifecycle.yml",
