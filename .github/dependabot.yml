@@ -15,3 +15,10 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    ignore:
+      # v4 breaks the docs dispatch with a mismatched Content-Length on
+      # GitHub-hosted runners. Bumping it silently red-mains the docs sync;
+      # this already happened twice (#1049, #1079). Remove once upstream
+      # ships a fixed release.
+      - dependency-name: "peter-evans/repository-dispatch"
+        versions: ["4.x"]
