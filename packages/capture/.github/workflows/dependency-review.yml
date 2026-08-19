@@ -3,7 +3,6 @@ name: Dependency Review
 # SOC 2: dependency-review (OA-C-24). Flags vulnerable/denied deps on PRs.
 on:
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
