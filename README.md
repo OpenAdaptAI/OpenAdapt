@@ -242,7 +242,7 @@ defines what can be claimed for a new deployment.
   canonical compiler, governed runtime, CLI implementation, and conformance
   tests
 - **[`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture):**
-  Beta native screen, mouse, keyboard, timing, window-scope, and media capture
+  native screen, mouse, keyboard, timing, window-scope, and media capture
   component used by the Flow desktop recording path
 - **[`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy):**
   local sanitization and review mechanisms for approved derivatives
