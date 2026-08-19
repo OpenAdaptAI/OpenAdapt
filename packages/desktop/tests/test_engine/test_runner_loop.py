@@ -16,6 +16,7 @@ import asyncio
 import hashlib
 import io
 import json
+import os
 import random
 import stat
 import threading
@@ -365,7 +366,13 @@ class TestHappyPath:
         run_dir = config.data_dir / "runner" / "runs" / "run_1"
         auth_json = json.loads((run_dir / "authorization.json").read_text())
         assert auth_json["authorization_id"] == "auth_1"
-        assert stat.S_IMODE((run_dir / "authorization.json").stat().st_mode) == 0o600
+        if os.name != "nt":
+            assert stat.S_IMODE((run_dir / "authorization.json").stat().st_mode) == 0o600
+        else:
+            # Windows does not expose POSIX owner/group bits, so `chmod(0o600)`
+            # cannot be asserted there. The operator audit copy is written
+            # inside Desktop's per-user run directory and inherits its ACL.
+            assert (run_dir / "authorization.json").is_file()
 
         # evidence: started state, one step event per step, terminal summary
         kinds = [e["kind"] for e in cloud.evidence]

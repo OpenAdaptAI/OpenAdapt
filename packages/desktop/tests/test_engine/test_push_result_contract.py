@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 
@@ -235,7 +236,13 @@ def test_handoff_persists_exact_server_id_with_private_permissions(tmp_path: Pat
     saved = json.loads(path.read_text())
     assert saved["state"] == "accepted_recording"
     assert saved["push_result"]["artifact_ingest_id"] == INGEST_ID
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    else:
+        # Windows does not expose POSIX owner/group bits, so `chmod(0o600)`
+        # cannot be asserted there. The handoff is written inside Desktop's
+        # per-user data directory and inherits its ACL.
+        assert path.is_file()
 
 
 def test_invalid_child_result_persists_reconcile_state(tmp_path: Path) -> None:
