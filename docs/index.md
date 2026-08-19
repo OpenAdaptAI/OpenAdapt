@@ -15,6 +15,7 @@ Start here:
 - [Canonical engine](https://github.com/OpenAdaptAI/openadapt-flow)
 - [Launcher and migration guidance](https://github.com/OpenAdaptAI/OpenAdapt#readme)
 
-The remaining files under this directory describe earlier package/training
-architectures. They are historical reference, not current onboarding or product
-claims.
+The getting-started, CLI, architecture, and package-map pages keep selected
+install and package contracts close to the code. Files that identify themselves
+as legacy, frozen, design-only, or architecture evolution are historical
+reference. They are not current onboarding or product claims.

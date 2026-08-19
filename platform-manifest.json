@@ -89,7 +89,7 @@
     "python": ">=3.10,<3.13",
     "launcher_requires": {
       "openadapt-capture": [
-        ">=1.0.4,<2.0.0"
+        ">=1.2.0,<2.0.0"
       ],
       "openadapt-evals": [
         ">=0.1.0"

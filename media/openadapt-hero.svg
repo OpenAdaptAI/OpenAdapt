@@ -97,8 +97,8 @@
 <text x="194.0" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">CLI</text>
 <rect x="243.4" y="520" width="204.2" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
 <text x="257.4" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Desktop app</text>
-<rect x="351.2" y="527" width="82.4" height="16" rx="8" fill="var(--warnfill)"/>
-<text x="392.4" y="538.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">EXPERIMENTAL</text>
+<rect x="351.2" y="527" width="82.4" height="16" rx="8" fill="var(--accentfill)"/>
+<text x="392.4" y="538.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--accentink)">BETA</text>
 <rect x="459.6" y="520" width="59.2" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
 <text x="473.6" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Tray</text>
 <rect x="530.8" y="520" width="157.4" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>

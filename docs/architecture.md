@@ -1,295 +1,85 @@
-# OpenAdapt Architecture
+# OpenAdapt architecture
 
-OpenAdapt v1.0+ uses a **modular meta-package architecture** where the main `openadapt` package provides a unified CLI and depends on focused sub-packages.
+> **Canonical architecture.** See
+> [docs.openadapt.ai/concepts](https://docs.openadapt.ai/concepts/) for the
+> maintained design and trust-boundary documentation.
 
-## System Overview
-
-```mermaid
-flowchart TB
-    subgraph User["User"]
-        UI[Desktop/Web GUI]
-    end
-
-    subgraph OpenAdapt["OpenAdapt Meta-Package"]
-        CLI[openadapt CLI]
-        LAZY[Lazy Imports]
-    end
-
-    subgraph Core["Core Packages"]
-        CAPTURE[openadapt-capture]
-        ML[openadapt-ml]
-        EVALS[openadapt-evals]
-        VIEWER[openadapt-viewer]
-    end
-
-    subgraph Optional["Optional Packages"]
-        GROUNDING[openadapt-grounding]
-        RETRIEVAL[openadapt-retrieval]
-        PRIVACY[openadapt-privacy]
-    end
-
-    subgraph Storage["Storage"]
-        DEMO[(Demonstration<br/>JSON/Parquet)]
-        MODEL[(Model<br/>Checkpoints)]
-        RESULTS[(Evaluation<br/>Results)]
-    end
-
-    %% User interactions
-    UI --> CAPTURE
-
-    %% CLI orchestration
-    CLI --> CAPTURE
-    CLI --> ML
-    CLI --> EVALS
-    CLI --> VIEWER
-
-    %% Lazy loading
-    LAZY -.-> GROUNDING
-    LAZY -.-> RETRIEVAL
-    LAZY -.-> PRIVACY
-
-    %% Data flow
-    CAPTURE --> DEMO
-    DEMO --> ML
-    ML --> MODEL
-    MODEL --> EVALS
-    EVALS --> RESULTS
-    DEMO --> VIEWER
-
-    %% Optional integrations
-    GROUNDING -.-> ML
-    RETRIEVAL -.-> ML
-    PRIVACY -.-> CAPTURE
-    PRIVACY -.-> VIEWER
-
-    classDef metaPkg fill:#4A90D9,stroke:#2E5A8B,color:#fff
-    classDef corePkg fill:#5CB85C,stroke:#3D7A3D,color:#fff
-    classDef optPkg fill:#F0AD4E,stroke:#C79121,color:#fff
-    classDef storage fill:#9B59B6,stroke:#6C3483,color:#fff
-    classDef user fill:#E74C3C,stroke:#A93226,color:#fff
-
-    class CLI,LAZY metaPkg
-    class CAPTURE,ML,EVALS,VIEWER corePkg
-    class GROUNDING,RETRIEVAL,PRIVACY optPkg
-    class DEMO,MODEL,RESULTS storage
-    class UI user
-```
-
-## Data Flow Pipeline
+OpenAdapt is a governed demonstration compiler. A human demonstrates a task.
+The engine retains evidence, compiles a deterministic program, qualifies it
+against a policy, and runs it through a fail-closed runtime.
 
 ```mermaid
 flowchart LR
-    subgraph Demonstrate["1. Demonstrate"]
-        A[Human Trajectory] --> B[Capture Session]
-        B --> C[Observations + Actions]
-    end
-
-    subgraph Store["2. Store"]
-        C --> D[JSON/Parquet Files]
-        D --> E[Demonstration Library]
-    end
-
-    subgraph Learn["3. Learn"]
-        E --> F[Trajectory Abstraction]
-        F --> G[Policy Learning]
-        G --> H[Checkpoint]
-    end
-
-    subgraph Execute["4. Execute"]
-        H --> I[Trained Policy]
-        I --> J[Inference]
-        J --> K[Agent Deployment]
-    end
-
-    subgraph Evaluate["5. Evaluate"]
-        I --> L[Benchmark Runner]
-        L --> M[Metrics]
-        M --> N[Results Report]
-    end
-
-    %% Optional enhancements
-    GROUND[Grounding] -.-> J
-    RETRIEVE[Retrieval] -.-> F
-    PRIV[Privacy] -.-> C
-
-    classDef phase fill:#3498DB,stroke:#1A5276,color:#fff
-    classDef optional fill:#F39C12,stroke:#B7950B,color:#fff
-
-    class A,B,C,D,E,F,G,H,I,J,K,L,M,N phase
-    class GROUND,RETRIEVE,PRIV optional
+    H[Human demonstration] --> R[Surface recorder]
+    R --> C[openadapt-flow compiler]
+    C --> B[Inspectable bundle]
+    B --> Q[Qualification and certification]
+    Q --> X[Governed runtime]
+    X --> V[Independent effect verifier]
+    V -->|contract passes| OK[VERIFIED]
+    V -->|uncertain or failed| STOP[HALTED or reconciliation]
 ```
 
-## Package Dependencies
+## Repository roles
 
-```mermaid
-graph TD
-    OA[openadapt<br/>Meta-package]
+| Component | Product role | Source availability |
+| --- | --- | --- |
+| `OpenAdapt` | Launcher, meta-package, unified CLI, and stable public entry point | MIT |
+| `openadapt-flow` | Compiler, certification, replay, governed repair, and run reports | MIT |
+| `openadapt-capture` | Native screen, mouse, keyboard, timing, window, and media capture | MIT |
+| `openadapt-desktop` | Cross-platform authoring and operator cockpit | MIT |
+| `openadapt-privacy` | Local sanitization and review mechanisms | MIT |
+| OpenAdapt Cloud | Managed control plane, identity, billing, fleet coordination, and hosted execution | Proprietary |
 
-    OA -->|capture| CAP[openadapt-capture]
-    OA -->|ml| MLP[openadapt-ml]
-    OA -->|evals| EVL[openadapt-evals]
-    OA -->|viewer| VWR[openadapt-viewer]
-    OA -->|grounding| GRD[openadapt-grounding]
-    OA -->|retrieval| RET[openadapt-retrieval]
-    OA -->|privacy| PRV[openadapt-privacy]
+The launcher installs Flow in its base dependency set. Capability extras select
+the surface-specific dependencies. The launcher does not implement a second
+compiler or runtime.
 
-    %% Core bundle
-    OA -->|core| CORE[Core Bundle]
-    CORE --> CAP
-    CORE --> MLP
-    CORE --> EVL
-    CORE --> VWR
+## Recording paths
 
-    %% All bundle
-    OA -->|all| ALL[Full Bundle]
-    ALL --> CORE
-    ALL --> GRD
-    ALL --> RET
-    ALL --> PRV
+The browser recorder uses Playwright. DOM identity, field geometry, and
+source-time secret exclusion are required on this path.
 
-    classDef meta fill:#2C3E50,stroke:#1A252F,color:#fff
-    classDef core fill:#27AE60,stroke:#1E8449,color:#fff
-    classDef optional fill:#E67E22,stroke:#A04000,color:#fff
-    classDef bundle fill:#8E44AD,stroke:#5B2C6F,color:#fff
+Native and remote demonstrations use `openadapt-capture` for screen, input,
+timing, window scope, and media. Optional UIA, Accessibility, or AT-SPI
+observers add structural evidence on the local desktop. RDP and Citrix remain
+external pixel surfaces.
 
-    class OA meta
-    class CAP,MLP,EVL,VWR core
-    class GRD,RET,PRV optional
-    class CORE,ALL bundle
-```
+All paths normalize into the recording contract that Flow compiles.
 
-## Component Details
+## Healthy execution
 
-### Core Packages
+A healthy run uses the compiled program and retained evidence. It makes no
+generative-model call. The runtime resolves targets through the strongest
+available deterministic evidence. It checks the live state before an action
+and the declared result after an action.
 
-| Package | Responsibility | Key Exports |
-|---------|---------------|-------------|
-| **openadapt-capture** | Demonstration collection, observation-action capture, storage | `CaptureSession`, `Recorder`, `Action` |
-| **openadapt-ml** | Policy learning, training, inference | `QwenVLAdapter`, `Trainer`, `AgentPolicy` |
-| **openadapt-evals** | Benchmark evaluation, metrics | `ApiAgent`, `BenchmarkAdapter`, `evaluate_agent_on_benchmark` |
-| **openadapt-viewer** | Trajectory visualization | `PageBuilder`, `HTMLBuilder` |
+An optional model can propose a repair when policy permits it. The proposal is
+not authorization. A repair remains a versioned candidate until review,
+qualification, approval, and promotion complete.
 
-### Optional Packages
+## Result states
 
-| Package | Responsibility | Use Case |
-|---------|---------------|----------|
-| **openadapt-grounding** | UI element grounding | Improved action accuracy with element detection |
-| **openadapt-retrieval** | Multimodal trajectory search | Find similar demonstrations for few-shot policy learning |
-| **openadapt-privacy** | PII/PHI scrubbing | Redact sensitive data before storage/training |
+`VERIFIED` means that the complete configured production contract confirmed the
+declared business effect. `COMPLETED_UNVERIFIED` is a Demo outcome. It is not a
+production success. Uncertainty after possible delivery requires
+reconciliation. The runtime does not retry a possibly dispatched effect
+without proof.
 
-## Evaluation Loop
+## Data boundary
 
-```mermaid
-flowchart TB
-    subgraph Agent["Agent Under Test"]
-        POLICY[Agent Policy]
-        API[API Agent<br/>Claude/GPT]
-    end
+Raw recordings and live observations stay local by default. Compilation does
+not make a recording safe to upload. A derivative crosses a boundary only
+after local sanitization, complete inventory, review, exact-hash approval, and
+destination policy checks.
 
-    subgraph Benchmark["Benchmark System"]
-        ADAPTER[Benchmark Adapter]
-        MOCK[Mock Adapter]
-        LIVE[Live WAA Adapter]
-    end
+## Maturity boundary
 
-    subgraph Tasks["Task Execution"]
-        TASK[Get Task]
-        OBS[Observe State]
-        ACT[Execute Action]
-        CHECK[Check Success]
-    end
+The launcher and Flow engine are Beta. Browser workflows run through the
+complete clean-machine lifecycle on Linux, macOS, and Windows. Native and
+remote evidence is bounded to named tasks and environments. Citrix is
+code-qualified and requires a live deployment qualification. No repository
+status certifies an arbitrary customer workflow.
 
-    subgraph Metrics["Metrics"]
-        SUCCESS[Success Rate]
-        STEPS[Avg Steps]
-        TIME[Execution Time]
-    end
-
-    POLICY --> ADAPTER
-    API --> ADAPTER
-    ADAPTER --> MOCK
-    ADAPTER --> LIVE
-
-    MOCK --> TASK
-    LIVE --> TASK
-    TASK --> OBS
-    OBS --> POLICY
-    OBS --> API
-    POLICY --> ACT
-    API --> ACT
-    ACT --> CHECK
-    CHECK -->|next| TASK
-    CHECK -->|done| SUCCESS
-    CHECK --> STEPS
-    CHECK --> TIME
-
-    classDef agent fill:#3498DB,stroke:#1A5276,color:#fff
-    classDef bench fill:#2ECC71,stroke:#1E8449,color:#fff
-    classDef task fill:#9B59B6,stroke:#6C3483,color:#fff
-    classDef metric fill:#E74C3C,stroke:#A93226,color:#fff
-
-    class POLICY,API agent
-    class ADAPTER,MOCK,LIVE bench
-    class TASK,OBS,ACT,CHECK task
-    class SUCCESS,STEPS,TIME metric
-```
-
-## CLI Command Structure
-
-```mermaid
-graph LR
-    OA[openadapt]
-
-    OA --> CAP[capture]
-    OA --> TRN[train]
-    OA --> EVL[eval]
-    OA --> SRV[serve]
-    OA --> VER[version]
-    OA --> DOC[doctor]
-
-    CAP --> CS[start]
-    CAP --> CT[stop]
-    CAP --> CL[list]
-    CAP --> CV[view]
-
-    TRN --> TS[start]
-    TRN --> TST[status]
-    TRN --> TSP[stop]
-
-    EVL --> ER[run]
-    EVL --> EM[mock]
-
-    classDef root fill:#2C3E50,stroke:#1A252F,color:#fff
-    classDef group fill:#3498DB,stroke:#1A5276,color:#fff
-    classDef cmd fill:#27AE60,stroke:#1E8449,color:#fff
-
-    class OA root
-    class CAP,TRN,EVL,SRV,VER,DOC group
-    class CS,CT,CL,CV,TS,TST,TSP,ER,EM cmd
-```
-
-## Installation Options
-
-```bash
-# Minimal CLI only
-pip install openadapt
-
-# Individual packages
-pip install openadapt[capture]     # Demonstration collection
-pip install openadapt[ml]          # Policy learning and inference
-pip install openadapt[evals]       # Benchmark evaluation
-pip install openadapt[viewer]      # Trajectory visualization
-
-# Optional packages
-pip install openadapt[grounding]   # UI element grounding
-pip install openadapt[retrieval]   # Trajectory retrieval
-pip install openadapt[privacy]     # PII/PHI scrubbing
-
-# Bundles
-pip install openadapt[core]        # capture + ml + evals + viewer
-pip install openadapt[all]         # Everything
-```
-
----
-
-*This architecture enables independent development and versioning of each component while maintaining a unified CLI experience.*
+The former model-training architecture remains in Git history and optional
+research packages. It is not the current product architecture.

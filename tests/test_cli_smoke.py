@@ -255,20 +255,6 @@ def test_doctor_lists_flow_as_core_not_extras():
     assert "pip install openadapt[" in optional_section
 
 
-# ---------------------------------------------------------------------------
-# Flow command (the demonstration compiler — flagship path)
-# ---------------------------------------------------------------------------
-
-FLOW_VERBS = {"demo-record", "record", "compile", "replay", "lint", "certify"}
-
-# Verbs wrapped with explicit click options (local --help, no engine import).
-# `record` and `replay` are intentionally absent: they delegate through the
-# passthrough group so every engine option (--backend, --config, native target
-# selectors, ...) forwards verbatim — their --help comes from the engine.
-FLOW_PASSTHROUGH_VERBS = {"record", "replay"}
-FLOW_WRAPPED_VERBS = FLOW_VERBS - FLOW_PASSTHROUGH_VERBS
-
-
 def test_launcher_flow_and_substrate_extras_metadata():
     """Install routes resolve the Flow release whose replay parser exposes
     every native/remote backend, without installing OS bindings elsewhere."""
@@ -279,10 +265,10 @@ def test_launcher_flow_and_substrate_extras_metadata():
 
     assert metadata["dependencies"].count("openadapt-flow[hosted]>=1.29.0,<2.0.0") == 1
     assert extras["flow"] == ["openadapt-flow>=1.29.0,<2.0.0"]
-    assert extras["browser"] == ["playwright>=1.44"]
+    assert extras["browser"] == ["openadapt-flow[browser]>=1.29.0,<2.0.0"]
     assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
     assert extras["capture"] == [
-        "openadapt-capture>=1.0.4,<2.0.0",
+        "openadapt-capture>=1.2.0,<2.0.0",
         "openadapt-flow[capture]>=1.29.0,<2.0.0",
     ]
     assert extras["windows"] == ["openadapt-flow[windows]>=1.29.0,<2.0.0"]
@@ -308,6 +294,29 @@ def test_doctor_does_not_require_browser_for_citrix(monkeypatch):
     assert "no Playwright or Chromium setup will run" in result.output
 
 
+def test_doctor_rdp_fails_without_transport_dependency(monkeypatch):
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: None)
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", "rdp"])
+
+    assert result.exit_code != 0
+    assert "[MISSING] rdp" in result.output
+    assert "python -m pip install 'openadapt[rdp]'" in result.output
+    assert "System check failed" in result.output
+
+
+def test_doctor_rdp_reports_transport_ready(monkeypatch):
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in {"aardwolf", "openadapt_flow"} else None,
+    )
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", "rdp"])
+
+    assert result.exit_code == 0, result.output
+    assert "RDP transport dependency is installed" in result.output
+
+
 def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
     monkeypatch,
 ):
@@ -320,7 +329,8 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
         "importlib.util.find_spec",
         lambda name: (
             object()
-            if name in {"openadapt_flow", "fastapi", "uvicorn", "openadapt_types"}
+            if name
+            in {"openadapt_flow", "aardwolf", "fastapi", "uvicorn", "openadapt_types"}
             else None
         ),
     )
@@ -345,7 +355,7 @@ def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch)
     """Base Flow hosted installs must not receive an unusable console command."""
     monkeypatch.setattr(
         "importlib.util.find_spec",
-        lambda name: object() if name == "openadapt_flow" else None,
+        lambda name: object() if name in {"openadapt_flow", "aardwolf"} else None,
     )
     monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
 
@@ -363,7 +373,9 @@ def test_deploy_console_requires_openadapt_types(monkeypatch):
     monkeypatch.setattr(
         "importlib.util.find_spec",
         lambda name: (
-            object() if name in {"openadapt_flow", "fastapi", "uvicorn"} else None
+            object()
+            if name in {"openadapt_flow", "aardwolf", "fastapi", "uvicorn"}
+            else None
         ),
     )
     monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.30.0")
@@ -407,6 +419,22 @@ def test_deploy_preflight_fails_without_web_runtime(monkeypatch):
     assert "Preflight passed" not in result.output
 
 
+def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name == "openadapt_flow" else None,
+    )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
+
+    assert result.exit_code != 0
+    assert "[MISSING] RDP transport dependency" in result.output
+    assert "python -m pip install 'openadapt[rdp]'" in result.output
+    assert "Preflight failed" in result.output
+    assert "Preflight passed" not in result.output
+
+
 @pytest.mark.parametrize("flow_version", ["1.28.9", "2.0.0", "2.1.0", "invalid"])
 def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
     monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
@@ -428,6 +456,8 @@ def test_top_level_help_leads_with_flow():
     # Quick Start headline and Commands listing both lead with flow.
     assert "Beta launcher" in result.output
     assert "openadapt flow demo-record" in result.output
+    assert "openadapt quickstart" in result.output
+    assert "effect-verified first run" in result.output
     assert "Standalone local human GUI capture" in result.output
     assert "Research: evaluate" in result.output
     assert "Research: train" in result.output
@@ -475,42 +505,77 @@ def test_capture_start_refuses_when_recorder_never_becomes_ready(monkeypatch):
     assert "Capture saved" not in result.output
 
 
-def test_flow_help_lists_verbs():
-    """`openadapt flow --help` lists every mounted verb (no flow install
-    needed — click renders help before importing openadapt-flow)."""
-    runner = CliRunner()
-    result = runner.invoke(cli_main, ["flow", "--help"])
+def test_capture_stop_fails_until_capture_has_a_control_channel():
+    result = CliRunner().invoke(cli_main, ["capture", "stop"])
+
+    assert result.exit_code != 0
+    assert "Ctrl+C in the recorder terminal" in result.output
+    assert "authenticated, owner-only local control channel" in result.output
+    assert "Stopping active capture session" not in result.output
+
+
+def test_flow_help_is_current_engine_help():
+    """The launcher must not maintain a second, stale Flow command list."""
+    _require_openadapt_flow()
+    import openadapt_flow.__main__ as flow_main_mod
+
+    result = CliRunner().invoke(cli_main, ["flow", "--help"])
+
     assert result.exit_code == 0, result.output
-    for verb in FLOW_VERBS:
-        assert verb in result.output, f"'{verb}' missing from `flow --help`"
+    assert result.output == flow_main_mod.build_parser().format_help()
 
 
-def test_flow_subcommand_help_renders():
-    """Each explicitly wrapped flow subcommand renders --help without
-    importing flow."""
-    runner = CliRunner()
-    for verb in FLOW_WRAPPED_VERBS:
-        result = runner.invoke(cli_main, ["flow", verb, "--help"])
-        assert result.exit_code == 0, f"`flow {verb} --help` failed: {result.output}"
-
-
-@pytest.mark.parametrize("verb", sorted(FLOW_PASSTHROUGH_VERBS))
-def test_flow_capture_and_replay_help_is_engine_help(verb):
-    """Record/replay help must come from the engine, not a stale launcher
-    wrapper that hides backend and native-target options."""
+@pytest.mark.parametrize(
+    ("verb", "expected_options"),
+    [
+        ("record", ("--backend", "--agent-url", "--task")),
+        ("replay", ("--backend", "--config", "--rdp-readiness-text")),
+        ("demo-record", ("--record-video", "--note-text", "--param-name")),
+        ("compile", ("--accept-params", "--params-from", "--no-confirm-params")),
+        ("certify", ("--config", "--policy")),
+    ],
+)
+def test_flow_subcommand_help_is_engine_help(verb, expected_options):
     _require_openadapt_flow()
     result = CliRunner().invoke(cli_main, ["flow", verb, "--help"])
     assert result.exit_code == 0, result.output
-    expected_options = (
-        ("--backend", "--agent-url", "--task")
-        if verb == "record"
-        else ("--backend", "--config", "--rdp-readiness-text")
-    )
     for option in expected_options:
         assert option in result.output, (
             f"{option} missing from `flow {verb} --help`; the launcher is "
-            "hiding engine options again"
+            "hiding current engine options"
         )
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["demo-record", "--out", "rec", "--record-video"],
+        [
+            "compile",
+            "rec",
+            "--out",
+            "bundle",
+            "--name",
+            "demo",
+            "--params-from",
+            "params.json",
+            "--accept-params",
+            "note",
+            "--no-confirm-params",
+        ],
+        ["certify", "bundle", "--config", "deployment.yaml"],
+    ],
+)
+def test_flow_forwards_current_engine_options_verbatim(monkeypatch, argv):
+    captured = {}
+    monkeypatch.setattr(
+        "openadapt.cli._run_flow", lambda value: captured.update(argv=list(value))
+    )
+
+    result = CliRunner().invoke(cli_main, ["flow", *argv])
+
+    assert result.exit_code == 0, result.output
+    assert captured["argv"] == argv
 
 
 def test_flow_record_forwards_backend_options(monkeypatch):

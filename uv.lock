@@ -2326,17 +2326,16 @@ dependencies = [
 all = [
     { name = "openadapt-capture" },
     { name = "openadapt-evals" },
-    { name = "openadapt-flow", extra = ["capture", "privacy", "rdp", "windows"] },
+    { name = "openadapt-flow", extra = ["browser", "capture", "privacy", "rdp", "windows"] },
     { name = "openadapt-flow", extra = ["linux"], marker = "sys_platform == 'linux'" },
     { name = "openadapt-flow", extra = ["macos"], marker = "sys_platform == 'darwin'" },
     { name = "openadapt-grounding" },
     { name = "openadapt-ml" },
     { name = "openadapt-retrieval" },
     { name = "openadapt-viewer" },
-    { name = "playwright" },
 ]
 browser = [
-    { name = "playwright" },
+    { name = "openadapt-flow", extra = ["browser"] },
 ]
 capture = [
     { name = "openadapt-capture" },
@@ -2396,9 +2395,10 @@ requires-dist = [
     { name = "openadapt", extras = ["capture", "ml", "evals", "viewer"], marker = "extra == 'core'" },
     { name = "openadapt", extras = ["linux"], marker = "sys_platform == 'linux' and extra == 'all'" },
     { name = "openadapt", extras = ["macos"], marker = "sys_platform == 'darwin' and extra == 'all'" },
-    { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.0.4,<2.0.0" },
+    { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0,<2.0.0" },
     { name = "openadapt-evals", marker = "extra == 'evals'", specifier = ">=0.1.0" },
     { name = "openadapt-flow", marker = "extra == 'flow'", specifier = ">=1.29.0,<2.0.0" },
+    { name = "openadapt-flow", extras = ["browser"], marker = "extra == 'browser'", specifier = ">=1.29.0,<2.0.0" },
     { name = "openadapt-flow", extras = ["capture"], marker = "extra == 'capture'", specifier = ">=1.29.0,<2.0.0" },
     { name = "openadapt-flow", extras = ["hosted"], specifier = ">=1.29.0,<2.0.0" },
     { name = "openadapt-flow", extras = ["linux"], marker = "sys_platform == 'linux' and extra == 'linux'", specifier = ">=1.29.0,<2.0.0" },
@@ -2410,7 +2410,6 @@ requires-dist = [
     { name = "openadapt-ml", marker = "extra == 'ml'", specifier = ">=0.2.0" },
     { name = "openadapt-retrieval", marker = "extra == 'retrieval'", specifier = ">=0.1.0" },
     { name = "openadapt-viewer", marker = "extra == 'viewer'", specifier = ">=0.1.0" },
-    { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
 ]
@@ -2503,6 +2502,9 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+browser = [
+    { name = "playwright" },
+]
 capture = [
     { name = "openadapt-capture" },
 ]
