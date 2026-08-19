@@ -39,9 +39,15 @@ jobs:
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
         run: python scripts/check_source_boundary.py --require-dist
 
+      # v1.14.0 bundles twine 6.1.0 and packaging 25.0, which reject the
+      # Metadata-Version 2.5 that current hatchling emits. That pin failed the
+      # openadapt-evals 0.91.0 publish after the tag, the release commit and
+      # the GitHub release had already landed, leaving PyPI stale. v1.14.2
+      # bundles twine 7.0.0 and packaging 26.2, and is the same pin
+      # openadapt-flow and openadapt-capture use.
       - name: Publish to PyPI
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
       - name: Publish to GitHub Releases
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
