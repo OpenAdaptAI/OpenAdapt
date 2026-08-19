@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v0.10.1 (2026-08-19)
+
+### Bug Fixes
+
+- **ci**: Publish with an action that accepts Metadata-Version 2.5
+  ([#26](https://github.com/OpenAdaptAI/openadapt-types/pull/26),
+  [`bdaca39`](https://github.com/OpenAdaptAI/openadapt-types/commit/bdaca39dd8eb9ddec1fb326b26375b000a8e44ce))
+
+pypa/gh-action-pypi-publish v1.14.0 bundles twine 6.1.0 and packaging 25.0, which reject
+  Metadata-Version 2.5 -- the version current hatchling emits. The publish step fails with:
+
+InvalidDistribution: Invalid distribution metadata:
+
+'2.5' is not a valid metadata version
+
+This repo builds with unpinned hatchling via the semantic-release build_command, so it emits 2.5 and
+  is exposed to exactly this failure.
+
+This is not hypothetical: the same pin broke the openadapt-evals 0.91.0 release. The tag, the
+  version-bump commit and the GitHub release all landed, then "Publish to PyPI" failed, leaving PyPI
+  stale while every other release artifact said the version had shipped.
+
+Move to v1.14.2 (twine 7.0.0 + packaging 26.2), the pin openadapt-flow and openadapt-capture already
+  use and the one applied to openadapt-evals in OpenAdaptAI/openadapt-evals#291.
+
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+
+
 ## v0.10.0 (2026-08-08)
 
 ### Documentation
