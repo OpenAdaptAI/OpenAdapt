@@ -30,9 +30,10 @@ or :func:`load_cached_policy` -- they degrade, mirroring the keychain gate in
 missing-backend error). Only :func:`fetch_effective_policy` raises, so its
 caller can decide whether to fall back to cache.
 
-The raw server body is cached to ``~/.openadapt/policy.json`` (same dir as
-``config.toml``) with an atomic temp-file + :func:`os.replace` write so a
-half-written file can never be read back.
+The server body is cached in a closed envelope at ``~/.openadapt/policy.json``
+(same dir as ``config.toml``). The envelope binds it to the canonical host,
+credential identity, organization, policy version, and fetch time. An atomic
+temp-file + :func:`os.replace` write prevents partial reads.
 
 BINDING THE POLICY TO A RUN
 ---------------------------
@@ -57,17 +58,26 @@ Two invariants govern the projection:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import tempfile
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from loguru import logger
 
-from engine.auth.store import auth_header
+from engine.auth.store import (
+    active_credential,
+    auth_header,
+    canonical_host_origin,
+    token_for_host,
+)
 from engine.config import DEFAULT_CONFIG_TOML
 
 # Endpoint the cloud serves the resolved (merged) org policy from.
@@ -80,6 +90,11 @@ DEFAULT_POLICY_CACHE = DEFAULT_CONFIG_TOML.parent / "policy.json"
 # Default HTTP timeout (seconds) for a policy fetch. Kept short so a slow/hung
 # control plane degrades quickly to cache rather than stalling a run.
 DEFAULT_TIMEOUT = 10.0
+
+# A cached org policy is an offline continuity aid, not permanent authority.
+# After one day the Desktop must reconnect before it can govern another run.
+DEFAULT_CACHE_MAX_AGE_S = 24 * 60 * 60
+CACHE_SCHEMA = "openadapt.policy-cache/v3"
 
 # The SAFEST value for every safety key the contract defines. A missing or
 # unreachable value MUST resolve to the entry here (fail-closed): more checking,
@@ -157,6 +172,109 @@ def _policy_cache_path() -> Path:
     return Path(override) if override else DEFAULT_POLICY_CACHE
 
 
+def _credential_binding_hmac(host: str) -> str | None:
+    """Return a keyed, destination-bound identity for the active bearer.
+
+    The bearer is the HMAC key. It is never stored and it is not passed through
+    an unkeyed password-hash operation. The public message binds the result to
+    this cache contract and exact hosted origin.
+    """
+
+    token = token_for_host(host)
+    if not token:
+        return None
+    origin = canonical_host_origin(host)
+    if not origin:
+        return None
+    message = f"openadapt.policy-cache-credential/v2\0{origin}".encode()
+    return hmac.new(token.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def _credential_org_id(host: str) -> str | None:
+    """Return the keychain org only when it belongs to this host and bearer."""
+
+    credential = active_credential()
+    if not credential:
+        return None
+    if canonical_host_origin(str(credential.get("host") or "")) != canonical_host_origin(host):
+        return None
+    if str(credential.get("token") or "").strip() != token_for_host(host):
+        return None
+    org_id = credential.get("org_id")
+    return org_id if isinstance(org_id, str) and org_id else None
+
+
+def _safe_policy_origin(host: str) -> str:
+    """Return the exact permitted origin for policy fetch and cache binding."""
+
+    parsed_host = urlsplit(str(host or "").strip())
+    if parsed_host.scheme.lower() == "http" and parsed_host.hostname not in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }:
+        raise PolicyFetchError("A remote policy host must use HTTPS.")
+    origin = canonical_host_origin(host)
+    if not origin:
+        raise PolicyFetchError("Policy host is not a valid HTTP(S) origin.")
+    return origin
+
+
+def _policy_version(policy: Mapping[str, Any]) -> int | None:
+    """Return a valid monotonic policy version, else ``None``."""
+
+    value = policy.get("policy_version")
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+def _policy_sha256(policy: Mapping[str, Any]) -> str:
+    """Bind one exact policy body without retaining another sensitive copy."""
+
+    canonical = json.dumps(
+        policy,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    digest = hashlib.sha256()
+    digest.update(b"openadapt.policy-cache-body/v1\0")
+    digest.update(canonical)
+    return digest.hexdigest()
+
+
+def _policy_authority_sha256(policy: Mapping[str, Any]) -> str:
+    """Bind only version-controlled organization policy authority.
+
+    The effective-policy response also carries per-request and per-user fields.
+    Those fields can change without an organization policy version change. They
+    must not disable a valid refresh. The fields below define the organization
+    authority that must move only with ``policy_version``.
+    """
+
+    authority = {
+        key: policy.get(key)
+        for key in (
+            "org_id",
+            "baseline_version",
+            "org",
+            "safety",
+            "grounding_model",
+        )
+    }
+    canonical = json.dumps(
+        authority,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    digest = hashlib.sha256()
+    digest.update(b"openadapt.policy-authority/v1\0")
+    digest.update(canonical)
+    return digest.hexdigest()
+
+
 def fetch_effective_policy(host: str, timeout: float = DEFAULT_TIMEOUT) -> dict[str, Any]:
     """Fetch the org's effective policy over the network and refresh the cache.
 
@@ -164,7 +282,7 @@ def fetch_effective_policy(host: str, timeout: float = DEFAULT_TIMEOUT) -> dict[
     credential resolved by :func:`~engine.auth.store.auth_header`, modeled on
     :meth:`engine.auth.paste.PasteTokenProvider._validate`. On success, the RAW
     response body is written atomically to the cache file so a later offline
-    :func:`load_cached_policy` returns the last-known-good policy.
+    :func:`load_cached_policy` can return it only to the same principal.
 
     Args:
         host: Hosted control-plane base URL (e.g. ``https://app.openadapt.ai``).
@@ -176,8 +294,9 @@ def fetch_effective_policy(host: str, timeout: float = DEFAULT_TIMEOUT) -> dict[
     Raises:
         PolicyFetchError: On any non-2xx response, network error, or invalid JSON.
     """
-    url = f"{host.rstrip('/')}{POLICY_PATH}"
-    headers = {**auth_header(), "Accept": "application/json"}
+    origin = _safe_policy_origin(host)
+    url = f"{origin}{POLICY_PATH}"
+    headers = {**auth_header(origin), "Accept": "application/json"}
     try:
         resp = httpx.get(url, headers=headers, timeout=timeout)
     except httpx.HTTPError as exc:
@@ -194,13 +313,36 @@ def fetch_effective_policy(host: str, timeout: float = DEFAULT_TIMEOUT) -> dict[
         raise PolicyFetchError(f"Policy response was not valid JSON: {exc}") from exc
     if not isinstance(policy, dict):
         raise PolicyFetchError("Policy response was not a JSON object.")
+    if _policy_version(policy) is None:
+        raise PolicyFetchError("Policy response did not include a valid policy version.")
 
-    _write_cache(policy)
+    org_id = policy.get("org_id")
+    if not isinstance(org_id, str) or not org_id:
+        raise PolicyFetchError("Policy response did not identify its organization.")
+    credential_org_id = _credential_org_id(origin)
+    if credential_org_id is not None and credential_org_id != org_id:
+        raise PolicyFetchError("Policy organization did not match the active credential.")
+
+    cached = load_cached_policy(origin, max_age_s=float("inf"))
+    if cached is not None:
+        cached_version = _policy_version(cached)
+        policy_version = _policy_version(policy)
+        if cached_version is not None and policy_version is not None:
+            if policy_version < cached_version:
+                raise PolicyFetchError("Policy response version moved backwards.")
+            if (
+                policy_version == cached_version
+                and _policy_authority_sha256(policy)
+                != _policy_authority_sha256(cached)
+            ):
+                raise PolicyFetchError("Policy response changed without a new version.")
+
+    _write_cache(policy, origin)
     return policy
 
 
-def _write_cache(policy: dict[str, Any]) -> None:
-    """Atomically persist the raw policy body to the cache file.
+def _write_cache(policy: dict[str, Any], host: str) -> None:
+    """Atomically persist a host, credential, org, and time-bound cache envelope.
 
     Writes to a temp file in the cache directory, then :func:`os.replace`s it
     into place so a reader can never observe a half-written file. Degrades
@@ -208,12 +350,37 @@ def _write_cache(policy: dict[str, Any]) -> None:
     still usable in-memory even when the disk is read-only.
     """
     path = _policy_cache_path()
+    host_origin = canonical_host_origin(host)
+    credential_binding_hmac = _credential_binding_hmac(host)
+    org_id = policy.get("org_id")
+    policy_version = _policy_version(policy)
+    if (
+        not host_origin
+        or not credential_binding_hmac
+        or not isinstance(org_id, str)
+        or not org_id
+        or policy_version is None
+    ):
+        logger.warning("Could not bind policy cache to the current hosted credential")
+        return
+    envelope = {
+        "schema": CACHE_SCHEMA,
+        "binding": {
+            "host_origin": host_origin,
+            "credential_binding_hmac": credential_binding_hmac,
+            "org_id": org_id,
+            "policy_version": policy_version,
+            "policy_sha256": _policy_sha256(policy),
+        },
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "policy": policy,
+    }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".policy.", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(policy, fh)
+                json.dump(envelope, fh)
             os.replace(tmp, path)
         except Exception:
             # Clean up the temp file on any failure so we don't leak turds.
@@ -226,8 +393,13 @@ def _write_cache(policy: dict[str, Any]) -> None:
         logger.warning("Could not persist policy cache: {e}", e=exc)
 
 
-def load_cached_policy() -> dict[str, Any] | None:
-    """Read the last-cached policy body, or ``None`` if absent/unreadable.
+def load_cached_policy(
+    host: str,
+    *,
+    now: datetime | None = None,
+    max_age_s: float = DEFAULT_CACHE_MAX_AGE_S,
+) -> dict[str, Any] | None:
+    """Read only a fresh cache bound to this exact host and credential.
 
     Degrade-not-raise (mirrors :func:`engine.auth.store._kr_get`): a missing
     file, unreadable file, or corrupt JSON all resolve to ``None`` rather than
@@ -247,9 +419,61 @@ def load_cached_policy() -> dict[str, Any] | None:
     except (json.JSONDecodeError, ValueError):
         logger.warning("Cached policy at {p} is corrupt; ignoring", p=path)
         return None
-    if not isinstance(data, dict):
+    if not isinstance(data, dict) or set(data) != {
+        "schema",
+        "binding",
+        "fetched_at",
+        "policy",
+    }:
         return None
-    return data
+    binding = data.get("binding")
+    policy = data.get("policy")
+    if data.get("schema") != CACHE_SCHEMA or not isinstance(binding, dict):
+        return None
+    if set(binding) != {
+        "host_origin",
+        "credential_binding_hmac",
+        "org_id",
+        "policy_version",
+        "policy_sha256",
+    }:
+        return None
+    if not isinstance(policy, dict):
+        return None
+    expected_origin = canonical_host_origin(host)
+    expected_credential = _credential_binding_hmac(host)
+    if not expected_origin or not expected_credential:
+        return None
+    if binding.get("host_origin") != expected_origin:
+        return None
+    if not hmac.compare_digest(
+        str(binding.get("credential_binding_hmac") or ""), expected_credential
+    ):
+        return None
+    policy_org_id = policy.get("org_id")
+    if not isinstance(policy_org_id, str) or not policy_org_id:
+        return None
+    if binding.get("org_id") != policy_org_id:
+        return None
+    credential_org_id = _credential_org_id(host)
+    if credential_org_id is not None and credential_org_id != policy_org_id:
+        return None
+    if binding.get("policy_version") != policy.get("policy_version"):
+        return None
+    if _policy_version(policy) is None:
+        return None
+    if binding.get("policy_sha256") != _policy_sha256(policy):
+        return None
+    try:
+        fetched_at = datetime.fromisoformat(str(data.get("fetched_at")))
+        if fetched_at.tzinfo is None:
+            return None
+        age_s = ((now or datetime.now(UTC)) - fetched_at.astimezone(UTC)).total_seconds()
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if age_s < 0 or age_s > max_age_s:
+        return None
+    return policy
 
 
 def harden_safety(policy: dict[str, Any]) -> dict[str, Any]:
@@ -330,7 +554,7 @@ def resolve_effective_policy(
         policy = fetch_effective_policy(host, timeout=timeout)
     except PolicyFetchError as exc:
         logger.warning("Policy fetch failed ({e}); falling back to cache", e=exc)
-        policy = load_cached_policy()
+        policy = load_cached_policy(host)
         source = "cache"
 
     if policy is None:

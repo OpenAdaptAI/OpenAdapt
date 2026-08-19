@@ -49,6 +49,7 @@ export function Settings({
     overlayPresentationEnabled,
   );
   const [overlayError, setOverlayError] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   useEffect(() => {
     engineTry<Cfg>(CMD.GET_CONFIG, {}, cfg).then(setCfg);
@@ -60,11 +61,24 @@ export function Settings({
   }, []);
 
   async function save<K extends keyof Cfg>(key: K, value: Cfg[K]) {
-    setCfg((c) => ({ ...c, [key]: value }));
+    setConfigError(null);
     try {
-      await engineInvoke(CMD.SET_CONFIG, { key, value });
-    } catch {
-      /* offline: kept in local UI state */
+      const result = await engineInvoke<{ ok: boolean; error?: string; host?: string }>(
+        CMD.SET_CONFIG,
+        { key, value },
+      );
+      if (!result.ok) {
+        setConfigError(result.error || "The setting was refused.");
+        setCfg(await engineTry<Cfg>(CMD.GET_CONFIG, {}, cfg));
+        return;
+      }
+      setCfg((current) => ({
+        ...current,
+        [key]: key === "host" && result.host ? result.host : value,
+      }));
+    } catch (error) {
+      setConfigError(`The setting was not saved: ${String(error)}`);
+      setCfg(await engineTry<Cfg>(CMD.GET_CONFIG, {}, cfg));
     }
   }
 
@@ -187,10 +201,16 @@ export function Settings({
           <input
             className="input"
             value={cfg.host}
-            onChange={(e) => save("host", e.target.value)}
+            onChange={(e) => setCfg((current) => ({ ...current, host: e.target.value }))}
+            onBlur={(e) => void save("host", e.target.value)}
             spellCheck={false}
           />
         </Field>
+        {configError && (
+          <Callout tone="warn" title="Hosted setting unchanged">
+            {configError}
+          </Callout>
+        )}
         <div className="row">
           <Pill tone={auth.authenticated ? "ok" : "neutral"}>
             {auth.authenticated ? "signed in" : "not signed in"}

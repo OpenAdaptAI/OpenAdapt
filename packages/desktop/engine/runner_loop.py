@@ -34,6 +34,13 @@ Non-negotiables enforced here:
   authoritatively, carries an unknown value, or cannot be bound REFUSES the
   dispatch (ack outcome ``refused``) -- the run never falls back to whatever the
   local deployment config happened to say.
+* **Exit code zero is not proof.** A Flow process that returns ``0`` proves only
+  that the local process returned. It does not prove the governed effect. This
+  lane does not yet consume Flow's shared qualification-v2 verifier, so it
+  cannot bind an exact signed ``VERIFIED`` result to the run, authorization,
+  policy, identity, effect, and event sequence. Until it can, a run that
+  completes without a halt is acked ``halted-needs-attention`` with
+  :data:`COMPLETION_PROOF_REQUIRED_REASON`; it is NEVER acked ``confirmed``.
 
 The whole lane is experimental and OFF by default (``runner_enabled=false``);
 the cloud half is built in parallel -- this module codes to the spec's wire
@@ -45,15 +52,20 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import platform as _platform
 import random
+import re
+import shutil
+import stat
 import sys
+import tempfile
 import threading
-import uuid
 import zipfile
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import httpx
 import yaml
@@ -90,6 +102,24 @@ DEFAULT_LEASE_S = 900
 LEASE_EXTEND_INTERVAL_S = 300
 BACKOFF_BASE_S = 1.0
 BACKOFF_CAP_S = 60.0
+MAX_BUNDLE_ARCHIVE_BYTES = 1024 * 1024 * 1024
+MAX_BUNDLE_UNPACKED_BYTES = 4 * MAX_BUNDLE_ARCHIVE_BYTES
+MAX_BUNDLE_MEMBERS = 100_000
+
+_SHA256_RE = re.compile(r"[a-f0-9]{64}")
+_CONTRACT_HASH_RE = re.compile(r"sha256:[a-f0-9]{64}")
+_SAFE_ID_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
+_RUNGS = frozenset({"structural", "template", "ocr", "geometry"})
+
+# Terminal outcome for a run whose Flow process returned but which carries no
+# signed qualification-v2 VERIFIED proof. Constant text: it crosses the ack
+# boundary as ``reason`` and lands in the local halt mirror, so it must stay
+# free of any run-derived value.
+COMPLETION_PROOF_REQUIRED_REASON = (
+    "run completed without the required signed qualification-v2 "
+    "VERIFIED proof; operator reconciliation is required"
+)
+COMPLETION_PROOF_HALT_KIND = "completion_proof_missing"
 
 # --- PHI boundary (spec section 3) ----------------------------------------------------
 
@@ -107,13 +137,6 @@ _STEP_FIELDS = (
     "step_id", "rung", "effect_contract_hashes", "effect_verified",
     "effect_approved_unverified", "identity_verified", "elapsed_ms",
 )
-_HALT_FIELDS = (
-    "task_id", "kind", "substrate", "effect_kind", "contract_hash", "verdict",
-    "reason", "evidence_digest", "suggested_action", "step_id", "rung",
-    "drift_signature",
-)
-
-
 class PhiBoundaryError(RuntimeError):
     """Raised when a payload would violate the PHI-free evidence boundary."""
 
@@ -124,6 +147,10 @@ class Refusal(RuntimeError):
 
 class ReauthRequired(RuntimeError):
     """The cloud rejected our token (401); the user must re-login. Never retry-loop."""
+
+
+class RunnerJournalError(RuntimeError):
+    """The durable runner journal cannot prove a safe prior run state."""
 
 
 def assert_phi_free(obj: Any, path: str = "$") -> None:
@@ -216,14 +243,74 @@ def bundle_content_digest(bundle_dir: Path) -> str:
 
 
 def safe_extract_zip(archive: Path, dest: Path) -> None:
-    """Extract a bundle archive, refusing path-traversal member names."""
+    """Extract only bounded regular ZIP members beneath ``dest``."""
+
+    root = dest.resolve()
     dest.mkdir(parents=True, exist_ok=True)
+    if any(dest.iterdir()):
+        raise Refusal("bundle staging directory is not empty")
+    seen: set[str] = set()
     with zipfile.ZipFile(archive) as zf:
-        for member in zf.namelist():
-            member_path = (dest / member).resolve()
-            if not str(member_path).startswith(str(dest.resolve())):
+        members = zf.infolist()
+        if len(members) > MAX_BUNDLE_MEMBERS:
+            raise Refusal("bundle archive has too many members")
+        if sum(member.file_size for member in members) > MAX_BUNDLE_UNPACKED_BYTES:
+            raise Refusal("bundle archive expands beyond the runner limit")
+        for member in members:
+            name = member.filename
+            path = PurePosixPath(name)
+            if (
+                not name
+                or "\x00" in name
+                or "\\" in name
+                or path.is_absolute()
+                or any(part in {"", ".", ".."} for part in path.parts)
+                or name in seen
+            ):
                 raise Refusal("bundle archive contains an unsafe member path")
-        zf.extractall(dest)
+            seen.add(name)
+            target = (root / Path(*path.parts)).resolve()
+            try:
+                target.relative_to(root)
+            except ValueError:
+                raise Refusal("bundle archive contains an unsafe member path") from None
+            file_type = stat.S_IFMT(member.external_attr >> 16)
+            if file_type not in {0, stat.S_IFREG, stat.S_IFDIR}:
+                raise Refusal("bundle archive contains an unsupported member type")
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with zf.open(member) as source, target.open("xb") as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
+                target.chmod(0o600)
+            except FileExistsError:
+                raise Refusal("bundle archive contains a duplicate member path") from None
+
+
+def _safe_bundle_url(value: Any) -> str:
+    """Return a safe HTTPS URL, or loopback HTTP URL, for bundle download."""
+
+    if not isinstance(value, str):
+        raise Refusal("bundle staging URL is invalid")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except (TypeError, ValueError):
+        raise Refusal("bundle staging URL is invalid") from None
+    hostname = (parsed.hostname or "").lower()
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or (parsed.scheme == "http" and hostname not in {"localhost", "127.0.0.1", "::1"})
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        raise Refusal("bundle staging URL is invalid")
+    return value
 
 
 def validate_dispatch(job: dict, bundle_dir: Path, *, now: datetime | None = None) -> None:
@@ -254,7 +341,9 @@ def validate_dispatch(job: dict, bundle_dir: Path, *, now: datetime | None = Non
     if expires_at:
         try:
             deadline = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
-        except ValueError:
+            if deadline.tzinfo is None:
+                raise ValueError
+        except (TypeError, ValueError):
             raise Refusal("dispatch expires_at is unparseable") from None
         if (now or datetime.now(timezone.utc)) >= deadline:
             raise Refusal("dispatch expired before start")
@@ -279,6 +368,37 @@ def validate_dispatch(job: dict, bundle_dir: Path, *, now: datetime | None = Non
     _flow_validate(authorization, bundle_dir)
 
 
+def _lease_deadline(job: dict, *, received_at: datetime) -> tuple[str, datetime]:
+    """Return the exact lease id and the earliest locally enforceable deadline."""
+
+    lease = job.get("lease")
+    if not isinstance(lease, dict):
+        raise Refusal("dispatch missing lease")
+    job_id = lease.get("job_id")
+    if not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", job_id):
+        raise Refusal("dispatch lease id is invalid")
+    visibility_timeout = lease.get("visibility_timeout_s")
+    if (
+        not isinstance(visibility_timeout, int)
+        or isinstance(visibility_timeout, bool)
+        or not 1 <= visibility_timeout <= DEFAULT_LEASE_S
+    ):
+        raise Refusal("dispatch lease timeout is invalid")
+    local_deadline = received_at + timedelta(seconds=visibility_timeout)
+    raw_deadline = lease.get("expires_at") or job.get("lease_expires_at")
+    if raw_deadline is None:
+        return job_id, local_deadline
+    try:
+        server_deadline = datetime.fromisoformat(
+            str(raw_deadline).replace("Z", "+00:00")
+        )
+        if server_deadline.tzinfo is None:
+            raise ValueError
+    except (TypeError, ValueError):
+        raise Refusal("dispatch lease expiry is unparseable") from None
+    return job_id, min(local_deadline, server_deadline.astimezone(timezone.utc))
+
+
 def _flow_validate(authorization: dict, bundle_dir: Path) -> None:
     """Run openadapt-flow's ``validate_execution_snapshot`` when importable.
 
@@ -299,10 +419,18 @@ def _flow_validate(authorization: dict, bundle_dir: Path) -> None:
         auth = GovernedRunAuthorization.model_validate(authorization)
         validate_execution_snapshot(auth, Path(bundle_dir))
     except Exception as exc:
-        raise Refusal(f"authorization revalidation refused: {exc}") from None
+        raise Refusal(
+            f"authorization revalidation refused ({type(exc).__name__})"
+        ) from None
 
 
 # --- evidence builders ----------------------------------------------------------------
+
+
+def _safe_identifier(value: Any, *, fallback: str) -> str:
+    """Return a bounded structural identifier without forwarding free text."""
+
+    return value if isinstance(value, str) and _SAFE_ID_RE.fullmatch(value) else fallback
 
 
 def _step_event(step: dict, index: int) -> dict:
@@ -311,36 +439,80 @@ def _step_event(step: dict, index: int) -> dict:
     if not isinstance(hashes, list):
         single = step.get("contract_hash")
         hashes = [single] if single else []
+    rung = step.get("rung") or step.get("resolver_rung")
     payload: dict[str, Any] = {
-        "step_id": step.get("step_id") or f"s{index}",
-        "rung": step.get("rung") or step.get("resolver_rung"),
-        "effect_contract_hashes": [str(h) for h in hashes],
+        "step_id": _safe_identifier(step.get("step_id"), fallback=f"s{index}"),
+        "rung": rung if rung in _RUNGS else None,
+        "effect_contract_hashes": [
+            value
+            for value in hashes
+            if isinstance(value, str) and _CONTRACT_HASH_RE.fullmatch(value)
+        ],
         "effect_verified": bool(
             step.get("effect_verified", step.get("effect") == "verified")
         ),
         "effect_approved_unverified": bool(step.get("effect_approved_unverified", False)),
-        "elapsed_ms": step.get("elapsed_ms", step.get("latency_ms")),
+        "elapsed_ms": max(
+            0,
+            int(step.get("elapsed_ms", step.get("latency_ms")) or 0),
+        ),
     }
     if "identity_verified" in step:
         payload["identity_verified"] = bool(step["identity_verified"])
     return payload
 
 
-def _halt_event(halt: dict) -> dict:
-    """Whitelist a halt block into the spec ``halt`` payload (digests/counts only)."""
-    payload: dict[str, Any] = {}
-    for key in _HALT_FIELDS:
-        if key in halt:
-            payload[key] = halt[key]
-    payload["task_id"] = payload.get("task_id") or f"recon-{uuid.uuid4().hex[:8]}"
-    payload["kind"] = payload.get("kind") or "resolver_halt"
+def _halt_event(
+    halt: dict,
+    *,
+    run_id: str,
+    workflow_id: str,
+    step_count: int,
+) -> dict:
+    """Build a structural halt event without forwarding any free text."""
+
+    rung = halt.get("rung") or halt.get("resolver_rung")
+    rung = rung if rung in _RUNGS else None
+    step_id = _safe_identifier(
+        halt.get("step_id") or (
+            f"s{halt['step_index']}" if isinstance(halt.get("step_index"), int) else None
+        ),
+        fallback="",
+    )
+    kind = halt.get("kind")
+    if kind not in {
+        "authorization_refused",
+        "identity_halt",
+        "effect_refuted",
+        "effect_indeterminate",
+        "compensation_failed",
+        "resolver_halt",
+    }:
+        kind = "resolver_halt"
+    payload: dict[str, Any] = {
+        "task_id": f"halt-{run_id}"[:64],
+        "kind": kind,
+        "reason": f"halt at step {step_id}" if step_id else "halt at unidentified step",
+        "drift_signature": hashlib.sha256(
+            f"{workflow_id}|{rung}|{step_count}".encode("utf-8")
+        ).hexdigest()[:16],
+    }
+    for key, allowed in {
+        "substrate": {"api", "fhir", "sql", "onscreen", "web", "desktop"},
+        "effect_kind": {"create", "update", "delete", "send", "submit", "write"},
+        "verdict": {"confirmed", "refuted", "indeterminate"},
+    }.items():
+        value = halt.get(key)
+        if value in allowed:
+            payload[key] = value
     payload["evidence_digest"] = _counts_only(halt.get("evidence_digest"))
-    if "step_id" not in payload and halt.get("step_index") is not None:
-        payload["step_id"] = f"s{halt['step_index']}"
-    if "rung" not in payload and halt.get("resolver_rung"):
-        payload["rung"] = halt["resolver_rung"]
-    if "reason" not in payload:
-        payload["reason"] = str(halt.get("reason", ""))[:500]
+    contract_hash = halt.get("contract_hash")
+    if isinstance(contract_hash, str) and _CONTRACT_HASH_RE.fullmatch(contract_hash):
+        payload["contract_hash"] = contract_hash
+    if step_id:
+        payload["step_id"] = step_id
+    if rung is not None:
+        payload["rung"] = rung
     return payload
 
 
@@ -390,29 +562,64 @@ class RunnerJournal:
 
     def __init__(self, journal_dir: Path) -> None:
         self._dir = journal_dir
+        self._lock = threading.RLock()
 
     def _path(self, run_id: str) -> Path:
-        safe = "".join(c for c in run_id if c.isalnum() or c in "-_") or "run"
-        return self._dir / f"{safe}.json"
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", run_id):
+            raise RunnerJournalError("runner run id is not a safe journal key")
+        return self._dir / f"{run_id}.json"
+
+    def _read_path(self, path: Path, *, expected_run_id: str) -> dict:
+        try:
+            entry = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeError) as exc:
+            raise RunnerJournalError("runner journal is corrupt") from exc
+        if (
+            not isinstance(entry, dict)
+            or entry.get("run_id") != expected_run_id
+            or entry.get("phase") not in {"leased", "starting", "started", "finished"}
+        ):
+            raise RunnerJournalError("runner journal has an invalid state")
+        return entry
 
     def record(self, run_id: str, phase: str, **extra: Any) -> None:
         """Persist a phase transition for ``run_id`` (merges over prior fields)."""
-        self._dir.mkdir(parents=True, exist_ok=True)
-        entry = self.get(run_id) or {"run_id": run_id}
-        entry.update(extra)
-        entry["phase"] = phase
-        entry["updated_at"] = datetime.now(timezone.utc).isoformat()
-        self._path(run_id).write_text(json.dumps(entry, indent=2))
+        if phase not in {"leased", "starting", "started", "finished"}:
+            raise RunnerJournalError("runner journal phase is invalid")
+        with self._lock:
+            self._dir.mkdir(parents=True, exist_ok=True)
+            try:
+                self._dir.chmod(0o700)
+            except OSError:
+                pass
+            entry = self.get(run_id) or {"run_id": run_id}
+            entry.update(extra)
+            entry["phase"] = phase
+            entry["updated_at"] = datetime.now(timezone.utc).isoformat()
+            destination = self._path(run_id)
+            fd, temporary = tempfile.mkstemp(
+                dir=str(self._dir), prefix=f".{run_id}.", suffix=".tmp"
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(entry, handle, indent=2)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.chmod(temporary, 0o600)
+                os.replace(temporary, destination)
+            finally:
+                try:
+                    os.unlink(temporary)
+                except FileNotFoundError:
+                    pass
 
     def get(self, run_id: str) -> dict | None:
         """Return the journal entry for ``run_id``, or None."""
-        path = self._path(run_id)
-        if not path.is_file():
-            return None
-        try:
-            return json.loads(path.read_text())
-        except (json.JSONDecodeError, OSError):
-            return None
+        with self._lock:
+            path = self._path(run_id)
+            if not path.is_file():
+                return None
+            return self._read_path(path, expected_run_id=run_id)
 
     def entries(self) -> list[dict]:
         """All journal entries, newest first."""
@@ -421,15 +628,14 @@ class RunnerJournal:
         out: list[dict] = []
         for path in sorted(self._dir.glob("*.json"), key=lambda p: p.stat().st_mtime,
                            reverse=True):
-            try:
-                out.append(json.loads(path.read_text()))
-            except (json.JSONDecodeError, OSError):
-                continue
+            out.append(self._read_path(path, expected_run_id=path.stem))
         return out
 
     def unfinished_started(self) -> list[dict]:
         """Runs that began executing but never reached a terminal phase."""
-        return [e for e in self.entries() if e.get("phase") == "started"]
+        return [
+            e for e in self.entries() if e.get("phase") in {"starting", "started"}
+        ]
 
     def last_runs(self, limit: int = 10) -> list[dict]:
         """Recent runs for the UI (run_id / phase / outcome / timestamps only)."""
@@ -563,6 +769,9 @@ class RunnerService:
         self._attempt = 0
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self._tick_lock = asyncio.Lock()
+        self._handle_lock = asyncio.Lock()
+        self._lifecycle_lock = threading.Lock()
 
     # ---- status / lifecycle ----
 
@@ -599,14 +808,15 @@ class RunnerService:
 
     def start(self) -> None:
         """Start the background loop thread (no-op if already running)."""
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._set_state("offline")
-        self._thread = threading.Thread(
-            target=self._thread_main, daemon=True, name="runner-loop"
-        )
-        self._thread.start()
+        with self._lifecycle_lock:
+            if self._thread and self._thread.is_alive():
+                return
+            self._stop.clear()
+            self._set_state("offline")
+            self._thread = threading.Thread(
+                target=self._thread_main, daemon=True, name="runner-loop"
+            )
+            self._thread.start()
 
     def stop(self) -> None:
         """Signal the loop to stop and wait briefly for the thread to exit."""
@@ -618,8 +828,8 @@ class RunnerService:
         try:
             asyncio.run(self._main())
         except Exception as exc:  # pragma: no cover - crash guard
-            logger.exception("runner loop crashed")
-            self._last_error = str(exc)
+            logger.error("runner loop stopped ({kind})", kind=type(exc).__name__)
+            self._last_error = f"runner loop stopped ({type(exc).__name__})"
             self._set_state("error")
 
     def _set_state(self, state: str) -> None:
@@ -724,7 +934,7 @@ class RunnerService:
         if cred and cred.get("runner_token"):
             client.token = cred["runner_token"]
             return True
-        session = auth_header().get("Authorization", "")
+        session = auth_header(self.config.hosted_host).get("Authorization", "")
         if not session.startswith("Bearer "):
             self._last_error = "not signed in; log in before enabling the runner"
             self._set_state("reauth_required")
@@ -762,6 +972,11 @@ class RunnerService:
 
     async def _tick(self, client: RunnerClient) -> float | None:
         """One poll iteration; returns the next sleep delay, None to stop."""
+        async with self._tick_lock:
+            return await self._tick_once(client)
+
+    async def _tick_once(self, client: RunnerClient) -> float | None:
+        """Run one serialized poll and its complete leased job, if present."""
         try:
             self._set_state("polling")
             job = await client.poll(
@@ -773,7 +988,7 @@ class RunnerService:
             self._set_state("reauth_required")
             return None
         except (httpx.HTTPError, OSError) as exc:
-            self._last_error = str(exc)
+            self._last_error = f"runner transport failed ({type(exc).__name__})"
             self._set_state("offline")
             delay = backoff_delay(self._attempt, self._rng)
             self._attempt += 1
@@ -787,8 +1002,11 @@ class RunnerService:
         except (httpx.HTTPError, OSError) as exc:
             # A dropped callback/ack never crashes the loop; the cloud's lease
             # expiry semantics land the run `uncertain` server-side.
-            self._last_error = str(exc)
-            logger.warning("job handling hit a network error: {e}", e=exc)
+            self._last_error = f"runner transport failed ({type(exc).__name__})"
+            logger.warning(
+                "job handling hit a network error ({kind})",
+                kind=type(exc).__name__,
+            )
             delay = backoff_delay(self._attempt, self._rng)
             self._attempt += 1
             return delay
@@ -808,7 +1026,11 @@ class RunnerService:
             try:
                 await client.ack(job_id, "uncertain", run_id=run_id, reason=reason)
             except (httpx.HTTPError, OSError) as exc:
-                logger.warning("uncertain ack for {r} deferred: {e}", r=run_id, e=exc)
+                logger.warning(
+                    "uncertain ack for {r} deferred ({kind})",
+                    r=run_id,
+                    kind=type(exc).__name__,
+                )
                 continue
             self.journal.record(run_id, "finished", outcome="uncertain", reason=reason)
 
@@ -816,14 +1038,39 @@ class RunnerService:
 
     async def handle_job(self, client: RunnerClient, job: dict) -> None:
         """Validate -> execute -> stream evidence -> ack for one leased job."""
+        received_at = datetime.now(timezone.utc)
+        async with self._handle_lock:
+            await self._handle_job(client, job, received_at=received_at)
+
+    async def _handle_job(
+        self, client: RunnerClient, job: dict, *, received_at: datetime
+    ) -> None:
+        """Handle one job under the process-local single-flight lock."""
+
         run_id = str(job.get("run_id") or "")
-        job_id = str((job.get("lease") or {}).get("job_id") or "")
-        if not run_id or not job_id:
-            logger.warning("dispatch missing run_id/lease.job_id; ignoring")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", run_id):
+            logger.warning("dispatch has an invalid run id; refusing")
+            return
+        try:
+            job_id, lease_deadline = _lease_deadline(job, received_at=received_at)
+        except Refusal as refusal:
+            raw_job_id = str((job.get("lease") or {}).get("job_id") or "")
+            if re.fullmatch(r"[A-Za-z0-9_-]{1,200}", raw_job_id):
+                await client.ack(
+                    raw_job_id,
+                    "refused",
+                    run_id=run_id,
+                    reason=str(refusal),
+                )
             return
 
-        existing = self.journal.get(run_id)
-        if existing and existing.get("phase") == "started":
+        try:
+            existing = self.journal.get(run_id)
+        except RunnerJournalError:
+            reason = "local run journal is corrupt; outcome requires reconciliation"
+            await client.ack(job_id, "uncertain", run_id=run_id, reason=reason)
+            return
+        if existing and existing.get("phase") in {"starting", "started"}:
             # Idempotency: this run already began executing (e.g. re-leased
             # after a crash). NEVER silently re-execute.
             reason = "run was already started on this runner; outcome uncertain"
@@ -848,6 +1095,8 @@ class RunnerService:
             # The org's safety policy binds THIS run, resolved fresh and before
             # any GUI action. An unenforceable policy refuses here.
             policy, deployment = await asyncio.to_thread(self.bind_effective_policy)
+            if datetime.now(timezone.utc) >= lease_deadline:
+                raise Refusal("dispatch lease expired before start")
         except Refusal as refusal:
             reason = str(refusal)
             logger.warning("dispatch {r} refused: {why}", r=run_id, why=reason)
@@ -857,17 +1106,28 @@ class RunnerService:
 
         self.journal.record(
             run_id,
-            "started",
+            "starting",
             policy_source=policy.get("source"),
             policy_version=policy.get("policy_version"),
         )
-        self._set_state("running")
-        await self._evidence(
+        start_confirmed = await self._evidence(
             client, run_id, authorization_id, seq, "state",
             {"state": "started", "at": datetime.now(timezone.utc).isoformat()},
         )
+        if not start_confirmed:
+            reason = "run start could not be confirmed; no action was dispatched"
+            await client.ack(job_id, "uncertain", run_id=run_id, reason=reason)
+            self.journal.record(
+                run_id, "finished", outcome="uncertain", reason=reason
+            )
+            self._set_state("polling")
+            return
+        self.journal.record(run_id, "started")
+        self._set_state("running")
         run_dir = self.config.data_dir / "runner" / "runs" / run_id
-        extend_task = asyncio.ensure_future(self._extend_loop(client, job_id))
+        extend_task = asyncio.ensure_future(
+            self._extend_loop(client, job_id, lease_deadline=lease_deadline)
+        )
         try:
             result = await asyncio.to_thread(
                 self._execute,
@@ -882,7 +1142,15 @@ class RunnerService:
             exec_error = str(exc)
             exec_ok = False
         finally:
-            extend_task.cancel()
+            if extend_task.done():
+                lease_error = extend_task.result()
+            else:
+                extend_task.cancel()
+                try:
+                    await extend_task
+                except asyncio.CancelledError:
+                    pass
+                lease_error = None
 
         report = FlowBridge.read_report(run_dir)
         halt = FlowBridge.read_halt(run_dir)
@@ -892,35 +1160,84 @@ class RunnerService:
             await self._evidence(
                 client, run_id, authorization_id, seq, "step", _step_event(step, index)
             )
-        if halt:
+        completion_proof_error: str | None = None
+        local_halt = halt
+        if lease_error:
+            status = "uncertain"
+        elif halt:
             status = "halted-needs-attention"
             await self._evidence(
-                client, run_id, authorization_id, seq, "halt", _halt_event(halt)
+                client,
+                run_id,
+                authorization_id,
+                seq,
+                "halt",
+                _halt_event(
+                    halt,
+                    run_id=run_id,
+                    workflow_id=str(job.get("workflow_id") or ""),
+                    step_count=len(steps),
+                ),
             )
         elif exec_ok:
-            status = "confirmed"
+            # Exit code zero proves only that the local process returned. It
+            # does not prove the governed effect. Keep this legacy lane
+            # fail-closed until it consumes Flow's shared qualification-v2
+            # verifier and can bind an exact signed VERIFIED result to this
+            # run, authorization, policy, identity, effect, and event sequence.
+            # The operator sees the run in the local needs-attention mirror;
+            # the ack carries the constant reason, never a run-derived value.
+            status = "halted-needs-attention"
+            completion_proof_error = COMPLETION_PROOF_REQUIRED_REASON
+            local_halt = {
+                "kind": COMPLETION_PROOF_HALT_KIND,
+                "reason": COMPLETION_PROOF_REQUIRED_REASON,
+            }
         else:
             status = "failed"
-        await self._evidence(
-            client, run_id, authorization_id, seq, "run_summary",
-            _run_summary(job, report, status),
-        )
-        self._record_local_run(run_id, run_dir, job, halt, status)
+        if status != "uncertain":
+            await self._evidence(
+                client, run_id, authorization_id, seq, "run_summary",
+                _run_summary(job, report, status),
+            )
+        self._record_local_run(run_id, run_dir, job, local_halt, status)
         self.journal.record(
             run_id, "finished", outcome=status,
-            reason=(exec_error or "")[:200] or None,
+            reason=(lease_error or exec_error or completion_proof_error or "")[:200] or None,
         )
-        await client.ack(job_id, status, run_id=run_id)
+        if status == "uncertain":
+            ack_reason = lease_error
+        elif status == "halted-needs-attention":
+            ack_reason = completion_proof_error
+        else:
+            ack_reason = None
+        await client.ack(job_id, status, run_id=run_id, reason=ack_reason)
         self._set_state("polling")
 
-    async def _extend_loop(self, client: RunnerClient, job_id: str) -> None:
-        """Renew the lease periodically while a run executes (spec Q6)."""
+    async def _extend_loop(
+        self, client: RunnerClient, job_id: str, *, lease_deadline: datetime
+    ) -> str | None:
+        """Renew a live lease and return an uncertainty reason if it expires."""
+
         while True:
-            await asyncio.sleep(LEASE_EXTEND_INTERVAL_S)
+            remaining_s = (
+                lease_deadline - datetime.now(timezone.utc)
+            ).total_seconds()
+            if remaining_s <= 0:
+                return "lease expired while the run was in progress"
+            await asyncio.sleep(min(LEASE_EXTEND_INTERVAL_S, remaining_s))
+            if datetime.now(timezone.utc) >= lease_deadline:
+                return "lease expired while the run was in progress"
             try:
                 await client.extend(job_id)
             except (httpx.HTTPError, OSError) as exc:
-                logger.warning("lease extend failed: {e}", e=exc)
+                logger.warning(
+                    "lease extend failed ({kind})", kind=type(exc).__name__
+                )
+                continue
+            lease_deadline = datetime.now(timezone.utc) + timedelta(
+                seconds=DEFAULT_LEASE_S
+            )
 
     async def _stage_bundle(self, job: dict) -> Path:
         """Locate or download the sealed bundle for a dispatch.
@@ -930,27 +1247,51 @@ class RunnerService:
         """
         bundle_info = job.get("bundle") or {}
         digest = str(bundle_info.get("content_digest") or "")
-        if not digest:
-            raise Refusal("dispatch missing bundle content digest")
+        if not _SHA256_RE.fullmatch(digest):
+            raise Refusal("dispatch bundle content digest is invalid")
         store_dir = self.config.data_dir / "runner" / "bundles" / digest
         if (store_dir / "manifest.json").is_file():
             return store_dir
-        url = bundle_info.get("url")
-        if not url:
+        raw_url = bundle_info.get("url")
+        if not raw_url:
             raise Refusal(
                 f"bundle {_digest_prefix(digest)} not in local store and no staging URL"
             )
-        archive = store_dir.with_suffix(".zip")
+        url = _safe_bundle_url(raw_url)
         store_dir.parent.mkdir(parents=True, exist_ok=True)
-        async with self._http_factory() as http:
-            resp = await http.get(url)
-            resp.raise_for_status()
-            archive.write_bytes(resp.content)
+        archive_fd, archive_name = tempfile.mkstemp(
+            dir=str(store_dir.parent), prefix=f".{digest}.", suffix=".zip"
+        )
+        os.close(archive_fd)
+        archive = Path(archive_name)
+        staging_dir = Path(
+            tempfile.mkdtemp(dir=str(store_dir.parent), prefix=f".{digest}.", suffix=".tmp")
+        )
         try:
-            safe_extract_zip(archive, store_dir)
+            total = 0
+            async with self._http_factory() as http:
+                async with http.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    with archive.open("wb") as output:
+                        async for chunk in resp.aiter_bytes():
+                            total += len(chunk)
+                            if total > MAX_BUNDLE_ARCHIVE_BYTES:
+                                raise Refusal("bundle archive exceeds the runner limit")
+                            output.write(chunk)
+            safe_extract_zip(archive, staging_dir)
+            try:
+                staging_dir.replace(store_dir)
+            except FileExistsError:
+                if not (store_dir / "manifest.json").is_file():
+                    raise Refusal("bundle staging destination is inconsistent") from None
+            return store_dir
+        except Refusal:
+            raise
+        except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile):
+            raise Refusal("bundle staging failed safety validation") from None
         finally:
             archive.unlink(missing_ok=True)
-        return store_dir
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
     def _execute(
         self,
@@ -972,8 +1313,26 @@ class RunnerService:
         policy has been applied to.
         """
         run_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            run_dir.chmod(0o700)
+        except OSError:
+            pass
         auth_path = run_dir / "authorization.json"
-        auth_path.write_text(json.dumps(authorization, indent=2))
+        fd, temporary = tempfile.mkstemp(
+            dir=str(run_dir), prefix=".authorization.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(authorization, handle, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, auth_path)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
         bridge = self.services.flow_bridge
         kwargs: dict[str, Any] = {}
         probe = getattr(bridge, "run_supports_authorization", None)
@@ -1004,8 +1363,8 @@ class RunnerService:
 
     async def _evidence(self, client: RunnerClient, run_id: str,
                         authorization_id: str, seq: _Seq, kind: str,
-                        payload: dict) -> None:
-        """Send one evidence event; PHI violations fail closed and abort nothing else."""
+                        payload: dict) -> bool:
+        """Send one evidence event and report whether Cloud confirmed receipt."""
         event: dict[str, Any] = {
             "schema": EVIDENCE_SCHEMA,
             "run_id": run_id,
@@ -1021,8 +1380,14 @@ class RunnerService:
             # evidence stays in the local run dir (the operator's audit copy).
             logger.error("evidence event for {r} violated the PHI boundary; dropped",
                          r=run_id)
+            return False
         except (httpx.HTTPError, OSError) as exc:
-            logger.warning("evidence POST failed (run continues): {e}", e=exc)
+            logger.warning(
+                "evidence POST failed; local execution state is retained ({kind})",
+                kind=type(exc).__name__,
+            )
+            return False
+        return True
 
 
 class _Seq:

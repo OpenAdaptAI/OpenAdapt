@@ -1379,10 +1379,41 @@ class TestSyncCommands:
                 "error": "",
             },
         )
+        monkeypatch.setattr(
+            "engine.qualification_lifecycle.persist_deployment_handoff",
+            lambda *a, **k: disp.config.data_dir / "handoff.json",
+        )
         r = disp.dispatch("push_workflow", {"workflow_id": "bnd1"})
         assert r["ok"] is True
         assert r["workflow_id"] == "wf_1"
         assert any(e == "sync_state" for e, _ in events)
+
+    def test_push_workflow_preserves_local_review_handoff(self, deps, monkeypatch) -> None:
+        disp, db, events = deps
+        db.insert_bundle("bnd1", str(disp.config.data_dir), capture_id="cap1")
+        monkeypatch.setattr(
+            "engine.hosted.push",
+            lambda *a, **k: {
+                "success": False,
+                "pending_review": True,
+                "sanitized_path": "/private/sanitized/artifact",
+                "review_command": "openadapt-flow review-sanitized ...",
+                "workflow_id": "",
+                "error": "",
+            },
+        )
+        monkeypatch.setattr(
+            "engine.qualification_lifecycle.persist_deployment_handoff",
+            lambda *a, **k: disp.config.data_dir / "handoff.json",
+        )
+
+        result = disp.dispatch("push_workflow", {"workflow_id": "bnd1"})
+
+        assert result["ok"] is False
+        assert result["pending_review"] is True
+        assert result["sanitized_path"] == "/private/sanitized/artifact"
+        assert result["review_command"].startswith("openadapt-flow review-sanitized")
+        assert ("sync_state", {"state": "paused", "queued": 0}) in events
 
 
 class TestAuthCommands:
@@ -1403,9 +1434,76 @@ class TestAuthCommands:
         assert r["authenticated"] is True
         assert r["org_id"] == "org_1"
 
+    def test_custom_origin_login_updates_live_and_persisted_host(
+        self, deps, monkeypatch, tmp_path
+    ) -> None:
+        disp, _db, _e = deps
+        host = "https://customer.example"
+        toml_path = tmp_path / "config.toml"
+        monkeypatch.setenv("OPENADAPT_CONFIG_TOML", str(toml_path))
+        cred = {
+            "kind": "ingest_token",
+            "token": "oai_ingest_customer",
+            "refresh_token": None,
+            "org_id": "org_customer",
+            "host": host,
+            "expires_at": None,
+        }
+        monkeypatch.setattr(
+            "engine.auth.paste.PasteTokenProvider.login", lambda self, token=None: cred
+        )
+
+        result = disp.dispatch("login_paste", {"host": f"{host}/path", "token": "t"})
+
+        assert result["authenticated"] is True
+        assert disp.config.hosted_host == host
+        assert f'host = "{host}"' in toml_path.read_text()
+
+    def test_login_refuses_remote_http_before_provider(self, deps, monkeypatch) -> None:
+        disp, _db, _e = deps
+        called = False
+
+        def _login(self, token=None):
+            nonlocal called
+            called = True
+            raise AssertionError("provider must not receive credentials")
+
+        monkeypatch.setattr("engine.auth.paste.PasteTokenProvider.login", _login)
+        result = disp.dispatch(
+            "login_paste", {"host": "http://customer.example", "token": "secret"}
+        )
+        assert result["authenticated"] is False
+        assert "HTTPS" in result["error"]
+        assert called is False
+
     def test_get_auth_status_unauthed(self, deps, fake_keyring) -> None:
         disp, _db, _e = deps
         assert disp.dispatch("get_auth_status", {})["authenticated"] is False
+
+    def test_get_auth_status_refuses_credential_for_other_configured_host(
+        self, deps, fake_keyring
+    ) -> None:
+        from engine.auth.provider import Credential
+        from engine.auth.store import store_credential
+
+        disp, _db, _e = deps
+        credential: Credential = {
+            "kind": "ingest_token",
+            "token": "oai_ingest_host_bound",
+            "refresh_token": None,
+            "org_id": "org_42",
+            "host": "https://app.openadapt.ai",
+            "expires_at": None,
+        }
+        store_credential(credential)
+        disp.config.hosted_host = "https://customer.example"
+
+        result = disp.dispatch("get_auth_status", {})
+
+        assert result == {
+            "authenticated": False,
+            "host": "https://customer.example",
+        }
 
     def test_connect_uri_forwards_one_exact_string_and_emits_safe_state(
         self, deps, monkeypatch, tmp_path
@@ -1434,6 +1532,25 @@ class TestAuthCommands:
                 "host": "https://app.openadapt.ai",
             },
         ) in events
+
+    def test_connect_uri_returns_the_canonical_authenticated_host(
+        self, deps, monkeypatch, tmp_path
+    ) -> None:
+        disp, _db, _events = deps
+        monkeypatch.setenv("OPENADAPT_CONFIG_TOML", str(tmp_path / "config.toml"))
+        monkeypatch.setattr(
+            "engine.auth.pairing.connect_uri",
+            lambda _uri: {
+                "authenticated": True,
+                "host": "HTTPS://Customer.Example:443/pairing",
+                "paired": True,
+            },
+        )
+
+        result = disp.dispatch("connect_uri", {"uri": "openadapt://connect"})
+
+        assert result["host"] == "https://customer.example"
+        assert disp.config.hosted_host == "https://customer.example"
 
     def test_connect_uri_requires_a_single_string_parameter(self, deps) -> None:
         disp, _db, _events = deps
@@ -1470,6 +1587,25 @@ class TestConfigCommands:
         disp, _db, _e = deps
         r = disp.dispatch("set_config", {"key": "s3_secret_access_key", "value": "x"})
         assert r["ok"] is False
+
+    def test_set_config_canonicalizes_host_alias(self, deps, monkeypatch, tmp_path) -> None:
+        disp, _db, _e = deps
+        monkeypatch.setenv("OPENADAPT_CONFIG_TOML", str(tmp_path / "config.toml"))
+        result = disp.dispatch(
+            "set_config",
+            {"key": "host", "value": "HTTPS://Customer.Example:443/dashboard"},
+        )
+        assert result["ok"] is True
+        assert result["host"] == "https://customer.example"
+
+    def test_set_config_refuses_remote_http(self, deps) -> None:
+        disp, _db, _e = deps
+        original = disp.config.hosted_host
+        result = disp.dispatch(
+            "set_config", {"key": "host", "value": "http://customer.example"}
+        )
+        assert result["ok"] is False
+        assert disp.config.hosted_host == original
 
 
 class TestRunReportMapping:

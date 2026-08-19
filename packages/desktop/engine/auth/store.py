@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import os
+from urllib.parse import urlsplit
 
 from loguru import logger
 
@@ -707,7 +708,64 @@ def clear_runner_credential(host: str) -> None:
     _kr_delete(_keyring(), host + _RUNNER_SUFFIX)
 
 
-def auth_header() -> dict[str, str]:
+def canonical_host_origin(host: str) -> str:
+    """Return a safe web origin for credential binding, or ``""``.
+
+    Keychain credentials must never follow URL user-info or cross a clear-text
+    remote transport. Local HTTP remains available for development.
+    """
+
+    try:
+        parsed = urlsplit(host.strip())
+        scheme = parsed.scheme.lower()
+        if (
+            scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            return ""
+        port = parsed.port
+    except (ValueError, AttributeError):
+        return ""
+    hostname = parsed.hostname.lower()
+    if scheme == "http" and hostname not in {"localhost", "127.0.0.1", "::1"}:
+        return ""
+    default_port = (scheme == "https" and port == 443) or (
+        scheme == "http" and port == 80
+    )
+    authority = f"[{hostname}]" if ":" in hostname else hostname
+    if port is not None and not default_port:
+        authority = f"{authority}:{port}"
+    return f"{scheme}://{authority}"
+
+
+def token_for_host(host: str, *, explicit: str | None = None) -> str:
+    """Resolve a bearer only for the requested destination origin.
+
+    An explicit argument or environment token is an operator-scoped override.
+    A keychain credential remains bound to the origin recorded at login.
+    """
+
+    requested_origin = canonical_host_origin(host)
+    if not requested_origin:
+        return ""
+    if explicit and explicit.strip():
+        return explicit.strip()
+    env_token = os.environ.get(INGEST_TOKEN_ENV, "").strip()
+    if env_token:
+        return env_token
+    credential = active_credential()
+    if (
+        requested_origin
+        and credential
+        and canonical_host_origin(str(credential.get("host") or "")) == requested_origin
+    ):
+        return str(credential.get("token") or "").strip()
+    return ""
+
+
+def auth_header(host: str | None = None) -> dict[str, str]:
     """Resolve the active bearer token to an HTTP ``Authorization`` header.
 
     Resolution order (spec section 3e): ``OPENADAPT_INGEST_TOKEN`` env, then
@@ -717,6 +775,10 @@ def auth_header() -> dict[str, str]:
     Returns:
         ``{"Authorization": "Bearer <token>"}`` or ``{}``.
     """
+    if host is not None:
+        token = token_for_host(host)
+        return {"Authorization": f"Bearer {token}"} if token else {}
+
     env_token = os.environ.get(INGEST_TOKEN_ENV, "").strip()
     if env_token:
         return {"Authorization": f"Bearer {env_token}"}

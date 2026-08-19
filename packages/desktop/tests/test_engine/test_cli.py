@@ -20,6 +20,7 @@ def cli_config(tmp_data_dir: Path) -> EngineConfig:
         storage_mode="air-gapped",
         max_storage_gb=1.0,
         log_level="WARNING",
+        audit_log_path=tmp_data_dir / "audit.jsonl",
     )
 
 
@@ -187,3 +188,51 @@ class TestCLI:
                 patch("engine.hosted.push", return_value=result):
             with pytest.raises(SystemExit):
                 main(["push", "/tmp/rec"])
+
+    def test_push_review_pause_is_not_failure_or_upload_success(
+        self, cli_config: EngineConfig, capsys
+    ) -> None:
+        """A local review pause gives the operator the exact next command."""
+        result = {
+            "success": False,
+            "pending_review": True,
+            "sanitized_path": "/tmp/sanitized/artifact-abc",
+            "review_command": (
+                "openadapt-flow review-sanitized /tmp/sanitized/artifact-abc "
+                "--original /tmp/rec"
+            ),
+            "workflow_id": "",
+            "dashboard_url": "",
+            "error": "",
+        }
+        with patch("engine.cli.EngineConfig", return_value=cli_config), patch(
+            "engine.hosted.push", return_value=result
+        ):
+            main(["push", "/tmp/rec"])
+
+        output = capsys.readouterr().out
+        assert "Upload paused" in output
+        assert result["review_command"] in output
+        assert "Pushed. Workflow" not in output
+
+    def test_legacy_hosted_upload_alias_routes_to_governed_push(
+        self, cli_config: EngineConfig, tmp_path: Path
+    ) -> None:
+        """The old command name keeps working without using the direct adapter."""
+        from engine.db import IndexDB
+
+        raw = tmp_path / "capture"
+        raw.mkdir()
+        db = IndexDB(cli_config.data_dir / "index.db")
+        db.initialize()
+        db.insert_capture("cap1", str(raw), "2026-08-18T00:00:00Z")
+        db.close()
+
+        with patch("engine.cli.EngineConfig", return_value=cli_config), patch(
+            "engine.cli.cmd_push"
+        ) as governed_push:
+            main(["upload", "cap1", "--backend", "hosted_ingest"])
+
+        args, _kwargs = governed_push.call_args
+        assert args[0].path == str(raw)
+        assert args[0].kind == "recording"

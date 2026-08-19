@@ -120,6 +120,7 @@ _POSTCONDITION_ACTION_KINDS = frozenset(
     }
 )
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+_INGEST_TOKEN_ENV = "OPENADAPT_INGEST_TOKEN"
 
 
 def _contract_counts(value: object) -> dict[str, int] | None:
@@ -410,6 +411,7 @@ def _safe_command_for_log(cmd: list[str]) -> str:
 
     redacted_after = {
         "--token",
+        "--host",
         "--password",
         "--rdp-password",
         "--agent-token",
@@ -426,10 +428,21 @@ def _safe_command_for_log(cmd: list[str]) -> str:
     }
     safe: list[str] = []
     redact_next = False
-    for value in cmd:
+    egress_verb_index = next(
+        (index for index, value in enumerate(cmd) if value in {"push", "report-break"}),
+        None,
+    )
+    for index, value in enumerate(cmd):
         if redact_next:
             safe.append("[REDACTED]")
             redact_next = False
+            continue
+        if (
+            egress_verb_index is not None
+            and index == egress_verb_index + 1
+            and not value.startswith("-")
+        ):
+            safe.append("[LOCAL_PATH]")
             continue
         safe.append(value)
         redact_next = value in redacted_after
@@ -454,6 +467,7 @@ class FlowBridge:
         self._runner = runner
         self._popen = popen
         self._run_auth_support: bool | None = None
+        self._push_json_support: bool | None = None
 
     # --- low-level ---
 
@@ -763,8 +777,15 @@ class FlowBridge:
         """Best-effort probe for an optional Flow subcommand."""
 
         try:
-            return self._run([command, "--help"], timeout=15).ok
+            result = self._run([command, "--help"], timeout=15)
+            if command == "push":
+                self._push_json_support = result.ok and "--json" in (
+                    result.stdout or ""
+                )
+            return result.ok
         except Exception:
+            if command == "push":
+                self._push_json_support = False
             return False
 
     def push(
@@ -777,14 +798,67 @@ class FlowBridge:
         token: str | None = None,
         timeout: float | None = None,
         env_overrides: dict[str, str] | None = None,
+        json_output: bool = True,
     ) -> FlowResult:
         """Upload through the same pinned Flow runtime as every other verb."""
 
+        if json_output and not self.push_supports_json():
+            raise FlowNotAvailableError(
+                "The pinned openadapt-flow runtime does not support the structured "
+                "push-result contract. Update the exact Flow pin before hosted upload."
+            )
         args = ["push", str(path), "--kind", kind, "--host", host]
+        if json_output:
+            args.append("--json")
         if name:
-            args += ["--name", name]
+            # A Desktop task description can contain a record identity. Do not
+            # put it in argv or logs. Cloud can suggest a safe display name.
+            logger.warning("Desktop omitted a local workflow name from the Flow command")
+        child_env = dict(env_overrides or {})
         if token:
-            args += ["--token", token]
+            child_env[_INGEST_TOKEN_ENV] = token
+        return self._run(args, timeout=timeout, env_overrides=child_env or None)
+
+    def push_supports_json(self) -> bool:
+        """Require Flow's machine-readable push contract before any upload."""
+
+        if self._push_json_support is None:
+            try:
+                result = self._run(["push", "--help"], timeout=15)
+                self._push_json_support = result.ok and "--json" in (result.stdout or "")
+            except Exception:
+                self._push_json_support = False
+        return self._push_json_support
+
+    def report_break(
+        self,
+        run_dir: Path,
+        *,
+        workflow_id: str,
+        host: str,
+        deployment_kind: str = "cloud",
+        org_id: str | None = None,
+        timeout: float | None = None,
+        env_overrides: dict[str, str] | None = None,
+    ) -> FlowResult:
+        """Send Flow's closed-schema break summary.
+
+        The bearer token belongs in ``env_overrides``. It must not appear in
+        the child process argument list.
+        """
+
+        args = [
+            "report-break",
+            str(run_dir),
+            "--workflow-id",
+            workflow_id,
+            "--host",
+            host,
+            "--deployment-kind",
+            deployment_kind,
+        ]
+        if org_id:
+            args += ["--org-id", org_id]
         return self._run(args, timeout=timeout, env_overrides=env_overrides)
 
     def teach(

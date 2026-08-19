@@ -116,7 +116,7 @@ teaching, escalation, and terminal receipts.
 | Python sidecar IPC | JSON-lines handler backed by a shared `EngineDispatcher` (recording, compile/replay/run/teach, auth, sync/push, review, config) | Beta; unit and e2e tests with mocked boundaries |
 | Tray IPC socket server | Token-authenticated loopback TCP server plus a `~/.openadapt/desktop_ipc.json` discovery file for `openadapt-tray` | Beta; not yet validated end to end against the shipped tray |
 | Desktop-to-flow handoff | `FlowBridge` launches the pinned Flow runtime embedded in the frozen sidecar as an isolated subprocess | Self-contained; no separate Python or Flow installation |
-| Hosted auth and push | Browser-PKCE and paste-token sign-in, keychain-stored credential, bundle push, and halted-run break reports to the hosted control plane | Beta |
+| Hosted auth and governed handoff | Browser-PKCE and paste-token sign-in; host-bound keychain credentials; exact `openadapt.push-result/v1` review, accepted-ingest, and uncertain-delivery state; local handoff retention; and halted-run break reports | Beta implementation candidate; distribution requires a release-qualified Flow build and live Cloud acceptance before Desktop updates its exact runtime pin |
 | Attended phone decisions | One-use QR pairing, protected local evidence, typed allowed actions, runner revalidation, receipts, device revocation, and an optional outbound hosted lane | Beta; device pairing does not replace the deployment's authenticated operator principal |
 | Build artifacts | Wheel/sdist, a self-contained PyInstaller engine+Flow runtime, and DMG/MSI/NSIS/DEB/AppImage native jobs | Native jobs prove the frozen browser lifecycle, structurally install/uninstall, and label every platform, architecture, and signing state |
 | Native installers | Distinct `desktop-v*` draft-prerelease workflow with final-byte checksums and GitHub provenance, auto-triggered at each engine release | Beta distribution lane; signing state is encoded in every filename and workflow qualification remains specific |
@@ -221,9 +221,10 @@ pinned sources, hashes, and modification status are recorded in
   each surface may then truthfully claim) is in
   [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md).
 
-Do not treat the legacy `upload` command or optional upload extras as the
-supported hosted path; they predate the current workflow-bundle and
-break-report contract.
+The legacy `upload --backend hosted_ingest` command is a compatibility alias
+for the supported governed `push` path. It does not call the old direct ingest
+adapter. Customer-owned storage upload is paused until it uses Flow's complete
+inventory, image-capable sanitization, and exact in-app review contract.
 
 ## Architecture
 
@@ -281,17 +282,35 @@ The Python engine exposes these Beta commands:
 | `openadapt-desktop record` | Capture a local session |
 | `openadapt-desktop list` / `info` | Inspect capture metadata |
 | `openadapt-desktop scrub` | Run configured PII scrubbing |
-| `openadapt-desktop review` / `approve` / `dismiss` | Operate the local review state machine |
+| `openadapt-desktop review` / `approve` / `dismiss` | Operate the local review state machine; dismissal keeps raw data local |
 | `openadapt-desktop compile` / `replay` / `run` | Invoke the bundled, pinned `openadapt-flow` runtime on a capture or bundle |
 | `openadapt-desktop login` / `push` / `report-break` | Authenticate to the hosted control plane, push a bundle, report a halted run |
 | `openadapt-desktop storage` / `health` / `cleanup` | Inspect and maintain local storage |
-| `openadapt-desktop backends` / `upload` | Inspect or invoke legacy upload adapters |
+| `openadapt-desktop backends` / `upload` | Inspect legacy customer-owned storage adapters; hosted uses governed `push`, and customer-owned upload remains paused behind a fail-closed release gate |
 | `openadapt-desktop config` / `doctor` | Inspect local configuration and dependencies |
 
 Raw recordings are local by default. Any egress path still requires careful
 review of the selected adapter, configuration, logs, and data-classification
 policy. This repository does not by itself establish a HIPAA-compliant or
 production-safe deployment.
+
+The governed `push` implementation delegates to Flow's exact-hash sanitized
+derivative contract. It consumes the closed `openadapt.push-result/v1` schema
+and retains the exact review or ingest handoff locally. A recording acceptance
+requires the server-owned `artifact_ingest_id` and a governed next action. A
+bundle acceptance additionally requires the server-owned workflow identity,
+the runtime-attestation binding, and the exact trusted dashboard path. An
+unknown child or delivery outcome requires reconciliation and never becomes an
+automatic retry. The command never falls back to a direct Desktop upload when
+Flow is missing or returns an error. The former direct hosted-ingest backend
+now refuses every upload.
+
+This path does not enter a native release until the exact pinned Flow artifact
+and the managed Cloud runtime pass the same live acceptance contract. The legacy
+customer-owned adapter queue remains paused for this release; its exit
+condition is a Flow-owned complete inventory, image-capable scrub, and exact
+in-app review. The dormant queue also selects the reviewed scrubbed path again
+immediately before egress; a dismissed raw capture is not uploadable.
 
 ## Development
 
@@ -316,7 +335,7 @@ current public product boundary.
 | [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) | Canonical workflow compiler, runtime, certification, and governed repair engine |
 | [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) | Flagship launcher and meta-repository |
 | [`openadapt-tray`](https://github.com/OpenAdaptAI/openadapt-tray) | Experimental system-tray status and launcher companion for this cockpit |
-| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | Experimental capture component used by this Python engine |
+| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | Beta canonical native screen, mouse, keyboard, timing, window-scoping, and media-capture component |
 | [`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy) | Experimental PII detection and redaction component |
 
 Documentation for the wider stack lives at

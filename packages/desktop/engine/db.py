@@ -244,16 +244,33 @@ class IndexDB:
     # --- Upload job operations ---
 
     def insert_upload_job(
-        self, job_id: str, capture_id: str, backend_name: str
+        self,
+        job_id: str,
+        capture_id: str,
+        backend_name: str,
+        *,
+        archive_path: str | None = None,
     ) -> None:
         """Create a new upload job in 'pending' status."""
         now = _now()
         self.conn.execute(
-            "INSERT INTO upload_jobs (job_id, capture_id, backend_name, created_at, completed_at)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (job_id, capture_id, backend_name, now, now),
+            "INSERT INTO upload_jobs "
+            "(job_id, capture_id, backend_name, archive_path, created_at, completed_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (job_id, capture_id, backend_name, archive_path, now, None),
         )
         self.conn.commit()
+
+    def recover_interrupted_upload_jobs(self) -> int:
+        """Return crash-interrupted jobs to the pending queue."""
+
+        cursor = self.conn.execute(
+            "UPDATE upload_jobs SET status = 'pending', "
+            "error = 'Desktop stopped during the prior upload attempt' "
+            "WHERE status = 'in_progress'"
+        )
+        self.conn.commit()
+        return int(cursor.rowcount)
 
     def get_pending_jobs(self) -> list[dict]:
         """Get all jobs in 'pending' status, ordered by created_at."""

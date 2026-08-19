@@ -66,24 +66,24 @@ def _init_engine(config: EngineConfig) -> types.SimpleNamespace:
 def _create_backends(config: EngineConfig) -> list:
     """Create backend instances based on config.
 
-    The hosted ingest backend (POST /api/ingest, bearer token) is always
-    registered -- it is the default cloud-lane sink. S3 is optional BYOC
-    customer-owned storage.
+    S3 is an optional customer-owned storage adapter. Hosted ingest is not a
+    generic storage backend: the ``push`` command routes it through Flow's
+    reviewed, exact-hash artifact contract.
     """
-    from engine.backends.hosted_ingest import HostedIngestBackend
-
-    backends = [HostedIngestBackend(host=config.hosted_host)]
+    backends = []
 
     if config.s3_bucket:
         from engine.backends.s3 import S3Backend
 
-        backends.append(S3Backend(
-            bucket=config.s3_bucket,
-            region=config.s3_region,
-            access_key_id=config.s3_access_key_id,
-            secret_access_key=config.s3_secret_access_key,
-            endpoint=config.s3_endpoint,
-        ))
+        backends.append(
+            S3Backend(
+                bucket=config.s3_bucket,
+                region=config.s3_region,
+                access_key_id=config.s3_access_key_id,
+                secret_access_key=config.s3_secret_access_key,
+                endpoint=config.s3_endpoint,
+            )
+        )
     return backends
 
 
@@ -138,10 +138,7 @@ def cmd_list(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
         dur = f"{c.get('duration_secs', 0):.0f}s" if c.get("duration_secs") else "..."
         size = _format_bytes(c.get("size_bytes", 0))
         started = c.get("started_at", "")[:19]
-        print(
-            f"{c['capture_id']:<12} {started:<22} {dur:<10} "
-            f"{c['review_status']:<12} {size:<10}"
-        )
+        print(f"{c['capture_id']:<12} {started:<22} {dur:<10} {c['review_status']:<12} {size:<10}")
 
 
 def cmd_info(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
@@ -216,7 +213,7 @@ def cmd_approve(args: argparse.Namespace, engine: types.SimpleNamespace) -> None
 
 
 def cmd_dismiss(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
-    """Dismiss scrubbing, accept PII risks."""
+    """Dismiss scrubbing while keeping the raw capture local."""
     from engine.review import ReviewStatus, transition_status
 
     transition_status(
@@ -226,17 +223,36 @@ def cmd_dismiss(args: argparse.Namespace, engine: types.SimpleNamespace) -> None
         db=engine.db,
         audit=engine.audit,
     )
-    print(f"Dismissed (raw data cleared for egress): {args.capture_id}")
+    print(f"Dismissed (raw data remains local and blocked from egress): {args.capture_id}")
 
 
 def cmd_upload(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """Upload a capture to a backend."""
+    if args.backend == "hosted_ingest":
+        capture = engine.db.get_capture(args.capture_id)
+        if capture is None:
+            print(f"Capture not found: {args.capture_id}")
+            sys.exit(1)
+        governed_args = types.SimpleNamespace(
+            path=capture["capture_path"],
+            kind="recording",
+            name=None,
+            host=None,
+            token=None,
+        )
+        cmd_push(governed_args, engine)
+        return
+
     from engine.upload_manager import UploadManager
 
     backends = _create_backends(engine.config)
     manager = UploadManager(engine.config, backends, engine.db, engine.audit)
 
-    job_id = manager.enqueue(args.capture_id, args.backend)
+    try:
+        job_id = manager.enqueue(args.capture_id, args.backend)
+    except ValueError as exc:
+        print(f"Upload refused: {exc}")
+        sys.exit(1)
     print(f"Upload queued: job {job_id[:8]}")
 
     results = manager.process_queue()
@@ -300,7 +316,7 @@ def cmd_rotate(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
 
 
 def cmd_push(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
-    """Zip a recording/bundle directory and push it to /api/ingest."""
+    """Use Flow to review and push an exact sanitized artifact."""
     from engine import hosted
 
     host = getattr(args, "host", None) or engine.config.hosted_host
@@ -319,7 +335,16 @@ def cmd_push(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
         print(f"Nothing to push: {exc}")
         sys.exit(1)
 
-    if result["success"]:
+    if result.get("pending_review"):
+        print(f"Sanitized derivative created: {result['sanitized_path']}")
+        print("Upload paused. Review and approve the derivative, then push that path.")
+        print(result["review_command"])
+        engine.audit.log(
+            "hosted_push_paused_for_review",
+            kind=args.kind,
+            sanitized_path=result["sanitized_path"],
+        )
+    elif result["success"]:
         print(f"Pushed. Workflow: {result['workflow_id']}")
         if result["dashboard_url"]:
             print(f"  {result['dashboard_url']}")
@@ -401,10 +426,8 @@ def cmd_report_break(args: argparse.Namespace, engine: types.SimpleNamespace) ->
 
 def cmd_backends(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """List available backends."""
+    print("  hosted_ingest: governed Flow push (local review and exact-hash approval required)")
     backends = _create_backends(engine.config)
-    if not backends:
-        print("No backends configured.")
-        return
     for b in backends:
         print(f"  {b.name}: credentials={'valid' if b.verify_credentials() else 'invalid'}")
 
@@ -461,8 +484,7 @@ def cmd_capabilities(args: argparse.Namespace, engine: types.SimpleNamespace) ->
 
     host = report["host"]
     print("Execution surface availability")
-    print(f"  Host: {host['os']} {host['os_version']} ({host['arch']}), "
-          f"app v{host['app_version']}")
+    print(f"  Host: {host['os']} {host['os_version']} ({host['arch']}), app v{host['app_version']}")
     print("=" * 72)
     for surface, cap in report["surfaces"].items():
         driver = cap.get("driver") or {}
@@ -648,20 +670,24 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     activate_provisioned_vision_runtime()
     try:
         import openadapt_capture
+
         ver = getattr(openadapt_capture, "__version__", "installed")
         ok, detail = capture_contract_status(ver)
         checks.append(("openadapt-capture", ok, detail))
     except ImportError as exc:
-        checks.append((
-            "openadapt-capture",
-            False,
-            f"unusable: {exc} (run a record or replay once to provision the "
-            "local vision runtime, or pip install openadapt-capture)",
-        ))
+        checks.append(
+            (
+                "openadapt-capture",
+                False,
+                f"unusable: {exc} (run a record or replay once to provision the "
+                "local vision runtime, or pip install openadapt-capture)",
+            )
+        )
 
     # openadapt-privacy
     try:
         import openadapt_privacy
+
         ver = getattr(openadapt_privacy, "__version__", "installed")
         checks.append(("openadapt-privacy", True, ver))
     except ImportError:
@@ -670,6 +696,7 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     # psutil
     try:
         import psutil
+
         checks.append(("psutil", True, psutil.__version__))
     except ImportError:
         checks.append(("psutil", False, "not installed (health monitoring disabled)"))
@@ -677,6 +704,7 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     # httpx (hosted ingest / auth)
     try:
         import httpx
+
         checks.append(("httpx (hosted ingest)", True, httpx.__version__))
     except ImportError:
         checks.append(("httpx (hosted ingest)", False, "not installed"))
@@ -684,27 +712,38 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     # keyring (credential store)
     try:
         import keyring
-        checks.append(("keyring (credential store)", True,
-                       getattr(keyring, "__version__", "installed")))
+
+        checks.append(
+            ("keyring (credential store)", True, getattr(keyring, "__version__", "installed"))
+        )
     except ImportError:
         checks.append(("keyring (credential store)", False, "not installed"))
 
     # openadapt-flow (the loop engine)
     from engine.flow_bridge import flow_available, flow_runtime_source
+
     flow_ready = flow_available()
-    checks.append((
-        "openadapt-flow (loop engine)",
-        flow_ready,
-        flow_runtime_source() if flow_ready else "not found (pip install openadapt-flow)",
-    ))
+    checks.append(
+        (
+            "openadapt-flow (loop engine)",
+            flow_ready,
+            flow_runtime_source() if flow_ready else "not found (pip install openadapt-flow)",
+        )
+    )
 
     # boto3 (optional BYOC storage)
     try:
         import boto3
+
         checks.append(("boto3 (S3 backend)", True, boto3.__version__))
     except ImportError:
-        checks.append(("boto3 (S3 backend)", False,
-                       "not installed (pip install openadapt-desktop[enterprise])"))
+        checks.append(
+            (
+                "boto3 (S3 backend)",
+                False,
+                "not installed (pip install openadapt-desktop[enterprise])",
+            )
+        )
 
     # Hosted control plane
     checks.append(("Hosted host", True, engine.config.hosted_host))
@@ -712,9 +751,15 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
 
     # Hosted credential
     from engine.auth.store import auth_header
-    logged_in = "Authorization" in auth_header()
-    checks.append(("Hosted credential", logged_in,
-                   "present" if logged_in else "not logged in (run 'openadapt login')"))
+
+    logged_in = "Authorization" in auth_header(engine.config.hosted_host)
+    checks.append(
+        (
+            "Hosted credential",
+            logged_in,
+            "present" if logged_in else "not logged in (run 'openadapt login')",
+        )
+    )
 
     # S3 credentials (if configured)
     if engine.config.s3_bucket:
@@ -811,8 +856,9 @@ def main(argv: list[str] | None = None) -> None:
     # login
     p = subparsers.add_parser("login", help="Authenticate to the hosted control plane")
     p.add_argument("--host", default=None, help="Hosted base URL")
-    p.add_argument("--provider", default=None, choices=["paste", "browser_pkce"],
-                   help="Force an auth provider")
+    p.add_argument(
+        "--provider", default=None, choices=["paste", "browser_pkce"], help="Force an auth provider"
+    )
 
     # credential lifetime / rotation
     p = subparsers.add_parser("credential", help="Show Cloud credential lifetime")
@@ -824,9 +870,7 @@ def main(argv: list[str] | None = None) -> None:
     p = subparsers.add_parser("push", help="Push a recording/bundle to /api/ingest")
     p.add_argument("path", nargs="?", default=None, help="Recording/bundle dir (default: latest)")
     p.add_argument("--kind", default="recording", choices=["recording", "bundle"])
-    p.add_argument("--name", default=None, help="Workflow name")
     p.add_argument("--host", default=None, help="Hosted base URL")
-    p.add_argument("--token", default=None, help="Ingest token (else keychain/env)")
 
     # compile
     p = subparsers.add_parser("compile", help="Compile a recording into a flow bundle")
@@ -850,7 +894,6 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("run_dir", help="Run directory containing report.json")
     p.add_argument("--workflow-id", dest="workflow_id", default=None, help="Hosted workflow id")
     p.add_argument("--host", default=None, help="Hosted base URL")
-    p.add_argument("--token", default=None, help="Ingest token (else keychain/env)")
 
     # backends
     subparsers.add_parser("backends", help="List available backends")

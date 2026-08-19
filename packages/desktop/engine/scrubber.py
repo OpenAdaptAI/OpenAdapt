@@ -32,6 +32,7 @@ import hashlib
 import json
 import re
 import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -124,53 +125,88 @@ class Scrubber:
             self._require_provider()
 
         scrubbed_path = capture_path.parent / (capture_path.name + ".scrubbed")
-        scrubbed_path.mkdir(parents=True, exist_ok=True)
+        if scrubbed_path.is_symlink():
+            raise RuntimeError("The scrubbed derivative path cannot be a symlink")
+        staging_path = Path(
+            tempfile.mkdtemp(
+                prefix=f".{capture_path.name}.scrubbing-",
+                dir=capture_path.parent,
+            )
+        )
+        staging_path.chmod(0o700)
 
-        all_redactions: list[dict] = []
+        try:
+            all_redactions: list[dict] = []
 
-        # Scrub meta.json text fields
-        meta_path = capture_path / "meta.json"
-        if meta_path.exists():
-            meta = json.loads(meta_path.read_text())
-            for key in ("task_description",):
-                if key in meta and isinstance(meta[key], str):
-                    scrubbed_text, redactions = self.scrub_text(meta[key])
-                    meta[key] = scrubbed_text
-                    for r in redactions:
-                        r["source"] = f"meta.json:{key}"
-                    all_redactions.extend(redactions)
-            (scrubbed_path / "meta.json").write_text(json.dumps(meta, indent=2))
+            # Scrub meta.json text fields
+            meta_path = capture_path / "meta.json"
+            if meta_path.exists():
+                meta = json.loads(meta_path.read_text())
+                for key in ("task_description",):
+                    if key in meta and isinstance(meta[key], str):
+                        scrubbed_text, redactions = self.scrub_text(meta[key])
+                        meta[key] = scrubbed_text
+                        for r in redactions:
+                            r["source"] = f"meta.json:{key}"
+                        all_redactions.extend(redactions)
+                (staging_path / "meta.json").write_text(json.dumps(meta, indent=2))
 
-        # Copy and scrub screenshots
-        screenshots_src = capture_path / "screenshots"
-        if screenshots_src.exists():
-            screenshots_dst = scrubbed_path / "screenshots"
-            screenshots_dst.mkdir(exist_ok=True)
-            for img_path in sorted(screenshots_src.glob("*.png")):
-                output_path = screenshots_dst / img_path.name
-                img_redactions = self.scrub_image(img_path, output_path)
-                for r in img_redactions:
-                    r["source"] = f"screenshots/{img_path.name}"
-                all_redactions.extend(img_redactions)
+            # Copy and scrub screenshots
+            screenshots_src = capture_path / "screenshots"
+            if screenshots_src.exists():
+                screenshots_dst = staging_path / "screenshots"
+                screenshots_dst.mkdir(exist_ok=True)
+                for img_path in sorted(screenshots_src.glob("*.png")):
+                    output_path = screenshots_dst / img_path.name
+                    img_redactions = self.scrub_image(img_path, output_path)
+                    for r in img_redactions:
+                        r["source"] = f"screenshots/{img_path.name}"
+                    all_redactions.extend(img_redactions)
 
-        # Write scrub manifest
-        manifest = {
-            "scrub_level": self.level.value,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "total_redactions": len(all_redactions),
-            "redactions": all_redactions,
-        }
-        (scrubbed_path / "scrub_manifest.json").write_text(json.dumps(manifest, indent=2))
+            # Write scrub manifest
+            manifest = {
+                "scrub_level": self.level.value,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "total_redactions": len(all_redactions),
+                "redactions": all_redactions,
+            }
+            (staging_path / "scrub_manifest.json").write_text(
+                json.dumps(manifest, indent=2)
+            )
 
-        # Write review status
-        review_status = {
-            "status": "pending_review",
-            "scrubbed_at": datetime.now(timezone.utc).isoformat(),
-            "scrub_level": self.level.value,
-        }
-        (scrubbed_path / "review_status.json").write_text(json.dumps(review_status, indent=2))
+            # Write review status
+            review_status = {
+                "status": "pending_review",
+                "scrubbed_at": datetime.now(timezone.utc).isoformat(),
+                "scrub_level": self.level.value,
+            }
+            (staging_path / "review_status.json").write_text(
+                json.dumps(review_status, indent=2)
+            )
 
-        return scrubbed_path
+            backup_path: Path | None = None
+            if scrubbed_path.exists():
+                backup_path = Path(
+                    tempfile.mkdtemp(
+                        prefix=f".{capture_path.name}.previous-",
+                        dir=capture_path.parent,
+                    )
+                )
+                backup_path.rmdir()
+                scrubbed_path.replace(backup_path)
+            try:
+                staging_path.replace(scrubbed_path)
+            except Exception:
+                if backup_path is not None and backup_path.exists():
+                    backup_path.replace(scrubbed_path)
+                raise
+            if backup_path is not None:
+                shutil.rmtree(backup_path)
+            return scrubbed_path
+        except Exception:
+            if staging_path.exists():
+                shutil.rmtree(staging_path)
+            raise
 
     def _require_provider(self):  # noqa: ANN202 - provider type is optional dep
         """Return a Presidio provider PROVEN able to run, or refuse.
@@ -246,7 +282,10 @@ class Scrubber:
             scrubbed_img.save(output_path)
         except Exception as exc:
             raise ScrubbingUnavailableError(self.level, exc) from exc
-        return [{"type": "image_scrub", "path": str(output_path)}]
+        # The caller adds a normalized derivative-relative ``source``. Never
+        # retain an absolute local path because capture directory names can
+        # contain a record identity.
+        return [{"type": "image_scrub"}]
 
     def _scrub_text_regex(self, text: str) -> tuple[str, list[dict]]:
         """Scrub PII using regex patterns only (basic level).

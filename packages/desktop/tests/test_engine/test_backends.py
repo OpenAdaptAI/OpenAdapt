@@ -57,65 +57,24 @@ class TestHostedIngestBackend:
         """Hosted ingest surfaces no per-upload storage cost to the client."""
         assert HostedIngestBackend().estimate_cost(1024**3) is None
 
-    def test_upload_without_auth_fails(self, monkeypatch) -> None:
-        """Upload without a resolvable bearer token fails closed."""
-        monkeypatch.delenv("OPENADAPT_INGEST_TOKEN", raising=False)
-        monkeypatch.setattr(
-            "engine.backends.hosted_ingest.auth_header", lambda: {}
-        )
+    def test_direct_upload_fails_closed(self) -> None:
+        """The obsolete adapter never sends unverified archive bytes."""
         from pathlib import Path
 
         result = HostedIngestBackend().upload(Path("/nonexistent.zip"), {})
         assert result.success is False
-        assert "Not logged in" in result.error
+        assert "Direct hosted ingest is disabled" in result.error
 
     def test_delete_not_supported(self) -> None:
         """Hosted ingest does not support client-side delete."""
         with pytest.raises(NotImplementedError):
             HostedIngestBackend().delete("any")
 
-    def test_upload_success(self, tmp_path, monkeypatch) -> None:
-        """A 201 response yields success + dashboard URL from workflow_id."""
-        from .conftest import FakeResponse
-
+    def test_direct_upload_makes_no_network_request(self, tmp_path, monkeypatch) -> None:
+        """Even valid-looking bytes and credentials cannot bypass Flow."""
         archive = tmp_path / "rec.zip"
         archive.write_bytes(b"zipdata")
-        monkeypatch.setattr(
-            "engine.backends.hosted_ingest.auth_header",
-            lambda: {"Authorization": "Bearer oai_ingest_x"},
-        )
-        captured = {}
-
-        def _post(url, headers=None, data=None, files=None, timeout=None):
-            captured["url"] = url
-            captured["data"] = data
-            captured["has_file"] = files is not None and "file" in files
-            return FakeResponse(201, {"ingest": {"workflow_id": "wf_7"}})
-
-        monkeypatch.setattr("engine.backends.hosted_ingest.httpx.post", _post)
-        result = HostedIngestBackend(host="https://app").upload(
-            archive, {"kind": "recording", "name": "My Flow"}
-        )
-        assert result.success is True
-        assert result.remote_url == "https://app/dashboard/workflows/wf_7"
-        assert captured["url"] == "https://app/api/ingest"
-        assert captured["data"]["kind"] == "recording"
-        assert captured["has_file"] is True
-
-    def test_upload_401(self, tmp_path, monkeypatch) -> None:
-        """A 401 is surfaced as a failed upload."""
-        from .conftest import FakeResponse
-
-        archive = tmp_path / "rec.zip"
-        archive.write_bytes(b"z")
-        monkeypatch.setattr(
-            "engine.backends.hosted_ingest.auth_header",
-            lambda: {"Authorization": "Bearer bad"},
-        )
-        monkeypatch.setattr(
-            "engine.backends.hosted_ingest.httpx.post",
-            lambda *a, **k: FakeResponse(401, {}),
-        )
         result = HostedIngestBackend().upload(archive, {})
+
         assert result.success is False
-        assert "401" in result.error
+        assert result.bytes_sent == 0

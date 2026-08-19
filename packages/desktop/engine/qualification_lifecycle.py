@@ -5,11 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
+import tempfile
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 
 class QualificationLifecycleError(RuntimeError):
@@ -263,35 +267,476 @@ def export_certified_bundle(bundle_dir: Path, destination: Path) -> str:
     return hashlib.sha256(destination.read_bytes()).hexdigest()
 
 
-def parse_flow_push(stdout: str, stderr: str, *, ok: bool) -> dict[str, Any]:
-    """Project Flow's bounded push states without treating review as deployment."""
+_PUSH_SCHEMA = "openadapt.push-result/v1"
+_PUSH_TOP_LEVEL = {
+    "schema",
+    "status",
+    "workflow_id",
+    "artifact_ingest_id",
+    "review",
+    "attestation",
+    "binding",
+    "next_action",
+    "dashboard_url",
+    "delivery",
+    "error",
+}
+_PUSH_BINDING_KEYS = {
+    "kind",
+    "source_tree_sha256",
+    "derivative_tree_sha256",
+    "approved_archive_sha256",
+    "artifact_sha256",
+    "bundle_sha256",
+    "source_recording_sha256",
+    "sanitization_policy",
+    "certification_policy",
+    "certification_evidence_sha256",
+    "governed_authorization_template_sha256",
+    "parameter_schema_sha256",
+    "attested_run_report_sha256",
+    "resolves_run_id",
+    "organization_id",
+    "bundle_version_id",
+    "bundle_version",
+    "runtime_validation_id",
+}
+_PUSH_HASH_KEYS = _PUSH_BINDING_KEYS - {
+    "kind",
+    "sanitization_policy",
+    "certification_policy",
+    "resolves_run_id",
+    "organization_id",
+    "bundle_version_id",
+    "bundle_version",
+    "runtime_validation_id",
+}
+_UUID_RE = re.compile(
+    r"[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}"
+)
 
-    if not ok:
-        return {"ok": False, "deployed": False, "error": stderr or "Cloud deploy failed"}
-    if "Upload paused for local review" in stdout:
-        sanitized_path = ""
-        marker = "Sanitized derivative created at "
-        for line in stdout.splitlines():
-            if line.startswith(marker):
-                sanitized_path = line[len(marker) :].rstrip(".")
-                break
-        return {
-            "ok": True,
-            "deployed": False,
-            "pending_review": True,
-            "sanitized_path": sanitized_path,
-        }
-    workflow_id = ""
-    dashboard_url = ""
-    for line in stdout.splitlines():
-        if "workflow_id=" in line:
-            workflow_id = line.split("workflow_id=", 1)[1].split()[0].rstrip(",).")
-        if line.startswith("Dashboard: "):
-            dashboard_url = line.removeprefix("Dashboard: ").strip()
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+def _is_uuid(value: Any) -> bool:
+    return isinstance(value, str) and _UUID_RE.fullmatch(value) is not None
+
+
+def _invalid_push_result() -> dict[str, Any]:
     return {
-        "ok": bool(workflow_id),
-        "deployed": bool(workflow_id),
-        "workflow_id": workflow_id,
-        "dashboard_url": dashboard_url,
-        "error": "" if workflow_id else "Cloud did not return a deployed workflow id",
+        "ok": False,
+        "deployed": False,
+        "pending_review": False,
+        "accepted_for_ingest": False,
+        "delivery_uncertain": True,
+        "workflow_id": None,
+        "artifact_ingest_id": None,
+        "dashboard_url": None,
+        "next_action": "reconcile",
+        "error_code": "invalid_ingest_response",
+        "error": (
+            "Flow did not return a valid push result. Reconcile the exact artifact "
+            "in Cloud before any retry."
+        ),
     }
+
+
+def _require_exact_object(value: Any, keys: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise QualificationLifecycleError(f"{label} did not match its closed schema")
+    return value
+
+
+def _origin(value: str) -> tuple[str, str, int | None]:
+    """Return a safe web origin tuple for a controller trust comparison."""
+
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        raise QualificationLifecycleError("Flow dashboard URL is unsafe")
+    hostname = parsed.hostname.lower()
+    if parsed.scheme == "http" and hostname not in {"localhost", "127.0.0.1", "::1"}:
+        raise QualificationLifecycleError("Flow dashboard URL is unsafe")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise QualificationLifecycleError("Flow dashboard URL is unsafe") from exc
+    if (parsed.scheme == "https" and port == 443) or (
+        parsed.scheme == "http" and port == 80
+    ):
+        port = None
+    return parsed.scheme, hostname, port
+
+
+def _validate_push_document(
+    document: Any, *, process_ok: bool, expected_host: str | None = None
+) -> dict[str, Any]:
+    """Validate Flow's complete V1 result and its phase-specific invariants."""
+
+    doc = _require_exact_object(document, _PUSH_TOP_LEVEL, "Flow push result")
+    if doc["schema"] != _PUSH_SCHEMA:
+        raise QualificationLifecycleError("Flow push result schema is unsupported")
+    status = doc["status"]
+    if status not in {
+        "paused_for_review",
+        "accepted_for_ingest",
+        "failed",
+        "delivery_uncertain",
+    }:
+        raise QualificationLifecycleError("Flow push result status is unsupported")
+    if process_ok != (status in {"paused_for_review", "accepted_for_ingest"}):
+        raise QualificationLifecycleError("Flow push process outcome conflicts with its status")
+
+    for field in ("workflow_id", "artifact_ingest_id"):
+        if doc[field] is not None and not _is_uuid(doc[field]):
+            raise QualificationLifecycleError(f"Flow push {field} is invalid")
+
+    review = doc["review"]
+    if review is not None:
+        review = _require_exact_object(
+            review, {"id", "scope", "sanitized_path", "command"}, "Flow review"
+        )
+        if not _is_sha256(review["id"]) or review["scope"] != "local_non_authoritative":
+            raise QualificationLifecycleError("Flow review binding is invalid")
+        for field in ("sanitized_path", "command"):
+            if review[field] is not None and (
+                not isinstance(review[field], str) or not review[field]
+            ):
+                raise QualificationLifecycleError("Flow review handoff is invalid")
+
+    attestation = doc["attestation"]
+    if attestation is not None:
+        attestation = _require_exact_object(
+            attestation, {"id", "schema"}, "Flow attestation"
+        )
+        schema = attestation["schema"]
+        if (
+            not isinstance(attestation["id"], str)
+            or not 1 <= len(attestation["id"]) <= 200
+            or not isinstance(schema, str)
+            or not schema.startswith("openadapt.runtime-validation/v")
+            or not schema.removeprefix("openadapt.runtime-validation/v").isdigit()
+        ):
+            raise QualificationLifecycleError("Flow runtime attestation is invalid")
+
+    binding = _require_exact_object(
+        doc["binding"], _PUSH_BINDING_KEYS, "Flow artifact binding"
+    )
+    if binding["kind"] not in {"recording", "bundle", None}:
+        raise QualificationLifecycleError("Flow artifact kind is invalid")
+    for field in _PUSH_HASH_KEYS:
+        if binding[field] is not None and not _is_sha256(binding[field]):
+            raise QualificationLifecycleError(f"Flow artifact binding {field} is invalid")
+    for field in ("sanitization_policy", "certification_policy"):
+        if binding[field] is not None and (
+            not isinstance(binding[field], str) or not binding[field]
+        ):
+            raise QualificationLifecycleError(f"Flow artifact binding {field} is invalid")
+    if binding["resolves_run_id"] is not None and not _is_uuid(
+        binding["resolves_run_id"]
+    ):
+        raise QualificationLifecycleError("Flow resolved run binding is invalid")
+    for field in ("organization_id", "bundle_version_id", "runtime_validation_id"):
+        if binding[field] is not None and not _is_uuid(binding[field]):
+            raise QualificationLifecycleError(
+                f"Flow artifact binding {field} is invalid"
+            )
+    bundle_version = binding["bundle_version"]
+    if bundle_version is not None and (
+        not isinstance(bundle_version, int)
+        or isinstance(bundle_version, bool)
+        or bundle_version < 1
+    ):
+        raise QualificationLifecycleError("Flow bundle version is invalid")
+
+    if doc["next_action"] not in {
+        "review_local",
+        "parameterize",
+        "validate_runtime",
+        "open_dashboard",
+        "reconcile",
+        None,
+    }:
+        raise QualificationLifecycleError("Flow next action is invalid")
+    dashboard = doc["dashboard_url"]
+    if dashboard is not None:
+        if not isinstance(dashboard, str):
+            raise QualificationLifecycleError("Flow dashboard URL is invalid")
+        dashboard_origin = _origin(dashboard)
+        if expected_host is not None and dashboard_origin != _origin(expected_host):
+            raise QualificationLifecycleError("Flow dashboard origin is not trusted")
+
+    delivery = _require_exact_object(
+        doc["delivery"], {"attempted", "certainty"}, "Flow delivery"
+    )
+    if (
+        delivery["attempted"] is not True
+        and delivery["attempted"] is not False
+        and delivery["attempted"] is not None
+    ) or delivery["certainty"] not in {
+        "not_attempted",
+        "not_accepted",
+        "accepted",
+        "unknown",
+    }:
+        raise QualificationLifecycleError("Flow delivery binding is invalid")
+    error = doc["error"]
+    if error is not None:
+        error = _require_exact_object(error, {"code", "message"}, "Flow push error")
+        if error["code"] not in {
+            "push_failed",
+            "delivery_uncertain",
+            "invalid_ingest_response",
+        } or not isinstance(error["message"], str) or not 1 <= len(error["message"]) <= 500:
+            raise QualificationLifecycleError("Flow push error is invalid")
+
+    if status == "paused_for_review":
+        pause_only_nulls = {
+            "approved_archive_sha256",
+            "artifact_sha256",
+            "bundle_sha256",
+            "source_recording_sha256",
+            "certification_policy",
+            "certification_evidence_sha256",
+            "governed_authorization_template_sha256",
+            "parameter_schema_sha256",
+            "attested_run_report_sha256",
+            "resolves_run_id",
+            "organization_id",
+            "bundle_version_id",
+            "bundle_version",
+            "runtime_validation_id",
+        }
+        if not (
+            doc["workflow_id"] is None
+            and doc["artifact_ingest_id"] is None
+            and isinstance(review, dict)
+            and isinstance(review["sanitized_path"], str)
+            and isinstance(review["command"], str)
+            and attestation is None
+            and doc["next_action"] == "review_local"
+            and dashboard is None
+            and error is None
+            and delivery == {"attempted": False, "certainty": "not_attempted"}
+            and binding["kind"] in {"recording", "bundle"}
+            and _is_sha256(binding["source_tree_sha256"])
+            and _is_sha256(binding["derivative_tree_sha256"])
+            and isinstance(binding["sanitization_policy"], str)
+            and all(binding[field] is None for field in pause_only_nulls)
+        ):
+            raise QualificationLifecycleError("Flow review pause is incomplete")
+    elif status == "accepted_for_ingest":
+        if not (
+            _is_uuid(doc["artifact_ingest_id"])
+            and isinstance(review, dict)
+            and review["sanitized_path"] is None
+            and review["command"] is None
+            and error is None
+            and delivery == {"attempted": True, "certainty": "accepted"}
+            and _is_sha256(binding["source_tree_sha256"])
+            and _is_sha256(binding["derivative_tree_sha256"])
+            and _is_sha256(binding["approved_archive_sha256"])
+            and binding["approved_archive_sha256"] == binding["artifact_sha256"]
+            and isinstance(binding["sanitization_policy"], str)
+        ):
+            raise QualificationLifecycleError("Flow accepted ingest binding is incomplete")
+        if binding["kind"] == "recording":
+            recording_only_nulls = {
+                "bundle_sha256",
+                "source_recording_sha256",
+                "certification_policy",
+                "certification_evidence_sha256",
+                "governed_authorization_template_sha256",
+                "parameter_schema_sha256",
+                "attested_run_report_sha256",
+                "resolves_run_id",
+                "organization_id",
+                "bundle_version_id",
+                "bundle_version",
+                "runtime_validation_id",
+            }
+            if not (
+                doc["workflow_id"] is None
+                and attestation is None
+                and doc["next_action"] in {"parameterize", "validate_runtime"}
+                and dashboard is None
+                and all(binding[field] is None for field in recording_only_nulls)
+            ):
+                raise QualificationLifecycleError("Flow recording ingest state is invalid")
+        elif binding["kind"] == "bundle":
+            required_bundle_hashes = (
+                "bundle_sha256",
+                "source_recording_sha256",
+                "certification_evidence_sha256",
+                "parameter_schema_sha256",
+                "attested_run_report_sha256",
+            )
+            if not (
+                _is_uuid(doc["workflow_id"])
+                and isinstance(attestation, dict)
+                and doc["next_action"] == "open_dashboard"
+                and all(_is_sha256(binding[field]) for field in required_bundle_hashes)
+                and binding["bundle_sha256"] == binding["artifact_sha256"]
+                and isinstance(binding["certification_policy"], str)
+                and _is_uuid(binding["organization_id"])
+                and _is_uuid(binding["bundle_version_id"])
+                and isinstance(binding["bundle_version"], int)
+                and not isinstance(binding["bundle_version"], bool)
+                and binding["bundle_version"] >= 1
+                and _is_uuid(binding["runtime_validation_id"])
+                and isinstance(dashboard, str)
+                and urlsplit(dashboard).path == f"/dashboard/workflows/{doc['workflow_id']}"
+                and not urlsplit(dashboard).query
+                and not urlsplit(dashboard).fragment
+            ):
+                raise QualificationLifecycleError("Flow bundle ingest state is invalid")
+        else:
+            raise QualificationLifecycleError("Flow accepted ingest has no artifact kind")
+    elif status == "delivery_uncertain":
+        uncertain_server_nulls = {
+            "organization_id",
+            "bundle_version_id",
+            "bundle_version",
+            "runtime_validation_id",
+        }
+        if not (
+            doc["workflow_id"] is None
+            and doc["artifact_ingest_id"] is None
+            and doc["next_action"] == "reconcile"
+            and dashboard is None
+            and delivery == {"attempted": True, "certainty": "unknown"}
+            and isinstance(error, dict)
+            and error["code"] == "delivery_uncertain"
+            and all(binding[field] is None for field in uncertain_server_nulls)
+        ):
+            raise QualificationLifecycleError("Flow uncertain delivery state is invalid")
+    else:
+        if not (
+            doc["workflow_id"] is None
+            and doc["artifact_ingest_id"] is None
+            and review is None
+            and attestation is None
+            and dashboard is None
+            and isinstance(error, dict)
+            and all(value is None for value in binding.values())
+        ):
+            raise QualificationLifecycleError("Flow failed state is invalid")
+        if error["code"] == "push_failed":
+            if not (
+                doc["next_action"] is None
+                and delivery == {"attempted": None, "certainty": "not_accepted"}
+            ):
+                raise QualificationLifecycleError("Flow rejected delivery state is invalid")
+        elif error["code"] == "invalid_ingest_response":
+            if not (
+                doc["next_action"] == "reconcile"
+                and delivery == {"attempted": True, "certainty": "unknown"}
+            ):
+                raise QualificationLifecycleError("Flow invalid response state is invalid")
+        else:
+            raise QualificationLifecycleError("Flow failed state has the wrong error")
+    return doc
+
+
+def parse_flow_push(
+    stdout: str, stderr: str, *, ok: bool, expected_host: str | None = None
+) -> dict[str, Any]:
+    """Project only Flow's exact JSON V1 result into Desktop state."""
+
+    del stderr  # Raw child diagnostics must not cross the local UI boundary.
+    try:
+        document = _validate_push_document(
+            json.loads(stdout), process_ok=ok, expected_host=expected_host
+        )
+    except (json.JSONDecodeError, QualificationLifecycleError, TypeError, ValueError):
+        return _invalid_push_result()
+    status = document["status"]
+    accepted = status == "accepted_for_ingest"
+    bundle_accepted = accepted and document["binding"]["kind"] == "bundle"
+    error = document["error"] or {}
+    return {
+        "ok": status in {"paused_for_review", "accepted_for_ingest"},
+        "deployed": bundle_accepted,
+        "pending_review": status == "paused_for_review",
+        "accepted_for_ingest": accepted,
+        "delivery_uncertain": status == "delivery_uncertain"
+        or document["delivery"]["certainty"] == "unknown",
+        "status": status,
+        "workflow_id": document["workflow_id"],
+        "artifact_ingest_id": document["artifact_ingest_id"],
+        "review": document["review"],
+        "attestation": document["attestation"],
+        "binding": document["binding"],
+        "next_action": document["next_action"],
+        "dashboard_url": document["dashboard_url"],
+        "delivery": document["delivery"],
+        "error_code": error.get("code"),
+        "error": error.get("message", ""),
+        "push_result": document,
+        "sanitized_path": (document["review"] or {}).get("sanitized_path") or "",
+        "review_command": (document["review"] or {}).get("command") or "",
+    }
+
+
+def persist_deployment_handoff(
+    data_dir: Path, *, local_workflow_id: str, result: dict[str, Any]
+) -> Path:
+    """Persist the exact typed Flow state so Desktop never loses a handoff."""
+
+    local_workflow_id = validate_path_token(local_workflow_id, label="Workflow id")
+    push_result = result.get("push_result")
+    if isinstance(push_result, dict):
+        state = {
+            "paused_for_review": "needs_review",
+            "accepted_for_ingest": (
+                "deployed"
+                if push_result["binding"]["kind"] == "bundle"
+                else "accepted_recording"
+            ),
+            "failed": "failed",
+            "delivery_uncertain": "delivery_uncertain",
+        }[push_result["status"]]
+    elif result.get("delivery_uncertain"):
+        state = "delivery_uncertain"
+        push_result = None
+    else:
+        raise QualificationLifecycleError("No valid Flow push result is available")
+    root = Path(data_dir) / "deployment-handoffs"
+    root.mkdir(parents=True, exist_ok=True)
+    try:
+        root.chmod(0o700)
+    except OSError:
+        pass
+    destination = root / f"{local_workflow_id}.json"
+    document = {
+        "schema": "openadapt.desktop-deployment-handoff/v1",
+        "local_workflow_id": local_workflow_id,
+        "state": state,
+        "updated_at": datetime.now(UTC).isoformat(),
+        "push_result": push_result,
+        "error_code": result.get("error_code"),
+    }
+    fd, temporary_name = tempfile.mkstemp(
+        dir=str(root), prefix=f".{local_workflow_id}.", suffix=".tmp"
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(document, handle, sort_keys=True, separators=(",", ":"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, stat.S_IRUSR | stat.S_IWUSR)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return destination

@@ -29,12 +29,12 @@ State machine (from design doc Section 5):
          |  copy)    |         |
          +-----+-----+         |
                |               |
-               v               v
+               v
          +-------------------------+
-         |   CLEARED FOR EGRESS   |  <- Data can now be sent to:
-         |                        |    storage backends, VLM APIs,
-         |                        |    annotation pipelines, FL, etc.
+         |   CLEARED FOR EGRESS   |  <- Only the reviewed scrubbed copy
          +-------------------------+
+
+``DISMISSED`` records a local choice only. It never permits raw-data egress.
 
 All outbound data paths MUST call check_egress_allowed() before sending
 any data off-machine. This is the single enforcement point.
@@ -43,7 +43,12 @@ any data off-machine. This is the single enforcement point.
 from __future__ import annotations
 
 import enum
-from typing import TYPE_CHECKING
+import hashlib
+import json
+import os
+import re
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from engine.audit import AuditLogger
@@ -57,7 +62,7 @@ class ReviewStatus(enum.Enum):
         CAPTURED:  Raw recording just created. Pending review. Blocked from all egress.
         SCRUBBED:  Scrub pass completed, awaiting user review. Still blocked.
         REVIEWED:  User reviewed scrubbed copy and approved. Scrubbed copy cleared for egress.
-        DISMISSED: User skipped scrubbing, accepted PII risks. Raw data cleared for egress.
+        DISMISSED: User skipped scrubbing. Raw data remains local and blocked from egress.
         DELETED:   Recording deleted from disk.
     """
 
@@ -68,8 +73,9 @@ class ReviewStatus(enum.Enum):
     DELETED = "deleted"
 
 
-# States that allow data to leave the machine.
-EGRESS_ALLOWED_STATES = frozenset({ReviewStatus.REVIEWED, ReviewStatus.DISMISSED})
+# Only a reviewed sanitized derivative can leave the machine.  `DISMISSED`
+# remains a persisted legacy/local-review state, but it never grants egress.
+EGRESS_ALLOWED_STATES = frozenset({ReviewStatus.REVIEWED})
 
 # Valid state transitions.
 VALID_TRANSITIONS: dict[ReviewStatus, frozenset[ReviewStatus]] = {
@@ -98,6 +104,187 @@ class EgressBlockedError(Exception):
         )
 
 
+class EgressArtifactError(Exception):
+    """Raised when the approved sanitized derivative is absent or unsafe."""
+
+
+_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+
+
+def load_derivative_approval(path: Path) -> str:
+    """Return the exact approved tree digest from a closed local schema."""
+
+    try:
+        review = json.loads((path / "review_status.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EgressArtifactError("The sanitized derivative has no valid approval.") from exc
+    if not isinstance(review, dict) or set(review) != {"status", "approved_tree_sha256"}:
+        raise EgressArtifactError("The sanitized derivative approval schema is invalid.")
+    approved_digest = review.get("approved_tree_sha256")
+    if review.get("status") != "reviewed" or not isinstance(
+        approved_digest, str
+    ) or not _SHA256_RE.fullmatch(approved_digest):
+        raise EgressArtifactError("The sanitized derivative has no exact approval.")
+    return approved_digest
+
+
+def _stream_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def update_derivative_tree_digest(
+    digest: Any,
+    *,
+    relative_path: str,
+    member_type: str,
+    file_sha256: str | None = None,
+) -> None:
+    """Add one unambiguous, type-aware record to a derivative tree hash."""
+
+    path_bytes = relative_path.encode("utf-8")
+    if member_type not in {"directory", "file"}:
+        raise EgressArtifactError("The sanitized derivative has an unsupported member type.")
+    digest.update(b"openadapt.desktop-derivative-member/v1\0")
+    digest.update(b"D" if member_type == "directory" else b"F")
+    digest.update(len(path_bytes).to_bytes(8, "big"))
+    digest.update(path_bytes)
+    if member_type == "file":
+        if not isinstance(file_sha256, str) or not _SHA256_RE.fullmatch(file_sha256):
+            raise EgressArtifactError("The sanitized derivative file digest is invalid.")
+        digest.update(bytes.fromhex(file_sha256))
+
+
+def derivative_tree_sha256(path: Path) -> str:
+    """Hash a derivative tree without loading recording media into memory."""
+
+    digest = hashlib.sha256()
+    members = [path, *sorted(path.rglob("*"))] if path.is_dir() else [path]
+    for member in members:
+        if member.is_symlink():
+            raise EgressArtifactError("The sanitized derivative contains a symlink.")
+        relative = "." if member == path else member.relative_to(path).as_posix()
+        if relative == "review_status.json":
+            continue
+        if member.is_file():
+            stat = os.stat(member, follow_symlinks=False)
+            if stat.st_nlink != 1:
+                raise EgressArtifactError(
+                    "The sanitized derivative contains a hard-linked file."
+                )
+            update_derivative_tree_digest(
+                digest,
+                relative_path=relative,
+                member_type="file",
+                file_sha256=_stream_sha256(member),
+            )
+        elif member.is_dir():
+            update_derivative_tree_digest(
+                digest,
+                relative_path=relative,
+                member_type="directory",
+            )
+        else:
+            raise EgressArtifactError(
+                "The sanitized derivative has an unsupported member type."
+            )
+    return digest.hexdigest()
+
+
+def approved_egress_path(capture_id: str, db: IndexDB) -> Path:
+    """Return the exact reviewed derivative that an upload worker may send.
+
+    The database status is not sufficient. This function also proves that the
+    selected path is the distinct scrubbed copy and contains no symlinks. The
+    upload worker calls it again immediately before network egress.
+    """
+
+    capture = db.get_capture(capture_id)
+    if capture is None:
+        raise ValueError(f"Unknown capture: {capture_id}")
+    status = ReviewStatus(capture["review_status"])
+    if status not in EGRESS_ALLOWED_STATES:
+        raise EgressBlockedError(capture_id, status)
+
+    raw_value = str(capture.get("capture_path") or "").strip()
+    scrubbed_value = str(capture.get("scrubbed_path") or "").strip()
+    if not scrubbed_value:
+        raise EgressArtifactError(f"Recording '{capture_id}' has no approved sanitized derivative.")
+    scrubbed_candidate = Path(scrubbed_value)
+    if scrubbed_candidate.is_symlink():
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' has a symlink as its sanitized derivative."
+        )
+    try:
+        scrubbed = scrubbed_candidate.resolve(strict=True)
+        raw = Path(raw_value).resolve(strict=True)
+    except OSError as exc:
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' has an unavailable sanitized derivative."
+        ) from exc
+    if scrubbed == raw:
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' points its sanitized derivative at raw data."
+        )
+    expected = raw.parent / f"{raw.name}.scrubbed"
+    if scrubbed != expected:
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' does not use its canonical sanitized derivative."
+        )
+    paths = [scrubbed, *scrubbed.rglob("*")] if scrubbed.is_dir() else [scrubbed]
+    if any(path.is_symlink() for path in paths):
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' has a symlink in its sanitized derivative."
+        )
+    linked_file = next(
+        (
+            path
+            for path in paths
+            if path.is_file() and os.stat(path, follow_symlinks=False).st_nlink != 1
+        ),
+        None,
+    )
+    if linked_file is not None:
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' has a hard-linked file in its sanitized derivative."
+        )
+    if not scrubbed.is_dir():
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' has no approved sanitized derivative directory."
+        )
+    documents: dict[str, dict] = {}
+    for name in ("scrub_manifest.json", "review_status.json"):
+        manifest_path = scrubbed / name
+        try:
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise EgressArtifactError(
+                f"Recording '{capture_id}' has no valid {name}."
+            ) from exc
+        if not isinstance(value, dict):
+            raise EgressArtifactError(
+                f"Recording '{capture_id}' has no valid {name}."
+            )
+        documents[name] = value
+    manifest = documents["scrub_manifest.json"]
+    if manifest.get("scrub_level") == "basic" and any(
+        path.is_file() for path in (scrubbed / "screenshots").rglob("*")
+    ):
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' used basic scrubbing for screenshots. "
+            "Image-capable scrubbing is required before egress."
+        )
+    approved_digest = load_derivative_approval(scrubbed)
+    if derivative_tree_sha256(scrubbed) != approved_digest:
+        raise EgressArtifactError(
+            f"Recording '{capture_id}' changed after its local review."
+        )
+    return scrubbed
+
+
 def check_egress_allowed(capture_id: str, db: IndexDB) -> bool:
     """Check whether a capture is cleared for egress.
 
@@ -114,18 +301,14 @@ def check_egress_allowed(capture_id: str, db: IndexDB) -> bool:
         db: The index database instance.
 
     Returns:
-        True if the capture is cleared for egress.
+        True if the capture has a reviewed sanitized derivative.
 
     Raises:
-        EgressBlockedError: If the capture is in captured or scrubbed state.
+        EgressBlockedError: If the capture is not in reviewed state.
+        EgressArtifactError: If the reviewed derivative is absent or unsafe.
         ValueError: If the capture does not exist.
     """
-    capture = db.get_capture(capture_id)
-    if capture is None:
-        raise ValueError(f"Unknown capture: {capture_id}")
-    status = ReviewStatus(capture["review_status"])
-    if status not in EGRESS_ALLOWED_STATES:
-        raise EgressBlockedError(capture_id, status)
+    approved_egress_path(capture_id, db)
     return True
 
 
@@ -174,6 +357,43 @@ def transition_status(
                 f"Status mismatch for '{capture_id}': "
                 f"expected {from_status.value}, got {current.value}"
             )
+        if from_status == ReviewStatus.SCRUBBED and to_status == ReviewStatus.REVIEWED:
+            scrubbed_value = str(capture.get("scrubbed_path") or "").strip()
+            if not scrubbed_value:
+                raise EgressArtifactError(
+                    f"Recording '{capture_id}' has no sanitized derivative to approve."
+                )
+            scrubbed = Path(scrubbed_value)
+            expected = Path(capture["capture_path"]).parent / (
+                Path(capture["capture_path"]).name + ".scrubbed"
+            )
+            if scrubbed.is_symlink() or scrubbed.resolve(strict=True) != expected.resolve():
+                raise EgressArtifactError(
+                    f"Recording '{capture_id}' does not use its canonical sanitized derivative."
+                )
+            manifest_path = scrubbed / "scrub_manifest.json"
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise EgressArtifactError(
+                    f"Recording '{capture_id}' has no valid scrub_manifest.json."
+                ) from exc
+            if not isinstance(manifest, dict):
+                raise EgressArtifactError(
+                    f"Recording '{capture_id}' has no valid scrub_manifest.json."
+                )
+            approval_path = scrubbed / "review_status.json"
+            temporary = scrubbed / ".review_status.json.tmp"
+            approval = {
+                "status": "reviewed",
+                "approved_tree_sha256": derivative_tree_sha256(scrubbed),
+            }
+            temporary.write_text(
+                json.dumps(approval, sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            os.chmod(temporary, 0o600)
+            temporary.replace(approval_path)
         db.update_capture(capture_id, review_status=to_status.value)
 
     if audit is not None:

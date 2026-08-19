@@ -14,6 +14,7 @@ from engine.flow_bridge import (
     EMBEDDED_FLOW_MODE,
     BrowserRuntimeError,
     FlowBridge,
+    FlowNotAvailableError,
     _safe_command_for_log,
     flow_available,
 )
@@ -65,6 +66,47 @@ class TestFlowBridgeInvocation:
         # openadapt-flow compile requires --name; default it to the bundle name.
         assert "--name" in command
         assert command[command.index("--name") + 1] == "bundle"
+
+    def test_report_break_keeps_token_out_of_argv(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls, stdout="Nothing emitted: no halt"))
+
+        bridge.report_break(
+            tmp_path / "run",
+            workflow_id="workflow-1",
+            host="https://app.openadapt.ai",
+            env_overrides={"OPENADAPT_INGEST_TOKEN": "secret-value"},
+        )
+
+        command, env = calls[0]
+        assert "secret-value" not in command
+        assert "--token" not in command
+        assert env["OPENADAPT_INGEST_TOKEN"] == "secret-value"
+
+    def test_push_keeps_token_and_local_name_out_of_argv(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls, stdout="--json\nok"))
+
+        bridge.push(
+            tmp_path / "bundle",
+            kind="bundle",
+            host="https://app.openadapt.ai",
+            name="Jane Doe patient transfer",
+            token="secret-value",
+        )
+
+        command, env = calls[1]
+        assert "secret-value" not in command
+        assert "Jane Doe patient transfer" not in command
+        assert "--token" not in command
+        assert "--name" not in command
+        assert env["OPENADAPT_INGEST_TOKEN"] == "secret-value"
 
     def test_demo_record_uses_canonical_bundled_flow_command(
         self, tmp_path: Path, monkeypatch
@@ -418,6 +460,32 @@ class TestFlowBridgeInvocation:
         assert "oar_secret" not in rendered
         assert rendered == "openadapt-flow push --token [REDACTED] --kind bundle"
 
+    def test_host_is_redacted_from_debug_command(self) -> None:
+        rendered = _safe_command_for_log(
+            [
+                "openadapt-flow",
+                "push",
+                "artifact",
+                "--host",
+                "https://customer-private.example",
+            ]
+        )
+        assert "customer-private" not in rendered
+        assert "--host [REDACTED]" in rendered
+
+    def test_egress_local_paths_are_redacted_from_debug_command(self) -> None:
+        rendered = _safe_command_for_log(
+            [
+                "openadapt-flow",
+                "push",
+                "/captures/Jane-Doe-12345.scrubbed",
+                "--kind",
+                "recording",
+            ]
+        )
+        assert "Jane-Doe" not in rendered
+        assert rendered == "openadapt-flow push [LOCAL_PATH] --kind recording"
+
     def test_phi_capable_selector_values_are_redacted_from_debug_command(self) -> None:
         rendered = _safe_command_for_log(
             [
@@ -460,7 +528,7 @@ class TestFlowBridgeInvocation:
         monkeypatch.setattr("engine.flow_bridge._is_frozen", lambda: True)
         monkeypatch.setattr("engine.flow_bridge.sys.executable", "/signed/openadapt-engine")
         calls: list = []
-        bridge = FlowBridge(runner=_runner(calls, stdout="wf_123"))
+        bridge = FlowBridge(runner=_runner(calls, stdout="--json\nwf_123"))
 
         assert bridge.supports_command("push")
         result = bridge.push(
@@ -482,6 +550,22 @@ class TestFlowBridgeInvocation:
             EMBEDDED_FLOW_MODE,
             "push",
         ]
+
+    def test_push_refuses_before_upload_when_structured_result_is_missing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls, stdout="legacy push help"))
+
+        with pytest.raises(FlowNotAvailableError, match="structured push-result"):
+            bridge.push(
+                tmp_path / "bundle",
+                kind="bundle",
+                host="https://app.openadapt.ai",
+            )
+
+        assert [command[1:] for command, _env in calls] == [["push", "--help"]]
 
 
 class TestReportParsing:

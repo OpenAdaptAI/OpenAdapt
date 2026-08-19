@@ -366,12 +366,10 @@ Every recording has a **review status** that persists in the index database. Thi
            │  scrubbed │         │
            │  copy)    │         │
            └─────┬─────┘         │
-                 │               │
-                 ▼               ▼
+                 │
+                 ▼
            ┌─────────────────────────┐
-           │     CLEARED FOR EGRESS  │  ← Data can now be sent to:
-           │                         │    storage backends, VLM APIs,
-           │                         │    annotation pipelines, FL, etc.
+           │     CLEARED FOR EGRESS  │  ← Reviewed scrubbed copy only
            └─────────────────────────┘
 ```
 
@@ -382,19 +380,17 @@ Every recording has a **review status** that persists in the index database. Thi
 | `captured` | Raw recording just created. Pending review. | **No** — blocked from all egress |
 | `scrubbed` | Scrub pass completed, awaiting user review | **No** — still pending human approval |
 | `reviewed` | User reviewed scrubbed copy and approved | **Yes** — scrubbed copy only |
-| `dismissed` | User skipped scrubbing, accepted PII risks | **Yes** — raw data, user's choice |
+| `dismissed` | User skipped scrubbing and kept the raw capture local | **No** — dismissal never grants egress |
 | `deleted` | User deleted the recording | N/A |
 
 #### Where data can leave the machine (ALL gated by review state)
 
 | Egress Path | What is sent | Gated? |
 |-------------|-------------|--------|
-| S3 / R2 / HF Hub / MinIO upload | Full recording archive | Yes — must be `reviewed` or `dismissed` |
-| OpenAI Vision API (annotation) | Individual screenshots | Yes — must be `reviewed` or `dismissed` |
-| Anthropic Claude API (annotation) | Individual screenshots | Yes — must be `reviewed` or `dismissed` |
-| Google Gemini API (annotation) | Individual screenshots | Yes — must be `reviewed` or `dismissed` |
-| Federated learning (gradient upload) | Model gradients (derived from data) | Yes — must be `reviewed` or `dismissed` |
-| Magic Wormhole (P2P sharing) | Full recording | Yes — must be `reviewed` or `dismissed` |
+| OpenAdapt hosted ingest | Flow-approved immutable sanitized archive plus its exact manifest | Yes — Flow review, approval, and hash verification |
+| S3 / R2 / MinIO upload | Reviewed sanitized derivative archive | Yes — must be `reviewed` |
+| Model or annotation service | Reviewed sanitized derivative content | Yes — must be `reviewed` |
+| Peer-to-peer sharing | Reviewed sanitized derivative archive | Yes — must be `reviewed` |
 | Error reporting / telemetry | Could contain screenshot fragments | Yes — stripped of all capture data |
 
 **Implementation**: A single `check_egress_allowed(capture_id) -> bool` function that every outbound code path calls. If the recording is in `captured` or `scrubbed` state, the function raises `EgressBlockedError` with a user-facing message: "This recording hasn't been reviewed yet. Open the review panel to approve it for sharing."
@@ -423,9 +419,9 @@ The tray icon can show a badge count of pending reviews. Periodic reminders (con
 2. **User opens review panel** (from tray menu, capture browser, or reminder notification)
 3. **User chooses action**:
    - **"Run Scrubbing"** → scrub worker creates parallel scrubbed copy → state becomes `scrubbed` → review UI shows before/after diff → user approves → state becomes `reviewed`
-   - **"Dismiss (skip scrubbing)"** → warning: "Your raw recordings may contain passwords, personal information, or sensitive data. They will be uploadable as-is." → user confirms → state becomes `dismissed`
+   - **"Dismiss (skip scrubbing)"** → warning: "Your raw recording remains local and cannot be uploaded." → user confirms → state becomes `dismissed`
    - **"Delete"** → recording deleted from disk → state becomes `deleted`
-4. **Once `reviewed` or `dismissed`** → recording is cleared for any egress path (upload, VLM annotation, sharing, etc.)
+4. **Once `reviewed`** → only the reviewed scrubbed copy is eligible for an approved egress path.
 
 This means:
 - The raw capture is never modified
@@ -496,9 +492,11 @@ The `scrub_manifest.json` enables the review UI to show exactly what changed:
 }
 ```
 
-#### 5.5 Scrubbing is Optional
+#### 5.5 Scrubbing Is Required for Egress
 
-Scrubbing is **recommended but not mandatory**. Users who are uploading their own personal recordings and don't care about PII can skip the scrub step entirely — they just confirm they've reviewed the raw data and consent to upload it as-is. The consent dialog makes this explicit (see Section 8).
+A user can dismiss a local review without scrubbing. That choice keeps the raw
+recording local. Every egress path requires a separate scrubbed derivative and
+an explicit review of that derivative.
 
 ---
 
@@ -613,7 +611,7 @@ class StorageBackend(Protocol):
     def estimate_cost(self, size_bytes: int) -> float | None: ...
 ```
 
-All backends share the same upload pipeline:
+Customer-owned storage adapters share the legacy upload pipeline:
 
 ```
 [User approves in review UI] → Compress (tar.zst) → Queue → Upload Worker
@@ -624,6 +622,12 @@ All backends share the same upload pipeline:
                                                   - R2: S3-compatible multipart
                                                   - Wormhole: P2P direct
 ```
+
+Hosted ingest is not one of these generic adapters. `push` delegates to Flow,
+which inventories and sanitizes every file, pauses for review, freezes the
+approved exact bytes, and sends the archive with its sanitization manifest.
+The old `HostedIngestBackend` remains importable for compatibility but refuses
+direct uploads. `upload --backend hosted_ingest` routes to governed `push`.
 
 ### 7.4 Recommended Backend Combinations
 
@@ -832,11 +836,8 @@ You are clearing [N] recording sessions ([X.X] GB) for
 sharing with external services.
 
 This data includes screenshots of your desktop and records
-of your mouse and keyboard actions. [If scrubbing was applied:
-"PII scrubbing was applied — review the highlighted regions
-above to verify nothing sensitive remains." / If dismissed:
-"PII scrubbing was not applied. The raw recordings will be
-shared as-is."]
+of your mouse and keyboard actions. PII scrubbing was applied.
+Review the highlighted regions above to verify nothing sensitive remains.
 
 Once cleared, this data may be sent to:
 
@@ -866,7 +867,7 @@ Once cleared, this data may be sent to:
     this data will also be open-source
 
 By clicking "Clear for Sharing", you confirm:
-  1. You have reviewed the [scrubbed/raw] recordings above
+  1. You have reviewed the scrubbed derivative above
   2. You consent to this data being sent to the services
      listed above
   3. [If any public destination: "You understand this data
@@ -890,20 +891,21 @@ Key design choices:
 
 ### 8.4 Dismiss Flow (Skip Scrubbing)
 
-Users CAN skip scrubbing entirely via the "Dismiss" action in the review panel. This still shows the full consent dialog:
+Users can skip scrubbing through the "Dismiss" action. This action does not
+grant consent and does not enable egress:
 
 1. User clicks "Dismiss (skip scrubbing)" on a pending recording
-2. Warning dialog: "Your recordings will be shared WITHOUT PII removal. Screenshots may contain passwords, personal information, or sensitive data visible on your screen."
-3. The consent dialog (8.3) is shown with the full list of configured destinations, with the note "PII scrubbing was not applied. The raw recordings will be shared as-is."
-4. User must explicitly confirm → state becomes `dismissed` → recording is cleared for egress
+2. Warning dialog: "Your raw recording remains local and cannot be uploaded."
+3. User confirms the local dismissal.
+4. The state becomes `dismissed`, and all egress checks continue to refuse it.
 
 ### 8.5 Batch Operations
 
 For users with many accumulated pending recordings:
 
 - **"Review All"**: Opens a batch review panel. User can scrub all, review summary of redactions across all recordings, and clear them in one action.
-- **"Dismiss All"**: Shows the warning + consent dialog once, covering all pending recordings. Good for users who don't care about PII (e.g., recording on a dedicated test machine).
-- **Per-app policies** (future): "Auto-dismiss recordings from [app name]" — for users who know certain apps never show PII. Requires explicit opt-in per app.
+- **"Dismiss All"**: Keeps all selected raw recordings local and blocked from egress.
+- **Per-app policies**: A policy can automate a sanitization step. It cannot mark raw recordings as uploadable.
 
 ---
 

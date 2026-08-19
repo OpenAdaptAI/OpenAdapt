@@ -1,37 +1,37 @@
 """hosted.py -- the cloud-lane egress verbs: ``push`` and ``report_break``.
 
-``push`` zips a flow recording (or compiled bundle) directory and uploads it to
-``POST /api/ingest`` (spec section 3b). ``report_break`` reads a local run's
-``report.json`` and posts a PHI-free break descriptor to
-``POST /api/runs/ingest-report`` (spec section 3c) so a BYOC halt is triageable
-centrally without any PHI leaving the machine.
+``push`` delegates to Flow's sanitized-derivative upload contract. It never
+constructs or uploads an archive from raw Desktop data. ``report_break`` also
+delegates to Flow. Flow validates ``report.json`` and sends only its
+closed-schema, PHI-minimal summary.
 
 Credentials come exclusively from :mod:`engine.auth` (``auth_header()``); this
-module never implements login. If the ``openadapt-flow`` CLI grows ``push``
-(workstream W4), :func:`push` prefers delegating to it; otherwise it runs
-in-tree against the identical contract.
+module never implements login. :func:`push` delegates to the pinned Flow
+runtime and fails closed when that command is unavailable.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any
 
-import httpx
 from loguru import logger
 
-from engine.auth.store import DEFAULT_HOST, active_credential, auth_header
-from engine.backends.hosted_ingest import HostedIngestBackend
+from engine.auth.store import (
+    DEFAULT_HOST,
+    INGEST_TOKEN_ENV,
+    active_credential,
+    canonical_host_origin,
+    token_for_host,
+)
 from engine.flow_bridge import FlowBridge
+from engine.qualification_lifecycle import parse_flow_push
 
-INGEST_REPORT_PATH = "/api/runs/ingest-report"
-
-# Keys that MUST NOT appear in a break descriptor on any lane (fail-closed;
-# server returns 422 if they leak). We strip them client-side too.
-_PHI_FORBIDDEN_KEYS = frozenset({"field_values", "report_body", "dom"})
+_MAX_FLOW_ERROR_CHARS = 500
 
 
 class PhiBoundaryError(RuntimeError):
@@ -49,6 +49,13 @@ def zip_dir(src_dir: Path, dest: Path | None = None) -> Path:
         Path to the created ``.zip``.
     """
     src_dir = Path(src_dir)
+    if src_dir.is_symlink() or not src_dir.is_dir():
+        raise ValueError("Archive source must be a real directory, not a symlink.")
+    members = sorted(src_dir.rglob("*"))
+    symlink = next((path for path in members if path.is_symlink()), None)
+    if symlink is not None:
+        raise ValueError(f"Archive source contains a symlink: {symlink.relative_to(src_dir)}")
+    temporary = dest is None
     if dest is None:
         fd, tmp = tempfile.mkstemp(suffix=".zip", prefix=f"{src_dir.name}_")
         # Close the handle mkstemp opened before touching the path -- on Windows
@@ -56,10 +63,19 @@ def zip_dir(src_dir: Path, dest: Path | None = None) -> Path:
         os.close(fd)
         Path(tmp).unlink(missing_ok=True)
         dest = Path(tmp)
-    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(src_dir.rglob("*")):
-            if path.is_file():
-                zf.write(path, path.relative_to(src_dir))
+    try:
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in members:
+                if path.is_symlink():
+                    raise ValueError(
+                        f"Archive source contains a symlink: {path.relative_to(src_dir)}"
+                    )
+                if path.is_file():
+                    zf.write(path, path.relative_to(src_dir))
+    except Exception:
+        if temporary:
+            dest.unlink(missing_ok=True)
+        raise
     return dest
 
 
@@ -81,12 +97,12 @@ def push(
     host: str = DEFAULT_HOST,
     token: str | None = None,
     recordings_dir: Path | None = None,
-    backend: HostedIngestBackend | None = None,
+    backend: Any = None,
     prefer_flow: bool = True,
     db: Any = None,
     bundle_id: str | None = None,
 ) -> dict[str, Any]:
-    """Zip a recording/bundle directory and push it to ``/api/ingest``.
+    """Push through Flow's approved sanitized-derivative contract.
 
     Signature mirrors ``openadapt_flow.hosted.push(path, kind, name, host, token)``
     (flow PR #119) so the two are swappable. On success the returned hosted
@@ -102,8 +118,8 @@ def push(
         host: Hosted base URL.
         token: Explicit ingest token (else resolved from the auth store/env).
         recordings_dir: Where to look for the default recording.
-        backend: Injected backend (tests); defaults to a real HostedIngestBackend.
-        prefer_flow: Delegate to ``openadapt-flow push`` when that CLI supports it.
+        backend: Deprecated direct backend injection. Supplying it fails closed.
+        prefer_flow: Deprecated bypass. Setting it false fails closed.
         db: Optional :class:`~engine.db.IndexDB` to persist the workflow_id into.
         bundle_id: Local bundle id to map to the returned hosted workflow_id.
 
@@ -123,23 +139,38 @@ def push(
     if not path.exists():
         raise FileNotFoundError(f"Nothing to push at {path}.")
 
-    if prefer_flow and _flow_supports_push():
+    if backend is not None or not prefer_flow:
+        return {
+            "success": False,
+            "workflow_id": None,
+            "dashboard_url": None,
+            "error": (
+                "Direct Desktop ingest is disabled. Use the pinned Flow push command so "
+                "only an approved, exact-hash sanitized derivative can leave the machine."
+            ),
+        }
+    try:
         result_dict = _push_via_flow(path, kind=kind, name=name, host=host, token=token)
-    else:
-        backend = backend or HostedIngestBackend(host=host)
-        zip_path = zip_dir(path)
-        try:
-            metadata: dict[str, Any] = {"kind": kind, "capture_id": path.name}
-            if name:
-                metadata["name"] = name
-            result = backend.upload(zip_path, metadata)
-        finally:
-            zip_path.unlink(missing_ok=True)
-        result_dict = {
-            "success": result.success,
-            "workflow_id": result.metadata.get("workflow_id", "") if result.success else "",
-            "dashboard_url": result.remote_url,
-            "error": result.error,
+    except Exception as exc:
+        # A launch or transport failure must never select a raw upload
+        # fallback. The exception can occur after Flow dispatched a request,
+        # so Desktop must not claim that no bytes crossed the boundary.
+        logger.warning(
+            "Flow push did not return a confirmed outcome ({kind})",
+            kind=type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "delivery_uncertain": True,
+            "workflow_id": None,
+            "artifact_ingest_id": None,
+            "next_action": "reconcile",
+            "error_code": "delivery_uncertain",
+            "dashboard_url": None,
+            "error": (
+                "Flow did not return a confirmed upload outcome. Do not retry blindly; "
+                "reconcile the exact artifact in Cloud first."
+            ),
         }
 
     # Persist the hosted workflow_id so report_break can reference it later.
@@ -153,86 +184,54 @@ def push(
         try:
             db.update_bundle(bundle_id, workflow_id=result_dict["workflow_id"])
         except Exception as exc:  # non-fatal -- push already succeeded
-            logger.warning("Could not persist workflow_id to bundle {bid}: {e}",
-                           bid=bundle_id, e=exc)
+            logger.warning(
+                "Could not persist workflow_id to bundle {bid}: {e}", bid=bundle_id, e=exc
+            )
     return result_dict
-
-
-def _flow_supports_push(flow_bin: str = "openadapt-flow") -> bool:
-    """Best-effort check whether the flow CLI exposes a ``push`` subcommand."""
-    return FlowBridge(flow_bin=flow_bin).supports_command("push")
 
 
 def _push_via_flow(
     path: Path, *, kind: str, name: str | None, host: str, token: str | None = None
 ) -> dict[str, Any]:
-    """Delegate to ``openadapt-flow push`` (flow PR #119); parse its workflow id."""
+    """Delegate to Flow and preserve upload versus local-review outcomes."""
     logger.info("Delegating push to openadapt-flow")
-    result = FlowBridge().push(path, kind=kind, name=name, host=host, token=token)
-    workflow_id = ""
-    for token in (result.stdout or "").split():
-        if token.startswith("wf_") or token.startswith("workflow_"):
-            workflow_id = token
-            break
+    resolved_token = _token_for_host(host, explicit=token)
+    env = {INGEST_TOKEN_ENV: resolved_token} if resolved_token else None
+    result = FlowBridge().push(
+        path,
+        kind=kind,
+        name=name,
+        host=host,
+        token=None,
+        env_overrides=env,
+        json_output=True,
+    )
+    parsed = parse_flow_push(
+        result.stdout or "",
+        result.stderr or "",
+        ok=result.ok,
+        expected_host=host,
+    )
+    success = bool(parsed.get("accepted_for_ingest"))
     return {
-        "success": result.ok,
-        "workflow_id": workflow_id,
-        "dashboard_url": f"{host.rstrip('/')}/dashboard/workflows/{workflow_id}"
-        if workflow_id
-        else "",
-        "error": result.stderr if not result.ok else "",
+        **parsed,
+        "success": success,
     }
 
 
-def build_break_descriptor(
-    report: dict,
-    *,
-    workflow_id: str | None = None,
-    deployment_kind: str = "cloud",
-    org_id: str | None = None,
-    report_path: str | None = None,
-) -> dict[str, Any]:
-    """Build a PHI-free break descriptor from a run's ``report.json``.
+def _token_for_host(host: str, *, explicit: str | None = None) -> str:
+    """Resolve a Desktop credential without sending it to another origin."""
 
-    Only whitelisted, PHI-free fields are included. Screenshots, field values,
-    DOM, and report bodies are never sent from here (spec section 3c). ``report``
-    is expected to be the ``halt`` block or a halt-shaped report.
+    return token_for_host(host, explicit=explicit)
 
-    Args:
-        report: The halt/report dict (from :meth:`FlowBridge.read_halt`).
-        workflow_id: The HOSTED workflow id (persisted at push time). A run's
-            ``report.json`` only carries ``workflow_name``, so this must be
-            supplied by the caller; it falls back to any id embedded in the report.
-        deployment_kind: ``"cloud"`` or ``"byoc"``.
-        org_id: The org the token resolves to (from the active credential).
-        report_path: A pointer to the local report (path string only, no body).
 
-    Returns:
-        The JSON-serializable descriptor.
-    """
-    metrics = report.get("metrics", {}) or {}
-    descriptor: dict[str, Any] = {
-        "org_id": org_id,
-        "workflow_id": workflow_id or report.get("workflow_id"),
-        "deployment_kind": "byoc" if deployment_kind == "byoc" else "cloud",
-        "status": report.get("status", "halt"),
-        "step_intent": report.get("step_intent", ""),
-        "reason": report.get("reason", ""),
-        "resolver_rung": report.get("resolver_rung"),
-        "drift_signature": report.get("drift_signature"),
-        "metrics": {
-            "steps": metrics.get("steps", report.get("steps", 0)),
-            "duration_s": metrics.get("duration_s", report.get("duration_s", 0)),
-        },
-    }
-    if report.get("error"):
-        descriptor["error"] = report["error"]
-    if report_path:
-        descriptor["report_path"] = report_path
-    # Defensive: never forward forbidden keys even if a report carries them.
-    for key in _PHI_FORBIDDEN_KEYS:
-        descriptor.pop(key, None)
-    return descriptor
+def _bounded_flow_error(message: str, *, secret: str = "") -> str:
+    """Return one bounded CLI diagnostic without reflecting a bearer token."""
+
+    detail = (message or "").strip()
+    if secret:
+        detail = detail.replace(secret, "[REDACTED]")
+    return detail[:_MAX_FLOW_ERROR_CHARS]
 
 
 def report_break(
@@ -246,86 +245,90 @@ def report_break(
     allow_local_fallback: bool = True,
     timeout: float = 30.0,
 ) -> dict[str, Any]:
-    """Post a PHI-free break descriptor for a halted run to ``/api/runs/ingest-report``.
-
-    Signature mirrors ``openadapt_flow.hosted.report_break(run_dir, workflow_id,
-    host, token, deployment_kind, org_id, allow_local_fallback)`` (flow PR #119)
-    so the two are swappable.
-
-    Args:
-        run_dir: The local run directory containing ``report.json``.
-        workflow_id: The HOSTED workflow id (persisted at push time). Required to
-            attribute the halt to the right hosted workflow -- ``report.json``
-            only has ``workflow_name``.
-        host: Hosted base URL.
-        token: Explicit ingest token (else resolved from the auth store/env).
-        deployment_kind: ``"cloud"`` or ``"byoc"``.
-        org_id: Org override (else read from the active credential).
-        allow_local_fallback: On a 422 PHI-boundary rejection, return a
-            ``local_teach`` result instead of raising.
-        timeout: HTTP timeout in seconds.
-
-    Returns:
-        Result dict with ``{"ok", "run_id", "halt_id", "status", "teach_url", "error"}``.
-        On a 422 with ``allow_local_fallback`` set, ``{"ok": False, "local_teach": True}``.
-
-    Raises:
-        PhiBoundaryError: On a 422 fail-closed response when ``allow_local_fallback``
-            is False -- the caller must fall back to LOCAL teach.
-    """
+    """Delegate break reporting to Flow's closed-schema egress boundary."""
     halt = FlowBridge.read_halt(run_dir)
     if halt is None:
         return {"ok": False, "error": "No halt found in report.json.", "run_id": None}
+    if not workflow_id:
+        return {"ok": False, "error": "A hosted workflow id is required.", "run_id": None}
 
-    headers = {"Authorization": f"Bearer {token}"} if token else auth_header()
-    if "Authorization" not in headers:
+    resolved_token = _token_for_host(host, explicit=token)
+    if not resolved_token:
         return {"ok": False, "error": "Not logged in (no ingest token).", "run_id": None}
 
     if org_id is None:
         cred = active_credential()
-        org_id = cred.get("org_id") if cred else None
-    report_path = str(Path(run_dir) / "report.json")
-    descriptor = build_break_descriptor(
-        halt, workflow_id=workflow_id, deployment_kind=deployment_kind,
-        org_id=org_id, report_path=report_path,
-    )
-
-    url = f"{host.rstrip('/')}{INGEST_REPORT_PATH}"
+        if cred and canonical_host_origin(
+            str(cred.get("host", ""))
+        ) == canonical_host_origin(host):
+            org_id = cred.get("org_id")
     try:
-        resp = httpx.post(url, headers=headers, json=descriptor, timeout=timeout)
-    except httpx.HTTPError as exc:
-        return {"ok": False, "error": f"ingest-report request failed: {exc}", "run_id": None}
-
-    if resp.status_code == 422:
-        if allow_local_fallback:
-            logger.warning("Break report rejected (422); falling back to local teach")
-            return {
-                "ok": False,
-                "local_teach": True,
-                "error": "PHI boundary violation (422); use local teach.",
-                "run_id": None,
-            }
-        raise PhiBoundaryError(
-            "Break report rejected as a PHI boundary violation (422); "
-            "fall back to local teach."
+        result = FlowBridge().report_break(
+            Path(run_dir),
+            workflow_id=workflow_id,
+            host=host,
+            deployment_kind=deployment_kind,
+            org_id=org_id,
+            timeout=timeout,
+            env_overrides={INGEST_TOKEN_ENV: resolved_token},
         )
-    if resp.status_code >= 400:
+    except Exception as exc:
+        logger.warning(
+            "Flow report-break did not return a confirmed outcome ({kind})",
+            kind=type(exc).__name__,
+        )
         return {
             "ok": False,
-            "error": f"ingest-report failed ({resp.status_code}): {resp.text[:200]}",
+            "delivery_uncertain": True,
+            "error": (
+                "Flow did not return a confirmed report outcome. Reconcile the run in "
+                "Cloud before another report attempt."
+            ),
             "run_id": None,
         }
-
-    try:
-        body = resp.json()
-    except ValueError:
-        body = {}
-    logger.info("Reported break: run {run_id}", run_id=body.get("run_id"))
+    stdout = result.stdout or ""
+    if not result.ok:
+        return {
+            "ok": False,
+            "delivery_uncertain": True,
+            "error": _bounded_flow_error(result.stderr or stdout, secret=resolved_token)
+            or "Flow report-break failed.",
+            "run_id": None,
+        }
+    if stdout.startswith("Break kept LOCAL-ONLY:"):
+        if not allow_local_fallback:
+            raise PhiBoundaryError(
+                "Break report was kept local by Flow's PHI boundary; use local teach."
+            )
+        return {
+            "ok": False,
+            "local_teach": True,
+            "error": stdout.partition(":")[2].strip(),
+            "run_id": None,
+        }
+    if stdout.startswith("Nothing emitted:"):
+        return {
+            "ok": False,
+            "error": stdout.partition(":")[2].strip() or "Flow emitted no break summary.",
+            "run_id": None,
+        }
+    match = re.search(
+        r"Break reported \(run_id=([^,]+), halt_id=([^,]+), status=([^\)]+)\)\.",
+        stdout,
+    )
+    if match is None:
+        return {
+            "ok": False,
+            "error": "Flow reported success without a verified break identity.",
+            "run_id": None,
+        }
+    teach_match = re.search(r"^Teach:\s+(\S+)\s*$", stdout, re.MULTILINE)
+    logger.info("Reported break: run {run_id}", run_id=match.group(1))
     return {
-        "ok": body.get("ok", True),
-        "run_id": body.get("run_id"),
-        "halt_id": body.get("halt_id"),
-        "status": body.get("status"),
-        "teach_url": body.get("teach_url"),
+        "ok": True,
+        "run_id": match.group(1),
+        "halt_id": match.group(2),
+        "status": match.group(3),
+        "teach_url": teach_match.group(1) if teach_match else None,
         "error": "",
     }

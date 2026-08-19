@@ -108,18 +108,25 @@ class TestE2EPipeline:
         scrubbed_path = scrubber.scrub_capture(capture_path)
         assert scrubbed_path.exists()
         assert (scrubbed_path / "scrub_manifest.json").exists()
+        pipeline.db.update_capture(capture_id, scrubbed_path=str(scrubbed_path))
 
         transition_status(
-            capture_id, ReviewStatus.CAPTURED, ReviewStatus.SCRUBBED,
-            db=pipeline.db, audit=pipeline.audit,
+            capture_id,
+            ReviewStatus.CAPTURED,
+            ReviewStatus.SCRUBBED,
+            db=pipeline.db,
+            audit=pipeline.audit,
         )
         cap = pipeline.db.get_capture(capture_id)
         assert cap["review_status"] == "scrubbed"
 
         # Step 4: Approve the scrubbed capture
         transition_status(
-            capture_id, ReviewStatus.SCRUBBED, ReviewStatus.REVIEWED,
-            db=pipeline.db, audit=pipeline.audit,
+            capture_id,
+            ReviewStatus.SCRUBBED,
+            ReviewStatus.REVIEWED,
+            db=pipeline.db,
+            audit=pipeline.audit,
         )
 
         # Step 5: Verify egress is now allowed
@@ -140,8 +147,8 @@ class TestE2EPipeline:
         # Verify audit log has entries
         assert pipeline.audit.log_path.exists()
 
-    def test_dismiss_allows_egress(self, pipeline) -> None:
-        """Dismissed captures should be cleared for egress."""
+    def test_dismiss_keeps_raw_capture_local(self, pipeline) -> None:
+        """A dismissal never makes the raw capture uploadable."""
         controller = RecordingController(
             captures_dir=pipeline.config.data_dir / "captures",
             storage_manager=pipeline.storage,
@@ -151,11 +158,16 @@ class TestE2EPipeline:
 
         # Dismiss (skip scrubbing)
         transition_status(
-            capture_id, ReviewStatus.CAPTURED, ReviewStatus.DISMISSED,
+            capture_id,
+            ReviewStatus.CAPTURED,
+            ReviewStatus.DISMISSED,
             db=pipeline.db,
         )
 
-        assert check_egress_allowed(capture_id, pipeline.db) is True
+        from engine.review import EgressBlockedError
+
+        with pytest.raises(EgressBlockedError):
+            check_egress_allowed(capture_id, pipeline.db)
 
     def test_upload_blocked_before_review(self, pipeline) -> None:
         """Upload should be blocked for unreviewed captures."""

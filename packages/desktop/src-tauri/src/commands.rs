@@ -14,6 +14,8 @@
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_shell::ShellExt;
+use url::Url;
 
 use crate::sidecar::SidecarHandle;
 
@@ -104,30 +106,59 @@ pub fn ensure_control_overlay_capture_excluded(app: AppHandle) -> Result<(), Str
 /// Used for the login deep-link ("open Settings -> Ingest tokens"), "Open cloud
 /// dashboard", and the OS System Settings permission panes. Implemented with the
 /// platform opener so no extra plugin capability is required.
+fn validated_external_url(value: &str) -> Result<String, String> {
+    let parsed = Url::parse(value).map_err(|_| "refusing to open an invalid URL".to_string())?;
+    let allowed_scheme = matches!(parsed.scheme(), "https" | "http" | "openadapt")
+        || cfg!(target_os = "macos") && parsed.scheme() == "x-apple.systempreferences";
+    if !allowed_scheme {
+        return Err("refusing to open a URL with an unsupported scheme".to_string());
+    }
+    if matches!(parsed.scheme(), "https" | "http")
+        && (parsed.host_str().is_none()
+            || !parsed.username().is_empty()
+            || parsed.password().is_some())
+    {
+        return Err("refusing to open a web URL with invalid authority".to_string());
+    }
+    if value.chars().any(char::is_control) {
+        return Err("refusing to open a URL with control characters".to_string());
+    }
+    Ok(parsed.to_string())
+}
+
 #[tauri::command]
-pub fn open_external(url: String) -> Result<(), String> {
-    // Only allow http(s), the app's custom scheme, and macOS System Settings deep
-    // links — never arbitrary shell strings.
-    let allowed = url.starts_with("https://")
-        || url.starts_with("http://")
-        || url.starts_with("openadapt://")
-        || url.starts_with("x-apple.systempreferences:");
-    if !allowed {
-        return Err(format!("refusing to open non-web URL: {url}"));
+pub fn open_external(app: AppHandle, url: String) -> Result<(), String> {
+    let safe_url = validated_external_url(&url)?;
+    app.shell()
+        .open(safe_url, None)
+        .map_err(|error| format!("failed to open URL: {error}"))
+}
+
+#[cfg(test)]
+mod external_url_tests {
+    use super::validated_external_url;
+
+    #[test]
+    fn accepts_clean_web_url() {
+        assert_eq!(
+            validated_external_url("https://app.openadapt.ai/dashboard").unwrap(),
+            "https://app.openadapt.ai/dashboard"
+        );
     }
 
-    #[cfg(target_os = "macos")]
-    let result = std::process::Command::new("open").arg(&url).spawn();
-    #[cfg(target_os = "windows")]
-    let result = std::process::Command::new("cmd")
-        .args(["/C", "start", "", &url])
-        .spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let result = std::process::Command::new("xdg-open").arg(&url).spawn();
-
-    result
-        .map(|_| ())
-        .map_err(|e| format!("failed to open URL: {e}"))
+    #[test]
+    fn rejects_shell_and_authority_tricks() {
+        for value in [
+            "javascript:alert(1)",
+            "https://user:secret@example.com/",
+            "https://example.com/\nnext",
+            "https://example.com\" & calc.exe",
+            "https://example.com|calc.exe",
+            "https://example.com^calc.exe",
+        ] {
+            assert!(validated_external_url(value).is_err(), "accepted {value}");
+        }
+    }
 }
 
 // --------------------------------------------------------------------------

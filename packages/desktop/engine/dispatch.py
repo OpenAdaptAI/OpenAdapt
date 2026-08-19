@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from loguru import logger
 
@@ -65,6 +66,25 @@ _TEACH_CORRECTION_META_KEY = "teach_correction"
 
 def _noop_emit(event: str, data: dict) -> None:
     """Default event sink -- drops events when no emitter is wired."""
+
+
+def _canonical_hosted_origin(value: Any) -> str:
+    """Return a safe hosted origin or raise before any credential is sent."""
+
+    from engine.auth.store import canonical_host_origin
+
+    raw_value = str(value or "").strip()
+    parsed_value = urlsplit(raw_value)
+    if parsed_value.scheme.lower() == "http" and parsed_value.hostname not in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }:
+        raise ValueError("A remote hosted origin must use HTTPS")
+    normalized = canonical_host_origin(raw_value)
+    if not normalized:
+        raise ValueError("Host must be an HTTP(S) origin")
+    return normalized
 
 
 @dataclass
@@ -2541,7 +2561,10 @@ class EngineDispatcher:
         from engine.auth.store import auth_header
         from engine.bundle_keys import bundle_key_environment
         from engine.qualification import inspect_bundle
-        from engine.qualification_lifecycle import parse_flow_push
+        from engine.qualification_lifecycle import (
+            parse_flow_push,
+            persist_deployment_handoff,
+        )
 
         workflow_id = str(params.get("workflow_id") or "")
         try:
@@ -2563,23 +2586,49 @@ class EngineDispatcher:
             if not self.services.flow_bridge.supports_command("push"):
                 raise ValueError("The bundled Flow runtime does not support governed deployment")
             env = bundle_key_environment(workflow_id)
-            authorization = auth_header().get("Authorization", "")
+            authorization = auth_header(self.config.hosted_host).get("Authorization", "")
             if authorization.startswith("Bearer "):
                 env["OPENADAPT_INGEST_TOKEN"] = authorization.removeprefix("Bearer ")
-            pushed = self.services.flow_bridge.push(
-                bundle,
-                kind="bundle",
-                host=self.config.hosted_host,
-                env_overrides=env,
-            )
-            result = parse_flow_push(pushed.stdout, pushed.stderr, ok=pushed.ok)
-            result["workflow_id"] = result.get("workflow_id") or workflow_id
+            try:
+                pushed = self.services.flow_bridge.push(
+                    bundle,
+                    kind="bundle",
+                    host=self.config.hosted_host,
+                    env_overrides=env,
+                    json_output=True,
+                )
+                result = parse_flow_push(
+                    pushed.stdout,
+                    pushed.stderr,
+                    ok=pushed.ok,
+                    expected_host=self.config.hosted_host,
+                )
+            except Exception:
+                # The child can fail after it dispatched a request. No raw
+                # exception or blind retry can replace reconciliation.
+                result = parse_flow_push("", "", ok=False)
+            try:
+                handoff = persist_deployment_handoff(
+                    self.config.data_dir,
+                    local_workflow_id=workflow_id,
+                    result=result,
+                )
+                result["handoff_path"] = str(handoff)
+            except Exception:
+                result["ok"] = False
+                result["local_persistence_error"] = True
+                result["error"] = (
+                    "Desktop could not retain the deployment handoff. Do not retry an "
+                    "attempted upload. Reconcile the exact artifact in Cloud."
+                )
             if result.get("deployed"):
+                hosted_workflow_id = result["workflow_id"]
                 self.services.db.update_bundle(
                     workflow_id,
-                    workflow_id=result["workflow_id"],
+                    workflow_id=hosted_workflow_id,
                     status="deployed",
                 )
+            result["local_workflow_id"] = workflow_id
             return result
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
@@ -2587,8 +2636,9 @@ class EngineDispatcher:
     # ------------------------------------------------------- sync / push
 
     def push_workflow(self, **params: Any) -> dict:
-        """Push a compiled bundle to ``/api/ingest`` and mirror sync state."""
+        """Start a governed push and preserve a required local-review pause."""
         from engine import hosted
+        from engine.qualification_lifecycle import persist_deployment_handoff
 
         workflow_id = params.get("workflow_id")
         bundle = self._bundle_dir(workflow_id)
@@ -2603,13 +2653,42 @@ class EngineDispatcher:
                 db=self.services.db,
                 bundle_id=workflow_id,
             )
+            try:
+                handoff = persist_deployment_handoff(
+                    self.config.data_dir,
+                    local_workflow_id=str(workflow_id),
+                    result=result,
+                )
+                result["handoff_path"] = str(handoff)
+            except Exception:
+                result["local_persistence_error"] = True
+                if result.get("success"):
+                    result["success"] = False
+                result["error"] = (
+                    "Desktop could not retain the deployment handoff. Do not retry an "
+                    "attempted upload. Reconcile the exact artifact in Cloud."
+                )
         except Exception as exc:
             self._emit_sync("offline")
             return {"ok": False, "error": str(exc), "workflow_id": ""}
-        self._emit_sync("synced" if result.get("success") else "offline")
+        if result.get("success"):
+            self._emit_sync("synced")
+        elif result.get("pending_review"):
+            self._emit_sync("paused")
+        else:
+            self._emit_sync("offline")
         return {
             "ok": bool(result.get("success")),
+            "pending_review": bool(result.get("pending_review")),
+            "delivery_uncertain": bool(result.get("delivery_uncertain")),
+            "sanitized_path": result.get("sanitized_path", ""),
+            "review_command": result.get("review_command", ""),
             "workflow_id": result.get("workflow_id", ""),
+            "artifact_ingest_id": result.get("artifact_ingest_id"),
+            "next_action": result.get("next_action"),
+            "delivery": result.get("delivery"),
+            "handoff_path": result.get("handoff_path", ""),
+            "local_persistence_error": bool(result.get("local_persistence_error")),
             "dashboard_url": result.get("dashboard_url", ""),
             "error": result.get("error", ""),
         }
@@ -2647,23 +2726,35 @@ class EngineDispatcher:
         """Log in via the browser-PKCE provider; return an ``AuthStatus``."""
         from engine import auth
 
-        host = params.get("host") or self.config.hosted_host
         try:
+            host = _canonical_hosted_origin(
+                params.get("host") or self.config.hosted_host
+            )
             cred = auth.login(host=host, prefer="browser_pkce")
+            if _canonical_hosted_origin(cred.get("host")) != host:
+                raise ValueError("Authenticated host did not match the requested host")
         except Exception as exc:
             return {"authenticated": False, "error": str(exc)}
+        self.config.hosted_host = host
+        self._persist_config_key("hosted_host", host)
         return self._auth_status(cred)
 
     def login_paste(self, **params: Any) -> dict:
         """Log in with a pasted ingest token; return an ``AuthStatus``."""
         from engine.auth.paste import PasteTokenProvider
 
-        host = params.get("host") or self.config.hosted_host
         token = params.get("token")
         try:
+            host = _canonical_hosted_origin(
+                params.get("host") or self.config.hosted_host
+            )
             cred = PasteTokenProvider(host=host).login(token=token)
+            if _canonical_hosted_origin(cred.get("host")) != host:
+                raise ValueError("Authenticated host did not match the requested host")
         except Exception as exc:
             return {"authenticated": False, "error": str(exc)}
+        self.config.hosted_host = host
+        self._persist_config_key("hosted_host", host)
         return self._auth_status(cred)
 
     def connect_uri(self, **params: Any) -> dict:
@@ -2674,30 +2765,53 @@ class EngineDispatcher:
         if not isinstance(uri, str):
             raise ValueError("uri is required")
         result = connect_uri(uri)
-        self.config.hosted_host = result["host"]
-        self._persist_config_key("hosted_host", result["host"])
+        host = _canonical_hosted_origin(result["host"])
+        result = {**result, "host": host}
+        self.config.hosted_host = host
+        self._persist_config_key("hosted_host", host)
         self.emit(
             "pairing_state",
-            {"status": "connected", "host": result["host"]},
+            {"status": "connected", "host": host},
         )
         return result
 
     def logout(self, **params: Any) -> dict:
-        """Clear the active credential."""
-        from engine.auth.store import active_host, clear_credential
+        """Clear only the credential for the selected safe hosted origin."""
+        from engine.auth.store import (
+            active_host,
+            canonical_host_origin,
+            clear_credential,
+        )
 
-        host = params.get("host") or active_host()
-        if host:
-            clear_credential(host)
+        stored_host = active_host()
+        requested_host = params.get("host")
+        if requested_host:
+            try:
+                requested_origin = _canonical_hosted_origin(requested_host)
+            except ValueError:
+                return {"authenticated": False, "error": "Hosted origin is invalid"}
+            if stored_host and canonical_host_origin(stored_host) == requested_origin:
+                clear_credential(stored_host)
+            else:
+                clear_credential(requested_origin)
+        elif stored_host:
+            if not canonical_host_origin(stored_host):
+                return {"authenticated": False, "error": "Hosted origin is invalid"}
+            clear_credential(stored_host)
         return {"authenticated": False}
 
     def get_auth_status(self, **params: Any) -> dict:
-        """Return the current :class:`AuthStatus` from the active credential."""
-        from engine.auth.store import active_credential
+        """Return auth only when the credential belongs to the configured host."""
+        from engine.auth.store import active_credential, canonical_host_origin
 
         cred = active_credential()
-        if not cred:
-            return {"authenticated": False}
+        configured_host = canonical_host_origin(self.config.hosted_host)
+        if (
+            not cred
+            or not configured_host
+            or canonical_host_origin(str(cred.get("host") or "")) != configured_host
+        ):
+            return {"authenticated": False, "host": configured_host or None}
         return self._auth_status(cred)
 
     def _auth_status(self, cred: Any) -> dict:
@@ -2729,9 +2843,16 @@ class EngineDispatcher:
         """
         key = params.get("key")
         value = params.get("value")
+        if key == "host":
+            key = "hosted_host"
         allowed = {"hosted_host", "deployment_lane", "phi_mode", "poll_interval_s"}
         if key not in allowed:
             return {"ok": False, "error": f"Unknown or non-settable key: {key}"}
+        if key == "hosted_host":
+            try:
+                value = _canonical_hosted_origin(value)
+            except ValueError as exc:
+                return {"ok": False, "error": str(exc)}
         # Update the live config object so subsequent commands see the change.
         try:
             setattr(self.config, key, value)

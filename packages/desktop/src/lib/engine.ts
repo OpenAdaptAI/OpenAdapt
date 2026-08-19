@@ -221,13 +221,11 @@ export function onFfmpegRuntimeStatus(
 
 /** Open a URL in the system browser (login deep-link, cloud dashboard, panes). */
 export async function openExternal(url: string): Promise<void> {
-  try {
-    await invoke("open_external", { url });
-  } catch (e) {
-    // Fall back to a plain anchor navigation when running outside Tauri (dev).
+  if (!inTauri()) {
     window.open(url, "_blank");
-    void e;
+    return;
   }
+  await invoke("open_external", { url });
 }
 
 /** Subscribe to an engine event. Returns an unlisten fn. */

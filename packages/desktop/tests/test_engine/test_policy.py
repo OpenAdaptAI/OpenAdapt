@@ -14,6 +14,7 @@ a tmp dir via the ``OPENADAPT_POLICY_CACHE`` override.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -48,7 +49,12 @@ def cache_path(tmp_path: Path, monkeypatch) -> Path:
     """Redirect the policy cache to a tmp file for the duration of a test."""
     path = tmp_path / "policy.json"
     monkeypatch.setenv("OPENADAPT_POLICY_CACHE", str(path))
+    monkeypatch.setenv("OPENADAPT_INGEST_TOKEN", "oai_ingest_policy_test_principal")
     return path
+
+
+def _write_bound_cache(policy: dict, host: str = "https://app.openadapt.ai") -> None:
+    policy_mod._write_cache(policy, host)
 
 
 class TestFetchAndCache:
@@ -64,16 +70,27 @@ class TestFetchAndCache:
         assert result["policy_version"] == 7
         assert result["is_admin"] is True
         assert result["safety"] == policy_mod.SAFE_SAFETY_DEFAULTS
-        # Cache was written with the raw body (no source field).
+        # The cache uses a closed, principal-bound envelope.
         assert cache_path.exists()
         cached = json.loads(cache_path.read_text())
-        assert cached["policy_version"] == 7
-        assert "source" not in cached
+        assert cached["schema"] == policy_mod.CACHE_SCHEMA
+        assert cached["binding"]["host_origin"] == "https://app.openadapt.ai"
+        assert cached["binding"]["org_id"] == "org_42"
+        assert cached["binding"]["policy_version"] == 7
+        assert cached["binding"]["credential_binding_hmac"] == (
+            policy_mod._credential_binding_hmac("https://app.openadapt.ai")
+        )
+        assert "credential_sha256" not in cached["binding"]
+        assert cached["binding"]["policy_sha256"] == policy_mod._policy_sha256(
+            cached["policy"]
+        )
+        assert cached["policy"]["policy_version"] == 7
+        assert "source" not in cached["policy"]
 
     def test_network_failure_falls_back_to_cache(
         self, cache_path: Path, monkeypatch
     ) -> None:
-        cache_path.write_text(json.dumps(_full_policy(policy_version=3)))
+        _write_bound_cache(_full_policy(policy_version=3))
 
         def _down(*a, **k):
             raise httpx.ConnectError("network down")
@@ -105,7 +122,7 @@ class TestFetchAndCache:
         assert set(result["safety"]) == set(policy_mod.SAFE_SAFETY_DEFAULTS)
 
     def test_http_error_status_falls_back(self, cache_path: Path, monkeypatch) -> None:
-        cache_path.write_text(json.dumps(_full_policy(policy_version=9)))
+        _write_bound_cache(_full_policy(policy_version=9))
         monkeypatch.setattr(
             "engine.policy.httpx.get", lambda *a, **k: FakeResponse(500, {})
         )
@@ -120,11 +137,203 @@ class TestFetchAndCache:
         with pytest.raises(policy_mod.PolicyFetchError, match="401"):
             policy_mod.fetch_effective_policy("https://app.openadapt.ai")
 
+    def test_network_policy_requires_a_monotonic_version(
+        self, cache_path: Path, monkeypatch
+    ) -> None:
+        body = _full_policy()
+        body.pop("policy_version")
+        monkeypatch.setattr(
+            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, body)
+        )
+        with pytest.raises(policy_mod.PolicyFetchError, match="policy version"):
+            policy_mod.fetch_effective_policy("https://app.openadapt.ai")
+        assert not cache_path.exists()
+
+    def test_network_policy_cannot_move_a_bound_version_backwards(
+        self, cache_path: Path, monkeypatch
+    ) -> None:
+        _write_bound_cache(_full_policy(policy_version=8))
+        monkeypatch.setattr(
+            "engine.policy.httpx.get",
+            lambda *a, **k: FakeResponse(200, _full_policy(policy_version=7)),
+        )
+
+        with pytest.raises(policy_mod.PolicyFetchError, match="moved backwards"):
+            policy_mod.fetch_effective_policy("https://app.openadapt.ai")
+        assert policy_mod.load_cached_policy("https://app.openadapt.ai")[
+            "policy_version"
+        ] == 8
+
+    def test_network_policy_cannot_change_without_a_new_version(
+        self, cache_path: Path, monkeypatch
+    ) -> None:
+        _write_bound_cache(_full_policy(policy_version=8))
+        changed = _full_policy(policy_version=8)
+        changed["safety"] = {**changed["safety"], "halt_on_ambiguous": False}
+        monkeypatch.setattr(
+            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, changed)
+        )
+
+        with pytest.raises(policy_mod.PolicyFetchError, match="without a new version"):
+            policy_mod.fetch_effective_policy("https://app.openadapt.ai")
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("baseline_version", "2026.08"),
+            ("org", {"retention_days": 7}),
+            ("grounding_model", "reviewed-grounding-v2"),
+        ],
+    )
+    def test_network_policy_authority_cannot_change_without_a_new_version(
+        self, cache_path: Path, monkeypatch, field: str, value: object
+    ) -> None:
+        _write_bound_cache(_full_policy(policy_version=8))
+        changed = _full_policy(policy_version=8)
+        changed[field] = value
+        monkeypatch.setattr(
+            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, changed)
+        )
+
+        with pytest.raises(policy_mod.PolicyFetchError, match="without a new version"):
+            policy_mod.fetch_effective_policy("https://app.openadapt.ai")
+
+    def test_same_version_allows_request_and_user_projection_changes(
+        self, cache_path: Path, monkeypatch
+    ) -> None:
+        _write_bound_cache(_full_policy(policy_version=8))
+        refreshed = _full_policy(
+            policy_version=8,
+            resolved_at="2026-07-21T00:00:00Z",
+            role="member",
+            is_admin=False,
+            user={"theme": "light"},
+        )
+        monkeypatch.setattr(
+            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, refreshed)
+        )
+
+        assert policy_mod.fetch_effective_policy("https://app.openadapt.ai") == refreshed
+        assert policy_mod.load_cached_policy("https://app.openadapt.ai") == refreshed
+
+    def test_remote_policy_host_requires_https(
+        self, cache_path: Path, monkeypatch
+    ) -> None:
+        called = False
+
+        def _get(*_args, **_kwargs):
+            nonlocal called
+            called = True
+            return FakeResponse(200, _full_policy())
+
+        monkeypatch.setattr("engine.policy.httpx.get", _get)
+        with pytest.raises(policy_mod.PolicyFetchError, match="must use HTTPS"):
+            policy_mod.fetch_effective_policy("http://policy.example.test")
+        assert called is False
+
     def test_load_cached_policy_degrades_on_corrupt(
         self, cache_path: Path
     ) -> None:
         cache_path.write_text("{ not json")
-        assert policy_mod.load_cached_policy() is None
+        assert policy_mod.load_cached_policy("https://app.openadapt.ai") is None
+
+    def test_offline_cache_rejects_other_host(
+        self, cache_path: Path, monkeypatch
+    ) -> None:
+        _write_bound_cache(_full_policy(policy_version=3))
+        monkeypatch.setattr(
+            "engine.policy.httpx.get",
+            lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("down")),
+        )
+        result = policy_mod.resolve_effective_policy("https://other.openadapt.ai")
+        assert result["source"] == policy_mod.UNCONFIRMED_POLICY_SOURCE
+        assert result["policy_version"] is None
+
+    def test_offline_cache_rejects_other_credential(
+        self, cache_path: Path, monkeypatch
+    ) -> None:
+        _write_bound_cache(_full_policy(policy_version=3))
+        monkeypatch.setenv("OPENADAPT_INGEST_TOKEN", "oai_ingest_other_principal")
+        monkeypatch.setattr(
+            "engine.policy.httpx.get",
+            lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("down")),
+        )
+        result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
+        assert result["source"] == policy_mod.UNCONFIRMED_POLICY_SOURCE
+
+    def test_offline_cache_rejects_other_org(
+        self, cache_path: Path, monkeypatch, fake_keyring
+    ) -> None:
+        from engine.auth.provider import Credential
+        from engine.auth.store import store_credential
+
+        monkeypatch.delenv("OPENADAPT_INGEST_TOKEN")
+        credential: Credential = {
+            "kind": "ingest_token",
+            "token": "oai_ingest_org_42_token",
+            "refresh_token": None,
+            "org_id": "org_42",
+            "host": "https://app.openadapt.ai",
+            "expires_at": None,
+        }
+        store_credential(credential)
+        _write_bound_cache(_full_policy(org_id="org_42"))
+        credential["org_id"] = "org_99"
+        store_credential(credential)
+        monkeypatch.setattr(
+            "engine.policy.httpx.get",
+            lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("down")),
+        )
+        result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
+        assert result["source"] == policy_mod.UNCONFIRMED_POLICY_SOURCE
+
+    def test_offline_cache_expires(
+        self, cache_path: Path, monkeypatch
+    ) -> None:
+        _write_bound_cache(_full_policy())
+        envelope = json.loads(cache_path.read_text())
+        envelope["fetched_at"] = (
+            datetime.now(UTC) - timedelta(seconds=policy_mod.DEFAULT_CACHE_MAX_AGE_S + 1)
+        ).isoformat()
+        cache_path.write_text(json.dumps(envelope))
+        assert policy_mod.load_cached_policy("https://app.openadapt.ai") is None
+
+    def test_legacy_unbound_cache_is_rejected(self, cache_path: Path) -> None:
+        cache_path.write_text(json.dumps(_full_policy()))
+        assert policy_mod.load_cached_policy("https://app.openadapt.ai") is None
+
+    def test_cache_without_a_policy_version_is_rejected(self, cache_path: Path) -> None:
+        policy = _full_policy()
+        policy.pop("policy_version")
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "schema": policy_mod.CACHE_SCHEMA,
+                    "binding": {
+                        "host_origin": "https://app.openadapt.ai",
+                        "credential_binding_hmac": policy_mod._credential_binding_hmac(
+                            "https://app.openadapt.ai"
+                        ),
+                        "org_id": "org_42",
+                        "policy_version": None,
+                        "policy_sha256": policy_mod._policy_sha256(policy),
+                    },
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                    "policy": policy,
+                }
+            )
+        )
+        assert policy_mod.load_cached_policy("https://app.openadapt.ai") is None
+
+    def test_cache_rejects_a_policy_body_changed_after_binding(
+        self, cache_path: Path
+    ) -> None:
+        _write_bound_cache(_full_policy(policy_version=3))
+        envelope = json.loads(cache_path.read_text())
+        envelope["policy"]["safety"]["halt_on_ambiguous"] = False
+        cache_path.write_text(json.dumps(envelope))
+
+        assert policy_mod.load_cached_policy("https://app.openadapt.ai") is None
 
     def test_atomic_write_leaves_no_temp_files(
         self, cache_path: Path, monkeypatch

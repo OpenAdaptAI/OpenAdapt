@@ -223,6 +223,49 @@ class TestScrubber:
         status_path = scrubbed_path / "review_status.json"
         assert status_path.exists()
 
+    def test_rescrub_atomically_replaces_stale_derivative_files(
+        self, sample_capture_dir: Path,
+    ) -> None:
+        scrubber = Scrubber(level=ScrubLevel.BASIC)
+        scrubbed_path = scrubber.scrub_capture(sample_capture_dir)
+        stale = scrubbed_path / "stale-secret.txt"
+        stale.write_text("Jane Doe account 12345")
+
+        replacement = scrubber.scrub_capture(sample_capture_dir)
+
+        assert replacement == scrubbed_path
+        assert not stale.exists()
+        assert (replacement / "scrub_manifest.json").exists()
+
+    def test_manifest_never_contains_identity_bearing_local_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        capture = _capture_with_screenshot(tmp_path)
+        identity_name = "Jane-Doe-record-12345"
+        named_capture = capture.with_name(identity_name)
+        capture.replace(named_capture)
+        scrubber = Scrubber(level=ScrubLevel.STANDARD)
+        monkeypatch.setattr(scrubber, "_require_provider", lambda: object())
+        monkeypatch.setattr(
+            scrubber,
+            "scrub_text",
+            lambda text: ("redacted", []),
+        )
+
+        def scrub_image(_source: Path, output: Path) -> list[dict]:
+            output.write_bytes(b"redacted")
+            return [{"type": "image_scrub"}]
+
+        monkeypatch.setattr(
+            scrubber,
+            "scrub_image",
+            scrub_image,
+        )
+
+        derivative = scrubber.scrub_capture(named_capture)
+
+        assert identity_name not in (derivative / "scrub_manifest.json").read_text()
+
     def test_scrub_capture_nonexistent_raises(self) -> None:
         """Scrubbing a nonexistent path should raise FileNotFoundError."""
         scrubber = Scrubber(level=ScrubLevel.BASIC)

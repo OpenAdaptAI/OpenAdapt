@@ -114,6 +114,47 @@ class TestAuthHeader:
     def test_empty_when_no_credential(self, fake_keyring) -> None:
         assert store.auth_header() == {}
 
+    def test_host_bound_header_refuses_active_credential_for_other_origin(
+        self, fake_keyring
+    ) -> None:
+        store.store_credential(_cred(host="https://app.openadapt.ai"))
+
+        assert store.auth_header("https://customer.example") == {}
+        assert store.auth_header("https://app.openadapt.ai/dashboard") == {
+            "Authorization": "Bearer oai_ingest_abc"
+        }
+
+    def test_explicit_environment_token_is_operator_override(
+        self, fake_keyring, monkeypatch
+    ) -> None:
+        store.store_credential(_cred(host="https://app.openadapt.ai"))
+        monkeypatch.setenv("OPENADAPT_INGEST_TOKEN", "explicit-env-token")
+
+        assert store.auth_header("https://customer.example") == {
+            "Authorization": "Bearer explicit-env-token"
+        }
+
+    def test_host_bound_header_refuses_unsafe_destination_even_with_environment_token(
+        self, fake_keyring, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("OPENADAPT_INGEST_TOKEN", "explicit-env-token")
+
+        assert store.auth_header("http://customer.example") == {}
+        assert store.auth_header("https://user:secret@customer.example") == {}
+        assert store.auth_header("not-a-url") == {}
+
+    def test_canonical_host_origin_allows_only_https_or_local_http(self) -> None:
+        assert (
+            store.canonical_host_origin("HTTPS://Customer.Example:443/dashboard")
+            == "https://customer.example"
+        )
+        assert (
+            store.canonical_host_origin("http://localhost:3000/path")
+            == "http://localhost:3000"
+        )
+        assert store.canonical_host_origin("http://customer.example") == ""
+        assert store.canonical_host_origin("https://user@example.com") == ""
+
 
 class _RaisingKeyring:
     """A keyring backend with no usable store -- every call raises.

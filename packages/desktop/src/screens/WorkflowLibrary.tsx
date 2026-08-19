@@ -1,7 +1,7 @@
 // Workflow library — local compiled workflows, their last-run state, halts, and
 // sync status. Push to cloud (cloud lane) or open the local teach view (byoc).
 import { useEffect, useState } from "react";
-import { CMD, engineInvoke, engineTry } from "../lib/engine";
+import { CMD, engineTry } from "../lib/engine";
 import type { Workflow } from "../lib/types";
 import {
   Button,
@@ -25,7 +25,6 @@ export function WorkflowLibrary({
 }) {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pushing, setPushing] = useState<string | null>(null);
 
   async function refresh() {
     const list = await engineTry<Workflow[]>(CMD.GET_WORKFLOWS, {}, []);
@@ -36,18 +35,6 @@ export function WorkflowLibrary({
   useEffect(() => {
     void refresh();
   }, []);
-
-  async function push(id: string) {
-    setPushing(id);
-    try {
-      await engineInvoke(CMD.PUSH_WORKFLOW, { workflow_id: id });
-      await refresh();
-    } catch {
-      /* surfaced via sync state elsewhere */
-    } finally {
-      setPushing(null);
-    }
-  }
 
   return (
     <div className="content">
@@ -127,12 +114,8 @@ export function WorkflowLibrary({
                           Teach fix
                         </Button>
                       ) : (
-                        <Button
-                          size="sm"
-                          disabled={pushing === w.id}
-                          onClick={() => push(w.id)}
-                        >
-                          {pushing === w.id ? "Pushing…" : "Push"}
+                        <Button size="sm" onClick={() => onQualify(w.id)}>
+                          Prepare to deploy
                         </Button>
                       )}
                     </div>
