@@ -17,7 +17,7 @@ jobs:
       # this back once already; a Dependabot bump (#1079) reverted it to v4 and
       # broke the docs dispatch again. The ignore rule in dependabot.yml keeps
       # that from recurring. Revisit when upstream ships a fixed v4.
-      - uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3.0.0
+      - uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
         with:
           token: ${{ secrets.DOCS_DISPATCH_TOKEN }}
           repository: OpenAdaptAI/openadapt-ops
