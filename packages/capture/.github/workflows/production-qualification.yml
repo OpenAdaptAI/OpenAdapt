@@ -1,0 +1,379 @@
+name: Production qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Exact 40-character main commit SHA to qualify"
+        type: string
+        required: true
+
+concurrency:
+  group: capture-production-qualification-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-candidate:
+    name: Build candidate distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout the dispatched commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Require the exact protected-main candidate
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${CANDIDATE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "candidate_sha must be a lowercase 40-character Git commit SHA"
+            exit 1
+          fi
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "Production qualification must be dispatched on protected main."
+            exit 1
+          fi
+          if [ "${CANDIDATE_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "Input candidate ${CANDIDATE_SHA} differs from dispatched commit ${GITHUB_SHA}."
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "${GITHUB_SHA}" ]; then
+            echo "Checkout does not match the dispatched commit."
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Build the candidate once
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv build --wheel --sdist
+          python scripts/verify_distribution.py dist/*
+          python scripts/check_source_boundary.py --require-dist
+          (
+            cd dist
+            sha256sum -- *.whl *.tar.gz > SHA256SUMS
+          )
+
+      - name: Upload the exact candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: capture-candidate-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  clean-wheel:
+    name: Clean candidate wheel (${{ matrix.os }})
+    needs: build-candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout the exact candidate source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download the exact candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: capture-candidate-${{ github.sha }}
+          path: dist
+
+      - name: Run the clean install and uninstall lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/candidate_lifecycle.py \
+            --dist dist \
+            --manifest dist/SHA256SUMS \
+            --candidate-sha "${GITHUB_SHA}" \
+            --output "evidence/clean-${{ matrix.os }}.json"
+
+      - name: Upload clean-machine evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: capture-clean-${{ matrix.os }}-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+  interactive-linux:
+    name: Interactive qualification (Linux X64)
+    needs: build-candidate
+    environment: production-qualification
+    runs-on: [self-hosted, Linux, X64, openadapt-capture-qualified]
+    timeout-minutes: 35
+    steps:
+      - name: Checkout the exact candidate source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Download the exact candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: capture-candidate-${{ github.sha }}
+          path: dist
+
+      - name: Install the exact wheel into an isolated environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          qualification_root="${RUNNER_TEMP}/capture-qualification-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+          qualification_python="${qualification_root}/bin/python"
+          uv venv --clear --python 3.12 "${qualification_root}"
+          uv pip install --python "${qualification_python}" \
+            dist/*.whl pytest==9.1.1 pytest-timeout==2.4.0 pynput==1.8.2
+          echo "QUALIFICATION_PYTHON=${qualification_python}" >> "${GITHUB_ENV}"
+
+      - name: Require the reviewed external video tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -version > evidence/ffmpeg-version.txt
+          ffprobe -version > evidence/ffprobe-version.txt
+
+      - name: Require a stable multiple-monitor desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${QUALIFICATION_PYTHON}" scripts/check_display_topology.py \
+            --minimum-monitors 2 \
+            --output evidence/display-topology.json
+
+      - name: Run the complete live recorder qualification
+        shell: bash
+        env:
+          OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          "${QUALIFICATION_PYTHON}" -m pytest \
+            "${GITHUB_WORKSPACE}/tests/test_performance.py" \
+            -m slow -v --timeout=300 --import-mode=importlib \
+            --junitxml="${GITHUB_WORKSPACE}/evidence/interactive-linux.xml"
+
+      - name: Reject skipped or incomplete qualification tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_junit_no_skips.py evidence/interactive-linux.xml
+
+      - name: Upload interactive qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: capture-interactive-linux-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  interactive-macos:
+    name: Interactive qualification (macOS ARM64)
+    needs: build-candidate
+    environment: production-qualification
+    runs-on: [self-hosted, macOS, ARM64, openadapt-capture-qualified]
+    timeout-minutes: 35
+    steps:
+      - name: Checkout the exact candidate source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Download the exact candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: capture-candidate-${{ github.sha }}
+          path: dist
+
+      - name: Install the exact wheel into an isolated environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          qualification_root="${RUNNER_TEMP}/capture-qualification-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+          qualification_python="${qualification_root}/bin/python"
+          uv venv --clear --python 3.12 "${qualification_root}"
+          uv pip install --python "${qualification_python}" \
+            dist/*.whl pytest==9.1.1 pytest-timeout==2.4.0 pynput==1.8.2
+          echo "QUALIFICATION_PYTHON=${qualification_python}" >> "${GITHUB_ENV}"
+
+      - name: Require the reviewed external video tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -version > evidence/ffmpeg-version.txt
+          ffprobe -version > evidence/ffprobe-version.txt
+
+      - name: Require a stable multiple-monitor desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${QUALIFICATION_PYTHON}" scripts/check_display_topology.py \
+            --minimum-monitors 2 \
+            --output evidence/display-topology.json
+
+      - name: Run the complete live recorder and window qualification
+        shell: bash
+        env:
+          OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          "${QUALIFICATION_PYTHON}" -m pytest \
+            "${GITHUB_WORKSPACE}/tests/test_performance.py" \
+            "${GITHUB_WORKSPACE}/tests/test_window_capture.py" \
+            -m slow -v --timeout=300 --import-mode=importlib \
+            --junitxml="${GITHUB_WORKSPACE}/evidence/interactive-macos.xml"
+
+      - name: Reject skipped or incomplete qualification tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_junit_no_skips.py evidence/interactive-macos.xml
+
+      - name: Upload interactive qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: capture-interactive-macos-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  interactive-windows:
+    name: Interactive qualification (Windows X64)
+    needs: build-candidate
+    environment: production-qualification
+    runs-on: [self-hosted, Windows, X64, openadapt-capture-qualified]
+    timeout-minutes: 35
+    steps:
+      - name: Checkout the exact candidate source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Download the exact candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: capture-candidate-${{ github.sha }}
+          path: dist
+
+      - name: Install the exact wheel into an isolated environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $qualificationRoot = Join-Path $env:RUNNER_TEMP "capture-qualification-$env:GITHUB_RUN_ID-$env:GITHUB_JOB"
+          $qualificationPython = Join-Path $qualificationRoot "Scripts\python.exe"
+          uv venv --clear --python 3.12 $qualificationRoot
+          $wheel = (Get-ChildItem "dist\*.whl" -File -ErrorAction Stop).FullName
+          if ($wheel.Count -ne 1) { throw "Expected exactly one candidate wheel." }
+          uv pip install --python $qualificationPython $wheel `
+            "pytest==9.1.1" "pytest-timeout==2.4.0" "pynput==1.8.2"
+          "QUALIFICATION_PYTHON=$qualificationPython" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Require the reviewed external video tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path evidence | Out-Null
+          Get-Command ffmpeg -ErrorAction Stop | Out-Null
+          Get-Command ffprobe -ErrorAction Stop | Out-Null
+          ffmpeg -version | Out-File evidence/ffmpeg-version.txt -Encoding utf8
+          ffprobe -version | Out-File evidence/ffprobe-version.txt -Encoding utf8
+
+      - name: Require a stable multiple-monitor desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & $env:QUALIFICATION_PYTHON scripts/check_display_topology.py `
+            --minimum-monitors 2 `
+            --output evidence/display-topology.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run the complete live recorder and window qualification
+        shell: pwsh
+        env:
+          OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & $env:QUALIFICATION_PYTHON -m pytest `
+              "$env:GITHUB_WORKSPACE/tests/test_performance.py" `
+              "$env:GITHUB_WORKSPACE/tests/test_window_capture.py" `
+              -m slow -v --timeout=300 --import-mode=importlib `
+              "--junitxml=$env:GITHUB_WORKSPACE/evidence/interactive-windows.xml"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Reject skipped or incomplete qualification tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python scripts/check_junit_no_skips.py evidence/interactive-windows.xml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload interactive qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: capture-interactive-windows-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30

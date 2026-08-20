@@ -55,50 +55,17 @@ jobs:
             echo "skip=true" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Wait for exact-head Tests workflow
+      - name: Wait for exact-head test and production qualification evidence
         if: steps.check_skip.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          deadline=$((SECONDS + 2700))
-          while [ "${SECONDS}" -lt "${deadline}" ]; do
-            response="$(
-              gh api --method GET \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/test.yml/runs" \
-                --raw-field head_sha="${GITHUB_SHA}" \
-                --raw-field event=push \
-                --raw-field per_page=20
-            )"
-            status="$(
-              printf '%s' "${response}" |
-                jq -r --arg sha "${GITHUB_SHA}" \
-                  '[.workflow_runs[]
-                    | select(.head_sha == $sha and .event == "push")]
-                   | sort_by(.created_at) | last | .status // "missing"'
-            )"
-            conclusion="$(
-              printf '%s' "${response}" |
-                jq -r --arg sha "${GITHUB_SHA}" \
-                  '[.workflow_runs[]
-                    | select(.head_sha == $sha and .event == "push")]
-                   | sort_by(.created_at) | last | .conclusion // "pending"'
-            )"
-            echo "test.yml for ${GITHUB_SHA}: ${status}/${conclusion}"
-            if [ "${status}" = "completed" ] && [ "${conclusion}" != "success" ]; then
-              echo "Refusing to publish because test.yml concluded ${conclusion}."
-              exit 1
-            fi
-            if [ "${status}" = "completed" ] && [ "${conclusion}" = "success" ]; then
-              break
-            fi
-            sleep 10
-          done
-          if [ "${status}" != "completed" ] || [ "${conclusion}" != "success" ]; then
-            echo "Refusing to publish: exact-head test.yml did not succeed within 45 minutes."
-            exit 1
-          fi
+          python scripts/check_release_ci.py \
+            --repository "${GITHUB_REPOSITORY}" \
+            --sha "${GITHUB_SHA}" \
+            --timeout-seconds 2700
 
       - name: Require dispatched head to remain current protected main
         if: steps.check_skip.outputs.skip != 'true'

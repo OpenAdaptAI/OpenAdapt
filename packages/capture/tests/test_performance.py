@@ -10,9 +10,9 @@ Run only these:                pytest -m slow -v
 NOTE: The recorder uses multiprocessing.Process for writer tasks. On macOS
 (Python "spawn" start method) writer processes historically failed to start
 because each child re-imported modules with display side effects; imports are
-side-effect free since 0.5.4, but the spawn path on macOS/Linux is not yet
-validated end to end. These tests target Windows (the primary recording
-platform) and are exercised in CI on windows-latest.
+side-effect free since 0.5.4. Windows runs these tests by default. Interactive
+macOS/Linux production-qualification runners can opt in explicitly with
+OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION=1.
 """
 
 import os
@@ -28,15 +28,22 @@ import pytest
 from openadapt_capture.capture import CaptureSession
 from openadapt_capture.recorder import Recorder
 
-# Skip on non-Windows platforms where the live pipeline is not yet validated
-_SKIP_REASON = (
-    "Live recorder integration tests target Windows (the primary recording "
-    "platform, exercised in CI on windows-latest). The multiprocessing "
-    "'spawn' writer path on macOS/Linux is not yet validated end to end; "
-    "on GitHub macOS runners synthetic input injection also needs Accessibility "
-    "permissions that cannot be granted."
+# A non-Windows host must opt in explicitly. This prevents a developer or a
+# hosted CI runner from accidentally starting native input injection when it
+# does not have a visible desktop and the required OS permissions. The
+# production qualification workflow uses controlled, interactive hosts.
+_PRODUCTION_QUALIFICATION = (
+    os.environ.get("OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION") == "1"
 )
-_ON_WINDOWS = sys.platform == "win32"
+_ON_SUPPORTED_LIVE_PLATFORM = sys.platform == "win32" or (
+    _PRODUCTION_QUALIFICATION and sys.platform in ("darwin", "linux")
+)
+_SKIP_REASON = (
+    "Live recorder integration tests run by default only on Windows. "
+    "Interactive macOS/Linux qualification requires "
+    "OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION=1 and the applicable screen, "
+    "input, and Accessibility permissions."
+)
 
 # GitHub-hosted Windows runners execute jobs in a non-interactive session:
 # SendInput-injected events never reach native low-level hooks in this session, so
@@ -129,7 +136,7 @@ def capture_dir(tmp_path):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.slow
-@pytest.mark.skipif(not _ON_WINDOWS, reason=_SKIP_REASON)
+@pytest.mark.skipif(not _ON_SUPPORTED_LIVE_PLATFORM, reason=_SKIP_REASON)
 class TestRecorderIntegration:
     """Integration tests that run the full recording pipeline."""
 

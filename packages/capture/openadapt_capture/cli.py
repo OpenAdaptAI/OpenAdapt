@@ -34,15 +34,22 @@ def record(
             unless RECORD_AUDIO_RETAIN_WAVEFORM is explicitly enabled.
             Requires an on-device transcription backend to be installed.
         images: Also save screenshots as PNGs (default: False).
-        browser_events: Enable the development Chrome extension prototype
-            (default: False). It is not the supported browser recorder. Use
-            openadapt-flow browser launch or attach mode for a compile-ready
-            recording. The prototype connects to localhost:8765.
+        browser_events: Removed legacy opt-in. If true, the command fails
+            before it starts a recorder. Use openadapt-flow Playwright launch
+            or attach recording instead.
         send_profile: Send profiling data via wormhole after recording (default: False).
         window_owner: Owner-app substring for window-scoped recording — capture
             ONE window in its own pixel space (e.g. --window-owner Parallels).
         window_title: Title substring to disambiguate the target window.
     """
+    if browser_events:
+        print(
+            "The Chrome-extension WebSocket prototype is not part of the "
+            "supported openadapt-capture runtime."
+        )
+        print("Use openadapt-flow Playwright launch or attach recording instead.")
+        raise SystemExit(2)
+
     import time
 
     from openadapt_capture.recorder import Recorder
@@ -86,11 +93,6 @@ def record(
     print(f"Recording to: {output_dir}")
     if window:
         print(f"Window-scoped: owner={window_owner!r} title={window_title!r}")
-    if browser_events:
-        print("PROTOTYPE: Capture Chrome-extension events are not a supported path.")
-        print("Use openadapt-flow browser launch or attach mode for real workflows.")
-        print("Browser event capture enabled (WebSocket on localhost:8765)")
-        print("Make sure the openadapt-capture Chrome extension is installed.")
     print("Press Ctrl+C or type stop sequence to stop recording...")
     print()
 
@@ -100,7 +102,6 @@ def record(
         capture_video=video,
         capture_audio=audio,
         capture_images=images,
-        capture_browser_events=browser_events,
         send_profile=send_profile,
         window=window,
     ) as recorder:

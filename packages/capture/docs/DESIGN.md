@@ -1,302 +1,214 @@
-# openadapt-capture Design
+# OpenAdapt Capture design
+
+## Product role
+
+`openadapt-capture` is the canonical native recorder for OpenAdapt. It records
+screen media, native input, timing, window geometry, and optional action-time UI
+structure into one local session. `openadapt-flow` consumes the session, applies
+the compiler and qualification contracts, and owns governed replay.
+
+The package lifecycle is **Experimental**. A successful unit test or a runnable package
+does not by itself make a recording path production-qualified. A release must
+also pass the exact-commit clean-install and interactive native qualification
+described below.
+
+Capture is local-first. It does not upload a recording. A raw session can
+contain screen text, typed secrets, accessibility text, and optional narration.
+It remains inside the approved local boundary unless a separate explicit
+operation exports it.
+
+## Supported recording paths
 
-> **Historical design record.** This file retains early goals and proposed
-> formats. It is not the current package contract. The current recorder
-> writes `recording.db` plus verified time-aligned MP4 media, uses native input
-> observers on Windows, macOS, and Linux, retains action-time Windows UIA
-> evidence, and supports window-scoped capture on Windows and macOS. See
-> [`README.md`](../README.md) and the public API for the current behavior. Items
-> such as `capture.db`, chunked continuous capture, and structural observers on
-> every operating system remain historical proposals where the code differs.
+| Path | Capture contract |
+| --- | --- |
+| Full virtual desktop | Capture the combined MSS desktop and translate global input into that exact pixel space. |
+| One native window | Re-resolve and capture the selected window on each frame; translate input into a fixed encoded viewport. |
+| RDP or Citrix client window | Use the native window path. Treat the remote application as pixels; local accessibility APIs do not cross the remote boundary. |
+| Browser | `openadapt-flow` owns the supported Playwright recorder. The Chrome extension and bridge in this repository are source-only development prototypes and are excluded from Capture release artifacts. |
+
+Capture supports native input observation on macOS, Windows, and X11 Linux.
+Windows can also retain UI Automation evidence at action time. The structural
+schema permits another injected provider, but the package does not currently
+ship macOS Accessibility or Linux AT-SPI structural observers.
 
-## Problem Statement
+## Session pipeline
+
+One recording has these stages:
+
+1. Resolve and verify all required local dependencies before input listeners
+   start. This includes a real encode-and-decode probe when video is enabled.
+2. Resolve the initial native-window or virtual-desktop coordinate scope.
+3. Create the per-capture SQLite database and media staging path.
+4. Observe native input and screen frames on separate workers.
+5. Put all observed events onto one timestamped processing queue.
+6. Associate actionable input with the preceding screen observation and
+   optional structural observation.
+7. Stream RGB frames to a separately provisioned FFmpeg process.
+8. Close, verify, and atomically promote the MP4. Retain an incomplete partial
+   file on an encoder failure and never report it as complete media.
+9. Post-process raw input into the public action view.
+
+A worker failure stops the session and propagates through the recording
+boundary. A frame whose size violates the fixed stream contract is an error. It
+is not silently skipped.
+
+## Coordinate contracts
+
+### Full virtual desktop
+
+MSS monitor zero is the bounding rectangle of all active monitors. Native input
+uses global desktop coordinates. Capture stores:
 
-We need a platform-agnostic representation of GUI interactions that:
+- `coordinate_space = "virtual_desktop_pixels"`
+- the combined desktop origin and viewport
+- the physical monitor count
+- privacy-safe physical monitor rectangles
+
+For each input point, Capture subtracts the combined desktop origin. This maps
+negative-origin secondary monitors into the exact captured frame without a
+fabricated per-monitor scale. A converter must not apply the legacy
+`pixel_ratio` scale to this coordinate space.
+
+The desktop topology is fixed for one recording. Display hot-plug, rotation,
+resolution, or scale changes alter the encoded frame contract and fail the
+session. Multiple monitors are supported when the topology stays unchanged.
+
+### Native window
+
+The first successful frame fixes the encoded viewport. Capture then re-resolves
+the selected window for each frame. It retains the current bounds, source
+viewport, source-to-output scale, letterbox content rectangle, and change
+timeline.
+
+When the window moves, resizes, or moves between displays with different
+scales, Capture scales the complete source frame to fit the fixed encoded
+viewport and adds letterboxing as required. It maps input with the same current
+bounds and content rectangle. It does not discard a frame because the source
+window changed size.
 
-1. Can be captured from any OS (macOS, Windows, Linux)
-2. Can be scrubbed for privacy (via `openadapt-privacy`)
-3. Can be replayed for automation
-4. Can be used for ML training (via `openadapt-ml`)
-5. Works as a generic library that any system can adapt to
-
-## Design Goals
-
-`openadapt-capture` is designed for **production use** - it should run uninterrupted for days without hindering the user.
-
-### Key Features
-
-1. **Production-ready** - Designed for continuous operation without degradation
-2. **Process-isolated video** - The MIT package stages frames and invokes a
-   separately provisioned FFmpeg executable; it does not bundle or link codec
-   libraries
-3. **Low resource footprint** - Non-blocking capture that doesn't slow down user's work
-4. **Chunked media** - Video/audio split into manageable segments for long captures
-5. **Audio capture** - Built-in audio recording with Whisper transcription
-6. **Privacy-first** - Designed to integrate with `openadapt-privacy` for scrubbing
-7. **Multi-process architecture** - Optimized queues for high-throughput event handling
-
-### Production Requirements
-
-For continuous capture over days/weeks:
-
-1. **Memory bounded** - Stream events to disk, don't accumulate in RAM
-2. **Chunked video** - Split into segments (e.g., 10 min each) to avoid giant files
-3. **Graceful recovery** - Handle crashes, resume without data loss
-4. **Minimal CPU** - Capture shouldn't impact user's work
-5. **Disk management** - Configurable retention, auto-cleanup of old captures
-
-## Scope Decision: Accessibility Data
-
-OpenAdapt currently captures **accessibility tree data** (element state, UI hierarchy) via platform-specific APIs:
-- macOS: `ApplicationServices` / `AXUIElement`
-- Windows: `UIAutomation`
-- Linux: `AT-SPI`
-
-### Recommendation
-
-**Start vision-only, add accessibility as optional layer later.**
-
-The core capture should be:
-- Input events (mouse, keyboard, scroll)
-- Screen frames (video)
-- Audio (optional)
-
-Accessibility data can be added as an optional enrichment step, not a core requirement.
-
-### Window Events
-
-**Decision:** Exclude window change events from core capture.
-
-Without accessibility data, window focus/bounds changes have limited value:
-- We already have screenshots showing window state
-- Window metadata without accessibility tree is just title + bounds
-- If needed, can be added as optional stream later
-
-## Terminology
-
-| Concept | Term | Rationale |
-|---------|------|-----------|
-| Container | **Capture** | Avoids "Recording" (implies audio/video), "Session" (overloaded) |
-| Atomic unit | **Event** | Standard term across systems |
-| Event sequence | **Stream** | Time-ordered events of one type |
-| Multi-capture | **Sequence** | Optional, for workflows |
-
-## Event Types
-
-### Raw Events (captured)
-
-Record primitive events, combine them in post-processing:
-
-```python
-# Mouse events
-"mouse.move"     # x, y
-"mouse.down"     # x, y, button
-"mouse.up"       # x, y, button
-"mouse.scroll"   # x, y, dx, dy
-
-# Keyboard events
-"key.down"       # key, key_char, modifiers
-"key.up"         # key, key_char, modifiers
-
-# Screen events
-"screen.frame"   # reference to video timestamp or image path
-
-# Audio events (optional)
-"audio.chunk"    # reference to audio file + timestamp range
-```
-
-### Derived Events (post-processing)
-
-Combine raw events into higher-level actions (see OpenAdapt's `events.py`):
-
-```python
-# Derived from mouse.down + mouse.up
-"mouse.click"        # single click
-"mouse.doubleclick"  # two clicks within threshold
-"mouse.drag"         # down + move + up (TODO: add to OpenAdapt)
-
-# Derived from key.down + key.up sequences
-"key.type"           # sequence of characters typed
-"key.shortcut"       # modifier + key combination
-```
-
-### Event Processing Pipeline
-
-Based on OpenAdapt's `events.py`:
-
-1. `remove_invalid_keyboard_events` - Filter invalid key codes
-2. `remove_redundant_mouse_move_events` - Remove moves that don't change position
-3. `merge_consecutive_keyboard_events` - Combine key sequences into "type" events
-4. `merge_consecutive_mouse_move_events` - Reduce move event density
-5. `merge_consecutive_mouse_scroll_events` - Combine scroll events
-6. `merge_consecutive_mouse_click_events` - Detect single/double clicks
-
-**TODO:** Add `mouse.drag` detection (currently missing from OpenAdapt).
-
-## Proposed Abstraction
-
-### Event Schema
-
-```python
-@dataclass
-class Event:
-    timestamp: float  # Unix timestamp (seconds, float for sub-ms)
-    type: str         # Event type identifier
-    data: dict        # Event-specific payload
-```
-
-### Stream Schema
-
-```python
-@dataclass
-class Stream:
-    id: str
-    type: str  # "action" | "screen" | "audio"
-    events: list[Event]
-```
-
-**Note:** Using "action" not "input" - clearer terminology.
-
-### Capture Schema
-
-```python
-@dataclass
-class Capture:
-    id: str
-    started_at: float
-    ended_at: float | None
-    platform: str  # "darwin" | "win32" | "linux"
-    screen_dimensions: tuple[int, int]  # For coordinate normalization
-    streams: dict[str, Stream]
-    metadata: dict  # task_description, etc.
-```
-
-## Media Handling
-
-### Video Encoding
-
-Capture keeps its video-first behavior without importing PyAV. During a
-recording it streams in-memory RGB frames directly into an externally
-provisioned FFmpeg process. Missing integer PTS slots reuse the preceding RGB
-frame, producing a deterministic constant-rate stream without depending on
-wall-clock arrival time. A compact ignored MP4 UUID box maps logical capture
-timestamps to their decoded-frame indexes, preserving the existing
-nearest-frame contract without an image sidecar. Finalization closes the
-bounded process, appends that metadata, verifies the output by decoding a PNG
-frame, and atomically promotes it. No intermediate screenshot sequence or
-`ffconcat` manifest is written. Failure retains only an explicitly incomplete
-partial MP4 and never reports it as complete. A sibling or explicitly
-configured `ffprobe` supports legacy nearest-frame extraction and metadata
-inspection without linking codec libraries into Capture. The real preflight
-exercises raw-video input through a pipe, the selected encoder, MP4, PNG
-through `image2pipe`, and the `select` filter before any input listener starts.
-
-```python
-codec = None           # Probe platform encoders, then portable mpeg4 fallback
-pix_fmt = None         # Selected with the verified codec
-crf = 0                # Lossless (adjustable for size vs quality)
-preset = "veryslow"    # Maximum compression
-fps = 24               # Configurable
-```
-
-### Storage: SQLite vs Filesystem
-
-OpenAdapt uses SQLite for events. Benchmarks show it's faster than filesystem for:
-- Many small writes (events)
-- Querying by timestamp
-- Atomic transactions
-
-**Recommendation:** SQLite for events, filesystem for media (video, audio).
-
-```
-capture_abc123/
-├── capture.db            # SQLite: events, metadata
-├── screen/
-│   └── video.mp4         # Or chunked: video_001.mp4, video_002.mp4, ...
-└── audio/
-    └── audio.flac        # Compressed audio
-```
-
-### Screenshots vs Video
-
-**Decision:** Default to video mode.
-
-- More storage-efficient than permanent individual screenshots
-- Exact timestamp alignment is preserved by deterministic PTS-gap filling and
-  logical timestamps embedded in the MP4
-- Screenshots can be extracted from video when needed
-- Individual screenshots remain optional for debugging frame alignment
-
-## Audio Handling
-
-Based on OpenAdapt's implementation:
-
-1. **Capture:** `sounddevice.InputStream` at 16kHz mono
-2. **Storage:** FLAC compression (lossless, ~50% size reduction)
-3. **Transcription:** Whisper with word-level timestamps
-4. **Schema:**
-   ```python
-   AudioInfo:
-       flac_data: bytes
-       transcribed_text: str
-       sample_rate: int
-       words_with_timestamps: list[dict]  # [{"word": "hello", "start": 0.5, "end": 0.8}]
-   ```
-
-Transcription stored separately from audio stream events, linked by timestamp.
-
-## Coordinate Handling
-
-**Decision:** Store absolute pixels, include screen dimensions in metadata.
-
-```python
-Capture:
-    screen_dimensions: (1920, 1080)
-
-Event (mouse.click):
-    data: {x: 500, y: 300, button: "left"}
-```
-
-Normalization can happen at read time if needed:
-```python
-normalized_x = event.data["x"] / capture.screen_dimensions[0]
-```
-
-## Privacy Integration
-
-Scrubbing operates at the Capture level:
-
-```python
-from openadapt_privacy import PresidioScrubbingProvider
-
-def scrub_capture(capture: Capture, scrubber: ScrubbingProvider) -> Capture:
-    """Return a new Capture with PII removed."""
-    # Scrub metadata (task_description, etc.)
-    # Scrub any text in key events
-    # Scrub video frames
-    # Scrub audio transcription
-    ...
-```
-
-## Open Questions
-
-1. **Drag detection:** How to detect drag events from mouse.down → move → mouse.up sequences?
-   - Time threshold?
-   - Distance threshold?
-   - Review other implementations
-
-2. **Video chunking:** What segment duration for long captures?
-   - 10 minutes? 1 hour?
-   - Based on file size or time?
-
-3. **SQLite schema:** Match OpenAdapt's schema for compatibility, or start fresh?
-
-## Next Steps
-
-1. Define exact event schemas (Pydantic models)
-2. Implement SQLite storage for events
-3. Maintain external-process video capture without bundling codec binaries
-4. Port event processing from OpenAdapt's `events.py`
-5. Add drag detection
-6. Integrate with `openadapt-privacy`
-7. Add audio capture
+Input outside the selected window remains out of range. Capture does not clamp
+it into a valid-looking target coordinate.
+
+## Native input
+
+Capture records these primitive event classes:
+
+- mouse move
+- mouse button press and release
+- mouse scroll
+- key press and release
+
+Platform observers have one ordered callback contract. They identify injected
+events when the operating system provides that information. Capture can exclude
+its own injected qualification events from a normal session. It refuses an
+incomplete observer startup instead of reporting partial coverage as complete.
+
+The post-processing layer merges primitive events into higher-level actions.
+The compiler remains responsible for refusing action forms that its selected
+backend cannot replay safely.
+
+## Structural observations
+
+Structural observations are optional evidence beside an action. The versioned
+schema can retain:
+
+- provider and query type
+- element role, name, AutomationId, class, framework, bounds, and patterns
+- process and top-level window identity
+- bounded ancestry
+- exact candidate cardinality and its matching fields
+
+The package currently creates a Windows UIA observer. A missing optional field
+stays missing. Capture does not infer an accessibility value from a screenshot,
+coordinate, or neighboring control. Provider text has strict length and depth
+bounds. A transient provider failure omits the optional observation without
+corrupting the screen and input evidence.
+
+UIA describes the local accessibility tree. It does not describe controls
+inside an RDP or Citrix pixel stream.
+
+## Video and frame timing
+
+Capture does not import, link, download, or bundle FFmpeg. It invokes an
+explicitly configured, Desktop-provisioned, or user-provisioned executable
+through a process boundary. Preflight verifies the required raw-video input,
+selected encoder, MP4 muxing, PNG encode/decode, `image2pipe`, and `select`
+filter before recording starts.
+
+The writer emits a deterministic constant-rate stream. It reuses the preceding
+RGB frame for a missing integer PTS slot. A compact MP4 metadata box binds
+logical capture timestamps to decoded frame indexes. Final verification decodes
+a real frame from the staged artifact before the file is promoted.
+
+Capture uses SQLite for events and the filesystem for media. The current media
+contract is one MP4 per recording. The package does not claim video chunking,
+automatic retention, or crash resume.
+
+## Audio boundary
+
+Microphone narration is off by default. When enabled, Capture requires an
+installed on-device transcription backend before it opens the microphone. It
+does not use a remote fallback. It discards the waveform after transcription
+unless the operator explicitly enables waveform retention.
+
+Transcript text is unsanitized. A retained waveform is biometric data. Neither
+is safe for automatic egress.
+
+## Browser boundary
+
+The supported browser recorder remains Playwright-native in `openadapt-flow`.
+It needs one owner for the browser context, DOM identity, field geometry,
+ordered before/after frames, page state, and source-time secret redaction.
+
+The Chrome extension can supply useful DOM observations, but it does not yet
+provide this complete contract. It can become a supported auxiliary observer
+after it has:
+
+1. a shared versioned event schema;
+2. source-time secret redaction;
+3. explicit permission and browser-profile boundaries;
+4. fail-closed reconnect and tab-lifecycle behavior;
+5. exact frame and event binding; and
+6. end-to-end compiler qualification.
+
+It should not replace the Playwright recorder only to consolidate packages.
+The stronger ownership and redaction boundary is more important than package
+uniformity.
+
+The extension and its unauthenticated development bridge are repository-only.
+Wheel and source archives exclude the bridge and its legacy direct replay. The
+production package keeps only the passive browser-event schemas needed to read
+old local captures.
+
+## Release qualification
+
+The production release workflow is manual and binds evidence to one exact
+commit. It must:
+
+- build and validate one wheel and sdist;
+- install and uninstall that exact wheel in a clean environment on Linux,
+  macOS, and Windows;
+- run interactive native qualification on labeled Linux, macOS, and Windows
+  hosts with real display and input permissions;
+- require at least two real monitors on each interactive host;
+- run the complete slow native capture tests with no skip;
+- verify live window movement and resize where the operating system supports
+  window-scoped capture; and
+- retain machine-readable test and topology evidence.
+
+The release workflow accepts only a successful, complete job set for its exact
+commit. Missing, stale, skipped, partial, or failed evidence blocks publication.
+
+## Known boundaries
+
+- A visible logged-in desktop session and operating-system permissions are
+  required.
+- Windows window capture uses a screen-region grab and requires an unobstructed
+  target window.
+- A display-topology change requires a new recording.
+- Browser extension capture is a repository-only development prototype. Its
+  bridge and direct replay are not in release artifacts. It is not the
+  supported browser recorder.
+- A raw capture is sensitive and has no automatic safe-for-egress derivative.
+- Customer RDP and Citrix environments require their own task-specific
+  qualification.

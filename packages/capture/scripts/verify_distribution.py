@@ -8,8 +8,13 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-FORBIDDEN_DEPENDENCIES = ("oa-atomacos", "pynput")
-FORBIDDEN_SOURCE_TOKENS = ("oa_atomacos", "pynput")
+if __package__:
+    from .check_changelog import validate_documents
+else:  # Direct execution: python scripts/verify_distribution.py
+    from check_changelog import validate_documents
+
+FORBIDDEN_DEPENDENCIES = ("oa-atomacos", "pynput", "websockets")
+FORBIDDEN_SOURCE_TOKENS = ("oa_atomacos", "pynput", "EXECUTE_ACTION")
 FORBIDDEN_ARCHIVE_PATHS = (
     ".env.example",
     ".github/",
@@ -19,6 +24,7 @@ FORBIDDEN_ARCHIVE_PATHS = (
     "docs/whisper-integration-plan.md",
     "scripts/",
     "tests/",
+    "openadapt_capture/browser_bridge.py",
 )
 
 
@@ -26,17 +32,14 @@ def _archive_files(path: Path) -> dict[str, bytes]:
     if path.suffix == ".whl":
         with zipfile.ZipFile(path) as archive:
             return {
-                name: archive.read(name)
-                for name in archive.namelist()
-                if not name.endswith("/")
+                name: archive.read(name) for name in archive.namelist() if not name.endswith("/")
             }
     if path.name.endswith(".tar.gz"):
         with tarfile.open(path, "r:gz") as archive:
             return {
                 member.name: extracted.read()
                 for member in archive.getmembers()
-                if member.isfile()
-                and (extracted := archive.extractfile(member)) is not None
+                if member.isfile() and (extracted := archive.extractfile(member)) is not None
             }
     raise ValueError(f"Unsupported distribution archive: {path}")
 
@@ -51,7 +54,8 @@ def _relative_archive_name(name: str) -> str:
 
 def verify_distribution(path: Path) -> None:
     files = _archive_files(path)
-    relative_names = {_relative_archive_name(name) for name in files}
+    relative_files = {_relative_archive_name(name): content for name, content in files.items()}
+    relative_names = set(relative_files)
     assert any(Path(name).name == "LICENSE" for name in files), (
         f"{path}: MIT LICENSE file is missing"
     )
@@ -64,6 +68,7 @@ def verify_distribution(path: Path) -> None:
 
     if path.name.endswith(".tar.gz"):
         required_source_files = {
+            "CHANGELOG.md",
             "LICENSE",
             "README.md",
             "pyproject.toml",
@@ -71,6 +76,13 @@ def verify_distribution(path: Path) -> None:
         }
         missing = required_source_files - relative_names
         assert not missing, f"{path}: required source files are missing: {sorted(missing)}"
+        try:
+            validate_documents(
+                relative_files["CHANGELOG.md"].decode("utf-8"),
+                relative_files["pyproject.toml"].decode("utf-8"),
+            )
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise AssertionError(f"{path}: invalid changelog contract: {exc}") from exc
 
     metadata_files = [
         content.decode("utf-8")
@@ -104,8 +116,7 @@ def verify_distribution(path: Path) -> None:
     python_sources = "\n".join(
         content.decode("utf-8")
         for name, content in files.items()
-        if name.endswith(".py")
-        and "/openadapt_capture/" in f"/{name}"
+        if name.endswith(".py") and "/openadapt_capture/" in f"/{name}"
     )
     for token in FORBIDDEN_SOURCE_TOKENS:
         assert token not in python_sources, (

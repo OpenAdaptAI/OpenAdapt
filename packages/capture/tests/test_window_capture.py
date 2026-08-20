@@ -14,15 +14,19 @@ on an interactive macOS/Windows desktop (e.g. the Parallels rig):
 """
 
 import os
+import queue
 import sys
+import threading
 import time
+from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
 from openadapt_capture.capture import CaptureSession
 from openadapt_capture.db import create_db, crud
-from openadapt_capture.recorder import Recorder
+from openadapt_capture.recorder import Recorder, read_screen_events
 from openadapt_capture.window_capture import (
     TargetWindow,
     WindowCaptureError,
@@ -192,8 +196,49 @@ class TestWindowCaptureScope:
     def test_resized_window_flagged_changed(self, scope, fake):
         scope.capture_frame()
         fake.bounds = (300.0, 150.0, 900.0, 700.0)
-        _, changed = scope.capture_frame()
+        image, changed = scope.capture_frame()
         assert changed is True
+        assert image.size == (1600, 1200)
+        state = scope.window_event_data()["state"]
+        assert state["viewport"] == [1600, 1200]
+        assert state["source_viewport"] == [1800, 1400]
+
+    def test_resize_letterboxes_and_translates_into_fixed_viewport(self, scope, fake):
+        scope.capture_frame()
+        fake.bounds = (300.0, 150.0, 400.0, 600.0)
+
+        image, changed = scope.capture_frame()
+
+        assert changed is True
+        assert image.size == (1600, 1200)
+        state = scope.window_event_data()["state"]
+        assert state["source_viewport"] == [800, 1200]
+        assert state["content_rect"] == [400, 0, 800, 1200]
+        assert state["fit_scale"] == 1.0
+        assert scope.translate(300.0, 150.0) == (400.0, 0.0)
+        assert scope.translate(500.0, 450.0) == (800.0, 600.0)
+
+    def test_resize_uses_exact_axis_scales_after_integer_rounding(self, fake):
+        fake.bounds = (0.0, 0.0, 3.0, 3.0)
+        images = iter(
+            [
+                Image.new("RGB", (5, 5)),
+                Image.new("RGB", (4, 3)),
+            ]
+        )
+        scope = WindowCaptureScope(
+            WindowTarget(owner="Parallels"),
+            resolver=fake.resolver,
+            capturer=lambda _window: next(images),
+        )
+        scope.capture_frame()
+        scope.capture_frame()
+
+        state = scope.window_event_data()["state"]
+        assert state["content_rect"] == [0, 0, 5, 4]
+        assert state["scale_x"] == pytest.approx(5 / 3)
+        assert state["scale_y"] == pytest.approx(4 / 3)
+        assert scope.translate(1.5, 1.5) == pytest.approx((2.5, 2.0))
 
     def test_translate_before_first_frame_raises(self, scope):
         with pytest.raises(WindowCaptureError, match="before the first"):
@@ -208,10 +253,42 @@ class TestWindowCaptureScope:
         scope.capture_frame()
         assert scope.translate(310.0, 170.0) == (420.0, 240.0)
 
+    def test_resolve_does_not_mix_new_bounds_with_previous_frame(self, scope, fake):
+        scope.capture_frame()
+        assert scope.translate(310.0, 170.0) == (20.0, 40.0)
+
+        fake.bounds = (100.0, 50.0, 800.0, 600.0)
+        scope.resolve()
+
+        # A resolver poll alone cannot commit geometry. Translation changes
+        # only after the corresponding frame has been captured.
+        assert scope.translate(310.0, 170.0) == (20.0, 40.0)
+        scope.capture_frame()
+        assert scope.translate(310.0, 170.0) == (420.0, 240.0)
+
+    def test_window_identity_change_terminates_scope(self, scope, fake):
+        scope.capture_frame()
+        fake.window_id = 99
+
+        with pytest.raises(WindowCaptureError, match="changed window identity"):
+            scope.capture_frame()
+
     def test_missing_window_raises_loudly(self, scope, fake):
         fake.missing = True
         with pytest.raises(WindowCaptureError, match="no window matching"):
             scope.capture_frame()
+
+    def test_screen_reader_propagates_capture_failure_without_retry(self, scope, fake):
+        fake.missing = True
+
+        with pytest.raises(WindowCaptureError, match="no window matching"):
+            read_screen_events(
+                queue.Queue(),
+                threading.Event(),
+                SimpleNamespace(timestamp=time.time()),
+                threading.Event(),
+                window_scope=scope,
+            )
 
     def test_window_event_data_matches_window_event_columns(self, scope):
         scope.capture_frame()
@@ -234,6 +311,9 @@ class TestWindowCaptureScope:
         assert state["scale"] == 2.0
         assert state["bounds"] == [300.0, 150.0, 800.0, 600.0]
         assert state["viewport"] == [1600, 1200]
+        assert state["source_viewport"] == [1600, 1200]
+        assert state["content_rect"] == [0, 0, 1600, 1200]
+        assert state["fit_scale"] == 1.0
 
     def test_window_event_data_before_frame_raises(self, scope):
         with pytest.raises(WindowCaptureError):
@@ -247,6 +327,8 @@ class TestWindowCaptureScope:
         assert snap["window_id"] == 42
         assert snap["initial_bounds"] == [300.0, 150.0, 800.0, 600.0]
         assert snap["viewport"] == [1600, 1200]
+        assert snap["source_viewport"] == [1600, 1200]
+        assert snap["content_rect"] == [0, 0, 1600, 1200]
 
     def test_snapshot_before_frame_has_target_only(self, scope):
         snap = scope.snapshot()
@@ -319,14 +401,12 @@ class TestActionTranslation:
         utils.set_start_time()
         scope.capture_frame()
         q = queue.Queue()
-        trigger_action_event(
-            q, {"name": "click", "mouse_x": 310.0, "mouse_y": 170.0}, scope
-        )
+        trigger_action_event(q, {"name": "click", "mouse_x": 310.0, "mouse_y": 170.0}, scope)
         (event,) = self._drain(q)
         assert event.data["mouse_x"] == 20.0
         assert event.data["mouse_y"] == 40.0
 
-    def test_mouse_action_before_first_frame_discarded(self, scope):
+    def test_mouse_action_before_first_frame_fails_session(self, scope):
         import queue
 
         from openadapt_capture import utils
@@ -334,10 +414,13 @@ class TestActionTranslation:
 
         utils.set_start_time()
         q = queue.Queue()
-        trigger_action_event(
-            q, {"name": "click", "mouse_x": 310.0, "mouse_y": 170.0}, scope
-        )
-        assert self._drain(q) == []  # discarded loudly, not mis-recorded
+        with pytest.raises(WindowCaptureError, match="before the first"):
+            trigger_action_event(
+                q,
+                {"name": "click", "mouse_x": 310.0, "mouse_y": 170.0},
+                scope,
+            )
+        assert self._drain(q) == []
 
     def test_key_action_unaffected(self, scope):
         import queue
@@ -402,9 +485,7 @@ class TestWindowCapturePersistence:
             "scale": 2.0,
             "viewport": [1600, 1200],
         }
-        capture_path = self._insert_recording(
-            str(tmp_path / "cap"), {"capture_window": scope_info}
-        )
+        capture_path = self._insert_recording(str(tmp_path / "cap"), {"capture_window": scope_info})
         with CaptureSession.load(capture_path) as capture:
             assert capture.window_capture == scope_info
             assert capture.window_capture["coordinate_space"] == "window_pixels"
@@ -429,6 +510,7 @@ _PLATFORM_SKIP_REASON = (
 # is no guarantee a resolvable/capturable application window exists. Run on
 # an interactive desktop (developer machine or the Parallels rig).
 _NO_INPUT_INJECTION = os.environ.get("OPENADAPT_CI_NO_INPUT_INJECTION") == "1"
+_PRODUCTION_QUALIFICATION = os.environ.get("OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION") == "1"
 _SESSION_SKIP_REASON = (
     "OPENADAPT_CI_NO_INPUT_INJECTION=1: non-interactive hosted-runner session "
     "has no guaranteed capturable application window (hosted CI limitation, "
@@ -443,6 +525,247 @@ _SMOKE_OWNER = os.environ.get(
 _SMOKE_TITLE = os.environ.get("OPENADAPT_WINDOW_SMOKE_TITLE") or None
 
 
+def _geometry_changed(
+    current: tuple[float, float, float, float],
+    original: tuple[float, float, float, float],
+) -> bool:
+    """Return true only after both the position and the size change."""
+    moved = abs(current[0] - original[0]) >= 1 or abs(current[1] - original[1]) >= 1
+    resized = abs(current[2] - original[2]) >= 1 or abs(current[3] - original[3]) >= 1
+    return moved and resized
+
+
+def _capture_until_bounds(
+    scope: WindowCaptureScope,
+    predicate,
+    *,
+    timeout: float = 10.0,
+):
+    """Capture until the live target has bounds accepted by ``predicate``."""
+    deadline = time.monotonic() + timeout
+    last_bounds = None
+    saw_changed = False
+    while time.monotonic() < deadline:
+        image, changed = scope.capture_frame()
+        saw_changed = saw_changed or changed
+        data = scope.window_event_data()
+        last_bounds = tuple(data["state"]["bounds"])
+        if predicate(last_bounds):
+            return image, saw_changed, data
+        time.sleep(0.1)
+    raise AssertionError(
+        f"window bounds did not reach the required state within {timeout}s; "
+        f"last bounds were {last_bounds!r}"
+    )
+
+
+@contextmanager
+def _temporary_windows_geometry(window: TargetWindow):
+    """Move and resize a normal Win32 window, then restore its exact rectangle."""
+    import ctypes
+    import ctypes.wintypes as wintypes
+
+    user32 = ctypes.windll.user32
+    hwnd = wintypes.HWND(window.window_id)
+    assert user32.IsWindow(hwnd), f"Win32 window {window.window_id} no longer exists"
+    assert not user32.IsIconic(hwnd), "qualification target must not be minimized"
+    assert not user32.IsZoomed(hwnd), "qualification target must not be maximized"
+
+    original = wintypes.RECT()
+    assert user32.GetWindowRect(hwnd, ctypes.byref(original)), (
+        f"GetWindowRect failed for Win32 window {window.window_id}"
+    )
+    original_width = original.right - original.left
+    original_height = original.bottom - original.top
+    target_width = max(320, original_width - 137)
+    target_height = max(240, original_height - 83)
+    if target_width == original_width:
+        target_width += 137
+    if target_height == original_height:
+        target_height += 83
+
+    mutated = False
+    try:
+        mutated = bool(
+            user32.MoveWindow(
+                hwnd,
+                original.left + 37,
+                original.top + 29,
+                target_width,
+                target_height,
+                True,
+            )
+        )
+        assert mutated, f"MoveWindow failed for Win32 window {window.window_id}"
+        yield
+    finally:
+        if mutated:
+            restored = user32.MoveWindow(
+                hwnd,
+                original.left,
+                original.top,
+                original_width,
+                original_height,
+                True,
+            )
+            assert restored, f"could not restore Win32 window {window.window_id} geometry"
+
+
+def _macos_ax_attribute(application_services, element, name: str):
+    """Read one AX attribute and return ``None`` when it is unavailable."""
+    error, value = application_services.AXUIElementCopyAttributeValue(
+        element,
+        name,
+        None,
+    )
+    if error != application_services.kAXErrorSuccess:
+        return None
+    return value
+
+
+def _macos_ax_geometry(application_services, value, value_type):
+    """Read a CGPoint or CGSize from an AXValue."""
+    success, geometry = application_services.AXValueGetValue(
+        value,
+        value_type,
+        None,
+    )
+    assert success, "could not decode macOS accessibility geometry"
+    return geometry
+
+
+@contextmanager
+def _temporary_macos_geometry(window: TargetWindow):
+    """Move and resize one AX window, then restore its exact AX geometry."""
+    import ApplicationServices
+
+    app = ApplicationServices.AXUIElementCreateApplication(window.pid)
+    ax_windows = _macos_ax_attribute(ApplicationServices, app, "AXWindows") or []
+    id_matches = []
+    title_matches = []
+    for candidate in ax_windows:
+        candidate_number = _macos_ax_attribute(
+            ApplicationServices,
+            candidate,
+            "AXWindowNumber",
+        )
+        if candidate_number is not None and int(candidate_number) == window.window_id:
+            id_matches.append(candidate)
+        candidate_title = _macos_ax_attribute(
+            ApplicationServices,
+            candidate,
+            "AXTitle",
+        )
+        if candidate_title is not None and str(candidate_title) == window.title:
+            title_matches.append(candidate)
+
+    if id_matches:
+        ax_window = id_matches[0]
+    else:
+        assert len(title_matches) == 1, (
+            "the macOS qualification target must expose a unique Accessibility "
+            f"window title; found {len(title_matches)} matches for {window.title!r}"
+        )
+        ax_window = title_matches[0]
+
+    fullscreen = _macos_ax_attribute(
+        ApplicationServices,
+        ax_window,
+        "AXFullScreen",
+    )
+    movable = _macos_ax_attribute(ApplicationServices, ax_window, "AXMovable")
+    resizable = _macos_ax_attribute(ApplicationServices, ax_window, "AXResizable")
+    assert not fullscreen, "qualification target must not be full screen"
+    assert movable is not False, "qualification target must be movable"
+    assert resizable is not False, "qualification target must be resizable"
+
+    original_position = _macos_ax_attribute(
+        ApplicationServices,
+        ax_window,
+        "AXPosition",
+    )
+    original_size = _macos_ax_attribute(ApplicationServices, ax_window, "AXSize")
+    assert original_position is not None and original_size is not None, (
+        "qualification target does not expose mutable Accessibility geometry"
+    )
+    point = _macos_ax_geometry(
+        ApplicationServices,
+        original_position,
+        ApplicationServices.kAXValueCGPointType,
+    )
+    size = _macos_ax_geometry(
+        ApplicationServices,
+        original_size,
+        ApplicationServices.kAXValueCGSizeType,
+    )
+    target_width = max(320.0, float(size.width) - 137.0)
+    target_height = max(240.0, float(size.height) - 83.0)
+    if target_width == float(size.width):
+        target_width += 137.0
+    if target_height == float(size.height):
+        target_height += 83.0
+
+    target_position_value = ApplicationServices.AXValueCreate(
+        ApplicationServices.kAXValueCGPointType,
+        (float(point.x) + 37.0, float(point.y) + 29.0),
+    )
+    target_size_value = ApplicationServices.AXValueCreate(
+        ApplicationServices.kAXValueCGSizeType,
+        (target_width, target_height),
+    )
+
+    mutated = False
+    try:
+        size_error = ApplicationServices.AXUIElementSetAttributeValue(
+            ax_window,
+            "AXSize",
+            target_size_value,
+        )
+        mutated = size_error == ApplicationServices.kAXErrorSuccess
+        assert mutated, f"could not resize macOS window (AX error {size_error})"
+        position_error = ApplicationServices.AXUIElementSetAttributeValue(
+            ax_window,
+            "AXPosition",
+            target_position_value,
+        )
+        assert position_error == ApplicationServices.kAXErrorSuccess, (
+            f"could not move macOS window (AX error {position_error})"
+        )
+        yield
+    finally:
+        if mutated:
+            size_error = ApplicationServices.AXUIElementSetAttributeValue(
+                ax_window,
+                "AXSize",
+                original_size,
+            )
+            position_error = ApplicationServices.AXUIElementSetAttributeValue(
+                ax_window,
+                "AXPosition",
+                original_position,
+            )
+            assert size_error == ApplicationServices.kAXErrorSuccess, (
+                f"could not restore macOS window size (AX error {size_error})"
+            )
+            assert position_error == ApplicationServices.kAXErrorSuccess, (
+                f"could not restore macOS window position (AX error {position_error})"
+            )
+
+
+@contextmanager
+def _temporary_window_geometry(window: TargetWindow):
+    """Dispatch a reversible live geometry change to the current platform."""
+    if sys.platform == "win32":
+        with _temporary_windows_geometry(window):
+            yield
+        return
+    if sys.platform == "darwin":
+        with _temporary_macos_geometry(window):
+            yield
+        return
+    raise AssertionError(f"no live window geometry controller for {sys.platform}")
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(not _ON_SUPPORTED_PLATFORM, reason=_PLATFORM_SKIP_REASON)
 @pytest.mark.skipif(_NO_INPUT_INJECTION, reason=_SESSION_SKIP_REASON)
@@ -450,12 +773,15 @@ class TestWindowCaptureLive:
     """Capture a real window end to end (resolve -> frame -> translate)."""
 
     def _scope(self) -> WindowCaptureScope:
-        scope = WindowCaptureScope(
-            WindowTarget(owner=_SMOKE_OWNER, title=_SMOKE_TITLE)
-        )
+        scope = WindowCaptureScope(WindowTarget(owner=_SMOKE_OWNER, title=_SMOKE_TITLE))
         try:
             scope.resolve()
-        except WindowCaptureError:
+        except WindowCaptureError as exc:
+            if _PRODUCTION_QUALIFICATION:
+                raise AssertionError(
+                    f"production qualification requires an on-screen window "
+                    f"matching owner {_SMOKE_OWNER!r} title {_SMOKE_TITLE!r}"
+                ) from exc
             pytest.skip(
                 f"no on-screen window matching owner {_SMOKE_OWNER!r} "
                 f"title {_SMOKE_TITLE!r} on this desktop; open one (or set "
@@ -485,9 +811,79 @@ class TestWindowCaptureLive:
         data = scope.window_event_data()
         assert data["state"]["viewport"] == [image.width, image.height]
 
-    def test_live_missing_window_fails_loud(self):
-        scope = WindowCaptureScope(
-            WindowTarget(owner="no-such-app-obviously-not-running-xyz")
+    @pytest.mark.skipif(
+        not _PRODUCTION_QUALIFICATION,
+        reason=(
+            "live window move/resize changes are reserved for explicit "
+            "OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION=1 runs"
+        ),
+    )
+    def test_live_move_resize_preserves_fixed_viewport_and_restores_window(self):
+        """Prove live move/resize normalization without changing final app state."""
+        discovery_scope = self._scope()
+        target = discovery_scope.resolve()
+        assert target.title.strip(), (
+            "production qualification requires a target with a stable window title"
         )
+
+        # Bind this test to the exact resolved application/title. This prevents
+        # an owner-only selector from switching to another large window after
+        # the target changes size.
+        scope = WindowCaptureScope(WindowTarget(owner=target.owner, title=target.title))
+        initial_image, initial_changed = scope.capture_frame()
+        assert initial_changed is True
+        initial_data = scope.window_event_data()
+        initial_state = initial_data["state"]
+        initial_bounds = tuple(initial_state["bounds"])
+        initial_viewport = initial_state["viewport"]
+        initial_source_viewport = initial_state["source_viewport"]
+
+        with _temporary_window_geometry(target):
+            moved_image, moved_changed, moved_data = _capture_until_bounds(
+                scope,
+                lambda bounds: _geometry_changed(bounds, initial_bounds),
+            )
+
+            assert moved_changed is True
+            assert moved_data["window_id"] == str(target.window_id)
+            moved_state = moved_data["state"]
+            assert moved_image.size == tuple(initial_viewport)
+            assert moved_state["viewport"] == initial_viewport
+            assert moved_state["source_viewport"] != initial_source_viewport
+
+            # A changed aspect ratio must be represented by a content rectangle
+            # inside the fixed output viewport, not by a dropped or stretched
+            # frame.
+            content_x, content_y, content_width, content_height = moved_state["content_rect"]
+            assert 0 <= content_x < initial_viewport[0]
+            assert 0 <= content_y < initial_viewport[1]
+            assert 0 < content_width <= initial_viewport[0]
+            assert 0 < content_height <= initial_viewport[1]
+            assert [content_x, content_y, content_width, content_height] != [
+                0,
+                0,
+                *initial_viewport,
+            ]
+
+            # Input at the live window center must map to the center of the
+            # non-letterboxed content, even after the move and resize.
+            x, y, width, height = moved_state["bounds"]
+            px, py = scope.translate(x + width / 2, y + height / 2)
+            tolerance = max(3.0, float(moved_state["scale"]))
+            assert px == pytest.approx(content_x + content_width / 2, abs=tolerance)
+            assert py == pytest.approx(content_y + content_height / 2, abs=tolerance)
+
+        restored_image, restored_changed, restored_data = _capture_until_bounds(
+            scope,
+            lambda bounds: all(
+                abs(current - original) <= 4 for current, original in zip(bounds, initial_bounds)
+            ),
+        )
+        assert restored_changed is True
+        assert restored_image.size == tuple(initial_viewport)
+        assert restored_data["window_id"] == str(target.window_id)
+
+    def test_live_missing_window_fails_loud(self):
+        scope = WindowCaptureScope(WindowTarget(owner="no-such-app-obviously-not-running-xyz"))
         with pytest.raises(WindowCaptureError, match="no window matching"):
             scope.capture_frame()

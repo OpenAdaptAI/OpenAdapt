@@ -78,11 +78,6 @@ class Settings(BaseSettings):
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
 
-    # Browser Events Record (extension) configurations
-    BROWSER_WEBSOCKET_SERVER_IP: str = "localhost"
-    BROWSER_WEBSOCKET_PORT: int = 8765
-    BROWSER_WEBSOCKET_MAX_SIZE: int = 2**22  # 4MB
-
     # Database
     DB_ECHO: bool = False
 

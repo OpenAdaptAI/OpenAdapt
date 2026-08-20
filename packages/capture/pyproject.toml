@@ -29,7 +29,6 @@ dependencies = [
     "soundfile>=0.13.1",
     # Note: openai-whisper moved to optional [transcribe] extra due to Python version conflicts
     "pydantic-settings>=2.12.0",
-    "websockets>=12.0",
     # Recording-pipeline dependencies (carried forward from OpenAdapt record.py)
     "sqlalchemy>=2.0.0",
     "alembic>=1.0.0",
@@ -98,6 +97,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt_capture"]
+exclude = [
+    "openadapt_capture/browser_bridge.py",
+]
 
 [tool.hatch.build.targets.sdist]
 ignore-vcs = true
@@ -108,6 +110,7 @@ only-include = [
     "docs",
 ]
 exclude = [
+    "/openadapt_capture/browser_bridge.py",
     "/docs/images/demo.gif",
     "/docs/whisper-integration-plan.md",
 ]
@@ -132,6 +135,14 @@ markers = [
 version_toml = ["pyproject.toml:project.version"]
 commit_message = "chore: release {version}"
 
+[tool.semantic_release.changelog]
+mode = "update"
+insertion_flag = "<!-- version list -->"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+output_format = "md"
+
 [tool.semantic_release.branches.main]
 match = "main"
 
@@ -149,4 +160,7 @@ dev = [
     # Test-only synthetic input driver; excluded from package metadata/runtime.
     "pynput>=1.7.6",
     "pytest>=9.0.2",
+    # Repository-only Chrome-extension prototype tests. The bridge and this
+    # dependency are not part of wheel or source-distribution runtime.
+    "websockets>=12.0",
 ]

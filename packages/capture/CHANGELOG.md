@@ -1,5 +1,232 @@
 # CHANGELOG
 
+<!-- version list -->
+
+
+## v1.2.2 (2026-07-28)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- Stop fabricating display metrics, window data, and UIA evidence
+  ([#61](https://github.com/OpenAdaptAI/openadapt-capture/pull/61),
+  [`e9e2d82`](https://github.com/OpenAdaptAI/openadapt-capture/commit/e9e2d8247e4cd56c7fc9aa250046852f0233912a))
+
+### Build System
+
+- Keep repository clutter out of source archive
+  ([#59](https://github.com/OpenAdaptAI/openadapt-capture/pull/59),
+  [`0137ecb`](https://github.com/OpenAdaptAI/openadapt-capture/commit/0137ecb1572c20b95ac379a423bc200120271a26))
+
+### Chores
+
+- Gitignore `.private/`
+  ([#60](https://github.com/OpenAdaptAI/openadapt-capture/pull/60),
+  [`c0ee3e8`](https://github.com/OpenAdaptAI/openadapt-capture/commit/c0ee3e86be97f47e164c323d2017c9688aa51d19))
+
+### Continuous Integration
+
+- Detect unreleased work and silently skipped publishes
+  ([#57](https://github.com/OpenAdaptAI/openadapt-capture/pull/57),
+  [`fc549ed`](https://github.com/OpenAdaptAI/openadapt-capture/commit/fc549ed47b3185bc804e725fa2972cd7b2673134))
+- Simplify and harden release health
+  ([#58](https://github.com/OpenAdaptAI/openadapt-capture/pull/58),
+  [`191a352`](https://github.com/OpenAdaptAI/openadapt-capture/commit/191a3523d2a4bff5564377aaf5de72d25b2d84e8))
+
+**Detailed Changes**: [v1.2.1...v1.2.2](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.2.1...v1.2.2)
+
+
+## v1.2.1 (2026-07-27)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- **audio**: Make narration capture on-device only and fail closed
+  ([#51](https://github.com/OpenAdaptAI/openadapt-capture/pull/51),
+  [`27ccd26`](https://github.com/OpenAdaptAI/openadapt-capture/commit/27ccd2625ddb6d76f81d4d53c52793366aafdddb))
+
+### Chores
+
+- **deps**: Update release and CodeQL actions
+  ([#56](https://github.com/OpenAdaptAI/openadapt-capture/pull/56),
+  [`22ca9cf`](https://github.com/OpenAdaptAI/openadapt-capture/commit/22ca9cfb36174e28dd18a5b62500a51ad4e34be6))
+
+### Continuous Integration
+
+- Run capture platform integration on exact `main`
+  ([#50](https://github.com/OpenAdaptAI/openadapt-capture/pull/50),
+  [`f54346c`](https://github.com/OpenAdaptAI/openadapt-capture/commit/f54346c4f40b018e302d1edef8082829251d6b7f))
+
+### Documentation
+
+- Note the PyAV/GPL packaging boundary for the `transcribe-fast` extra
+  ([#51](https://github.com/OpenAdaptAI/openadapt-capture/pull/51),
+  [`27ccd26`](https://github.com/OpenAdaptAI/openadapt-capture/commit/27ccd2625ddb6d76f81d4d53c52793366aafdddb))
+
+**Detailed Changes**: [v1.2.0...v1.2.1](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.2.0...v1.2.1)
+
+
+## v1.2.0 (2026-07-26)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- Bound native structural evidence
+  ([#48](https://github.com/OpenAdaptAI/openadapt-capture/pull/48),
+  [`1547f83`](https://github.com/OpenAdaptAI/openadapt-capture/commit/1547f83b01d2e087dcc0f41462e5be8d5b521b82))
+
+### Features
+
+- Preserve keyboard shortcuts in Capture events
+  ([#49](https://github.com/OpenAdaptAI/openadapt-capture/pull/49),
+  [`3720cea`](https://github.com/OpenAdaptAI/openadapt-capture/commit/3720cea5dad937100c98211213330302cc367664))
+
+**Detailed Changes**: [v1.1.1...v1.2.0](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.1.1...v1.2.0)
+
+
+## v1.1.1 (2026-07-25)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- Preserve observer setup failure at readiness timeout
+  ([#47](https://github.com/OpenAdaptAI/openadapt-capture/pull/47),
+  [`1b2cbd3`](https://github.com/OpenAdaptAI/openadapt-capture/commit/1b2cbd38227ea67fd2ab9e618123e091039d7f89))
+- Preserve readiness timeout on startup cancellation
+  ([#47](https://github.com/OpenAdaptAI/openadapt-capture/pull/47),
+  [`1b2cbd3`](https://github.com/OpenAdaptAI/openadapt-capture/commit/1b2cbd38227ea67fd2ab9e618123e091039d7f89))
+- Preserve setup failure at observer timeout
+  ([#47](https://github.com/OpenAdaptAI/openadapt-capture/pull/47),
+  [`1b2cbd3`](https://github.com/OpenAdaptAI/openadapt-capture/commit/1b2cbd38227ea67fd2ab9e618123e091039d7f89))
+
+**Detailed Changes**: [v1.1.0...v1.1.1](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.1.0...v1.1.1)
+
+
+## v1.1.0 (2026-07-25)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- Enumerate UIA candidates with supported filters
+  ([#45](https://github.com/OpenAdaptAI/openadapt-capture/pull/45),
+  [`ba08f0b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/ba08f0b6da322378c165b699129487d41d91334f))
+- Make Windows UIA capture use real APIs
+  ([#45](https://github.com/OpenAdaptAI/openadapt-capture/pull/45),
+  [`ba08f0b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/ba08f0b6da322378c165b699129487d41d91334f))
+
+### Chores
+
+- Remove the generated viewer artifact
+  ([#44](https://github.com/OpenAdaptAI/openadapt-capture/pull/44),
+  [`031b378`](https://github.com/OpenAdaptAI/openadapt-capture/commit/031b37880f3f09ce91578130cc1a8c4f9dc03075))
+
+### Features
+
+- Capture Windows UIA structural evidence
+  ([#45](https://github.com/OpenAdaptAI/openadapt-capture/pull/45),
+  [`ba08f0b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/ba08f0b6da322378c165b699129487d41d91334f))
+
+### Testing
+
+- Exercise real Windows UIA observation
+  ([#45](https://github.com/OpenAdaptAI/openadapt-capture/pull/45),
+  [`ba08f0b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/ba08f0b6da322378c165b699129487d41d91334f))
+
+**Detailed Changes**: [v1.0.4...v1.1.0](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.0.4...v1.1.0)
+
+
+## v1.0.4 (2026-07-24)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- Report FFmpeg input worker startup failure
+  ([#43](https://github.com/OpenAdaptAI/openadapt-capture/pull/43),
+  [`c11969b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/c11969b7efd2eaaf9981d853fbe62d2bdaddd953))
+
+**Detailed Changes**: [v1.0.3...v1.0.4](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.0.3...v1.0.4)
+
+
+## v1.0.3 (2026-07-23)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- Isolate video codec runtime from capture
+  ([#41](https://github.com/OpenAdaptAI/openadapt-capture/pull/41),
+  [`dd84934`](https://github.com/OpenAdaptAI/openadapt-capture/commit/dd849344e5b1687b78fc85242912635a08930b4a))
+- Propagate video writer contracts and failures
+  ([#41](https://github.com/OpenAdaptAI/openadapt-capture/pull/41),
+  [`dd84934`](https://github.com/OpenAdaptAI/openadapt-capture/commit/dd849344e5b1687b78fc85242912635a08930b4a))
+
+**Detailed Changes**: [v1.0.2...v1.0.3](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.0.2...v1.0.3)
+
+
+## v1.0.2 (2026-07-23)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- Replace copyleft input dependencies
+  ([`f0af5a8`](https://github.com/OpenAdaptAI/openadapt-capture/commit/f0af5a8b13ccc7cdb02e8309f0b0f8ff9fece914))
+
+**Detailed Changes**: [v1.0.1...v1.0.2](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.0.1...v1.0.2)
+
+
+## v1.0.1 (2026-07-23)
+
+_This release is published under the MIT License._
+
+### Bug Fixes
+
+- Dispatch docs updates to canonical repository
+  ([#38](https://github.com/OpenAdaptAI/openadapt-capture/pull/38),
+  [`b65d3ad`](https://github.com/OpenAdaptAI/openadapt-capture/commit/b65d3adc280cc98c9855cdc31f8bf1accde38e17))
+
+### Documentation
+
+- Refresh README to shared OpenAdapt house style
+  ([#37](https://github.com/OpenAdaptAI/openadapt-capture/pull/37),
+  [`da30acd`](https://github.com/OpenAdaptAI/openadapt-capture/commit/da30acddd7ac52617d45ec09945046e84f0295de))
+
+**Detailed Changes**: [v1.0.0...v1.0.1](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.0.0...v1.0.1)
+
+
+## v1.0.0 (2026-07-21)
+
+_This release is published under the MIT License._
+
+### Chores
+
+- Add security CI for CodeQL, Gitleaks, dependency review, and Dependabot
+  ([#31](https://github.com/OpenAdaptAI/openadapt-capture/pull/31),
+  [`ea786c4`](https://github.com/OpenAdaptAI/openadapt-capture/commit/ea786c45e550ff29bb2ce5caaf67811120506fdb))
+- **deps**: Bump `actions/checkout` from 4 to 7
+  ([#32](https://github.com/OpenAdaptAI/openadapt-capture/pull/32),
+  [`3b5d694`](https://github.com/OpenAdaptAI/openadapt-capture/commit/3b5d694567fffd883094423e40a3be3e92d27b00))
+- **deps**: Bump `actions/dependency-review-action` from 4.9.0 to 5.0.0
+  ([#33](https://github.com/OpenAdaptAI/openadapt-capture/pull/33),
+  [`100f8cf`](https://github.com/OpenAdaptAI/openadapt-capture/commit/100f8cf13701317a1070714ad8198b09027223cd))
+- **deps**: Bump `astral-sh/setup-uv` from 4 to 7
+  ([#35](https://github.com/OpenAdaptAI/openadapt-capture/pull/35),
+  [`2829be5`](https://github.com/OpenAdaptAI/openadapt-capture/commit/2829be5ccc99fb8060f297e04c24e6d7ada09eba))
+- **deps**: Bump `peter-evans/repository-dispatch` from 3 to 4
+  ([#36](https://github.com/OpenAdaptAI/openadapt-capture/pull/36),
+  [`52c6a4f`](https://github.com/OpenAdaptAI/openadapt-capture/commit/52c6a4f62448598e549827086a9461b6bec86fba))
+- **deps**: Bump `python-semantic-release/python-semantic-release`
+  ([#34](https://github.com/OpenAdaptAI/openadapt-capture/pull/34),
+  [`4b1f42b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/4b1f42b9eb879cc045244c738d04613adc4878e3))
+
+**Detailed Changes**: [v0.6.0...v1.0.0](https://github.com/OpenAdaptAI/openadapt-capture/compare/v0.6.0...v1.0.0)
+
 
 ## v0.6.0 (2026-07-18)
 

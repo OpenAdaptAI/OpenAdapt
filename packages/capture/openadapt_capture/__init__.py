@@ -11,6 +11,26 @@ except PackageNotFoundError:
     __version__ = "0+unknown"
 
 # High-level APIs (primary interface)
+# Passive browser-event schemas remain public so existing local captures can
+# still be inspected. The repository-only Chrome-extension bridge is not part
+# of the production package or API. Supported browser recording is owned by
+# openadapt-flow's Playwright launch and attach paths.
+from openadapt_capture.browser_events import (
+    BoundingBox,
+    BrowserClickEvent,
+    BrowserEvent,
+    BrowserEventType,
+    BrowserFocusEvent,
+    BrowserInputEvent,
+    BrowserKeyEvent,
+    BrowserNavigationEvent,
+    BrowserScrollEvent,
+    DOMSnapshot,
+    ElementState,
+    NavigationType,
+    SemanticElementRef,
+    VisibleElement,
+)
 from openadapt_capture.capture import Action, Capture, CaptureSession
 
 # Frame comparison utilities
@@ -111,34 +131,6 @@ from openadapt_capture.window_capture import (
     translate_point,
 )
 
-# Browser events and bridge (optional - requires websockets)
-try:
-    from openadapt_capture.browser_bridge import (
-        BrowserBridge,
-        BrowserEventRecord,
-        BrowserMode,
-        run_browser_bridge,
-    )
-    from openadapt_capture.browser_events import (
-        BoundingBox,
-        BrowserClickEvent,
-        BrowserEvent,
-        BrowserEventType,
-        BrowserFocusEvent,
-        BrowserInputEvent,
-        BrowserKeyEvent,
-        BrowserNavigationEvent,
-        BrowserScrollEvent,
-        DOMSnapshot,
-        ElementState,
-        NavigationType,
-        SemanticElementRef,
-        VisibleElement,
-    )
-    _BROWSER_BRIDGE_AVAILABLE = True
-except ImportError:
-    _BROWSER_BRIDGE_AVAILABLE = False
-
 __all__ = [
     # Version
     "__version__",
@@ -221,13 +213,7 @@ __all__ = [
     # Visualization
     "create_demo",
     "create_html",
-    # Browser bridge (optional)
-    "_BROWSER_BRIDGE_AVAILABLE",
-    "BrowserBridge",
-    "BrowserMode",
-    "BrowserEventRecord",
-    "run_browser_bridge",
-    # Browser events
+    # Passive browser events (legacy capture reads)
     "BrowserEventType",
     "BrowserEvent",
     "BrowserClickEvent",

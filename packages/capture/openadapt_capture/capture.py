@@ -648,6 +648,21 @@ class CaptureSession:
         return None
 
     @property
+    def desktop_capture(self) -> dict | None:
+        """Combined-monitor geometry for a full-screen recording, else None.
+
+        New full-screen sessions translate native global input into MSS monitor
+        zero, the captured virtual-desktop frame. The metadata retains its
+        origin, viewport, monitor count, and privacy-safe monitor rectangles so
+        converters must not apply the legacy display-ratio scale again.
+        """
+
+        config = getattr(self._recording, "config", None)
+        if isinstance(config, dict):
+            return config.get("capture_desktop")
+        return None
+
+    @property
     def audio_start_time(self) -> float | None:
         """Start timestamp of the audio recording, or None if unavailable."""
         # Check the AudioInfo relationship for the timestamp

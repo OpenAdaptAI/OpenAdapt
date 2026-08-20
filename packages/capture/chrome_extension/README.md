@@ -16,6 +16,11 @@ The extension can collect DOM events and visible HTML and send them to the
 Capture WebSocket bridge on `localhost:8765`. It also contains legacy direct
 DOM replay code.
 
+The extension and bridge are repository-only development files. The published
+wheel and source archive exclude the bridge. The package API does not export
+it, and the package does not install its WebSocket dependency. The former
+browser-event recording opt-in fails before it binds a listener.
+
 Do not use it in a sensitive browser profile. The current implementation does
 not provide these supported-path controls:
 

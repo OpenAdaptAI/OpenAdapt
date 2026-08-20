@@ -68,14 +68,23 @@ Documentation for the whole stack lives at
 | Windows, macOS, and Linux demonstrations | `openadapt-capture` records native input and action-gated screen video; Windows can also retain action-time UI Automation evidence. `openadapt-flow` converts the session into compiler input. |
 | RDP and Citrix/VDI demonstrations | `openadapt-capture` records the selected client window in its own pixel space. The remote application remains externally black-box, and `openadapt-flow` converts the session into compiler input. |
 | Browser demonstrations | `openadapt-flow` uses its Playwright recorder. It can launch Chromium or attach to one existing signed-in local Chromium tab. It does not require this package. |
-| Chrome extension in this repository | Prototype alternate acquisition transport. It is not the supported recorder and must not perform direct replay. |
+| Chrome extension in this repository | Repository-only prototype. Its bridge and legacy direct replay are excluded from the wheel and source archive. It is not the supported recorder. |
 
-The browser path stays inside `openadapt-flow` because the compiler needs
-ordered before/after frames, page state, secret-field redaction, and one bound
-event schema. Flow now supports an existing authenticated browser session
-through its local-loopback CDP attach mode. The extension can become another
-acquisition transport after it emits that same evidence contract. It must not
-create a second compiler format or bypass governed replay.
+The supported browser path stays inside `openadapt-flow`. Playwright owns the
+browser context and can bind DOM identity, field geometry, ordered before/after
+frames, and source-time secret redaction to one recording contract. A Chrome
+extension cannot guarantee that contract across browser profiles, extension
+permissions, browser-internal pages, and process or tab disconnects.
+
+The extension remains useful as a research observer and as a possible future
+source of optional DOM evidence. It should become a supported auxiliary
+observer only after it emits the shared event schema, has a fail-closed
+connection and permission contract, redacts secret fields before persistence,
+and passes the same compiler qualification as the Playwright path. It should
+not replace the Playwright recorder merely to make the package layout uniform,
+create a second compiler format, or bypass governed replay. Flow supports an
+existing authenticated browser session through its local-loopback CDP attach
+mode.
 
 ## Use it with OpenAdapt
 
@@ -182,12 +191,11 @@ retain window-scoped pixels and coordinates for Flow's remote visual compiler.
 
 ## Window-scoped recording
 
-**Status: implemented and unit-proven on all CI platforms; live-validated
-end to end on macOS (frames, translated coordinates, bounds timeline, and
-video verified against a real window on a real display). Windows uses a
-Win32 + `mss` region grab and is exercised by the same unit suite; its live
-smoke test awaits an interactive Windows desktop. Not yet validated against
-a Parallels/Citrix client window specifically.**
+**Status: implemented, with display-free unit coverage on every
+supported operating system.** The production release gate also requires live
+window capture, input injection, movement, resize, video verification, and no
+skipped tests on interactive macOS and Windows runners. A customer RDP or
+Citrix deployment still requires task- and environment-specific qualification.
 
 By default the recorder captures the full screen. Window-scoped mode records
 ONE window in that window's own pixel space. This is the mode built for
@@ -224,20 +232,46 @@ In this mode:
   exact inverse of the replay mapping). Input outside the window records
   out-of-range coordinates rather than being silently clamped.
 - **The window scoping is persisted**: the recording's config JSON carries the
-  target, resolved window, initial bounds, scale, and viewport
+  target, resolved window, initial bounds, fixed output viewport, current
+  source viewport, scale-to-fit mapping, and content rectangle
   (`CaptureSession.window_capture`), and the window is re-resolved every
   frame with bounds changes recorded as window events, a bounds timeline
   converters can use to be exact even when the window moves.
+- **Window movement and resize are supported.** The first frame fixes the
+  encoded video size. Later source frames scale to fit and letterbox into that
+  viewport. Input uses the exact current bounds and content rectangle. No frame
+  is silently skipped because the window changed size or moved to a display
+  with a different scale.
 - **Fail-loud guarantees:** recording refuses to start if the window cannot be
   resolved and captured; input arriving before the first frame is discarded
   with a warning instead of being recorded in the wrong coordinate space; a
-  mid-recording window *resize* skips unencodable video frames loudly
-  (screenshots and the bounds timeline stay exact), so avoid resizing the
-  target during a demonstration.
+  lost window, capture failure, or unexpected output-frame size fails the
+  session instead of producing complete-looking media with an evidence gap.
 
 Note for converters: window-mode coordinates are already in captured-frame
 pixels (`coordinate_space == "window_pixels"`); do not rescale them by
 `pixel_ratio`.
+
+## Multiple monitors
+
+Full-screen mode records the complete virtual desktop reported by MSS, not
+only the primary monitor. Capture stores its origin, fixed viewport, monitor
+count, and privacy-safe monitor rectangles as
+`CaptureSession.desktop_capture`. Global input is translated into this exact
+combined-frame coordinate space. This includes a secondary monitor whose
+native coordinates have a negative origin.
+
+The release qualification requires at least two real monitors on each
+interactive operating-system runner. It checks the topology and then runs the
+native screen and input tests. Downstream converters must not apply the legacy
+display-ratio scale when
+`coordinate_space == "virtual_desktop_pixels"`.
+
+The monitor topology is fixed for one recording. Connecting, disconnecting,
+rotating, or changing the resolution or scale of a display changes the encoded
+frame contract. Capture fails the session if that occurs. Start a new recording
+after a display-topology change. This boundary does not restrict movement or
+resize of a recorded window across an unchanged monitor layout.
 
 ## Data and privacy boundary
 
@@ -286,13 +320,16 @@ boundary. `openadapt-flow` still refuses desktop `--secret` authoring until its
 source-time field-redaction contract can prove that sensitive values were not
 retained. Review the desktop guide before recording sensitive workflows.
 
-The Chrome extension prototype can observe pages across its configured host
-permissions and can emit DOM text and keyboard events to a local WebSocket.
-It does not yet provide source-time secret exclusion, authenticated
+The repository-only Chrome extension prototype can observe pages across its
+configured host permissions. Its development bridge can emit DOM text and
+keyboard events to an unauthenticated local WebSocket and contains legacy
+direct DOM replay. These files are excluded from the package wheel and source
+archive. The production Capture API does not export the bridge, and the former
+`browser_events=True` opt-in fails before it binds a listener. The prototype
+does not provide source-time secret exclusion, authenticated
 profile/tab/document/session binding, acknowledged ordered delivery, or exact
-frame-to-event evidence. Its direct DOM replay does not use Flow's identity,
-policy, fresh-frame, and effect checks. Treat it as development code. Do not
-deploy it in a sensitive browser profile.
+frame-to-event evidence. Treat it as development code. Do not deploy it in a
+sensitive browser profile.
 
 Use Flow's supported attach recorder when an existing SSO or 2FA browser
 session is required. See the
@@ -308,10 +345,13 @@ session is required. See the
   text, named keys, modifier chords, and scrolling. It rejects unsupported
   input such as middle clicks, non-left-button drags, malformed shortcuts, and
   unmapped keys instead of silently compiling an incomplete workflow.
-- Browser-extension installation, security hardening, and compiler integration
-  are not part of the current product path. Promotion requires the shared Flow
-  schema, source-time secret exclusion, authenticated and sequenced delivery,
-  exact frame binding, compiler integration, and removal of direct replay.
+- Display hot-plug, rotation, resolution changes, and scale changes require a
+  new recording because one media stream has one fixed virtual-desktop viewport.
+- Browser-extension installation, bridge code, and direct replay are not part
+  of the published Capture artifacts or supported browser path. Promotion
+  requires the shared Flow schema, source-time secret exclusion, authenticated
+  and sequenced delivery, exact frame binding, compiler integration, and
+  removal of direct replay.
 
 See the organization-wide
 [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md)
