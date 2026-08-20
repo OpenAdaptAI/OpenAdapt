@@ -95,6 +95,8 @@ def test_recorder_writes_recording_format(tmp_path: Path) -> None:
     assert events[3]["text"] == "world"
     assert events[3]["param"] == "note"
     assert events[4]["key"] == "Enter"
+    assert all(e["viewport_before"] == [1280, 800] for e in events)
+    assert all(e["viewport_after"] == [1280, 800] for e in events)
     times = [e["t"] for e in events]
     assert times == sorted(times)
     assert all(t >= 0 for t in times)

@@ -22,6 +22,8 @@ Recording format (DESIGN.md):
                          # structural observations (StructuralBackend), and
                          # sor_before/sor_after (a system-of-record snapshot)
                          # when a recorder-only observer is configured.
+                         # Every frame-backed event also carries
+                         # viewport_before/viewport_after from the actual PNGs.
       frames/{i:04d}_before.png
       frames/{i:04d}_after.png   # captured after the action settled
 
@@ -208,6 +210,12 @@ class Recorder:
         (self._dir / "meta.json").write_text(json.dumps(meta, indent=2))
         return self._dir
 
+    @property
+    def event_count(self) -> int:
+        """Number of complete events already persisted."""
+
+        return self._i
+
     # -- internals -----------------------------------------------------------
 
     def _record(self, event: dict[str, Any], act: Callable[[], None]) -> None:
@@ -346,7 +354,16 @@ class Recorder:
             after_png = self._redact(after_png, redact_region)
         (self._frames_dir / f"{i:04d}_before.png").write_bytes(before_png)
         (self._frames_dir / f"{i:04d}_after.png").write_bytes(after_png)
-        line: dict[str, Any] = {"i": i, **event}
+        with Image.open(io.BytesIO(before_png)) as before_image:
+            before_viewport = [int(before_image.width), int(before_image.height)]
+        with Image.open(io.BytesIO(after_png)) as after_image:
+            after_viewport = [int(after_image.width), int(after_image.height)]
+        line: dict[str, Any] = {
+            "i": i,
+            **event,
+            "viewport_before": before_viewport,
+            "viewport_after": after_viewport,
+        }
         for key, value in structural_before.items():
             line[f"{key}_before"] = value
         if structural_after is None:

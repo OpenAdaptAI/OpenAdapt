@@ -594,6 +594,10 @@ def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
     The compiler binds the compiled bundle to this exact surface. Best-effort
     by design: a recording written by an older converter without ``meta.json``
     simply compiles to a legacy, surface-unbound bundle.
+
+    A recorder that stamps the surface itself before it publishes the
+    recording leaves nothing to do here. This function then writes nothing, so
+    a complete recording is never modified after its atomic publish.
     """
     import json
 
@@ -601,6 +605,8 @@ def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
     try:
         meta = json.loads(meta_path.read_text())
     except (OSError, ValueError):
+        return
+    if meta.get("surface") == surface:
         return
     meta["surface"] = surface
     meta_path.write_text(json.dumps(meta, indent=2))
@@ -895,7 +901,16 @@ def _cmd_record(args: argparse.Namespace) -> int:
         print(demo_default_notice(backend, from_last_used=last is not None))
     elif profile == "demo":
         store_last_surface(_report_backend_kind(backend))
+    browser_attach_requested = bool(
+        getattr(args, "browser_cdp_endpoint", None)
+        or getattr(args, "browser_page_url", None)
+    )
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
+        if browser_attach_requested:
+            raise SystemExit(
+                "record: --browser-cdp-endpoint and --browser-page-url apply "
+                "only to --backend web"
+            )
         return _cmd_record_desktop(args, backend)
 
     if (
@@ -920,28 +935,141 @@ def _cmd_record(args: argparse.Namespace) -> int:
         raise SystemExit(
             "record --backend web requires --url (the app to record against)."
         )
+    if getattr(args, "browser_page_url", None) and not getattr(
+        args, "browser_cdp_endpoint", None
+    ):
+        raise SystemExit("record: --browser-page-url requires --browser-cdp-endpoint")
+    if getattr(args, "browser_cdp_endpoint", None) and args.headless:
+        raise SystemExit(
+            "record: --headless cannot be combined with "
+            "--browser-cdp-endpoint; the attached browser controls its own "
+            "display mode"
+        )
 
-    from openadapt_flow.interactive_recorder import record_interactive
-
-    out = record_interactive(
-        args.url,
-        Path(args.out),
-        secret_fields=tuple(args.secret or ()),
-        param_fields=tuple(args.param or ()),
-        identifier_fields=tuple(getattr(args, "identifier", None) or ()),
-        headless=args.headless,
+    from openadapt_flow.interactive_recorder import (
+        BrowserAttachError,
+        record_interactive,
     )
+
+    try:
+        out = record_interactive(
+            args.url,
+            Path(args.out),
+            secret_fields=tuple(args.secret or ()),
+            param_fields=tuple(args.param or ()),
+            identifier_fields=tuple(getattr(args, "identifier", None) or ()),
+            headless=args.headless,
+            cdp_endpoint=getattr(args, "browser_cdp_endpoint", None),
+            browser_page_url=getattr(args, "browser_page_url", None),
+            surface="web",
+        )
+    except BrowserAttachError as exc:
+        raise SystemExit(f"record: browser attachment refused: {exc}") from exc
     _stamp_recording_surface(out, "web")
     print(f"Recording written to {out}")
     secrets = sorted(args.secret or ())
     if secrets:
         print(
-            "Secret field(s) recorded (values NOT stored): "
+            "Secret field(s) recorded (no value stored, and each value is "
+            "redacted from the recorded URL, title, label, and structural "
+            "text): "
             + ", ".join(secrets)
             + ". At replay, export "
             + ", ".join(f"OPENADAPT_FLOW_SECRET_{name.upper()}" for name in secrets)
         )
+    for notice in _recording_privacy_notices(out):
+        print(notice)
     return 0
+
+
+def _recording_privacy_notices(recording_dir: Path) -> list[str]:
+    """Report exactly what the recorder had to withhold, or nothing.
+
+    The claim that a secret value is not stored is the claim the operator uses
+    to decide whether a recording is safe to keep or to share. Where the
+    recorder had to drop evidence to keep that claim true, say so here.
+    """
+    import json
+
+    try:
+        meta = json.loads((Path(recording_dir) / "meta.json").read_text())
+    except (OSError, ValueError):
+        return []
+    notices: list[str] = []
+    raw_withheld = meta.get("structural_text_withheld")
+    if raw_withheld:
+        explained = {
+            "secret-value-left-its-document": (
+                "a declared secret value left its document (for example a form "
+                "submit that reflects the value into the next URL), and the new "
+                "document builds a page closure that never saw that value"
+            ),
+            "reflected-text-changed-after-a-secret-value": (
+                "the page URL or title changed after a declared secret field "
+                "held a value, so Flow could not prove the new text was not a "
+                "reflection of that value"
+            ),
+            "title-changed-after-a-secret-value": (
+                "the page title changed after a declared secret field held a "
+                "value. A title has no structure to reduce, so Flow withholds "
+                "it rather than guess whether it reflects the value"
+            ),
+            "declared-value-in-url": (
+                "the page URL held a declared secret value that no parameter "
+                "name identified, so structure alone could not remove it"
+            ),
+            "declared-value-in-title": ("the page title held a declared secret value"),
+            "url-cannot-be-parsed": (
+                "the page reported a URL that is not an HTTP or HTTPS URL, so "
+                "Flow could not reduce it by structure"
+            ),
+            "opaque-secret-boundary": (
+                "a declared secret field sits behind a closed shadow root, "
+                "which exposes its value to no check at all"
+            ),
+        }
+        for reason in [
+            part.strip() for part in str(raw_withheld).split(",") if part.strip()
+        ]:
+            notices.append(
+                "Flow withheld the page URL and title because "
+                f"{explained.get(reason, reason)}. Those actions carry an "
+                "origin-only URL and an empty title. Flow reports page text "
+                "exactly or not at all and never rewrites it, so the recording "
+                "holds no secret value and no altered text."
+            )
+    dropped = meta.get("url_dropped_params")
+    if isinstance(dropped, list) and dropped:
+        names = sorted(
+            {str(entry.get("name")) for entry in dropped if isinstance(entry, dict)}
+        )
+        notices.append(
+            "Flow removed the value of these URL parameters and kept their "
+            f"names: {', '.join(names)}. A parameter named after a declared "
+            "secret field loses its value in every recorded URL, whatever the "
+            "value is. The rest of each URL -- origin, path and other "
+            "parameters -- is exact."
+        )
+    if meta.get("application_placed_secret_in_url") or meta.get(
+        "application_placed_secret_in_title"
+    ):
+        notices.append(
+            "WARNING: the application put a declared secret value into its own "
+            "page URL or title. Flow withheld that text, but this is an "
+            "application defect that exists with or without Flow: OWASP lists "
+            "browser history, server logs, proxies, CDNs and the Referer "
+            "header as places such a value is already exposed. Report it to "
+            "the application owner."
+        )
+    withheld_identity = meta.get("identity_withheld_events")
+    if isinstance(withheld_identity, int) and withheld_identity > 0:
+        notices.append(
+            f"{withheld_identity} action(s) carry no DOM selector: the element "
+            "identity contained a declared secret value, so Flow refused to "
+            "record it. Replay uses the remaining identity tiers for those "
+            "actions."
+        )
+    return notices
 
 
 def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
@@ -4490,6 +4618,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--url",
         default=None,
         help="URL of the app to record against (required for --backend web)",
+    )
+    p.add_argument(
+        "--browser-cdp-endpoint",
+        default=None,
+        metavar="URL",
+        help=(
+            "Attach the web recorder to an already-running local Chromium "
+            "browser through its loopback DevTools endpoint (for example, "
+            "http://127.0.0.1:9222). The recorder selects a tab on the "
+            "--url origin and does not launch, navigate, or close the browser."
+        ),
+    )
+    p.add_argument(
+        "--browser-page-url",
+        default=None,
+        metavar="URL",
+        help=(
+            "Exact current URL of the existing tab to record. Use this with "
+            "--browser-cdp-endpoint when more than one open tab has the "
+            "--url origin."
+        ),
     )
     p.add_argument("--out", required=True, help="Recording output directory")
     p.add_argument(

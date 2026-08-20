@@ -142,6 +142,173 @@ def compiled(tmp_path_factory: pytest.TempPathFactory):
 
 
 class TestCompileRecording:
+    def test_per_event_viewports_can_change_between_steps(self, tmp_path: Path) -> None:
+        recording = tmp_path / "recording"
+        (recording / "frames").mkdir(parents=True)
+        first = blank()
+        second = np.full((600, 900, 3), 245, dtype=np.uint8)
+        frames = {0: (first, first), 1: (second, second)}
+        for i, (before, after) in frames.items():
+            write_frame(recording, i, "before", before)
+            write_frame(recording, i, "after", after)
+        events = [
+            {
+                "i": 0,
+                "kind": "key",
+                "key": "Tab",
+                "t": 1.0,
+                "viewport_before": [1280, 800],
+                "viewport_after": [1280, 800],
+            },
+            {
+                "i": 1,
+                "kind": "key",
+                "key": "Enter",
+                "t": 2.0,
+                "viewport_before": [900, 600],
+                "viewport_after": [900, 600],
+            },
+        ]
+        (recording / "events.jsonl").write_text(
+            "\n".join(json.dumps(event) for event in events) + "\n"
+        )
+        (recording / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "resized-recording",
+                    "created_at": "2026-08-18T00:00:00+00:00",
+                    "viewport": [1280, 800],
+                    "viewport_mode": "per-event",
+                    "viewport_history": [
+                        {
+                            "before_event": 0,
+                            "viewport": [1280, 800],
+                            "device_scale_factor": 2,
+                        },
+                        {
+                            "before_event": 1,
+                            "viewport": [900, 600],
+                            "device_scale_factor": 1,
+                        },
+                    ],
+                    "params": {},
+                }
+            )
+        )
+
+        workflow = compile_recording(
+            recording,
+            tmp_path / "bundle",
+            name="resized-recording",
+        )
+        assert len(workflow.steps) == 2
+        assert workflow.viewport == VIEWPORT
+
+    def test_per_event_viewport_cannot_change_within_one_step(
+        self, tmp_path: Path
+    ) -> None:
+        recording = tmp_path / "recording"
+        (recording / "frames").mkdir(parents=True)
+        write_frame(recording, 0, "before", blank())
+        write_frame(
+            recording,
+            0,
+            "after",
+            np.full((600, 900, 3), 245, dtype=np.uint8),
+        )
+        (recording / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "i": 0,
+                    "kind": "key",
+                    "key": "Enter",
+                    "t": 1.0,
+                    "viewport_before": [1280, 800],
+                    "viewport_after": [900, 600],
+                }
+            )
+            + "\n"
+        )
+        (recording / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "mid-event-resize",
+                    "created_at": "2026-08-18T00:00:00+00:00",
+                    "viewport": list(VIEWPORT),
+                    "viewport_mode": "per-event",
+                    "params": {},
+                }
+            )
+        )
+
+        with pytest.raises(ValueError, match="viewport changed during event 0"):
+            compile_recording(recording, tmp_path / "bundle", name="mid-resize")
+
+    def test_per_event_viewport_must_match_retained_png(self, tmp_path: Path) -> None:
+        recording = tmp_path / "recording"
+        (recording / "frames").mkdir(parents=True)
+        write_frame(recording, 0, "before", blank())
+        write_frame(recording, 0, "after", blank())
+        (recording / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "i": 0,
+                    "kind": "key",
+                    "key": "Enter",
+                    "t": 1.0,
+                    "viewport_before": [900, 600],
+                    "viewport_after": [1280, 800],
+                }
+            )
+            + "\n"
+        )
+        (recording / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "mismatched-viewport",
+                    "created_at": "2026-08-18T00:00:00+00:00",
+                    "viewport": list(VIEWPORT),
+                    "params": {},
+                }
+            )
+        )
+
+        with pytest.raises(ValueError, match="does not match the retained PNG"):
+            compile_recording(recording, tmp_path / "bundle", name="mismatch")
+
+    def test_pointer_must_be_inside_event_viewport(self, tmp_path: Path) -> None:
+        recording = tmp_path / "recording"
+        (recording / "frames").mkdir(parents=True)
+        write_frame(recording, 0, "before", blank())
+        write_frame(recording, 0, "after", blank())
+        (recording / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "i": 0,
+                    "kind": "click",
+                    "x": 1280,
+                    "y": 50,
+                    "t": 1.0,
+                    "viewport_before": [1280, 800],
+                    "viewport_after": [1280, 800],
+                }
+            )
+            + "\n"
+        )
+        (recording / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "outside-viewport",
+                    "created_at": "2026-08-18T00:00:00+00:00",
+                    "viewport": list(VIEWPORT),
+                    "params": {},
+                }
+            )
+        )
+
+        with pytest.raises(ValueError, match="is outside viewport"):
+            compile_recording(recording, tmp_path / "bundle", name="outside")
+
     def test_incomplete_frame_pair_fails_loud(self, tmp_path: Path) -> None:
         recording = tmp_path / "recording"
         (recording / "frames").mkdir(parents=True)

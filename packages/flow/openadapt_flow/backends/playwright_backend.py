@@ -15,7 +15,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -33,6 +33,7 @@ from openadapt_flow.runtime.resolver import (
 )
 
 VIEWPORT: tuple[int, int] = (1280, 800)
+_MASKED_SCREENSHOT_ATTEMPTS = 3
 
 _MODIFIER_ALIASES = {
     "meta": "Meta",
@@ -86,6 +87,10 @@ _APPLICATION_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+/-]{0,127}
 _WORKFLOW_STATE_IDENTITY_PATTERN = re.compile(
     r"^[a-z0-9](?:[a-z0-9._:-]{0,126}[a-z0-9])?$"
 )
+
+
+class ScreenshotMaskStabilityError(RuntimeError):
+    """The browser frame tree changed across every masked screenshot attempt."""
 
 
 @dataclass
@@ -703,13 +708,50 @@ class PlaywrightBackend:
             such as the demo driver may use locators; replay never does).
     """
 
-    def __init__(self, page: "Page") -> None:
+    def __init__(
+        self,
+        page: "Page",
+        *,
+        screenshot_scale: Literal["css", "device"] = "device",
+        screenshot_mask_selectors: tuple[str, ...] = (),
+        structural_state_reader: Optional[Callable[[], dict[str, Any]]] = None,
+        screenshot_guard: Optional[Callable[[], None]] = None,
+    ) -> None:
         """Wrap an existing Playwright page.
 
         Args:
-            page: A page created with viewport 1280x800, deviceScaleFactor=1.
+            page: A Playwright page.
+            screenshot_scale: Pixel scale for retained screenshots. The
+                ordinary launched-browser path uses Playwright's ``device``
+                default. A browser attached through CDP uses ``css`` so DOM
+                event coordinates and retained frame pixels stay in the same
+                coordinate system even on a high-density display.
+            screenshot_mask_selectors: CSS selectors whose matching elements
+                are blacked out by Chromium before screenshot bytes reach
+                Python. The interactive recorder uses this for password and
+                declared-secret fields on every retained frame. Locators are
+                rebuilt from every current document frame for each screenshot
+                so a child-frame field or a frame added after startup cannot
+                bypass the mask.
+            structural_state_reader: Optional source-time sanitized URL/title
+                reader. Recording paths use it to keep raw reflected secrets
+                out of Python-side structural evidence.
+            screenshot_guard: Optional fail-closed check that runs before
+                Chromium creates screenshot bytes. Recording paths use it to
+                bind or refuse closed-shadow secret boundaries.
         """
         self.page = page
+        self._screenshot_scale = screenshot_scale
+        self._screenshot_mask_selectors = screenshot_mask_selectors
+        self._structural_state_reader = structural_state_reader
+        self._screenshot_guard = screenshot_guard
+        self._screenshot_frame_generation = 0
+        self._screenshot_frame_listener = self._handle_screenshot_frame_lifecycle
+        self._screenshot_frame_tracking = False
+        if self._screenshot_mask_selectors:
+            for event in ("frameattached", "framedetached", "framenavigated"):
+                self.page.on(event, self._screenshot_frame_listener)
+            self._screenshot_frame_tracking = True
         # Opaque per-backend key keeps the WeakMap private from ordinary page
         # code. Python retains only token material keyed by the public
         # SHA-256 fingerprint; target/row text stays page-local and ephemeral.
@@ -726,7 +768,21 @@ class PlaywrightBackend:
     def viewport(self) -> tuple[int, int]:
         """(width, height) of the page viewport in pixels."""
         size = self.page.viewport_size
-        if size is None:  # pragma: no cover - viewport always set by launch()
+        if size is None:
+            # A Chromium page reached through ``connect_over_cdp`` normally
+            # has no Playwright viewport emulation. Reading the live CSS
+            # viewport avoids both the old fixed 1280x800 fallback and any
+            # mutation of the operator's browser window.
+            try:
+                live = self.page.evaluate(
+                    "() => ({width: window.innerWidth, height: window.innerHeight})"
+                )
+                width = int(live["width"])
+                height = int(live["height"])
+                if width > 0 and height > 0:
+                    return (width, height)
+            except Exception:
+                pass
             return VIEWPORT
         return (size["width"], size["height"])
 
@@ -762,6 +818,12 @@ class PlaywrightBackend:
     @property
     def url(self) -> Optional[str]:
         """Current page URL, or None if momentarily unobservable."""
+        if self._structural_state_reader is not None:
+            try:
+                value = self._structural_state_reader().get("url")
+                return value if isinstance(value, str) else None
+            except Exception:
+                return None
         try:
             return self.page.url
         except Exception:
@@ -770,6 +832,12 @@ class PlaywrightBackend:
     @property
     def page_title(self) -> Optional[str]:
         """Current page title, or None if momentarily unobservable."""
+        if self._structural_state_reader is not None:
+            try:
+                value = self._structural_state_reader().get("title")
+                return value if isinstance(value, str) else None
+            except Exception:
+                return None
         try:
             return self.page.title()
         except Exception:
@@ -2091,11 +2159,15 @@ class PlaywrightBackend:
         """
 
         def capture() -> bytes:
+            options: dict[str, Any] = {}
+            if self._screenshot_scale == "css":
+                options["scale"] = "css"
             return self.page.screenshot(
                 type="png",
                 full_page=False,
                 caret="initial",
                 style="* { caret-color: transparent !important; }",
+                **options,
             )
 
         previous = capture()
@@ -2195,9 +2267,71 @@ class PlaywrightBackend:
             deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
         )
 
+    def _handle_screenshot_frame_lifecycle(self, _frame: Any = None) -> None:
+        """Advance the irreversible frame-tree generation."""
+
+        self._screenshot_frame_generation += 1
+
+    def stop_screenshot_mask_tracking(self) -> None:
+        """Remove recording-only frame listeners from an external page."""
+
+        if not self._screenshot_frame_tracking:
+            return
+        for event in ("frameattached", "framedetached", "framenavigated"):
+            try:
+                self.page.remove_listener(event, self._screenshot_frame_listener)
+            except Exception:
+                pass
+        self._screenshot_frame_tracking = False
+
+    @staticmethod
+    def _same_frames(left: tuple[Any, ...], right: tuple[Any, ...]) -> bool:
+        return len(left) == len(right) and all(
+            before is after for before, after in zip(left, right)
+        )
+
     def screenshot(self) -> bytes:
-        """Return the current full-viewport frame as PNG bytes."""
-        return self.page.screenshot(type="png", full_page=False)
+        """Return a stable current full-viewport frame as PNG bytes."""
+        if self._screenshot_guard is not None:
+            self._screenshot_guard()
+        base_options: dict[str, Any] = {}
+        if self._screenshot_scale == "css":
+            base_options["scale"] = "css"
+        if not self._screenshot_mask_selectors:
+            return self.page.screenshot(type="png", full_page=False, **base_options)
+
+        for _attempt in range(_MASKED_SCREENSHOT_ATTEMPTS):
+            generation = self._screenshot_frame_generation
+            frames = tuple(self.page.frames)
+            if generation != self._screenshot_frame_generation:
+                continue
+            options = dict(base_options)
+            options["mask"] = [
+                frame.locator(selector)
+                for frame in frames
+                for selector in self._screenshot_mask_selectors
+            ]
+            options["mask_color"] = "#000000"
+            try:
+                png = self.page.screenshot(type="png", full_page=False, **options)
+                # Flush lifecycle events that Chromium sent with or before the
+                # screenshot response before accepting the in-memory bytes.
+                self.page.evaluate("() => null")
+            except Exception:
+                if generation != self._screenshot_frame_generation:
+                    continue
+                raise
+            current_frames = tuple(self.page.frames)
+            if generation == self._screenshot_frame_generation and self._same_frames(
+                frames, current_frames
+            ):
+                return png
+            # ``png`` is intentionally discarded here. It never reaches the
+            # recorder, disk, or a compiled bundle.
+        raise ScreenshotMaskStabilityError(
+            "the browser frame tree changed during every secret-masked "
+            "screenshot attempt; recording was refused"
+        )
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click (or double-click) at pixel coordinates via the mouse."""

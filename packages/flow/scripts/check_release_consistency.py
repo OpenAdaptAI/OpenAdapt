@@ -226,6 +226,8 @@ RAW_RESULT_BASENAMES = frozenset(
     }
 )
 RECORDING_METADATA_BASENAMES = frozenset({"events.jsonl", "meta.json"})
+LOCAL_SENSITIVE_ARCHIVE_SEGMENTS = frozenset({".openadapt-chrome-profile"})
+LOCAL_SENSITIVE_ARCHIVE_PREFIXES = (".openadapt-recording-partial-",)
 RECORDING_AUTHORITY_TOKENS = (
     b"access_token",
     b"api_key",
@@ -494,17 +496,27 @@ def _repository_only_evaluation_hits(members: set[str]) -> set[str]:
 def _generated_or_raw_archive_hits(
     members: set[str], payloads: dict[str, bytes]
 ) -> set[str]:
-    """Return generated sessions, raw media/results, or retained authority.
+    """Return local secrets, generated sessions, or retained authority.
 
     Synthetic fixture source and reviewed aggregate results remain eligible for
-    publication. What cannot ship is a local run directory, raw video/per-run
-    result, or recording metadata that retains session authority.
+    publication. What cannot ship is a browser profile, an unpublished partial
+    recording, a local run directory, raw video/per-run result, or recording
+    metadata that retains session authority.
     """
     hits: set[str] = set()
     for member in members:
         path = PurePosixPath(member)
         lower_parts = tuple(part.lower() for part in path.parts)
         basename = path.name.lower()
+        if any(
+            part in LOCAL_SENSITIVE_ARCHIVE_SEGMENTS
+            or any(
+                part.startswith(prefix) for prefix in LOCAL_SENSITIVE_ARCHIVE_PREFIXES
+            )
+            for part in lower_parts
+        ):
+            hits.add(member)
+            continue
         if path.suffix.lower() in RAW_VIDEO_SUFFIXES:
             hits.add(member)
             continue
@@ -1323,8 +1335,9 @@ def validate_sdist_license_boundary(
     generated_or_raw = _generated_or_raw_archive_hits(members, payloads)
     if generated_or_raw:
         raise ValueError(
-            "source distribution contains generated/raw benchmark output, "
-            "recording authority, or per-run evidence: "
+            "source distribution contains a browser profile, unpublished "
+            "recording, generated/raw benchmark output, recording authority, "
+            "or per-run evidence: "
             f"{sorted(generated_or_raw)}"
         )
     missing = REQUIRED_SDIST_PATHS - members
@@ -1437,8 +1450,9 @@ def validate_wheel_license_boundary(
     generated_or_raw = _generated_or_raw_archive_hits(members, payloads)
     if generated_or_raw:
         raise ValueError(
-            "wheel contains generated/raw benchmark output, recording authority, "
-            f"or per-run evidence: {sorted(generated_or_raw)}"
+            "wheel contains a browser profile, unpublished recording, "
+            "generated/raw benchmark output, recording authority, or per-run "
+            f"evidence: {sorted(generated_or_raw)}"
         )
     forbidden = {
         member

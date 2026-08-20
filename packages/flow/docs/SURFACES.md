@@ -58,6 +58,10 @@ openadapt-flow record --backend web --url https://your.app --out rec
 openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --url https://your.app
 
+# Attach the same recorder to one existing signed-in local Chromium tab.
+openadapt-flow record --backend web --url https://your.app \
+  --browser-cdp-endpoint http://127.0.0.1:9222 --out rec
+
 # Windows: Capture records the local window; the in-guest WAA agent replays it.
 openadapt-flow record --backend windows --window "Target App" --out rec
 openadapt-flow compile rec --out bundle --name my-task
@@ -99,6 +103,15 @@ the bundle's existing replay-binding metadata. `--agent-url`, `--linux-app`,
 session cannot control them, so `record` refuses them instead of accepting an
 unused flag. Pass them to `replay`/`run`; `run ... --config deploy.yaml
 --profile standard|regulated` wires the same selection for a real deployment.
+
+The browser attach mode keeps the Playwright-native recording contract. It
+binds one same-origin tab and reuses the same event schema, DOM evidence,
+before/after frames, secret redaction, compiler, and governed replay path as a
+browser that Flow launches. The endpoint is local-loopback only. Flow refuses
+ambiguous tabs and does not navigate or close the attached browser. It
+rebaselines exact event/frame coordinates after an idle resize or
+monitor-scale change. It refuses an action that overlaps that transition. See
+[`BROWSER_RECORDING.md`](BROWSER_RECORDING.md).
 
 ## The two remote execution modes
 

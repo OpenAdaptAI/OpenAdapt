@@ -13,6 +13,8 @@ build/
 .DS_Store
 /runs/
 /recordings/
+.openadapt-chrome-profile/
+.openadapt-recording-partial-*/
 dist/
 benchmark/openemr/finals/
 benchmark/openemr/rows.jsonl

@@ -65,6 +65,138 @@ claims:
         proves: >-
           The deterministic replayer resolves steps, substitutes parameters,
           enforces postconditions and the risk gate — no model in the loop.
+      - path: tests/test_browser_attach.py
+        node: test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trials
+        proves: >-
+          Three real Chromium CDP-attach trials record and compile the same
+          synthetic workflow, exclude password values before persistence,
+          preserve CSS-pixel frame/coordinate alignment, and detach without
+          closing the external browser. The same live campaign covers same-task
+          replacement, declared open and closed shadow hosts, contenteditable
+          click metadata, and same-document URL/title reflection through
+          history.replaceState. A live case records and
+          compiles actions across viewport and monitor-scale changes. It binds
+          each event to its exact frame dimensions. A separate live case
+          refuses an action that overlaps the transition. Unit cases refuse
+          remote endpoints, cross-origin selectors and navigation, iframe
+          events, invalid viewport evidence, and ambiguous same-origin tabs.
+      - path: tests/test_browser_attach.py
+        node: test_launched_recording_withholds_a_later_document_url_after_a_get_submit
+        proves: >-
+          A live Chromium recording submits a same-origin GET form. The
+          document that submit reaches is a fresh closure that holds no value
+          to match against, so Flow withholds its URL and its title and says
+          so, and the recorded surface is stamped before publish.
+      - path: tests/test_browser_attach.py
+        node: test_launched_recording_withholds_a_redirect_that_puts_the_value_in_a_path
+        proves: >-
+          A server that answers a GET submit with a 302 to `/results/<value>`
+          puts a declared secret in a path segment, where no parameter name
+          identifies it. Flow withholds the whole URL for every document after
+          the one that first held the value, so the literal never reaches
+          events.jsonl.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_keeps_url_and_identity_evidence_for_a_lowercase_secret
+        proves: >-
+          A lowercase secret typed one character at a time into a page whose
+          URL, title, and button ID share those characters leaves the URL, the
+          title, the DOM selector, and the accessible name exact.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_keeps_all_evidence_for_a_password_starting_with_a_word
+        proves: >-
+          A password that begins with a common English word leaves that word
+          exact in the page URL, the page title, the clicked row's identity
+          characters, the accessible name, and an unrelated button ID. Matching
+          uses only the value the field holds at that moment, so an
+          intermediate keystroke prefix never becomes a matching value.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_withholds_identity_that_holds_a_declared_value
+        proves: >-
+          Identity evidence that holds a declared value is WITHHELD with a
+          stated reason, never rewritten. Replay compares identity evidence
+          against the live page, so a rewritten copy would compare against
+          characters the page never showed, invisibly. No placeholder string
+          appears anywhere in the recorded evidence.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_withholds_a_stale_reflection_from_a_swapping_input
+        proves: >-
+          A page that replaces its input element on every keystroke and writes
+          the value into its URL and title can end up showing a version the
+          field no longer holds. Flow withholds that reflected text whole --
+          an origin-only URL and an empty title -- instead of matching it
+          against the current value, and keeps the clicked element's identity
+          evidence exact.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_still_reports_a_same_document_route_after_the_fix
+        proves: >-
+          A single-page application route change through history.pushState does
+          not build a new document, so the closure that held the declared value
+          is the one being sampled and its URL is still reported exactly. The
+          cross-document rule that withholds a later document's URL therefore
+          does not cost this evidence.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_withholds_a_title_a_consumed_field_produced
+        proves: >-
+          A scanner input that writes the badge into the page URL and title and
+          then clears its own field holds nothing at any moment Flow samples.
+          Flow arms the document's secret boundary from the input event itself,
+          so both channels are checked and both are withheld.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_keeps_a_consumed_value_across_a_second_entry
+        proves: >-
+          A second scan into the same cleared field does not displace the first
+          badge while the first badge is still shown in the URL. A value the
+          next one does not continue was taken by the page, not edited away by
+          the operator, so it is promoted into the withhold-only set.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_keeps_a_consumed_value_while_another_field_is_live
+        proves: >-
+          A second declared field holding a value does not re-expose the first
+          field's consumed value. The last-value test is per element, so the
+          same URL is withheld before and after the second field is filled.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_withholds_a_selector_built_from_an_inbound_value
+        proves: >-
+          A DOM selector is identity evidence and uses the same value set as
+          the accessible name and the clicked-row identity. An element id built
+          from a value carried in an inbound declared parameter is withheld with
+          a reason, not emitted verbatim.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_drops_only_the_unproven_parameter_value
+        proves: >-
+          A query parameter whose value Flow cannot prove predates the moment
+          the document first held a declared value loses only ITS value. Every
+          parameter name survives, the path stays exact, and the drop is
+          recorded with its reason.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_withholds_a_url_that_holds_the_value_in_its_path
+        proves: >-
+          A value that no parameter name identifies -- here written into a path
+          segment -- is caught by detection rather than structure: Flow
+          withholds the whole URL, marks it, and warns the operator that the
+          application placed a declared secret into its own URL.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_withholds_identity_after_the_field_is_removed
+        proves: >-
+          A single-page wizard that removes its declared field and renders the
+          value into a summary row cannot leak it into the clicked row's
+          identity: the value the field held at a commit point is retained for
+          the single purpose of WITHHOLDING identity text, never to rewrite it
+          and never for the URL or the title.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_marks_a_withheld_secret_field_name
+        proves: >-
+          Flow never reads the visible text of a bound secret field, because
+          that text is the value. The resulting missing accessible name is
+          reported as WITHHELD with a reason and counted, never left as a
+          silent null, while a control field beside it returns its name.
+      - path: tests/test_browser_attach.py
+        node: test_page_closure_emits_no_reflected_text_from_the_capture_phase
+        proves: >-
+          No browser event carries a URL or a title. The in-page listeners run
+          in the capture phase, before the page's own handlers, so anything
+          they read describes the state before the action. Flow samples
+          reflected evidence from Python at the settled boundary instead.
     caveats:
       - >-
         "Supported" is scoped to the reference headless-browser backend in this
@@ -73,6 +205,11 @@ claims:
       - >-
         The full record->compile->replay browser suite runs in the required
         e2e-browser PR gate and repeats in the weekly compatibility matrix.
+      - >-
+        Existing-session attachment is Chromium-only and loopback-only. It
+        requires a dedicated browser process started with remote debugging.
+        It does not claim support for the Capture Chrome extension prototype
+        or direct extension replay.
 
   # -------------------------------------------------- deterministic $0 replay
   - id: deterministic-zero-model-replay

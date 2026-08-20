@@ -214,6 +214,78 @@ def _read_png(path: Path) -> Optional[bytes]:
     return path.read_bytes() if path.exists() else None
 
 
+def _png_viewport(png: bytes, *, source: str) -> tuple[int, int]:
+    """Return a PNG's exact ``(width, height)`` or reject invalid evidence."""
+
+    frame = cv2.imdecode(np.frombuffer(png, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        raise ValueError(f"could not decode {source} PNG")
+    return (int(frame.shape[1]), int(frame.shape[0]))
+
+
+def _validated_event_viewport(
+    event: dict,
+    *,
+    key: str,
+    png: Optional[bytes],
+    event_index: int,
+) -> Optional[tuple[int, int]]:
+    """Bind an event viewport declaration to its exact retained PNG.
+
+    Older recordings do not carry per-event viewport fields. They remain
+    valid and use the PNG dimensions as the source of truth. A new recording
+    that does carry the field must match the retained evidence exactly.
+    """
+
+    declared = event.get(key)
+    actual = (
+        _png_viewport(png, source=f"event {event_index} {key}")
+        if png is not None
+        else None
+    )
+    if declared is None:
+        return actual
+    if (
+        not isinstance(declared, (list, tuple))
+        or len(declared) != 2
+        or any(
+            isinstance(value, bool) or not isinstance(value, int) for value in declared
+        )
+        or int(declared[0]) <= 0
+        or int(declared[1]) <= 0
+    ):
+        raise ValueError(
+            f"events.jsonl event {event_index} {key} must be two positive integers"
+        )
+    if actual is None:
+        raise ValueError(
+            f"events.jsonl event {event_index} declares {key} without its PNG"
+        )
+    normalized = (int(declared[0]), int(declared[1]))
+    if normalized != actual:
+        raise ValueError(
+            f"events.jsonl event {event_index} {key} {normalized} does not match "
+            f"the retained PNG {actual}"
+        )
+    return actual
+
+
+def _validate_point_in_viewport(
+    point: Point,
+    viewport: tuple[int, int],
+    *,
+    event_index: int,
+    label: str,
+) -> None:
+    """Reject pointer evidence outside its declared coordinate space."""
+
+    if not (0 <= point[0] < viewport[0] and 0 <= point[1] < viewport[1]):
+        raise ValueError(
+            f"events.jsonl event {event_index} {label} {point} is outside "
+            f"viewport {viewport}"
+        )
+
+
 def _clamped_crop_region(
     click: Point,
     frame_w: int,
@@ -1715,6 +1787,28 @@ def compile_recording(
             )
         before_png = _read_png(before_path)
         after_png = _read_png(after_path)
+        before_viewport = _validated_event_viewport(
+            event,
+            key="viewport_before",
+            png=before_png,
+            event_index=i,
+        )
+        after_viewport = _validated_event_viewport(
+            event,
+            key="viewport_after",
+            png=after_png,
+            event_index=i,
+        )
+        if (
+            before_viewport is not None
+            and after_viewport is not None
+            and before_viewport != after_viewport
+        ):
+            raise ValueError(
+                f"viewport changed during event {i}: before "
+                f"{before_viewport[0]}x{before_viewport[1]}, after "
+                f"{after_viewport[0]}x{after_viewport[1]}"
+            )
 
         if kind in ("click", "double_click", "right_click", "drag"):
             if before_png is None:
@@ -1722,6 +1816,13 @@ def compile_recording(
                     f"missing before frame for {kind} event {i} in {recording}"
                 )
             click: Point = (int(event["x"]), int(event["y"]))
+            assert before_viewport is not None
+            _validate_point_in_viewport(
+                click,
+                before_viewport,
+                event_index=i,
+                label="pointer",
+            )
             # ``before_png`` is a captured frame we already hold; the decode is
             # known-valid. cv2's stub types imdecode as Optional, hence the cast.
             frame = cast(
@@ -1874,6 +1975,12 @@ def compile_recording(
             drag_end_anchor: Optional[Anchor] = None
             if kind == "drag":
                 drag_end: Point = (int(event["end_x"]), int(event["end_y"]))
+                _validate_point_in_viewport(
+                    drag_end,
+                    before_viewport,
+                    event_index=i,
+                    label="drag destination",
+                )
                 end_crop_region = _discriminative_crop_region(frame, drag_end)
                 end_template_rel = f"templates/{step_id}_drag_end.png"
                 (bundle / end_template_rel).write_bytes(
