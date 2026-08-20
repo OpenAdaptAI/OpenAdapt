@@ -403,13 +403,13 @@ def verify_authenticated_channel(
         if _version_tuple(channel["native_version"]) <= _version_tuple(previous["native_version"]):
             raise ValueError("release channel does not advance the accepted version")
 
-    # The verified index is attested by `mirror-installers-to-engine-release`,
-    # which runs on the `release: published` event for the native tag, so its
-    # certificate carries that tag as the workflow ref -- never a branch ref.
+    # One reviewed-main workflow dispatch attests the native bytes, verified
+    # index, and channel. Every certificate therefore carries the same protected
+    # main workflow identity.
     index_digest, index_bytes = _verify_github_attestation(
         index_path,
         repository=repository,
-        identity_ref=f"refs/tags/{channel['native_tag']}",
+        identity_ref="refs/heads/main",
     )
     if index_digest != channel["verified_index"]["sha256"]:
         raise ValueError("verified release index digest differs from the authenticated channel")
@@ -431,7 +431,7 @@ def verify_authenticated_channel(
     checksum_digest, checksum_bytes = _verify_github_attestation(
         checksums,
         repository=repository,
-        identity_ref=f"refs/tags/{channel['native_tag']}",
+        identity_ref="refs/heads/main",
     )
     if checksum_digest != channel["checksums"]["sha256"]:
         raise ValueError("SHA256SUMS digest differs from the authenticated channel")

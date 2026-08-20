@@ -757,7 +757,7 @@ def write_release_provenance(
     expected_engine_url = f"https://github.com/{repository}/releases/tag/{engine_tag}"
     if engine_release_url != expected_engine_url:
         raise ValueError("engine release URL does not match its repository and tag")
-    expected_ref = f"{repository}/{NATIVE_RELEASE_WORKFLOW}@refs/tags/{tag}"
+    expected_ref = f"{repository}/{NATIVE_RELEASE_WORKFLOW}@refs/heads/main"
     if workflow_ref != expected_ref:
         raise ValueError(f"workflow ref must be exactly {expected_ref!r}, got {workflow_ref!r}")
     if workflow_commit != source_commit:
@@ -781,7 +781,7 @@ def write_release_provenance(
         "workflow_path": NATIVE_RELEASE_WORKFLOW,
         "workflow_ref": workflow_ref,
         "workflow_commit": workflow_commit,
-        "event": "push",
+        "event": "workflow_dispatch",
         "run_id": run_id,
         "run_attempt": run_attempt,
         "runner_environment": runner_environment,
@@ -826,7 +826,7 @@ def validate_release_provenance(
     }
     if not isinstance(data, dict) or set(data) != expected_keys:
         raise ValueError("native release provenance does not use the closed v2 schema")
-    expected_ref = f"{repository}/{NATIVE_RELEASE_WORKFLOW}@refs/tags/{tag}"
+    expected_ref = f"{repository}/{NATIVE_RELEASE_WORKFLOW}@refs/heads/main"
     expected = {
         "schema": NATIVE_RELEASE_PROVENANCE_SCHEMA,
         "repository": repository,
@@ -835,7 +835,7 @@ def validate_release_provenance(
         "workflow_path": NATIVE_RELEASE_WORKFLOW,
         "workflow_ref": expected_ref,
         "workflow_commit": source_commit,
-        "event": "push",
+        "event": "workflow_dispatch",
         "runner_environment": "github-hosted",
         "engine_tag": f"v{tag.removeprefix(NATIVE_TAG_PREFIX)}",
         "engine_release_url": (
@@ -937,8 +937,8 @@ def write_engine_release_provenance(
     expected_ref = f"{repository}/{ENGINE_RELEASE_WORKFLOW}@refs/heads/main"
     if workflow_ref != expected_ref:
         raise ValueError(f"engine release workflow ref must be exactly {expected_ref!r}")
-    if workflow_commit != engine_commit:
-        raise ValueError("engine release workflow commit must equal the released source commit")
+    if workflow_commit == engine_commit:
+        raise ValueError("engine release workflow commit must precede the semantic release commit")
     if not isinstance(run_id, int) or run_id <= 0:
         raise ValueError("engine release run id must be a positive integer")
     if not isinstance(run_attempt, int) or run_attempt <= 0:
@@ -1026,7 +1026,6 @@ def validate_engine_release_provenance(
         "engine_release_url": release["url"],
         "workflow_path": ENGINE_RELEASE_WORKFLOW,
         "workflow_ref": f"{repository}/{ENGINE_RELEASE_WORKFLOW}@refs/heads/main",
-        "workflow_commit": engine_commit,
         "event": "workflow_dispatch",
         "runner_environment": "github-hosted",
     }
@@ -1034,6 +1033,8 @@ def validate_engine_release_provenance(
         if data.get(field) != value:
             raise ValueError(f"engine release provenance {field} differs")
     _validate_commit(str(data.get("workflow_commit") or ""))
+    if data["workflow_commit"] == engine_commit:
+        raise ValueError("engine release provenance does not identify the dispatched parent commit")
     for field in ("run_id", "run_attempt"):
         if not isinstance(data.get(field), int) or data[field] <= 0:
             raise ValueError(f"engine release provenance {field} is invalid")
@@ -1440,29 +1441,28 @@ def _validate_attestation_record(record: object, *, provenance: dict, checksums:
         raise ValueError("signed attestation subjects differ from SHA256SUMS")
 
     repository = provenance["repository"]
-    tag = provenance["source_tag"]
     commit = provenance["source_commit"]
     run_id = provenance["run_id"]
     run_attempt = provenance["run_attempt"]
     repository_url = f"https://github.com/{repository}"
-    workflow_uri = f"{repository_url}/{NATIVE_RELEASE_WORKFLOW}@refs/tags/{tag}"
+    workflow_uri = f"{repository_url}/{NATIVE_RELEASE_WORKFLOW}@refs/heads/main"
     invocation_uri = f"{repository_url}/actions/runs/{run_id}/attempts/{run_attempt}"
     certificate_claims = {
         "subjectAlternativeName": workflow_uri,
-        "githubWorkflowTrigger": "push",
+        "githubWorkflowTrigger": "workflow_dispatch",
         "githubWorkflowSHA": commit,
         "githubWorkflowName": NATIVE_RELEASE_WORKFLOW_NAME,
         "githubWorkflowRepository": repository,
-        "githubWorkflowRef": f"refs/tags/{tag}",
+        "githubWorkflowRef": "refs/heads/main",
         "buildSignerURI": workflow_uri,
         "buildSignerDigest": commit,
         "runnerEnvironment": "github-hosted",
         "sourceRepositoryURI": repository_url,
         "sourceRepositoryDigest": commit,
-        "sourceRepositoryRef": f"refs/tags/{tag}",
+        "sourceRepositoryRef": "refs/heads/main",
         "buildConfigURI": workflow_uri,
         "buildConfigDigest": commit,
-        "buildTrigger": "push",
+        "buildTrigger": "workflow_dispatch",
         "runInvocationURI": invocation_uri,
     }
     for field, value in certificate_claims.items():
@@ -1483,20 +1483,20 @@ def _validate_attestation_record(record: object, *, provenance: dict, checksums:
     workflow = external.get("workflow") if isinstance(external, dict) else None
     if workflow != {
         "path": NATIVE_RELEASE_WORKFLOW,
-        "ref": f"refs/tags/{tag}",
+        "ref": "refs/heads/main",
         "repository": repository_url,
     }:
         raise ValueError("attestation external workflow identity differs")
     internal = build_definition.get("internalParameters")
     github = internal.get("github") if isinstance(internal, dict) else None
-    if not isinstance(github, dict) or github.get("event_name") != "push":
-        raise ValueError("attestation was not produced by a push event")
+    if not isinstance(github, dict) or github.get("event_name") != "workflow_dispatch":
+        raise ValueError("attestation was not produced by a workflow dispatch")
     if github.get("runner_environment") != "github-hosted":
         raise ValueError("attestation was not produced on a GitHub-hosted runner")
     if build_definition.get("resolvedDependencies") != [
         {
             "digest": {"gitCommit": commit},
-            "uri": f"git+{repository_url}@refs/tags/{tag}",
+            "uri": f"git+{repository_url}@refs/heads/main",
         }
     ]:
         raise ValueError("attestation resolved source differs")
@@ -1561,8 +1561,8 @@ def validate_release_workflow_run(path: Path, *, provenance: dict) -> int:
         "databaseId": provenance["run_id"],
         "attempt": provenance["run_attempt"],
         "conclusion": "success",
-        "event": "push",
-        "headBranch": provenance["source_tag"],
+        "event": "workflow_dispatch",
+        "headBranch": "main",
         "headSha": provenance["source_commit"],
         "name": NATIVE_RELEASE_WORKFLOW_NAME,
         "status": "completed",
@@ -1590,13 +1590,13 @@ def validate_release_workflow_run(path: Path, *, provenance: dict) -> int:
         if job.get("status") != "completed":
             raise ValueError(f"native release workflow job is not complete: {job['name']}")
     required = {
-        "Validate immutable native tag",
+        "Validate reviewed main release source",
         "macOS arm64",
         "macOS x86_64",
         "Windows x86_64",
         "Linux x86_64 (GitHub-attested bytes)",
         "Checksum and attest exact release bytes",
-        "Create or update Beta draft prerelease",
+        "Publish the verified Beta prerelease",
     }
     failed = {
         name: conclusions.get(name) for name in required if conclusions.get(name) != "success"

@@ -10,10 +10,9 @@
     "29514474536). Each left an immutable public tag promising installers that",
     "were never published, and native-release.yml has no failure notifier at",
     "all -- nor could one see `cancelled` or `skipped`.",
-    "tag_without_release_grace_hours is 6 on the native lane because a full",
-    "macOS/Windows/Linux Tauri build, smoke test, and attest legitimately takes",
-    "far longer than a wheel; a run still waiting on the native-release human",
-    "approval gate suppresses the detector regardless of age."
+    "The target-state native workflow does not create a tag until the signed",
+    "bytes pass and the native-release environment approves publication.",
+    "The historical failures remain detector fixtures."
   ],
   "repository": "OpenAdaptAI/openadapt-desktop",
   "branch": "main",
@@ -38,7 +37,7 @@
       "release_workflows": ["native-release.yml"],
       "tracks_main": false,
       "tag_without_release_grace_hours": 6,
-      "remediation": "# Rebuild the installers for an existing engine version (X.Y.Z), then\n# approve the native-release environment when the publish-draft job requests it.\ngh workflow run native-freshness.yml --repo OpenAdaptAI/openadapt-desktop --ref main -f version=X.Y.Z"
+      "remediation": "# After the exact native-version pull request merges, dispatch the reviewed-main transaction.\n# Approve the native-release environment when publish-native requests it.\ngh workflow run native-release.yml --repo OpenAdaptAI/openadapt-desktop --ref main -f version=X.Y.Z"
     }
   ]
 }

@@ -45,6 +45,10 @@ jobs:
       actions: read
       id-token: write
       contents: write
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      engine_tag: ${{ steps.release.outputs.tag }}
+      engine_commit: ${{ steps.release.outputs.commit_sha }}
 
     steps:
       - name: Checkout protected main at the dispatched commit
@@ -148,6 +152,118 @@ jobs:
         uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
+
+
+  attest-engine-release:
+    name: Attest the published engine release receipt
+    needs: semantic-release
+    if: needs.semantic-release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    env:
+      ENGINE_TAG: ${{ needs.semantic-release.outputs.engine_tag }}
+      ENGINE_COMMIT: ${{ needs.semantic-release.outputs.engine_commit }}
+      WORKFLOW_REF: ${{ github.workflow_ref }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout the published engine commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.semantic-release.outputs.engine_commit }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Write the protected-main engine release receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "${ENGINE_TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "error: semantic-release returned an invalid tag: ${ENGINE_TAG}" >&2
+            exit 1
+          fi
+          git fetch --force origin main "refs/tags/${ENGINE_TAG}:refs/tags/${ENGINE_TAG}"
+          tag_commit="$(git rev-parse --verify "${ENGINE_TAG}^{commit}")"
+          current_main="$(git rev-parse --verify origin/main)"
+          if [ "${tag_commit}" != "${ENGINE_COMMIT}" ] || \
+             [ "${ENGINE_COMMIT}" != "${current_main}" ]; then
+            echo "error: engine tag, semantic-release output, and current main differ" >&2
+            exit 1
+          fi
+          parent_commit="$(git rev-parse --verify "${ENGINE_COMMIT}^")"
+          if [ "${parent_commit}" != "${GITHUB_SHA}" ]; then
+            echo "error: release parent ${parent_commit} is not dispatched main ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+          gh release view "${ENGINE_TAG}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > engine-release.json
+          mkdir engine-assets
+          gh release download "${ENGINE_TAG}" --dir engine-assets \
+            --pattern '*.whl' \
+            --pattern '*.tar.gz'
+          python scripts/native_release.py write-engine-provenance \
+            --output openadapt-desktop-engine-release-provenance.json \
+            --directory engine-assets \
+            --release engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${ENGINE_TAG}" \
+            --engine-commit "${ENGINE_COMMIT}" \
+            --workflow-ref "${WORKFLOW_REF}" \
+            --workflow-commit "${GITHUB_SHA}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --runner-environment "${RUNNER_ENVIRONMENT}"
+
+      - name: Attest the engine release receipt
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: openadapt-desktop-engine-release-provenance.json
+
+      - name: Publish and reverify the engine release receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt=openadapt-desktop-engine-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main"
+          gh attestation verify "${receipt}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          mkdir remote-engine
+          gh release view "${ENGINE_TAG}" --json assets --jq '.assets[].name' \
+            > engine-release-assets.txt
+          if grep -qxF "${receipt}" engine-release-assets.txt; then
+            gh release download "${ENGINE_TAG}" --dir remote-engine \
+              --pattern '*.whl' \
+              --pattern '*.tar.gz' \
+              --pattern 'openadapt-desktop-engine-release-provenance.json'
+          else
+            gh release upload "${ENGINE_TAG}" "${receipt}"
+            gh release download "${ENGINE_TAG}" --dir remote-engine \
+              --pattern '*.whl' \
+              --pattern '*.tar.gz' \
+              --pattern 'openadapt-desktop-engine-release-provenance.json'
+            cmp "${receipt}" "remote-engine/${receipt}"
+          fi
+          gh attestation verify "remote-engine/${receipt}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-engine-provenance \
+            --file "remote-engine/${receipt}" \
+            --directory remote-engine \
+            --release engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${ENGINE_TAG}" \
+            --engine-commit "${ENGINE_COMMIT}"
 
   publish-existing-ref:
     name: Recover PyPI publication for an existing green ref

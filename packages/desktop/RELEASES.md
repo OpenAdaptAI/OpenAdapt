@@ -32,8 +32,9 @@ manifest, or installer may state or imply production acceptance.
 
 | Lane | Tag | Trigger | Marked as | Assets |
 | --- | --- | --- | --- | --- |
-| Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from reviewed, green `main` | Regular release ("Latest") | Wheel, sdist, PyPI publish attestations, **and a mirrored copy of the matching `desktop-vX.Y.Z` installer set** |
-| Native installers | `desktop-vX.Y.Z` | `desktop-v*` tag push (automated, see below) | Draft, then published **prerelease** | Beta installers, platform metadata, SBOM, website manifest, signed build-provenance identity, and `SHA256SUMS` |
+| Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from reviewed, green `main` | Regular release ("Latest") | Wheel, sdist, an attested engine-release provenance receipt, PyPI publish attestations, **and a mirrored copy of the matching `desktop-vX.Y.Z` installer set** |
+| Native installers | `desktop-vX.Y.Z` | Explicit `Native Installer Release` dispatch from reviewed, green `main` | Published **prerelease** | Beta installers, platform metadata, SBOM, website manifest, signed build provenance, and `SHA256SUMS` |
+| Stable native channel | `desktop-channel` | Final promotion step in the same native dispatch | Published **prerelease authority** | The attested, strictly monotonic `openadapt-desktop-channel.json` descriptor |
 
 The engine lane stays non-prerelease so GitHub's "Latest" pointer always names
 the canonical engine release. The native lane stays prerelease because its
@@ -59,12 +60,13 @@ GitHub's `/releases/latest` excludes prereleases by definition, so it always
 resolves to an engine release. That link is the one cited in launch material, so
 it must not dead-end.
 
-Two mechanisms keep it working, both driven from `native-release.yml`:
+Two mechanisms keep it working. Both run after publication in the same
+reviewed-main `native-release.yml` transaction:
 
 1. **`mirror-installers-to-engine-release`** copies the exact attested asset set
    from `desktop-vX.Y.Z` onto `vX.Y.Z`. Before any write, it verifies the exact
    asset inventory against the signed GitHub attestation, workflow, source
-   commit, run attempt, and successful protected publish job.
+   commit, and run attempt.
    `/releases/latest` therefore carries a verified installer, not just a link.
 2. **`point-engine-release`** prepends a marker-delimited pointer block at the
    top of the engine release notes:
@@ -75,13 +77,11 @@ Two mechanisms keep it working, both driven from `native-release.yml`:
 <!-- openadapt-installer-pointer:end -->
 ```
 
-Both jobs run on `release: published` for a non-draft `desktop-v*` prerelease,
-not on the tag push, for the same reason the supersession notice does:
-`publish-draft` creates a **draft**, whose tag page 404s publicly, and neither a
-pointer nor a mirror may advertise a URL nobody can open. The pointer block is
-rewritten in place, so republishing is idempotent and pointers never accumulate.
-If the matching engine release is missing, both jobs fail loudly rather than
-leaving "Latest" without an installer.
+The publish job creates the immutable tag and public prerelease once. It does
+not create a draft, overwrite an existing release, or replace published native
+bytes. The pointer block is rewritten in place, so pointers never accumulate.
+If the matching engine release or its attested receipt is missing, the
+transaction fails before the platform builds start.
 
 #### Why mirroring does not promote the Beta channel
 
@@ -100,8 +100,8 @@ addressed directly instead of by withholding the artifact:
   the `sha256sum -c` and `gh attestation verify` commands.
 - The mirror job verifies every downloaded byte against `SHA256SUMS`. It then
   requires the signed subject set to equal that complete inventory. It also
-  checks the exact GitHub-hosted workflow, tag commit, run attempt, and
-  protected publish job before upload.
+  checks the exact GitHub-hosted reviewed-main workflow, source commit, and run
+  attempt before upload.
 - The engine release gets **assets only**. It never receives the
   `<!-- installer-release -->` marker, so the machine-readable selection rule
   below is unchanged and download-page consumers keep resolving `desktop-v*`.
@@ -118,7 +118,9 @@ were pushed by hand. Three workflows now keep it fresh:
 1. **Release and PyPI Publish** (`.github/workflows/release.yml`): a maintainer
    explicitly dispatches one semantic release after the intended release train
    has landed. It refuses to publish until the exact main-contained commit has
-   successful `Test` and `Build artifacts` push workflows. The recovery operation
+   successful `Test` and `Build artifacts` push workflows. It writes and attests
+   `openadapt-desktop-engine-release-provenance.json` after the release commit,
+   tag, public release, wheel, and sdist exist. The recovery operation
    can rebuild and publish a pre-existing, main-contained ref after checking that
    ref's exact CI; ordinary merges never publish packages.
 2. **Native Installer Freshness** (`.github/workflows/native-freshness.yml`):
@@ -126,18 +128,16 @@ were pushed by hand. Three workflows now keep it fresh:
    and opens a pull request with the exact deterministic transform of
    `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`,
    `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. It never writes to
-   `main`. After the protected branch merges that pull request, a main-push job
-   reconstructs the transform from the immutable `vX.Y.Z` tag. It also verifies
-   the current engine release and then creates `desktop-vX.Y.Z`. A manual
-   backfill uses the same pull-request path.
+   `main`, create a native tag, or publish a release. A manual backfill uses the
+   same pull-request path.
 3. **Native Installer Release** (`.github/workflows/native-release.yml`):
-   the tag push triggers the fail-closed signing
-   preflight, the platform build matrix, install/launch/uninstall smoke tests,
-   final-byte checksums, attestation, and a **draft** prerelease that a
-   maintainer reviews and publishes. The release tag must be on current main,
-   differ from the matching engine tag only in the five native version files,
-   and advance the highest published native version. The build matrix runs only
-   on `desktop-v*` tags, not on ordinary pushes.
+   a maintainer dispatches the workflow from reviewed `main` with the exact
+   version. The workflow verifies current main, the five-file version transform,
+   the stable engine release, and its attested receipt before it starts the
+   fail-closed signing preflight. The same transaction builds, smoke-tests,
+   attests, publishes, mirrors, writes the verified index, promotes the
+   monotonic channel, updates the pointer, and marks older prereleases
+   superseded. Only this workflow creates `desktop-vX.Y.Z`.
 
 When the external controls below are active, each engine release `vX.Y.Z` can
 get a matching native prerelease `desktop-vX.Y.Z` from the same reviewed source.
@@ -158,37 +158,39 @@ Before the next native tag or release:
    pull requests.
 2. Add an immutable release-tag ruleset for `v*`. Only the engine release
    identity can create a tag. Do not permit a tag update or deletion.
-3. Add an immutable release-tag ruleset for `desktop-v*`. Only the native
-   freshness identity can create a tag. Do not permit a tag update or deletion.
+3. Add an immutable release-tag ruleset for `desktop-v*`. Only the explicitly
+   dispatched native release identity can create a tag. Do not permit a tag
+   update or deletion.
 4. Configure Apple Developer ID plus notarization and one Windows Authenticode
    identity in the reviewed `native-release` environment.
-5. Publish only after the exact tag workflow passes. Then verify the public
-   assets, attestation, pointer, mirror, and supersession result.
+5. Permit the reviewed `native-release` environment on `main`, with no admin
+   bypass. Publish only after its approval. Then verify the public assets,
+   attestation, pointer, mirror, channel, and supersession result.
 
 The `native-release` environment reviewer is an additional publish boundary.
 It does not replace the main and tag rulesets.
 
 ## Supersession
 
-After a native prerelease is published, CI selects the highest semantic version
-from all published, marked `desktop-v*` prereleases. It verifies that release
-and edits every lower prerelease to carry a prominent "Superseded by
+After the verified index and channel are published, the same transaction edits
+every lower marked `desktop-v*` prerelease to carry a prominent "Superseded by
 `desktop-vX.Y.Z` — do not use"
-notice at the top of their notes (machine marker:
-`<!-- openadapt-superseded-by: desktop-vX.Y.Z -->`). The previous published
-installer remains valid while its replacement is a draft. A late publish event
-for an older version cannot move the pointer or mirror backward. CI never
+notice at the top of its notes (machine marker:
+`<!-- openadapt-superseded-by: desktop-vX.Y.Z -->`). CI never
 deletes releases or assets; superseded assets are retained for provenance and
 any deletion is a human decision.
 
 ## Machine-readable selection rule (download pages)
 
-Consumers must not select a release from mutable release notes. The release
-workflow publishes `openadapt-desktop-verified-release.json` on the matching
-stable engine release after every byte and trust check passes. It attests the
-index with the release-event workflow identity from protected `main`.
+Consumers must not select a release from mutable release notes. Fetch the
+attested `openadapt-desktop-channel.json` asset from the `desktop-channel`
+release. It binds the selected `openadapt-desktop-verified-release.json` on the
+matching engine release. The channel must strictly advance from its prior
+descriptor.
 
-- Fetch the index from the stable engine release channel.
+- Fetch and attest the channel against
+  `.github/workflows/native-release.yml@refs/heads/main`.
+- Follow its hash-bound verified-index URL.
 - Verify the index attestation against
   `.github/workflows/native-release.yml@refs/heads/main`.
 - Require the closed index schema and the expected repository.
@@ -196,7 +198,8 @@ index with the release-event workflow identity from protected `main`.
 - Use only the engine release, native tag, checksum digest, and asset names in
   the verified index.
 - Download all named files into an empty directory.
-- Authenticate `SHA256SUMS` against the exact `desktop-vX.Y.Z` workflow identity.
+- Authenticate `SHA256SUMS` against
+  `.github/workflows/native-release.yml@refs/heads/main`.
 - Run `sha256sum -c SHA256SUMS` and
   `verify-openadapt-native-release.py`. The helper refuses an incomplete or
   expanded directory.

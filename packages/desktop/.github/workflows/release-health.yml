@@ -1,9 +1,9 @@
 name: Release health
 
 # Nothing here publishes anything. Releases stay a deliberate operation: the
-# engine lane is `workflow_dispatch`-only and the native lane keeps its
-# `native-release` reviewer gate on `publish-draft`, the single point where
-# installer bytes are written. That design exists because Flow 1.13.0/1.14.0
+# engine and native lanes are `workflow_dispatch`-only. The native lane keeps
+# its `native-release` reviewer gate on `publish-native`, the single point where
+# the immutable tag and installer release are created. That design exists because Flow 1.13.0/1.14.0
 # were yanked for shipping AGPL benchmark files. This workflow only LOOKS, and
 # prints the command a human would run.
 #
