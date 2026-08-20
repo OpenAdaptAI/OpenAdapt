@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -2270,11 +2271,21 @@ def test_download_verification_reads_through_the_checked_path(tmp_path: Path) ->
     (directory / "installer.bin").unlink()
     (directory / "installer.bin").symlink_to(secret)
 
-    # A link never reaches the hash loop, and reading it directly is refused.
+    # A link never reaches the hash loop. This is the whole defence on every
+    # platform, so assert it before the platform-specific open behaviour.
     with pytest.raises(ValueError, match="link or non-regular file"):
         verify_download_inventory(directory, directory / "SHA256SUMS")
-    with pytest.raises(OSError):
-        download_verifier._read_bytes(directory / "installer.bin")
+
+    link = directory / "installer.bin"
+    if hasattr(os, "O_NOFOLLOW"):
+        # POSIX refuses the open itself, so the hash can never follow a link
+        # that appears between the check and the read.
+        with pytest.raises(OSError):
+            download_verifier._read_bytes(link)
+    else:
+        # Windows has no O_NOFOLLOW and no equivalent. The open succeeds there
+        # by design, and the explicit is_symlink check above is the defence.
+        assert download_verifier._read_bytes(link) == b"installer"
 
 
 def test_git_helpers_refuse_an_option_shaped_ref(tmp_path: Path) -> None:
