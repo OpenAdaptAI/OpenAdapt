@@ -38,6 +38,11 @@ dependencies = [
     # attended decision path, with a TypeError rather than at resolve. Raise
     # this with every new symbol taken from Flow's attended contract.
     "openadapt-flow>=1.26.0,<2",
+    # Flow uses cryptography for encrypted bundles and signed runtime evidence.
+    # Keep the published Agent artifact above the PKCS#7 oracle fixed by 50.0.0
+    # (GHSA-g6cj-pr64-35w5), even when an existing environment already has an
+    # older version that still satisfies Flow's transitive requirement.
+    "cryptography>=50.0.0",
     # Official Model Context Protocol SDK (stdio server transport).
     "mcp>=1.28,<2",
     # Structured concurrency runtime the mcp SDK already uses; we call
