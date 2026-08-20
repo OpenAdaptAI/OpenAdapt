@@ -1,5 +1,14 @@
 # openadapt-capture Design
 
+> **Historical design record.** This file retains early goals and proposed
+> formats. It is not the current package contract. The current recorder
+> writes `recording.db` plus verified time-aligned MP4 media, uses native input
+> observers on Windows, macOS, and Linux, retains action-time Windows UIA
+> evidence, and supports window-scoped capture on Windows and macOS. See
+> [`README.md`](../README.md) and the public API for the current behavior. Items
+> such as `capture.db`, chunked continuous capture, and structural observers on
+> every operating system remain historical proposals where the code differs.
+
 ## Problem Statement
 
 We need a platform-agnostic representation of GUI interactions that:

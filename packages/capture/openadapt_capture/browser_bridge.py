@@ -1,4 +1,10 @@
-"""WebSocket server for Chrome extension communication.
+"""Prototype WebSocket transport for Chrome extension development.
+
+This module is not the supported OpenAdapt browser recorder or a governed
+replay path. Use the Playwright launch or attach recorder in ``openadapt-flow``
+for compile-ready browser demonstrations. The transport remains available for
+development while it gains authenticated session binding, acknowledged
+ordering, source-time secret exclusion, and exact event/frame evidence.
 
 This module provides the BrowserBridge WebSocket server that connects to
 the Chrome extension for capturing browser DOM events. It handles:

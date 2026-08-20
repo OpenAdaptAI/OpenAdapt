@@ -65,14 +65,17 @@ Documentation for the whole stack lives at
 
 | Recording path | Current implementation |
 | --- | --- |
-| Windows and RDP demonstrations | `openadapt-capture` records native input and action-gated screen video; `openadapt-flow` converts the session into compiler input. |
-| Browser demonstrations | `openadapt-flow` records its Playwright browser directly. It does not require this package. |
-| Chrome extension in this repository | Experimental DOM-capture code for development; it is not the supported web recorder or governed replay path. |
+| Windows, macOS, and Linux demonstrations | `openadapt-capture` records native input and action-gated screen video; Windows can also retain action-time UI Automation evidence. `openadapt-flow` converts the session into compiler input. |
+| RDP and Citrix/VDI demonstrations | `openadapt-capture` records the selected client window in its own pixel space. The remote application remains externally black-box, and `openadapt-flow` converts the session into compiler input. |
+| Browser demonstrations | `openadapt-flow` uses its Playwright recorder. It can launch Chromium or attach to one existing signed-in local Chromium tab. It does not require this package. |
+| Chrome extension in this repository | Prototype alternate acquisition transport. It is not the supported recorder and must not perform direct replay. |
 
 The browser path stays inside `openadapt-flow` because the compiler needs
-ordered before/after frames, page state, secret-field redaction, and events in
-its own recording format. The extension captures useful DOM context, but it
-does not provide that end-to-end contract.
+ordered before/after frames, page state, secret-field redaction, and one bound
+event schema. Flow now supports an existing authenticated browser session
+through its local-loopback CDP attach mode. The extension can become another
+acquisition transport after it emits that same evidence contract. It must not
+create a second compiler format or bypass governed replay.
 
 ## Use it with OpenAdapt
 
@@ -283,9 +286,17 @@ boundary. `openadapt-flow` still refuses desktop `--secret` authoring until its
 source-time field-redaction contract can prove that sensitive values were not
 retained. Review the desktop guide before recording sensitive workflows.
 
-The experimental Chrome extension can observe pages across its configured host
+The Chrome extension prototype can observe pages across its configured host
 permissions and can emit DOM text and keyboard events to a local WebSocket.
-Treat it as development code; do not deploy it in a sensitive browser profile.
+It does not yet provide source-time secret exclusion, authenticated
+profile/tab/document/session binding, acknowledged ordered delivery, or exact
+frame-to-event evidence. Its direct DOM replay does not use Flow's identity,
+policy, fresh-frame, and effect checks. Treat it as development code. Do not
+deploy it in a sensitive browser profile.
+
+Use Flow's supported attach recorder when an existing SSO or 2FA browser
+session is required. See the
+[`openadapt-flow` browser recording guide](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/BROWSER_RECORDING.md).
 
 ## Current limitations
 
@@ -293,10 +304,14 @@ Treat it as development code; do not deploy it in a sensitive browser profile.
   screen-recording and input-monitoring permissions.
 - Native Windows capture retains UIA evidence when the application exposes it;
   opaque remote applications still require Flow's visual and OCR bindings.
-- The Flow adapter rejects unsupported input such as drag, non-left-click, and
-  modifier-chord actions instead of silently compiling an incomplete workflow.
+- The Flow adapter compiles left and right clicks, left-button drags, typed
+  text, named keys, modifier chords, and scrolling. It rejects unsupported
+  input such as middle clicks, non-left-button drags, malformed shortcuts, and
+  unmapped keys instead of silently compiling an incomplete workflow.
 - Browser-extension installation, security hardening, and compiler integration
-  are not part of the current product path.
+  are not part of the current product path. Promotion requires the shared Flow
+  schema, source-time secret exclusion, authenticated and sequenced delivery,
+  exact frame binding, compiler integration, and removal of direct replay.
 
 See the organization-wide
 [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md)

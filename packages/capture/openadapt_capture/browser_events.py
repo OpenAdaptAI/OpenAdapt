@@ -1,4 +1,8 @@
-"""Browser event schemas for Chrome extension communication.
+"""Event schemas for the Chrome extension development prototype.
+
+These passive schemas do not make the extension a supported recorder or its
+legacy direct DOM replay a governed execution path. The supported browser
+recorder is the Playwright launch or attach path in ``openadapt-flow``.
 
 This module defines Pydantic models for all browser event types captured by
 the Chrome extension. These events include DOM-level interactions with rich

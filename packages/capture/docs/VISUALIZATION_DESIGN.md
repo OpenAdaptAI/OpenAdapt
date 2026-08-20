@@ -1,5 +1,10 @@
 # Visualization Design
 
+> **Historical design record.** This file contains early visualization
+> proposals. The current API and privacy rules are in [`README.md`](../README.md)
+> and `openadapt_capture.visualize`. In particular, the current HTML viewer does
+> not embed recorded audio by default.
+
 ## Goals
 
 1. **README Demo**: Automated GIF/video generation showing a recording with visual event overlays

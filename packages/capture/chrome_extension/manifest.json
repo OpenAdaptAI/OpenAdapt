@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "OpenAdapt Capture",
+  "name": "OpenAdapt Capture (Prototype)",
   "version": "1.0.0",
-  "description": "DOM-level event capture for browser interactions with coordinate tracking and semantic element references",
+  "description": "Development prototype for DOM event capture; use openadapt-flow for supported browser recording",
   "permissions": [
     "activeTab",
     "tabs",
@@ -34,6 +34,6 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "OpenAdapt Capture"
+    "default_title": "OpenAdapt Capture prototype"
   }
 }

@@ -5,10 +5,12 @@
 **openadapt-capture** is the data collection component of the OpenAdapt GUI automation ecosystem. It captures platform-agnostic GUI interaction streams (mouse, keyboard, screen) with time-aligned media for training ML models or replaying workflows.
 
 Key responsibilities:
-- Record human demonstrations with mouse, keyboard, and screen capture
+- Record human demonstrations with native mouse, keyboard, and screen capture
 - Time-align all events and media (video, audio)
 - Process raw events into structured actions (clicks, drags, typing)
-- Support privacy scrubbing of sensitive data
+- Retain optional action-time structural evidence where a provider exists
+- Keep raw captures local unless a caller invokes an explicit transfer path
+- Expose an optional privacy integration without claiming automatic scrubbing
 
 **Always use PRs, never push directly to main**
 
@@ -18,8 +20,8 @@ Key responsibilities:
 # Install the package
 uv add openadapt-capture
 
-# Install with audio support (large download)
-uv add "openadapt-capture[audio]"
+# Install with on-device transcription support (large download)
+uv add "openadapt-capture[transcribe-fast]"
 
 # Run tests (exclude browser bridge tests which need websockets fixtures)
 uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py
@@ -60,7 +62,7 @@ openadapt_capture/
   extensions/      # SynchronizedQueue (multiprocessing.Queue wrapper)
   utils.py         # Timestamps, screenshots, monitor dims
   config.py        # Recording config (RECORD_VIDEO, RECORD_AUDIO, etc.)
-  video.py         # Video encoding (av/ffmpeg)
+  video.py         # External FFmpeg process boundary and frame extraction
   audio.py         # Audio recording + transcription
   visualize/       # Demo GIF and HTML viewer generation
   share.py         # Magic Wormhole sharing
@@ -101,7 +103,7 @@ SQLAlchemy-based per-capture databases:
 # Fast tests (unit + integration, no recording)
 uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py -m "not slow"
 
-# Slow tests (full recording pipeline with pynput synthetic input)
+# Slow tests (full native recording pipeline with synthetic input)
 uv run pytest tests/ -v -m slow
 
 # All tests
