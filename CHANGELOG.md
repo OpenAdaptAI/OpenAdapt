@@ -2,6 +2,26 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-08-20)
+
+### Bug Fixes
+
+- **ci**: Repin the docs dispatch action and stop the recurring bump
+  ([#1098](https://github.com/OpenAdaptAI/OpenAdapt/pull/1098),
+  [`9da67d7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9da67d7fd318a111195a80df15c5655a46ce504c))
+
+### Build System
+
+- **deps**: Bump astral-sh/setup-uv from 10.0.0 to 10.0.1
+  ([#1101](https://github.com/OpenAdaptAI/OpenAdapt/pull/1101),
+  [`bb91e4b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bb91e4b744fff1199241f48adf31761224771e11))
+
+### Chores
+
+- **release**: Reconcile platform BOM
+  ([`f8c23f4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f8c23f4d9863b03b133d73ae269ecf9735b3e082))
+
+
 ## v1.13.0 (2026-08-19)
 
 ### Build System
