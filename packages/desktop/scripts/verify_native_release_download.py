@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import stat
 import subprocess
@@ -37,6 +38,30 @@ SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 
 
+def _no_follow_opener(path: str, flags: int) -> int:
+    """Open a path, refusing a symbolic link at the final component.
+
+    ``O_NOFOLLOW`` exists on POSIX. Windows has no such flag and no equivalent,
+    so the value falls back to zero there and the caller keeps its explicit
+    ``is_symlink`` check.
+    """
+
+    return os.open(path, flags | getattr(os, "O_NOFOLLOW", 0))
+
+
+def _read_bytes(path: Path) -> bytes:
+    """Read the exact bytes of one path without following a symbolic link.
+
+    A separate ``is_symlink`` test and a later ``read_bytes`` resolve the path
+    twice, so a local writer can replace a checked file with a link between the
+    two calls. This reads through one descriptor that the kernel refuses to
+    open on a link.
+    """
+
+    with open(path, "rb", opener=_no_follow_opener) as stream:
+        return stream.read()
+
+
 def _read_regular_bytes(path: Path, *, label: str) -> bytes:
     """Read one regular file exactly once.
 
@@ -47,7 +72,7 @@ def _read_regular_bytes(path: Path, *, label: str) -> bytes:
 
     if not path.is_file() or path.is_symlink():
         raise ValueError(f"{label} must be a regular file")
-    return path.read_bytes()
+    return _read_bytes(path)
 
 
 def _sha256(path: Path, *, label: str) -> str:
@@ -73,7 +98,16 @@ def _version_tuple(version: str) -> tuple[int, int, int]:
     return tuple(int(part) for part in version.split("."))  # type: ignore[return-value]
 
 
-def _expected_asset_names(version: str) -> set[str]:
+def expected_asset_names(version: str) -> set[str]:
+    """Return the exact asset set one native version publishes.
+
+    ``expected_release_asset_names`` in ``scripts/native_release.py`` states the
+    same contract. This file ships beside the installers as a standalone
+    stdlib-only verifier, so it cannot import that module.
+    ``test_standalone_verifier_states_the_same_asset_contract`` fails when the
+    two definitions drift apart.
+    """
+
     _version_tuple(version)
     names = {
         "openadapt-desktop-release-manifest.json",
@@ -282,7 +316,7 @@ def validate_index(
         ):
             raise ValueError("verified release index contains an invalid asset")
         entries[asset["name"]] = asset["sha256"]
-    if list(entries) != sorted(entries) or set(entries) != _expected_asset_names(version):
+    if list(entries) != sorted(entries) or set(entries) != expected_asset_names(version):
         raise ValueError("verified release index does not contain the exact asset set")
     return data
 
@@ -454,19 +488,23 @@ def verify(directory: Path, manifest: Path, *, entries: dict[str, str] | None = 
         raise ValueError("SHA256SUMS must be a regular file")
     if entries is None:
         entries = read_manifest(manifest)
-    members = list(directory.iterdir())
+    members = {path.name: path for path in directory.iterdir()}
     unsafe = [
-        path.name
-        for path in members
+        name
+        for name, path in members.items()
         if path.is_symlink() or not stat.S_ISREG(path.stat(follow_symlinks=False).st_mode)
     ]
     if unsafe:
         raise ValueError("download directory contains a link or non-regular file")
-    actual = {path.name for path in members if path != manifest}
+    actual = {name for name, path in members.items() if path != manifest}
     if actual != set(entries):
         raise ValueError("downloaded files do not equal the signed checksum inventory")
     for name, expected in entries.items():
-        observed = hashlib.sha256((directory / name).read_bytes()).hexdigest()
+        # Hash the exact path object the check above proved regular and
+        # unlinked, and open it with O_NOFOLLOW. Rebuilding `directory / name`
+        # here would resolve the name a second time and follow a link that
+        # appeared in between.
+        observed = hashlib.sha256(_read_bytes(members[name])).hexdigest()
         if observed != expected:
             raise ValueError(f"checksum mismatch for {name}")
     return len(entries)

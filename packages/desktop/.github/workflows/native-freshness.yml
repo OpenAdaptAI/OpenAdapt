@@ -232,10 +232,13 @@ jobs:
             --engine-tag "${engine_tag}" \
             --engine-commit "${engine_commit}"
 
-          gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate --slurp > releases.json
+          # The immutable desktop-v* tag namespace is the release order.
+          # Release draft, prerelease, and body fields are mutable, and this
+          # repository rewrites release notes itself.
+          git ls-remote --tags origin > remote-native-tags.txt
           python scripts/native_release.py validate-release-order \
             --candidate-tag "${native_tag}" \
-            --releases releases.json
+            --tags remote-native-tags.txt
 
           echo "native_tag=${native_tag}" >> "${GITHUB_OUTPUT}"
 

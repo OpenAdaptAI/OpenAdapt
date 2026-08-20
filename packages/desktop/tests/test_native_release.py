@@ -16,9 +16,13 @@ from scripts.native_release import (
     NATIVE_RELEASE_VERIFIER,
     VERIFIED_RELEASE_CHANNEL,
     VERIFIED_RELEASE_INDEX,
+    VERSION_TRANSFORM_PATHS,
+    expected_release_asset_names,
     installer_pointer_notes,
+    native_release_tags,
     native_tag_tuple,
     native_version,
+    native_version_at_ref,
     select_latest_native_release,
     set_native_version,
     stage_artifacts,
@@ -28,7 +32,7 @@ from scripts.native_release import (
     validate_engine_release_provenance,
     validate_git_version_advance,
     validate_git_version_transform,
-    validate_new_native_tag,
+    validate_native_tag_order,
     validate_release_attestation,
     validate_release_provenance,
     validate_release_set,
@@ -306,7 +310,7 @@ def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None
     assert "validate-release-order" in transaction
 
 
-def test_native_version_pr_guard_rejects_a_stale_base() -> None:
+def test_native_version_pr_guard_never_skips_and_judges_content() -> None:
     guard = _workflow("native-version-guard.yml")
     assert guard[True]["pull_request"]["types"] == [
         "opened",
@@ -314,10 +318,42 @@ def test_native_version_pr_guard_rejects_a_stale_base() -> None:
         "synchronize",
         "ready_for_review",
     ]
+    assert guard[True]["pull_request"]["paths"] == list(VERSION_TRANSFORM_PATHS)
     job = guard["jobs"]["validate-advance"]
     assert guard["permissions"] == {"contents": "read"}
-    assert job["if"] == "startsWith(github.head_ref, 'native-version/v')"
-    script = _job_steps(job)["Require an exact strict advance from the current PR base"]["run"]
+
+    # A branch name is author controlled, and GitHub counts a skipped job as a
+    # satisfied required check. The job must run for every matching pull
+    # request and refuse in a step instead.
+    assert "if" not in job
+    assert not any("if" in step for step in job["steps"])
+    assert "github.head_ref" not in json.dumps(job)
+
+    steps = _job_steps(job)
+    checkout = steps["actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"]
+    # The guard grades the head, so it must run the reviewed base scripts.
+    assert checkout["with"]["ref"] == "${{ github.event.pull_request.base.sha }}"
+    assert checkout["with"]["fetch-depth"] == 0
+
+    fetch = steps["Fetch the exact pull request head"]["run"]
+    assert "refs/pull/${PR_NUMBER}/head:refs/remotes/pull/${PR_NUMBER}/head" in fetch
+    assert 'if [ "${observed}" != "${HEAD_SHA}" ]' in fetch
+
+    step = steps["Require an exact strict advance from the current PR base"]
+    script = step["run"]
+    assert step["env"]["HEAD_REF"] == "${{ github.event.pull_request.head.ref }}"
+    assert step["env"]["HEAD_REPOSITORY"] == "${{ github.event.pull_request.head.repo.full_name }}"
+
+    # An ordinary dependency or feature change to the same five files keeps the
+    # version, and must pass.
+    assert 'if [ "${base_version}" = "${head_version}" ]' in script
+    assert "version --ref" in script
+    # A version change is reserved to this repository's automation branch.
+    assert 'if [ "${HEAD_REPOSITORY}" != "${GITHUB_REPOSITORY}" ]' in script
+    assert "native-version/v*) ;;" in script
+    # One refusal for a fork head, one for an unreserved branch, one for a
+    # stale base. No path through the step falls through to success.
+    assert script.count("exit 1") == 3
     assert "validate-version-advance" in script
     assert "github.event.pull_request.base.sha" in json.dumps(job)
     assert "git fetch origin main:refs/remotes/origin/main" in script
@@ -871,13 +907,65 @@ def test_release_selection_uses_semver_and_ignores_event_order() -> None:
     assert select_latest_native_release(releases)["tag_name"] == "desktop-v1.11.0"
 
 
-def test_release_order_refuses_downgrade_or_duplicate() -> None:
-    releases = [_release("desktop-v1.11.0")]
+def _ls_remote(*tags: str) -> str:
+    return "".join(f"{'a' * 40}\trefs/tags/{tag}\n" for tag in tags)
 
-    for candidate in ("desktop-v1.10.9", "desktop-v1.11.0"):
-        with pytest.raises(ValueError, match="does not advance"):
-            validate_new_native_tag(candidate, releases)
-    assert validate_new_native_tag("desktop-v1.11.1", releases) == "desktop-v1.11.1"
+
+def test_release_order_refuses_a_tag_below_the_immutable_tag_namespace() -> None:
+    tags = native_release_tags(_ls_remote("desktop-v1.11.0", "v1.11.0"))
+    assert tags == ["desktop-v1.11.0"]
+
+    with pytest.raises(ValueError, match="is below existing native tag"):
+        validate_native_tag_order("desktop-v1.10.9", tags)
+    assert validate_native_tag_order("desktop-v1.11.1", tags) == "desktop-v1.11.1"
+    # The tag write is idempotent, so a re-run legitimately presents the tag
+    # that already leads. That is still monotonic.
+    assert validate_native_tag_order("desktop-v1.11.0", tags) == "desktop-v1.11.0"
+    assert validate_native_tag_order("desktop-v0.1.0", []) == "desktop-v0.1.0"
+
+
+def test_release_order_ignores_mutable_release_metadata() -> None:
+    """A release that loses its marker or prerelease flag stays in the order.
+
+    ``_published_native_releases`` drops such a release. The tag namespace
+    cannot, because ``gh release edit`` never touches a Git tag.
+    """
+
+    tags = native_release_tags(_ls_remote("desktop-v1.11.0"))
+    unmarked = [_release("desktop-v1.11.0", marked=False)]
+
+    with pytest.raises(ValueError, match="no published marked native prerelease"):
+        select_latest_native_release(unmarked)
+    with pytest.raises(ValueError, match="is below existing native tag"):
+        validate_native_tag_order("desktop-v1.0.0", tags)
+
+
+def test_native_tag_namespace_parsing_fails_closed() -> None:
+    # An annotated tag adds a peeled line for the same tag.
+    peeled = f"{'b' * 40}\trefs/tags/desktop-v2.0.0^{{}}\n"
+    assert native_release_tags(_ls_remote("desktop-v2.0.0") + peeled) == ["desktop-v2.0.0"]
+
+    with pytest.raises(ValueError, match="invalid line"):
+        native_release_tags("not-an-object-id\trefs/tags/desktop-v1.0.0\n")
+    with pytest.raises(ValueError, match="not restricted to tags"):
+        native_release_tags(f"{'a' * 40}\trefs/heads/main\n")
+    with pytest.raises(ValueError, match="native release tag"):
+        native_release_tags(_ls_remote("desktop-v1.2"))
+    with pytest.raises(ValueError, match="list of tag names"):
+        validate_native_tag_order("desktop-v1.0.0", {"desktop-v2.0.0": True})
+
+
+def test_release_order_reads_the_tag_namespace_in_every_workflow() -> None:
+    for name, candidate in (
+        ("native-release.yml", '"${GITHUB_REF_NAME}"'),
+        ("native-freshness.yml", '"${native_tag}"'),
+    ):
+        body = (ROOT / ".github" / "workflows" / name).read_text()
+        order = body.split("validate-release-order", 1)[1].split("\n\n", 1)[0]
+        assert f"--candidate-tag {candidate}" in order
+        assert "--tags remote-native-tags.txt" in order
+        assert "git ls-remote --tags origin > remote-native-tags.txt" in body
+        assert "--releases" not in order
 
 
 def test_marked_native_release_with_malformed_tag_fails_closed() -> None:
@@ -2075,3 +2163,143 @@ def test_website_release_manifest_rejects_forged_metadata_checksum(tmp_path: Pat
 
     with pytest.raises(ValueError, match="SHA256SUMS digest differs"):
         validate_website_release_manifest(output, checksums=checksums)
+
+
+def test_missing_existing_document_is_an_error_not_a_skipped_check(tmp_path: Path) -> None:
+    """A passed but absent ``--existing`` must fail, never drop the check.
+
+    The release workflow used to end its download with ``|| true``, so a failed
+    download produced no file and the monotonicity comparison disappeared.
+    """
+
+    release, _manifest, checksums = _stage_complete_release(tmp_path / "assets")
+    absent = tmp_path / "absent" / VERIFIED_RELEASE_INDEX
+
+    with pytest.raises(ValueError, match="missing or is not a regular file"):
+        write_verified_release_index(
+            tmp_path / VERIFIED_RELEASE_INDEX,
+            directory=release,
+            checksums=checksums,
+            provenance_path=release / NATIVE_RELEASE_PROVENANCE,
+            repository="OpenAdaptAI/openadapt-desktop",
+            tag=f"desktop-v{native_version()}",
+            source_commit="a" * 40,
+            engine_release_path=_engine_release_file(tmp_path),
+            existing=absent,
+        )
+
+    index = write_verified_release_index(
+        tmp_path / VERIFIED_RELEASE_INDEX,
+        directory=release,
+        checksums=checksums,
+        provenance_path=release / NATIVE_RELEASE_PROVENANCE,
+        repository="OpenAdaptAI/openadapt-desktop",
+        tag=f"desktop-v{native_version()}",
+        source_commit="a" * 40,
+        engine_release_path=_engine_release_file(tmp_path),
+    )
+    with pytest.raises(ValueError, match="missing or is not a regular file"):
+        write_verified_release_channel(
+            tmp_path / VERIFIED_RELEASE_CHANNEL,
+            index_path=index,
+            repository="OpenAdaptAI/openadapt-desktop",
+            workflow_ref=(
+                "OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/heads/main"
+            ),
+            workflow_commit="a" * 40,
+            run_id=123456,
+            run_attempt=1,
+            existing=tmp_path / "absent" / VERIFIED_RELEASE_CHANNEL,
+        )
+
+
+def test_release_workflow_never_swallows_the_existing_index_download() -> None:
+    body = (ROOT / ".github/workflows/native-release.yml").read_text()
+    step = body.split("Write the monotonic verified release index", 1)[1].split(
+        "- name: Attest", 1
+    )[0]
+
+    assert "|| true" not in step
+    assert 'gh release view "${ENGINE_TAG}" --json assets' in step
+    assert "grep -qxF 'openadapt-desktop-verified-release.json'" in step
+
+
+def test_draft_publish_never_returns_a_public_release_to_draft() -> None:
+    """The tag namespace cannot see draft state, so the publish step must.
+
+    The old release-metadata comparison refused this run as a side effect. The
+    refusal is now explicit, at the step that would do the damage.
+    """
+
+    body = (ROOT / ".github/workflows/native-release.yml").read_text()
+    step = body.split("Create or update draft prerelease and upload assets", 1)[1].split(
+        "\n  verify-published-release:", 1
+    )[0]
+
+    assert 'gh release view "${GITHUB_REF_NAME}" --json isDraft' in step
+    assert 'if [ "${state}" = "false" ]' in step
+    assert "refusing to redraft it" in step
+    assert 'if [ "${state}" = "true" ]' in step
+
+
+def test_standalone_verifier_states_the_same_asset_contract() -> None:
+    """The shipped verifier duplicates the asset contract; keep them equal."""
+
+    for version in ("0.1.0", "1.11.0", "10.20.30", native_version()):
+        assert download_verifier.expected_asset_names(version) == expected_release_asset_names(
+            version
+        )
+    for invalid in ("1.2", "v1.2.3", "1.2.3-rc1"):
+        with pytest.raises(ValueError):
+            expected_release_asset_names(invalid)
+        with pytest.raises(ValueError):
+            download_verifier.expected_asset_names(invalid)
+
+
+def test_download_verification_reads_through_the_checked_path(tmp_path: Path) -> None:
+    """Hash the member the inventory check proved regular, not a fresh lookup."""
+
+    directory = tmp_path / "download"
+    directory.mkdir()
+    (directory / "installer.bin").write_bytes(b"installer")
+    write_checksums(directory, directory / "SHA256SUMS")
+    assert verify_download_inventory(directory, directory / "SHA256SUMS") == 1
+
+    secret = tmp_path / "outside.bin"
+    secret.write_bytes(b"installer")
+    (directory / "installer.bin").unlink()
+    (directory / "installer.bin").symlink_to(secret)
+
+    # A link never reaches the hash loop, and reading it directly is refused.
+    with pytest.raises(ValueError, match="link or non-regular file"):
+        verify_download_inventory(directory, directory / "SHA256SUMS")
+    with pytest.raises(OSError):
+        download_verifier._read_bytes(directory / "installer.bin")
+
+
+def test_git_helpers_refuse_an_option_shaped_ref(tmp_path: Path) -> None:
+    """A ref that begins with ``-`` must never reach Git as an option."""
+
+    stolen = tmp_path / "stolen.txt"
+    for injected in (f"--output={stolen}", "-h", ""):
+        with pytest.raises(ValueError, match="invalid Git ref|does not name exactly one commit"):
+            validate_git_version_transform(injected, "HEAD", native_version())
+        with pytest.raises(ValueError, match="invalid Git ref|does not name exactly one commit"):
+            native_version_at_ref(injected)
+    assert not stolen.exists()
+
+    with pytest.raises(ValueError, match="does not name exactly one commit"):
+        native_version_at_ref("refs/heads/no-such-branch-for-this-test")
+
+
+def test_native_version_at_ref_reads_git_objects_not_the_working_tree() -> None:
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    assert native_version_at_ref(head) == native_version()
+    assert native_version_at_ref("HEAD") == native_version()

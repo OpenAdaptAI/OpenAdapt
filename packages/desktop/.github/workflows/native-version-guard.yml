@@ -1,5 +1,17 @@
 name: Native Version Advance Guard
 
+# The five native version files carry the installer version, and they also
+# carry ordinary npm and Cargo dependency state. Dependabot and feature pull
+# requests edit them for those ordinary reasons, so this job cannot demand a
+# reserved branch from every pull request that touches the paths.
+#
+# It decides on content instead of on a branch name. When the pull request
+# leaves the native version alone, it passes. When the pull request moves the
+# native version, only the reserved `native-version/v*` branch of this
+# repository may do it, from the current protected base, as the exact strict
+# advance. The job never skips: a skipped job satisfies a required status
+# check, and the branch name is author controlled.
+
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -19,35 +31,75 @@ concurrency:
 
 jobs:
   validate-advance:
-    name: Reject a stale native version pull request
-    if: startsWith(github.head_ref, 'native-version/v')
+    name: Reject an unreserved or stale native version pull request
     runs-on: ubuntu-22.04
     steps:
+      # Check out the base, never the head. This job grades the head, so it
+      # must run the reviewed scripts of the base commit. A head checkout would
+      # let the same pull request rewrite the guard that judges it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
+      - name: Fetch the exact pull request head
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin \
+            "refs/pull/${PR_NUMBER}/head:refs/remotes/pull/${PR_NUMBER}/head"
+          observed="$(git rev-parse --verify "refs/remotes/pull/${PR_NUMBER}/head^{commit}")"
+          if [ "${observed}" != "${HEAD_SHA}" ]; then
+            echo "error: pull request head is ${observed}, not the event head ${HEAD_SHA}" >&2
+            exit 1
+          fi
+
       - name: Require an exact strict advance from the current PR base
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin "${BASE_SHA}"
+          # The checkout above already holds BASE_SHA and its whole history.
+          base_version="$(python scripts/native_release.py version --ref "${BASE_SHA}")"
+          head_version="$(python scripts/native_release.py version --ref "${HEAD_SHA}")"
+          if [ "${base_version}" = "${head_version}" ]; then
+            echo "This pull request keeps native version ${base_version}."
+            exit 0
+          fi
+
+          echo "This pull request moves the native version ${base_version} -> ${head_version}."
+          if [ "${HEAD_REPOSITORY}" != "${GITHUB_REPOSITORY}" ]; then
+            echo "error: a native version change must come from ${GITHUB_REPOSITORY}," \
+                 "not from '${HEAD_REPOSITORY}'" >&2
+            exit 1
+          fi
+          case "${HEAD_REF}" in
+            native-version/v*) ;;
+            *)
+              echo "error: a native version change must come from a native-version/v*" \
+                   "branch, not from '${HEAD_REF}'" >&2
+              exit 1
+              ;;
+          esac
+
           git fetch origin main:refs/remotes/origin/main
           current_base="$(git rev-parse refs/remotes/origin/main)"
           if [ "${BASE_SHA}" != "${current_base}" ]; then
             echo "error: native version pull request base is stale" >&2
             exit 1
           fi
-          version="$(python scripts/native_release.py version)"
           python scripts/native_release.py validate-version-advance \
             --base-ref "${BASE_SHA}" \
             --candidate-ref "${HEAD_SHA}" \
-            --version "${version}"
+            --version "${head_version}"

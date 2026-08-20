@@ -194,19 +194,52 @@ def select_latest_native_release(releases: object) -> dict:
     return max(candidates, key=lambda release: native_tag_tuple(release["tag_name"]))
 
 
-def validate_new_native_tag(candidate_tag: str, releases: object) -> str:
-    """Refuse a tag that does not advance the published native release."""
+def native_release_tags(ls_remote_output: str) -> list[str]:
+    """Return every ``desktop-v*`` tag in ``git ls-remote --tags`` output.
+
+    The Git tag namespace is immutable release order. A release ``draft`` flag,
+    ``prerelease`` flag, and ``body`` are all mutable, and this repository
+    rewrites release notes itself, so a comparison set filtered on those fields
+    can silently lose a member and admit a lower version.
+
+    Every line must be one object id and one ``refs/tags/`` ref. A malformed
+    line, or a ``desktop-v`` tag that is not ``X.Y.Z``, fails closed.
+    """
+
+    tags: set[str] = set()
+    for line in ls_remote_output.splitlines():
+        if not line.strip():
+            continue
+        object_id, separator, ref = line.partition("\t")
+        if not separator or not GIT_COMMIT_PATTERN.fullmatch(object_id):
+            raise ValueError(f"git ls-remote output has an invalid line: {line!r}")
+        if not ref.startswith("refs/tags/"):
+            raise ValueError(f"git ls-remote output is not restricted to tags: {ref!r}")
+        name = ref[len("refs/tags/") :].removesuffix("^{}")
+        if not name.startswith(NATIVE_TAG_PREFIX):
+            continue
+        native_tag_tuple(name)
+        tags.add(name)
+    return sorted(tags, key=native_tag_tuple)
+
+
+def validate_native_tag_order(candidate_tag: str, tags: object) -> str:
+    """Refuse a candidate that a higher immutable native tag already leads.
+
+    A re-run may present a tag that already exists, because the tag write is
+    idempotent. That is still monotonic. Only a tag below the highest existing
+    native tag moves the release line backwards.
+    """
 
     candidate = native_tag_tuple(candidate_tag)
-    published = _published_native_releases(releases)
-    if not published:
+    if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+        raise ValueError("native tag comparison set must be a list of tag names")
+    if not tags:
         return candidate_tag
-    latest_tag = max(published, key=lambda release: native_tag_tuple(release["tag_name"]))[
-        "tag_name"
-    ]
-    if candidate <= native_tag_tuple(latest_tag):
+    highest_tag = max(tags, key=native_tag_tuple)
+    if candidate < native_tag_tuple(highest_tag):
         raise ValueError(
-            f"native release {candidate_tag} does not advance published release {latest_tag}"
+            f"native release {candidate_tag} is below existing native tag {highest_tag}"
         )
     return candidate_tag
 
@@ -281,16 +314,79 @@ VERSION_TRANSFORM_PATHS = (
 )
 
 
-def _git_bytes(root: Path, ref: str, relative_path: str) -> bytes:
+def _require_existing_file(path: Path, *, label: str) -> Path:
+    """Require a named prior document to be present and regular.
+
+    A caller passes ``--existing`` to demand a monotonicity check. Treating an
+    absent file as "no prior document" would delete that check exactly when a
+    download failed, so a missing path is an error, never a silent skip.
+    """
+
+    if not path.is_file() or path.is_symlink():
+        raise ValueError(f"prior {label} {str(path)!r} is missing or is not a regular file")
+    return path
+
+
+def _resolve_commit(root: Path, ref: str) -> str:
+    """Resolve one caller ref to its 40-character commit id.
+
+    Every later Git call receives that object id rather than the caller string.
+    A hexadecimal object id can never begin with ``-``, so a ref such as
+    ``--output=/tmp/stolen`` cannot reach Git as an option.
+    """
+
+    if not isinstance(ref, str) or not ref or ref.startswith("-"):
+        raise ValueError(f"invalid Git ref: {ref!r}")
     result = subprocess.run(
-        ["git", "show", f"{ref}:{relative_path}"],
+        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    commit = result.stdout.strip()
+    if result.returncode != 0 or not GIT_COMMIT_PATTERN.fullmatch(commit):
+        raise ValueError(f"Git ref {ref!r} does not name exactly one commit")
+    return commit
+
+
+def _git_bytes(root: Path, commit: str, relative_path: str) -> bytes:
+    if not GIT_COMMIT_PATTERN.fullmatch(commit):
+        raise ValueError(f"expected a resolved commit id, got {commit!r}")
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{relative_path}"],
         cwd=root,
         check=False,
         capture_output=True,
     )
     if result.returncode != 0:
-        raise ValueError(f"Git ref {ref!r} does not contain {relative_path!r}")
+        raise ValueError(f"Git commit {commit!r} does not contain {relative_path!r}")
     return result.stdout
+
+
+def native_version_at_ref(ref: str, root: Path = ROOT) -> str:
+    """Return the one native version that ``ref`` records.
+
+    This reads Git objects, so a caller can ask about a commit that is not
+    checked out. The three sources must agree, exactly as they must in a
+    working tree.
+    """
+
+    commit = _resolve_commit(root, ref)
+    package = json.loads(_git_bytes(root, commit, "package.json"))
+    tauri = json.loads(_git_bytes(root, commit, "src-tauri/tauri.conf.json"))
+    cargo = tomllib.loads(_git_bytes(root, commit, "src-tauri/Cargo.toml").decode("utf-8"))
+    observed = {
+        str(package.get("version") or ""),
+        str(tauri.get("version") or ""),
+        str(cargo.get("package", {}).get("version") or ""),
+    }
+    if len(observed) != 1:
+        raise ValueError(f"native versions differ at {ref}: {sorted(observed)}")
+    version = observed.pop()
+    if not VERSION_PATTERN.fullmatch(version):
+        raise ValueError(f"native version at {ref} is invalid: {version!r}")
+    return version
 
 
 def validate_git_version_transform(
@@ -310,8 +406,10 @@ def validate_git_version_transform(
 
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError(f"native version must be X.Y.Z, got {version!r}")
+    base_commit = _resolve_commit(root, base_ref)
+    candidate_commit = _resolve_commit(root, candidate_ref)
     changed = subprocess.run(
-        ["git", "diff", "--name-only", f"{base_ref}..{candidate_ref}"],
+        ["git", "diff", "--name-only", f"{base_commit}..{candidate_commit}", "--"],
         cwd=root,
         check=False,
         capture_output=True,
@@ -332,12 +430,13 @@ def validate_git_version_transform(
         for relative in VERSION_TRANSFORM_PATHS:
             destination = reconstructed / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(_git_bytes(root, base_ref, relative))
+            destination.write_bytes(_git_bytes(root, base_commit, relative))
         set_native_version(version, reconstructed)
         mismatches = [
             relative
             for relative in VERSION_TRANSFORM_PATHS
-            if (reconstructed / relative).read_bytes() != _git_bytes(root, candidate_ref, relative)
+            if (reconstructed / relative).read_bytes()
+            != _git_bytes(root, candidate_commit, relative)
         ]
     if mismatches:
         raise ValueError(
@@ -361,21 +460,7 @@ def validate_git_version_advance(
     otherwise overwrite newer native versions when GitHub merges it later.
     """
 
-    base_versions = {
-        relative: json.loads(_git_bytes(root, base_ref, relative))
-        for relative in ("package.json", "src-tauri/tauri.conf.json")
-    }
-    observed = {
-        str(base_versions["package.json"].get("version") or ""),
-        str(base_versions["src-tauri/tauri.conf.json"].get("version") or ""),
-    }
-    cargo = tomllib.loads(_git_bytes(root, base_ref, "src-tauri/Cargo.toml").decode())
-    observed.add(str(cargo.get("package", {}).get("version") or ""))
-    if len(observed) != 1:
-        raise ValueError(f"base native versions differ: {sorted(observed)}")
-    base_version = observed.pop()
-    if not VERSION_PATTERN.fullmatch(base_version):
-        raise ValueError(f"base native version is invalid: {base_version!r}")
+    base_version = native_version_at_ref(base_ref, root=root)
     if native_tag_tuple(f"{NATIVE_TAG_PREFIX}{version}") <= native_tag_tuple(
         f"{NATIVE_TAG_PREFIX}{base_version}"
     ):
@@ -1037,7 +1122,8 @@ def write_verified_release_index(
         },
         "assets": [{"name": name, "sha256": digest} for name, digest in sorted(entries.items())],
     }
-    if existing is not None and existing.is_file():
+    if existing is not None:
+        _require_existing_file(existing, label="verified release index")
         prior = validate_verified_release_index(existing)
         prior_tag = prior["native_tag"]
         if native_tag_tuple(tag) < native_tag_tuple(prior_tag):
@@ -1157,7 +1243,8 @@ def write_verified_release_channel(
         raise ValueError("release channel run attempt must be a positive integer")
     prior_sha256 = None
     prior_version = None
-    if existing is not None and existing.is_file():
+    if existing is not None:
+        _require_existing_file(existing, label="release channel")
         prior = validate_verified_release_channel(existing)
         if prior["repository"] != repository:
             raise ValueError("prior release channel belongs to a different repository")
@@ -1797,7 +1884,11 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("version")
+    version_parser = subparsers.add_parser("version")
+    version_parser.add_argument(
+        "--ref",
+        help="read the version from this Git commit instead of the working tree",
+    )
     tag_parser = subparsers.add_parser("validate-tag")
     tag_parser.add_argument("tag")
 
@@ -1897,7 +1988,7 @@ def _parser() -> argparse.ArgumentParser:
     selection_parser.add_argument("--github-output", type=Path)
 
     order_parser = subparsers.add_parser("validate-release-order")
-    order_parser.add_argument("--releases", type=Path, required=True)
+    order_parser.add_argument("--tags", type=Path, required=True)
     order_parser.add_argument("--candidate-tag", required=True)
 
     engine_release_parser = subparsers.add_parser("validate-engine-release")
@@ -1970,7 +2061,7 @@ def main() -> int:
     args = _parser().parse_args()
     try:
         if args.command == "version":
-            print(native_version())
+            print(native_version() if args.ref is None else native_version_at_ref(args.ref))
         elif args.command == "validate-tag":
             print(validate_tag(args.tag))
         elif args.command == "set-version":
@@ -2119,8 +2210,8 @@ def main() -> int:
             _write_github_output(args.github_output, values)
             print(json.dumps(values, sort_keys=True))
         elif args.command == "validate-release-order":
-            releases = json.loads(args.releases.read_text(encoding="utf-8"))
-            print(validate_new_native_tag(args.candidate_tag, releases))
+            tags = native_release_tags(args.tags.read_text(encoding="utf-8"))
+            print(validate_native_tag_order(args.candidate_tag, tags))
         elif args.command == "validate-engine-release":
             provenance = None
             if args.provenance is not None:

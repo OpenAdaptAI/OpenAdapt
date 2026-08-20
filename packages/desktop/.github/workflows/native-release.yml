@@ -92,10 +92,13 @@ jobs:
             exit 1
           fi
 
-          gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate --slurp > releases.json
+          # The immutable desktop-v* tag namespace is the release order.
+          # Release draft, prerelease, and body fields are mutable, and this
+          # repository rewrites release notes itself.
+          git ls-remote --tags origin > remote-native-tags.txt
           python scripts/native_release.py validate-release-order \
             --candidate-tag "${GITHUB_REF_NAME}" \
-            --releases releases.json
+            --tags remote-native-tags.txt
 
   build-macos:
     name: macOS ${{ matrix.architecture }}
@@ -786,7 +789,17 @@ jobs:
         run: |
           set -euo pipefail
           title="OpenAdapt Desktop Beta ${GITHUB_REF_NAME#desktop-v}"
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+          # `gh release edit --draft` would return an already public release to
+          # draft and then clobber its assets. Refuse that outright. Release
+          # order is checked against the immutable tag namespace, which cannot
+          # observe this mutable draft state.
+          state="$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq '.isDraft' \
+            2>/dev/null || echo absent)"
+          if [ "${state}" = "false" ]; then
+            echo "error: ${GITHUB_REF_NAME} is already published; refusing to redraft it" >&2
+            exit 1
+          fi
+          if [ "${state}" = "true" ]; then
             gh release edit "${GITHUB_REF_NAME}" \
               --draft \
               --prerelease \
@@ -1163,11 +1176,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir existing-index
-          gh release download "${ENGINE_TAG}" \
-            --dir existing-index \
-            --pattern 'openadapt-desktop-verified-release.json' || true
+          # Decide from the authenticated asset list, never from the absence of
+          # a downloaded file. A swallowed download error would otherwise drop
+          # the monotonicity check that --existing exists to demand.
+          gh release view "${ENGINE_TAG}" --json assets --jq '.assets[].name' \
+            > engine-release-assets.txt
           existing=()
-          if [ -f existing-index/openadapt-desktop-verified-release.json ]; then
+          if grep -qxF 'openadapt-desktop-verified-release.json' engine-release-assets.txt; then
+            gh release download "${ENGINE_TAG}" \
+              --dir existing-index \
+              --pattern 'openadapt-desktop-verified-release.json'
             existing=(--existing existing-index/openadapt-desktop-verified-release.json)
           fi
           python scripts/native_release.py write-verified-index \
