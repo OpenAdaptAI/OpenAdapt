@@ -391,6 +391,22 @@ def test_release_workflow_uses_pinned_actions() -> None:
     assert "# v10.6.1" in workflow
 
 
+def test_all_workflows_use_pinned_actions() -> None:
+    """A mutable action tag can change release or qualification code in place."""
+    mutable: list[str] = []
+    workflows_dir = ROOT / ".github/workflows"
+    paths = sorted((*workflows_dir.glob("*.yml"), *workflows_dir.glob("*.yaml")))
+    for path in paths:
+        workflow = path.read_text()
+        for match in re.finditer(
+            r"^\s*uses:\s+\S+@([^\s#]+)", workflow, flags=re.MULTILINE
+        ):
+            if re.fullmatch(r"[0-9a-f]{40}", match.group(1)) is None:
+                mutable.append(f"{path.name}:{match.group(1)}")
+
+    assert mutable == []
+
+
 def test_semantic_release_requires_dispatched_exact_head_production_evidence() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
 
@@ -399,6 +415,9 @@ def test_semantic_release_requires_dispatched_exact_head_production_evidence() -
         workflow.index("\n  auto-release:") : workflow.index("\n  manual-publish:")
     ]
     wait_index = auto.index("- name: Wait for exact-head full-matrix qualification")
+    current_main_index = auto.index(
+        "- name: Require dispatched head to remain current protected main"
+    )
     release_index = auto.index("- name: Python Semantic Release")
 
     assert "  push:" not in triggers
@@ -407,12 +426,17 @@ def test_semantic_release_requires_dispatched_exact_head_production_evidence() -
     assert "- publish-existing-ref" in triggers
     assert "inputs.operation == 'semantic-release'" in auto
     assert "actions: read # inspect exact-head full-matrix CI" in auto
-    assert wait_index < release_index
+    assert wait_index < current_main_index < release_index
     assert "python3 scripts/check_release_ci.py" in auto
     assert '--repository "$GITHUB_REPOSITORY"' in auto
     assert '--sha "$GITHUB_SHA"' in auto
     assert "--wait-seconds 2700" in auto
     assert "--poll-seconds 10" in auto
+    assert (
+        "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main" in auto
+    )
+    assert 'current_main="$(git rev-parse refs/remotes/origin/main)"' in auto
+    assert '[ "$current_main" != "$GITHUB_SHA" ]' in auto
     assert "gh api" not in auto
     gate = (ROOT / "scripts/check_release_ci.py").read_text()
     assert "require_production_qualification" in gate

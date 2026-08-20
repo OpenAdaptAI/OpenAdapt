@@ -89,7 +89,7 @@
     },
     {
       "path": ".github/workflows/canvas-nodom-ladder.yml",
-      "sha256": "29afaaa85b3284e5645111cf3493633940015ad419b8d8e6cbbc93966e20d982"
+      "sha256": "db5bdaf110b2d8acc15003eb5442ba9c2714a809fad3ac087cdc6ff5547e05a4"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -109,7 +109,7 @@
     },
     {
       "path": ".github/workflows/paper.yml",
-      "sha256": "6446edb96cddea116abe931611360122d8c4e3cba32e55c5ceab1f1e5209302a"
+      "sha256": "52e1d8d83c6d6b23be3fb99dee6d974056c465e1ba05e2a755a6a10262998307"
     },
     {
       "path": ".github/workflows/quickstart-lifecycle.yml",
@@ -121,7 +121,7 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "20e760b316f9597b0cf8dc125574d8fdbaec86ca1bb34b6a6fb52fa86043a303"
+      "sha256": "7f5197dd1d7545185840a360d6dcea582d3c5eff0c916c9818b4cecc9a3dbc4d"
     },
     {
       "path": ".github/workflows/validate-claims.yml",

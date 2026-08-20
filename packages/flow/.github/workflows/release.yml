@@ -80,6 +80,17 @@ jobs:
             --wait-seconds 2700 \
             --poll-seconds 10
 
+      - name: Require dispatched head to remain current protected main
+        if: steps.check_skip.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main="$(git rev-parse refs/remotes/origin/main)"
+          if [ "$current_main" != "$GITHUB_SHA" ]; then
+            echo "Refusing stale release dispatch: main is $current_main, dispatched head is $GITHUB_SHA."
+            exit 1
+          fi
+
       - name: Set up Python
         if: steps.check_skip.outputs.skip != 'true'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

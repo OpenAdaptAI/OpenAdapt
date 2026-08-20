@@ -27,7 +27,7 @@ jobs:
     # RDP workflow but did not reach this file.
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check paper constants against benchmark artifacts
         run: python paper/check_artifacts.py
       - name: Install TeX
@@ -65,12 +65,12 @@ jobs:
         timeout-minutes: 10
         run: make -C paper
       - name: Upload full report PDF
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: openadapt-paper
           path: paper/build/main.pdf
       - name: Upload workshop PDF
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: openadapt-paper-workshop
           path: paper/workshop/build/main.pdf
@@ -90,7 +90,7 @@ jobs:
       contents: write # create/overwrite the release asset on the stable tag
     steps:
       - name: Download built full report PDF
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: openadapt-paper
           path: pdf
