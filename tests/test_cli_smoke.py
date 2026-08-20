@@ -268,7 +268,7 @@ def test_launcher_flow_and_substrate_extras_metadata():
     assert extras["browser"] == ["openadapt-flow[browser]>=1.29.0,<2.0.0"]
     assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
     assert extras["capture"] == [
-        "openadapt-capture>=1.2.0,<2.0.0",
+        "openadapt-capture>=1.3.0,<2.0.0",
         "openadapt-flow[capture]>=1.29.0,<2.0.0",
     ]
     assert extras["windows"] == ["openadapt-flow[windows]>=1.29.0,<2.0.0"]
@@ -505,13 +505,142 @@ def test_capture_start_refuses_when_recorder_never_becomes_ready(monkeypatch):
     assert "Capture saved" not in result.output
 
 
-def test_capture_stop_fails_until_capture_has_a_control_channel():
+def test_capture_start_prints_exact_control_session(monkeypatch):
+    from types import SimpleNamespace
+
+    class ReadyRecorder:
+        control_session_id = "session-123"
+        event_count = 7
+        is_recording = False
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def wait_for_ready(self):
+            return True
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openadapt_capture",
+        SimpleNamespace(Recorder=ReadyRecorder),
+    )
+
+    result = CliRunner().invoke(
+        cli_main,
+        ["capture", "start", "--name", "ready-capture", "--no-video"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Capture session: session-123" in result.output
+    assert "openadapt capture stop --session-id session-123" in result.output
+    assert "Capture saved: ./ready-capture/ (7 events)" in result.output
+
+
+def _capture_control_module(monkeypatch, *, error=None):
+    from types import SimpleNamespace
+
+    class CaptureControlError(RuntimeError):
+        pass
+
+    calls = []
+
+    def status_recording(session_id, **kwargs):
+        calls.append(("status", session_id, kwargs))
+        if error is not None:
+            raise CaptureControlError(error)
+        return SimpleNamespace(
+            session_id=session_id or "only-active-session",
+            phase="recording",
+            ready=True,
+            complete=False,
+            integrity_verified=False,
+            event_counts={"action": 7},
+        )
+
+    def stop_recording(session_id, **kwargs):
+        calls.append(("stop", session_id, kwargs))
+        if error is not None:
+            raise CaptureControlError(error)
+        return SimpleNamespace(
+            session_id=session_id or "only-active-session",
+            phase="complete",
+            ready=True,
+            complete=True,
+            integrity_verified=True,
+            event_counts={"action": 7},
+        )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openadapt_capture",
+        SimpleNamespace(
+            CaptureControlError=CaptureControlError,
+            status_recording=status_recording,
+            stop_recording=stop_recording,
+        ),
+    )
+    return calls
+
+
+def test_capture_status_uses_authenticated_public_control(monkeypatch, tmp_path):
+    calls = _capture_control_module(monkeypatch)
+
+    result = CliRunner().invoke(
+        cli_main,
+        [
+            "capture",
+            "status",
+            "--session-id",
+            "session-123",
+            "--timeout",
+            "2.5",
+            "--runtime-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        (
+            "status",
+            "session-123",
+            {"timeout": 2.5, "runtime_dir": tmp_path},
+        )
+    ]
+    assert '"phase": "recording"' in result.output
+    assert '"integrity_verified": false' in result.output
+
+
+def test_capture_stop_waits_for_verified_finalization(monkeypatch):
+    calls = _capture_control_module(monkeypatch)
+
+    result = CliRunner().invoke(
+        cli_main,
+        ["capture", "stop", "--session-id", "session-123", "--timeout", "45"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("stop", "session-123", {"timeout": 45.0, "runtime_dir": None})]
+    assert '"phase": "complete"' in result.output
+    assert '"integrity_verified": true' in result.output
+
+
+def test_capture_control_failure_returns_non_success(monkeypatch):
+    calls = _capture_control_module(
+        monkeypatch, error="No unambiguous live Capture recorder was found."
+    )
+
     result = CliRunner().invoke(cli_main, ["capture", "stop"])
 
     assert result.exit_code != 0
-    assert "Ctrl+C in the recorder terminal" in result.output
-    assert "authenticated, owner-only local control channel" in result.output
-    assert "Stopping active capture session" not in result.output
+    assert calls == [("stop", None, {"timeout": 60.0, "runtime_dir": None})]
+    assert "No unambiguous live Capture recorder was found" in result.output
 
 
 def test_flow_help_is_current_engine_help():

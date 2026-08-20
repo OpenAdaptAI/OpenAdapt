@@ -8,6 +8,7 @@ Usage:
     openadapt flow certify bundle --policy clinical-write
 
     openadapt capture start --name my-task
+    openadapt capture status
     openadapt capture stop
     openadapt capture list
     openadapt capture view <name>
@@ -479,6 +480,7 @@ def capture():
     \b
     Examples:
         openadapt capture start --name login-flow
+        openadapt capture status
         openadapt capture stop
         openadapt capture list
         openadapt capture view login-flow
@@ -508,7 +510,13 @@ def capture_start(name: str, video: bool, audio: bool):
                 raise click.ClickException(
                     "Capture did not become ready. No successful capture was saved."
                 )
+            session_id = recorder.control_session_id
             click.echo("Recording...")
+            click.echo(f"Capture session: {session_id}")
+            click.echo(
+                "Stop from another terminal: "
+                f"openadapt capture stop --session-id {session_id}"
+            )
             try:
                 while recorder.is_recording:
                     import time
@@ -525,15 +533,88 @@ def capture_start(name: str, video: bool, audio: bool):
         sys.exit(1)
 
 
+@capture.command("status")
+@click.option(
+    "--session-id",
+    help="Exact Capture session ID. Omit only when one recorder is active.",
+)
+@click.option(
+    "--timeout",
+    type=click.FloatRange(min=0.0, min_open=True),
+    default=5.0,
+    show_default=True,
+    help="Maximum seconds to wait for the recorder.",
+)
+@click.option(
+    "--runtime-dir",
+    type=click.Path(path_type=Path, file_okay=False),
+    help="Owner-only Capture control runtime directory override.",
+)
+def capture_status(
+    session_id: Optional[str], timeout: float, runtime_dir: Optional[Path]
+) -> None:
+    """Show authenticated status for one active Capture recorder."""
+    import json
+
+    try:
+        from openadapt_capture import CaptureControlError, status_recording
+    except ImportError as exc:
+        raise click.ClickException(
+            "openadapt-capture 1.3.0 or newer is required. Install or upgrade "
+            "openadapt[capture]."
+        ) from exc
+
+    try:
+        current = status_recording(
+            session_id,
+            timeout=timeout,
+            runtime_dir=runtime_dir,
+        )
+    except CaptureControlError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(current.__dict__, sort_keys=True))
+
+
 @capture.command("stop")
-def capture_stop():
-    """Explain how to stop a capture started in another terminal."""
-    raise click.ClickException(
-        "No separate capture-stop control channel is available. Stop the capture "
-        "with Ctrl+C in the recorder terminal. A separate stop command will remain "
-        "unavailable until Capture provides an authenticated, owner-only local "
-        "control channel."
-    )
+@click.option(
+    "--session-id",
+    help="Exact Capture session ID. Omit only when one recorder is active.",
+)
+@click.option(
+    "--timeout",
+    type=click.FloatRange(min=0.0, min_open=True),
+    default=60.0,
+    show_default=True,
+    help="Maximum seconds to wait for verified finalization.",
+)
+@click.option(
+    "--runtime-dir",
+    type=click.Path(path_type=Path, file_okay=False),
+    help="Owner-only Capture control runtime directory override.",
+)
+def capture_stop(
+    session_id: Optional[str], timeout: float, runtime_dir: Optional[Path]
+) -> None:
+    """Stop one recorder and wait for verified Capture finalization."""
+    import json
+
+    try:
+        from openadapt_capture import CaptureControlError, stop_recording
+    except ImportError as exc:
+        raise click.ClickException(
+            "openadapt-capture 1.3.0 or newer is required. Install or upgrade "
+            "openadapt[capture]."
+        ) from exc
+
+    try:
+        completed = stop_recording(
+            session_id,
+            timeout=timeout,
+            runtime_dir=runtime_dir,
+        )
+    except CaptureControlError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(completed.__dict__, sort_keys=True))
 
 
 @capture.command("list")

@@ -52,11 +52,17 @@ The compatibility launcher can start a raw Capture session:
 
 ```bash
 openadapt capture start --name my-task
+openadapt capture status --session-id SESSION_ID
+openadapt capture stop --session-id SESSION_ID
 ```
 
-Stop it with Ctrl-C in the same terminal. The separate `openadapt capture stop`
-command does not control another process and returns non-success. Use
-`openadapt flow record` when the output must compile directly.
+The start command prints the exact session ID after the recorder is ready.
+`status` reads the authenticated state of that process. `stop` sends an
+authenticated owner-only loopback request, waits for the writers to stop, and
+returns success only after Capture verifies the finalized session. You can
+omit `--session-id` only when one recorder is active. Ctrl-C in the recorder
+terminal remains available. Use `openadapt flow record` when the output must
+compile directly.
 
 ## Storage and privacy
 

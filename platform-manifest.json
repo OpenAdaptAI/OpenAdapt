@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.3.0",
-  "generated_at": "2026-08-20T15:18:32+00:00",
+  "generated_at": "2026-08-20T15:34:42+00:00",
   "generation": {
     "files": [
       {
@@ -1091,7 +1091,7 @@
     "python": ">=3.10,<3.13",
     "launcher_requires": {
       "openadapt-capture": [
-        ">=1.2.0,<2.0.0"
+        ">=1.3.0,<2.0.0"
       ],
       "openadapt-evals": [
         ">=0.1.0"
