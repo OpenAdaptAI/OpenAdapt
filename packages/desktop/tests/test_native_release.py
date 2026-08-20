@@ -99,14 +99,15 @@ def test_native_workflows_are_pinned_and_preserve_beta_boundary() -> None:
     assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", use) for use in uses)
 
     trigger = release[True]
-    assert trigger["push"]["tags"] == ["desktop-v*"]
-    assert trigger["release"]["types"] == ["published"]
+    assert set(trigger) == {"workflow_dispatch"}
+    assert trigger["workflow_dispatch"]["inputs"]["version"]["required"] is True
     assert release["permissions"] == {"contents": "read"}
+    assert release["concurrency"]["group"] == "native-release"
     assert release["concurrency"]["cancel-in-progress"] is False
 
     jobs = release["jobs"]
-    assert jobs["publish-draft"]["environment"] == "native-release"
-    assert jobs["publish-draft"]["permissions"] == {
+    assert jobs["publish-native"]["environment"] == "native-release"
+    assert jobs["publish-native"]["permissions"] == {
         "contents": "write",
         "attestations": "read",
     }
@@ -129,15 +130,19 @@ def test_native_workflows_are_pinned_and_preserve_beta_boundary() -> None:
     )
     assert (
         "validate-version-transform"
-        in validate_steps["Require a fresh native tag from the matching reviewed engine source"][
-            "run"
-        ]
+        in validate_steps["Require current reviewed main and the signed engine receipt"]["run"]
     )
+    validation = validate_steps["Require current reviewed main and the signed engine receipt"][
+        "run"
+    ]
+    assert "validate-engine-provenance" in validation
+    assert "refs/heads/main" in validation
+    assert "github.ref == 'refs/heads/main'" == jobs["validate"]["if"]
 
     verifier_steps = _job_steps(jobs["verify-published-release"])
     verifier_checkout = verifier_steps["actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"]
     assert verifier_checkout["with"] == {
-        "ref": "${{ github.workflow_sha }}",
+        "ref": "${{ needs.validate.outputs.source_commit }}",
         "fetch-depth": 0,
     }
     assert jobs["verify-published-release"]["outputs"]["verifier_commit"]
@@ -161,6 +166,53 @@ def test_native_workflows_are_pinned_and_preserve_beta_boundary() -> None:
     assert attest_steps["Attest SHA256SUMS as the consumer trust root"]["with"] == {
         "subject-path": "release-assets/SHA256SUMS"
     }
+
+
+def test_engine_and_native_release_form_one_attested_acceptance_chain() -> None:
+    engine = _workflow("release.yml")
+    native = _workflow("native-release.yml")
+
+    semantic = engine["jobs"]["semantic-release"]
+    assert semantic["outputs"]["engine_commit"] == "${{ steps.release.outputs.commit_sha }}"
+    engine_job = engine["jobs"]["attest-engine-release"]
+    assert engine_job["needs"] == "semantic-release"
+    assert engine_job["permissions"]["attestations"] == "write"
+    engine_steps = _job_steps(engine_job)
+    receipt = engine_steps["Write the protected-main engine release receipt"]["run"]
+    assert "write-engine-provenance" in receipt
+    assert '--workflow-commit "${GITHUB_SHA}"' in receipt
+    assert '"${ENGINE_COMMIT}^"' in receipt
+    assert engine_steps["Attest the engine release receipt"]["with"] == {
+        "subject-path": ENGINE_RELEASE_PROVENANCE
+    }
+    published_receipt = engine_steps["Publish and reverify the engine release receipt"]["run"]
+    assert 'gh release upload "${ENGINE_TAG}" "${receipt}"' in published_receipt
+    assert "validate-engine-provenance" in published_receipt
+    assert "@refs/heads/main" in published_receipt
+
+    validate = _job_steps(native["jobs"]["validate"])[
+        "Require current reviewed main and the signed engine receipt"
+    ]["run"]
+    assert "openadapt-desktop-engine-release-provenance.json" in validate
+    assert "gh attestation verify" in validate
+    assert "validate-engine-provenance" in validate
+    assert 'if [ "${receipt_parent}" != "${observed_parent}" ]' in validate
+
+    mirror_steps = _job_steps(native["jobs"]["mirror-installers-to-engine-release"])
+    assert mirror_steps["Attest the verified release index"]["with"] == {
+        "subject-path": VERIFIED_RELEASE_INDEX
+    }
+    channel = mirror_steps["Write the monotonic stable channel descriptor"]["run"]
+    assert "write-release-channel" in channel
+    assert "--existing prior-channel/openadapt-desktop-channel.json" in channel
+    assert "validate-release-channel" in channel
+    assert mirror_steps["Attest the monotonic stable channel descriptor"]["with"] == {
+        "subject-path": VERIFIED_RELEASE_CHANNEL
+    }
+    publication = mirror_steps["Publish and reverify the stable channel authority"]["run"]
+    assert "channel_tag=desktop-channel" in publication
+    assert "gh attestation verify" in publication
+    assert "--clobber" in publication
 
 
 def test_windows_installer_lifecycle_has_an_overall_fail_closed_timeout() -> None:
@@ -259,16 +311,9 @@ def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None
     trigger = freshness[True]
     assert trigger["release"] == {"types": ["published"]}
     assert "workflow_dispatch" in trigger
-    assert trigger["push"]["branches"] == ["main"]
-    assert set(trigger["push"]["paths"]) == {
-        "package.json",
-        "package-lock.json",
-        "src-tauri/Cargo.toml",
-        "src-tauri/Cargo.lock",
-        "src-tauri/tauri.conf.json",
-    }
+    assert "push" not in trigger
     assert freshness["permissions"] == {"contents": "read"}
-    assert set(freshness["jobs"]) == {"propose-native-version", "publish-native-tag"}
+    assert set(freshness["jobs"]) == {"propose-native-version"}
 
     proposal = freshness["jobs"]["propose-native-version"]
     proposal_steps = _job_steps(proposal)
@@ -287,28 +332,13 @@ def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None
     assert "HEAD:main" not in branch_script
     assert "gh pr create" in proposal_steps["Open or report the protected-main pull request"]["run"]
 
-    publisher = freshness["jobs"]["publish-native-tag"]
-    assert publisher["if"] == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
-    publisher_steps = _job_steps(publisher)
-    publisher_checkout = publisher_steps[
-        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-    ]
-    assert publisher_checkout["with"]["ref"] == "${{ github.sha }}"
-    gate = publisher_steps["Require the exact protected-main transform and stable engine release"][
-        "run"
-    ]
-    assert "validate-version-transform" in gate
-    assert "validate-engine-release" in gate
-    tag_script = publisher_steps["Create or confirm the immutable native tag"]["run"]
-    assert 'git push origin "refs/tags/${NATIVE_TAG}"' in tag_script
-    assert "HEAD:main" not in "\n".join(
-        step.get("run", "") for step in proposal["steps"] + publisher["steps"]
-    )
-
-    transaction = publisher_steps[
-        "Require the exact protected-main transform and stable engine release"
+    scripts = "\n".join(step.get("run", "") for step in proposal["steps"])
+    assert "HEAD:main" not in scripts
+    assert "git tag" not in scripts
+    assert 'git push origin "refs/tags/' not in scripts
+    assert "dispatch native-release.yml from main" in proposal_steps[
+        "Open or report the protected-main pull request"
     ]["run"]
-    assert "validate-release-order" in transaction
 
 
 def test_native_version_pr_guard_never_skips_and_judges_content() -> None:
@@ -369,14 +399,10 @@ def test_supersession_edits_notes_only_and_never_deletes() -> None:
     assert "  supersede-published-native:" not in freshness
     assert "  supersede-published-native:" in release
     supersede_job = release.split("  supersede-published-native:", 1)[1]
-    assert "github.event_name == 'release'" in supersede_job
-    assert "github.event.release.prerelease" in supersede_job
-    assert "!github.event.release.draft" in supersede_job
-    assert "contains(github.event.release.body, '<!-- installer-release -->')" in supersede_job
-    # The supersede job carries no `environment:` gate: it runs only after a
-    # maintainer has already published (un-drafted) a native prerelease, so the
-    # publish decision is already made. Only the publish step keeps the
-    # `environment: native-release` approval gate.
+    assert "needs: [verify-published-release, mirror-installers-to-engine-release]" in supersede_job
+    assert "github.event" not in supersede_job
+    # The supersede job runs only after channel promotion succeeds. The earlier
+    # publish job owns the environment approval.
     assert "environment: native-release" not in supersede_job
     assert "contents: write" in supersede_job
     assert "SELECTED_TAG: ${{ needs.verify-published-release.outputs.native_tag }}" in supersede_job
@@ -957,16 +983,12 @@ def test_native_tag_namespace_parsing_fails_closed() -> None:
 
 
 def test_release_order_reads_the_tag_namespace_in_every_workflow() -> None:
-    for name, candidate in (
-        ("native-release.yml", '"${GITHUB_REF_NAME}"'),
-        ("native-freshness.yml", '"${native_tag}"'),
-    ):
-        body = (ROOT / ".github" / "workflows" / name).read_text()
-        order = body.split("validate-release-order", 1)[1].split("\n\n", 1)[0]
-        assert f"--candidate-tag {candidate}" in order
-        assert "--tags remote-native-tags.txt" in order
-        assert "git ls-remote --tags origin > remote-native-tags.txt" in body
-        assert "--releases" not in order
+    body = (ROOT / ".github" / "workflows" / "native-release.yml").read_text()
+    order = body.split("validate-release-order", 1)[1].split("\n\n", 1)[0]
+    assert '--candidate-tag "${native_tag}"' in order
+    assert "--tags remote-native-tags.txt" in order
+    assert "git ls-remote --tags origin > remote-native-tags.txt" in body
+    assert "--releases" not in order
 
 
 def test_marked_native_release_with_malformed_tag_fails_closed() -> None:
@@ -981,7 +1003,7 @@ def test_release_provenance_rejects_modified_workflow_or_source(tmp_path: Path) 
         "tag": tag,
         "source_commit": "a" * 40,
         "workflow_ref": (
-            f"OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/tags/{tag}"
+            "OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/heads/main"
         ),
         "workflow_commit": "a" * 40,
         "run_id": 123456,
@@ -1013,10 +1035,9 @@ def test_release_provenance_rejects_modified_workflow_or_source(tmp_path: Path) 
 
 def _attestation_record(provenance: dict, checksums: dict[str, str]) -> dict:
     repository = provenance["repository"]
-    tag = provenance["source_tag"]
     commit = provenance["source_commit"]
     repository_url = f"https://github.com/{repository}"
-    workflow_uri = f"{repository_url}/.github/workflows/native-release.yml@refs/tags/{tag}"
+    workflow_uri = f"{repository_url}/.github/workflows/native-release.yml@refs/heads/main"
     invocation = (
         f"{repository_url}/actions/runs/{provenance['run_id']}/attempts/{provenance['run_attempt']}"
     )
@@ -1025,20 +1046,20 @@ def _attestation_record(provenance: dict, checksums: dict[str, str]) -> dict:
             "signature": {
                 "certificate": {
                     "subjectAlternativeName": workflow_uri,
-                    "githubWorkflowTrigger": "push",
+                    "githubWorkflowTrigger": "workflow_dispatch",
                     "githubWorkflowSHA": commit,
                     "githubWorkflowName": "Native Installer Release",
                     "githubWorkflowRepository": repository,
-                    "githubWorkflowRef": f"refs/tags/{tag}",
+                    "githubWorkflowRef": "refs/heads/main",
                     "buildSignerURI": workflow_uri,
                     "buildSignerDigest": commit,
                     "runnerEnvironment": "github-hosted",
                     "sourceRepositoryURI": repository_url,
                     "sourceRepositoryDigest": commit,
-                    "sourceRepositoryRef": f"refs/tags/{tag}",
+                    "sourceRepositoryRef": "refs/heads/main",
                     "buildConfigURI": workflow_uri,
                     "buildConfigDigest": commit,
-                    "buildTrigger": "push",
+                    "buildTrigger": "workflow_dispatch",
                     "runInvocationURI": invocation,
                 }
             },
@@ -1053,20 +1074,20 @@ def _attestation_record(provenance: dict, checksums: dict[str, str]) -> dict:
                         "externalParameters": {
                             "workflow": {
                                 "path": ".github/workflows/native-release.yml",
-                                "ref": f"refs/tags/{tag}",
+                                "ref": "refs/heads/main",
                                 "repository": repository_url,
                             }
                         },
                         "internalParameters": {
                             "github": {
-                                "event_name": "push",
+                                "event_name": "workflow_dispatch",
                                 "runner_environment": "github-hosted",
                             }
                         },
                         "resolvedDependencies": [
                             {
                                 "digest": {"gitCommit": commit},
-                                "uri": f"git+{repository_url}@refs/tags/{tag}",
+                                "uri": f"git+{repository_url}@refs/heads/main",
                             }
                         ],
                     },
@@ -1115,20 +1136,20 @@ def test_release_provenance_attestation_and_workflow_run_bind_exact_identity(
 
     workflow_run = tmp_path / "workflow-run.json"
     required_jobs = [
-        "Validate immutable native tag",
+        "Validate reviewed main release source",
         "macOS arm64",
         "macOS x86_64",
         "Windows x86_64",
         "Linux x86_64 (GitHub-attested bytes)",
         "Checksum and attest exact release bytes",
-        "Create or update Beta draft prerelease",
+        "Publish the verified Beta prerelease",
     ]
     workflow_payload = {
         "databaseId": 123456,
         "attempt": 1,
         "conclusion": "success",
-        "event": "push",
-        "headBranch": tag,
+        "event": "workflow_dispatch",
+        "headBranch": "main",
         "headSha": commit,
         "name": "Native Installer Release",
         "status": "completed",
@@ -1238,8 +1259,8 @@ def test_workflow_run_rejects_missing_protected_publish_success(tmp_path: Path) 
                 "databaseId": 123456,
                 "attempt": 1,
                 "conclusion": "success",
-                "event": "push",
-                "headBranch": provenance["source_tag"],
+                "event": "workflow_dispatch",
+                "headBranch": "main",
                 "headSha": provenance["source_commit"],
                 "name": "Native Installer Release",
                 "status": "completed",
@@ -1362,7 +1383,7 @@ def _stage_complete_release(tmp_path: Path) -> tuple[Path, Path, Path]:
         tag=tag,
         source_commit=source_commit,
         workflow_ref=(
-            f"OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/tags/{tag}"
+            "OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/heads/main"
         ),
         workflow_commit=source_commit,
         run_id=123456,
@@ -1443,7 +1464,7 @@ def test_engine_release_provenance_binds_main_workflow_and_exact_artifacts(
         workflow_ref=(
             "OpenAdaptAI/openadapt-desktop/.github/workflows/release.yml@refs/heads/main"
         ),
-        workflow_commit="b" * 40,
+        workflow_commit="a" * 40,
         run_id=123,
         run_attempt=1,
         runner_environment="github-hosted",
@@ -1462,7 +1483,9 @@ def test_engine_release_provenance_binds_main_workflow_and_exact_artifacts(
         f"openadapt_desktop-{version}.tar.gz",
     }
 
-    with pytest.raises(ValueError, match="must equal the released source commit"):
+    assert validated["workflow_commit"] == "a" * 40
+
+    with pytest.raises(ValueError, match="must precede the semantic release commit"):
         write_engine_release_provenance(
             tmp_path / "wrong-source" / ENGINE_RELEASE_PROVENANCE,
             directory=artifacts,
@@ -1473,7 +1496,7 @@ def test_engine_release_provenance_binds_main_workflow_and_exact_artifacts(
             workflow_ref=(
                 "OpenAdaptAI/openadapt-desktop/.github/workflows/release.yml@refs/heads/main"
             ),
-            workflow_commit="a" * 40,
+            workflow_commit="b" * 40,
             run_id=123,
             run_attempt=1,
             runner_environment="github-hosted",
@@ -1749,15 +1772,9 @@ def test_public_download_verifier_authenticates_complete_channel_chain(
         "https://github.com/OpenAdaptAI/openadapt-desktop/"
         ".github/workflows/native-release.yml@refs/heads/main"
     )
-    tag_identity = (
-        "https://github.com/OpenAdaptAI/openadapt-desktop/"
-        f".github/workflows/native-release.yml@refs/tags/desktop-v{native_version()}"
-    )
     assert commands[0][commands[0].index("--cert-identity") + 1] == main_identity
-    # The verified index is attested on the `release: published` event for the
-    # native tag, so its certificate carries the tag ref, not a branch ref.
-    assert commands[1][commands[1].index("--cert-identity") + 1] == tag_identity
-    assert commands[2][commands[2].index("--cert-identity") + 1] == tag_identity
+    assert commands[1][commands[1].index("--cert-identity") + 1] == main_identity
+    assert commands[2][commands[2].index("--cert-identity") + 1] == main_identity
     # `gh attestation verify` refuses the command outright when two flags from
     # this group are set, so a second one would make every call fail.
     exclusive = {"--cert-identity", "--cert-identity-regex", "--signer-repo", "--signer-workflow"}
@@ -2225,22 +2242,21 @@ def test_release_workflow_never_swallows_the_existing_index_download() -> None:
     assert "grep -qxF 'openadapt-desktop-verified-release.json'" in step
 
 
-def test_draft_publish_never_returns_a_public_release_to_draft() -> None:
-    """The tag namespace cannot see draft state, so the publish step must.
-
-    The old release-metadata comparison refused this run as a side effect. The
-    refusal is now explicit, at the step that would do the damage.
-    """
+def test_native_publish_only_resumes_identical_bytes_and_never_clobbers() -> None:
+    """A failed attempt can fill missing assets, but cannot replace one byte."""
 
     body = (ROOT / ".github/workflows/native-release.yml").read_text()
-    step = body.split("Create or update draft prerelease and upload assets", 1)[1].split(
+    step = body.split("Create or safely resume the immutable public prerelease", 1)[1].split(
         "\n  verify-published-release:", 1
     )[0]
 
-    assert 'gh release view "${GITHUB_REF_NAME}" --json isDraft' in step
-    assert 'if [ "${state}" = "false" ]' in step
-    assert "refusing to redraft it" in step
-    assert 'if [ "${state}" = "true" ]' in step
+    assert 'git ls-remote --exit-code --tags origin "refs/tags/${NATIVE_TAG}"' in step
+    assert 'gh release view "${NATIVE_TAG}"' in step
+    assert 'cmp "release-assets/${name}" "existing-release-assets/${name}"' in step
+    assert "existing release has an unexpected asset" in step
+    assert "--clobber" not in step
+    assert "--draft" not in step
+    assert "--prerelease" in step
 
 
 def test_standalone_verifier_states_the_same_asset_contract() -> None:

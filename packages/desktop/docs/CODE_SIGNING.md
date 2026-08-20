@@ -170,16 +170,16 @@ signed subjects to equal the complete release inventory before upload.
 
 This state is named `github-attested`. It is not called native-signed. It needs
 no founder-managed signing secret. GitHub issues the short-lived OIDC identity
-for the pinned release workflow. The verifier also binds the tag commit, run ID,
-run attempt, GitHub-hosted runner, and successful protected publish job.
+for the pinned release workflow. The verifier also binds the reviewed main
+commit, run ID, run attempt, and GitHub-hosted runner.
 `SHA256SUMS` and the website manifest bind the same exact bytes for offline hash
 checks.
 
 This workflow control is not sufficient without repository controls. Configure
 a no-bypass pull-request ruleset for `main`. Configure immutable creation rules
 for both `v*` and `desktop-v*` tags before a release. Only the engine release
-workflow can create `v*`. Only the native freshness workflow can create
-`desktop-v*`. Neither identity can update or delete a tag. The historical
+workflow can create `v*`. Only the explicitly dispatched native release
+workflow can create `desktop-v*`. Neither identity can update or delete a tag. The historical
 `desktop-v0.15.0` prerelease is ad-hoc/unsigned and does not satisfy this trust
 contract.
 
@@ -205,13 +205,10 @@ name — only the human-readable claim wording changes.
 ## Verify a signed release locally
 
 ```bash
-# Set this to the native release that supplied the downloaded files.
-native_tag=desktop-vX.Y.Z
-
-# First authenticate the checksum manifest and its exact release workflow.
+# First authenticate the checksum manifest and its reviewed-main workflow.
 gh attestation verify SHA256SUMS \
   --repo OpenAdaptAI/openadapt-desktop \
-  --cert-identity "https://github.com/OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/tags/${native_tag}" \
+  --cert-identity "https://github.com/OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/heads/main" \
   --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
   --deny-self-hosted-runners
 

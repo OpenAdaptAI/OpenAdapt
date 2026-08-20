@@ -2,14 +2,11 @@ name: Native Installer Freshness
 
 # A published engine release creates a narrow version-sync pull request from
 # the current protected main. The pull request must strictly advance that base
-# and contain only the exact five-file transform. A later main push repeats the
-# monotonic check and creates the immutable desktop tag. The separate native
-# release workflow currently starts from that tag.
+# and contain only the exact five-file transform. After review and merge, a
+# maintainer explicitly dispatches native-release.yml from protected main.
 #
-# ADMIN_TOKEN is required for two bounded operations. It creates a pull request
-# whose events run normal CI, and it pushes the protected desktop-v* tag whose
-# event starts native-release.yml. The repository rules must deny this identity
-# direct writes to main while granting only the documented tag authority.
+# ADMIN_TOKEN creates the proposal branch and pull request. This workflow has no
+# native tag or release publication authority.
 
 on:
   release:
@@ -20,20 +17,12 @@ on:
         description: "Current engine version to prepare installers for (X.Y.Z; a leading v is stripped)"
         required: true
         type: string
-  push:
-    branches: [main]
-    paths:
-      - package.json
-      - package-lock.json
-      - src-tauri/Cargo.toml
-      - src-tauri/Cargo.lock
-      - src-tauri/tauri.conf.json
 
 permissions:
   contents: read
 
 concurrency:
-  group: native-freshness-${{ github.event_name == 'push' && 'tag' || 'proposal' }}
+  group: native-freshness-proposal
   cancel-in-progress: false
 
 jobs:
@@ -174,89 +163,7 @@ jobs:
               --base main \
               --head "${BRANCH}" \
               --title "chore(native): sync installer version to ${NATIVE_VERSION}" \
-              --body "Sync the five native version files from ${ENGINE_TAG}. After protected-main review and merge, this workflow verifies the exact transform and creates ${NATIVE_TAG}."
+              --body "Sync the five native version files from ${ENGINE_TAG}. After protected-main review and merge, dispatch native-release.yml from main for ${NATIVE_TAG}."
           else
             echo "Pull request #${number} already owns ${BRANCH}."
-          fi
-
-  publish-native-tag:
-    name: Publish the reviewed immutable native tag
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-22.04
-    env:
-      GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          token: ${{ secrets.ADMIN_TOKEN }}
-
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-
-      - name: Require the exact protected-main transform and stable engine release
-        id: release
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main:refs/remotes/origin/main
-          current_main="$(git rev-parse refs/remotes/origin/main)"
-          if [ "${current_main}" != "${GITHUB_SHA}" ]; then
-            echo "error: refusing a stale main event" >&2
-            exit 1
-          fi
-
-          version="$(python scripts/native_release.py version)"
-          engine_tag="v${version}"
-          native_tag="desktop-v${version}"
-          engine_commit="$(git rev-parse --verify "refs/tags/${engine_tag}^{commit}")" || {
-            echo "error: matching engine tag ${engine_tag} does not exist" >&2
-            exit 1
-          }
-          if ! git merge-base --is-ancestor "${engine_commit}" "${GITHUB_SHA}"; then
-            echo "error: ${engine_tag} is not an ancestor of current main" >&2
-            exit 1
-          fi
-          python scripts/native_release.py validate-version-transform \
-            --base-ref "${engine_commit}" \
-            --candidate-ref "${GITHUB_SHA}" \
-            --version "${version}"
-          gh release view "${engine_tag}" \
-            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
-            > engine-release.json
-          python scripts/native_release.py validate-engine-release \
-            --file engine-release.json \
-            --repository "${GITHUB_REPOSITORY}" \
-            --engine-tag "${engine_tag}" \
-            --engine-commit "${engine_commit}"
-
-          # The immutable desktop-v* tag namespace is the release order.
-          # Release draft, prerelease, and body fields are mutable, and this
-          # repository rewrites release notes itself.
-          git ls-remote --tags origin > remote-native-tags.txt
-          python scripts/native_release.py validate-release-order \
-            --candidate-tag "${native_tag}" \
-            --tags remote-native-tags.txt
-
-          echo "native_tag=${native_tag}" >> "${GITHUB_OUTPUT}"
-
-      - name: Create or confirm the immutable native tag
-        env:
-          NATIVE_TAG: ${{ steps.release.outputs.native_tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/${NATIVE_TAG}" >/dev/null; then
-            git fetch --force origin "refs/tags/${NATIVE_TAG}:refs/tags/${NATIVE_TAG}"
-            observed="$(git rev-parse --verify "${NATIVE_TAG}^{commit}")"
-            if [ "${observed}" != "${GITHUB_SHA}" ]; then
-              echo "error: immutable ${NATIVE_TAG} resolves to ${observed}, not ${GITHUB_SHA}" >&2
-              exit 1
-            fi
-            echo "${NATIVE_TAG} already resolves to the reviewed main commit."
-          else
-            git tag "${NATIVE_TAG}" "${GITHUB_SHA}"
-            git push origin "refs/tags/${NATIVE_TAG}"
           fi

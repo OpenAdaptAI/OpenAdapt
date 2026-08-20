@@ -217,7 +217,7 @@ def test_beta_release_notes_describe_the_bundled_flow_runtime() -> None:
     classifiers = pyproject["project"]["classifiers"]
 
     assert not (ROOT / "docs/EXPERIMENTAL_NATIVE_INSTALLERS.md").exists()
-    assert native_release.count("--notes-file docs/BETA_NATIVE_INSTALLERS.md") == 2
+    assert native_release.count("--notes-file docs/BETA_NATIVE_INSTALLERS.md") == 1
     assert "EXPERIMENTAL_NATIVE_INSTALLERS" not in native_release
     flow_dependencies = [
         dependency for dependency in build_dependencies if dependency.startswith("openadapt-flow")
