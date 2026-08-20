@@ -168,16 +168,38 @@ nothing else.
 The metric and fault taxonomy are packaged as EffectBench, a standalone,
 versioned, and independently runnable benchmark (specification version 1.0.0), so
 that the silent-wrong-effect rate can be measured against any GUI or API
-automation, not only ours. We state its current scope honestly. The public
-reference pack ships one synthetic system of record and its reference oracle, and
-the two baselines scored so far are our own screen-only and effect-verified arms;
-no independent third-party system has been scored yet, so fair cross-system
-ranking is a design property, not a demonstrated one. A pluggable interface lets
-a third party bring its own system of record and its own independent oracle, and
-the built-in oracle is marked reference-only rather than handed to the system
-under test as a general capability, because authoring a cheap, correct,
-independent oracle for a real system of record is the actual cost the reference
-fixture abstracts away.
+automation, not only ours. We state its current scope honestly, because the
+reusable surface a third party can run is narrower than the specification.
+
+\emph{What is public.} The MIT synthetic sample is one fixture, the MockMed
+anchor, and it covers five of the seven divergence categories (C1--C5) plus
+controls, on the \texttt{web} substrate alone. C6 (homonym) and C7
+(no-op/wrong-target) are specified but exercised only by the container-gated
+real-system-of-record packs and the private hardened corpus, as are the desktop
+and remote-display substrates. The differentiating cases are therefore defined in
+the open and measured behind a gate. A submission may target any subset it can
+reach and must report which pack and split it ran.
+
+\emph{What the public pack hands away.} The reference pack ships the synthetic
+system of record together with its reference oracle. In a real deployment,
+authoring a cheap, correct, independent oracle for a legacy system of record is
+the whole cost, and this paper does not claim to remove it: effects are authored
+per deployment and the compiler does not infer them
+(Section~\ref{sec:governance}). A benchmark that supplies the oracle therefore
+measures whether a system uses one, not whether it could obtain one. We mark the
+built-in oracle reference-only rather than expose it to the system under test as
+a general capability, and a pluggable interface lets a third party bring its own
+system of record and its own independent oracle. That is the honest boundary of
+what the public pack tests.
+
+\emph{What is not yet demonstrated.} The two baselines scored so far are our own
+screen-only and effect-verified arms, so fair cross-system ranking is a design
+property rather than a shown one. The public fixture is also small, fixed, and
+open, which is exactly the shape a submission can special-case; the private
+hardened corpus is the intended mitigation, but a non-gameability argument that
+rests on a corpus the reader cannot inspect is asserted rather than
+demonstrated. Both gaps close only when an independent system of record and an
+independently scored third-party submission enter the public pack.
 
 \paragraph{Identity ladder.}
 Adversarial same-name/same-date-of-birth homonyms differ by confusable glyphs
