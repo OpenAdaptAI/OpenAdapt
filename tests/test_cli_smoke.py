@@ -201,8 +201,8 @@ def test_version_flag_matches_installed_metadata():
     assert __version__ == expected
 
 
-def test_distribution_metadata_advertises_beta_lifecycle():
-    """Published launcher metadata must match the documented Beta lifecycle."""
+def test_distribution_metadata_does_not_publish_a_static_lifecycle():
+    """The signed public record, not immutable package metadata, owns maturity."""
     from importlib.metadata import metadata
 
     classifiers = metadata("openadapt").get_all("Classifier") or []
@@ -211,7 +211,7 @@ def test_distribution_metadata_advertises_beta_lifecycle():
         for classifier in classifiers
         if classifier.startswith("Development Status :: ")
     ]
-    assert lifecycle == ["Development Status :: 4 - Beta"]
+    assert lifecycle == []
 
 
 def test_distribution_metadata_matches_engine_python_range():
@@ -454,7 +454,6 @@ def test_top_level_help_leads_with_flow():
     result = runner.invoke(cli_main, ["--help"])
     assert result.exit_code == 0
     # Quick Start headline and Commands listing both lead with flow.
-    assert "Beta launcher" in result.output
     assert "openadapt flow demo-record" in result.output
     assert "openadapt quickstart" in result.output
     assert "effect-verified first run" in result.output

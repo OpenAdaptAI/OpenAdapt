@@ -92,14 +92,19 @@ def _flow_packages_for_extras(
     return packages
 
 
-def _metadata(version: str, requires_python: str = ">=3.10,<3.13") -> bytes:
+def _metadata(
+    version: str,
+    requires_python: str = ">=3.10,<3.13",
+    lifecycle_classifier: str | None = None,
+) -> bytes:
+    classifier = f"Classifier: {lifecycle_classifier}\n" if lifecycle_classifier else ""
     return (
         "Metadata-Version: 2.4\n"
         "Name: openadapt\n"
         f"Version: {version}\n"
-        "Summary: Beta launcher\n"
+        "Summary: OpenAdapt launcher\n"
         f"Requires-Python: {requires_python}\n"
-        "Classifier: Development Status :: 4 - Beta\n\n"
+        f"{classifier}\n"
     ).encode()
 
 
@@ -107,6 +112,7 @@ def _release_tree(
     tmp_path: Path,
     artifact_version: str = "2.0.0",
     artifact_requires_python: str = ">=3.10,<3.13",
+    lifecycle_classifier: str | None = None,
 ) -> tuple[Path, Path]:
     (tmp_path / "pyproject.toml").write_text(
         "[project]\n"
@@ -122,11 +128,19 @@ def _release_tree(
     with zipfile.ZipFile(wheel, mode="w") as archive:
         archive.writestr(
             "openadapt-2.0.0.dist-info/METADATA",
-            _metadata(artifact_version, artifact_requires_python),
+            _metadata(
+                artifact_version,
+                artifact_requires_python,
+                lifecycle_classifier,
+            ),
         )
 
     sdist = dist / "openadapt-2.0.0.tar.gz"
-    raw = _metadata(artifact_version, artifact_requires_python)
+    raw = _metadata(
+        artifact_version,
+        artifact_requires_python,
+        lifecycle_classifier,
+    )
     info = tarfile.TarInfo("openadapt-2.0.0/PKG-INFO")
     info.size = len(raw)
     with tarfile.open(sdist, mode="w:gz") as archive:
@@ -169,6 +183,18 @@ def test_release_artifacts_reject_python_range_drift(tmp_path: Path):
     dist, _ = _release_tree(tmp_path, artifact_requires_python=">=3.10")
 
     with pytest.raises(ValueError, match="Requires-Python does not match"):
+        verify_release_artifacts(dist, root=tmp_path)
+
+
+def test_release_artifacts_reject_static_lifecycle_metadata(tmp_path: Path):
+    """Immutable package bytes must not override the signed lifecycle record."""
+
+    dist, _ = _release_tree(
+        tmp_path,
+        lifecycle_classifier="Development Status :: 4 - Beta",
+    )
+
+    with pytest.raises(ValueError, match="static lifecycle classifier"):
         verify_release_artifacts(dist, root=tmp_path)
 
 

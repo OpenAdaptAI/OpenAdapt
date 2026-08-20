@@ -31,7 +31,21 @@ unavoidable and the outcome needs proof.
 > and governed runtime are implemented in
 > [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). This
 > repository provides the unified `openadapt` CLI and compatibility surface,
-> not a second engine. Lifecycle: **Beta**.
+> not a second engine.
+
+<!-- BEGIN PRODUCTION LIFECYCLE -->
+> **Built for qualified production workflows.** A Production run requires both
+> active signed product admissions for the exact OpenAdapt component and
+> deployment releases, and an active signed, expiring, revocable workflow
+> admission for the exact compiled workflow version. The workflow admission binds
+> the organization and workflow identity; bundle version and digest; admitted
+> runtime release; application and environment; input, action, identity, effect,
+> and policy contracts; evidence authority; and its issue, expiry, and revocation
+> state. Qualification requires at least three trials for each task and condition.
+> A closed result schema must report silent incorrect success and over-halt. Any
+> bound change requires a new qualification.
+> [Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
+<!-- END PRODUCTION LIFECYCLE -->
 
 ## Try it locally
 
@@ -126,6 +140,24 @@ state, record identity, target uniqueness, and the fresh application view.
 Afterward it waits for settled state and evaluates the declared effect. If the
 contract cannot be established, it returns evidence and halts.
 
+### Complete run outcomes
+
+Every terminal run records what the runtime knows about the business effect:
+
+| Outcome | Meaning |
+|---|---|
+| `VERIFIED` | Every declared effect and collateral-effect check passed at the required evidence tier. This is the only production success. |
+| `HALTED_BEFORE_EFFECT` | The run stopped and positive evidence established that no consequential effect occurred. |
+| `RECONCILIATION_REQUIRED` | Delivery or persistence is uncertain, conflicting, or temporarily unverifiable. The runtime never blind-retries it. |
+| `FAILED_PLATFORM` | An OpenAdapt platform failure occurred before any possible business effect. |
+| `CANCELED` | The run was canceled before any business effect. |
+| `REJECTED_POLICY` | Authorization, identity, qualification, or environment policy refused execution before any effect. |
+| `COMPLETED_UNVERIFIED` | A Demo run completed without production-grade effect evidence. |
+| `ROLLED_BACK` | A detected duplicate or collateral write was compensated and re-verified. |
+
+These terminal outcomes are not interchangeable. A resumed
+`RECONCILIATION_REQUIRED` run must first reacquire and reconcile the live state.
+
 ### A focused question when a person is needed
 
 A halted run can send one signed task to the OpenAdapt phone view. The task can
@@ -175,14 +207,15 @@ Every workflow is qualified against its exact application, version,
 environment, identity contract, and effect verifier rather than inheriting a
 blanket platform claim.
 
-Substrate maturity, stated the same way across the OpenAdapt repositories:
+Each qualification binds the exact surface, application, version, environment,
+identity contract, and effect verifier:
 
-| Substrate | Maturity |
+| Substrate | Evidence available to a qualified workflow |
 | --- | --- |
-| Browser (web) | Beta; available in production today through the managed browser product |
-| Native desktop (Windows, macOS, Linux) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
-| Remote display (RDP) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
-| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification is deployment-specific |
+| Browser (web) | DOM, accessibility, visual, OCR, field geometry, and source-time secret exclusion |
+| Native desktop (Windows, macOS, Linux) | Visual, OCR, and local window scope, plus adapter-supplied UI Automation, Accessibility, or AT-SPI evidence when present |
+| Remote display (RDP) | External pixels, OCR, anchors, keyboard, mouse, and fresh-frame verification |
+| Citrix / VDI | External pixels, OCR, anchors, keyboard, mouse, and deployment-bound verification |
 
 See the [substrate model](https://docs.openadapt.ai/concepts/substrate-model/),
 [qualification evidence](https://docs.openadapt.ai/get-started/what-works-today/),

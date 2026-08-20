@@ -52,7 +52,7 @@ class _FlowFirstGroup(click.Group):
 @click.group(cls=_FlowFirstGroup)
 @click.version_option(version=__version__, prog_name="openadapt")
 def main():
-    """OpenAdapt - Beta launcher for the openadapt-flow compiler.
+    """OpenAdapt launcher for the openadapt-flow compiler.
 
     Compile a demonstrated workflow into deterministic local replay. Healthy
     runs make no model calls; configured checks can halt on ambiguity. Native

@@ -76,10 +76,12 @@ record time. Read the
 [canonical recording guide](https://docs.openadapt.ai/guides/record-your-app/)
 before a real-data demonstration.
 
-## Product boundary
+## Production qualification
 
-The launcher and Flow engine are Beta. Browser workflows run end to end in the
-three-OS clean-machine lifecycle. Native and remote evidence is task- and
-environment-specific. Citrix support is code-qualified and still requires a
-real deployment qualification. A runnable workflow is not automatically a
-certified production workflow.
+A runnable workflow is not automatically a qualified production workflow. A
+qualification binds the exact application, version, environment, input schema,
+identity checks, effect checks, policy, and verification rules. A Production
+run gate must reject an absent, expired, revoked, or mismatched qualification.
+Check the
+[live signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
+for the current admitted releases.

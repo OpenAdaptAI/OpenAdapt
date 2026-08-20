@@ -2,7 +2,7 @@
 
 ## Repository role
 
-This public repository is the Beta launcher/meta-package and stable community
+This public repository is the launcher/meta-package and stable community
 entry point for OpenAdapt. It owns `pip install openadapt`, the unified
 `openadapt` CLI, release compatibility, and launcher packaging.
 

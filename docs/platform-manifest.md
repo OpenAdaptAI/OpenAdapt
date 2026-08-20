@@ -212,7 +212,7 @@ Top-level fields:
 | `schema_version` | Semver of this schema; validators reject unknown majors. |
 | `generated_at` | UTC timestamp of generation. |
 | `generation` | SHA-256 bindings for the generator and report renderer. |
-| `release_channel` | Lowercased product lifecycle from status.json (currently `beta`). |
+| `release_channel` | Legacy artifact-channel compatibility field copied from status.json. It is not a lifecycle authority. Consumers use the signed Production record for release maturity. |
 | `release_selection` | Latest-published selection or exact published version inputs supplied for an ordered release train. |
 | `components` | `launcher`, `flow`, `capture`, `privacy`, `types`, `desktop`, and `agent`: package name, published version, Python range, dependency constraints and markers, release source commit/tree, and the exact artifact set. |
 | `runtime_units` | Launcher, runner, Desktop, and Agent deployment views. Non-locked units name selected packages. The Desktop sidecar names the exact lock-resolved closure. |

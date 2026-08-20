@@ -73,13 +73,19 @@ not make a recording safe to upload. A derivative crosses a boundary only
 after local sanitization, complete inventory, review, exact-hash approval, and
 destination policy checks.
 
-## Maturity boundary
+## Production qualification
 
-The launcher and Flow engine are Beta. Browser workflows run through the
-complete clean-machine lifecycle on Linux, macOS, and Windows. Native and
-remote evidence is bounded to named tasks and environments. Citrix is
-code-qualified and requires a live deployment qualification. No repository
-status certifies an arbitrary customer workflow.
+Production applies to exact admitted product and deployment releases and an
+exact qualified workflow, not to a substrate name. The workflow admission binds
+the organization and workflow identity; bundle version and digest; admitted
+runtime release; application and environment; input, action, identity, effect,
+and policy contracts; evidence authority; and its issue, expiry, and revocation
+state. Qualification requires at least three trials for each task and condition.
+A closed result schema must report silent incorrect success and over-halt. A
+Production run gate must reject an absent, expired, revoked, or mismatched
+product or workflow admission. The
+[live signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
+is the maturity authority for public releases.
 
 The former model-training architecture remains in Git history and optional
 research packages. It is not the current product architecture.
