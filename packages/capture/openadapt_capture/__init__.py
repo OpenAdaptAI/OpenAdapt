@@ -42,6 +42,15 @@ from openadapt_capture.comparison import (
     plot_comparison,
 )
 from openadapt_capture.config import RecordingConfig
+from openadapt_capture.control import (
+    CaptureControlAuthenticationError,
+    CaptureControlError,
+    CaptureControlUnavailable,
+    RecorderStatus,
+    discover_recorders,
+    status_recording,
+    stop_recording,
+)
 from openadapt_capture.db.models import (
     ActionEvent as DBActionEvent,
 )
@@ -137,6 +146,13 @@ __all__ = [
     # High-level APIs
     "Recorder",
     "RecordingConfig",
+    "RecorderStatus",
+    "CaptureControlError",
+    "CaptureControlUnavailable",
+    "CaptureControlAuthenticationError",
+    "discover_recorders",
+    "status_recording",
+    "stop_recording",
     "Capture",
     "CaptureSession",
     "Action",

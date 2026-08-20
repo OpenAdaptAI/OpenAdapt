@@ -119,9 +119,42 @@ Record from the command line:
 
 ```bash
 capture record ./my-capture --description "Describe the workflow"
-# Press Ctrl-C to stop.
+# The ready message prints the exact session ID.
+
+# From another terminal:
+capture status --session-id SESSION_ID
+capture stop --session-id SESSION_ID
 
 capture info ./my-capture
+```
+
+The recorder creates its control endpoint before it reports ready. The endpoint
+listens on IPv4 loopback only. Each request and response uses an authenticated
+session capability. Capture stores that capability only in an owner-only
+runtime file (`0700` directory and `0600` file on macOS/Linux; a protected
+current-user owner and DACL on Windows). Capture removes and verifies the
+absence of macOS extended ACL entries. The capability does not enter command
+arguments, logs, or the capture directory.
+
+`capture stop` binds the request to the exact session ID, process ID, and
+process start identity. It waits for producer and writer shutdown, reconciles
+producer counts with committed rows, checks database and relationship integrity,
+validates replay-relevant events, and writes atomic terminal metadata before it
+returns success. Repeated stop requests share one finalization result. A timeout,
+worker failure, invalid capability, stale process, or ambiguous set of active
+sessions returns non-success. A crash leaves `capture-state.json` incomplete;
+the next authenticated discovery removes the stale runtime descriptor only after
+it proves that the bound process instance is no longer live.
+
+Launchers and embedded clients use the public Python contract instead of
+reading recorder internals:
+
+```python
+from openadapt_capture import status_recording, stop_recording
+
+current = status_recording(session_id)
+completed = stop_recording(session_id, timeout=60)
+assert completed.complete and completed.integrity_verified
 ```
 
 Or inspect processed actions in Python:
@@ -140,6 +173,7 @@ A capture normally contains:
 
 ```text
 my-capture/
+├── capture-state.json
 ├── recording.db
 ├── oa_recording-*.mp4
 └── profiling.json

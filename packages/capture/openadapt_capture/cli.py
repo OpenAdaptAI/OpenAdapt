@@ -108,6 +108,11 @@ def record(
         if not recorder.wait_for_ready():
             print("Recording did not become ready. No successful capture was saved.")
             raise SystemExit(1)
+        print(f"Capture session: {recorder.control_session_id}")
+        print(
+            "Stop from another terminal: "
+            f"capture stop --session-id {recorder.control_session_id}"
+        )
         try:
             while recorder.is_recording:
                 time.sleep(1)
@@ -117,6 +122,66 @@ def record(
     print()
     print(f"Recorded {recorder.event_count} events")
     print(f"Saved to: {output_dir}")
+
+
+def status(
+    session_id: str | None = None,
+    timeout: float = 5.0,
+    runtime_dir: str | None = None,
+) -> None:
+    """Show the authenticated status of an active recorder.
+
+    Args:
+        session_id: Exact Capture session ID. It can be omitted only when one
+            recorder is active.
+        timeout: Maximum seconds to wait for the recorder.
+        runtime_dir: Owner-only runtime directory override for an embedded
+            launcher or a test environment.
+    """
+    import json
+
+    from openadapt_capture.control import CaptureControlError, status_recording
+
+    try:
+        current = status_recording(
+            session_id,
+            timeout=timeout,
+            runtime_dir=runtime_dir,
+        )
+    except CaptureControlError as exc:
+        print(str(exc))
+        raise SystemExit(1) from exc
+    print(json.dumps(current.__dict__, sort_keys=True))
+
+
+def stop(
+    session_id: str | None = None,
+    timeout: float = 60.0,
+    runtime_dir: str | None = None,
+) -> None:
+    """Stop one recorder and confirm its finalized Capture session.
+
+    Args:
+        session_id: Exact Capture session ID. It can be omitted only when one
+            recorder is active.
+        timeout: Maximum seconds to wait for finalization and integrity checks.
+        runtime_dir: Owner-only runtime directory override for an embedded
+            launcher or a test environment.
+    """
+    import json
+
+    from openadapt_capture.control import CaptureControlError, stop_recording
+
+    try:
+        completed = stop_recording(
+            session_id,
+            timeout=timeout,
+            runtime_dir=runtime_dir,
+        )
+    except CaptureControlError as exc:
+        print(str(exc))
+        raise SystemExit(1) from exc
+    print(json.dumps(completed.__dict__, sort_keys=True))
 
 
 def visualize(
@@ -394,6 +459,8 @@ def main() -> None:
     import fire
     fire.Fire({
         "record": record,
+        "status": status,
+        "stop": stop,
         "visualize": visualize,
         "info": info,
         "transcribe": transcribe,

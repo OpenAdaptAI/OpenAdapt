@@ -24,10 +24,12 @@ import multiprocessing
 import os
 import queue
 import signal
+import sqlite3
 import sys
 import threading
 import time
 import tracemalloc
+import uuid
 from collections import namedtuple
 from functools import partial
 from typing import Any, Callable
@@ -430,6 +432,7 @@ def process_events(
                     recording,
                     perf_q,
                 )
+                num_browser_events.value += 1
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -1712,6 +1715,7 @@ def record(
     window_write_q = sq.SynchronizedQueue()
     browser_write_q = sq.SynchronizedQueue()
     video_write_q = sq.SynchronizedQueue()
+    terminate_writers = multiprocessing.Event()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
     if terminate_processing is None:
@@ -1799,25 +1803,32 @@ def record(
     if num_video_events is None:
         num_video_events = multiprocessing.Value("i", 0)
 
+    event_processor_args = (
+        event_q,
+        screen_write_q,
+        action_write_q,
+        window_write_q,
+        browser_write_q,
+        video_write_q,
+        perf_q,
+        recording,
+        terminate_processing,
+        task_started_events.setdefault("event_processor", threading.Event()),
+        num_screen_events,
+        num_action_events,
+        num_window_events,
+        num_browser_events,
+        num_video_events,
+    )
     event_processor = threading.Thread(
-        target=process_events,
+        target=_run_task_fail_loud,
         daemon=True,
         args=(
-            event_q,
-            screen_write_q,
-            action_write_q,
-            window_write_q,
-            browser_write_q,
-            video_write_q,
-            perf_q,
-            recording,
+            "event_processor",
+            process_events,
+            event_processor_args,
             terminate_processing,
-            task_started_events.setdefault("event_processor", threading.Event()),
-            num_screen_events,
-            num_action_events,
-            num_window_events,
-            num_browser_events,
-            num_video_events,
+            task_errors,
         ),
     )
     event_processor.start()
@@ -1833,7 +1844,7 @@ def record(
             perf_q,
             recording,
             db_path,
-            terminate_processing,
+            terminate_writers,
             task_started_events.setdefault("screen_event_writer", multiprocessing.Event()),
         ),
     )
@@ -1850,7 +1861,7 @@ def record(
             perf_q,
             recording,
             db_path,
-            terminate_processing,
+            terminate_writers,
             task_started_events.setdefault("action_event_writer", multiprocessing.Event()),
         ),
     )
@@ -1868,7 +1879,7 @@ def record(
                 perf_q,
                 recording,
                 db_path,
-                terminate_processing,
+                terminate_writers,
                 task_started_events.setdefault("window_event_writer", multiprocessing.Event()),
             ),
         )
@@ -1886,7 +1897,7 @@ def record(
                 perf_q,
                 recording,
                 db_path,
-                terminate_processing,
+                terminate_writers,
                 task_started_events.setdefault("video_writer", multiprocessing.Event()),
                 partial(
                     video_pre_callback,
@@ -1994,11 +2005,21 @@ def record(
             "screen_event_reader",
             "input_event_reader",
             "event_processor",
+            "audio_recorder",
+        ],
+        timeout=pre_ready_timeout,
+    )
+
+    # No writer can stop while the event processor can still enqueue work.
+    # Signal writer completion only after all producers have exited.
+    terminate_writers.set()
+    _join_tasks(
+        task_by_name,
+        [
             "screen_event_writer",
             "action_event_writer",
             "window_event_writer",
             "video_writer",
-            "audio_recorder",
         ],
         timeout=pre_ready_timeout,
     )
@@ -2169,6 +2190,8 @@ class Recorder:
         send_profile: bool = False,
         window: dict | None = None,
         structural_observer: StructuralObserver | None = None,
+        control_enabled: bool = True,
+        control_runtime_dir: str | None = None,
     ) -> None:
         from pathlib import Path
 
@@ -2178,6 +2201,8 @@ class Recorder:
         self.capture_dir = str(Path(capture_dir).resolve())
         self.task_description = task_description
         self._send_profile = send_profile
+        self._control_enabled = control_enabled
+        self._control_runtime_dir = control_runtime_dir
 
         if capture_browser_events:
             # Preserve a clear error for callers of the former keyword while
@@ -2224,6 +2249,7 @@ class Recorder:
         self._ready_event = threading.Event()
         self._stopped_event = threading.Event()
         self._ready_or_stopped_event = threading.Event()
+        self._finalized_event = threading.Event()
 
         # Internal
         self._record_thread: threading.Thread | None = None
@@ -2232,6 +2258,229 @@ class Recorder:
         self._worker_error: BaseException | None = None
         self._worker_error_lock = threading.Lock()
         self._structural_observer = structural_observer
+        self._control_server = None
+        self._control_state_lock = threading.RLock()
+        self._control_stop_lock = threading.Lock()
+        self._control_session_id = str(uuid.uuid4())
+        self._process_started_at = psutil.Process(os.getpid()).create_time()
+        self._control_phase = "starting"
+        self._control_complete = False
+        self._control_integrity_verified = False
+        self._control_error_code: str | None = None
+        self._control_started_at = time.time()
+        self._control_finalized_at: float | None = None
+
+    def _control_payload(self) -> dict[str, Any]:
+        """Return the secret-free state shared with the client and state file."""
+        with self._control_state_lock:
+            return {
+                "schema_version": "openadapt.capture-terminal.v1",
+                "session_id": self._control_session_id,
+                "pid": os.getpid(),
+                "process_started_at": self._process_started_at,
+                "capture_dir": self.capture_dir,
+                "phase": self._control_phase,
+                "ready": self._ready_event.is_set(),
+                "complete": self._control_complete,
+                "integrity_verified": self._control_integrity_verified,
+                "error_code": self._control_error_code,
+                "started_at": self._control_started_at,
+                "finalized_at": self._control_finalized_at,
+                "event_counts": {
+                    "action": self._num_action_events.value,
+                    "screen": self._num_screen_events.value,
+                    "window": self._num_window_events.value,
+                    "browser": self._num_browser_events.value,
+                    "video": self._num_video_events.value,
+                },
+            }
+
+    def _persist_control_state(self) -> None:
+        if not self._control_enabled:
+            return
+        from openadapt_capture.control import write_terminal_state
+
+        terminal = self._control_payload()
+        # The file location already binds the capture. Do not retain an
+        # absolute local path (which can disclose a user/profile name) in an
+        # artifact that may later enter sanitization and review.
+        terminal.pop("capture_dir", None)
+        write_terminal_state(self.capture_dir, terminal)
+
+    def _transition_control(
+        self,
+        phase: str,
+        *,
+        complete: bool = False,
+        integrity_verified: bool = False,
+        error_code: str | None = None,
+        finalized: bool = False,
+    ) -> None:
+        with self._control_state_lock:
+            if self._control_phase in {"complete", "failed", "crashed"}:
+                return
+            previous = (
+                self._control_phase,
+                self._control_complete,
+                self._control_integrity_verified,
+                self._control_error_code,
+                self._control_finalized_at,
+            )
+            if (
+                self._control_error_code == "finalization_timeout"
+                and error_code is None
+                and phase not in {"complete", "failed", "crashed"}
+            ):
+                error_code = self._control_error_code
+            self._control_phase = phase
+            self._control_complete = complete
+            self._control_integrity_verified = integrity_verified
+            self._control_error_code = error_code
+            if finalized:
+                self._control_finalized_at = time.time()
+            try:
+                self._persist_control_state()
+            except BaseException:
+                (
+                    self._control_phase,
+                    self._control_complete,
+                    self._control_integrity_verified,
+                    self._control_error_code,
+                    self._control_finalized_at,
+                ) = previous
+                raise
+
+    def _set_worker_error(self, exc: BaseException) -> None:
+        with self._worker_error_lock:
+            if self._worker_error is None:
+                self._worker_error = exc
+
+    def _verify_completed_capture(self) -> None:
+        """Verify the finalized database before control reports completion."""
+        from pathlib import Path
+
+        from openadapt_capture.capture import (
+            CaptureSession,
+            _convert_action_event,
+            _convert_browser_event,
+        )
+
+        db_path = Path(self.capture_dir) / "recording.db"
+        details = db_path.lstat()
+        if not db_path.is_file() or db_path.is_symlink():
+            raise RuntimeError("The finalized Capture database is not a regular file.")
+        if details.st_size <= 0:
+            raise RuntimeError("The finalized Capture database is empty.")
+        database = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            quick_check = database.execute("PRAGMA quick_check").fetchall()
+            if quick_check != [("ok",)]:
+                raise RuntimeError("The finalized Capture database failed integrity check.")
+            foreign_key_errors = database.execute("PRAGMA foreign_key_check").fetchall()
+            if foreign_key_errors:
+                raise RuntimeError("The finalized Capture database has broken relationships.")
+            recordings = database.execute("SELECT id FROM recording").fetchall()
+            if len(recordings) != 1:
+                raise RuntimeError(
+                    "The finalized Capture database does not contain one session."
+                )
+            recording_id = recordings[0][0]
+            expected_counts = {
+                "action_event": self._num_action_events.value,
+                "screenshot": self._num_screen_events.value,
+                "window_event": self._num_window_events.value,
+                "browser_event": self._num_browser_events.value,
+            }
+            for table, expected in expected_counts.items():
+                committed = database.execute(
+                    f"SELECT COUNT(*) FROM {table}",
+                ).fetchone()[0]
+                if committed != expected:
+                    raise RuntimeError(
+                        f"The finalized Capture database lost {table} events "
+                        f"(expected {expected}, committed {committed})."
+                    )
+                wrong_recording = database.execute(
+                    f"SELECT COUNT(*) FROM {table} "
+                    "WHERE recording_id IS NULL OR recording_id != ?",
+                    (recording_id,),
+                ).fetchone()[0]
+                if wrong_recording:
+                    raise RuntimeError(
+                        f"The finalized Capture database has unbound {table} events."
+                    )
+            actions_without_screenshots = database.execute(
+                "SELECT COUNT(*) FROM action_event "
+                "WHERE recording_id = ? AND screenshot_id IS NULL",
+                (recording_id,),
+            ).fetchone()[0]
+            if actions_without_screenshots:
+                raise RuntimeError(
+                    "The finalized Capture database has actions without screenshots."
+                )
+        finally:
+            database.close()
+        capture = CaptureSession.load(self.capture_dir)
+        try:
+            for event in capture._recording.action_events:
+                _convert_action_event(event)
+            for event in capture._recording.browser_events:
+                if _convert_browser_event(event) is None:
+                    raise RuntimeError(
+                        "The finalized Capture database has an invalid browser event."
+                    )
+        finally:
+            capture.close()
+
+    def _start_control_server(self) -> None:
+        from pathlib import Path
+
+        from openadapt_capture.control import RecorderControlServer
+
+        Path(self.capture_dir).mkdir(parents=True, exist_ok=True)
+        self._persist_control_state()
+        server = RecorderControlServer(
+            capture_dir=self.capture_dir,
+            snapshot=self._control_payload,
+            stop=self._control_stop,
+            session_id=self._control_session_id,
+            runtime_dir=self._control_runtime_dir,
+        )
+        self._control_server = server.start()
+
+    def _control_stop(self, timeout: float) -> dict[str, Any]:
+        """Idempotently request stop and wait for the one finalization result."""
+        with self._control_stop_lock:
+            if (
+                not self._finalized_event.is_set()
+                and not self._terminate_processing.is_set()
+            ):
+                try:
+                    self._transition_control("stopping")
+                except BaseException as exc:
+                    self._set_worker_error(exc)
+                    self._terminate_processing.set()
+                    return {
+                        **self._control_payload(),
+                        "error_code": "terminal_metadata_failed",
+                    }
+                self._terminate_processing.set()
+        if not self._finalized_event.wait(timeout=timeout):
+            try:
+                self._transition_control(
+                    "finalizing",
+                    error_code="finalization_timeout",
+                )
+            except BaseException as exc:
+                self._set_worker_error(exc)
+            return {
+                **self._control_payload(),
+                "phase": "finalizing",
+                "complete": False,
+                "integrity_verified": False,
+                "error_code": "finalization_timeout",
+            }
+        return self._control_payload()
 
     def _drain_status_pipe(self) -> None:
         """Background thread that reads status messages from record()."""
@@ -2243,11 +2492,18 @@ class Recorder:
                         if msg.get("type") == "record.started":
                             self._ready_event.set()
                             self._ready_or_stopped_event.set()
+                            self._transition_control("recording")
+                        elif msg.get("type") == "record.stopping":
+                            self._transition_control("finalizing")
                         elif msg.get("type") == "record.stopped":
                             self._stopped_event.set()
                             self._ready_or_stopped_event.set()
         except (EOFError, OSError):
             pass
+        except BaseException as exc:
+            self._set_worker_error(exc)
+            self._terminate_processing.set()
+            self._ready_or_stopped_event.set()
 
     def _run_record(self) -> None:
         """Thread target: apply config overrides, then call record()."""
@@ -2269,39 +2525,106 @@ class Recorder:
                     send_profile=self._send_profile,
                     structural_observer=self._structural_observer,
                 )
+            self.check_health()
+            if self._ready_event.is_set():
+                self._verify_completed_capture()
+                self._transition_control(
+                    "complete",
+                    complete=True,
+                    integrity_verified=True,
+                    finalized=True,
+                )
+            else:
+                self._transition_control(
+                    "failed",
+                    error_code="startup_incomplete",
+                    finalized=True,
+                )
         except BaseException as exc:
             # A setup exception must wake wait_for_ready() and let context-manager
             # teardown finish instead of leaving callers blocked for its timeout.
-            with self._worker_error_lock:
-                if self._worker_error is None:
-                    self._worker_error = exc
+            self._set_worker_error(exc)
             self._terminate_processing.set()
+            try:
+                self._transition_control(
+                    "failed",
+                    error_code="recording_or_finalization_failed",
+                    finalized=True,
+                )
+            except BaseException as state_exc:
+                add_exception_note(
+                    exc,
+                    f"terminal state persistence also failed: {state_exc!r}",
+                )
             try:
                 self._status_send.send({"type": "record.stopped"})
             except (BrokenPipeError, EOFError, OSError):
                 self._stopped_event.set()
                 self._ready_or_stopped_event.set()
+        finally:
+            self._stopped_event.set()
+            self._ready_or_stopped_event.set()
+            self._finalized_event.set()
 
     def __enter__(self) -> "Recorder":
+        if self._control_enabled:
+            try:
+                self._start_control_server()
+            except BaseException:
+                try:
+                    self._transition_control(
+                        "failed",
+                        error_code="control_channel_failed",
+                        finalized=True,
+                    )
+                except BaseException:
+                    pass
+                raise
+
         # Start status drain thread
         self._status_thread = threading.Thread(
             target=self._drain_status_pipe,
             daemon=True,
         )
-        self._status_thread.start()
-
-        # Start recording thread
         self._record_thread = threading.Thread(target=self._run_record)
-        self._record_thread.start()
+        try:
+            self._status_thread.start()
+            self._record_thread.start()
+        except BaseException as exc:
+            self._terminate_processing.set()
+            self._stopped_event.set()
+            self._ready_or_stopped_event.set()
+            self._finalized_event.set()
+            try:
+                self._transition_control(
+                    "failed",
+                    error_code="recorder_thread_start_failed",
+                    finalized=True,
+                )
+            except BaseException as state_exc:
+                add_exception_note(
+                    exc,
+                    f"terminal state persistence also failed: {state_exc!r}",
+                )
+            if self._control_server is not None:
+                self._control_server.close()
+            raise
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        if not self._finalized_event.is_set():
+            try:
+                self._transition_control("stopping")
+            except BaseException as exc:
+                self._set_worker_error(exc)
         self._terminate_processing.set()
         if self._record_thread is not None:
             self._record_thread.join()
         self._stopped_event.set()  # ensure status thread exits
         if self._status_thread is not None:
             self._status_thread.join(timeout=5)
+        if self._control_server is not None:
+            self._control_server.close()
         if self._worker_error is not None:
             if exc_val is not None:
                 add_exception_note(
@@ -2312,10 +2635,19 @@ class Recorder:
 
     def stop(self) -> None:
         """Stop, join, and surface any recording-worker failure."""
+        if not self._finalized_event.is_set():
+            try:
+                self._transition_control("stopping")
+            except BaseException as exc:
+                self._set_worker_error(exc)
         self._terminate_processing.set()
         if self._record_thread is not None:
             self._record_thread.join()
-        self.check_health()
+        try:
+            self.check_health()
+        finally:
+            if self._control_server is not None:
+                self._control_server.close()
 
     def check_health(self) -> None:
         """Raise the first recording-worker error observed by the owner thread."""
@@ -2368,6 +2700,11 @@ class Recorder:
             "video_frames": self._num_video_events.value,
             "is_recording": self.is_recording,
         }
+
+    @property
+    def control_session_id(self) -> str:
+        """Stable identifier used by authenticated cross-process clients."""
+        return self._control_session_id
 
     @property
     def capture(self):
