@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.3.0",
-  "generated_at": "2026-08-19T22:12:44+00:00",
+  "generated_at": "2026-08-20T01:13:06+00:00",
   "generation": {
     "files": [
       {
@@ -22,7 +22,7 @@
   "components": {
     "launcher": {
       "package": "openadapt",
-      "version": "1.13.0",
+      "version": "1.13.1",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "requires": {
@@ -256,23 +256,23 @@
       ],
       "provenance": {
         "repository": "OpenAdaptAI/OpenAdapt",
-        "release_ref": "v1.13.0",
-        "commit": "c6822aa1b1b3d755f4d701dd3ba20fbcc4032f4f",
-        "tree": "bbe3cc068679afd2796a72954500c767ea0e2434",
-        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/v1.13.0"
+        "release_ref": "v1.13.1",
+        "commit": "7f69923e164a028893e7d570658aa5dcbebc121f",
+        "tree": "8032a72f16d29bc7a357557d3801b4d48f972813",
+        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/v1.13.1"
       },
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt-1.13.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/ca/3d/ca9a01fa4d722646cde12e1ff41d942edecd5dbb12777cb94922b8430e8e/openadapt-1.13.0-py3-none-any.whl",
-          "sha256": "7a848b2272002aec23066cca004d7c7b3b05acc1a659100048b1eb3ee46b9bc2"
+          "filename": "openadapt-1.13.1-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/ac/5b/1c651245dde5124e9bca11be36b7b241ca5a9cd85678d1893718212b5a36/openadapt-1.13.1-py3-none-any.whl",
+          "sha256": "e168825bf3f553e537786c2ab24a9da726f96a8043ac5d52604cb95d83e6ea3b"
         },
         {
           "type": "sdist",
-          "filename": "openadapt-1.13.0.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/b9/1a/f89c21f0f0d2ec668383417258277dc927a45f205de9571c51f44ee83ad6/openadapt-1.13.0.tar.gz",
-          "sha256": "426e101ce77bd4bb11b8b50c6d0b33850aa3230accb6fc78e5e27da0f7294877"
+          "filename": "openadapt-1.13.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/14/3a/c5a50e0fdd22985453734e560507749dfb82485b9085dd08d666ca706ae3/openadapt-1.13.1.tar.gz",
+          "sha256": "ba6a6c86bd21eebf31ed59b4d0f5c0860f16aed479826da8cf4dc6a5288b5de0"
         }
       ]
     },
@@ -570,15 +570,15 @@
   "runtime_units": {
     "launcher_environment": {
       "kind": "launcher-environment",
-      "version": "1.13.0",
+      "version": "1.13.1",
       "source_component": "launcher",
       "entry_point": "openadapt",
       "requirements": {
-        "openadapt": "==1.13.0",
+        "openadapt": "==1.13.1",
         "openadapt-flow": "<2.0.0,>=1.29.0"
       },
       "selected": {
-        "openadapt": "1.13.0",
+        "openadapt": "1.13.1",
         "openadapt-flow": "1.31.0"
       }
     },
@@ -793,7 +793,7 @@
       "scope": "selected-platform",
       "source_role": "launcher",
       "source_package": "openadapt",
-      "source_version": "1.13.0",
+      "source_version": "1.13.1",
       "target_role": "capture",
       "target_package": "openadapt-capture",
       "requires": "<2.0.0,>=1.2.0",
@@ -817,7 +817,7 @@
       "scope": "selected-platform",
       "source_role": "launcher",
       "source_package": "openadapt",
-      "source_version": "1.13.0",
+      "source_version": "1.13.1",
       "target_role": "flow",
       "target_package": "openadapt-flow",
       "requires": "<2.0.0,>=1.29.0",
