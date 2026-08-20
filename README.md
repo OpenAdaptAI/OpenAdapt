@@ -7,17 +7,18 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-**Automate the UI-only work your APIs can’t reach.**
+**Automate the work your systems still make people do.**
 
-OpenAdapt is the verified execution layer for consequential work trapped behind
-human interfaces. It turns a demonstration into an inspectable workflow that
-runs across browser, Windows, macOS, Linux, RDP, and Citrix/VDI. Healthy runs
-use no generative-model calls. Consequential actions are identity-gated,
-declared results are verified, and uncertainty halts for review instead of
-becoming a wrong click.
+OpenAdapt provides verified automation from demonstration. Show it a repeated
+task and it compiles the demonstration into an inspectable, deterministic
+program for browser, Windows, macOS, Linux, RDP, or Citrix/VDI. Healthy runs
+make no generative-model calls. OpenAdapt checks identities before
+consequential actions and checks the declared result before it reports
+`VERIFIED`.
 
-Use a supported API when one fits. Use OpenAdapt when the interface is
-unavoidable and the outcome needs proof.
+OpenAdapt fits repeated work where the interface is unavoidable and the result
+needs proof. If the required evidence is missing or disagrees with the live
+state, the run stops for review.
 
 [Website](https://openadapt.ai) ·
 [Documentation](https://docs.openadapt.ai) ·
@@ -110,7 +111,7 @@ For the visual authoring and review experience, install
 
 *Image provenance: headless synthetic fixture from Desktop PR #93 commit `1f50259ffb052776742b284a493eb9c735caa122`; no live run, engine sidecar, account, customer data, or physical input. SHA-256: `5616f0b0812a5e366f58e448689600e16eeab234aaf92ec6d49133efa0be33ee`. The final release hash will be updated after Desktop 0.15.*
 
-## What makes it different
+## What the runtime checks
 
 ### Verified business effects
 
@@ -126,7 +127,7 @@ state, record identity, target uniqueness, and the fresh application view.
 Afterward it waits for settled state and evaluates the declared effect. If the
 contract cannot be established, it returns evidence and halts.
 
-### A focused question when a person is needed
+### Authorized human decisions
 
 A halted run can send one signed task to the OpenAdapt phone view. The task can
 ask about record identity, target ambiguity, a required human step, a saved
