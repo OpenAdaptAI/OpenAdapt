@@ -97,6 +97,18 @@ def test_release_versions_are_synchronized() -> None:
     assert len(set(versions.values())) == 1, versions
 
 
+def test_runtime_declares_one_opencv_distribution_provider() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    opencv = [
+        requirement
+        for requirement in project["dependencies"]
+        if requirement.lower().startswith("opencv-")
+    ]
+
+    assert opencv == ["opencv-python>=4.9"]
+    assert all("headless" not in requirement for requirement in opencv)
+
+
 def test_public_source_refuses_paid_agent_raw_evidence_and_recipes(
     tmp_path: Path,
 ) -> None:
@@ -379,7 +391,7 @@ def test_release_workflow_uses_pinned_actions() -> None:
     assert "# v10.6.1" in workflow
 
 
-def test_semantic_release_requires_dispatched_exact_head_full_matrix() -> None:
+def test_semantic_release_requires_dispatched_exact_head_production_evidence() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
 
     triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
@@ -402,6 +414,9 @@ def test_semantic_release_requires_dispatched_exact_head_full_matrix() -> None:
     assert "--wait-seconds 2700" in auto
     assert "--poll-seconds 10" in auto
     assert "gh api" not in auto
+    gate = (ROOT / "scripts/check_release_ci.py").read_text()
+    assert "require_production_qualification" in gate
+    assert "quickstart-lifecycle.yml" in gate
 
 
 def test_manual_publish_requires_dispatched_exact_target_full_matrix() -> None:
@@ -419,6 +434,9 @@ def test_manual_publish_requires_dispatched_exact_target_full_matrix() -> None:
     assert '--sha "$TARGET_SHA"' in manual
     assert "--wait-seconds" not in manual
     assert "gh api" not in manual
+    gate = (ROOT / "scripts/check_release_ci.py").read_text()
+    assert "require_production_qualification" in gate
+    assert "quickstart-lifecycle.yml" in gate
     assert "--validate-dist-dir target/dist" in manual
     assert "--license-file target/LICENSE" not in manual
     assert "packages-dir: target/dist/" in manual

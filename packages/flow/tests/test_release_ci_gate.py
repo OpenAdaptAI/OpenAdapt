@@ -8,15 +8,18 @@ from typing import Any
 import pytest
 
 from scripts.check_release_ci import (
+    EXPECTED_CLEAN_MACHINE_JOBS,
     EXPECTED_MATRIX_JOBS,
     QualificationError,
     QualificationPending,
     require_exact_full_matrix,
+    require_production_qualification,
 )
 
 REPOSITORY = "OpenAdaptAI/openadapt-flow"
 SHA = "a" * 40
 RUN_ID = 12345
+CLEAN_RUN_ID = 67890
 
 
 def _run(
@@ -43,17 +46,32 @@ def _matrix_jobs(*, conclusion: str = "success") -> list[dict[str, Any]]:
     ]
 
 
+def _clean_run(**kwargs: Any) -> dict[str, Any]:
+    return {**_run(**kwargs), "id": CLEAN_RUN_ID}
+
+
+def _clean_jobs(*, conclusion: str = "success") -> list[dict[str, Any]]:
+    return [
+        {"name": name, "conclusion": conclusion}
+        for name in sorted(EXPECTED_CLEAN_MACHINE_JOBS)
+    ]
+
+
 class FakeGitHub:
     def __init__(
         self,
         *,
         runs: list[dict[str, Any]] | None = None,
         jobs: list[dict[str, Any]] | None = None,
+        clean_runs: list[dict[str, Any]] | None = None,
+        clean_jobs: list[dict[str, Any]] | None = None,
         page_size: int = 100,
         error_endpoint: str | None = None,
     ) -> None:
         self.runs = runs if runs is not None else [_run()]
         self.jobs = jobs if jobs is not None else _matrix_jobs()
+        self.clean_runs = clean_runs if clean_runs is not None else [_clean_run()]
+        self.clean_jobs = clean_jobs if clean_jobs is not None else _clean_jobs()
         self.page_size = page_size
         self.error_endpoint = error_endpoint
         self.calls: list[tuple[str, dict[str, str]]] = []
@@ -63,7 +81,12 @@ class FakeGitHub:
         self.calls.append((endpoint, params_copy))
         if self.error_endpoint and self.error_endpoint in endpoint:
             raise QualificationError("simulated API error")
-        source = self.runs if endpoint.endswith("/runs") else self.jobs
+        if "quickstart-lifecycle.yml" in endpoint:
+            source = self.clean_runs
+        elif f"/runs/{CLEAN_RUN_ID}/jobs" in endpoint:
+            source = self.clean_jobs
+        else:
+            source = self.runs if endpoint.endswith("/runs") else self.jobs
         key = "workflow_runs" if endpoint.endswith("/runs") else "jobs"
         page = int(params_copy["page"])
         start = (page - 1) * self.page_size
@@ -75,12 +98,44 @@ def _require(fake: FakeGitHub):
     return require_exact_full_matrix(fake, repository=REPOSITORY, sha=SHA)
 
 
+def _require_production(fake: FakeGitHub):
+    return require_production_qualification(fake, repository=REPOSITORY, sha=SHA)
+
+
 def test_accepts_exact_dispatched_run_with_exact_successful_matrix() -> None:
     result = _require(FakeGitHub())
 
     assert result.run_id == RUN_ID
     assert result.sha == SHA
     assert result.job_names == EXPECTED_MATRIX_JOBS
+
+
+def test_production_gate_requires_exact_three_os_clean_machine_lifecycle() -> None:
+    result = _require_production(FakeGitHub())
+
+    assert result.full_matrix.run_id == RUN_ID
+    assert result.clean_machine.run_id == CLEAN_RUN_ID
+    assert result.clean_machine.job_names == EXPECTED_CLEAN_MACHINE_JOBS
+
+
+def test_production_gate_rejects_missing_clean_machine_run() -> None:
+    with pytest.raises(QualificationPending, match="clean-machine run"):
+        _require_production(FakeGitHub(clean_runs=[]))
+
+
+def test_production_gate_rejects_partial_clean_machine_matrix() -> None:
+    with pytest.raises(
+        QualificationError, match="clean-machine job set/count mismatch"
+    ):
+        _require_production(FakeGitHub(clean_jobs=_clean_jobs()[:-1]))
+
+
+def test_production_gate_rejects_skipped_clean_machine_job() -> None:
+    jobs = _clean_jobs()
+    jobs[0]["conclusion"] = "skipped"
+
+    with pytest.raises(QualificationError, match="non-success jobs"):
+        _require_production(FakeGitHub(clean_jobs=jobs))
 
 
 def test_rejects_skipped_matrix_job() -> None:

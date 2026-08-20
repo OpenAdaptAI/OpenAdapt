@@ -56,16 +56,25 @@ Loud rejection (a demonstrated action must never be *silently* dropped):
 middle clicks, right-button double-clicks/drags, malformed shortcuts, unmapped
 named keys, and any unknown input action type all raise instead of being ignored.
 
-Coordinate spaces: capture mouse coordinates are in *logical points*;
-captured frames are *physical pixels*. openadapt-flow requires event coordinates in
-the same pixel space as the frames, so points are scaled by
-``CaptureSession.pixel_ratio`` (physical / logical). NOTE: sessions recorded
-with capture >=0.5.4 persist ``pixel_ratio`` on the recording model itself, so
-scaling is always correct for them. Older 0.5.x sessions carry it only when
-the recorder wrote it into the recording ``config`` JSON; absent that it
-defaults to 1.0 and coordinates pass through unscaled — on such a legacy HiDPI
-session click coordinates would be under-scaled, an honest limitation of the
-old metadata that this adapter cannot recover from pixels alone.
+Coordinate spaces: legacy full-screen capture mouse coordinates are in
+*logical points* while captured frames are *physical pixels*. openadapt-flow
+requires event coordinates in the same pixel space as the frames, so legacy
+points are scaled by ``CaptureSession.pixel_ratio`` (physical / logical).
+NOTE: sessions recorded with capture >=0.5.4 persist ``pixel_ratio`` on the
+recording model itself, so scaling is always correct for them. Older 0.5.x
+sessions carry it only when the recorder wrote it into the recording ``config``
+JSON; absent that it defaults to 1.0 and coordinates pass through unscaled —
+on such a legacy HiDPI session click coordinates would be under-scaled, an
+honest limitation of the old metadata that this adapter cannot recover from
+pixels alone.
+
+Current full-screen sessions capture MSS's combined virtual desktop and
+translate global input into that frame at source. Their
+``CaptureSession.desktop_capture["coordinate_space"]`` is
+``"virtual_desktop_pixels"``. The retained origin, viewport, and privacy-safe
+monitor rectangles let this adapter validate the combined coordinate space;
+it does NOT apply ``pixel_ratio`` again. This supports secondary displays and
+negative virtual-desktop origins without double-scaling input.
 
 Window-scoped sessions (capture's window recording mode, capture PR #30). A
 session recorded with ``Recorder(window=...)`` is scoped to ONE window: frames
@@ -79,14 +88,15 @@ This adapter detects such a session and:
     pixels, and rescaling them would double-scale every click (the exact
     silent-mis-conversion this detection exists to prevent);
   * takes frames as-is (already the client-window viewport);
-  * validates the static viewport and bounds timeline, refuses a mid-session
-    resize (capture media and Flow recordings each have one fixed viewport),
-    verifies extracted frame sizes, and screens every mouse action against
-    that pixel space: window capture records out-of-window input at
-    out-of-range coordinates instead of clamping, and such an action targeted
-    a DIFFERENT window, so conversion refuses loudly (dropping it would
-    silently lose a demonstrated action; keeping it would compile a
-    wrong-target step);
+  * validates the fixed output viewport and bounds timeline. A source window
+    can resize: Capture scales the complete source frame to fit and letterboxes
+    it into the fixed output viewport, then maps actions into that same output
+    pixel space. The adapter validates this normalization metadata, verifies
+    extracted frame sizes, and screens every mouse action against that pixel
+    space. Window capture records out-of-window input at out-of-range
+    coordinates instead of clamping, and such an action targeted a DIFFERENT
+    window, so conversion refuses loudly (dropping it would silently lose a
+    demonstrated action; keeping it would compile a wrong-target step);
   * stamps the output ``meta.json`` with the recorded scoping
     (``window_capture``), but does not infer an execution surface from window
     scope alone. Live ``record --backend rdp|citrix`` orchestration adds the
@@ -155,6 +165,10 @@ FRAME_TOLERANCE_S = 2.0
 # action coordinates already translated into the captured frame's pixel space
 # (see openadapt_capture.window_capture). Any other declared space is refused.
 WINDOW_PIXEL_SPACE = "window_pixels"
+
+# Current full-screen Capture sessions translate global pointer positions into
+# MSS monitor zero (the combined virtual-desktop frame) before persistence.
+DESKTOP_PIXEL_SPACE = "virtual_desktop_pixels"
 
 # pynput key names (openadapt-capture ``key_name`` / ``.keys``) ->
 # flow/Playwright names.
@@ -266,6 +280,35 @@ def _window_capture_meta(session: "CaptureSession") -> Optional[dict[str, Any]]:
     return None
 
 
+def _desktop_capture_meta(session: "CaptureSession") -> Optional[dict[str, Any]]:
+    """Virtual-desktop metadata for a current full-screen session, else None.
+
+    Read Capture's public property when available. The config fallback keeps
+    this adapter compatible with a session produced by a newer Capture package
+    when an older compatible public API object is used to read the database.
+    """
+    desktop_capture = getattr(session, "desktop_capture", None)
+    if desktop_capture is not None:
+        if not isinstance(desktop_capture, dict):
+            raise ValueError(
+                "capture session declares malformed desktop-capture metadata; "
+                "expected an object or null"
+            )
+        return desktop_capture
+    recording = getattr(session, "_recording", None)
+    config = getattr(recording, "config", None)
+    if isinstance(config, dict):
+        fallback = config.get("capture_desktop")
+        if fallback is not None:
+            if not isinstance(fallback, dict):
+                raise ValueError(
+                    "capture session config declares malformed desktop-capture "
+                    "metadata; expected capture_desktop to be an object or null"
+                )
+            return fallback
+    return None
+
+
 def _is_viewport(value: Any) -> TypeGuard[Sequence[float]]:
     """True when ``value`` is an exact positive integer pixel pair."""
     return (
@@ -282,28 +325,215 @@ def _is_viewport(value: Any) -> TypeGuard[Sequence[float]]:
     )
 
 
+def _exact_integer(value: Any, field: str, *, positive: bool = False) -> int:
+    """Return one exact finite JSON integer, with a named validation error."""
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or not float(value).is_integer()
+        or (positive and value <= 0)
+    ):
+        qualifier = "positive " if positive else ""
+        raise ValueError(
+            f"desktop-capture metadata {field} must be a {qualifier}integer"
+        )
+    return int(value)
+
+
+def _validated_desktop_capture(
+    desktop_capture: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate and sanitize virtual-desktop coordinate provenance.
+
+    Only numeric geometry is carried into Flow's recording metadata. Display
+    names, application data, or other unrecognized producer fields never cross
+    this adapter boundary.
+    """
+    space = desktop_capture.get("coordinate_space")
+    if space != DESKTOP_PIXEL_SPACE:
+        raise ValueError(
+            "desktop capture session declares "
+            f"coordinate_space={space!r}, which this adapter does not "
+            f"understand (expected {DESKTOP_PIXEL_SPACE!r}); converting it "
+            "could silently mis-scale action coordinates"
+        )
+
+    origin = desktop_capture.get("origin")
+    if not isinstance(origin, (list, tuple)) or len(origin) != 2:
+        raise ValueError(
+            "desktop-capture metadata origin must be a two-integer pixel pair"
+        )
+    parsed_origin = [
+        _exact_integer(origin[0], "origin[0]"),
+        _exact_integer(origin[1], "origin[1]"),
+    ]
+
+    viewport = desktop_capture.get("viewport")
+    if not _is_viewport(viewport):
+        raise ValueError(
+            "desktop-capture metadata viewport must be two positive integer pixels"
+        )
+    parsed_viewport = [int(viewport[0]), int(viewport[1])]
+
+    monitor_count = _exact_integer(
+        desktop_capture.get("monitor_count"), "monitor_count", positive=True
+    )
+    monitors = desktop_capture.get("monitors")
+    if not isinstance(monitors, (list, tuple)):
+        raise ValueError("desktop-capture metadata monitors must be an array")
+    if len(monitors) != monitor_count:
+        raise ValueError(
+            "desktop-capture metadata monitor_count does not match the number "
+            "of monitor rectangles"
+        )
+
+    parsed_monitors: list[list[int]] = []
+    for index, monitor in enumerate(monitors):
+        if not isinstance(monitor, (list, tuple)) or len(monitor) != 4:
+            raise ValueError(
+                "desktop-capture metadata monitor rectangle "
+                f"{index} must be [left, top, width, height]"
+            )
+        parsed_monitors.append(
+            [
+                _exact_integer(monitor[0], f"monitors[{index}][0]"),
+                _exact_integer(monitor[1], f"monitors[{index}][1]"),
+                _exact_integer(monitor[2], f"monitors[{index}][2]", positive=True),
+                _exact_integer(monitor[3], f"monitors[{index}][3]", positive=True),
+            ]
+        )
+
+    left, top = parsed_origin
+    width, height = parsed_viewport
+    right = left + width
+    bottom = top + height
+    for index, (monitor_left, monitor_top, monitor_width, monitor_height) in enumerate(
+        parsed_monitors
+    ):
+        if not (
+            left <= monitor_left
+            and top <= monitor_top
+            and monitor_left + monitor_width <= right
+            and monitor_top + monitor_height <= bottom
+        ):
+            raise ValueError(
+                "desktop-capture metadata monitor rectangle "
+                f"{index} falls outside the declared virtual-desktop viewport"
+            )
+
+    topology_bounds = [
+        min(monitor[0] for monitor in parsed_monitors),
+        min(monitor[1] for monitor in parsed_monitors),
+        max(monitor[0] + monitor[2] for monitor in parsed_monitors),
+        max(monitor[1] + monitor[3] for monitor in parsed_monitors),
+    ]
+    if topology_bounds != [left, top, right, bottom]:
+        raise ValueError(
+            "desktop-capture metadata monitor rectangles do not span the "
+            "declared virtual-desktop origin and viewport"
+        )
+
+    return {
+        "coordinate_space": DESKTOP_PIXEL_SPACE,
+        "origin": parsed_origin,
+        "viewport": parsed_viewport,
+        "monitor_count": monitor_count,
+        "monitors": parsed_monitors,
+    }
+
+
+def _validate_window_normalization(
+    state: dict[str, Any], output_viewport: tuple[int, int]
+) -> None:
+    """Validate optional resize-normalization metadata from current Capture.
+
+    Older window sessions do not have these fields. Current sessions retain all
+    three so a changed native source viewport remains auditable while actions
+    and frames stay in one fixed, letterboxed output viewport.
+    """
+    fields = ("source_viewport", "content_rect", "fit_scale")
+    present = [field in state for field in fields]
+    if not any(present):
+        return
+    if not all(present):
+        raise ValueError(
+            "window-scoped capture contains incomplete resize-normalization "
+            "metadata; source_viewport, content_rect, and fit_scale must occur "
+            "together"
+        )
+
+    source_viewport = state["source_viewport"]
+    if not _is_viewport(source_viewport):
+        raise ValueError("window-scoped capture contains an invalid source_viewport")
+    content_rect = state["content_rect"]
+    if not isinstance(content_rect, (list, tuple)) or len(content_rect) != 4:
+        raise ValueError(
+            "window-scoped capture content_rect must be [left, top, width, height]"
+        )
+    try:
+        rect = tuple(
+            _exact_integer(value, f"content_rect[{index}]", positive=index >= 2)
+            for index, value in enumerate(content_rect)
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "window-scoped capture contains an invalid content_rect"
+        ) from exc
+    rect_left, rect_top, rect_width, rect_height = rect
+    output_width, output_height = output_viewport
+    if (
+        rect_left < 0
+        or rect_top < 0
+        or rect_left + rect_width > output_width
+        or rect_top + rect_height > output_height
+    ):
+        raise ValueError(
+            "window-scoped capture content_rect falls outside the fixed output viewport"
+        )
+    fit_scale = state["fit_scale"]
+    if (
+        not isinstance(fit_scale, (int, float))
+        or isinstance(fit_scale, bool)
+        or not math.isfinite(fit_scale)
+        or fit_scale <= 0
+    ):
+        raise ValueError("window-scoped capture fit_scale must be finite and positive")
+
+    source_width, source_height = int(source_viewport[0]), int(source_viewport[1])
+    expected_scale = min(output_width / source_width, output_height / source_height)
+    expected_width = max(1, min(output_width, round(source_width * expected_scale)))
+    expected_height = max(1, min(output_height, round(source_height * expected_scale)))
+    expected_rect = (
+        (output_width - expected_width) // 2,
+        (output_height - expected_height) // 2,
+        expected_width,
+        expected_height,
+    )
+    if not math.isclose(float(fit_scale), expected_scale) or rect != expected_rect:
+        raise ValueError(
+            "window-scoped capture resize-normalization metadata does not match "
+            "the declared source and fixed output viewports"
+        )
+
+
 def _window_viewport_timeline(
     session: "CaptureSession", window_capture: dict[str, Any]
 ) -> list[tuple[float, tuple[int, int]]]:
     """Time-ordered ``(timestamp, (width, height))`` of the captured frame size.
 
-    Starts with the static viewport captured before the input listeners start,
-    then validates the recording's bounds-timeline window events. Capture's
-    window mode appends one whenever the resolved window's bounds/title change,
-    with the captured frame's pixel size in ``state["viewport"]``. Read via a public
-    ``session.window_events`` accessor when the installed capture exposes one,
-    else via the session's underlying recording model (same rows).
-
-    Flow recordings and capture's frame timeline each have one fixed viewport.
-    Capture currently skips frames after a window resize because they no
-    longer match the stream size. Therefore a timeline viewport change cannot
-    be represented faithfully and is refused instead of pairing coordinates in
-    the new pixel space with a stale frame in the old pixel space.
+    Starts with the fixed output viewport captured before the input listeners
+    start, then validates the recording's bounds-timeline window events.
+    Capture appends one whenever the resolved window's bounds/title change.
+    ``state["viewport"]`` remains the fixed encoded frame size. Current Capture
+    also retains the changing ``source_viewport`` and its scale-to-fit,
+    letterbox mapping. Read through a public ``session.window_events`` accessor
+    when available, else through the session's underlying recording model.
 
     Raises:
         ValueError: When the initial viewport is absent or malformed, a
-            window-capture timeline row is malformed, or the window changes
-            size during the recording.
+            window-capture timeline row is malformed, or the encoded output
+            viewport changes during the recording.
     """
     initial = window_capture.get("viewport")
     if not _is_viewport(initial):
@@ -315,6 +545,7 @@ def _window_viewport_timeline(
             "window viewport"
         )
     initial_size = (int(initial[0]), int(initial[1]))
+    _validate_window_normalization(window_capture, initial_size)
     # The snapshot is taken after capture's initial frame and before input
     # listeners start, so it is the only safe viewport for an action whose
     # timestamp precedes the first persisted timeline row.
@@ -357,13 +588,12 @@ def _window_viewport_timeline(
         size = (int(viewport[0]), int(viewport[1]))
         if size != initial_size:
             raise ValueError(
-                "window-scoped capture changed viewport from "
+                "window-scoped capture changed its fixed output viewport from "
                 f"{initial_size[0]}x{initial_size[1]} to {size[0]}x{size[1]}; "
-                "the current capture video and Flow recording formats each "
-                "have one fixed viewport, so conversion could associate "
-                "new-space coordinates with a stale old-size frame — "
-                "re-record without resizing the target window"
+                "Capture media and Flow recordings each require one encoded "
+                "viewport, so conversion cannot prove the coordinate space"
             )
+        _validate_window_normalization(state, initial_size)
         entries.append((parsed_ts, size))
     entries.sort(key=lambda entry: entry[0])
     return entries
@@ -372,8 +602,11 @@ def _window_viewport_timeline(
 def _reject_out_of_window(
     actions: "list[Action]",
     timeline: list[tuple[float, tuple[int, int]]],
+    *,
+    scope: str = "window-scoped",
+    boundary_error: str = "out-of-window input",
 ) -> None:
-    """Refuse loudly on any mouse action outside the captured window.
+    """Refuse loudly on a mouse action outside a captured pixel viewport.
 
     Window-scoped recording translates GLOBAL input into the captured frame's
     pixel space *without clamping*, so input aimed at another window (or the
@@ -390,7 +623,7 @@ def _reject_out_of_window(
         x, y = action.x, action.y
         if x is None or y is None:
             raise ValueError(
-                f"window-scoped {action.type} carries no complete pointer "
+                f"{scope} {action.type} carries no complete pointer "
                 "coordinates; its target window cannot be verified"
             )
         try:
@@ -399,12 +632,12 @@ def _reject_out_of_window(
             ts = float(action.timestamp)
         except (TypeError, ValueError) as exc:
             raise ValueError(
-                f"window-scoped {action.type} carries non-numeric pointer "
+                f"{scope} {action.type} carries non-numeric pointer "
                 "coordinates or timestamp; its target window cannot be verified"
             ) from exc
         if not all(math.isfinite(value) for value in (parsed_x, parsed_y, ts)):
             raise ValueError(
-                f"window-scoped {action.type} carries non-finite pointer "
+                f"{scope} {action.type} carries non-finite pointer "
                 "coordinates or timestamp; its target window cannot be verified"
             )
         points = [
@@ -421,12 +654,10 @@ def _reject_out_of_window(
                 parsed_dy = float(dy)
             except (TypeError, ValueError) as exc:
                 raise ValueError(
-                    "window-scoped mouse.drag carries a non-numeric destination"
+                    f"{scope} mouse.drag carries a non-numeric destination"
                 ) from exc
             if not all(math.isfinite(value) for value in (parsed_dx, parsed_dy)):
-                raise ValueError(
-                    "window-scoped mouse.drag carries a non-finite destination"
-                )
+                raise ValueError(f"{scope} mouse.drag carries a non-finite destination")
             points.append((parsed_x + parsed_dx, parsed_y + parsed_dy, "destination"))
         active_size: Optional[tuple[int, int]] = None
         for entry_ts, size in timeline:
@@ -436,7 +667,7 @@ def _reject_out_of_window(
                 break
         if active_size is None:
             raise ValueError(
-                f"window-scoped {action.type} at t={ts:.3f} precedes every "
+                f"{scope} {action.type} at t={ts:.3f} precedes every "
                 "known viewport sample; its coordinate space cannot be "
                 "verified safely"
             )
@@ -452,14 +683,13 @@ def _reject_out_of_window(
                 and 0 <= emitted_y < height
             ):
                 raise ValueError(
-                    f"out-of-window input: {action.type}{point_suffix} at "
+                    f"{boundary_error}: {action.type}{point_suffix} at "
                     f"({point_x:.3f}, {point_y:.3f}) "
-                    f"(t={ts:.3f}) falls outside the captured window viewport "
+                    f"(t={ts:.3f}) falls outside the captured {scope} viewport "
                     f"{width}x{height}, or rounds outside it as "
-                    f"({emitted_x}, {emitted_y}); the demonstrated action targeted "
-                    "a different window or the desktop, so converting it would "
-                    "compile a wrong-target step — re-record keeping all input "
-                    "inside the captured window"
+                    f"({emitted_x}, {emitted_y}); it has no corresponding "
+                    "captured pixel, so converting it would compile a "
+                    "wrong-target step"
                 )
 
 
@@ -836,6 +1066,12 @@ def convert_capture(
     an RDP or Citrix surface. A window alone does not prove that the captured
     surface is remote.
 
+    A current FULL-SCREEN session with ``CaptureSession.desktop_capture`` is
+    also converted in its already-normalized frame pixel space. Its validated,
+    privacy-safe virtual-desktop geometry is retained as ``desktop_capture``
+    provenance. Legacy full-screen sessions have neither scope marker and keep
+    the historical ``pixel_ratio`` conversion.
+
     Args:
         capture_dir: An openadapt-capture session directory (contains
             ``recording.db`` and frame media readable through
@@ -869,9 +1105,12 @@ def convert_capture(
             same value, or a click whose before frame is missing from the
             captured frame timeline. Also, for a window-scoped session: on an
             out-of-window action, an unknown declared coordinate space,
-            malformed selector/viewport metadata, a mid-recording resize, or
-            an extracted frame whose dimensions disagree with the recorded
-            viewport — refusing loudly instead of mis-converting.
+            malformed selector/viewport metadata, a changed encoded output
+            viewport, or an extracted frame whose dimensions disagree with the
+            recorded viewport. For a current full-screen session: on malformed
+            or conflicting desktop topology, an unknown coordinate space, an
+            out-of-desktop action, or a frame-size disagreement. These cases
+            refuse loudly instead of mis-converting.
     """
     CaptureSession = _require_capture()
     capture_dir = Path(capture_dir)
@@ -890,9 +1129,16 @@ def convert_capture(
     session = CaptureSession.load(capture_dir)
     try:
         window_capture = _window_capture_meta(session)
+        desktop_capture = _desktop_capture_meta(session)
+        if window_capture is not None and desktop_capture is not None:
+            raise ValueError(
+                "capture session declares both window and desktop capture "
+                "metadata; its action coordinate space is ambiguous"
+            )
         window_selectors: Optional[
             tuple[Optional[str], Optional[str], Optional[str], Optional[str]]
         ] = None
+        desktop_provenance: Optional[dict[str, Any]] = None
         if window_capture is not None:
             space = window_capture.get("coordinate_space")
             if space != WINDOW_PIXEL_SPACE:
@@ -909,14 +1155,32 @@ def convert_capture(
             # the captured frame's pixel space. Applying pixel_ratio here
             # would DOUBLE-scale them; frames are already the window viewport.
             scale = 1.0
+        elif desktop_capture is not None:
+            desktop_provenance = _validated_desktop_capture(desktop_capture)
+            # Current full-screen mode translates global input into the
+            # combined MSS frame before persistence. Applying pixel_ratio here
+            # would double-scale it, including points on secondary monitors.
+            scale = 1.0
         else:
             scale = float(session.pixel_ratio or 1.0)
         actions = list(session.actions(include_moves=False))
-        window_viewport: Optional[tuple[int, int]] = None
+        scoped_viewport: Optional[tuple[int, int]] = None
+        scope_label: Optional[str] = None
         if window_capture is not None:
             timeline = _window_viewport_timeline(session, window_capture)
             _reject_out_of_window(actions, timeline)
-            window_viewport = timeline[0][1]
+            scoped_viewport = timeline[0][1]
+            scope_label = "window-scoped"
+        elif desktop_provenance is not None:
+            desktop_viewport = desktop_provenance["viewport"]
+            scoped_viewport = (desktop_viewport[0], desktop_viewport[1])
+            _reject_out_of_window(
+                actions,
+                [(float("-inf"), scoped_viewport)],
+                scope="virtual-desktop",
+                boundary_error="out-of-desktop input",
+            )
+            scope_label = "virtual-desktop"
         events = _flow_events(
             actions,
             scale,
@@ -945,14 +1209,15 @@ def convert_capture(
                 t_after = min(t_after, float(events[i + 1]["_ts"]))
             after_img = session.get_frame_at(t_after, tolerance=FRAME_TOLERANCE_S)
 
-            if window_viewport is not None:
+            if scoped_viewport is not None:
+                assert scope_label is not None
                 for label, image in (("before", before_img), ("after", after_img)):
-                    if image is not None and image.size != window_viewport:
+                    if image is not None and image.size != scoped_viewport:
                         raise ValueError(
-                            f"window-scoped {label} frame for event {i} is "
+                            f"{scope_label} {label} frame for event {i} is "
                             f"{image.width}x{image.height}, but the recorded "
-                            "window viewport is "
-                            f"{window_viewport[0]}x{window_viewport[1]}; "
+                            "viewport is "
+                            f"{scoped_viewport[0]}x{scoped_viewport[1]}; "
                             "coordinates and visual evidence are not in one "
                             "verified pixel space"
                         )
@@ -1017,6 +1282,8 @@ def convert_capture(
                 meta["window_capture"]["resolved_pid"] = resolved_pid
             if resolved_window_id is not None:
                 meta["window_capture"]["resolved_window_id"] = resolved_window_id
+        elif desktop_provenance is not None:
+            meta["desktop_capture"] = desktop_provenance
         (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
         return out_dir
     finally:

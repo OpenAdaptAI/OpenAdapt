@@ -100,6 +100,38 @@ def _console_script(root: Path) -> Path:
     )
 
 
+def _inspect_opencv_provider(
+    python: Path,
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    log: Path,
+) -> str:
+    """Require one reviewed distribution to own the installed ``cv2`` package."""
+
+    probe = _run(
+        [
+            str(python),
+            "-c",
+            (
+                "import importlib.metadata as m, json; "
+                "names={d.metadata['Name'].lower() for d in m.distributions() "
+                "if d.metadata.get('Name')}; "
+                "providers=sorted(names & {'opencv-python','opencv-python-headless',"
+                "'opencv-contrib-python','opencv-contrib-python-headless'}); "
+                "import cv2; "
+                "print(json.dumps({'providers':providers,'cv2_version':cv2.__version__})); "
+                "assert providers == ['opencv-python'], providers"
+            ),
+        ],
+        cwd=cwd,
+        env=env,
+        log=log,
+    )
+    payload = json.loads(probe.stdout.splitlines()[-1])
+    return str(payload["providers"][0])
+
+
 def _load_report(path: Path) -> dict:
     if not path.is_file():
         raise AssertionError(f"missing machine-readable run report: {path}")
@@ -290,6 +322,12 @@ def run_lifecycle(
             log=logs / "01-install.log",
         )
         installed = True
+        summary["opencv_provider"] = _inspect_opencv_provider(
+            python,
+            cwd=artifacts,
+            env=env,
+            log=logs / "02-opencv-provider.log",
+        )
         console = _console_script(venv_dir)
         if not console.is_file():
             raise AssertionError(f"console entry point was not installed: {console}")
@@ -297,7 +335,7 @@ def run_lifecycle(
             [str(console), "--help"],
             cwd=artifacts,
             env=env,
-            log=logs / "02-cli-help.log",
+            log=logs / "03-cli-help.log",
         )
 
         # Linux needs host libraries that the ordinary unprivileged first-run
@@ -312,7 +350,7 @@ def run_lifecycle(
                 browser_command,
                 cwd=artifacts,
                 env=env,
-                log=logs / "03-browser-install.log",
+                log=logs / "04-browser-install.log",
             )
 
         cli = [str(python), "-m", "openadapt_flow"]
@@ -322,7 +360,7 @@ def run_lifecycle(
             [*cli, "demo-record", "--out", str(recording)],
             cwd=artifacts,
             env=env,
-            log=logs / "04-record.log",
+            log=logs / "05-record.log",
         )
         _run(
             [
@@ -336,7 +374,7 @@ def run_lifecycle(
             ],
             cwd=artifacts,
             env=env,
-            log=logs / "05-compile.log",
+            log=logs / "06-compile.log",
         )
 
         # The bundled tutorial is deliberately not production-certified. The
@@ -349,20 +387,20 @@ def run_lifecycle(
             [*cli, "lint", str(bundle), "--strict"],
             cwd=artifacts,
             env=env,
-            log=logs / "06-strict-lint-expected-refusal.log",
+            log=logs / "07-strict-lint-expected-refusal.log",
             expected=1,
         )
         _run(
             [*cli, "certify", str(bundle), "--policy", "permissive"],
             cwd=artifacts,
             env=env,
-            log=logs / "07-certify-permissive.log",
+            log=logs / "08-certify-permissive.log",
         )
         _run(
             [*cli, "certify", str(bundle), "--policy", "clinical-write"],
             cwd=artifacts,
             env=env,
-            log=logs / "08-certify-clinical-expected-refusal.log",
+            log=logs / "09-certify-clinical-expected-refusal.log",
             expected=2,
         )
         _run(
@@ -375,7 +413,7 @@ def run_lifecycle(
             ],
             cwd=artifacts,
             env=env,
-            log=logs / "09-replay-baseline.log",
+            log=logs / "10-replay-baseline.log",
         )
         _run(
             [
@@ -391,7 +429,7 @@ def run_lifecycle(
             ],
             cwd=artifacts,
             env=env,
-            log=logs / "10-replay-drift.log",
+            log=logs / "11-replay-drift.log",
         )
         # The COMPOSED free path. Every command above passed while this loop
         # was broken; only running it end to end catches that.
@@ -399,7 +437,7 @@ def run_lifecycle(
             [*cli, "tutorial", "--out", str(artifacts / "tutorial")],
             cwd=artifacts,
             env=env,
-            log=logs / "11-tutorial-verified.log",
+            log=logs / "12-tutorial-verified.log",
         )
         summary.update(_inspect_artifacts(artifacts))
     finally:
@@ -408,7 +446,7 @@ def run_lifecycle(
                 [str(python), "-m", "pip", "uninstall", "-y", "openadapt-flow"],
                 cwd=artifacts,
                 env=env,
-                log=logs / "12-uninstall.log",
+                log=logs / "13-uninstall.log",
             )
             probe = _run(
                 [
@@ -421,7 +459,7 @@ def run_lifecycle(
                 ],
                 cwd=artifacts,
                 env=env,
-                log=logs / "13-uninstall-probe.log",
+                log=logs / "14-uninstall-probe.log",
             )
             summary["uninstall_verified"] = probe.returncode == 0
         (work_dir / "summary.json").write_text(

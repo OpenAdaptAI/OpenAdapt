@@ -104,4 +104,4 @@ jobs:
             runs/lifecycle/artifacts/**/REPORT.md
             runs/lifecycle/artifacts/**/report.json
             runs/lifecycle/artifacts/**/patch.json
-          if-no-files-found: warn
+          if-no-files-found: error

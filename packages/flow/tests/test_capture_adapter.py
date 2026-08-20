@@ -854,11 +854,7 @@ def test_window_mode_out_of_window_scroll_rejected(tmp_path: Path) -> None:
 
 
 def test_window_mode_bounds_timeline_honored(tmp_path: Path) -> None:
-    """A mid-recording resize is refused even when actions remain in bounds.
-
-    Capture's fixed-size MP4 skips resized frames and Flow has one viewport.
-    Accepting the resize could pair new-space coordinates with an old frame.
-    """
+    """A source resize is valid when Capture normalizes to one output viewport."""
     x, y = 100.0, 100.0  # deliberately inside both 1280x800 and 640x400
     rows = _click_rows(T0 + 1.0, x, y) + _click_rows(T0 + 2.0, x, y)
     small = (640, 400)
@@ -875,6 +871,9 @@ def test_window_mode_bounds_timeline_honored(tmp_path: Path) -> None:
                 "window_capture": True,
                 "owner": WINDOW_OWNER,
                 "viewport": list(FRAME_SIZE),
+                "source_viewport": list(FRAME_SIZE),
+                "content_rect": [0, 0, *FRAME_SIZE],
+                "fit_scale": 1.0,
             },
         },
         {
@@ -888,9 +887,53 @@ def test_window_mode_bounds_timeline_honored(tmp_path: Path) -> None:
             "state": {
                 "window_capture": True,
                 "owner": WINDOW_OWNER,
-                "viewport": list(small),
+                # The native source changed, but every encoded frame and every
+                # translated action remains in the first frame's output space.
+                "viewport": list(FRAME_SIZE),
+                "source_viewport": list(small),
+                "content_rect": [0, 0, *FRAME_SIZE],
+                "fit_scale": 2.0,
             },
         },
+    ]
+    config = window_capture_config(
+        source_viewport=list(FRAME_SIZE),
+        content_rect=[0, 0, *FRAME_SIZE],
+        fit_scale=1.0,
+    )
+    capture_dir = make_capture(
+        tmp_path,
+        rows,
+        screens=app_screens()[:1],
+        config=config,
+        window_event_rows=window_event_rows,
+    )
+    recording_dir = tmp_path / "recording"
+    convert_capture(capture_dir, recording_dir)
+    assert [(event["x"], event["y"]) for event in events_of(recording_dir)] == [
+        (100, 100),
+        (100, 100),
+    ]
+
+
+def test_window_mode_changed_output_viewport_rejected(tmp_path: Path) -> None:
+    """Only the source may resize; the encoded output viewport stays fixed."""
+    rows = _click_rows(T0 + 1.0, 100.0, 100.0)
+    window_event_rows = [
+        {
+            "timestamp": T0,
+            "title": WINDOW_TITLE,
+            "left": 100,
+            "top": 50,
+            "width": FRAME_SIZE[0] // 2,
+            "height": FRAME_SIZE[1] // 2,
+            "window_id": "42",
+            "state": {
+                "window_capture": True,
+                "owner": WINDOW_OWNER,
+                "viewport": [640, 400],
+            },
+        }
     ]
     capture_dir = make_capture(
         tmp_path,
@@ -899,7 +942,24 @@ def test_window_mode_bounds_timeline_honored(tmp_path: Path) -> None:
         config=window_capture_config(),
         window_event_rows=window_event_rows,
     )
-    with pytest.raises(ValueError, match=r"changed viewport.*640x400"):
+    with pytest.raises(ValueError, match=r"fixed output viewport.*640x400"):
+        convert_capture(capture_dir, tmp_path / "recording")
+
+
+def test_window_mode_invalid_resize_normalization_rejected(tmp_path: Path) -> None:
+    """A letterbox mapping must agree with both source and output viewports."""
+    config = window_capture_config(
+        source_viewport=[800, 1200],
+        content_rect=[0, 0, *FRAME_SIZE],
+        fit_scale=1.0,
+    )
+    capture_dir = make_capture(
+        tmp_path,
+        _click_rows(T0 + 1.0, 100.0, 100.0),
+        screens=app_screens()[:1],
+        config=config,
+    )
+    with pytest.raises(ValueError, match="resize-normalization metadata"):
         convert_capture(capture_dir, tmp_path / "recording")
 
 
@@ -1075,4 +1135,145 @@ def test_window_mode_frame_size_must_match_recorded_viewport(
         config=window_capture_config(viewport=viewport),
     )
     with pytest.raises(ValueError, match=r"frame.*1280x800.*viewport.*640x400"):
+        convert_capture(capture_dir, tmp_path / "recording")
+
+
+# -- current full-screen sessions (combined virtual-desktop pixels) -----------
+
+
+DESKTOP_ORIGIN = (-640, 0)
+DESKTOP_MONITORS = [[-640, 0, 640, 800], [0, 0, 640, 800]]
+
+
+def desktop_capture_config(**overrides) -> dict:
+    """Recording config for a two-display virtual desktop with negative x."""
+    capture_desktop = {
+        "coordinate_space": "virtual_desktop_pixels",
+        "origin": list(DESKTOP_ORIGIN),
+        "viewport": list(FRAME_SIZE),
+        "monitor_count": 2,
+        "monitors": DESKTOP_MONITORS,
+        # The adapter must retain only the privacy-safe geometry allowlist.
+        "producer_extension": "not retained",
+    }
+    capture_desktop.update(overrides)
+    return {"pixel_ratio": PIXEL_RATIO, "capture_desktop": capture_desktop}
+
+
+def test_desktop_mode_uses_combined_frame_coordinates_and_provenance(
+    tmp_path: Path,
+) -> None:
+    """Translated multi-monitor pixels pass through without a HiDPI rescale."""
+    # Global x=100 on the right display becomes x=740 in a frame whose origin
+    # is -640. Capture performs that translation before persistence.
+    translated = (740.0, 400.0)
+    rows = _click_rows(T0 + 1.0, *translated)
+    capture_dir = make_capture(
+        tmp_path,
+        rows,
+        screens=app_screens()[:1],
+        config=desktop_capture_config(),
+    )
+    recording_dir = tmp_path / "recording"
+    convert_capture(capture_dir, recording_dir)
+
+    click = events_of(recording_dir)[0]
+    assert (click["x"], click["y"]) == (740, 400)
+    meta = json.loads((recording_dir / "meta.json").read_text())
+    assert meta["desktop_capture"] == {
+        "coordinate_space": "virtual_desktop_pixels",
+        "origin": [-640, 0],
+        "viewport": list(FRAME_SIZE),
+        "monitor_count": 2,
+        "monitors": DESKTOP_MONITORS,
+    }
+    assert "window_capture" not in meta
+    assert "producer_extension" not in meta["desktop_capture"]
+
+
+def test_window_and_desktop_scope_are_mutually_exclusive(tmp_path: Path) -> None:
+    config = desktop_capture_config()
+    config["capture_window"] = window_capture_config()["capture_window"]
+    capture_dir = make_capture(
+        tmp_path,
+        _click_rows(T0 + 1.0, 100.0, 100.0),
+        screens=app_screens()[:1],
+        config=config,
+    )
+    with pytest.raises(ValueError, match="both window and desktop"):
+        convert_capture(capture_dir, tmp_path / "recording")
+
+
+def test_desktop_mode_out_of_frame_action_rejected(tmp_path: Path) -> None:
+    rows = _click_rows(T0 + 1.0, float(FRAME_SIZE[0] + 1), 100.0)
+    capture_dir = make_capture(
+        tmp_path,
+        rows,
+        screens=app_screens()[:1],
+        config=desktop_capture_config(),
+    )
+    with pytest.raises(ValueError, match="out-of-desktop input"):
+        convert_capture(capture_dir, tmp_path / "recording")
+
+
+def test_desktop_mode_unknown_coordinate_space_rejected(tmp_path: Path) -> None:
+    config = desktop_capture_config(coordinate_space="global_screen_points")
+    capture_dir = make_capture(
+        tmp_path,
+        _click_rows(T0 + 1.0, 100.0, 100.0),
+        screens=app_screens()[:1],
+        config=config,
+    )
+    with pytest.raises(ValueError, match="coordinate_space='global_screen_points'"):
+        convert_capture(capture_dir, tmp_path / "recording")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"origin": [True, 0]}, "origin"),
+        ({"viewport": [1280.5, 800]}, "viewport"),
+        ({"monitor_count": 1}, "monitor_count"),
+        (
+            {"monitors": [[-641, 0, 641, 800], [0, 0, 640, 800]]},
+            "outside",
+        ),
+        (
+            {"monitors": [[-600, 0, 600, 800], [0, 0, 640, 800]]},
+            "do not span",
+        ),
+    ],
+)
+def test_desktop_mode_malformed_topology_rejected(
+    tmp_path: Path, overrides: dict, message: str
+) -> None:
+    config = desktop_capture_config(**overrides)
+    capture_dir = make_capture(
+        tmp_path,
+        _click_rows(T0 + 1.0, 100.0, 100.0),
+        screens=app_screens()[:1],
+        config=config,
+    )
+    with pytest.raises(ValueError, match=message):
+        convert_capture(capture_dir, tmp_path / "recording")
+
+
+def test_desktop_mode_frame_size_must_match_declared_viewport(
+    tmp_path: Path,
+) -> None:
+    config = desktop_capture_config(
+        origin=[0, 0],
+        viewport=[640, 400],
+        monitor_count=1,
+        monitors=[[0, 0, 640, 400]],
+    )
+    capture_dir = make_capture(
+        tmp_path,
+        _click_rows(T0 + 1.0, 100.0, 100.0),
+        screens=app_screens()[:1],
+        config=config,
+    )
+    with pytest.raises(
+        ValueError, match=r"virtual-desktop.*1280x800.*viewport.*640x400"
+    ):
         convert_capture(capture_dir, tmp_path / "recording")

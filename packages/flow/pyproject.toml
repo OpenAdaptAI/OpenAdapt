@@ -17,7 +17,13 @@ authors = [{ name = "OpenAdapt.AI" }]
 dependencies = [
     "pydantic>=2.5",
     "numpy>=1.26",
-    "opencv-python-headless>=4.9",
+    # rapidocr-onnxruntime requires opencv-python by distribution name. Python
+    # packaging has no provider/alias mechanism through which the headless
+    # distribution can satisfy that requirement. Declaring both installs two
+    # distributions that own the same cv2 package. Use the one provider that
+    # RapidOCR's published metadata requires, and enforce this in the clean
+    # wheel lifecycle on every supported OS.
+    "opencv-python>=4.9",
     "pillow>=10.0",
     "rapidocr-onnxruntime>=1.3",
     # GPU-less runners call the on-prem VLM appliance over HTTP

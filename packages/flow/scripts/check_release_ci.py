@@ -24,6 +24,13 @@ EXPECTED_MATRIX_JOBS = frozenset(
         "test-matrix (macos-latest, 3.12)",
     }
 )
+EXPECTED_CLEAN_MACHINE_JOBS = frozenset(
+    {
+        "lifecycle (ubuntu-latest)",
+        "lifecycle (macos-latest)",
+        "lifecycle (windows-latest)",
+    }
+)
 PER_PAGE = 100
 MAX_PAGES = 100
 GITHUB_API_VERSION = "2022-11-28"
@@ -46,6 +53,12 @@ class Qualification:
     run_id: int
     sha: str
     job_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ProductionQualification:
+    full_matrix: Qualification
+    clean_machine: Qualification
 
 
 class GitHubJSONFetcher:
@@ -207,6 +220,103 @@ def require_exact_full_matrix(
     )
 
 
+def require_exact_clean_machine(
+    fetch_json: JSONFetcher,
+    *,
+    repository: str,
+    sha: str,
+) -> Qualification:
+    """Require the three-OS clean-wheel Browser lifecycle on the exact SHA."""
+
+    if not _REPOSITORY_RE.fullmatch(repository):
+        raise QualificationError(f"invalid GitHub repository: {repository!r}")
+    if not _SHA_RE.fullmatch(sha):
+        raise QualificationError(f"invalid Git commit SHA: {sha!r}")
+
+    runs = _paginate(
+        fetch_json,
+        f"/repos/{repository}/actions/workflows/quickstart-lifecycle.yml/runs",
+        "workflow_runs",
+        {"head_sha": sha, "event": "workflow_dispatch"},
+    )
+    exact_runs = [
+        run
+        for run in runs
+        if run.get("head_sha") == sha and run.get("event") == "workflow_dispatch"
+    ]
+    if not exact_runs:
+        raise QualificationPending(
+            f"no exact-SHA workflow_dispatch clean-machine run exists for {sha}"
+        )
+    latest = max(
+        exact_runs,
+        key=lambda run: (str(run.get("created_at", "")), int(run.get("id", 0))),
+    )
+    run_id = latest.get("id")
+    if not isinstance(run_id, int) or run_id <= 0:
+        raise QualificationError("clean-machine qualification run has an invalid id")
+    status = latest.get("status")
+    conclusion = latest.get("conclusion")
+    if status != "completed":
+        raise QualificationPending(
+            f"exact-SHA clean-machine run {run_id} is {status!r}"
+        )
+    if conclusion != "success":
+        raise QualificationError(
+            f"exact-SHA clean-machine run {run_id} concluded {conclusion!r}"
+        )
+
+    jobs = _paginate(
+        fetch_json,
+        f"/repos/{repository}/actions/runs/{run_id}/jobs",
+        "jobs",
+        {"filter": "latest"},
+    )
+    lifecycle_jobs = [
+        job
+        for job in jobs
+        if isinstance(job.get("name"), str)
+        and str(job["name"]).startswith("lifecycle")
+    ]
+    counts = Counter(str(job.get("name")) for job in lifecycle_jobs)
+    expected_counts = Counter({name: 1 for name in EXPECTED_CLEAN_MACHINE_JOBS})
+    if counts != expected_counts:
+        raise QualificationError(
+            "exact-SHA clean-machine job set/count mismatch: "
+            f"expected={dict(sorted(expected_counts.items()))}, "
+            f"observed={dict(sorted(counts.items()))}"
+        )
+    non_success = {
+        str(job["name"]): job.get("conclusion")
+        for job in lifecycle_jobs
+        if job.get("conclusion") != "success"
+    }
+    if non_success:
+        raise QualificationError(
+            "exact-SHA clean-machine run has non-success jobs: "
+            f"{dict(sorted(non_success.items()))}"
+        )
+    return Qualification(run_id=run_id, sha=sha, job_names=frozenset(counts))
+
+
+def require_production_qualification(
+    fetch_json: JSONFetcher,
+    *,
+    repository: str,
+    sha: str,
+) -> ProductionQualification:
+    """Require both code-level and clean-wheel product qualification."""
+
+    return ProductionQualification(
+        full_matrix=require_exact_full_matrix(
+            fetch_json, repository=repository, sha=sha
+        ),
+        clean_machine=require_exact_clean_machine(
+            fetch_json, repository=repository, sha=sha
+        ),
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Require an exact-SHA dispatched CI full-matrix qualification."
@@ -232,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
     deadline = time.monotonic() + args.wait_seconds
     while True:
         try:
-            qualification = require_exact_full_matrix(
+            qualification = require_production_qualification(
                 fetch_json,
                 repository=args.repository,
                 sha=args.sha,
@@ -249,8 +359,11 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(
             "Release qualification passed: "
-            f"sha={qualification.sha} run_id={qualification.run_id} "
-            f"matrix_jobs={len(qualification.job_names)}"
+            f"sha={qualification.full_matrix.sha} "
+            f"matrix_run_id={qualification.full_matrix.run_id} "
+            f"clean_machine_run_id={qualification.clean_machine.run_id} "
+            f"matrix_jobs={len(qualification.full_matrix.job_names)} "
+            f"clean_machine_jobs={len(qualification.clean_machine.job_names)}"
         )
         return 0
 
