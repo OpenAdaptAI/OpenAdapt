@@ -175,23 +175,42 @@ jobs:
             --minimum-monitors 2 \
             --output evidence/display-topology.json
 
-      - name: Run the complete live recorder qualification
+      - name: Run three counted live recorder qualification trials
         shell: bash
         env:
           OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}"
-          "${QUALIFICATION_PYTHON}" -m pytest \
-            "${GITHUB_WORKSPACE}/tests/test_performance.py" \
-            -m slow -v --timeout=300 --import-mode=importlib \
-            --junitxml="${GITHUB_WORKSPACE}/evidence/interactive-linux.xml"
+          for trial in 1 2 3; do
+            echo "::group::Linux trial ${trial}"
+            "${QUALIFICATION_PYTHON}" -m pytest \
+              "${GITHUB_WORKSPACE}/tests/test_performance.py" \
+              -m slow -v --timeout=300 --import-mode=importlib \
+              "--junitxml=${GITHUB_WORKSPACE}/evidence/trial-${trial}-linux.xml"
+            echo "::endgroup::"
+          done
 
-      - name: Reject skipped or incomplete qualification tests
+      - name: Reject skipped or incomplete qualification trials
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/check_junit_no_skips.py evidence/interactive-linux.xml
+          for trial in 1 2 3; do
+            python scripts/check_junit_no_skips.py "evidence/trial-${trial}-linux.xml"
+          done
+
+      - name: Aggregate the counted trial evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/aggregate_qualification_trials.py \
+            --os linux \
+            --candidate-sha "${GITHUB_SHA}" \
+            --expected-trials 3 \
+            evidence/trial-1-linux.xml \
+            evidence/trial-2-linux.xml \
+            evidence/trial-3-linux.xml \
+            --output evidence/qualification-summary-linux.json
 
       - name: Upload interactive qualification evidence
         if: always()
@@ -257,24 +276,43 @@ jobs:
             --minimum-monitors 2 \
             --output evidence/display-topology.json
 
-      - name: Run the complete live recorder and window qualification
+      - name: Run three counted live recorder and window qualification trials
         shell: bash
         env:
           OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}"
-          "${QUALIFICATION_PYTHON}" -m pytest \
-            "${GITHUB_WORKSPACE}/tests/test_performance.py" \
-            "${GITHUB_WORKSPACE}/tests/test_window_capture.py" \
-            -m slow -v --timeout=300 --import-mode=importlib \
-            --junitxml="${GITHUB_WORKSPACE}/evidence/interactive-macos.xml"
+          for trial in 1 2 3; do
+            echo "::group::macOS trial ${trial}"
+            "${QUALIFICATION_PYTHON}" -m pytest \
+              "${GITHUB_WORKSPACE}/tests/test_performance.py" \
+              "${GITHUB_WORKSPACE}/tests/test_window_capture.py" \
+              -m slow -v --timeout=300 --import-mode=importlib \
+              "--junitxml=${GITHUB_WORKSPACE}/evidence/trial-${trial}-macos.xml"
+            echo "::endgroup::"
+          done
 
-      - name: Reject skipped or incomplete qualification tests
+      - name: Reject skipped or incomplete qualification trials
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/check_junit_no_skips.py evidence/interactive-macos.xml
+          for trial in 1 2 3; do
+            python scripts/check_junit_no_skips.py "evidence/trial-${trial}-macos.xml"
+          done
+
+      - name: Aggregate the counted trial evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/aggregate_qualification_trials.py \
+            --os macos \
+            --candidate-sha "${GITHUB_SHA}" \
+            --expected-trials 3 \
+            evidence/trial-1-macos.xml \
+            evidence/trial-2-macos.xml \
+            evidence/trial-3-macos.xml \
+            --output evidence/qualification-summary-macos.json
 
       - name: Upload interactive qualification evidence
         if: always()
@@ -344,7 +382,7 @@ jobs:
             --output evidence/display-topology.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run the complete live recorder and window qualification
+      - name: Run three counted live recorder and window qualification trials
         shell: pwsh
         env:
           OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"
@@ -352,21 +390,41 @@ jobs:
           $ErrorActionPreference = "Stop"
           Push-Location $env:RUNNER_TEMP
           try {
-            & $env:QUALIFICATION_PYTHON -m pytest `
-              "$env:GITHUB_WORKSPACE/tests/test_performance.py" `
-              "$env:GITHUB_WORKSPACE/tests/test_window_capture.py" `
-              -m slow -v --timeout=300 --import-mode=importlib `
-              "--junitxml=$env:GITHUB_WORKSPACE/evidence/interactive-windows.xml"
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            foreach ($trial in 1..3) {
+              Write-Host "::group::Windows trial $trial"
+              & $env:QUALIFICATION_PYTHON -m pytest `
+                "$env:GITHUB_WORKSPACE/tests/test_performance.py" `
+                "$env:GITHUB_WORKSPACE/tests/test_window_capture.py" `
+                -m slow -v --timeout=300 --import-mode=importlib `
+                "--junitxml=$env:GITHUB_WORKSPACE/evidence/trial-$trial-windows.xml"
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              Write-Host "::endgroup::"
+            }
           } finally {
             Pop-Location
           }
 
-      - name: Reject skipped or incomplete qualification tests
+      - name: Reject skipped or incomplete qualification trials
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          python scripts/check_junit_no_skips.py evidence/interactive-windows.xml
+          foreach ($trial in 1..3) {
+            python scripts/check_junit_no_skips.py "evidence/trial-$trial-windows.xml"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Aggregate the counted trial evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python scripts/aggregate_qualification_trials.py `
+            --os windows `
+            --candidate-sha $env:GITHUB_SHA `
+            --expected-trials 3 `
+            evidence/trial-1-windows.xml `
+            evidence/trial-2-windows.xml `
+            evidence/trial-3-windows.xml `
+            --output evidence/qualification-summary-windows.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload interactive qualification evidence
