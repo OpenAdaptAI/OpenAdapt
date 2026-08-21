@@ -816,7 +816,7 @@ class DurableAuthority:
                     "PRAGMA table_info(remote_delivery_pending)"
                 ).fetchall()
             }
-            if pending_columns != {
+            expected_pending_columns = {
                 "path_key",
                 "authority_id",
                 "authority_origin",
@@ -831,7 +831,24 @@ class DurableAuthority:
                 "runtime_delivery_sequence",
                 "permit_artifact_sha256",
                 "permit_artifact_bytes",
-            }:
+            }
+            legacy_pending_columns = expected_pending_columns - {"authority_origin"}
+            if pending_columns == legacy_pending_columns:
+                pending_count = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM remote_delivery_pending"
+                    ).fetchone()[0]
+                )
+                if pending_count:
+                    raise DurableAuthorityBusy(
+                        "the legacy pending remote delivery cannot be migrated"
+                    )
+                connection.execute(
+                    "ALTER TABLE remote_delivery_pending ADD COLUMN "
+                    "authority_origin TEXT NOT NULL DEFAULT ''"
+                )
+                pending_columns = expected_pending_columns
+            if pending_columns != expected_pending_columns:
                 raise DurableAuthorityBusy(
                     "the pending remote delivery schema is incompatible"
                 )

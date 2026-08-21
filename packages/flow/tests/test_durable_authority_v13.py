@@ -134,6 +134,57 @@ def _fresh_run(
     return run_dir, store, manifest, authority
 
 
+def _replace_pending_table_with_legacy_schema(
+    authority: DurableAuthority,
+    *,
+    populated: bool,
+) -> None:
+    with sqlite3.connect(authority.db_path) as connection:
+        connection.execute("DROP TABLE remote_delivery_pending")
+        connection.execute(
+            """
+            CREATE TABLE remote_delivery_pending (
+                path_key TEXT PRIMARY KEY,
+                authority_id TEXT NOT NULL,
+                authority_signer_sha256 TEXT NOT NULL,
+                permit_id TEXT NOT NULL,
+                dispatch_session_id TEXT NOT NULL,
+                one_use_claim_id TEXT NOT NULL,
+                next_sequence INTEGER NOT NULL,
+                cursor_secret TEXT NOT NULL,
+                input_edge_sequence INTEGER NOT NULL,
+                authority_sequence INTEGER NOT NULL,
+                runtime_delivery_sequence INTEGER NOT NULL,
+                permit_artifact_sha256 TEXT NOT NULL,
+                permit_artifact_bytes BLOB NOT NULL
+            )
+            """
+        )
+        if populated:
+            connection.execute(
+                """
+                INSERT INTO remote_delivery_pending VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (
+                    authority.path_key,
+                    "00000000-0000-4000-8000-000000000008",
+                    "a" * 64,
+                    "20000000-0000-4000-8000-000000000001",
+                    "30000000-0000-4000-8000-000000000001",
+                    "40000000-0000-4000-8000-000000000001",
+                    1,
+                    "b" * 64,
+                    1,
+                    0,
+                    0,
+                    "c" * 64,
+                    b"{}",
+                ),
+            )
+
+
 def _pause(
     store: CheckpointStore,
     manifest: RunManifest,
@@ -370,6 +421,42 @@ def test_customer_controlled_standard_delivery_stays_local_without_cloud(
         authority, manifest, pending, attempt="local", now=datetime.now(timezone.utc)
     )
     authority.before_delivery(manifest, attempt_id="local", owner_nonce_sha256=owner)
+
+
+def test_empty_legacy_pending_delivery_table_migrates_without_data_loss(
+    tmp_path: Path,
+) -> None:
+    _run_dir, _store, manifest, authority = _fresh_run(tmp_path)
+    _replace_pending_table_with_legacy_schema(authority, populated=False)
+
+    assert authority.validate(manifest).phase == "active"
+    with sqlite3.connect(authority.db_path) as connection:
+        columns = {
+            str(row[1])
+            for row in connection.execute(
+                "PRAGMA table_info(remote_delivery_pending)"
+            ).fetchall()
+        }
+        pending_count = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM remote_delivery_pending"
+            ).fetchone()[0]
+        )
+    assert "authority_origin" in columns
+    assert pending_count == 0
+
+
+def test_populated_legacy_pending_delivery_table_fails_closed(
+    tmp_path: Path,
+) -> None:
+    _run_dir, _store, manifest, authority = _fresh_run(tmp_path)
+    _replace_pending_table_with_legacy_schema(authority, populated=True)
+
+    with pytest.raises(
+        DurableAuthorityBusy,
+        match="legacy pending remote delivery cannot be migrated",
+    ):
+        authority.validate(manifest)
 
 
 def test_production_delivery_requires_and_validates_remote_permit(
