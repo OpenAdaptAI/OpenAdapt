@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from base64 import b64decode
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -21,9 +23,12 @@ from openadapt_flow.terminal_verification_v2 import (
     ProductionAuthorizationEvidenceManifest,
     ProductionDeliveryPermit,
     ProductionDeliveryPermitChain,
+    ProductionDeliveryPermitPayload,
+    ProductionDeliveryReceiptPayload,
     ProductionEffectEvidence,
     ProductionEffectEvidenceManifest,
     ProductionEvidenceManifests,
+    ProductionExecutionAuthorityPayload,
     ProductionExecutionOutcome,
     ProductionIdentityEvidenceManifest,
     ProductionIdentityResult,
@@ -37,6 +42,9 @@ from openadapt_flow.terminal_verification_v2 import (
     build_evidence_manifest,
     evidence_runner_signer_sha256,
     project_production_run_receipt,
+    rebuild_production_delivery_permit_chain_from_artifacts,
+    sign_production_delivery_permit,
+    sign_production_delivery_receipt,
     sign_production_terminal_verification,
     verify_production_terminal_verification,
 )
@@ -56,6 +64,7 @@ IDS = {
     "bundle_version_id": "00000000-0000-4000-8000-000000000004",
     "runtime_validation_id": "00000000-0000-4000-8000-000000000005",
     "admission_id": "00000000-0000-4000-8000-000000000006",
+    "execution_authority_id": "00000000-0000-4000-8000-000000000008",
 }
 
 
@@ -72,6 +81,10 @@ def _public_key() -> bytes:
             format=serialization.PublicFormat.Raw,
         )
     )
+
+
+def _authority_key() -> Ed25519PrivateKey:
+    return Ed25519PrivateKey.from_private_bytes(bytes(range(32, 64)))
 
 
 def _postcondition() -> PostconditionContractEvidence:
@@ -175,28 +188,59 @@ def _receipt() -> ProductionRunReceipt:
     return project_production_run_receipt(source)
 
 
-def _permit_chain() -> ProductionDeliveryPermitChain:
-    permit = ProductionDeliveryPermit(
-        execution_authority_id="authority:run:1",
+def _permit_entry(
+    *,
+    permit_id: str = "permit:1",
+    action_request_sha256: str = SHA_D,
+    qualification_signer_registry_revision: int = 7,
+    qualification_signer_registry_checked_at: str = "2026-08-18T11:59:30Z",
+    input_edge_sequence: int = 1,
+    authority_sequence: int = 0,
+    runtime_delivery_sequence: int = 9,
+    issued_at: str = "2026-08-18T12:00:00Z",
+    delivered_at: str = "2026-08-18T12:00:01Z",
+    one_use_claim_id: str = "00000000-0000-4000-8000-000000000010",
+) -> ProductionDeliveryPermit:
+    permit_payload = ProductionDeliveryPermitPayload(
+        execution_authority_id=IDS["execution_authority_id"],
         execution_authority_sha256=SHA_A,
-        permit_id="permit:1",
-        permit_sha256=SHA_B,
+        permit_id=permit_id,
+        run_id=IDS["run_id"],
+        flow_run_id_sha256=hashlib.sha256(IDS["run_id"].encode("utf-8")).hexdigest(),
         run_request_sha256=SHA_C,
-        action_request_sha256=SHA_D,
+        action_request_sha256=action_request_sha256,
         admission_artifact_sha256=SHA_D,
         evidence_identity_sha256=SHA_E,
         environment_digest=SHA_A,
         qualification_signer_registry_sha256=SHA_E,
-        qualification_signer_registry_revision=7,
-        qualification_signer_registry_checked_at="2026-08-18T11:59:30Z",
+        qualification_signer_registry_revision=(qualification_signer_registry_revision),
+        qualification_signer_registry_checked_at=(
+            qualification_signer_registry_checked_at
+        ),
         qualification_signer_registry_expires_at="2026-08-20T11:00:00Z",
-        input_edge_sequence=1,
-        authority_sequence=0,
-        runtime_delivery_sequence=9,
-        issued_at="2026-08-18T12:00:00Z",
-        delivered_at="2026-08-18T12:00:01Z",
+        input_edge_sequence=input_edge_sequence,
+        authority_sequence=authority_sequence,
+        issued_at=issued_at,
     )
-    return ProductionDeliveryPermitChain.build((permit,))
+    permit_artifact = sign_production_delivery_permit(permit_payload, _authority_key())
+    receipt_payload = ProductionDeliveryReceiptPayload(
+        execution_authority_id=permit_payload.execution_authority_id,
+        permit_id=permit_payload.permit_id,
+        permit_artifact_sha256=permit_artifact.artifact_sha256(),
+        authenticated_runner_id_sha256=SHA_B,
+        authenticated_session_id_sha256=SHA_C,
+        one_use_claim_id=one_use_claim_id,
+        runtime_delivery_sequence=runtime_delivery_sequence,
+        delivered_at=delivered_at,
+    )
+    receipt_artifact = sign_production_delivery_receipt(
+        receipt_payload, _authority_key()
+    )
+    return ProductionDeliveryPermit.build(permit_artifact, receipt_artifact)
+
+
+def _permit_chain() -> ProductionDeliveryPermitChain:
+    return ProductionDeliveryPermitChain.build((_permit_entry(),))
 
 
 def _manifests(
@@ -219,7 +263,7 @@ def _manifests(
         governed_authorization_id_sha256=SHA_A,
         admission_id=IDS["admission_id"],
         admission_artifact_sha256=SHA_D,
-        execution_authority_id="authority:run:1",
+        execution_authority_id=IDS["execution_authority_id"],
         execution_authority_sha256=SHA_A,
         permit_chain_sha256=chain.permit_chain_sha256,
     )
@@ -280,7 +324,7 @@ def _payload() -> ProductionTerminalVerificationPayload:
     chain = _permit_chain()
     return ProductionTerminalVerificationPayload(
         **IDS,
-        flow_run_id_sha256=SHA_A,
+        flow_run_id_sha256=hashlib.sha256(IDS["run_id"].encode("utf-8")).hexdigest(),
         bundle_artifact_sha256=SHA_B,
         bundle_content_digest=SHA_A,
         environment_digest=SHA_A,
@@ -296,8 +340,8 @@ def _payload() -> ProductionTerminalVerificationPayload:
         evidence_runner_signer_sha256=evidence_runner_signer_sha256(_public_key()),
         qualification_signer_registry_sha256=SHA_E,
         qualification_signer_registry_revision=7,
-        execution_authority_id="authority:run:1",
         execution_authority_sha256=SHA_A,
+        execution_authority_signer_sha256=(chain.entries[0].authority_signer_sha256),
         permit_chain=chain,
         permit_count=1,
         final_authority_sequence=0,
@@ -347,10 +391,20 @@ def _expected(
         qualification_signer_registry_revision=payload.qualification_signer_registry_revision,
         execution_authority_id=payload.execution_authority_id,
         execution_authority_sha256=payload.execution_authority_sha256,
+        execution_authority_signer_sha256=(payload.execution_authority_signer_sha256),
         permit_chain_sha256=payload.permit_chain.permit_chain_sha256,
         permit_count=payload.permit_count,
         final_authority_sequence=payload.final_authority_sequence,
         final_runtime_delivery_sequence=payload.final_runtime_delivery_sequence,
+        authenticated_runner_id_sha256=(
+            payload.permit_chain.entries[0].authenticated_runner_id_sha256
+        ),
+        authenticated_session_id_sha256=(
+            payload.permit_chain.entries[0].authenticated_session_id_sha256
+        ),
+        acknowledged_one_use_claim_ids=tuple(
+            entry.one_use_claim_id for entry in payload.permit_chain.entries
+        ),
         workflow_contract_sha256=payload.workflow_contract_sha256,
         execution_outcome_sha256=payload.execution_outcome_sha256,
         run_receipt_sha256=payload.run_receipt_sha256,
@@ -376,9 +430,76 @@ def test_terminal_v2_signs_and_verifies_exact_production_success() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("authenticated_runner_id_sha256", SHA_E, "runner identity"),
+        ("authenticated_session_id_sha256", SHA_E, "delivery session"),
+        (
+            "acknowledged_one_use_claim_ids",
+            ("99999999-9999-4999-8999-999999999999",),
+            "one-use claims",
+        ),
+    ],
+)
+def test_terminal_acceptor_rechecks_each_cloud_delivery_identity(
+    field: str, value: object, message: str
+) -> None:
+    payload = _payload()
+    envelope = sign_production_terminal_verification(payload, _private_key())
+    expected = _expected(payload).model_copy(update={field: value})
+
+    with pytest.raises(ProductionTerminalVerificationError, match=message):
+        verify_production_terminal_verification(
+            envelope,
+            expected=expected,
+            now=NOW,
+        )
+
+
 def test_generic_success_cannot_parse_as_terminal_v2() -> None:
     with pytest.raises(ValidationError):
         ProductionTerminalVerificationPayload.model_validate({"status": "success"})
+
+
+def test_execution_authority_digest_binds_the_exact_run_and_signer() -> None:
+    signer_sha256 = _permit_chain().entries[0].authority_signer_sha256
+    authority = ProductionExecutionAuthorityPayload(
+        execution_authority_id=IDS["execution_authority_id"],
+        tenant_id=IDS["tenant_id"],
+        run_id=IDS["run_id"],
+        flow_run_id_sha256=hashlib.sha256(IDS["run_id"].encode("utf-8")).hexdigest(),
+        workflow_id=IDS["workflow_id"],
+        workflow_version_id=IDS["workflow_version_id"],
+        bundle_version_id=IDS["bundle_version_id"],
+        bundle_artifact_sha256=SHA_B,
+        bundle_content_digest=SHA_A,
+        runtime_validation_id=IDS["runtime_validation_id"],
+        runtime_substrate="web",
+        runtime_boundary_id="managed-us",
+        admission_id=IDS["admission_id"],
+        admission_artifact_sha256=SHA_D,
+        admission_policy_sha256=SHA_A,
+        evidence_identity_sha256=SHA_E,
+        environment_digest=SHA_A,
+        environment_contract_sha256=SHA_B,
+        runtime_environment_sha256=SHA_C,
+        identity_contract_sha256=SHA_D,
+        effect_contract_sha256=SHA_E,
+        admitted_runtime_build_sha256=SHA_C,
+        evidence_runner_signer_sha256=evidence_runner_signer_sha256(_public_key()),
+        qualification_signer_registry_sha256=SHA_E,
+        qualification_signer_registry_revision=7,
+        qualification_signer_registry_checked_at="2026-08-18T11:59:30Z",
+        qualification_signer_registry_expires_at="2026-08-20T11:00:00Z",
+        execution_profile="standard",
+        dispatch_binding_sha256="sha256:" + SHA_A,
+        execution_authority_signer_sha256=signer_sha256,
+        created_at="2026-08-18T12:00:00Z",
+    )
+    assert len(authority.artifact_sha256()) == 64
+    changed = authority.model_copy(update={"environment_digest": SHA_B})
+    assert changed.artifact_sha256() != authority.artifact_sha256()
 
 
 @pytest.mark.parametrize(
@@ -421,19 +542,70 @@ def test_terminal_rejects_report_object_mismatch() -> None:
 
 
 def test_permit_rejects_stale_registry_check() -> None:
-    stale = _permit_chain().entries[0].model_dump(mode="json")
-    stale["qualification_signer_registry_checked_at"] = "2026-08-18T11:58:00Z"
     with pytest.raises(ValidationError, match="registry check is stale"):
-        ProductionDeliveryPermit.model_validate(stale)
+        _permit_entry(
+            qualification_signer_registry_checked_at="2026-08-18T11:58:00Z",
+        )
 
 
 def test_permit_registry_check_at_sixty_seconds_is_accepted() -> None:
-    fresh = _permit_chain().entries[0].model_dump(mode="json")
-    fresh["qualification_signer_registry_checked_at"] = "2026-08-18T11:59:00Z"
     assert (
-        ProductionDeliveryPermit.model_validate(fresh).issued_at
+        _permit_entry(
+            qualification_signer_registry_checked_at="2026-08-18T11:59:00Z",
+        ).issued_at
         == "2026-08-18T12:00:00Z"
     )
+
+
+def test_permit_digest_is_recomputed_from_all_retained_fields() -> None:
+    permit = _permit_chain().entries[0]
+    data = permit.model_dump(mode="json")
+    data["permit_artifact"]["payload"]["action_request_sha256"] = SHA_E
+    with pytest.raises(ValidationError, match="permit payload digest is invalid"):
+        ProductionDeliveryPermit.model_validate(data)
+
+
+def test_chain_revalidates_an_in_memory_permit_with_stale_digest() -> None:
+    permit = _permit_chain().entries[0]
+    changed_payload = permit.permit_artifact.payload.model_copy(
+        update={"action_request_sha256": SHA_E}
+    )
+    changed_artifact = permit.permit_artifact.model_copy(
+        update={"payload": changed_payload}
+    )
+    changed_entry = permit.model_copy(update={"permit_artifact": changed_artifact})
+    with pytest.raises(ValidationError, match="permit payload digest is invalid"):
+        ProductionDeliveryPermitChain.build((changed_entry,))
+
+
+def test_permit_signer_revalidates_an_in_memory_payload() -> None:
+    payload = (
+        _permit_chain()
+        .entries[0]
+        .permit_artifact.payload.model_copy(update={"flow_run_id_sha256": SHA_A})
+    )
+    with pytest.raises(ValidationError, match="run identity digest is invalid"):
+        sign_production_delivery_permit(payload, _authority_key())
+
+
+def test_delivery_receipt_must_bind_exact_permit_bytes() -> None:
+    entry = _permit_chain().entries[0]
+    receipt_payload = entry.delivery_receipt_artifact.payload.model_copy(
+        update={"permit_artifact_sha256": SHA_E}
+    )
+    receipt = sign_production_delivery_receipt(receipt_payload, _authority_key())
+    with pytest.raises(ValidationError, match="does not bind its exact permit"):
+        ProductionDeliveryPermit.build(entry.permit_artifact, receipt)
+
+
+def test_delivery_receipt_must_use_the_permit_authority_signer() -> None:
+    entry = _permit_chain().entries[0]
+    other_key = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
+    receipt = sign_production_delivery_receipt(
+        entry.delivery_receipt_artifact.payload, other_key
+    )
+    with pytest.raises(ValidationError, match="signer differs"):
+        ProductionDeliveryPermit.build(entry.permit_artifact, receipt)
 
 
 def test_terminal_counts_reject_numeric_boolean_and_float_spellings() -> None:
@@ -457,16 +629,14 @@ def test_terminal_counts_reject_numeric_boolean_and_float_spellings() -> None:
 
 def test_terminal_rejects_permit_sequence_gap() -> None:
     first = _permit_chain().entries[0]
-    second = first.model_copy(
-        update={
-            "permit_id": "permit:2",
-            "action_request_sha256": SHA_E,
-            "input_edge_sequence": 3,
-            "authority_sequence": 1,
-            "runtime_delivery_sequence": 10,
-            "issued_at": "2026-08-18T12:00:02Z",
-            "delivered_at": "2026-08-18T12:00:03Z",
-        }
+    second = _permit_entry(
+        permit_id="permit:2",
+        action_request_sha256=SHA_E,
+        input_edge_sequence=3,
+        authority_sequence=1,
+        runtime_delivery_sequence=10,
+        issued_at="2026-08-18T12:00:02Z",
+        delivered_at="2026-08-18T12:00:03Z",
     )
     with pytest.raises(ValidationError, match="input-edge sequence"):
         ProductionDeliveryPermitChain.build((first, second))
@@ -474,37 +644,87 @@ def test_terminal_rejects_permit_sequence_gap() -> None:
 
 def test_terminal_supports_multiple_input_edges_with_independent_sequences() -> None:
     first = _permit_chain().entries[0]
-    second = first.model_copy(
-        update={
-            "permit_id": "permit:2",
-            "permit_sha256": SHA_C,
-            "action_request_sha256": SHA_E,
-            "input_edge_sequence": 2,
-            "authority_sequence": 1,
-            "runtime_delivery_sequence": 10,
-            "issued_at": "2026-08-18T12:00:02Z",
-            "delivered_at": "2026-08-18T12:00:03Z",
-        }
+    second = _permit_entry(
+        permit_id="permit:2",
+        action_request_sha256=SHA_E,
+        input_edge_sequence=2,
+        authority_sequence=1,
+        runtime_delivery_sequence=10,
+        issued_at="2026-08-18T12:00:02Z",
+        delivered_at="2026-08-18T12:00:03Z",
+        one_use_claim_id="00000000-0000-4000-8000-000000000011",
     )
     chain = ProductionDeliveryPermitChain.build((first, second))
     assert chain.entries[-1].authority_sequence == 1
     assert chain.entries[-1].runtime_delivery_sequence == 10
 
 
+def test_delivery_cross_language_vector_is_exact() -> None:
+    vector = json.loads(
+        Path("tests/fixtures/terminal_verification_v2_delivery_vector.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    key = Ed25519PrivateKey.from_private_bytes(
+        b64decode(vector["private_key_base64"], validate=True)
+    )
+    permit_payload = ProductionDeliveryPermitPayload.model_validate(
+        vector["permit_payload"]
+    )
+    permit_artifact = sign_production_delivery_permit(permit_payload, key)
+    assert permit_artifact.payload_sha256 == vector["permit_payload_sha256"]
+    assert permit_artifact.signature == vector["permit_signature"]
+    assert permit_artifact.artifact_sha256() == vector["permit_artifact_sha256"]
+    assert permit_artifact.signer.key_id == vector["key_id"]
+    assert permit_artifact.signer.public_key == vector["public_key_base64"]
+    assert permit_artifact.signer.signer_sha256() == vector["signer_sha256"]
+
+    receipt_payload = ProductionDeliveryReceiptPayload.model_validate(
+        vector["receipt_payload"]
+    )
+    receipt_artifact = sign_production_delivery_receipt(receipt_payload, key)
+    assert receipt_artifact.payload_sha256 == vector["receipt_payload_sha256"]
+    assert receipt_artifact.signature == vector["receipt_signature"]
+    assert (
+        receipt_artifact.artifact_sha256() == vector["delivery_receipt_artifact_sha256"]
+    )
+    entry = ProductionDeliveryPermit.build(permit_artifact, receipt_artifact)
+    chain = ProductionDeliveryPermitChain.build((entry,))
+    assert chain.permit_chain_sha256 == vector["permit_chain_sha256"]
+    rebuilt = rebuild_production_delivery_permit_chain_from_artifacts(
+        ((permit_artifact.canonical_bytes(), receipt_artifact.canonical_bytes()),)
+    )
+    assert rebuilt == chain
+
+
+def test_delivery_artifact_rebuild_rejects_noncanonical_stored_bytes() -> None:
+    entry = _permit_chain().entries[0]
+    with pytest.raises(
+        ProductionTerminalVerificationError,
+        match="not canonical",
+    ):
+        rebuild_production_delivery_permit_chain_from_artifacts(
+            (
+                (
+                    b" " + entry.permit_artifact.canonical_bytes(),
+                    entry.delivery_receipt_artifact.canonical_bytes(),
+                ),
+            )
+        )
+
+
 def test_terminal_rejects_registry_change_between_input_edges() -> None:
     first = _permit_chain().entries[0]
-    second = first.model_copy(
-        update={
-            "permit_id": "permit:2",
-            "permit_sha256": SHA_C,
-            "action_request_sha256": SHA_E,
-            "qualification_signer_registry_revision": 8,
-            "input_edge_sequence": 2,
-            "authority_sequence": 1,
-            "runtime_delivery_sequence": 10,
-            "issued_at": "2026-08-18T12:00:02Z",
-            "delivered_at": "2026-08-18T12:00:03Z",
-        }
+    second = _permit_entry(
+        permit_id="permit:2",
+        action_request_sha256=SHA_E,
+        qualification_signer_registry_revision=8,
+        input_edge_sequence=2,
+        authority_sequence=1,
+        runtime_delivery_sequence=10,
+        issued_at="2026-08-18T12:00:02Z",
+        delivered_at="2026-08-18T12:00:03Z",
+        one_use_claim_id="00000000-0000-4000-8000-000000000011",
     )
     with pytest.raises(ValidationError, match="changes its production authority"):
         ProductionDeliveryPermitChain.build((first, second))
@@ -542,6 +762,19 @@ def test_terminal_refuses_one_field_binding_mutation(
         ProductionTerminalVerificationPayload.model_validate(data)
 
 
+def test_terminal_refuses_run_id_digest_mismatch() -> None:
+    data = _payload().model_dump(mode="json")
+    data["flow_run_id_sha256"] = SHA_A
+    with pytest.raises(ValidationError, match="run identity digest is invalid"):
+        ProductionTerminalVerificationPayload.model_validate(data)
+
+
+def test_terminal_signer_revalidates_an_in_memory_payload() -> None:
+    payload = _payload().model_copy(update={"flow_run_id_sha256": SHA_A})
+    with pytest.raises(ValidationError, match="run identity digest is invalid"):
+        sign_production_terminal_verification(payload, _private_key())
+
+
 def test_terminal_rejects_wrong_evidence_signer() -> None:
     payload = _payload().model_copy(update={"evidence_runner_signer_sha256": SHA_A})
     with pytest.raises(
@@ -560,7 +793,7 @@ def test_terminal_rejects_mutated_signature() -> None:
     )
     with pytest.raises(
         ProductionTerminalVerificationError,
-        match="signature is invalid",
+        match="signature is invalid|envelope is not canonical",
     ):
         verify_production_terminal_verification(
             mutated,

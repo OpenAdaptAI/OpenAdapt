@@ -581,6 +581,7 @@ class Replayer:
         self._durable_linear_snapshot: tuple[Any, ...] = ()
         self._durable_program_snapshot: tuple[ProgramCheckpoint, ...] = ()
         self._durable_pending_snapshot: Optional[Any] = None
+        self._active_delivery_acknowledgers: tuple[Any, ...] = ()
         self._durable_continuation_guard: Optional[Any] = None
         # API/tool actuator -- the TOP of the capability ladder (RFC section 4
         # `api` tier). When set, a step carrying an `api_binding` has its write
@@ -1183,14 +1184,35 @@ class Replayer:
         ):
             from openadapt_flow.runtime.durable.authority import DurableAuthority
 
+            managed_durable_run = durable_run
+
             class _ManagedInitialDeliveryGuard:
-                def before_delivery(self_nonlocal) -> None:
-                    assert durable_run is not None
-                    DurableAuthority(
-                        run_dir, durable_run.store
-                    ).before_initial_delivery(
-                        durable_run._manifest  # noqa: SLF001 - exact retained manifest
+                def __init__(self_nonlocal) -> None:
+                    self_nonlocal.authority = DurableAuthority(
+                        run_dir, managed_durable_run.store
                     )
+                    self_nonlocal.pending_remote_permit: Any = None
+
+                def before_delivery(self_nonlocal) -> None:
+                    if self_nonlocal.pending_remote_permit is not None:
+                        raise RuntimeError(
+                            "a prior production delivery lacks an acknowledgment receipt"
+                        )
+                    self_nonlocal.pending_remote_permit = (
+                        self_nonlocal.authority.before_initial_delivery(
+                            managed_durable_run._manifest  # noqa: SLF001 - exact retained manifest
+                        )
+                    )
+
+                def acknowledge_delivery(self_nonlocal) -> None:
+                    pending = self_nonlocal.pending_remote_permit
+                    if pending is None:
+                        return
+                    self_nonlocal.authority.acknowledge_remote_delivery(
+                        managed_durable_run._manifest,  # noqa: SLF001
+                        pending,
+                    )
+                    self_nonlocal.pending_remote_permit = None
 
             self._durable_initial_delivery_guard = _ManagedInitialDeliveryGuard()
         (run_dir / "steps").mkdir(parents=True, exist_ok=True)
@@ -8790,8 +8812,8 @@ class Replayer:
         )
         return resolution, region, error
 
-    @staticmethod
     def _deliver_backend_call(
+        self,
         result: StepResult,
         call: Callable[[], _DeliveryResultT],
     ) -> _DeliveryResultT:
@@ -8804,6 +8826,8 @@ class Replayer:
         """
 
         attempted_before = result.delivery_attempted
+        acknowledgers = self._active_delivery_acknowledgers
+        self._active_delivery_acknowledgers = ()
         try:
             delivered = call()
         except (FreshActuationRequired, StructuralResolutionRefused):
@@ -8813,6 +8837,8 @@ class Replayer:
             result.delivery_attempted = True
             raise
         result.delivery_attempted = True
+        for guard in acknowledgers:
+            guard.acknowledge_delivery()
         return delivered
 
     @staticmethod
@@ -9222,6 +9248,8 @@ class Replayer:
     ) -> Optional[str]:
         """Recheck exact authority at the last point before input delivery."""
 
+        self._active_delivery_acknowledgers = ()
+        acknowledgers: list[Any] = []
         refusal = self._managed_dispatch_refusal()
         if refusal is None:
             refusal = self._fresh_actuation_authorization_refusal(
@@ -9231,6 +9259,7 @@ class Replayer:
         if refusal is None and initial_guard is not None:
             try:
                 initial_guard.before_delivery()
+                acknowledgers.append(initial_guard)
             except Exception as exc:  # noqa: BLE001 - durable fencing boundary
                 refusal = (
                     f"managed initial delivery was preempted before delivery: {exc}"
@@ -9239,6 +9268,7 @@ class Replayer:
         if refusal is None and self._durable_continuation_guard is not None:
             try:
                 self._durable_continuation_guard.before_delivery()
+                acknowledgers.append(self._durable_continuation_guard)
             except Exception as exc:  # noqa: BLE001 - durable fencing boundary
                 refusal = f"durable continuation was preempted before delivery: {exc}"
                 result.failure_category = "continuation_preempted"
@@ -9252,6 +9282,8 @@ class Replayer:
                     if self.governed_authorization is not None
                     else "safety_halt"
                 )
+        else:
+            self._active_delivery_acknowledgers = tuple(acknowledgers)
         return refusal
 
     def _act(
@@ -10731,6 +10763,9 @@ class Replayer:
                 # well: every backend input edge must cross the same lease.
                 try:
                     self._durable_continuation_guard.before_delivery()
+                    self._active_delivery_acknowledgers = (
+                        self._durable_continuation_guard,
+                    )
                 except Exception as exc:  # noqa: BLE001 - fencing boundary
                     result.failure_category = "continuation_preempted"
                     result.safety_halt = True

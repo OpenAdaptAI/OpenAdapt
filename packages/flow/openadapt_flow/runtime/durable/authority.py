@@ -24,6 +24,8 @@ import re
 import secrets
 import sqlite3
 import stat
+from base64 import b64decode, b64encode
+from binascii import Error as BinasciiError
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -39,6 +41,13 @@ from pydantic import BaseModel, ConfigDict
 from openadapt_flow.runtime.durable.approval import (
     StateDiverged,
     approval_pause_digest,
+)
+from openadapt_flow.terminal_verification_v2 import (
+    MAX_DELIVERY_ARTIFACT_BYTES,
+    ProductionDeliveryPermit,
+    ProductionDeliveryPermitArtifact,
+    ProductionDeliveryPermitChain,
+    ProductionDeliveryReceiptArtifact,
 )
 
 AUTHORITY_DB_ENV = "OPENADAPT_DURABLE_AUTHORITY_DB"
@@ -56,7 +65,7 @@ _SYNTHETIC_DELIVERY_MARKER_FD = 3
 _SYNTHETIC_DELIVERY_MARKER_SCHEMA_VERSION = 1
 _SYNTHETIC_DELIVERY_MARKER_DOMAIN = b"openadapt-synthetic-delivery-marker-permit-v1\0"
 _MAX_SYNTHETIC_DELIVERY_MARKER_BYTES = 1024
-MAX_REMOTE_AUTHORITY_RESPONSE_BYTES = 64 * 1024
+MAX_REMOTE_AUTHORITY_RESPONSE_BYTES = 2 * 1024 * 1024
 AUTHORITY_SCHEMA_VERSION = 1
 JOURNAL_GENESIS_DIGEST = "sha256:" + hashlib.sha256(b"").hexdigest()
 JOURNAL_MAC_DOMAIN = b"openadapt-attended-journal-v1\0"
@@ -222,16 +231,27 @@ class DurableAuthorityBusy(StateDiverged):
 
 @dataclass(frozen=True)
 class _RemoteDeliveryPermit:
-    """Private remote-permit cursor update plus a one-way observer digest.
+    """Exact pending Cloud authority for one not-yet-acknowledged input edge.
 
-    The permit id and cursor are authority secrets. The synthetic acceptance
-    observer receives only the digest, never either secret.
+    The cursor, session, and one-use claim are private authority values. The
+    signed permit bytes are retained exactly so the post-delivery receipt can
+    bind the same artifact and terminal verification can rebuild the chain.
     """
 
     authority_id: str
+    authority_origin: str
     next_sequence: int
     cursor_secret: str
     permit_digest: str
+    authority_signer_sha256: str
+    permit_id: str
+    dispatch_session_id: str
+    one_use_claim_id: str
+    input_edge_sequence: int
+    authority_sequence: int
+    runtime_delivery_sequence: int
+    permit_artifact_bytes: bytes
+    permit_artifact: ProductionDeliveryPermitArtifact
 
 
 def _fixed_synthetic_delivery_marker_sink() -> Callable[[bytes], None] | None:
@@ -766,6 +786,86 @@ class DurableAuthority:
             }:
                 raise DurableAuthorityBusy(
                     "the remote delivery cursor schema is incompatible"
+                )
+            # A permit is durable before the backend call. It remains pending
+            # until the exact post-delivery receipt is acknowledged. A crash or
+            # network failure can therefore never permit a second input edge.
+            connection.execute(
+                """
+            CREATE TABLE IF NOT EXISTS remote_delivery_pending (
+                path_key TEXT PRIMARY KEY,
+                authority_id TEXT NOT NULL,
+                authority_origin TEXT NOT NULL,
+                authority_signer_sha256 TEXT NOT NULL,
+                permit_id TEXT NOT NULL,
+                dispatch_session_id TEXT NOT NULL,
+                one_use_claim_id TEXT NOT NULL,
+                next_sequence INTEGER NOT NULL,
+                cursor_secret TEXT NOT NULL,
+                input_edge_sequence INTEGER NOT NULL,
+                authority_sequence INTEGER NOT NULL,
+                runtime_delivery_sequence INTEGER NOT NULL,
+                permit_artifact_sha256 TEXT NOT NULL,
+                permit_artifact_bytes BLOB NOT NULL
+            )
+            """
+            )
+            pending_columns = {
+                str(row[1])
+                for row in connection.execute(
+                    "PRAGMA table_info(remote_delivery_pending)"
+                ).fetchall()
+            }
+            if pending_columns != {
+                "path_key",
+                "authority_id",
+                "authority_origin",
+                "authority_signer_sha256",
+                "permit_id",
+                "dispatch_session_id",
+                "one_use_claim_id",
+                "next_sequence",
+                "cursor_secret",
+                "input_edge_sequence",
+                "authority_sequence",
+                "runtime_delivery_sequence",
+                "permit_artifact_sha256",
+                "permit_artifact_bytes",
+            }:
+                raise DurableAuthorityBusy(
+                    "the pending remote delivery schema is incompatible"
+                )
+            connection.execute(
+                """
+            CREATE TABLE IF NOT EXISTS remote_delivery_artifacts (
+                path_key TEXT NOT NULL,
+                runtime_delivery_sequence INTEGER NOT NULL,
+                permit_artifact_sha256 TEXT NOT NULL,
+                permit_artifact_bytes BLOB NOT NULL,
+                receipt_artifact_sha256 TEXT NOT NULL,
+                receipt_artifact_bytes BLOB NOT NULL,
+                PRIMARY KEY (path_key, runtime_delivery_sequence),
+                UNIQUE (path_key, permit_artifact_sha256),
+                UNIQUE (path_key, receipt_artifact_sha256)
+            )
+            """
+            )
+            artifact_columns = {
+                str(row[1])
+                for row in connection.execute(
+                    "PRAGMA table_info(remote_delivery_artifacts)"
+                ).fetchall()
+            }
+            if artifact_columns != {
+                "path_key",
+                "runtime_delivery_sequence",
+                "permit_artifact_sha256",
+                "permit_artifact_bytes",
+                "receipt_artifact_sha256",
+                "receipt_artifact_bytes",
+            }:
+                raise DurableAuthorityBusy(
+                    "the retained remote delivery artifact schema is incompatible"
                 )
             connection.execute(
                 """
@@ -1307,6 +1407,168 @@ class DurableAuthority:
         if cursor.rowcount != 1:
             raise DurableAuthorityBusy("the remote delivery cursor changed")
 
+    def _pending_remote_delivery(
+        self, connection: sqlite3.Connection
+    ) -> _RemoteDeliveryPermit | None:
+        row = connection.execute(
+            "SELECT * FROM remote_delivery_pending WHERE path_key = ?",
+            (self.path_key,),
+        ).fetchone()
+        if row is None:
+            return None
+        raw = bytes(row["permit_artifact_bytes"])
+        artifact = self._parse_permit_artifact_bytes(raw)
+        permit = _RemoteDeliveryPermit(
+            authority_id=str(row["authority_id"]),
+            authority_origin=str(row["authority_origin"]),
+            authority_signer_sha256=str(row["authority_signer_sha256"]),
+            permit_id=str(row["permit_id"]),
+            dispatch_session_id=str(row["dispatch_session_id"]),
+            one_use_claim_id=str(row["one_use_claim_id"]),
+            next_sequence=int(row["next_sequence"]),
+            cursor_secret=str(row["cursor_secret"]),
+            input_edge_sequence=int(row["input_edge_sequence"]),
+            authority_sequence=int(row["authority_sequence"]),
+            runtime_delivery_sequence=int(row["runtime_delivery_sequence"]),
+            permit_digest="sha256:" + str(row["permit_artifact_sha256"]),
+            permit_artifact_bytes=raw,
+            permit_artifact=artifact,
+        )
+        if not (
+            permit.authority_id == artifact.payload.execution_authority_id
+            and permit.authority_signer_sha256 == artifact.signer.signer_sha256()
+            and urlparse(permit.authority_origin).scheme in {"http", "https"}
+            and bool(urlparse(permit.authority_origin).netloc)
+            and urlparse(permit.authority_origin).path == ""
+            and permit.permit_id == artifact.payload.permit_id
+            and permit.input_edge_sequence == artifact.payload.input_edge_sequence
+            and permit.authority_sequence == artifact.payload.authority_sequence
+            and permit.runtime_delivery_sequence == permit.authority_sequence
+            and permit.next_sequence == permit.authority_sequence + 1
+            and permit.permit_digest == "sha256:" + hashlib.sha256(raw).hexdigest()
+            and _REMOTE_UUID_RE.fullmatch(permit.dispatch_session_id)
+            and _REMOTE_UUID_RE.fullmatch(permit.one_use_claim_id)
+            and _REMOTE_PERMIT_CURSOR_RE.fullmatch(permit.cursor_secret)
+        ):
+            raise DurableAuthorityBusy(
+                "the pending remote delivery authority is invalid"
+            )
+        return permit
+
+    def _retain_pending_remote_delivery(
+        self,
+        connection: sqlite3.Connection,
+        permit: _RemoteDeliveryPermit,
+    ) -> None:
+        if self._pending_remote_delivery(connection) is not None:
+            raise DurableAuthorityBusy(
+                "a prior production delivery lacks an acknowledgment receipt"
+            )
+        previous = connection.execute(
+            "SELECT permit_artifact_bytes, receipt_artifact_bytes "
+            "FROM remote_delivery_artifacts WHERE path_key = ? "
+            "ORDER BY runtime_delivery_sequence DESC LIMIT 1",
+            (self.path_key,),
+        ).fetchone()
+        if previous is not None:
+            previous_permit = self._parse_permit_artifact_bytes(
+                bytes(previous["permit_artifact_bytes"])
+            )
+            previous_receipt = self._parse_receipt_artifact_bytes(
+                bytes(previous["receipt_artifact_bytes"])
+            )
+            previous_entry = ProductionDeliveryPermit.build(
+                previous_permit, previous_receipt
+            )
+            if not (
+                permit.authority_id == previous_entry.execution_authority_id
+                and permit.authority_signer_sha256
+                == previous_entry.authority_signer_sha256
+                and permit.input_edge_sequence == previous_entry.input_edge_sequence + 1
+                and permit.authority_sequence == previous_entry.authority_sequence + 1
+                and permit.runtime_delivery_sequence
+                == previous_entry.runtime_delivery_sequence + 1
+            ):
+                raise DurableAuthorityBusy(
+                    "remote delivery permit changes the retained authority chain"
+                )
+        elif not (
+            permit.input_edge_sequence == 1
+            and permit.authority_sequence == 0
+            and permit.runtime_delivery_sequence == 0
+        ):
+            raise DurableAuthorityBusy(
+                "the first remote delivery permit sequence is invalid"
+            )
+        try:
+            connection.execute(
+                "INSERT INTO remote_delivery_pending "
+                "(path_key, authority_id, authority_signer_sha256, permit_id, "
+                "authority_origin, "
+                "dispatch_session_id, one_use_claim_id, next_sequence, "
+                "cursor_secret, input_edge_sequence, authority_sequence, "
+                "runtime_delivery_sequence, permit_artifact_sha256, "
+                "permit_artifact_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    self.path_key,
+                    permit.authority_id,
+                    permit.authority_signer_sha256,
+                    permit.permit_id,
+                    permit.authority_origin,
+                    permit.dispatch_session_id,
+                    permit.one_use_claim_id,
+                    permit.next_sequence,
+                    permit.cursor_secret,
+                    permit.input_edge_sequence,
+                    permit.authority_sequence,
+                    permit.runtime_delivery_sequence,
+                    permit.permit_digest.removeprefix("sha256:"),
+                    permit.permit_artifact_bytes,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise DurableAuthorityBusy(
+                "a production delivery permit is already pending"
+            ) from exc
+
+    @staticmethod
+    def _same_remote_permit(
+        left: _RemoteDeliveryPermit, right: _RemoteDeliveryPermit
+    ) -> bool:
+        return left == right
+
+    def _validate_pending_delivery_owner(
+        self,
+        connection: sqlite3.Connection,
+        manifest: Any,
+        permit: _RemoteDeliveryPermit,
+        *,
+        attempt_id: str | None,
+        owner_nonce_sha256: str | None,
+    ) -> DurableAuthorityRecord:
+        retained = self._pending_remote_delivery(connection)
+        if retained is None or not self._same_remote_permit(retained, permit):
+            raise DurableAuthorityBusy(
+                "the pending remote delivery changed before acknowledgment"
+            )
+        if attempt_id is None:
+            record = self._read(connection)
+            if (
+                record is None
+                or not self._identity_matches(record, manifest)
+                or record.phase != "active"
+            ):
+                raise DurableAuthorityBusy(
+                    "the managed initial delivery authority changed"
+                )
+            return record
+        if owner_nonce_sha256 is None:
+            raise DurableAuthorityBusy("the continuation delivery owner is unavailable")
+        record = self._owned(connection, manifest, attempt_id, owner_nonce_sha256)
+        if record.attempt_phase != "delivery_started":
+            raise DurableAuthorityBusy("the continuation is not at a delivery boundary")
+        return record
+
     @staticmethod
     def _identity_matches(record: DurableAuthorityRecord, manifest: Any) -> bool:
         return (
@@ -1601,6 +1863,56 @@ class DurableAuthority:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    @staticmethod
+    def _exact_artifact_bytes(value: Any, *, field: str) -> bytes:
+        if (
+            not isinstance(value, str)
+            or not value
+            or len(value) > ((MAX_DELIVERY_ARTIFACT_BYTES * 4 // 3) + 8)
+        ):
+            raise DurableAuthorityBusy(f"{field} is invalid")
+        try:
+            decoded = b64decode(value, validate=True)
+        except (TypeError, ValueError, BinasciiError) as exc:
+            raise DurableAuthorityBusy(f"{field} is invalid") from exc
+        if (
+            not decoded
+            or len(decoded) > MAX_DELIVERY_ARTIFACT_BYTES
+            or b64encode(decoded).decode("ascii") != value
+        ):
+            raise DurableAuthorityBusy(f"{field} is invalid")
+        return decoded
+
+    @staticmethod
+    def _parse_permit_artifact_bytes(raw: bytes) -> ProductionDeliveryPermitArtifact:
+        try:
+            artifact = ProductionDeliveryPermitArtifact.model_validate_json(raw)
+        except ValueError as exc:
+            raise DurableAuthorityBusy(
+                "remote delivery permit artifact is invalid"
+            ) from exc
+        if artifact.canonical_bytes() != raw:
+            raise DurableAuthorityBusy(
+                "remote delivery permit artifact is not canonical JSON"
+            )
+        return artifact
+
+    @staticmethod
+    def _parse_receipt_artifact_bytes(
+        raw: bytes,
+    ) -> ProductionDeliveryReceiptArtifact:
+        try:
+            artifact = ProductionDeliveryReceiptArtifact.model_validate_json(raw)
+        except ValueError as exc:
+            raise DurableAuthorityBusy(
+                "remote delivery receipt artifact is invalid"
+            ) from exc
+        if artifact.canonical_bytes() != raw:
+            raise DurableAuthorityBusy(
+                "remote delivery receipt artifact is not canonical JSON"
+            )
+        return artifact
+
     def _require_remote_delivery_permit(
         self,
         manifest: Any,
@@ -1681,8 +1993,19 @@ class DurableAuthority:
             raise DurableAuthorityBusy(
                 "production delivery requires configured remote authority credentials"
             )
+        parsed = urlparse(url)
+        if (
+            not parsed.scheme
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or bool(parsed.query)
+            or bool(parsed.fragment)
+        ):
+            raise DurableAuthorityBusy(
+                "production delivery authority endpoint is invalid"
+            )
         if self._remote_transport is None:
-            parsed = urlparse(url)
             if (
                 parsed.scheme != "https"
                 or not parsed.netloc
@@ -1740,6 +2063,13 @@ class DurableAuthority:
             raise DurableAuthorityBusy(
                 "remote delivery authority is unavailable or refused the permit"
             ) from exc
+        if (
+            not isinstance(response_bytes, bytes)
+            or len(response_bytes) > MAX_REMOTE_AUTHORITY_RESPONSE_BYTES
+        ):
+            raise DurableAuthorityBusy(
+                "remote delivery authority response is too large"
+            )
         try:
             response = json.loads(response_bytes.decode("utf-8"))
         except (AttributeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -1749,54 +2079,356 @@ class DurableAuthority:
         expected_keys = {
             "schema_version",
             "status",
-            "authority_id",
+            "execution_authority_id",
             "permit_id",
-            "request_sha256",
+            "dispatch_session_id",
+            "one_use_claim_id",
+            "permit_artifact_bytes_base64",
+            "permit_artifact_sha256",
             "next_permit_cursor",
-            "delivery_sequence",
-            "issued_at",
+            "input_edge_sequence",
+            "authority_sequence",
+            "runtime_delivery_sequence",
         }
         if not isinstance(response, dict) or set(response) != expected_keys:
             raise DurableAuthorityBusy(
                 "remote delivery authority response has invalid schema"
             )
         if not (
-            response["schema_version"] == 1
-            and type(response["schema_version"]) is int
+            response["schema_version"]
+            == "openadapt.production-delivery-permit-issue/v2"
             and response["status"] == "issued"
-            and isinstance(response["authority_id"], str)
-            and _REMOTE_AUTHORITY_ID_RE.fullmatch(response["authority_id"])
-            and all(
-                isinstance(response[name], str) and response[name]
-                for name in ("permit_id", "request_sha256", "issued_at")
-            )
-            and type(response["delivery_sequence"]) is int
-            and response["delivery_sequence"] == record.delivery_sequence
-            and response["request_sha256"] == request_digest
+            and isinstance(response["execution_authority_id"], str)
+            and _REMOTE_AUTHORITY_ID_RE.fullmatch(response["execution_authority_id"])
+            and isinstance(response["permit_id"], str)
+            and _REMOTE_UUID_RE.fullmatch(response["permit_id"])
+            and isinstance(response["dispatch_session_id"], str)
+            and _REMOTE_UUID_RE.fullmatch(response["dispatch_session_id"])
+            and isinstance(response["one_use_claim_id"], str)
+            and _REMOTE_UUID_RE.fullmatch(response["one_use_claim_id"])
+            and isinstance(response["permit_artifact_sha256"], str)
+            and re.fullmatch(r"[a-f0-9]{64}", response["permit_artifact_sha256"])
             and isinstance(response["next_permit_cursor"], str)
             and _REMOTE_PERMIT_CURSOR_RE.fullmatch(response["next_permit_cursor"])
             and response["next_permit_cursor"] != permit_cursor
+            and type(response["input_edge_sequence"]) is int
+            and response["input_edge_sequence"] == remote_delivery_sequence + 1
+            and type(response["authority_sequence"]) is int
+            and response["authority_sequence"] == remote_delivery_sequence
+            and type(response["runtime_delivery_sequence"]) is int
+            and response["runtime_delivery_sequence"] == remote_delivery_sequence
             and (
                 remote_authority_id is None
-                or response["authority_id"] == remote_authority_id
+                or response["execution_authority_id"] == remote_authority_id
             )
         ):
             raise DurableAuthorityBusy(
                 "remote delivery authority response does not match request"
             )
-        permit_digest = (
-            "sha256:"
-            + hashlib.sha256(
-                _SYNTHETIC_DELIVERY_MARKER_DOMAIN
-                + response["permit_id"].encode("utf-8")
-            ).hexdigest()
+        permit_artifact_bytes = self._exact_artifact_bytes(
+            response["permit_artifact_bytes_base64"],
+            field="remote delivery permit artifact bytes",
         )
+        permit_artifact_sha256 = hashlib.sha256(permit_artifact_bytes).hexdigest()
+        if permit_artifact_sha256 != response["permit_artifact_sha256"]:
+            raise DurableAuthorityBusy(
+                "remote delivery permit artifact digest does not match response"
+            )
+        permit_artifact = self._parse_permit_artifact_bytes(permit_artifact_bytes)
+        permit_payload = permit_artifact.payload
+        if not (
+            permit_payload.execution_authority_id == response["execution_authority_id"]
+            and permit_payload.permit_id == response["permit_id"]
+            and permit_payload.run_id == required["run_id"]
+            and permit_payload.flow_run_id_sha256
+            == hashlib.sha256(required["run_id"].encode("utf-8")).hexdigest()
+            and permit_payload.action_request_sha256 == request_digest
+            and permit_payload.input_edge_sequence == response["input_edge_sequence"]
+            and permit_payload.authority_sequence == response["authority_sequence"]
+        ):
+            raise DurableAuthorityBusy(
+                "remote delivery permit artifact does not bind the exact request"
+            )
+        permit_digest = "sha256:" + permit_artifact_sha256
         return _RemoteDeliveryPermit(
-            authority_id=response["authority_id"],
+            authority_id=response["execution_authority_id"],
+            authority_origin=f"{parsed.scheme}://{parsed.netloc}",
             next_sequence=remote_delivery_sequence + 1,
             cursor_secret=response["next_permit_cursor"],
             permit_digest=permit_digest,
+            authority_signer_sha256=permit_artifact.signer.signer_sha256(),
+            permit_id=response["permit_id"],
+            dispatch_session_id=response["dispatch_session_id"],
+            one_use_claim_id=response["one_use_claim_id"],
+            input_edge_sequence=response["input_edge_sequence"],
+            authority_sequence=response["authority_sequence"],
+            runtime_delivery_sequence=response["runtime_delivery_sequence"],
+            permit_artifact_bytes=permit_artifact_bytes,
+            permit_artifact=permit_artifact,
         )
+
+    def acknowledge_remote_delivery(
+        self,
+        manifest: Any,
+        permit: _RemoteDeliveryPermit,
+        *,
+        attempt_id: str | None = None,
+        owner_nonce_sha256: str | None = None,
+    ) -> ProductionDeliveryPermit:
+        """Acknowledge one completed backend call and commit its exact edge.
+
+        The backend call happens before this method. Until Cloud returns the
+        signed receipt and the protected local transaction retains both exact
+        artifacts, the edge remains uncertain and no later permit can issue.
+        """
+
+        # Validate the exact pending edge and current owner before a remote
+        # mutation. Recheck it after the response before local commit.
+        with self._transaction() as connection:
+            self._validate_pending_delivery_owner(
+                connection,
+                manifest,
+                permit,
+                attempt_id=attempt_id,
+                owner_nonce_sha256=owner_nonce_sha256,
+            )
+        url = os.getenv(REMOTE_AUTHORITY_URL_ENV, "")
+        token = os.getenv(REMOTE_AUTHORITY_TOKEN_ENV, "")
+        if not url or not token:
+            raise DurableAuthorityBusy(
+                "production delivery acknowledgment requires remote credentials"
+            )
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            raise DurableAuthorityBusy(
+                "production delivery acknowledgment endpoint is invalid"
+            )
+        if self._remote_transport is None and (
+            parsed.scheme != "https"
+            or parsed.username is not None
+            or parsed.password is not None
+            or bool(parsed.query)
+            or bool(parsed.fragment)
+        ):
+            raise DurableAuthorityBusy(
+                "production delivery acknowledgment endpoint must use HTTPS"
+            )
+        if f"{parsed.scheme}://{parsed.netloc}" != permit.authority_origin:
+            raise DurableAuthorityBusy(
+                "production delivery authority origin changed before acknowledgment"
+            )
+        acknowledgment_url = (
+            f"{parsed.scheme}://{parsed.netloc}"
+            "/api/internal/managed-delivery-acknowledgment"
+        )
+        body_value = {
+            "schema_version": "openadapt.production-delivery-acknowledgment/v2",
+            "run_id": getattr(manifest, "remote_delivery_run_id", None),
+            "dispatch_session_id": permit.dispatch_session_id,
+            "one_use_claim_id": permit.one_use_claim_id,
+            "runtime_delivery_sequence": permit.runtime_delivery_sequence,
+            "permit_artifact_bytes_base64": b64encode(
+                permit.permit_artifact_bytes
+            ).decode("ascii"),
+        }
+        body = json.dumps(
+            body_value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        try:
+            if self._remote_transport is not None:
+                response_bytes = self._remote_transport(
+                    acknowledgment_url, headers, body
+                )
+            else:
+                request = Request(
+                    acknowledgment_url, data=body, headers=headers, method="POST"
+                )
+                opener = build_opener(_RefuseRemoteAuthorityRedirects())
+                with opener.open(request, timeout=10) as response:  # nosec B310
+                    if response.status not in {200, 201}:
+                        raise DurableAuthorityBusy(
+                            "remote delivery acknowledgment was refused"
+                        )
+                    response_bytes = response.read(
+                        MAX_REMOTE_AUTHORITY_RESPONSE_BYTES + 1
+                    )
+                    if len(response_bytes) > MAX_REMOTE_AUTHORITY_RESPONSE_BYTES:
+                        raise DurableAuthorityBusy(
+                            "remote delivery acknowledgment response is too large"
+                        )
+        except DurableAuthorityBusy:
+            raise
+        except (HTTPError, URLError, OSError, TimeoutError) as exc:
+            raise DurableAuthorityBusy(
+                "remote delivery acknowledgment is unavailable or refused"
+            ) from exc
+        if (
+            not isinstance(response_bytes, bytes)
+            or len(response_bytes) > MAX_REMOTE_AUTHORITY_RESPONSE_BYTES
+        ):
+            raise DurableAuthorityBusy(
+                "remote delivery acknowledgment response is too large"
+            )
+        try:
+            response_value = json.loads(response_bytes.decode("utf-8"))
+        except (AttributeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DurableAuthorityBusy(
+                "remote delivery acknowledgment returned invalid JSON"
+            ) from exc
+        expected_keys = {
+            "schema_version",
+            "status",
+            "receipt_artifact_bytes_base64",
+            "receipt_artifact_sha256",
+            "runtime_delivery_sequence",
+            "delivered_at",
+        }
+        if not isinstance(response_value, dict) or set(response_value) != expected_keys:
+            raise DurableAuthorityBusy(
+                "remote delivery acknowledgment response has invalid schema"
+            )
+        if not (
+            response_value["schema_version"]
+            == "openadapt.production-delivery-acknowledgment-result/v2"
+            and response_value["status"] == "acknowledged"
+            and isinstance(response_value["receipt_artifact_sha256"], str)
+            and re.fullmatch(r"[a-f0-9]{64}", response_value["receipt_artifact_sha256"])
+            and type(response_value["runtime_delivery_sequence"]) is int
+            and response_value["runtime_delivery_sequence"]
+            == permit.runtime_delivery_sequence
+            and isinstance(response_value["delivered_at"], str)
+        ):
+            raise DurableAuthorityBusy(
+                "remote delivery acknowledgment does not match the pending edge"
+            )
+        receipt_bytes = self._exact_artifact_bytes(
+            response_value["receipt_artifact_bytes_base64"],
+            field="remote delivery receipt artifact bytes",
+        )
+        receipt_sha256 = hashlib.sha256(receipt_bytes).hexdigest()
+        if receipt_sha256 != response_value["receipt_artifact_sha256"]:
+            raise DurableAuthorityBusy(
+                "remote delivery receipt artifact digest does not match response"
+            )
+        receipt_artifact = self._parse_receipt_artifact_bytes(receipt_bytes)
+        try:
+            entry = ProductionDeliveryPermit.build(
+                permit.permit_artifact, receipt_artifact
+            )
+        except ValueError as exc:
+            raise DurableAuthorityBusy(
+                "remote delivery receipt does not bind the pending permit"
+            ) from exc
+        receipt_payload = receipt_artifact.payload
+        if not (
+            receipt_payload.one_use_claim_id == permit.one_use_claim_id
+            and receipt_payload.runtime_delivery_sequence
+            == permit.runtime_delivery_sequence
+            and receipt_payload.delivered_at == response_value["delivered_at"]
+        ):
+            raise DurableAuthorityBusy(
+                "remote delivery receipt does not bind the exact acknowledgment"
+            )
+
+        marker_payload: bytes | None = None
+        with self._transaction() as connection:
+            record = self._validate_pending_delivery_owner(
+                connection,
+                manifest,
+                permit,
+                attempt_id=attempt_id,
+                owner_nonce_sha256=owner_nonce_sha256,
+            )
+            self._advance_remote_cursor(
+                connection,
+                authority_id=permit.authority_id,
+                next_sequence=permit.next_sequence,
+                cursor_secret=permit.cursor_secret,
+            )
+            try:
+                connection.execute(
+                    "INSERT INTO remote_delivery_artifacts "
+                    "(path_key, runtime_delivery_sequence, "
+                    "permit_artifact_sha256, permit_artifact_bytes, "
+                    "receipt_artifact_sha256, receipt_artifact_bytes) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        self.path_key,
+                        permit.runtime_delivery_sequence,
+                        permit.permit_digest.removeprefix("sha256:"),
+                        permit.permit_artifact_bytes,
+                        receipt_sha256,
+                        receipt_bytes,
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise DurableAuthorityBusy(
+                    "the production delivery artifact chain already changed"
+                ) from exc
+            deleted = connection.execute(
+                "DELETE FROM remote_delivery_pending WHERE path_key = ? "
+                "AND permit_artifact_sha256 = ?",
+                (
+                    self.path_key,
+                    permit.permit_digest.removeprefix("sha256:"),
+                ),
+            )
+            if deleted.rowcount != 1:
+                raise DurableAuthorityBusy(
+                    "the pending remote delivery changed before commit"
+                )
+            self._update(
+                connection,
+                record,
+                delivery_sequence=record.delivery_sequence + 1,
+            )
+            marker_payload = self._synthetic_delivery_marker_payload(
+                manifest,
+                delivery_count=permit.input_edge_sequence,
+                permit_count=permit.next_sequence,
+                permit_digest=permit.permit_digest,
+            )
+        self._emit_synthetic_delivery_marker(marker_payload)
+        return entry
+
+    def production_delivery_permit_chain(self) -> ProductionDeliveryPermitChain:
+        """Rebuild the exact acknowledged chain from protected retained bytes."""
+
+        with self._transaction() as connection:
+            if self._pending_remote_delivery(connection) is not None:
+                raise DurableAuthorityBusy(
+                    "production delivery remains uncertain without a receipt"
+                )
+            rows = connection.execute(
+                "SELECT permit_artifact_bytes, receipt_artifact_bytes "
+                "FROM remote_delivery_artifacts WHERE path_key = ? "
+                "ORDER BY runtime_delivery_sequence",
+                (self.path_key,),
+            ).fetchall()
+        if not rows:
+            raise DurableAuthorityBusy(
+                "the production delivery permit chain is unavailable"
+            )
+        entries = tuple(
+            ProductionDeliveryPermit.build(
+                self._parse_permit_artifact_bytes(bytes(row["permit_artifact_bytes"])),
+                self._parse_receipt_artifact_bytes(
+                    bytes(row["receipt_artifact_bytes"])
+                ),
+            )
+            for row in rows
+        )
+        try:
+            return ProductionDeliveryPermitChain.build(entries)
+        except ValueError as exc:
+            raise DurableAuthorityBusy(
+                "the retained production delivery permit chain is invalid"
+            ) from exc
 
     def _synthetic_delivery_marker_payload(
         self,
@@ -1862,7 +2494,7 @@ class DurableAuthority:
         *,
         attempt_id: str,
         owner_nonce_sha256: str,
-    ) -> None:
+    ) -> _RemoteDeliveryPermit | None:
         marker_payload: bytes | None = None
         with self._transaction() as connection:
             record = self._owned(connection, manifest, attempt_id, owner_nonce_sha256)
@@ -1880,6 +2512,10 @@ class DurableAuthority:
             remote_authority_id, remote_sequence, remote_cursor = self._remote_cursor(
                 connection
             )
+            if self._pending_remote_delivery(connection) is not None:
+                raise DurableAuthorityBusy(
+                    "a prior production delivery lacks an acknowledgment receipt"
+                )
             remote_permit = self._require_remote_delivery_permit(
                 manifest,
                 record,
@@ -1889,28 +2525,21 @@ class DurableAuthority:
             )
             self._consume_delivery_fence(record, manifest)
             if remote_permit is not None:
-                self._advance_remote_cursor(
-                    connection,
-                    authority_id=remote_permit.authority_id,
-                    next_sequence=remote_permit.next_sequence,
-                    cursor_secret=remote_permit.cursor_secret,
-                )
+                self._retain_pending_remote_delivery(connection, remote_permit)
             self._update(
                 connection,
                 record,
                 attempt_phase="delivery_started",
-                delivery_sequence=record.delivery_sequence + 1,
+                delivery_sequence=(
+                    record.delivery_sequence
+                    if remote_permit is not None
+                    else record.delivery_sequence + 1
+                ),
             )
-            if remote_permit is not None:
-                marker_payload = self._synthetic_delivery_marker_payload(
-                    manifest,
-                    delivery_count=record.delivery_sequence + 1,
-                    permit_count=remote_permit.next_sequence,
-                    permit_digest=remote_permit.permit_digest,
-                )
         self._emit_synthetic_delivery_marker(marker_payload)
+        return remote_permit
 
-    def before_initial_delivery(self, manifest: Any) -> None:
+    def before_initial_delivery(self, manifest: Any) -> _RemoteDeliveryPermit | None:
         """Consume the managed genesis permit immediately before any first input.
 
         The server-owned cursor is the cross-directory, cross-process authority.
@@ -1936,6 +2565,10 @@ class DurableAuthority:
             remote_authority_id, remote_sequence, remote_cursor = self._remote_cursor(
                 connection
             )
+            if self._pending_remote_delivery(connection) is not None:
+                raise DurableAuthorityBusy(
+                    "a prior production delivery lacks an acknowledgment receipt"
+                )
             remote_permit = self._require_remote_delivery_permit(
                 manifest,
                 initial_record,
@@ -1945,25 +2578,18 @@ class DurableAuthority:
             )
             self._consume_delivery_fence(record, manifest)
             if remote_permit is not None:
-                self._advance_remote_cursor(
-                    connection,
-                    authority_id=remote_permit.authority_id,
-                    next_sequence=remote_permit.next_sequence,
-                    cursor_secret=remote_permit.cursor_secret,
-                )
+                self._retain_pending_remote_delivery(connection, remote_permit)
             self._update(
                 connection,
                 record,
-                delivery_sequence=record.delivery_sequence + 1,
+                delivery_sequence=(
+                    record.delivery_sequence
+                    if remote_permit is not None
+                    else record.delivery_sequence + 1
+                ),
             )
-            if remote_permit is not None:
-                marker_payload = self._synthetic_delivery_marker_payload(
-                    manifest,
-                    delivery_count=record.delivery_sequence + 1,
-                    permit_count=remote_permit.next_sequence,
-                    permit_digest=remote_permit.permit_digest,
-                )
         self._emit_synthetic_delivery_marker(marker_payload)
+        return remote_permit
 
     def acknowledge_progress(
         self,

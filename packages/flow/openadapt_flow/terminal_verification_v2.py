@@ -1,9 +1,9 @@
-"""Approval-held v2 production terminal proof.
+"""Production terminal-verification v2 contracts and producer.
 
-This module defines the one success-only artifact that a runner can sign after
-Flow has built and revalidated a complete VERIFIED report and run receipt. It
-is additive and has no production call sites until the production identity
-transition and database acceptance transaction are approved.
+Flow builds one success-only artifact after it revalidates a complete VERIFIED
+report, run receipt, signed permit chain, and class-separated evidence. The
+acceptor must reconstruct every value from immutable storage before it admits
+the result as Production success.
 """
 
 from __future__ import annotations
@@ -48,6 +48,33 @@ PERMIT_CHAIN_DOMAIN: Final[bytes] = b"openadapt-managed-delivery-permit-chain-v2
 PERMIT_CHAIN_SCHEMA: Final[Literal["openadapt.production-delivery-permit-chain/v2"]] = (
     "openadapt.production-delivery-permit-chain/v2"
 )
+PERMIT_PAYLOAD_DOMAIN: Final[bytes] = (
+    b"openadapt.production-delivery-permit-payload.v2\0"
+)
+PERMIT_PAYLOAD_SCHEMA: Final[
+    Literal["openadapt.production-delivery-permit-payload/v2"]
+] = "openadapt.production-delivery-permit-payload/v2"
+PERMIT_ARTIFACT_SCHEMA: Final[
+    Literal["openadapt.production-delivery-permit-artifact/v2"]
+] = "openadapt.production-delivery-permit-artifact/v2"
+DELIVERY_RECEIPT_PAYLOAD_DOMAIN: Final[bytes] = (
+    b"openadapt.production-delivery-receipt-payload.v2\0"
+)
+DELIVERY_RECEIPT_PAYLOAD_SCHEMA: Final[
+    Literal["openadapt.production-delivery-receipt-payload/v2"]
+] = "openadapt.production-delivery-receipt-payload/v2"
+DELIVERY_RECEIPT_ARTIFACT_SCHEMA: Final[
+    Literal["openadapt.production-delivery-receipt-artifact/v2"]
+] = "openadapt.production-delivery-receipt-artifact/v2"
+PERMIT_CHAIN_ENTRY_SCHEMA: Final[
+    Literal["openadapt.production-delivery-permit-chain-entry/v2"]
+] = "openadapt.production-delivery-permit-chain-entry/v2"
+EXECUTION_AUTHORITY_DOMAIN: Final[bytes] = (
+    b"openadapt.production-execution-authority.v2\0"
+)
+EXECUTION_AUTHORITY_SCHEMA: Final[
+    Literal["openadapt.production-execution-authority/v2"]
+] = "openadapt.production-execution-authority/v2"
 
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 _UUID_RE = re.compile(
@@ -56,7 +83,9 @@ _UUID_RE = re.compile(
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,199}$")
 _UTC_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 _RUNNER_KEY_ID_RE = re.compile(r"^evidence-runner-ed25519-[a-f0-9]{16}$")
+_AUTHORITY_KEY_ID_RE = re.compile(r"^delivery-authority-ed25519-[a-f0-9]{16}$")
 JS_MAX_SAFE_INTEGER: Final[int] = 9_007_199_254_740_991
+MAX_DELIVERY_ARTIFACT_BYTES: Final[int] = 1_048_576
 EXECUTION_OUTCOME_DOMAIN: Final[bytes] = b"openadapt-production-execution-outcome-v2\0"
 
 
@@ -650,11 +679,135 @@ def build_evidence_manifest(model: type[BaseModel], **values: Any) -> BaseModel:
     return model.model_validate({**values, "manifest_sha256": digest})
 
 
-class ProductionDeliveryPermit(ClosedSignedModel):
-    execution_authority_id: str = Field(pattern=_ID_RE)
+def delivery_authority_key_id(public_key: bytes) -> str:
+    if len(public_key) != 32:
+        raise ValueError("delivery authority public key is invalid")
+    return f"delivery-authority-ed25519-{hashlib.sha256(public_key).hexdigest()[:16]}"
+
+
+def delivery_authority_signer_sha256(public_key: bytes) -> str:
+    if len(public_key) != 32:
+        raise ValueError("delivery authority public key is invalid")
+    return hashlib.sha256(public_key).hexdigest()
+
+
+class DeliveryAuthoritySigner(ClosedSignedModel):
+    algorithm: Literal["ed25519"] = "ed25519"
+    key_id: str = Field(pattern=_AUTHORITY_KEY_ID_RE)
+    public_key: str
+
+    @field_validator("public_key")
+    @classmethod
+    def _canonical_public_key(cls, value: str) -> str:
+        try:
+            decoded = b64decode(value, validate=True)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("delivery authority public key is invalid") from exc
+        if len(decoded) != 32 or b64encode(decoded).decode("ascii") != value:
+            raise ValueError("delivery authority public key is invalid")
+        return value
+
+    @model_validator(mode="after")
+    def _key_id_matches(self) -> "DeliveryAuthoritySigner":
+        if (
+            delivery_authority_key_id(b64decode(self.public_key, validate=True))
+            != self.key_id
+        ):
+            raise ValueError("delivery authority key id does not match its public key")
+        return self
+
+    def signer_sha256(self) -> str:
+        return delivery_authority_signer_sha256(
+            b64decode(self.public_key, validate=True)
+        )
+
+
+class ProductionExecutionAuthorityPayload(ClosedSignedModel):
+    """Immutable server-retained authority for one Production run."""
+
+    schema_version: Literal["openadapt.production-execution-authority/v2"] = (
+        EXECUTION_AUTHORITY_SCHEMA
+    )
+    execution_authority_id: str = Field(pattern=_UUID_RE)
+    tenant_id: str = Field(pattern=_UUID_RE)
+    run_id: str = Field(pattern=_UUID_RE)
+    flow_run_id_sha256: str = Field(pattern=_SHA256_RE)
+    workflow_id: str = Field(pattern=_UUID_RE)
+    workflow_version_id: str = Field(pattern=_UUID_RE)
+    bundle_version_id: str = Field(pattern=_UUID_RE)
+    bundle_artifact_sha256: str = Field(pattern=_SHA256_RE)
+    bundle_content_digest: str = Field(pattern=_SHA256_RE)
+    runtime_validation_id: str = Field(pattern=_UUID_RE)
+    runtime_substrate: Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
+    runtime_boundary_id: str = Field(pattern=_ID_RE)
+    admission_id: str = Field(pattern=_UUID_RE)
+    admission_artifact_sha256: str = Field(pattern=_SHA256_RE)
+    admission_policy_sha256: str = Field(pattern=_SHA256_RE)
+    evidence_identity_sha256: str = Field(pattern=_SHA256_RE)
+    environment_digest: str = Field(pattern=_SHA256_RE)
+    environment_contract_sha256: str = Field(pattern=_SHA256_RE)
+    runtime_environment_sha256: str = Field(pattern=_SHA256_RE)
+    identity_contract_sha256: str = Field(pattern=_SHA256_RE)
+    effect_contract_sha256: str = Field(pattern=_SHA256_RE)
+    admitted_runtime_build_sha256: str = Field(pattern=_SHA256_RE)
+    evidence_runner_signer_sha256: str = Field(pattern=_SHA256_RE)
+    qualification_signer_registry_sha256: str = Field(pattern=_SHA256_RE)
+    qualification_signer_registry_revision: StrictInt = Field(
+        ge=1, le=JS_MAX_SAFE_INTEGER
+    )
+    qualification_signer_registry_checked_at: str
+    qualification_signer_registry_expires_at: str
+    execution_profile: Literal["standard", "regulated"]
+    dispatch_binding_sha256: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    execution_authority_signer_sha256: str = Field(pattern=_SHA256_RE)
+    created_at: str
+
+    @model_validator(mode="after")
+    def _closed_authority(self) -> "ProductionExecutionAuthorityPayload":
+        if hashlib.sha256(self.run_id.encode("utf-8")).hexdigest() != (
+            self.flow_run_id_sha256
+        ):
+            raise ValueError("execution authority run identity digest is invalid")
+        if self.workflow_version_id != self.bundle_version_id:
+            raise ValueError("execution authority workflow and bundle versions differ")
+        if self.admission_id == self.runtime_validation_id:
+            raise ValueError("execution authority admission identity is invalid")
+        checked = _parse_utc(
+            self.qualification_signer_registry_checked_at,
+            field="execution authority registry checked_at",
+        )
+        expires = _parse_utc(
+            self.qualification_signer_registry_expires_at,
+            field="execution authority registry expires_at",
+        )
+        created = _parse_utc(self.created_at, field="execution authority created_at")
+        if not checked <= created < expires:
+            raise ValueError("execution authority signer registry is not fresh")
+        if created - checked > MAX_PERMIT_SNAPSHOT_AGE:
+            raise ValueError("execution authority signer registry check is stale")
+        return self
+
+    def canonical_bytes(self) -> bytes:
+        return canonical_json(self)
+
+    def artifact_sha256(self) -> str:
+        validated = ProductionExecutionAuthorityPayload.model_validate(
+            self.model_dump(mode="json")
+        )
+        return hashlib.sha256(
+            EXECUTION_AUTHORITY_DOMAIN + validated.canonical_bytes()
+        ).hexdigest()
+
+
+class ProductionDeliveryPermitPayload(ClosedSignedModel):
+    schema_version: Literal["openadapt.production-delivery-permit-payload/v2"] = (
+        PERMIT_PAYLOAD_SCHEMA
+    )
+    execution_authority_id: str = Field(pattern=_UUID_RE)
     execution_authority_sha256: str = Field(pattern=_SHA256_RE)
     permit_id: str = Field(pattern=_ID_RE)
-    permit_sha256: str = Field(pattern=_SHA256_RE)
+    run_id: str = Field(pattern=_UUID_RE)
+    flow_run_id_sha256: str = Field(pattern=_SHA256_RE)
     run_request_sha256: str = Field(pattern=_SHA256_RE)
     action_request_sha256: str = Field(pattern=_SHA256_RE)
     admission_artifact_sha256: str = Field(pattern=_SHA256_RE)
@@ -668,12 +821,10 @@ class ProductionDeliveryPermit(ClosedSignedModel):
     qualification_signer_registry_expires_at: str
     input_edge_sequence: StrictInt = Field(ge=1, le=JS_MAX_SAFE_INTEGER)
     authority_sequence: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
-    runtime_delivery_sequence: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
     issued_at: str
-    delivered_at: str
 
     @model_validator(mode="after")
-    def _valid_permit_time(self) -> "ProductionDeliveryPermit":
+    def _valid_permit_time(self) -> "ProductionDeliveryPermitPayload":
         checked = _parse_utc(
             self.qualification_signer_registry_checked_at,
             field="permit registry checked_at",
@@ -683,15 +834,362 @@ class ProductionDeliveryPermit(ClosedSignedModel):
             field="permit registry expires_at",
         )
         issued = _parse_utc(self.issued_at, field="permit issued_at")
-        delivered = _parse_utc(self.delivered_at, field="permit delivered_at")
-        if not checked <= issued <= delivered < expires:
+        if not checked <= issued < expires:
             raise ValueError("permit was not issued under a fresh signer registry")
         if issued - checked > MAX_PERMIT_SNAPSHOT_AGE:
             raise ValueError(
                 "permit registry check is stale; the issuing authority must "
                 "recheck the signer registry within 60 seconds of permit issue"
             )
+        if hashlib.sha256(self.run_id.encode("utf-8")).hexdigest() != (
+            self.flow_run_id_sha256
+        ):
+            raise ValueError("permit run identity digest is invalid")
         return self
+
+    def canonical_bytes(self) -> bytes:
+        return canonical_json(self)
+
+    def payload_sha256(self) -> str:
+        return hashlib.sha256(
+            PERMIT_PAYLOAD_DOMAIN + self.canonical_bytes()
+        ).hexdigest()
+
+
+class ProductionDeliveryReceiptPayload(ClosedSignedModel):
+    schema_version: Literal["openadapt.production-delivery-receipt-payload/v2"] = (
+        DELIVERY_RECEIPT_PAYLOAD_SCHEMA
+    )
+    execution_authority_id: str = Field(pattern=_UUID_RE)
+    permit_id: str = Field(pattern=_ID_RE)
+    permit_artifact_sha256: str = Field(pattern=_SHA256_RE)
+    authenticated_runner_id_sha256: str = Field(pattern=_SHA256_RE)
+    authenticated_session_id_sha256: str = Field(pattern=_SHA256_RE)
+    one_use_claim_id: str = Field(pattern=_UUID_RE)
+    runtime_delivery_sequence: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
+    delivered_at: str
+
+    @field_validator("delivered_at")
+    @classmethod
+    def _valid_delivery_time(cls, value: str) -> str:
+        _parse_utc(value, field="delivery receipt delivered_at")
+        return value
+
+    def canonical_bytes(self) -> bytes:
+        return canonical_json(self)
+
+    def payload_sha256(self) -> str:
+        return hashlib.sha256(
+            DELIVERY_RECEIPT_PAYLOAD_DOMAIN + self.canonical_bytes()
+        ).hexdigest()
+
+
+class ProductionDeliveryPermitArtifact(ClosedSignedModel):
+    schema_version: Literal["openadapt.production-delivery-permit-artifact/v2"] = (
+        PERMIT_ARTIFACT_SCHEMA
+    )
+    payload: ProductionDeliveryPermitPayload
+    payload_sha256: str = Field(pattern=_SHA256_RE)
+    signer: DeliveryAuthoritySigner
+    signature: str = Field(min_length=86, max_length=86)
+
+    @field_validator("signature")
+    @classmethod
+    def _canonical_signature(cls, value: str) -> str:
+        _decode_ed25519_signature(value, field="delivery permit")
+        return value
+
+    @model_validator(mode="after")
+    def _verify_artifact(self) -> "ProductionDeliveryPermitArtifact":
+        payload = ProductionDeliveryPermitPayload.model_validate(
+            self.payload.model_dump(mode="json")
+        )
+        if self.payload_sha256 != payload.payload_sha256():
+            raise ValueError("delivery permit payload digest is invalid")
+        _verify_authority_signature(
+            self.signer,
+            self.signature,
+            PERMIT_PAYLOAD_DOMAIN + payload.canonical_bytes(),
+            field="delivery permit",
+        )
+        return self
+
+    def canonical_bytes(self) -> bytes:
+        return canonical_json(self)
+
+    def artifact_sha256(self) -> str:
+        return hashlib.sha256(self.canonical_bytes()).hexdigest()
+
+
+class ProductionDeliveryReceiptArtifact(ClosedSignedModel):
+    schema_version: Literal["openadapt.production-delivery-receipt-artifact/v2"] = (
+        DELIVERY_RECEIPT_ARTIFACT_SCHEMA
+    )
+    payload: ProductionDeliveryReceiptPayload
+    payload_sha256: str = Field(pattern=_SHA256_RE)
+    signer: DeliveryAuthoritySigner
+    signature: str = Field(min_length=86, max_length=86)
+
+    @field_validator("signature")
+    @classmethod
+    def _canonical_signature(cls, value: str) -> str:
+        _decode_ed25519_signature(value, field="delivery receipt")
+        return value
+
+    @model_validator(mode="after")
+    def _verify_artifact(self) -> "ProductionDeliveryReceiptArtifact":
+        payload = ProductionDeliveryReceiptPayload.model_validate(
+            self.payload.model_dump(mode="json")
+        )
+        if self.payload_sha256 != payload.payload_sha256():
+            raise ValueError("delivery receipt payload digest is invalid")
+        _verify_authority_signature(
+            self.signer,
+            self.signature,
+            DELIVERY_RECEIPT_PAYLOAD_DOMAIN + payload.canonical_bytes(),
+            field="delivery receipt",
+        )
+        return self
+
+    def canonical_bytes(self) -> bytes:
+        return canonical_json(self)
+
+    def artifact_sha256(self) -> str:
+        return hashlib.sha256(self.canonical_bytes()).hexdigest()
+
+
+def _decode_ed25519_signature(value: str, *, field: str) -> bytes:
+    try:
+        decoded = urlsafe_b64decode(value + "==")
+    except ValueError as exc:
+        raise ValueError(f"{field} signature is invalid") from exc
+    if (
+        len(decoded) != 64
+        or urlsafe_b64encode(decoded).decode("ascii").rstrip("=") != value
+    ):
+        raise ValueError(f"{field} signature is invalid")
+    return decoded
+
+
+def _verify_authority_signature(
+    signer: DeliveryAuthoritySigner,
+    signature: str,
+    message: bytes,
+    *,
+    field: str,
+) -> None:
+    try:
+        Ed25519PublicKey.from_public_bytes(
+            b64decode(signer.public_key, validate=True)
+        ).verify(_decode_ed25519_signature(signature, field=field), message)
+    except (InvalidSignature, ValueError) as exc:
+        raise ValueError(f"{field} authority signature is invalid") from exc
+
+
+def _authority_signer(private_key: Ed25519PrivateKey) -> DeliveryAuthoritySigner:
+    public_key = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return DeliveryAuthoritySigner(
+        key_id=delivery_authority_key_id(public_key),
+        public_key=b64encode(public_key).decode("ascii"),
+    )
+
+
+def sign_production_delivery_permit(
+    payload: ProductionDeliveryPermitPayload,
+    private_key: Ed25519PrivateKey,
+) -> ProductionDeliveryPermitArtifact:
+    payload = ProductionDeliveryPermitPayload.model_validate(
+        payload.model_dump(mode="json")
+    )
+    signature = private_key.sign(PERMIT_PAYLOAD_DOMAIN + payload.canonical_bytes())
+    return ProductionDeliveryPermitArtifact(
+        payload=payload,
+        payload_sha256=payload.payload_sha256(),
+        signer=_authority_signer(private_key),
+        signature=urlsafe_b64encode(signature).decode("ascii").rstrip("="),
+    )
+
+
+def sign_production_delivery_receipt(
+    payload: ProductionDeliveryReceiptPayload,
+    private_key: Ed25519PrivateKey,
+) -> ProductionDeliveryReceiptArtifact:
+    payload = ProductionDeliveryReceiptPayload.model_validate(
+        payload.model_dump(mode="json")
+    )
+    signature = private_key.sign(
+        DELIVERY_RECEIPT_PAYLOAD_DOMAIN + payload.canonical_bytes()
+    )
+    return ProductionDeliveryReceiptArtifact(
+        payload=payload,
+        payload_sha256=payload.payload_sha256(),
+        signer=_authority_signer(private_key),
+        signature=urlsafe_b64encode(signature).decode("ascii").rstrip("="),
+    )
+
+
+class ProductionDeliveryPermit(ClosedSignedModel):
+    """One acknowledged input edge in the terminal permit chain."""
+
+    schema_version: Literal["openadapt.production-delivery-permit-chain-entry/v2"] = (
+        PERMIT_CHAIN_ENTRY_SCHEMA
+    )
+    permit_artifact: ProductionDeliveryPermitArtifact
+    permit_artifact_sha256: str = Field(pattern=_SHA256_RE)
+    delivery_receipt_artifact: ProductionDeliveryReceiptArtifact
+    delivery_receipt_artifact_sha256: str = Field(pattern=_SHA256_RE)
+
+    @model_validator(mode="after")
+    def _closed_acknowledged_edge(self) -> "ProductionDeliveryPermit":
+        permit = ProductionDeliveryPermitArtifact.model_validate(
+            self.permit_artifact.model_dump(mode="json")
+        )
+        receipt = ProductionDeliveryReceiptArtifact.model_validate(
+            self.delivery_receipt_artifact.model_dump(mode="json")
+        )
+        if self.permit_artifact_sha256 != permit.artifact_sha256():
+            raise ValueError("delivery permit artifact digest is invalid")
+        if self.delivery_receipt_artifact_sha256 != receipt.artifact_sha256():
+            raise ValueError("delivery receipt artifact digest is invalid")
+        if permit.signer != receipt.signer:
+            raise ValueError("delivery receipt signer differs from permit signer")
+        permit_payload = permit.payload
+        receipt_payload = receipt.payload
+        if (
+            receipt_payload.execution_authority_id
+            != permit_payload.execution_authority_id
+            or receipt_payload.permit_id != permit_payload.permit_id
+            or receipt_payload.permit_artifact_sha256 != self.permit_artifact_sha256
+        ):
+            raise ValueError("delivery receipt does not bind its exact permit")
+        issued = _parse_utc(permit_payload.issued_at, field="permit issued_at")
+        delivered = _parse_utc(
+            receipt_payload.delivered_at,
+            field="delivery receipt delivered_at",
+        )
+        registry_expires = _parse_utc(
+            permit_payload.qualification_signer_registry_expires_at,
+            field="permit registry expires_at",
+        )
+        if not issued <= delivered < registry_expires:
+            raise ValueError("delivery receipt chronology is invalid")
+        return self
+
+    @classmethod
+    def build(
+        cls,
+        permit_artifact: ProductionDeliveryPermitArtifact,
+        delivery_receipt_artifact: ProductionDeliveryReceiptArtifact,
+    ) -> "ProductionDeliveryPermit":
+        """Build one edge from the two exact retained signed artifacts."""
+
+        return cls(
+            permit_artifact=permit_artifact,
+            permit_artifact_sha256=permit_artifact.artifact_sha256(),
+            delivery_receipt_artifact=delivery_receipt_artifact,
+            delivery_receipt_artifact_sha256=(
+                delivery_receipt_artifact.artifact_sha256()
+            ),
+        )
+
+    @property
+    def _permit(self) -> ProductionDeliveryPermitPayload:
+        return self.permit_artifact.payload
+
+    @property
+    def _receipt(self) -> ProductionDeliveryReceiptPayload:
+        return self.delivery_receipt_artifact.payload
+
+    @property
+    def execution_authority_id(self) -> str:
+        return self._permit.execution_authority_id
+
+    @property
+    def execution_authority_sha256(self) -> str:
+        return self._permit.execution_authority_sha256
+
+    @property
+    def permit_id(self) -> str:
+        return self._permit.permit_id
+
+    @property
+    def run_id(self) -> str:
+        return self._permit.run_id
+
+    @property
+    def flow_run_id_sha256(self) -> str:
+        return self._permit.flow_run_id_sha256
+
+    @property
+    def run_request_sha256(self) -> str:
+        return self._permit.run_request_sha256
+
+    @property
+    def action_request_sha256(self) -> str:
+        return self._permit.action_request_sha256
+
+    @property
+    def admission_artifact_sha256(self) -> str:
+        return self._permit.admission_artifact_sha256
+
+    @property
+    def evidence_identity_sha256(self) -> str:
+        return self._permit.evidence_identity_sha256
+
+    @property
+    def environment_digest(self) -> str:
+        return self._permit.environment_digest
+
+    @property
+    def qualification_signer_registry_sha256(self) -> str:
+        return self._permit.qualification_signer_registry_sha256
+
+    @property
+    def qualification_signer_registry_revision(self) -> int:
+        return self._permit.qualification_signer_registry_revision
+
+    @property
+    def qualification_signer_registry_expires_at(self) -> str:
+        return self._permit.qualification_signer_registry_expires_at
+
+    @property
+    def input_edge_sequence(self) -> int:
+        return self._permit.input_edge_sequence
+
+    @property
+    def authority_sequence(self) -> int:
+        return self._permit.authority_sequence
+
+    @property
+    def runtime_delivery_sequence(self) -> int:
+        return self._receipt.runtime_delivery_sequence
+
+    @property
+    def issued_at(self) -> str:
+        return self._permit.issued_at
+
+    @property
+    def delivered_at(self) -> str:
+        return self._receipt.delivered_at
+
+    @property
+    def authority_signer_sha256(self) -> str:
+        return self.permit_artifact.signer.signer_sha256()
+
+    @property
+    def authenticated_runner_id_sha256(self) -> str:
+        return self._receipt.authenticated_runner_id_sha256
+
+    @property
+    def authenticated_session_id_sha256(self) -> str:
+        return self._receipt.authenticated_session_id_sha256
+
+    @property
+    def one_use_claim_id(self) -> str:
+        return self._receipt.one_use_claim_id
 
 
 class ProductionDeliveryPermitChain(ClosedSignedModel):
@@ -705,6 +1203,11 @@ class ProductionDeliveryPermitChain(ClosedSignedModel):
 
     @model_validator(mode="after")
     def _closed_chain(self) -> "ProductionDeliveryPermitChain":
+        # Pydantic does not revalidate an already-created nested model by
+        # default.  Reparse each retained permit so ``model_copy`` or another
+        # in-memory mutation cannot enter a trusted chain with a stale digest.
+        for item in self.entries:
+            ProductionDeliveryPermit.model_validate(item.model_dump(mode="json"))
         authority = self.entries[0].execution_authority_id
         authority_digest = self.entries[0].execution_authority_sha256
         admission_digest = self.entries[0].admission_artifact_sha256
@@ -714,9 +1217,18 @@ class ProductionDeliveryPermitChain(ClosedSignedModel):
         registry_revision = self.entries[0].qualification_signer_registry_revision
         registry_expiry = self.entries[0].qualification_signer_registry_expires_at
         run_request_digest = self.entries[0].run_request_sha256
+        run_id = self.entries[0].run_id
+        flow_run_id_sha256 = self.entries[0].flow_run_id_sha256
+        authority_signer_sha256 = self.entries[0].authority_signer_sha256
+        authenticated_runner_id_sha256 = self.entries[0].authenticated_runner_id_sha256
+        authenticated_session_id_sha256 = self.entries[
+            0
+        ].authenticated_session_id_sha256
         if any(
             item.execution_authority_id != authority
             or item.execution_authority_sha256 != authority_digest
+            or item.run_id != run_id
+            or item.flow_run_id_sha256 != flow_run_id_sha256
             or item.admission_artifact_sha256 != admission_digest
             or item.evidence_identity_sha256 != evidence_identity_digest
             or item.environment_digest != environment_digest
@@ -724,6 +1236,9 @@ class ProductionDeliveryPermitChain(ClosedSignedModel):
             or item.qualification_signer_registry_revision != registry_revision
             or item.qualification_signer_registry_expires_at != registry_expiry
             or item.run_request_sha256 != run_request_digest
+            or item.authority_signer_sha256 != authority_signer_sha256
+            or item.authenticated_runner_id_sha256 != authenticated_runner_id_sha256
+            or item.authenticated_session_id_sha256 != authenticated_session_id_sha256
             for item in self.entries
         ):
             raise ValueError("delivery permit chain changes its production authority")
@@ -751,6 +1266,9 @@ class ProductionDeliveryPermitChain(ClosedSignedModel):
         action_requests = tuple(item.action_request_sha256 for item in self.entries)
         if len(action_requests) != len(set(action_requests)):
             raise ValueError("delivery permit chain repeats an action request")
+        claim_ids = tuple(item.one_use_claim_id for item in self.entries)
+        if len(claim_ids) != len(set(claim_ids)):
+            raise ValueError("delivery permit chain repeats a one-use claim")
         event_times = tuple(
             (
                 _parse_utc(item.issued_at, field="permit issued_at"),
@@ -962,6 +1480,7 @@ class ProductionTerminalVerificationPayload(ClosedSignedModel):
     )
     execution_authority_id: str = Field(pattern=_ID_RE)
     execution_authority_sha256: str = Field(pattern=_SHA256_RE)
+    execution_authority_signer_sha256: str = Field(pattern=_SHA256_RE)
     permit_chain: ProductionDeliveryPermitChain
     permit_count: StrictInt = Field(ge=1, le=JS_MAX_SAFE_INTEGER)
     final_authority_sequence: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
@@ -980,6 +1499,10 @@ class ProductionTerminalVerificationPayload(ClosedSignedModel):
 
     @model_validator(mode="after")
     def _closed_terminal_success(self) -> "ProductionTerminalVerificationPayload":
+        if hashlib.sha256(self.run_id.encode("utf-8")).hexdigest() != (
+            self.flow_run_id_sha256
+        ):
+            raise ValueError("terminal run identity digest is invalid")
         if self.admission_id == self.runtime_validation_id:
             raise ValueError("terminal admission and runtime identities must differ")
         if self.workflow_version_id != self.bundle_version_id:
@@ -989,13 +1512,20 @@ class ProductionTerminalVerificationPayload(ClosedSignedModel):
         if (
             self.execution_authority_id,
             self.execution_authority_sha256,
+            self.execution_authority_signer_sha256,
             self.admission_artifact_sha256,
         ) != (
             final.execution_authority_id,
             final.execution_authority_sha256,
+            final.authority_signer_sha256,
             final.admission_artifact_sha256,
         ):
             raise ValueError("terminal authority does not match its permit chain")
+        if (
+            self.run_id != final.run_id
+            or self.flow_run_id_sha256 != final.flow_run_id_sha256
+        ):
+            raise ValueError("terminal run identity does not match its permit chain")
         if (
             self.evidence_identity_sha256,
             self.environment_digest,
@@ -1202,10 +1732,16 @@ class ProductionTerminalVerificationExpected(ClosedSignedModel):
     )
     execution_authority_id: str = Field(pattern=_ID_RE)
     execution_authority_sha256: str = Field(pattern=_SHA256_RE)
+    execution_authority_signer_sha256: str = Field(pattern=_SHA256_RE)
     permit_chain_sha256: str = Field(pattern=_SHA256_RE)
     permit_count: StrictInt = Field(ge=1, le=JS_MAX_SAFE_INTEGER)
     final_authority_sequence: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
     final_runtime_delivery_sequence: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
+    authenticated_runner_id_sha256: str = Field(pattern=_SHA256_RE)
+    authenticated_session_id_sha256: str = Field(pattern=_SHA256_RE)
+    acknowledged_one_use_claim_ids: tuple[str, ...] = Field(
+        min_length=1, max_length=10_000
+    )
     workflow_contract_sha256: str = Field(pattern=_SHA256_RE)
     execution_outcome_sha256: str = Field(pattern=_SHA256_RE)
     run_receipt_sha256: str = Field(pattern=_SHA256_RE)
@@ -1214,11 +1750,82 @@ class ProductionTerminalVerificationExpected(ClosedSignedModel):
     run_report_object_sha256: str = Field(pattern=_SHA256_RE)
     evidence_manifests: ProductionEvidenceManifests
 
+    @model_validator(mode="after")
+    def _closed_delivery_state(self) -> "ProductionTerminalVerificationExpected":
+        if len(self.acknowledged_one_use_claim_ids) != self.permit_count:
+            raise ValueError("live delivery claim count does not match permit count")
+        if len(set(self.acknowledged_one_use_claim_ids)) != self.permit_count:
+            raise ValueError("live delivery claims are not globally one-use")
+        for claim_id in self.acknowledged_one_use_claim_ids:
+            if _UUID_RE.fullmatch(claim_id) is None:
+                raise ValueError("live delivery claim id is invalid")
+        return self
+
+
+class ProductionTerminalVerificationContext(ClosedSignedModel):
+    """Independent exact bindings needed to produce one terminal v2 proof."""
+
+    run_id: str = Field(pattern=_UUID_RE)
+    tenant_id: str = Field(pattern=_UUID_RE)
+    workflow_id: str = Field(pattern=_UUID_RE)
+    workflow_version_id: str = Field(pattern=_UUID_RE)
+    bundle_version_id: str = Field(pattern=_UUID_RE)
+    bundle_artifact_sha256: str = Field(pattern=_SHA256_RE)
+    environment_digest: str = Field(pattern=_SHA256_RE)
+    environment_contract_sha256: str = Field(pattern=_SHA256_RE)
+    runtime_environment_sha256: str = Field(pattern=_SHA256_RE)
+    identity_contract_sha256: str = Field(pattern=_SHA256_RE)
+    effect_contract_sha256: str = Field(pattern=_SHA256_RE)
+    runtime_validation_id: str = Field(pattern=_UUID_RE)
+    runtime_substrate: Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
+    admission_id: str = Field(pattern=_UUID_RE)
+    admission_artifact_sha256: str = Field(pattern=_SHA256_RE)
+    admission_policy_sha256: str = Field(pattern=_SHA256_RE)
+    evidence_identity_sha256: str = Field(pattern=_SHA256_RE)
+    admitted_runtime_build_sha256: str = Field(pattern=_SHA256_RE)
+    evidence_runner_signer_sha256: str = Field(pattern=_SHA256_RE)
+    qualification_signer_registry_sha256: str = Field(pattern=_SHA256_RE)
+    qualification_signer_registry_revision: StrictInt = Field(
+        ge=1, le=JS_MAX_SAFE_INTEGER
+    )
+    execution_authority_id: str = Field(pattern=_UUID_RE)
+    execution_authority_sha256: str = Field(pattern=_SHA256_RE)
+    execution_authority_signer_sha256: str = Field(pattern=_SHA256_RE)
+    permit_chain: ProductionDeliveryPermitChain
+    run_report_object_version: str = Field(pattern=_ID_RE)
+    verified_at: str
+    issued_at: str
+
+    @model_validator(mode="after")
+    def _closed_context(self) -> "ProductionTerminalVerificationContext":
+        if self.workflow_version_id != self.bundle_version_id:
+            raise ValueError("terminal workflow and bundle versions must match")
+        if self.admission_id == self.runtime_validation_id:
+            raise ValueError("terminal admission and runtime identities must differ")
+        _parse_utc(self.verified_at, field="terminal verified_at")
+        _parse_utc(self.issued_at, field="terminal issued_at")
+        return self
+
+
+@dataclass(frozen=True)
+class BuiltProductionTerminalVerification:
+    """Signed proof plus the exact report object bytes that it binds."""
+
+    envelope: ProductionTerminalVerificationEnvelope
+    report_bytes: bytes = dataclass_field(repr=False)
+    report_sha256: str
+
 
 _EXPECTED_FIELDS: Final[tuple[str, ...]] = tuple(
     field
     for field in ProductionTerminalVerificationExpected.model_fields
-    if field != "permit_chain_sha256"
+    if field
+    not in {
+        "permit_chain_sha256",
+        "authenticated_runner_id_sha256",
+        "authenticated_session_id_sha256",
+        "acknowledged_one_use_claim_ids",
+    }
 )
 
 
@@ -1226,6 +1833,9 @@ def sign_production_terminal_verification(
     payload: ProductionTerminalVerificationPayload,
     private_key: Ed25519PrivateKey,
 ) -> ProductionTerminalVerificationEnvelope:
+    payload = ProductionTerminalVerificationPayload.model_validate(
+        payload.model_dump(mode="json")
+    )
     public_key = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
@@ -1249,6 +1859,88 @@ def sign_production_terminal_verification(
     )
 
 
+def build_production_terminal_verification(
+    report: RunReport,
+    *,
+    context: ProductionTerminalVerificationContext,
+    private_key: Ed25519PrivateKey,
+) -> BuiltProductionTerminalVerification:
+    """Build the complete production proof from one retained Flow report."""
+
+    context = ProductionTerminalVerificationContext.model_validate(
+        context.model_dump(mode="json")
+    )
+    prepared = prepare_production_terminal_evidence(report)
+    manifests = build_production_evidence_manifests(
+        prepared,
+        admission_policy_sha256=context.admission_policy_sha256,
+        environment_digest=context.environment_digest,
+        environment_contract_sha256=context.environment_contract_sha256,
+        runtime_environment_sha256=context.runtime_environment_sha256,
+        identity_contract_sha256=context.identity_contract_sha256,
+        effect_contract_sha256=context.effect_contract_sha256,
+        admission_id=context.admission_id,
+        admission_artifact_sha256=context.admission_artifact_sha256,
+        execution_authority_id=context.execution_authority_id,
+        execution_authority_sha256=context.execution_authority_sha256,
+        permit_chain=context.permit_chain,
+    )
+    final = context.permit_chain.entries[-1]
+    payload = ProductionTerminalVerificationPayload(
+        run_id=context.run_id,
+        flow_run_id_sha256=prepared.flow_run_id_sha256,
+        tenant_id=context.tenant_id,
+        workflow_id=context.workflow_id,
+        workflow_version_id=context.workflow_version_id,
+        bundle_version_id=context.bundle_version_id,
+        bundle_artifact_sha256=context.bundle_artifact_sha256,
+        bundle_content_digest=prepared.bundle_content_digest,
+        environment_digest=context.environment_digest,
+        environment_contract_sha256=context.environment_contract_sha256,
+        runtime_environment_sha256=context.runtime_environment_sha256,
+        identity_contract_sha256=context.identity_contract_sha256,
+        effect_contract_sha256=context.effect_contract_sha256,
+        runtime_validation_id=context.runtime_validation_id,
+        runtime_substrate=context.runtime_substrate,
+        admission_id=context.admission_id,
+        admission_artifact_sha256=context.admission_artifact_sha256,
+        admission_policy_sha256=context.admission_policy_sha256,
+        evidence_identity_sha256=context.evidence_identity_sha256,
+        admitted_runtime_build_sha256=context.admitted_runtime_build_sha256,
+        evidence_runner_signer_sha256=context.evidence_runner_signer_sha256,
+        qualification_signer_registry_sha256=(
+            context.qualification_signer_registry_sha256
+        ),
+        qualification_signer_registry_revision=(
+            context.qualification_signer_registry_revision
+        ),
+        execution_authority_id=context.execution_authority_id,
+        execution_authority_sha256=context.execution_authority_sha256,
+        execution_authority_signer_sha256=(context.execution_authority_signer_sha256),
+        permit_chain=context.permit_chain,
+        permit_count=len(context.permit_chain.entries),
+        final_authority_sequence=final.authority_sequence,
+        final_runtime_delivery_sequence=final.runtime_delivery_sequence,
+        workflow_contract_sha256=(prepared.execution_outcome.workflow_contract_sha256),
+        execution_outcome=prepared.execution_outcome,
+        execution_outcome_sha256=prepared.execution_outcome.artifact_sha256(),
+        run_receipt=prepared.run_receipt,
+        run_receipt_sha256=prepared.run_receipt_sha256,
+        run_report_sha256=prepared.report_sha256,
+        run_report_object_version=context.run_report_object_version,
+        run_report_object_sha256=prepared.report_sha256,
+        evidence_manifests=manifests,
+        verified_at=context.verified_at,
+        issued_at=context.issued_at,
+    )
+    envelope = sign_production_terminal_verification(payload, private_key)
+    return BuiltProductionTerminalVerification(
+        envelope=envelope,
+        report_bytes=prepared.report_bytes,
+        report_sha256=prepared.report_sha256,
+    )
+
+
 def verify_production_terminal_verification(
     envelope: ProductionTerminalVerificationEnvelope,
     *,
@@ -1257,6 +1949,17 @@ def verify_production_terminal_verification(
 ) -> str:
     """Verify the runner proof against independent DB and object-store state."""
 
+    try:
+        envelope = ProductionTerminalVerificationEnvelope.model_validate(
+            envelope.model_dump(mode="json")
+        )
+        expected = ProductionTerminalVerificationExpected.model_validate(
+            expected.model_dump(mode="json")
+        )
+    except ValueError as exc:
+        raise ProductionTerminalVerificationError(
+            "production terminal envelope is not canonical"
+        ) from exc
     payload = envelope.payload
     public_key_bytes = b64decode(envelope.signer.public_key, validate=True)
     try:
@@ -1277,6 +1980,28 @@ def verify_production_terminal_verification(
         raise ProductionTerminalVerificationError(
             "production terminal permit chain does not match live state"
         )
+    chain = payload.permit_chain
+    if any(
+        entry.authenticated_runner_id_sha256 != expected.authenticated_runner_id_sha256
+        for entry in chain.entries
+    ):
+        raise ProductionTerminalVerificationError(
+            "production terminal runner identity does not match live state"
+        )
+    if any(
+        entry.authenticated_session_id_sha256
+        != expected.authenticated_session_id_sha256
+        for entry in chain.entries
+    ):
+        raise ProductionTerminalVerificationError(
+            "production terminal delivery session does not match live state"
+        )
+    if tuple(entry.one_use_claim_id for entry in chain.entries) != (
+        expected.acknowledged_one_use_claim_ids
+    ):
+        raise ProductionTerminalVerificationError(
+            "production terminal one-use claims do not match live state"
+        )
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     if _parse_utc(payload.issued_at, field="terminal issued_at") > current + timedelta(
         minutes=5
@@ -1292,13 +2017,55 @@ def rebuild_production_delivery_permit_chain(
 ) -> ProductionDeliveryPermitChain:
     """Rebuild the permit chain from independently retained permit records.
 
-    The acceptor must not trust the ``permit_sha256`` or chain digest carried
-    inside the proof.  It loads each retained permit artifact, recomputes its
-    digest, rebuilds the chain, and passes the rebuilt chain digest as
-    ``expected.permit_chain_sha256``.
+    The acceptor must not trust either artifact digest or the chain digest
+    carried inside the proof. It loads each exact retained permit and receipt
+    envelope, verifies both authority signatures, recomputes their digests,
+    rebuilds the chain, and passes the rebuilt digest as the expected value.
     """
 
     return ProductionDeliveryPermitChain.build(permits)
+
+
+def rebuild_production_delivery_permit_chain_from_artifacts(
+    artifacts: tuple[tuple[bytes, bytes], ...],
+) -> ProductionDeliveryPermitChain:
+    """Rebuild a chain from exact retained permit and receipt envelope bytes."""
+
+    if not artifacts or len(artifacts) > 10_000:
+        raise ProductionTerminalVerificationError(
+            "retained production delivery artifact count is invalid"
+        )
+    entries: list[ProductionDeliveryPermit] = []
+    for permit_bytes, receipt_bytes in artifacts:
+        if (
+            not isinstance(permit_bytes, bytes)
+            or not isinstance(receipt_bytes, bytes)
+            or len(permit_bytes) == 0
+            or len(receipt_bytes) == 0
+            or len(permit_bytes) > MAX_DELIVERY_ARTIFACT_BYTES
+            or len(receipt_bytes) > MAX_DELIVERY_ARTIFACT_BYTES
+        ):
+            raise ProductionTerminalVerificationError(
+                "retained production delivery artifact size is invalid"
+            )
+        try:
+            permit = ProductionDeliveryPermitArtifact.model_validate_json(permit_bytes)
+            receipt = ProductionDeliveryReceiptArtifact.model_validate_json(
+                receipt_bytes
+            )
+        except ValueError as exc:
+            raise ProductionTerminalVerificationError(
+                "retained production delivery artifact is invalid"
+            ) from exc
+        if (
+            permit.canonical_bytes() != permit_bytes
+            or receipt.canonical_bytes() != receipt_bytes
+        ):
+            raise ProductionTerminalVerificationError(
+                "retained production delivery artifact is not canonical"
+            )
+        entries.append(ProductionDeliveryPermit.build(permit, receipt))
+    return ProductionDeliveryPermitChain.build(tuple(entries))
 
 
 def verify_production_terminal_verification_from_report(

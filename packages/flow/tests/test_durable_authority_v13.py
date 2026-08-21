@@ -12,12 +12,14 @@ import os
 import shutil
 import sqlite3
 import stat
+from base64 import b64encode
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 import openadapt_flow.runtime.durable.authority as durable_authority_module
 from openadapt_flow.ir import ActionKind, RunReport, Step, StepResult, Workflow
@@ -48,6 +50,12 @@ from openadapt_flow.runtime.durable.checkpoint import (
     RunManifest,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.terminal_verification_v2 import (
+    ProductionDeliveryPermitPayload,
+    ProductionDeliveryReceiptPayload,
+    sign_production_delivery_permit,
+    sign_production_delivery_receipt,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -223,21 +231,111 @@ def _remote_initial_authority(
 def _issued_permit_transport(
     permit_id: str, cursor: str
 ) -> Callable[[str, dict[str, str], bytes], bytes]:
-    def transport(_url: str, _headers: dict[str, str], body: bytes) -> bytes:
+    key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+    retained: dict[str, tuple[object, bytes]] = {}
+    permit_digests: list[str] = []
+
+    def transport(url: str, _headers: dict[str, str], body: bytes) -> bytes:
         request = json.loads(body)
+        if url.endswith("/api/internal/managed-delivery-acknowledgment"):
+            claim_id = request["one_use_claim_id"]
+            artifact, permit_bytes = retained[claim_id]
+            assert request["permit_artifact_bytes_base64"] == b64encode(
+                permit_bytes
+            ).decode("ascii")
+            delivered_at = (
+                datetime.fromisoformat(artifact.payload.issued_at)
+                + timedelta(seconds=10)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            receipt = sign_production_delivery_receipt(
+                ProductionDeliveryReceiptPayload(
+                    execution_authority_id=artifact.payload.execution_authority_id,
+                    permit_id=artifact.payload.permit_id,
+                    permit_artifact_sha256=hashlib.sha256(permit_bytes).hexdigest(),
+                    authenticated_runner_id_sha256="8" * 64,
+                    authenticated_session_id_sha256="9" * 64,
+                    one_use_claim_id=claim_id,
+                    runtime_delivery_sequence=request["runtime_delivery_sequence"],
+                    delivered_at=delivered_at,
+                ),
+                key,
+            )
+            receipt_bytes = receipt.canonical_bytes()
+            return json.dumps(
+                {
+                    "schema_version": (
+                        "openadapt.production-delivery-acknowledgment-result/v2"
+                    ),
+                    "status": "acknowledged",
+                    "receipt_artifact_bytes_base64": b64encode(receipt_bytes).decode(
+                        "ascii"
+                    ),
+                    "receipt_artifact_sha256": hashlib.sha256(
+                        receipt_bytes
+                    ).hexdigest(),
+                    "runtime_delivery_sequence": request["runtime_delivery_sequence"],
+                    "delivered_at": delivered_at,
+                }
+            ).encode()
+        sequence = request["remote_delivery_sequence"]
+        issued_at = (
+            datetime(2026, 8, 20, tzinfo=timezone.utc)
+            + timedelta(seconds=20 * sequence + 20)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        permit_uuid = f"20000000-0000-4000-8000-{sequence + 1:012d}"
+        session_id = "30000000-0000-4000-8000-000000000001"
+        claim_id = f"40000000-0000-4000-8000-{sequence + 1:012d}"
+        artifact = sign_production_delivery_permit(
+            ProductionDeliveryPermitPayload(
+                execution_authority_id="22222222-2222-4222-8222-222222222222",
+                execution_authority_sha256="1" * 64,
+                permit_id=permit_uuid,
+                run_id=request["run_id"],
+                flow_run_id_sha256=hashlib.sha256(
+                    request["run_id"].encode()
+                ).hexdigest(),
+                run_request_sha256="2" * 64,
+                action_request_sha256=hashlib.sha256(body).hexdigest(),
+                admission_artifact_sha256="3" * 64,
+                evidence_identity_sha256="4" * 64,
+                environment_digest="5" * 64,
+                qualification_signer_registry_sha256="6" * 64,
+                qualification_signer_registry_revision=1,
+                qualification_signer_registry_checked_at="2026-08-20T00:00:00Z",
+                qualification_signer_registry_expires_at="2026-08-20T01:00:00Z",
+                input_edge_sequence=sequence + 1,
+                authority_sequence=sequence,
+                issued_at=issued_at,
+            ),
+            key,
+        )
+        permit_bytes = artifact.canonical_bytes()
+        permit_sha256 = hashlib.sha256(permit_bytes).hexdigest()
+        permit_digests.append("sha256:" + permit_sha256)
+        retained[claim_id] = (artifact, permit_bytes)
         return json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": "openadapt.production-delivery-permit-issue/v2",
                 "status": "issued",
-                "authority_id": "22222222-2222-4222-8222-222222222222",
-                "permit_id": permit_id,
-                "request_sha256": hashlib.sha256(body).hexdigest(),
-                "next_permit_cursor": cursor,
-                "delivery_sequence": request["delivery_sequence"],
-                "issued_at": "2026-08-05T00:00:00+00:00",
+                "execution_authority_id": ("22222222-2222-4222-8222-222222222222"),
+                "permit_id": permit_uuid,
+                "dispatch_session_id": session_id,
+                "one_use_claim_id": claim_id,
+                "permit_artifact_bytes_base64": b64encode(permit_bytes).decode("ascii"),
+                "permit_artifact_sha256": permit_sha256,
+                "next_permit_cursor": (
+                    cursor
+                    if sequence == 0
+                    else hashlib.sha256(f"{cursor}:{sequence}".encode()).hexdigest()
+                ),
+                "input_edge_sequence": sequence + 1,
+                "authority_sequence": sequence,
+                "runtime_delivery_sequence": sequence,
             }
         ).encode()
 
+    transport.permit_digests = permit_digests  # type: ignore[attr-defined]
+    transport.test_permit_label = permit_id  # type: ignore[attr-defined]
     return transport
 
 
@@ -278,29 +376,25 @@ def test_production_delivery_requires_and_validates_remote_permit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seen: dict[str, object] = {}
+    issued = _issued_permit_transport("permit-1", "a" * 64)
 
-    def transport(_url: str, headers: dict[str, str], body: bytes) -> bytes:
-        request = json.loads(body)
-        seen.update(headers=headers, request=request)
-        response = {
-            "schema_version": 1,
-            "status": "issued",
-            "authority_id": "22222222-2222-4222-8222-222222222222",
-            "permit_id": "permit-1",
-            "request_sha256": hashlib.sha256(body).hexdigest(),
-            "next_permit_cursor": hashlib.sha256(
-                ("cursor:" + (request["permit_cursor"] or "genesis")).encode()
-            ).hexdigest(),
-            "delivery_sequence": request["delivery_sequence"],
-            "issued_at": "2026-07-29T00:00:00+00:00",
-        }
-        return json.dumps(response).encode()
+    def transport(url: str, headers: dict[str, str], body: bytes) -> bytes:
+        if not url.endswith("/managed-delivery-acknowledgment"):
+            seen.update(headers=headers, request=json.loads(body))
+        return issued(url, headers, body)
 
     manifest, authority, owner = _remote_ready_authority(
         tmp_path, monkeypatch, transport
     )
-    authority.before_delivery(
+    permit = authority.before_delivery(
         manifest,
+        attempt_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        owner_nonce_sha256=owner,
+    )
+    assert permit is not None
+    authority.acknowledge_remote_delivery(
+        manifest,
+        permit,
         attempt_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         owner_nonce_sha256=owner,
     )
@@ -319,15 +413,129 @@ def test_production_delivery_requires_and_validates_remote_permit(
     assert "next_permit_cursor" not in record_dump
 
 
+def test_v2_permit_remains_pending_until_signed_receipt_commits_edge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transport = _issued_permit_transport("pending-edge", "4" * 64)
+    manifest, authority = _remote_initial_authority(tmp_path, monkeypatch, transport)
+
+    permit = authority.before_initial_delivery(manifest)
+    assert permit is not None
+    assert authority.validate(manifest).delivery_sequence == 0
+    with pytest.raises(DurableAuthorityBusy, match="lacks an acknowledgment"):
+        authority.before_initial_delivery(manifest)
+    with pytest.raises(DurableAuthorityBusy, match="remains uncertain"):
+        authority.production_delivery_permit_chain()
+
+    entry = authority.acknowledge_remote_delivery(manifest, permit)
+
+    assert authority.validate(manifest).delivery_sequence == 1
+    chain = authority.production_delivery_permit_chain()
+    assert chain.entries == (entry,)
+    assert entry.input_edge_sequence == 1
+    assert entry.authority_sequence == 0
+    assert entry.runtime_delivery_sequence == 0
+
+
+def test_receipt_digest_mismatch_keeps_delivery_uncertain_and_blocks_next_edge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    issued = _issued_permit_transport("bad-receipt", "3" * 64)
+
+    def transport(url: str, headers: dict[str, str], body: bytes) -> bytes:
+        response = issued(url, headers, body)
+        if url.endswith("/managed-delivery-acknowledgment"):
+            value = json.loads(response)
+            value["receipt_artifact_sha256"] = "0" * 64
+            return json.dumps(value).encode()
+        return response
+
+    manifest, authority = _remote_initial_authority(tmp_path, monkeypatch, transport)
+    permit = authority.before_initial_delivery(manifest)
+    assert permit is not None
+
+    with pytest.raises(DurableAuthorityBusy, match="digest does not match"):
+        authority.acknowledge_remote_delivery(manifest, permit)
+
+    assert authority.validate(manifest).delivery_sequence == 0
+    with pytest.raises(DurableAuthorityBusy, match="lacks an acknowledgment"):
+        authority.before_initial_delivery(manifest)
+
+
+def test_acknowledgment_refuses_changed_authority_origin_before_token_forwarding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    issued = _issued_permit_transport("origin-bound", "2" * 64)
+    acknowledgment_calls = 0
+
+    def transport(url: str, headers: dict[str, str], body: bytes) -> bytes:
+        nonlocal acknowledgment_calls
+        if url.endswith("/managed-delivery-acknowledgment"):
+            acknowledgment_calls += 1
+        return issued(url, headers, body)
+
+    manifest, authority = _remote_initial_authority(tmp_path, monkeypatch, transport)
+    permit = authority.before_initial_delivery(manifest)
+    assert permit is not None
+    monkeypatch.setenv(
+        REMOTE_AUTHORITY_URL_ENV,
+        "https://other-control.example/api/internal/managed-delivery-permit",
+    )
+
+    with pytest.raises(DurableAuthorityBusy, match="origin changed"):
+        authority.acknowledge_remote_delivery(manifest, permit)
+
+    assert acknowledgment_calls == 0
+    assert authority.validate(manifest).delivery_sequence == 0
+
+
+def test_backend_success_requires_delivery_acknowledgment_before_return() -> None:
+    events: list[str] = []
+
+    class Guard:
+        def acknowledge_delivery(self) -> None:
+            events.append("acknowledged")
+
+    replayer = object.__new__(Replayer)
+    replayer._active_delivery_acknowledgers = (Guard(),)
+    result = StepResult(step_id="edge", intent="deliver edge", ok=False)
+
+    delivered = replayer._deliver_backend_call(
+        result,
+        lambda: events.append("delivered") or "receipt",
+    )
+
+    assert delivered == "receipt"
+    assert events == ["delivered", "acknowledged"]
+    assert result.delivery_attempted is True
+
+
+def test_backend_acknowledgment_failure_is_an_uncertain_delivery() -> None:
+    class Guard:
+        def acknowledge_delivery(self) -> None:
+            raise DurableAuthorityBusy("receipt unavailable")
+
+    replayer = object.__new__(Replayer)
+    replayer._active_delivery_acknowledgers = (Guard(),)
+    result = StepResult(step_id="edge", intent="deliver edge", ok=False)
+
+    with pytest.raises(DurableAuthorityBusy, match="receipt unavailable"):
+        replayer._deliver_backend_call(result, lambda: None)
+
+    assert result.delivery_attempted is True
+    assert replayer._active_delivery_acknowledgers == ()
+
+
 def test_synthetic_delivery_marker_is_canonical_and_never_contains_secrets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     permit_id = "synthetic-permit-id-not-for-observers"
     permit_cursor = "d" * 64
+    transport = _issued_permit_transport(permit_id, permit_cursor)
     manifest, authority = _remote_initial_authority(
         tmp_path,
         monkeypatch,
-        _issued_permit_transport(permit_id, permit_cursor),
+        transport,
     )
     _enable_synthetic_marker(monkeypatch, run_id=manifest.run_id)
     observed: list[bytes] = []
@@ -339,7 +547,9 @@ def test_synthetic_delivery_marker_is_canonical_and_never_contains_secrets(
 
     authority._synthetic_delivery_marker_sink = sink
 
-    authority.before_initial_delivery(manifest)
+    permit = authority.before_initial_delivery(manifest)
+    assert permit is not None
+    authority.acknowledge_remote_delivery(manifest, permit)
 
     assert len(observed) == 1
     raw = observed[0]
@@ -356,10 +566,7 @@ def test_synthetic_delivery_marker_is_canonical_and_never_contains_secrets(
         "delivery_count": 1,
         "managed_dispatch_binding_sha256": manifest.managed_dispatch_binding_sha256,
         "permit_count": 1,
-        "permit_digest": "sha256:"
-        + hashlib.sha256(
-            b"openadapt-synthetic-delivery-marker-permit-v1\0" + permit_id.encode()
-        ).hexdigest(),
+        "permit_digest": transport.permit_digests[0],  # type: ignore[attr-defined]
         "run_id": manifest.run_id,
         "schema_version": 1,
     }
@@ -371,10 +578,11 @@ def test_synthetic_delivery_marker_is_canonical_and_never_contains_secrets(
 def test_synthetic_marker_sink_failure_never_changes_a_permitted_delivery(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    transport = _issued_permit_transport("permit-with-broken-observer", "c" * 64)
     manifest, authority = _remote_initial_authority(
         tmp_path,
         monkeypatch,
-        _issued_permit_transport("permit-with-broken-observer", "c" * 64),
+        transport,
     )
     _enable_synthetic_marker(monkeypatch, run_id=manifest.run_id)
 
@@ -383,7 +591,9 @@ def test_synthetic_marker_sink_failure_never_changes_a_permitted_delivery(
 
     authority._synthetic_delivery_marker_sink = broken_sink
 
-    authority.before_initial_delivery(manifest)
+    permit = authority.before_initial_delivery(manifest)
+    assert permit is not None
+    authority.acknowledge_remote_delivery(manifest, permit)
 
     assert authority.validate(manifest).delivery_sequence == 1
 
@@ -393,10 +603,11 @@ def test_synthetic_marker_short_pipe_write_never_changes_a_permitted_delivery(
 ) -> None:
     """A partial observer write is not part of the durable delivery contract."""
 
+    transport = _issued_permit_transport("permit-with-short-observer-write", "b" * 64)
     manifest, authority = _remote_initial_authority(
         tmp_path,
         monkeypatch,
-        _issued_permit_transport("permit-with-short-observer-write", "b" * 64),
+        transport,
     )
     _enable_synthetic_marker(monkeypatch, run_id=manifest.run_id)
 
@@ -420,7 +631,9 @@ def test_synthetic_marker_short_pipe_write_never_changes_a_permitted_delivery(
         durable_authority_module._fixed_synthetic_delivery_marker_sink()
     )
 
-    authority.before_initial_delivery(manifest)
+    permit = authority.before_initial_delivery(manifest)
+    assert permit is not None
+    authority.acknowledge_remote_delivery(manifest, permit)
 
     # The exact permit transaction commits even when the observer drops a marker.
     assert authority.validate(manifest).delivery_sequence == 1
@@ -476,8 +689,15 @@ def test_synthetic_delivery_marker_requires_exact_server_owned_run_id(
     observed: list[bytes] = []
     authority._synthetic_delivery_marker_sink = observed.append
 
-    authority.before_delivery(
+    permit = authority.before_delivery(
         manifest,
+        attempt_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        owner_nonce_sha256=owner,
+    )
+    assert permit is not None
+    authority.acknowledge_remote_delivery(
+        manifest,
+        permit,
         attempt_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         owner_nonce_sha256=owner,
     )
@@ -534,9 +754,16 @@ def test_synthetic_delivery_marker_is_not_emitted_before_cursor_advance(
         ),
     )
 
+    permit = authority.before_delivery(
+        manifest,
+        attempt_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        owner_nonce_sha256=owner,
+    )
+    assert permit is not None
     with pytest.raises(DurableAuthorityBusy, match="synthetic cursor failure"):
-        authority.before_delivery(
+        authority.acknowledge_remote_delivery(
             manifest,
+            permit,
             attempt_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             owner_nonce_sha256=owner,
         )
@@ -640,24 +867,12 @@ def test_initial_managed_edges_advance_remote_and_local_sequences(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     requests: list[dict[str, object]] = []
+    issued = _issued_permit_transport("initial-sequence", "7" * 64)
 
-    def transport(_url: str, _headers: dict[str, str], body: bytes) -> bytes:
-        request = json.loads(body)
-        requests.append(request)
-        return json.dumps(
-            {
-                "schema_version": 1,
-                "status": "issued",
-                "authority_id": "22222222-2222-4222-8222-222222222222",
-                "permit_id": f"permit-{len(requests)}",
-                "request_sha256": hashlib.sha256(body).hexdigest(),
-                "next_permit_cursor": hashlib.sha256(
-                    f"cursor-{len(requests)}".encode()
-                ).hexdigest(),
-                "delivery_sequence": request["delivery_sequence"],
-                "issued_at": "2026-07-29T00:00:00+00:00",
-            }
-        ).encode()
+    def transport(url: str, headers: dict[str, str], body: bytes) -> bytes:
+        if not url.endswith("/managed-delivery-acknowledgment"):
+            requests.append(json.loads(body))
+        return issued(url, headers, body)
 
     _run_dir, _store, manifest, authority = _fresh_run(
         tmp_path, execution_profile="standard"
@@ -667,13 +882,21 @@ def test_initial_managed_edges_advance_remote_and_local_sequences(
     authority = DurableAuthority(
         authority.run_dir, authority.store, remote_transport=transport
     )
-    authority.before_initial_delivery(manifest)
-    authority.before_initial_delivery(manifest)
+    first = authority.before_initial_delivery(manifest)
+    assert first is not None
+    authority.acknowledge_remote_delivery(manifest, first)
+    second = authority.before_initial_delivery(manifest)
+    assert second is not None
+    authority.acknowledge_remote_delivery(manifest, second)
     assert [request["delivery_sequence"] for request in requests] == [0, 1]
     assert [request["remote_delivery_sequence"] for request in requests] == [0, 1]
     assert requests[0]["permit_cursor"] is None
     assert requests[1]["permit_cursor"] is not None
     assert authority.validate(manifest).delivery_sequence == 2
+    chain = authority.production_delivery_permit_chain()
+    assert [entry.input_edge_sequence for entry in chain.entries] == [1, 2]
+    assert [entry.authority_sequence for entry in chain.entries] == [0, 1]
+    assert [entry.runtime_delivery_sequence for entry in chain.entries] == [0, 1]
 
 
 def test_replayer_refuses_public_cloud_runner_strings() -> None:
@@ -796,8 +1019,9 @@ def test_remote_sequence_survives_complete_local_state_restore(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     consumed: set[tuple[str, str, int]] = set()
+    issued = _issued_permit_transport("restore-sequence", "6" * 64)
 
-    def transport(_url: str, _headers: dict[str, str], body: bytes) -> bytes:
+    def transport(url: str, headers: dict[str, str], body: bytes) -> bytes:
         request = json.loads(body)
         key = (
             request["run_id"],
@@ -807,20 +1031,7 @@ def test_remote_sequence_survives_complete_local_state_restore(
         if key in consumed:
             raise OSError("409 duplicate delivery sequence")
         consumed.add(key)
-        return json.dumps(
-            {
-                "schema_version": 1,
-                "status": "issued",
-                "authority_id": "22222222-2222-4222-8222-222222222222",
-                "permit_id": f"permit-{len(consumed)}",
-                "request_sha256": hashlib.sha256(body).hexdigest(),
-                "next_permit_cursor": hashlib.sha256(
-                    ("cursor:" + (request["permit_cursor"] or "genesis")).encode()
-                ).hexdigest(),
-                "delivery_sequence": request["delivery_sequence"],
-                "issued_at": "2026-07-29T00:00:00+00:00",
-            }
-        ).encode()
+        return issued(url, headers, body)
 
     run_dir, store, manifest, _authority = _fresh_run(
         tmp_path, execution_profile="standard"
@@ -878,10 +1089,13 @@ def test_remote_sequence_spans_verified_progress_in_one_continuation(
 ) -> None:
     expected_sequence = 0
     observed: list[tuple[int, str, int, str | None]] = []
+    issued = _issued_permit_transport("progress-sequence", "5" * 64)
 
-    def transport(_url: str, _headers: dict[str, str], body: bytes) -> bytes:
+    def transport(url: str, headers: dict[str, str], body: bytes) -> bytes:
         nonlocal expected_sequence
         request = json.loads(body)
+        if url.endswith("/managed-delivery-acknowledgment"):
+            return issued(url, headers, body)
         assert request["delivery_sequence"] == expected_sequence
         observed.append(
             (
@@ -892,20 +1106,7 @@ def test_remote_sequence_spans_verified_progress_in_one_continuation(
             )
         )
         expected_sequence += 1
-        return json.dumps(
-            {
-                "schema_version": 1,
-                "status": "issued",
-                "authority_id": "22222222-2222-4222-8222-222222222222",
-                "permit_id": f"permit-{expected_sequence}",
-                "request_sha256": hashlib.sha256(body).hexdigest(),
-                "next_permit_cursor": hashlib.sha256(
-                    ("cursor:" + (request["permit_cursor"] or "genesis")).encode()
-                ).hexdigest(),
-                "delivery_sequence": request["delivery_sequence"],
-                "issued_at": "2026-07-29T00:00:00+00:00",
-            }
-        ).encode()
+        return issued(url, headers, body)
 
     run_dir, store, manifest, _authority = _fresh_run(
         tmp_path, execution_profile="standard"
@@ -940,8 +1141,15 @@ def test_remote_sequence_spans_verified_progress_in_one_continuation(
 
     authority._synthetic_delivery_marker_sink = sink
 
-    authority.before_delivery(
+    first = authority.before_delivery(
         manifest,
+        attempt_id="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        owner_nonce_sha256=owner,
+    )
+    assert first is not None
+    authority.acknowledge_remote_delivery(
+        manifest,
+        first,
         attempt_id="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         owner_nonce_sha256=owner,
     )
@@ -965,8 +1173,15 @@ def test_remote_sequence_spans_verified_progress_in_one_continuation(
         owner_nonce_sha256=owner,
         terminal_pause=False,
     )
-    authority.before_delivery(
+    second = authority.before_delivery(
         manifest,
+        attempt_id="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        owner_nonce_sha256=owner,
+    )
+    assert second is not None
+    authority.acknowledge_remote_delivery(
+        manifest,
+        second,
         attempt_id="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         owner_nonce_sha256=owner,
     )

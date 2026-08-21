@@ -45,12 +45,18 @@ from openadapt_flow.receipt import (
 from openadapt_flow.terminal_verification_v2 import (
     ProductionDeliveryPermit,
     ProductionDeliveryPermitChain,
+    ProductionDeliveryPermitPayload,
+    ProductionDeliveryReceiptPayload,
+    ProductionTerminalVerificationContext,
     ProductionTerminalVerificationError,
     ProductionTerminalVerificationExpected,
     ProductionTerminalVerificationPayload,
     build_production_evidence_manifests,
+    build_production_terminal_verification,
     evidence_runner_signer_sha256,
     prepare_production_terminal_evidence,
+    sign_production_delivery_permit,
+    sign_production_delivery_receipt,
     sign_production_terminal_verification,
     verify_production_terminal_verification,
     verify_production_terminal_verification_from_report,
@@ -105,30 +111,7 @@ def test_terminal_preparation_revalidates_exact_report_and_integer_receipt() -> 
 
 def test_terminal_evidence_manifests_recompute_from_retained_report() -> None:
     prepared = prepare_production_terminal_evidence(_report(run_id_sha256="f" * 64))
-    permit_chain = ProductionDeliveryPermitChain.build(
-        (
-            ProductionDeliveryPermit(
-                execution_authority_id="authority:run:1",
-                execution_authority_sha256="1" * 64,
-                permit_id="permit:1",
-                permit_sha256="2" * 64,
-                run_request_sha256="3" * 64,
-                action_request_sha256="4" * 64,
-                admission_artifact_sha256="5" * 64,
-                evidence_identity_sha256="6" * 64,
-                environment_digest="7" * 64,
-                qualification_signer_registry_sha256="8" * 64,
-                qualification_signer_registry_revision=7,
-                qualification_signer_registry_checked_at="2026-08-18T11:59:00Z",
-                qualification_signer_registry_expires_at="2026-08-20T11:00:00Z",
-                input_edge_sequence=1,
-                authority_sequence=0,
-                runtime_delivery_sequence=9,
-                issued_at="2026-08-18T12:00:00Z",
-                delivered_at="2026-08-18T12:00:01Z",
-            ),
-        )
-    )
+    permit_chain = _terminal_permit_chain()
     manifests = build_production_evidence_manifests(
         prepared,
         admission_policy_sha256="9" * 64,
@@ -139,7 +122,7 @@ def test_terminal_evidence_manifests_recompute_from_retained_report() -> None:
         effect_contract_sha256="d" * 64,
         admission_id="00000000-0000-4000-8000-000000000001",
         admission_artifact_sha256="5" * 64,
-        execution_authority_id="authority:run:1",
+        execution_authority_id="00000000-0000-4000-8000-000000000008",
         execution_authority_sha256="1" * 64,
         permit_chain=permit_chain,
     )
@@ -152,29 +135,42 @@ def test_terminal_evidence_manifests_recompute_from_retained_report() -> None:
 
 
 def _terminal_permit_chain() -> ProductionDeliveryPermitChain:
+    run_id = "00000000-0000-4000-8000-000000000002"
+    permit_payload = ProductionDeliveryPermitPayload(
+        execution_authority_id="00000000-0000-4000-8000-000000000008",
+        execution_authority_sha256="1" * 64,
+        permit_id="permit:1",
+        run_id=run_id,
+        flow_run_id_sha256=hashlib.sha256(run_id.encode("utf-8")).hexdigest(),
+        run_request_sha256="3" * 64,
+        action_request_sha256="4" * 64,
+        admission_artifact_sha256="5" * 64,
+        evidence_identity_sha256="6" * 64,
+        environment_digest="7" * 64,
+        qualification_signer_registry_sha256="8" * 64,
+        qualification_signer_registry_revision=7,
+        qualification_signer_registry_checked_at="2026-08-18T11:59:00Z",
+        qualification_signer_registry_expires_at="2026-08-20T11:00:00Z",
+        input_edge_sequence=1,
+        authority_sequence=0,
+        issued_at="2026-08-18T12:00:00Z",
+    )
+    permit_artifact = sign_production_delivery_permit(permit_payload, _terminal_key())
+    receipt_payload = ProductionDeliveryReceiptPayload(
+        execution_authority_id=permit_payload.execution_authority_id,
+        permit_id=permit_payload.permit_id,
+        permit_artifact_sha256=permit_artifact.artifact_sha256(),
+        authenticated_runner_id_sha256="a" * 64,
+        authenticated_session_id_sha256="b" * 64,
+        one_use_claim_id="00000000-0000-4000-8000-000000000010",
+        runtime_delivery_sequence=9,
+        delivered_at="2026-08-18T12:00:01Z",
+    )
+    receipt_artifact = sign_production_delivery_receipt(
+        receipt_payload, _terminal_key()
+    )
     return ProductionDeliveryPermitChain.build(
-        (
-            ProductionDeliveryPermit(
-                execution_authority_id="authority:run:1",
-                execution_authority_sha256="1" * 64,
-                permit_id="permit:1",
-                permit_sha256="2" * 64,
-                run_request_sha256="3" * 64,
-                action_request_sha256="4" * 64,
-                admission_artifact_sha256="5" * 64,
-                evidence_identity_sha256="6" * 64,
-                environment_digest="7" * 64,
-                qualification_signer_registry_sha256="8" * 64,
-                qualification_signer_registry_revision=7,
-                qualification_signer_registry_checked_at="2026-08-18T11:59:00Z",
-                qualification_signer_registry_expires_at="2026-08-20T11:00:00Z",
-                input_edge_sequence=1,
-                authority_sequence=0,
-                runtime_delivery_sequence=9,
-                issued_at="2026-08-18T12:00:00Z",
-                delivered_at="2026-08-18T12:00:01Z",
-            ),
-        )
+        (ProductionDeliveryPermit.build(permit_artifact, receipt_artifact),)
     )
 
 
@@ -187,7 +183,10 @@ def _terminal_key():
 def _terminal_payload_from_report() -> tuple[
     ProductionTerminalVerificationPayload, bytes
 ]:
-    prepared = prepare_production_terminal_evidence(_report(run_id_sha256="f" * 64))
+    run_id = "00000000-0000-4000-8000-000000000002"
+    prepared = prepare_production_terminal_evidence(
+        _report(run_id_sha256=hashlib.sha256(run_id.encode("utf-8")).hexdigest())
+    )
     chain = _terminal_permit_chain()
     manifests = build_production_evidence_manifests(
         prepared,
@@ -199,7 +198,7 @@ def _terminal_payload_from_report() -> tuple[
         effect_contract_sha256="d" * 64,
         admission_id="00000000-0000-4000-8000-000000000001",
         admission_artifact_sha256="5" * 64,
-        execution_authority_id="authority:run:1",
+        execution_authority_id="00000000-0000-4000-8000-000000000008",
         execution_authority_sha256="1" * 64,
         permit_chain=chain,
     )
@@ -214,7 +213,7 @@ def _terminal_payload_from_report() -> tuple[
         )
     )
     payload = ProductionTerminalVerificationPayload(
-        run_id="00000000-0000-4000-8000-000000000002",
+        run_id=run_id,
         flow_run_id_sha256=prepared.flow_run_id_sha256,
         tenant_id="00000000-0000-4000-8000-000000000003",
         workflow_id="00000000-0000-4000-8000-000000000004",
@@ -237,8 +236,9 @@ def _terminal_payload_from_report() -> tuple[
         evidence_runner_signer_sha256=evidence_runner_signer_sha256(public_key),
         qualification_signer_registry_sha256="8" * 64,
         qualification_signer_registry_revision=7,
-        execution_authority_id="authority:run:1",
+        execution_authority_id="00000000-0000-4000-8000-000000000008",
         execution_authority_sha256="1" * 64,
+        execution_authority_signer_sha256=(chain.entries[0].authority_signer_sha256),
         permit_chain=chain,
         permit_count=1,
         final_authority_sequence=0,
@@ -264,9 +264,24 @@ def _terminal_expected(
     values = {
         field: getattr(payload, field)
         for field in ProductionTerminalVerificationExpected.model_fields
-        if field != "permit_chain_sha256"
+        if field
+        not in {
+            "permit_chain_sha256",
+            "authenticated_runner_id_sha256",
+            "authenticated_session_id_sha256",
+            "acknowledged_one_use_claim_ids",
+        }
     }
     values["permit_chain_sha256"] = payload.permit_chain.permit_chain_sha256
+    values["authenticated_runner_id_sha256"] = payload.permit_chain.entries[
+        0
+    ].authenticated_runner_id_sha256
+    values["authenticated_session_id_sha256"] = payload.permit_chain.entries[
+        0
+    ].authenticated_session_id_sha256
+    values["acknowledged_one_use_claim_ids"] = tuple(
+        entry.one_use_claim_id for entry in payload.permit_chain.entries
+    )
     return ProductionTerminalVerificationExpected.model_validate(values)
 
 
@@ -280,6 +295,24 @@ def test_terminal_proof_verifies_when_derived_from_retained_report() -> None:
         now=None,
     )
     assert digest == envelope.artifact_sha256()
+
+
+def test_terminal_producer_builds_the_exact_report_derived_payload() -> None:
+    payload, report_bytes = _terminal_payload_from_report()
+    context = ProductionTerminalVerificationContext.model_validate(
+        {
+            field: getattr(payload, field)
+            for field in ProductionTerminalVerificationContext.model_fields
+        }
+    )
+    built = build_production_terminal_verification(
+        RunReport.model_validate_json(report_bytes),
+        context=context,
+        private_key=_terminal_key(),
+    )
+    assert built.report_bytes == report_bytes
+    assert built.report_sha256 == payload.run_report_sha256
+    assert built.envelope.payload == payload
 
 
 def test_terminal_proof_refuses_other_report_bytes() -> None:

@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterator, Literal, Optional
+from typing import Any, Iterator, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -274,14 +274,14 @@ class ContinuationCoordinator:
                 self.release(token)
             return
 
-    def before_delivery(self, token: ContinuationToken) -> None:
+    def before_delivery(self, token: ContinuationToken) -> Any:
         """Linearize Reject against the first resumed delivery boundary."""
 
         manifest = self.store.read_manifest()
         if manifest is None:
             raise ContinuationBusy("the durable manifest disappeared before delivery")
         try:
-            self.authority.before_delivery(
+            remote_permit = self.authority.before_delivery(
                 manifest,
                 attempt_id=token.attempt_id,
                 owner_nonce_sha256=self._nonce_digest(token.owner_nonce),
@@ -313,7 +313,7 @@ class ContinuationCoordinator:
                         }
                     )
                 )
-                return
+                return remote_permit
             if record.phase != "validating":
                 raise ContinuationBusy(
                     "the continuation attempt is not eligible for delivery"
@@ -327,6 +327,27 @@ class ContinuationCoordinator:
                     }
                 )
             )
+        return remote_permit
+
+    def acknowledge_delivery(
+        self, token: ContinuationToken, remote_permit: Any
+    ) -> None:
+        """Commit the receipt for the exact backend edge that just returned."""
+
+        if remote_permit is None:
+            return
+        manifest = self.store.read_manifest()
+        if manifest is None:
+            raise ContinuationBusy("the durable manifest disappeared after delivery")
+        try:
+            self.authority.acknowledge_remote_delivery(
+                manifest,
+                remote_permit,
+                attempt_id=token.attempt_id,
+                owner_nonce_sha256=self._nonce_digest(token.owner_nonce),
+            )
+        except StateDiverged as exc:
+            raise ContinuationBusy(str(exc)) from exc
 
     def bind_approval(self, token: ContinuationToken, approval: ApprovalRecord) -> None:
         """Bind the exact admitted approval in the external authority."""
@@ -720,9 +741,19 @@ class ContinuationGuard:
     ) -> None:
         self.coordinator = coordinator
         self.token = token
+        self._pending_remote_permit: Any = None
 
     def before_delivery(self) -> None:
-        self.coordinator.before_delivery(self.token)
+        if self._pending_remote_permit is not None:
+            raise ContinuationBusy(
+                "a prior production delivery lacks an acknowledgment receipt"
+            )
+        self._pending_remote_permit = self.coordinator.before_delivery(self.token)
+
+    def acknowledge_delivery(self) -> None:
+        pending = self._pending_remote_permit
+        self.coordinator.acknowledge_delivery(self.token, pending)
+        self._pending_remote_permit = None
 
     def bind_approval(self, approval: ApprovalRecord) -> None:
         self.coordinator.bind_approval(self.token, approval)
