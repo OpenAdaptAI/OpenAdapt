@@ -90,6 +90,21 @@ def _first_structural_observation(
     return None
 
 
+def _bound_screenshot_timestamp(events: list[ActionEvent]) -> float | None:
+    """Keep the frame bound where the merged action completed.
+
+    The recorder binds an action to the screen frame retained when the action
+    was emitted (a click at button-up, a typed run at its last key), so the
+    merged event carries the LAST child's binding, not the first's.
+    """
+
+    bound: float | None = None
+    for event in events:
+        if event.screenshot_timestamp is not None:
+            bound = event.screenshot_timestamp
+    return bound
+
+
 # =============================================================================
 # Event Processing Functions
 # =============================================================================
@@ -250,6 +265,9 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
                         structural_observation=_first_structural_observation(
                             list(keyboard_buffer)
                         ),
+                        screenshot_timestamp=_bound_screenshot_timestamp(
+                            list(keyboard_buffer)
+                        ),
                     )
                 )
         else:
@@ -266,6 +284,7 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
                 structural_observation=_first_structural_observation(
                     list(keyboard_buffer)
                 ),
+                screenshot_timestamp=_bound_screenshot_timestamp(list(keyboard_buffer)),
             )
             result.append(type_event)
 
@@ -328,6 +347,7 @@ def merge_consecutive_mouse_move_events(events: list[ActionEvent]) -> list[Actio
                 structural_observation=_first_structural_observation(
                     list(move_buffer)
                 ),
+                screenshot_timestamp=_bound_screenshot_timestamp(list(move_buffer)),
             )
             result.append(merged)
 
@@ -380,6 +400,7 @@ def merge_consecutive_mouse_scroll_events(events: list[ActionEvent]) -> list[Act
                 structural_observation=_first_structural_observation(
                     list(scroll_buffer)
                 ),
+                screenshot_timestamp=_bound_screenshot_timestamp(list(scroll_buffer)),
             )
             result.append(merged)
 
@@ -487,6 +508,9 @@ def merge_consecutive_mouse_click_events(
                             structural_observation=_first_structural_observation(
                                 [down, up, next_down, next_up]
                             ),
+                            screenshot_timestamp=_bound_screenshot_timestamp(
+                                [down, up, next_down, next_up]
+                            ),
                         )
                         result.append(double_click)
                         skip_timestamps.add(up.timestamp)
@@ -504,6 +528,7 @@ def merge_consecutive_mouse_click_events(
                     structural_observation=_first_structural_observation(
                         [down, up]
                     ),
+                    screenshot_timestamp=_bound_screenshot_timestamp([down, up]),
                 )
                 result.append(single_click)
                 skip_timestamps.add(up.timestamp)
@@ -569,6 +594,9 @@ def detect_drag_events(
                         button=down_event.button,
                         children=[down_event] + moves + [event],
                         structural_observation=_first_structural_observation(
+                            [down_event] + moves + [event]
+                        ),
+                        screenshot_timestamp=_bound_screenshot_timestamp(
                             [down_event] + moves + [event]
                         ),
                     )

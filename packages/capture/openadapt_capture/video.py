@@ -88,30 +88,43 @@ def _append_timing_box(
     *,
     fps: Fraction,
     frames: list[tuple[int, float]],
+    captures: list[tuple[int, float]] | None = None,
 ) -> None:
-    """Append logical capture-frame timestamps in an ignored MP4 UUID box."""
-    payload = json.dumps(
-        {
-            "schema": _TIMING_SCHEMA,
-            "fps": f"{fps.numerator}/{fps.denominator}",
-            "frames": [[index, timestamp] for index, timestamp in frames],
-        },
-        separators=(",", ":"),
-    ).encode("utf-8")
-    box_size = 24 + len(payload)
-    if len(payload) > _MAX_TIMING_PAYLOAD_BYTES or box_size >= 2**32:
+    """Append logical capture-frame timestamps in an ignored MP4 UUID box.
+
+    ``frames`` maps encoded frame index to stream-relative seconds.
+    ``captures`` optionally binds encoded frame indexes to the exact
+    wall-clock capture timestamps of the retained source frames, so a
+    consumer can decode THE frame an action was bound to instead of a
+    nearest-frame guess.
+    """
+    payload: dict = {
+        "schema": _TIMING_SCHEMA,
+        "fps": f"{fps.numerator}/{fps.denominator}",
+        "frames": [[index, timestamp] for index, timestamp in frames],
+    }
+    if captures:
+        payload["captures"] = [[index, timestamp] for index, timestamp in captures]
+    serialized = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    box_size = 24 + len(serialized)
+    if len(serialized) > _MAX_TIMING_PAYLOAD_BYTES or box_size >= 2**32:
         raise FFmpegEncodingError("Video timing metadata exceeds its bounded MP4 box")
     with path.open("ab") as output:
         output.write(struct.pack(">I4s16s", box_size, b"uuid", _TIMING_BOX_UUID))
-        output.write(payload)
+        output.write(serialized)
         output.flush()
         os.fsync(output.fileno())
 
 
 def _read_timing_box(
     path: Path,
-) -> tuple[Fraction, list[tuple[int, float]]] | None:
-    """Read OpenAdapt logical timestamps from top-level MP4 boxes, if present."""
+) -> tuple[Fraction, list[tuple[int, float]], list[tuple[int, float]] | None]:
+    """Read OpenAdapt logical timestamps from top-level MP4 boxes, if present.
+
+    Returns ``(fps, frames, captures)``. ``captures`` is ``None`` for media
+    recorded before exact frame binding existed; consumers that require the
+    exact retained frame must treat that as unavailable (fail closed).
+    """
     file_size = path.stat().st_size
     with path.open("rb") as source:
         offset = 0
@@ -181,7 +194,42 @@ def _read_timing_box(
                         result.append((entry[0], timestamp))
                         previous_index = entry[0]
                         previous_timestamp = timestamp
-                    return fps, result
+                    captures: list[tuple[int, float]] | None = None
+                    raw_captures = payload.get("captures")
+                    if raw_captures is not None:
+                        captures = []
+                        capture_index = -1
+                        capture_timestamp = -1.0
+                        for entry in raw_captures:
+                            if (
+                                not isinstance(entry, list)
+                                or len(entry) != 2
+                                or not isinstance(entry[0], int)
+                            ):
+                                raise FFmpegEncodingError(
+                                    "Video timing metadata has an invalid capture binding"
+                                )
+                            try:
+                                bound_timestamp = float(entry[1])
+                            except (TypeError, ValueError) as exc:
+                                raise FFmpegEncodingError(
+                                    "Video timing metadata has an invalid capture timestamp"
+                                ) from exc
+                            if entry[0] <= capture_index or not math.isfinite(bound_timestamp):
+                                raise FFmpegEncodingError(
+                                    "Video timing metadata capture bindings are not ordered"
+                                )
+                            # A duplicated first frame may legitimately repeat one
+                            # capture timestamp at a new encoded index, so the
+                            # timestamps are non-decreasing rather than strict.
+                            if bound_timestamp < capture_timestamp:
+                                raise FFmpegEncodingError(
+                                    "Video timing metadata capture bindings are not ordered"
+                                )
+                            captures.append((entry[0], bound_timestamp))
+                            capture_index = entry[0]
+                            capture_timestamp = bound_timestamp
+                    return fps, result, captures
             offset += box_size
     return None
 
@@ -681,6 +729,7 @@ class FFmpegFrameStage:
         self._last_pts = -1
         self._emitted_frames = 0
         self._logical_frames: list[tuple[int, float]] = []
+        self._capture_frames: list[tuple[int, float]] = []
         self._closed = False
         self._lock = threading.Lock()
 
@@ -837,8 +886,20 @@ class FFmpegFrameStage:
                 "FFmpeg input pipe stopped accepting frames" + (f": {detail}" if detail else "")
             ) from exc
 
-    def stage_frame(self, image: "PILImage", pts: int) -> None:
-        """Stream one frame, filling PTS gaps deterministically without disk."""
+    def stage_frame(
+        self,
+        image: "PILImage",
+        pts: int,
+        capture_timestamp: float | None = None,
+    ) -> None:
+        """Stream one frame, filling PTS gaps deterministically without disk.
+
+        ``capture_timestamp`` is the exact wall-clock time the source frame was
+        captured. It is retained only for newly captured frames (gap fillers
+        repeat the previous frame and bind to no new evidence), so extraction
+        can later decode THE retained frame for an action instead of a
+        nearest-frame guess.
+        """
         with self._lock:
             if self._closed:
                 raise FFmpegEncodingError("Video stream is already closed")
@@ -865,6 +926,13 @@ class FFmpegFrameStage:
                 emitted = gap
             assert self._first_pts is not None
             self._logical_frames.append((encoded_index, (pts - self._first_pts) / fps))
+            if capture_timestamp is not None:
+                bound_timestamp = float(capture_timestamp)
+                if not math.isfinite(bound_timestamp):
+                    raise FFmpegEncodingError(
+                        "Capture timestamp must be a finite wall-clock value"
+                    )
+                self._capture_frames.append((encoded_index, bound_timestamp))
             self._emitted_frames += emitted
             self._last_frame = frame
             self._last_pts = pts
@@ -931,6 +999,7 @@ class FFmpegFrameStage:
                     self.partial_path,
                     fps=self.stream.average_rate,
                     frames=self._logical_frames,
+                    captures=self._capture_frames,
                 )
                 _decode_first_frame_png(
                     self.provision,
@@ -1119,7 +1188,7 @@ def write_video_frame(
     pts = int(time_diff * float(video_stream.average_rate))
     if pts <= last_pts:
         pts = last_pts + 1
-    video_container.stage_frame(screenshot, pts)
+    video_container.stage_frame(screenshot, pts, capture_timestamp=timestamp)
     return pts
 
 
@@ -1181,8 +1250,8 @@ def move_moov_atom(
         timeout=DEFAULT_PROCESS_TIMEOUT_SECONDS,
     )
     if timing is not None:
-        fps, logical_frames = timing
-        _append_timing_box(output_path, fps=fps, frames=logical_frames)
+        fps, logical_frames, captures = timing
+        _append_timing_box(output_path, fps=fps, frames=logical_frames, captures=captures)
     if temp_file is not None:
         os.replace(temp_file, input_path)
 
@@ -1339,6 +1408,49 @@ def extract_frame(
         ffmpeg_path=ffmpeg_path,
         ffprobe_path=ffprobe_path,
     )[0]
+
+
+def extract_exact_frame(
+    video_path: str | Path,
+    capture_timestamp: float,
+    *,
+    ffmpeg_path: str | os.PathLike[str] | None = None,
+    ffprobe_path: str | os.PathLike[str] | None = None,
+) -> "PILImage":
+    """Decode THE retained frame bound to this exact capture wall-clock timestamp.
+
+    The binding comes from the timing box's ``captures`` timeline, which the
+    recorder populates with the source-frame timestamp at encode time. There
+    is deliberately no nearest-frame fallback: when the binding is absent
+    (older media, a stripped timing box) or the exact timestamp was never
+    bound, this raises instead of returning a frame an action never pointed
+    at.
+    """
+    path = Path(video_path)
+    timing = _read_timing_box(path)
+    if timing is None:
+        raise LookupError(
+            f"{path}: no OpenAdapt timing metadata; "
+            "the exact retained frame cannot be resolved (fail-closed)"
+        )
+    _, _, captures = timing
+    if not captures:
+        raise LookupError(
+            f"{path}: timing metadata predates exact frame binding; "
+            "the exact retained frame cannot be resolved (fail-closed)"
+        )
+    matches = [index for index, bound in captures if bound == capture_timestamp]
+    if not matches:
+        nearest = min(captures, key=lambda item: abs(item[1] - capture_timestamp))
+        raise LookupError(
+            f"{path}: no retained frame bound to {capture_timestamp!r} "
+            f"(nearest binding: index {nearest[0]} at {nearest[1]!r})"
+        )
+    provision = resolve_ffmpeg(
+        ffmpeg_path or config.VIDEO_FFMPEG_PATH,
+        ffprobe_path or config.VIDEO_FFPROBE_PATH,
+    )
+    return _extract_frame_index_png(path, matches[0], provision)
 
 
 def get_video_info(

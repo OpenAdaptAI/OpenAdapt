@@ -71,6 +71,14 @@ class ActionBaseEvent(BaseEvent):
         default=None,
         description="Versioned accessibility evidence observed at action time",
     )
+    screenshot_timestamp: float | None = Field(
+        default=None,
+        description=(
+            "Exact capture timestamp of the retained screen frame this action "
+            "is bound to. Extract that exact frame instead of guessing a "
+            "nearest one."
+        ),
+    )
 
 
 # =============================================================================

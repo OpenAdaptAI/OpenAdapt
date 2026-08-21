@@ -5,6 +5,7 @@ Provides time-aligned access to captured events with associated screenshots.
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
@@ -112,6 +113,7 @@ def _convert_action_event(db_event) -> PydanticActionEvent:
         "structural_observation": _parse_structural_observation(
             getattr(db_event, "structural_observation", None)
         ),
+        "screenshot_timestamp": getattr(db_event, "screenshot_timestamp", None),
     }
 
     if db_event.name == "move":
@@ -449,11 +451,22 @@ class Action:
 
     @property
     def screenshot(self) -> "Image" | None:
-        """Get the screenshot at the time of this action.
+        """Get the exact retained screen frame this action is bound to.
+
+        The action's ``screenshot_timestamp`` names the one frame the recorder
+        retained as this action's evidence; it is decoded exactly or this
+        raises. Actions recorded before frame binding existed fall back to a
+        nearest-frame lookup at the action timestamp.
 
         Returns:
-            PIL Image of the screen at action time, or None if not available.
+            PIL Image of the bound frame.
+
+        Raises:
+            LookupError: If the bound frame cannot be resolved exactly.
         """
+        bound = getattr(self.event, "screenshot_timestamp", None)
+        if bound is not None:
+            return self._capture.get_exact_frame(bound)
         return self._capture.get_frame_at(self.timestamp)
 
 
@@ -739,6 +752,10 @@ class CaptureSession:
     def get_frame_at(self, timestamp: float, tolerance: float = 0.5) -> "Image" | None:
         """Get the screen frame closest to a timestamp.
 
+        This is the lenient legacy lookup. Evidence consumers should prefer
+        :meth:`get_exact_frame`, which resolves one exact retained frame and
+        fails closed when it cannot.
+
         Args:
             timestamp: Unix timestamp.
             tolerance: Maximum time difference in seconds.
@@ -763,6 +780,36 @@ class CaptureSession:
             return extract_frame(video_path, video_timestamp, tolerance=tolerance)
         except Exception:
             return None
+
+    def get_exact_frame(self, capture_timestamp: float) -> "Image":
+        """Decode THE retained frame bound to this exact capture timestamp.
+
+        Prefers the video's capture-timeline binding; for image-only captures
+        (no video stream) the retained PNG row with that exact timestamp is
+        the bound frame.
+
+        Raises:
+            LookupError: If no frame was retained at exactly this timestamp,
+                or the binding metadata is unavailable (fail-closed).
+        """
+        from PIL import Image
+
+        video_path = self.video_path
+        if video_path is not None:
+            from openadapt_capture.video import extract_exact_frame
+
+            return extract_exact_frame(video_path, capture_timestamp)
+        for screenshot in self._recording.screenshots:
+            if screenshot.timestamp == capture_timestamp:
+                if not screenshot.png_data:
+                    raise LookupError(
+                        f"the screenshot retained at {capture_timestamp!r} has no image data"
+                    )
+                return Image.open(io.BytesIO(screenshot.png_data)).convert("RGB")
+        raise LookupError(
+            f"no frame was retained at exactly {capture_timestamp!r} "
+            "(fail-closed; refusing a nearest-frame substitute)"
+        )
 
     def close(self) -> None:
         """Close the capture and release resources.

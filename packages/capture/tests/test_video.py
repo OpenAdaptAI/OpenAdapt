@@ -446,7 +446,7 @@ def test_successful_direct_encode_is_verified_and_atomically_promoted(tmp_path, 
     stage.close()
 
     assert output.read_bytes().startswith(b"\x00\x00\x00\x08ftyp")
-    assert video._read_timing_box(output) == (Fraction(24), [(0, 0.0)])
+    assert video._read_timing_box(output) == (Fraction(24), [(0, 0.0)], None)
     assert not stage.partial_path.exists()
 
 
@@ -473,6 +473,7 @@ def test_direct_stream_normalizes_nonzero_initial_pts(tmp_path, monkeypatch):
     assert video._read_timing_box(output) == (
         Fraction(24),
         [(0, 0.0), (3, 3 / 24)],
+        None,
     )
 
 
@@ -564,7 +565,7 @@ def test_direct_encode_retries_partial_pipe_writes(tmp_path, monkeypatch):
     stage.close()
 
     assert bytes(process.pipe.data) == frame.tobytes()
-    assert video._read_timing_box(output) == (Fraction(24), [(0, 0.0)])
+    assert video._read_timing_box(output) == (Fraction(24), [(0, 0.0)], None)
 
 
 def test_direct_encode_worker_start_failure_reaps_process(tmp_path, monkeypatch):
@@ -956,10 +957,16 @@ def test_real_external_mpeg4_preserves_metadata_and_nearest_frame(tmp_path):
         [index / 24 for index in range(26)],
         abs=1e-6,
     )
-    assert video._read_timing_box(output) == (
+    fps, logical_frames, captures = video._read_timing_box(output)
+    assert (fps, logical_frames) == (
         Fraction(24),
         [(0, 0.0), (24, 1.0), (25, 25 / 24)],
     )
+    # The duplicated first frame and the finalized last frame each bind to
+    # their exact capture wall-clock timestamps.
+    assert captures == [(0, start), (24, start + 1), (25, start + 1)]
+    bound_frame = video.extract_exact_frame(output, start + 1, ffmpeg_path=executable)
+    assert bound_frame.getpixel((10, 10))[2] > bound_frame.getpixel((10, 10))[0]
     frame = video.extract_frame(
         output,
         0.8,
@@ -969,7 +976,5 @@ def test_real_external_mpeg4_preserves_metadata_and_nearest_frame(tmp_path):
     assert frame.getpixel((10, 10))[2] > frame.getpixel((10, 10))[0]
 
     video.move_moov_atom(output, ffmpeg_path=executable)
-    assert video._read_timing_box(output) == (
-        Fraction(24),
-        [(0, 0.0), (24, 1.0), (25, 25 / 24)],
-    )
+    _, _, moved_captures = video._read_timing_box(output)
+    assert moved_captures == [(0, start), (24, start + 1), (25, start + 1)]
