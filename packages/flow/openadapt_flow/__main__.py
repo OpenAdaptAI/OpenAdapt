@@ -56,7 +56,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -664,6 +663,8 @@ def _configured_replayer(
     ] = "customer_local",
     remote_delivery_run_id: Optional[str] = None,
     managed_dispatch_binding=None,
+    production_qualification_guard=None,
+    qualification_campaign_guard=None,
     runtime_config=None,
 ):
     """Wire the grounding, verification, and actuation layers into a Replayer.
@@ -700,6 +701,8 @@ def _configured_replayer(
         delivery_authority_kind=delivery_authority_kind,
         remote_delivery_run_id=remote_delivery_run_id,
         managed_dispatch_binding=managed_dispatch_binding,
+        production_qualification_guard=production_qualification_guard,
+        qualification_campaign_guard=qualification_campaign_guard,
         runtime_config=runtime_config,
         checkpoint_key=checkpoint_key,
     )
@@ -726,6 +729,8 @@ def _build_and_run_replayer(
     ] = "customer_local",
     remote_delivery_run_id: Optional[str] = None,
     managed_dispatch_binding=None,
+    production_qualification_guard=None,
+    qualification_campaign_guard=None,
     runtime_config=None,
     execution_target_kind: Optional["ExecutionTargetKind"] = None,
     surface_override: bool = False,
@@ -747,6 +752,8 @@ def _build_and_run_replayer(
         delivery_authority_kind=delivery_authority_kind,
         remote_delivery_run_id=remote_delivery_run_id,
         managed_dispatch_binding=managed_dispatch_binding,
+        production_qualification_guard=production_qualification_guard,
+        qualification_campaign_guard=qualification_campaign_guard,
         runtime_config=runtime_config,
     ).run(
         workflow,
@@ -815,6 +822,8 @@ def _replay_desktop(
     ] = "customer_local",
     remote_delivery_run_id: Optional[str] = None,
     managed_dispatch_binding=None,
+    production_qualification_guard=None,
+    qualification_campaign_guard=None,
     runtime_config=None,
     run_id: Optional[str] = None,
 ) -> int:
@@ -858,6 +867,8 @@ def _replay_desktop(
             delivery_authority_kind=delivery_authority_kind,
             remote_delivery_run_id=remote_delivery_run_id,
             managed_dispatch_binding=managed_dispatch_binding,
+            production_qualification_guard=production_qualification_guard,
+            qualification_campaign_guard=qualification_campaign_guard,
             runtime_config=runtime_config,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
             surface_override=bool(getattr(args, "_surface_override", False)),
@@ -1571,6 +1582,12 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             ),
             remote_delivery_run_id=getattr(args, "_remote_delivery_run_id", None),
             managed_dispatch_binding=getattr(args, "_managed_dispatch_binding", None),
+            production_qualification_guard=getattr(
+                args, "_production_qualification_guard", None
+            ),
+            qualification_campaign_guard=getattr(
+                args, "_qualification_campaign_guard", None
+            ),
             runtime_config=cfg.runtime,
             run_id=getattr(args, "_qualification_run_id", None),
         )
@@ -1649,6 +1666,12 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                     managed_dispatch_binding=getattr(
                         args, "_managed_dispatch_binding", None
                     ),
+                    production_qualification_guard=getattr(
+                        args, "_production_qualification_guard", None
+                    ),
+                    qualification_campaign_guard=getattr(
+                        args, "_qualification_campaign_guard", None
+                    ),
                     runtime_config=cfg.runtime,
                     execution_target_kind="web",
                     surface_override=bool(getattr(args, "_surface_override", False)),
@@ -1695,11 +1718,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
         resolve_execution_profile,
     )
     from openadapt_flow.ir import Workflow
-    from openadapt_flow.qualification_admission import (
-        QualificationAdmissionError,
-        expected_from_payload,
-        load_qualification_signer_trust,
-        verify_qualification_admission,
+    from openadapt_flow.production_qualification import (
+        ProductionQualificationAuthorityError,
+        ProductionQualificationGuard,
+    )
+    from openadapt_flow.qualification_campaign_authority import (
+        QualificationCampaignAuthorityError,
+        QualificationCampaignGuard,
     )
     from openadapt_flow.run_gate import (
         build_qualification_case_authorization,
@@ -1826,42 +1851,22 @@ def _cmd_run(args: argparse.Namespace) -> int:
             "dispatch. Nothing was executed."
         )
         return 2
+    runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
+    runtime_worklists = (
+        qualification_case["worklists"]
+        if qualification_case is not None
+        else _resolve_worklists(getattr(args, "worklist", None), workflow)
+    )
+    managed_binding = None
+    authorization = None
+    local_authorization = None
     if dispatch_file:
-        runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
-        runtime_worklists = (
-            qualification_case["worklists"]
-            if qualification_case is not None
-            else _resolve_worklists(getattr(args, "worklist", None), workflow)
-        )
         try:
             managed_binding = read_managed_dispatch_envelope(Path(dispatch_file))
             authorization = managed_binding.authorization
         except ManagedDispatchEnvelopeError:
             print(
                 "run REFUSED: managed dispatch binding is invalid. Nothing was executed."
-            )
-            return 2
-        if authorization.qualification_admission is None:
-            print(
-                "run REFUSED: managed production dispatch has no signed "
-                "qualification admission. Nothing was executed."
-            )
-            return 2
-        try:
-            signer_trust = load_qualification_signer_trust(
-                os.environ.get("OPENADAPT_QUALIFICATION_SIGNERS_JSON", "")
-            )
-            verify_qualification_admission(
-                authorization.qualification_admission,
-                trusted_signers=signer_trust,
-                expected=expected_from_payload(
-                    authorization.qualification_admission.payload
-                ),
-            )
-        except QualificationAdmissionError:
-            print(
-                "run REFUSED: qualification admission is not signed by an "
-                "active trusted authority. Nothing was executed."
             )
             return 2
         local_authorization = build_runtime_authorization(
@@ -1900,6 +1905,86 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 "run REFUSED: managed dispatch does not match this exact run. Nothing was executed."
             )
             return 2
+
+    if getattr(args, "dry_run", False) or getattr(args, "explain", False):
+        # Report-only paths retain the complete local gate and, when supplied,
+        # the exact managed-dispatch check above. They do not require an
+        # actuation authority because they never cross an input edge.
+        return 0 if report.passed else 2
+
+    production_guard = None
+    campaign_guard = None
+    campaign_permit_binding = None
+    if qualification_case is not None:
+        authority_file = getattr(args, "qualification_campaign_authority_file", None)
+        if authority_file:
+            try:
+                campaign_guard = QualificationCampaignGuard(
+                    authority_file,
+                    workflow=workflow,
+                    case_id=qualification_case["case"].id,
+                    input_digest=runtime_inputs_digest(
+                        workflow, gate_params, runtime_worklists
+                    ),
+                    campaign_id=qualification_case["campaign_id"],
+                    run_id=qualification_case["run_id"],
+                )
+                campaign_permit_binding = campaign_guard.authorization_binding(workflow)
+            except QualificationCampaignAuthorityError:
+                print(
+                    "run REFUSED: the non-production qualification campaign permit "
+                    "is invalid, expired, consumed, or does not match this exact "
+                    "trial. Nothing was executed."
+                )
+                return 2
+            args._qualification_campaign_guard = campaign_guard
+        if campaign_permit_binding is not None and local_authorization is not None:
+            local_authorization = local_authorization.model_copy(
+                update=campaign_permit_binding
+            )
+    authority_file = getattr(args, "qualification_authority_file", None)
+    if authority_file:
+        try:
+            production_guard = ProductionQualificationGuard(
+                authority_file,
+                remote_permit_revalidation=bool(dispatch_file),
+            )
+            production_binding = production_guard.authorization_binding(workflow)
+        except ProductionQualificationAuthorityError:
+            print(
+                "run REFUSED: the Production qualification authority is invalid, "
+                "expired, revoked, or does not match this exact run. Nothing was "
+                "executed."
+            )
+            return 2
+        args._production_qualification_guard = production_guard
+        if local_authorization is None:
+            local_authorization = build_runtime_authorization(
+                workflow,
+                report,
+                params=runtime_params,
+                worklists=runtime_worklists,
+            )
+        local_authorization = local_authorization.model_copy(update=production_binding)
+
+    if dispatch_file:
+        assert managed_binding is not None
+        assert authorization is not None
+        assert local_authorization is not None
+        production_fields = tuple(
+            field
+            for field in local_authorization.model_fields
+            if field.startswith("production_qualification_")
+        )
+        if any(
+            getattr(authorization, field) != getattr(local_authorization, field)
+            for field in production_fields
+        ):
+            print(
+                "run REFUSED: managed dispatch does not bind the active Production "
+                "qualification authority. Nothing was executed."
+            )
+            return 2
         args._governed_run_authorization = authorization
         args._managed_dispatch_binding = managed_binding
         args._delivery_authority_kind = "cloud_runner"
@@ -1916,6 +2001,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 worklists=runtime_worklists,
                 campaign_id=qualification_case["campaign_id"],
                 run_id=qualification_case["run_id"],
+                campaign_permit_binding=campaign_permit_binding,
             )
         except ValueError:
             print(
@@ -1928,20 +2014,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
         args._remote_delivery_run_id = None
         args._qualification_run_id = qualification_case["run_id"]
 
-    if getattr(args, "dry_run", False) or getattr(args, "explain", False):
-        # A managed dry run also validates its protected Cloud handoff above.
-        # Report-only: it never executes, regardless of the verdict.
-        return 0 if report.passed else 2
     if not dispatch_file and qualification_case is None:
-        runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
-        runtime_worklists = _resolve_worklists(
-            getattr(args, "worklist", None), workflow
-        )
-        args._governed_run_authorization = build_runtime_authorization(
-            workflow,
-            report,
-            params=runtime_params,
-            worklists=runtime_worklists,
+        args._governed_run_authorization = local_authorization or (
+            build_runtime_authorization(
+                workflow,
+                report,
+                params=runtime_params,
+                worklists=runtime_worklists,
+            )
         )
         args._delivery_authority_kind = "customer_local"
         args._remote_delivery_run_id = None
@@ -2027,6 +2107,89 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         )
         return 3
 
+    production_guard = None
+    campaign_guard = None
+    retained_authorization = manifest.governed_authorization
+    if (
+        retained_authorization is not None
+        and retained_authorization.production_qualification_admission_id is not None
+    ):
+        from openadapt_flow.production_qualification import (
+            ProductionQualificationAuthorityError,
+            ProductionQualificationGuard,
+        )
+
+        authority_file = getattr(args, "qualification_authority_file", None)
+        if not authority_file:
+            print(
+                "Resume REFUSED: Production actuation requires the private v2 "
+                "qualification authority again. Nothing was executed."
+            )
+            return 3
+        try:
+            production_guard = ProductionQualificationGuard(
+                authority_file,
+                remote_permit_revalidation=(
+                    manifest.delivery_authority_kind == "cloud_runner"
+                ),
+            )
+            production_binding = production_guard.authorization_binding(workflow)
+        except ProductionQualificationAuthorityError:
+            print(
+                "Resume REFUSED: the Production qualification authority is invalid, "
+                "expired, revoked, or does not match this exact run. Nothing was "
+                "executed."
+            )
+            return 3
+        if any(
+            getattr(retained_authorization, field, None) != value
+            for field, value in production_binding.items()
+        ):
+            print(
+                "Resume REFUSED: the Production qualification authority differs "
+                "from the retained run. Nothing was executed."
+            )
+            return 3
+        args._production_qualification_guard = production_guard
+
+    if (
+        retained_authorization is not None
+        and retained_authorization.qualification_campaign_permit_id is not None
+    ):
+        from openadapt_flow.qualification_campaign_authority import (
+            QualificationCampaignAuthorityError,
+            QualificationCampaignGuard,
+        )
+
+        authority_file = getattr(args, "qualification_campaign_authority_file", None)
+        if not authority_file:
+            print(
+                "Resume REFUSED: qualification actuation requires the private "
+                "signed non-production campaign authority again. Nothing was "
+                "executed."
+            )
+            return 3
+        try:
+            campaign_guard = QualificationCampaignGuard(
+                authority_file,
+                workflow=workflow,
+                case_id=retained_authorization.qualification_case_id,
+                input_digest=retained_authorization.runtime_inputs_digest,
+            )
+            campaign_refusal = campaign_guard.authorization_refusal(
+                workflow, retained_authorization
+            )
+        except QualificationCampaignAuthorityError:
+            campaign_refusal = "qualification campaign authority is invalid"
+        if campaign_refusal is not None:
+            print(
+                "Resume REFUSED: the non-production qualification campaign "
+                "permit is invalid, expired, consumed, or differs from the "
+                "retained run. Nothing was executed."
+            )
+            return 3
+        args._qualification_campaign_guard = campaign_guard
+
     # A GUI automation cannot be resumed without a LIVE backend/vision, so build
     # a fresh Replayer here (deployment wiring from --config) and hand it to the
     # durable resume entrypoint, which re-binds params from the run manifest.
@@ -2076,6 +2239,8 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             checkpoint_key=ckpt_key,
             allow_model_grounding=allow_egress,
             managed_dispatch_binding=managed_binding,
+            production_qualification_guard=production_guard,
+            qualification_campaign_guard=campaign_guard,
         )
         return resume(
             run_dir,
@@ -5154,6 +5319,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
+        "--qualification-authority-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Private owner-only v2 Production qualification authority; when "
+            "supplied it is verified and re-read at every input edge"
+        ),
+    )
+    p.add_argument(
         "--dry-run",
         "--explain",
         dest="dry_run",
@@ -5181,6 +5355,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("run_dir", help="The paused run directory (holds checkpoints)")
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
+    p.add_argument(
+        "--qualification-authority-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Private owner-only v2 Production qualification authority for the "
+            "resumed input edge"
+        ),
+    )
+    p.add_argument(
+        "--qualification-campaign-authority-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Private signed non-production campaign authority for a resumed "
+            "qualification input edge"
+        ),
+    )
     p.add_argument(
         "--url",
         default=None,
@@ -5667,6 +5859,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     q.add_argument("--campaign-id", required=True, help="Local campaign identity")
     q.add_argument("--run-id", required=True, help="One local case-attempt identity")
+    q.add_argument(
+        "--qualification-campaign-authority-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Private owner-only signed non-production authority for this exact "
+            "trial; required once the run actuates under a campaign permit"
+        ),
+    )
     q.add_argument(
         "--run-dir", required=True, help="New durable case-attempt directory"
     )

@@ -2145,6 +2145,12 @@ def test_qualification_authorization_cannot_omit_project_identity_scope(
         qualification_run_id_sha256="f" * 64,
         qualification_case_kind="representative",
         qualification_case_action_paths={"save": "gui"},
+        qualification_campaign_permit_id="00000000-0000-4000-8000-000000000001",
+        qualification_campaign_permit_sha256="1" * 64,
+        qualification_campaign_signer_registry_sha256="2" * 64,
+        qualification_campaign_signer_registry_revision=1,
+        qualification_campaign_signer_registry_expires_at=("2099-01-01T00:00:00Z"),
+        qualification_campaign_authority_sha256="3" * 64,
     )
 
     assert authorization.validate_workflow(workflow) == (
@@ -2843,6 +2849,28 @@ def test_persisted_certification_is_recomputed_and_policy_digest_bound(
     project.last_certification.report_sha256 = forged_report.report_sha256()
     assert not current_certification_matches(workflow)
     assert not current_certification_matches(workflow, policy=policy)
+
+
+def test_persisted_certification_refuses_expired_or_invalid_bundle_expiry(
+    tmp_path: Path,
+) -> None:
+    workflow = _workflow()
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    evidence_root = tmp_path / "evidence"
+    _record_passing_campaign(workflow, evidence_root)
+    policy = load_policy("clinical-write")
+    assert certify_project(workflow, policy=policy, evidence_root=evidence_root).passed
+    assert workflow.manifest is not None
+    assert current_certification_matches(workflow, policy=policy)
+
+    workflow.manifest.provenance.expires_at = "2000-01-01T00:00:00Z"
+    assert not current_certification_matches(workflow, policy=policy)
+
+    workflow.manifest.provenance.expires_at = "invalid"
+    assert not current_certification_matches(workflow, policy=policy)
+
+    workflow.manifest.provenance.expires_at = "2099-01-01T00:00:00Z"
+    assert current_certification_matches(workflow, policy=policy)
 
 
 def test_judgment_evidence_certification_reproduces_and_saves(

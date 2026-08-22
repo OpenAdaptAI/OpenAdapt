@@ -34,6 +34,32 @@ DISPATCH_LEASE_TTL_S = 900
 #: Cloud long-poll ceiling (runners.ts POLL_MAX_WAIT_S).
 POLL_MAX_WAIT_S = 25
 
+#: Runtime-local v2 authority bindings are deliberately OUTSIDE the dispatch
+#: binding digest. The digest grammar is a cross-repo contract: Cloud and Flow
+#: must hash byte-identical payloads, so fields Cloud does not emit may not
+#: move the digest. These bindings are still enforced directly — the dispatch
+#: path compares every production_qualification_* field between the envelope
+#: authorization and the local authorization, and the terminal-verification
+#: v2 permit carries its own admission and authority digests.
+DISPATCH_BINDING_LOCAL_FIELDS = frozenset(
+    {
+        "production_qualification_admission_id",
+        "production_qualification_admission_sha256",
+        "production_qualification_evidence_identity_sha256",
+        "production_qualification_runtime_validation_id",
+        "production_qualification_signer_registry_sha256",
+        "production_qualification_signer_registry_revision",
+        "production_qualification_signer_registry_expires_at",
+        "production_qualification_authority_sha256",
+        "qualification_campaign_permit_id",
+        "qualification_campaign_permit_sha256",
+        "qualification_campaign_signer_registry_sha256",
+        "qualification_campaign_signer_registry_revision",
+        "qualification_campaign_signer_registry_expires_at",
+        "qualification_campaign_authority_sha256",
+    }
+)
+
 
 class DispatchParseError(ValueError):
     """A dispatch payload could not be strictly parsed (contract drift)."""
@@ -50,7 +76,11 @@ def dispatch_binding_sha256(
 
     payload = {
         "run_id": run_id,
-        "authorization": authorization.model_dump(mode="json"),
+        "authorization": {
+            key: value
+            for key, value in authorization.model_dump(mode="json").items()
+            if key not in DISPATCH_BINDING_LOCAL_FIELDS
+        },
     }
     encoded = json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False

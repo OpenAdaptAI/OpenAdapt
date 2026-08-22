@@ -652,6 +652,44 @@ class QualificationCase(BaseModel):
         return None
 
 
+_QUALIFICATION_CASE_CONTRACT_DOMAIN = b"openadapt-qualification-case-contract-v1\0"
+
+
+def qualification_case_contract_sha256(case: "QualificationCase") -> str:
+    """Digest one stable case contract without descriptions or result rows."""
+
+    if case.runtime_input_sha256 is None:
+        raise ValueError("qualification case has no approved runtime-input digest")
+    action_targets = [
+        item.model_dump(mode="json")
+        for item in sorted(
+            case.action_targets,
+            key=lambda item: (item.step_id, item.actuation_path),
+        )
+    ]
+    payload = {
+        "schema_version": "openadapt.qualification-case-contract/v1",
+        "qualification_case_id": case.id,
+        "qualification_case_kind": case.kind.value,
+        "expected_outcome": case.expected_outcome.value,
+        "runtime_input_sha256": case.runtime_input_sha256,
+        "action_targets": action_targets,
+        "fault_target": (
+            case.fault_target.model_dump(mode="json")
+            if case.fault_target is not None
+            else None
+        ),
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+    return hashlib.sha256(_QUALIFICATION_CASE_CONTRACT_DOMAIN + encoded).hexdigest()
+
+
 class EnvironmentBoundary(BaseModel):
     """Application/environment scope in which the qualification is valid."""
 
@@ -5358,6 +5396,21 @@ def current_certification_matches(
     certification = project.last_certification
     if not certification.passed:
         return False
+    manifest = workflow.manifest
+    if manifest is None:
+        return False
+    expires_at = manifest.provenance.expires_at
+    if expires_at is not None:
+        try:
+            parsed_expiry = datetime.fromisoformat(
+                expires_at[:-1] + "+00:00" if expires_at.endswith("Z") else expires_at
+            )
+        except (TypeError, ValueError):
+            return False
+        if parsed_expiry.tzinfo is None:
+            return False
+        if datetime.now(timezone.utc) >= parsed_expiry.astimezone(timezone.utc):
+            return False
 
     from openadapt_flow.policy import Policy, policy_contract_sha256
 

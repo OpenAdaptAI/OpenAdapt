@@ -50,7 +50,7 @@ QUALIFICATION_CAMPAIGN_EXECUTION_POLICY: Final[dict[str, Any]] = {
     "signature_domain": "openadapt-qualification-campaign-permit-v1\\0",
     "issuer_workflow": (
         "OpenAdaptAI/openadapt-internal/.github/workflows/"
-        "production-qualification-admission.yml"
+        "issue-qualification-campaign-permit.yml"
     ),
     "issuer_ref_prefix": "refs/heads/main@",
     "maximum_lifetime_seconds": 24 * 60 * 60,

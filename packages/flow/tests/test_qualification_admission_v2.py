@@ -221,7 +221,8 @@ def _registry(
                     "key_id": qualification_signer_key_id(key),
                     "public_key": b64encode(key).decode("ascii"),
                     "allowed_workflows": [
-                        "OpenAdaptAI/openadapt-internal/.github/workflows/production-qualification-admission.yml"
+                        "OpenAdaptAI/openadapt-internal/.github/workflows/issue-qualification-campaign-permit.yml",
+                        "OpenAdaptAI/openadapt-internal/.github/workflows/production-qualification-admission.yml",
                     ],
                     "allowed_ref_prefixes": ["refs/heads/main@"],
                     "status": status,
@@ -415,7 +416,7 @@ def _campaign_permit_payload(
             key_id=qualification_signer_key_id(_public_key()),
             workflow=(
                 "OpenAdaptAI/openadapt-internal/.github/workflows/"
-                "production-qualification-admission.yml"
+                "issue-qualification-campaign-permit.yml"
             ),
             ref="refs/heads/main@" + COMMIT,
         ),
@@ -566,6 +567,11 @@ def test_campaign_requires_exact_policy_taxonomy(replacement: list[str]) -> None
     ("field", "replacement"),
     [
         ("workflow", "OpenAdaptAI/alternate/.github/workflows/admit.yml"),
+        (
+            "workflow",
+            "OpenAdaptAI/openadapt-internal/.github/workflows/"
+            "issue-qualification-campaign-permit.yml",
+        ),
         ("ref", "refs/heads/release@" + COMMIT),
         ("ref", "refs/heads/main@" + "a" * 39),
         ("ref", "refs/heads/main@" + "A" * 40),
@@ -846,6 +852,16 @@ def test_campaign_trial_permit_cannot_emit_success() -> None:
     data = _campaign_permit_payload(_registry()).model_dump(mode="json")
     data["status"] = "success"
     with pytest.raises(ValidationError):
+        QualificationCampaignPermitPayload.model_validate(data)
+
+
+def test_campaign_trial_permit_rejects_the_retired_issuer_workflow() -> None:
+    data = _campaign_permit_payload(_registry()).model_dump(mode="json")
+    data["issuer"]["workflow"] = (
+        "OpenAdaptAI/openadapt-internal/.github/workflows/"
+        "production-qualification-admission.yml"
+    )
+    with pytest.raises(ValidationError, match="issuer workflow"):
         QualificationCampaignPermitPayload.model_validate(data)
 
 

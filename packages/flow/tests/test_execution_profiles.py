@@ -51,6 +51,7 @@ from openadapt_flow.ir import (
     Workflow,
     predicate_contract_sha256,
 )
+from openadapt_flow.production_qualification import ProductionQualificationGuard
 from openadapt_flow.qualification import (
     EffectVerificationPolicy,
     EnvironmentBoundary,
@@ -81,13 +82,40 @@ from openadapt_flow.runtime.effects import (
 )
 from openadapt_flow.runtime.effects.effect import ReadbackNav, ReadbackSpec
 from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier
-from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.runtime.replayer import Replayer as _RuntimeReplayer
 from openadapt_flow.verification import VerificationTier
 from openadapt_flow.vision.ocr import OcrLine
 from tests.test_durable_runtime import FakeSoRVerifier, _approval
 from tests.test_replayer import FakeBackend, FakeVision, make_png
 
 _KEY = "profile-test-key"
+
+
+class _PreviouslyQualifiedTestGuard(ProductionQualificationGuard):
+    """Keep profile tests focused on their pre-existing runtime contracts.
+
+    Dedicated Production qualification tests exercise the real signed gate.
+    These tests build synthetic Standard and Regulated authorizations directly,
+    so this typed test guard represents their assumed prior qualification.
+    """
+
+    def __init__(self) -> None:
+        pass
+
+    def authorization_binding(self, workflow):
+        return {}
+
+    def refusal(self, workflow):
+        return None
+
+
+class Replayer(_RuntimeReplayer):
+    """Supply the prior-qualification premise used by this profile test suite."""
+
+    def __init__(self, *args, **kwargs):
+        if "production_qualification_guard" not in kwargs:
+            kwargs["production_qualification_guard"] = _PreviouslyQualifiedTestGuard()
+        super().__init__(*args, **kwargs)
 
 
 def _keyboard_receipt() -> ActionDeliveryReceipt:

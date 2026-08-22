@@ -193,6 +193,10 @@ _MAX_FRESH_ACTUATION_REACQUISITIONS = 2
 _DURABLE_RESUME_AUTHORITY = object()
 
 if TYPE_CHECKING:
+    from openadapt_flow.production_qualification import ProductionQualificationGuard
+    from openadapt_flow.qualification_campaign_authority import (
+        QualificationCampaignGuard,
+    )
     from openadapt_flow.runtime.control_overlay import RuntimeControlOverlayEmitter
     from openadapt_flow.transaction import IdempotencyLedger
 
@@ -436,6 +440,8 @@ class Replayer:
         ] = "customer_local",
         remote_delivery_run_id: Optional[str] = None,
         managed_dispatch_binding: Optional[Any] = None,
+        production_qualification_guard: Optional["ProductionQualificationGuard"] = None,
+        qualification_campaign_guard: Optional["QualificationCampaignGuard"] = None,
         governed_continuation: bool = False,
         require_settled: bool = False,
         settle_readiness_timeout_s: float = 10.0,
@@ -544,8 +550,35 @@ class Replayer:
             governed_authorization = managed_dispatch_binding.authorization
             delivery_authority_kind = "cloud_runner"
             remote_delivery_run_id = managed_dispatch_binding.run_id
+        if production_qualification_guard is not None:
+            from openadapt_flow.production_qualification import (
+                ProductionQualificationGuard,
+            )
+
+            if not isinstance(
+                production_qualification_guard, ProductionQualificationGuard
+            ):
+                raise ValueError("Production qualification authority is invalid")
+        if qualification_campaign_guard is not None:
+            from openadapt_flow.qualification_campaign_authority import (
+                QualificationCampaignGuard,
+            )
+
+            if not isinstance(qualification_campaign_guard, QualificationCampaignGuard):
+                raise ValueError("qualification campaign authority is invalid")
+        carries_campaign_permit = (
+            getattr(governed_authorization, "qualification_campaign_permit_id", None)
+            is not None
+        )
+        if carries_campaign_permit and qualification_campaign_guard is None:
+            raise ValueError(
+                "qualification actuation bound to a campaign permit requires the "
+                "signed non-production campaign authority"
+            )
         self.managed_dispatch_binding = managed_dispatch_binding
         self.governed_authorization = governed_authorization
+        self.production_qualification_guard = production_qualification_guard
+        self.qualification_campaign_guard = qualification_campaign_guard
         self.delivery_authority_kind = delivery_authority_kind
         self.remote_delivery_run_id = remote_delivery_run_id
         self._managed_dispatch_snapshot: tuple[str, str, str] | None = None
@@ -1051,6 +1084,12 @@ class Replayer:
         managed_refusal = self._managed_dispatch_refusal()
         if managed_refusal is not None:
             raise ValueError(managed_refusal)
+        production_refusal = self._production_qualification_refusal(workflow)
+        if production_refusal is not None:
+            raise ValueError(production_refusal)
+        campaign_refusal = self._qualification_campaign_refusal(workflow)
+        if campaign_refusal is not None:
+            raise ValueError(campaign_refusal)
         bundle_dir = Path(bundle_dir)
         run_dir = Path(run_dir)
         self._install_execution_snapshots(workflow)
@@ -9239,6 +9278,60 @@ class Replayer:
             return "managed dispatch binding is invalid after admission"
         return None
 
+    def _production_qualification_refusal(self, workflow: Workflow) -> Optional[str]:
+        """Bind the current v2 admission to the durable run authorization."""
+
+        authorization = self.governed_authorization
+        if authorization is None or authorization.execution_profile not in {
+            "standard",
+            "regulated",
+        }:
+            return None
+        if authorization.qualification_case_id is not None:
+            return None
+        guard = self.production_qualification_guard
+        if guard is None:
+            # A local Standard/Regulated run keeps the run-gate contracts it
+            # always had; a v2 authority becomes mandatory once an admission
+            # issuer provisions one for the runner.
+            return None
+        try:
+            expected = guard.authorization_binding(workflow)
+        except Exception as exc:  # noqa: BLE001 - private authority boundary
+            return (
+                "Production qualification could not be verified before execution "
+                f"({type(exc).__name__})"
+            )
+        if any(
+            getattr(authorization, field, None) != value
+            for field, value in expected.items()
+        ):
+            return "Production qualification differs from the run authorization"
+        return None
+
+    def _qualification_campaign_refusal(self, workflow: Workflow) -> Optional[str]:
+        """Bind a case run to its signed, isolated non-production permit."""
+
+        authorization = self.governed_authorization
+        if authorization is None or authorization.qualification_case_id is None:
+            return None
+        guard = self.qualification_campaign_guard
+        if guard is None:
+            carries_permit = (
+                getattr(authorization, "qualification_campaign_permit_id", None)
+                is not None
+            )
+            if not carries_permit:
+                return None
+            return "qualification actuation has no signed campaign permit"
+        try:
+            return guard.authorization_refusal(workflow, authorization)
+        except Exception as exc:  # noqa: BLE001 - private authority boundary
+            return (
+                "qualification campaign could not be verified before execution "
+                f"({type(exc).__name__})"
+            )
+
     def _delivery_authorization_refusal(
         self,
         workflow: Workflow,
@@ -9251,6 +9344,22 @@ class Replayer:
         self._active_delivery_acknowledgers = ()
         acknowledgers: list[Any] = []
         refusal = self._managed_dispatch_refusal()
+        if refusal is None and self.production_qualification_guard is not None:
+            try:
+                refusal = self.production_qualification_guard.refusal(workflow)
+            except Exception as exc:  # noqa: BLE001 - authority boundary
+                refusal = (
+                    "Production qualification could not be revalidated before "
+                    f"delivery ({type(exc).__name__})"
+                )
+        if refusal is None and self.qualification_campaign_guard is not None:
+            try:
+                refusal = self.qualification_campaign_guard.refusal(workflow)
+            except Exception as exc:  # noqa: BLE001 - authority boundary
+                refusal = (
+                    "qualification campaign could not be revalidated before "
+                    f"delivery ({type(exc).__name__})"
+                )
         if refusal is None:
             refusal = self._fresh_actuation_authorization_refusal(
                 workflow, params, step

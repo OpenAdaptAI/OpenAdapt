@@ -230,6 +230,27 @@ class GovernedRunAuthorization(BaseModel):
     qualification_admission_sha256: str | None = Field(
         default=None, pattern="^[a-f0-9]{64}$"
     )
+    # v2 Production admission identity.  The signed artifact stays in the
+    # private authority handoff; these PHI-free bindings enter the durable run
+    # authorization so a different admission cannot replace it after the gate.
+    production_qualification_admission_id: str | None = None
+    production_qualification_admission_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    production_qualification_evidence_identity_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    production_qualification_runtime_validation_id: str | None = None
+    production_qualification_signer_registry_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    production_qualification_signer_registry_revision: int | None = Field(
+        default=None, ge=1
+    )
+    production_qualification_signer_registry_expires_at: str | None = None
+    production_qualification_authority_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
     qualification_project_id: str | None = None
     qualification_project_revision: int | None = Field(default=None, ge=1)
     qualification_project_contract_sha256: str | None = Field(
@@ -245,6 +266,20 @@ class GovernedRunAuthorization(BaseModel):
         default=None, pattern="^[a-f0-9]{64}$"
     )
     qualification_run_id_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_campaign_permit_id: str | None = None
+    qualification_campaign_permit_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_campaign_signer_registry_sha256: str | None = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    qualification_campaign_signer_registry_revision: int | None = Field(
+        default=None, ge=1
+    )
+    qualification_campaign_signer_registry_expires_at: str | None = None
+    qualification_campaign_authority_sha256: str | None = Field(
         default=None, pattern="^[a-f0-9]{64}$"
     )
     qualification_case_kind: (
@@ -286,6 +321,20 @@ class GovernedRunAuthorization(BaseModel):
             != self.qualification_admission_sha256
         ):
             raise ValueError("qualification admission digest does not match")
+        production_qualification = (
+            self.production_qualification_admission_id,
+            self.production_qualification_admission_sha256,
+            self.production_qualification_evidence_identity_sha256,
+            self.production_qualification_runtime_validation_id,
+            self.production_qualification_signer_registry_sha256,
+            self.production_qualification_signer_registry_revision,
+            self.production_qualification_signer_registry_expires_at,
+            self.production_qualification_authority_sha256,
+        )
+        if any(value is not None for value in production_qualification) and not all(
+            value is not None for value in production_qualification
+        ):
+            raise ValueError("Production qualification binding is incomplete")
         requirement_refs = [
             (item.step_id, item.actuation_path, item.effect_index)
             for item in self.qualified_effect_requirements
@@ -307,6 +356,18 @@ class GovernedRunAuthorization(BaseModel):
             value is not None for value in values
         ):
             raise ValueError("qualification-run authorization binding is incomplete")
+        campaign_permit = (
+            self.qualification_campaign_permit_id,
+            self.qualification_campaign_permit_sha256,
+            self.qualification_campaign_signer_registry_sha256,
+            self.qualification_campaign_signer_registry_revision,
+            self.qualification_campaign_signer_registry_expires_at,
+            self.qualification_campaign_authority_sha256,
+        )
+        if any(value is not None for value in campaign_permit) and not all(
+            value is not None for value in campaign_permit
+        ):
+            raise ValueError("qualification campaign permit binding is incomplete")
         if (
             self.qualification_case_kind is not None
             and self.qualification_case_id is None
