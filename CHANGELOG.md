@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v1.14.0 (2026-08-22)
+
+### Build System
+
+- **deps**: Bump both codeql-action pins to v4.37.7 together
+  ([#1103](https://github.com/OpenAdaptAI/OpenAdapt/pull/1103),
+  [`22ffc6f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/22ffc6f3fd94dc3421888eeeeb0d6dd05e474b24))
+
+### Chores
+
+- **release**: Reconcile Flow 1.32.0 platform manifest
+  ([#1104](https://github.com/OpenAdaptAI/OpenAdapt/pull/1104),
+  [`42970fb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/42970fbb1246f77f8350254569e5ce55f9bb60ed))
+
+- **release**: Reconcile platform BOM
+  ([`26067c3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/26067c3426e3a7c44fddcb17fcf00480ad4e552b))
+
+### Documentation
+
+- Clarify verified automation positioning
+  ([#1107](https://github.com/OpenAdaptAI/OpenAdapt/pull/1107),
+  [`f6d2758`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f6d275807cc18557f57c989519be3327b90d7ac5))
+
+### Features
+
+- Polish quickstart onboarding and unify package one-liner
+  ([#1108](https://github.com/OpenAdaptAI/OpenAdapt/pull/1108),
+  [`5de1804`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5de18046d4c63d57eddbe827259818b31d24ecd3))
+
+
 ## v1.13.1 (2026-08-20)
 
 ### Bug Fixes
