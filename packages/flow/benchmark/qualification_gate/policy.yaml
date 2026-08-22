@@ -1,0 +1,19 @@
+name: qualification-gate-campaign
+description: >-
+  Fail-closed policy for the deterministic local qualification-gate campaign.
+  Only the qualified write carries a system-of-record effect contract; every
+  pointer and keyboard edge of the pixel-surface workflow stays bound to its
+  verified target identity and fresh frame through the runtime's guarded
+  one-shot leases.
+
+prohibit_unarmed_clicks: true
+require_identity_for:
+  - entity_navigation
+  - write
+require_system_effects_for:
+  - write
+require_idempotency_key_for:
+  - write
+prohibit_unconfirmed_effect_bindings: true
+require_screen_postconditions_for:
+  - write

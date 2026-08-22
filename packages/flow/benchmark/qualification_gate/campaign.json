@@ -1,0 +1,86 @@
+{
+  "schema_version": "openadapt.qualification-gate-campaign.v1",
+  "task": "Select one synthetic patient record, enter a triage note parameter, and prove both the exact persisted record and every delivered input edge on independent read-only SQLite surfaces through a deterministic pixel fixture.",
+  "trials_per_condition": 3,
+  "required_metrics": [
+    "verified_outcomes",
+    "safe_halts",
+    "reconciliation_required_outcomes",
+    "silent_incorrect_successes",
+    "over_halts",
+    "wrong_record_writes",
+    "duplicate_effects",
+    "model_calls",
+    "blind_retries",
+    "replay_dispatches"
+  ],
+  "minimum_uncertain_delivery_conditions": 3,
+  "conditions": [
+    {
+      "id": "healthy",
+      "expect": "verified",
+      "fault": "none",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "row_reordered",
+      "expect": "verified",
+      "fault": "The target record row renders at a different vertical position.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "moderate_display_drift",
+      "expect": "verified_or_safe_halt",
+      "fault": "A bounded scale, contrast, and compression change keeps text legible.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "severe_display_drift",
+      "expect": "safe_halt",
+      "fault": "Heavy downscale, inverted luminance, posterization, blur, and recompression remove reliable target detail.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "duplicate_save_control",
+      "expect": "safe_halt",
+      "fault": "Two competing Save controls render inside the recorded target region, defeating template match and retained-evidence disambiguation.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "partial_render",
+      "expect": "safe_halt",
+      "fault": "The Save control is absent when its action is due.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "wrong_record_before_write",
+      "expect": "safe_halt",
+      "fault": "The active record changes to a different patient before the consequential click.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "stale_identity_before_write",
+      "expect": "safe_halt",
+      "fault": "The identity band is replaced by a loading placeholder before the consequential click.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "uncertain_delivery_write_lost",
+      "expect": "reconciliation_required",
+      "fault": "Delivery certainty is lost after the input edge and the application rolls its commit back.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "uncertain_delivery_write_kept_timeout",
+      "expect": "verified_after_uncertainty_or_reconciliation_required",
+      "fault": "Delivery certainty is lost after the input edge and the write persists; only the contract may confirm it.",
+      "oracle": ["records", "input_events"]
+    },
+    {
+      "id": "uncertain_delivery_oracle_unreachable",
+      "expect": "reconciliation_required",
+      "fault": "Delivery certainty is lost after the input edge and the system of record becomes unreachable before proof.",
+      "oracle": ["records", "input_events"]
+    }
+  ]
+}

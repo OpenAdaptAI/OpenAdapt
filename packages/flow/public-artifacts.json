@@ -412,6 +412,18 @@
       "sha256": "c9763f03873c01c7977a17c899b1304e25cecde047709c54982f3dfc59707cba"
     },
     {
+      "path": "benchmark/qualification_gate/campaign.json",
+      "sha256": "e54b0f27b6de8611afdcea8f647a922e784c9c998bee7a078c9701ff17e26831"
+    },
+    {
+      "path": "benchmark/qualification_gate/policy.yaml",
+      "sha256": "338e407017dce8a33140d7f2173e8255a0924bead582435138ae298d357b89be"
+    },
+    {
+      "path": "benchmark/qualification_gate/results.json",
+      "sha256": "e0453510a67f06a2032a1a4da139f596ce42ac217ca37e60c5a917b43018b889"
+    },
+    {
       "path": "benchmark/rdp/results.json",
       "sha256": "733fe8948a423dcbf2d413a10bca924cba918d196693d30cfb30f0a425ca5d15"
     },
