@@ -8,7 +8,9 @@ browser: the install subprocess is always mocked. Covered:
   even across repeated calls),
 * the ``OPENADAPT_FLOW_NO_AUTO_INSTALL`` opt-out skips the install entirely,
 * a failing install surfaces an actionable error,
-* importing the package triggers no install (import stays side-effect-free).
+* importing the package triggers no install (import stays side-effect-free),
+* on Linux, missing Chromium system libraries abort BEFORE any download with
+  the exact remedy (probes are monkeypatched; no network, no host state).
 """
 
 from __future__ import annotations
@@ -126,6 +128,7 @@ def test_missing_browser_extra_refuses_before_network_or_subprocess(monkeypatch)
 def test_installs_once_when_missing(monkeypatch):
     """Missing browser -> install runs exactly once, even on repeat calls."""
     monkeypatch.setattr(bs, "_chromium_present", lambda: False)
+    monkeypatch.setattr(bs, "_missing_chromium_system_libs", lambda: [])
     calls = []
 
     def fake_run(cmd, *a, **k):
@@ -166,6 +169,7 @@ def test_opt_out_skips_install(monkeypatch):
 def test_failed_install_raises_actionable_error(monkeypatch):
     """A failing install subprocess surfaces a clear, actionable RuntimeError."""
     monkeypatch.setattr(bs, "_chromium_present", lambda: False)
+    monkeypatch.setattr(bs, "_missing_chromium_system_libs", lambda: [])
 
     def fake_run(cmd, *a, **k):
         raise subprocess.CalledProcessError(1, cmd)
@@ -178,6 +182,8 @@ def test_failed_install_raises_actionable_error(monkeypatch):
     msg = str(exc.value)
     assert "playwright install chromium" in msg
     assert bs.NO_AUTO_INSTALL_ENV in msg
+    # Proxy guidance for CDN-blocked / offline machines.
+    assert "HTTPS_PROXY" in msg
 
 
 def test_probe_failure_falls_back_to_install(monkeypatch):
@@ -187,6 +193,7 @@ def test_probe_failure_falls_back_to_install(monkeypatch):
         raise RuntimeError("driver blew up")
 
     monkeypatch.setattr(bs, "_chromium_present", _raise)
+    monkeypatch.setattr(bs, "_missing_chromium_system_libs", lambda: [])
     calls = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, *a, **k: calls.append(cmd))
 
@@ -203,3 +210,84 @@ def test_import_is_side_effect_free(monkeypatch):
     importlib.reload(importlib.import_module("openadapt_flow"))
 
     assert called == []
+
+
+# --- Linux shared-library gate ---------------------------------------------
+
+
+def test_lib_probe_is_empty_off_linux(monkeypatch):
+    """Non-Linux platforms never report missing libraries."""
+    monkeypatch.setattr(bs.sys, "platform", "darwin")
+
+    def _boom(name):
+        raise AssertionError("find_library must not run off Linux")
+
+    monkeypatch.setattr(bs.ctypes.util, "find_library", _boom)
+
+    assert bs._missing_chromium_system_libs() == []
+
+
+def test_lib_probe_reports_only_missing_sonames(monkeypatch):
+    """On Linux, exactly the sonames find_library cannot resolve are listed."""
+    monkeypatch.setattr(bs.sys, "platform", "linux")
+    present = {"nss3", "gbm"}
+
+    def fake_find_library(name):
+        return "lib{}.so.9".format(name) if name in present else None
+
+    monkeypatch.setattr(bs.ctypes.util, "find_library", fake_find_library)
+
+    missing = bs._missing_chromium_system_libs()
+
+    assert set(missing) == set(bs._LINUX_CHROMIUM_SONAMES) - present
+    # Deterministic order for stable error messages.
+    assert missing == [s for s in bs._LINUX_CHROMIUM_SONAMES if s not in present]
+
+
+def test_missing_system_libs_abort_before_any_download(monkeypatch):
+    """Missing libraries -> remedy raised and NO download is attempted."""
+    monkeypatch.setattr(bs, "_missing_chromium_system_libs", lambda: ["nss3", "gbm"])
+    # Presence is checked before the library gate; report "missing" so the
+    # install path (and therefore the gate) is reached.
+    monkeypatch.setattr(bs, "_chromium_present", lambda: False)
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: calls.append((a, k)))
+
+    with pytest.raises(RuntimeError) as exc:
+        bs.ensure_chromium_installed()
+
+    msg = str(exc.value)
+    assert "nss3" in msg
+    assert "playwright install-deps chromium" in msg  # exact primary remedy
+    assert "apt-get install" in msg  # apt alternative line
+    assert "Nothing was downloaded" in msg
+    assert calls == []
+
+
+def test_present_system_libs_do_not_block_install(monkeypatch):
+    """Empty probe result -> the normal download path proceeds unchanged."""
+    monkeypatch.setattr(bs, "_chromium_present", lambda: False)
+    monkeypatch.setattr(bs, "_missing_chromium_system_libs", lambda: [])
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, *a, **k: calls.append(cmd))
+
+    bs.ensure_chromium_installed()
+
+    assert len(calls) == 1
+    assert calls[0][1:] == ["-m", "playwright", "install", "chromium"]
+
+
+def test_opt_out_bypasses_the_library_gate(monkeypatch):
+    """OPENADAPT_FLOW_NO_AUTO_INSTALL skips both the lib probe and download."""
+    monkeypatch.setenv(bs.NO_AUTO_INSTALL_ENV, "1")
+
+    def _boom():
+        raise AssertionError("probe must not run when opted out")
+
+    monkeypatch.setattr(bs, "_missing_chromium_system_libs", _boom)
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: calls.append((a, k)))
+
+    bs.ensure_chromium_installed()
+
+    assert calls == []

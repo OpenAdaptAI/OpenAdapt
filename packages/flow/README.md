@@ -42,7 +42,17 @@ rounds against the wrong-target check.
 ## Try it
 
 The canonical first run uses the [OpenAdapt](https://github.com/OpenAdaptAI/openadapt)
-launcher:
+launcher. The installer handles Python versions, virtual environments, and
+shell quoting for you:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/main/scripts/install.sh | sh
+
+openadapt quickstart                                     # the whole loop, VERIFIED
+```
+
+Prefer plain pip? Two commands (quote the brackets; on Windows `cmd.exe` use
+double quotes: `pip install "openadapt[browser]"`):
 
 ```bash
 pip install 'openadapt[browser]'
@@ -50,7 +60,8 @@ pip install 'openadapt[browser]'
 openadapt quickstart                                     # the whole loop, VERIFIED
 ```
 
-On Windows `cmd.exe`, use double quotes: `pip install "openadapt[browser]"`.
+**Requirements:** Python 3.10–3.12 (3.13+ is not yet supported; the installer
+provisions a suitable interpreter for you).
 
 To work against this engine directly, install it and run the same loop under
 its engine-native name:

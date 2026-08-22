@@ -16,6 +16,10 @@ Design constraints:
 * **Idempotent across processes.** ``playwright install chromium`` is itself
   idempotent, and the probe skips it entirely once the binary is present, so a
   second *run* finds it installed and pays nothing.
+* **No wasted downloads on fresh Linux machines.** Before downloading on
+  Linux, a cheap probe checks for the shared libraries Chromium needs; when
+  any are missing, the exact remedy is printed and the launch aborts cleanly
+  instead of downloading a browser that could not start anyway.
 * **Opt-out for air-gapped / pre-provisioned environments.** Set
   ``OPENADAPT_FLOW_NO_AUTO_INSTALL=1`` to skip the auto-install; the original
   clear Playwright "Executable doesn't exist ... run playwright install" error
@@ -24,6 +28,7 @@ Design constraints:
 
 from __future__ import annotations
 
+import ctypes.util
 import importlib.util
 import os
 import re
@@ -37,6 +42,29 @@ from pathlib import Path
 NO_AUTO_INSTALL_ENV = "OPENADAPT_FLOW_NO_AUTO_INSTALL"
 
 _NOTICE = "Downloading the Chromium browser OpenAdapt needs (first run only)…"
+
+#: Shared-library soname bases Playwright's Chromium needs at launch time on
+#: Linux. These mirror the packages ``playwright install-deps chromium``
+#: installs (NSS, ATK, X11 helpers, audio, GBM, …). Names are the
+#: ``ctypes.util.find_library`` form: no ``lib`` prefix, no version suffix.
+_LINUX_CHROMIUM_SONAMES = (
+    "nss3",
+    "nspr4",
+    "atk-1.0",
+    "atk-bridge-2.0",
+    "atspi",
+    "cups",
+    "drm",
+    "xkbcommon",
+    "xcomposite",
+    "xdamage",
+    "xfixes",
+    "xrandr",
+    "gbm",
+    "pango-1.0",
+    "cairo",
+    "asound",
+)
 
 
 class BrowserSupportMissing(RuntimeError):
@@ -71,6 +99,53 @@ _lock = threading.Lock()
 def _opted_out() -> bool:
     """True when the user asked us not to auto-install (env var set)."""
     return bool(os.environ.get(NO_AUTO_INSTALL_ENV))
+
+
+#: The Debian/Ubuntu package names matching :data:`_LINUX_CHROMIUM_SONAMES`,
+#: shown as the manual alternative to ``playwright install-deps``.
+_LINUX_APT_PACKAGES = (
+    "libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libatspi2.0-0 "
+    "libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 "
+    "libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2"
+)
+
+
+def _missing_chromium_system_libs() -> list[str]:
+    """Return the Chromium shared libraries missing on this Linux machine.
+
+    Uses ``ctypes.util.find_library`` (an ``ldconfig``-based lookup: cheap,
+    offline, and no subprocess spawned by us). Returns an empty list on
+    non-Linux platforms, where Playwright ships everything Chromium needs.
+    """
+    if sys.platform != "linux":
+        return []
+    return [
+        soname
+        for soname in _LINUX_CHROMIUM_SONAMES
+        if ctypes.util.find_library(soname) is None
+    ]
+
+
+def _require_linux_system_libs() -> None:
+    """Refuse to download Chromium when its system libraries cannot exist.
+
+    Fresh Linux machines without the X11/audio/NSS stack used to download the
+    whole browser and only then fail at launch. When libraries are missing,
+    print the exact remedy FIRST and abort cleanly before any download.
+    """
+    missing = _missing_chromium_system_libs()
+    if not missing:
+        return
+    libs = ", ".join(missing)
+    raise RuntimeError(
+        "Chromium cannot launch on this machine yet: required system "
+        f"libraries are missing ({libs}).\n\n"
+        "Install them once with:\n\n"
+        "    sudo python -m playwright install-deps chromium\n\n"
+        "or, on Debian/Ubuntu:\n\n"
+        f"    sudo apt-get install -y {_LINUX_APT_PACKAGES}\n\n"
+        "Then run your command again. Nothing was downloaded."
+    )
 
 
 def _chromium_present() -> bool:
@@ -109,11 +184,18 @@ def _chromium_present() -> bool:
 def _install_chromium() -> None:
     """Run ``python -m playwright install chromium`` once, with a notice.
 
+    On Linux, verifies first that Chromium's shared libraries are present and
+    aborts with the exact remedy when they are not, so no download is wasted
+    on a browser that could not launch.
+
     Raises:
-        RuntimeError: if the install subprocess fails (e.g. offline), with an
-            actionable message pointing at the manual command and the opt-out.
+        RuntimeError: if system libraries are missing (Linux), or if the
+            install subprocess fails (e.g. offline or behind a proxy that
+            blocks the Playwright CDN), with an actionable message pointing
+            at the manual command, the proxy variable, and the opt-out.
     """
     require_browser_support()
+    _require_linux_system_libs()
     print(_NOTICE, file=sys.stderr, flush=True)
     try:
         subprocess.run(
@@ -123,11 +205,16 @@ def _install_chromium() -> None:
     except (subprocess.CalledProcessError, OSError) as exc:
         raise RuntimeError(
             "openadapt-flow could not automatically download the Chromium "
-            "browser it needs. Run\n\n"
+            "browser it needs. To install it manually, run:\n\n"
             "    playwright install chromium\n\n"
-            "manually (you may be offline or behind a proxy), or set "
-            f"{NO_AUTO_INSTALL_ENV}=1 to disable auto-install if the browser "
-            "is provisioned another way."
+            "If you are behind a corporate proxy or firewall that blocks the "
+            "Playwright download CDN, set HTTPS_PROXY first "
+            "(for example: export HTTPS_PROXY=http://proxy.example.com:8080) "
+            "and retry. If you are fully offline, install the browser on a "
+            "connected machine and copy Playwright's cache directory "
+            "(~/.cache/ms-playwright), or provision it another way. You can "
+            f"also set {NO_AUTO_INSTALL_ENV}=1 to disable auto-install "
+            "entirely."
         ) from exc
 
 
@@ -139,10 +226,11 @@ def ensure_chromium_installed() -> None:
     (subsequent calls return immediately) and is a cheap no-op when the browser
     is already installed.
 
-    When the browser is missing it downloads it once via
-    ``playwright install chromium`` and prints a one-time notice. When
-    :data:`NO_AUTO_INSTALL_ENV` is set it does nothing, leaving Playwright's own
-    "browser not installed" error to surface at launch.
+    When the browser is missing it verifies Chromium's system libraries
+    (Linux), then downloads it once via ``playwright install chromium`` and
+    prints a one-time notice. When :data:`NO_AUTO_INSTALL_ENV` is set it does
+    nothing, leaving Playwright's own "browser not installed" error to surface
+    at launch.
     """
     global _ensured
     require_browser_support()
