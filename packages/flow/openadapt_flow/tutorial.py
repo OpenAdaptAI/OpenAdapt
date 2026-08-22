@@ -166,6 +166,64 @@ def _next_steps_block() -> str:
     )
 
 
+def outcome_epilogue_lines(
+    *,
+    what: str,
+    why_safe: str,
+    next_command: str,
+) -> list[str]:
+    """The three-line outcome epilogue: what / why-safe / exact next command.
+
+    Presentation only -- every caller keeps its own exit code and fail-closed
+    semantics unchanged. Shared by the replay finisher, the lint failure path,
+    and the tutorial so every non-VERIFIED ending speaks with one voice.
+    """
+
+    return [
+        f"What happened: {what}.",
+        f"Why this is safe: {why_safe}.",
+        f"Next command: {next_command}",
+    ]
+
+
+def tutorial_epilogue(result: "TutorialResult") -> list[str]:
+    """The epilogue for a NON-VERIFIED tutorial run (never printed on success).
+
+    A halt or unverified completion is a correct result but earns no receipt;
+    these lines say what happened, why that is the safe behavior, and give the
+    exact next command instead of leaving the operator at a dead end.
+    """
+
+    outcome = result.execution_outcome
+    if outcome == "COMPLETED_UNVERIFIED":
+        what = (
+            f"the run completed on screen but ended {outcome} -- no independent "
+            "system-of-record proof, so no receipt was issued"
+        )
+        why_safe = (
+            "a demo-profile completion can never claim success under Flow; "
+            "only independently confirmed writes earn VERIFIED"
+        )
+        next_command = (
+            "openadapt-flow scaffold-verifier "
+            f"{result.recording_dir}   # draft an oracle, wire deployment.yaml "
+            "effects:, re-run under the standard profile"
+        )
+    else:  # HALTED / FAILED / ROLLED_BACK
+        what = (
+            f"the run stopped at a governed check and ended {outcome} -- no "
+            "receipt was issued for an unproven run"
+        )
+        why_safe = (
+            "the engine reports only what independent evidence proves; halting "
+            "on a failed check is the fail-closed contract working"
+        )
+        next_command = f"openadapt-flow explain {result.run_dir}"
+    return outcome_epilogue_lines(
+        what=what, why_safe=why_safe, next_command=next_command
+    )
+
+
 def _http_json(url: str, *, method: str = "GET", body: Any = None) -> Any:
     data = None if body is None else json.dumps(body).encode("utf-8")
     request = Request(  # noqa: S310 - loopback only, built from serve()'s URL

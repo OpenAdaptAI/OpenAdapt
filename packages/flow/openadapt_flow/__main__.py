@@ -37,6 +37,12 @@ imported lazily inside each handler so ``--help`` always works):
 - ``certify`` — enforce a safety policy on a bundle (refuse it if it fails).
 - ``qualify`` — create and edit the versioned qualification project, import
   customer-controlled case results, explain refusals, and persist certification.
+- ``scaffold-verifier`` — draft (never approve) an effect-oracle contract
+  (``effect_contract.yaml``) from a recording or bundle's write-shaped steps;
+  refuses demonstrations with no consequential step.
+- ``explain`` — plain-language, read-only read of a completed run directory:
+  what happened, why the outcome is the safe one, and the next suggested
+  command.
 - ``console`` — serve the localhost-only operator console (a read-first web
   UI over bundles / runs / skill libraries; requires the ``console`` extra).
 - ``emit-skill`` — emit an Agent Skills folder for a bundle.
@@ -774,6 +780,74 @@ def _build_and_run_replayer(
     )
 
 
+def _replay_outcome_epilogue(
+    report,
+    outcome: str,
+    run_dir: Path,
+) -> Optional[str]:
+    """Three-line epilogue after a non-VERIFIED replay (presentation only).
+
+    What happened / why this is the safe behavior / the exact next command.
+    Fail-closed semantics are untouched: this only explains an ending that
+    already happened.
+    """
+    from openadapt_flow.tutorial import outcome_epilogue_lines
+
+    halt = getattr(report, "halt", None)
+    halted_step = next(
+        (
+            result.step_id
+            for result in report.results
+            if not result.skipped
+            and (
+                result.effect_verified is False
+                or result.safety_halt
+                or (
+                    result.identity is not None and result.identity.status == "mismatch"
+                )
+            )
+        ),
+        None,
+    )
+    if outcome == "HALTED":
+        where = f" at step `{halted_step}`" if halted_step else ""
+        what = f"the run stopped{where} and ended {outcome}" + (
+            f" ({halt.reason})" if halt is not None and halt.reason else ""
+        )
+        why_safe = (
+            "the engine halts instead of acting on unproven state; nothing "
+            "further was executed once the check failed"
+        )
+        return "\n".join(
+            outcome_epilogue_lines(
+                what=what,
+                why_safe=why_safe,
+                next_command=f"openadapt-flow explain {run_dir}",
+            )
+        )
+    if outcome == "COMPLETED_UNVERIFIED":
+        return "\n".join(
+            outcome_epilogue_lines(
+                what=(
+                    "every executed step finished on screen, but nothing "
+                    f"independently proved the writes landed ({outcome})"
+                ),
+                why_safe=("screen-only completion can never claim success under Flow"),
+                next_command=(
+                    "openadapt-flow scaffold-verifier <recording-or-bundle>  "
+                    "# draft an oracle, wire effects:, re-run"
+                ),
+            )
+        )
+    return "\n".join(
+        outcome_epilogue_lines(
+            what=f"the run ended {outcome} and reported the failure loudly",
+            why_safe="a failure is never guessed into a success",
+            next_command=f"openadapt-flow explain {run_dir}",
+        )
+    )
+
+
 def _finish_replay(
     run_dir: Path,
     report,
@@ -794,6 +868,10 @@ def _finish_replay(
             "NOTE: a model-grounding component was wired for this run — "
             "screenshots could have left the box (see REPORT.md)."
         )
+    if outcome not in {"VERIFIED", "success"}:
+        epilogue = _replay_outcome_epilogue(report, outcome, run_dir)
+        if epilogue:
+            print(f"\n{epilogue}")
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
     _maybe_attest_run(run_dir, report, args)
@@ -1216,6 +1294,7 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
         TutorialError,
         _next_steps_block,
         run_tutorial,
+        tutorial_epilogue,
     )
 
     out = (
@@ -1274,6 +1353,10 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
             "watch the engine halt:\n  openadapt-flow tutorial --break-it"
         )
         print(f"\n{_next_steps_block()}")
+    else:
+        # Presentation-only epilogue for the non-VERIFIED endings: what
+        # happened, why this is the safe behavior, the exact next command.
+        print("\n" + "\n".join(tutorial_epilogue(result)))
     if result.execution_outcome != "VERIFIED":
         return 1
     return 0
@@ -2498,7 +2581,47 @@ def _cmd_lint(args: argparse.Namespace) -> int:
     # (an unarmed or vacuous IRREVERSIBLE step). `--strict` also fails on warn.
     threshold = "warn" if args.strict else "error"
     fail = SEVERITY_ORDER[report.max_severity] >= SEVERITY_ORDER[threshold]
-    return 1 if (report.findings and fail) else 0
+    if report.findings and fail:
+        _print_lint_epilogue(args.bundle, threshold)
+        return 1
+    return 0
+
+
+def _print_lint_epilogue(bundle: str, threshold: str) -> None:
+    """Three-line epilogue after a failing lint (presentation only)."""
+    from openadapt_flow.tutorial import outcome_epilogue_lines
+
+    lines = outcome_epilogue_lines(
+        what=(
+            f"lint found coverage gaps at or above the '{threshold}' severity "
+            f"in {bundle}"
+        ),
+        why_safe=(
+            "gaps are reported instead of silently running unguarded or "
+            "unverifiable steps"
+        ),
+        next_command=f"openadapt-flow certify {bundle} --policy <policy>",
+    )
+    print("\n" + "\n".join(lines))
+
+
+def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
+    """Draft (never approve) an effect-oracle contract from retained evidence."""
+    from openadapt_flow.scaffold_verifier import NEXT_COMMANDS_TEMPLATE, write_draft
+
+    out, count = write_draft(
+        Path(args.source), Path(args.out) if getattr(args, "out", None) else None
+    )
+    print(NEXT_COMMANDS_TEMPLATE.format(out=out, count=count))
+    return 0
+
+
+def _cmd_explain(args: argparse.Namespace) -> int:
+    """Print a plain-language, read-only summary of one completed run."""
+    from openadapt_flow.scaffold_verifier import explain_run
+
+    print(explain_run(Path(args.run_dir)))
+    return 0
 
 
 def _cmd_visualize(args: argparse.Namespace) -> int:
@@ -5518,6 +5641,44 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit nonzero on warnings too (default: only on errors)",
     )
     p.set_defaults(func=_cmd_lint)
+
+    p = sub.add_parser(
+        "scaffold-verifier",
+        help=(
+            "Draft an effect-oracle contract (effect_contract.yaml) from a "
+            "recording or bundle's write-shaped steps. The output is a DRAFT "
+            "requiring human edit; refuses demonstrations with no "
+            "consequential (write) step"
+        ),
+    )
+    p.add_argument(
+        "source",
+        help="Recording directory OR workflow bundle directory",
+    )
+    p.add_argument(
+        "-o",
+        "--out",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Directory for the drafted effect_contract.yaml (default: beside the input)"
+        ),
+    )
+    p.set_defaults(func=_cmd_scaffold_verifier)
+
+    p = sub.add_parser(
+        "explain",
+        help=(
+            "Plain-language read of a completed run dir: what happened, why "
+            "the outcome is the safe one, and the next suggested command "
+            "(read-only)"
+        ),
+    )
+    p.add_argument(
+        "run_dir",
+        help="Completed run directory (holds report.json)",
+    )
+    p.set_defaults(func=_cmd_explain)
 
     p = sub.add_parser(
         "visualize",
