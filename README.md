@@ -235,7 +235,7 @@ for the partner contract and qualification process.
 
 | Evidence | Result |
 |---|---|
-| Public OpenEMR reference workflow | 20/20 effect-verified runs, 39.2s median, 0 model calls |
+| Public OpenEMR reference workflow | 19/20 effect-verified runs (run 20 was a safe halt under the corrected saved-row oracle), 39.2s median, 0 model calls |
 | Heart-care RVU audit customer case | Approximately $75,000/year in recovered billables and several hours of monthly audit work saved |
 
 Read the [benchmark method and comparison](https://openadapt.ai/compare) and
