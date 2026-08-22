@@ -108,13 +108,52 @@ def _run_flow(argv: list[str]) -> None:
     sys.exit(_invoke_flow(argv))
 
 
-@main.command("quickstart")
+_DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
+_PYTHON_REMEDY = (
+    "OpenAdapt needs Python 3.10\u20133.12. Easiest fix: "
+    "curl -LsSf https://astral.sh/uv/install.sh | sh && "
+    "uv venv --python 3.12 && uv pip install 'openadapt[browser]'\n"
+    "Or use the installer script: https://raw.githubusercontent.com/"
+    "OpenAdaptAI/openadapt-flow/main/scripts/install.sh"
+)
+
+
+def _echo_python_remedy() -> None:
+    """Print the plain-language fix for an unsupported interpreter."""
+    click.echo(_PYTHON_REMEDY, err=True)
+
+
+def _require_supported_python() -> None:
+    """Stop before delegation when pip cannot resolve this launcher.
+
+    The requires-python bound means a >=3.13 interpreter fails pip
+    resolution with raw resolver noise; give the remedy here instead.
+    """
+    if sys.version_info >= (3, 13):
+        _echo_python_remedy()
+        raise click.exceptions.Exit(1)
+
+
+def _is_externally_managed_error(error: BaseException) -> bool:
+    """Match pip's PEP 668 externally-managed-environment failure text."""
+    return "externally-managed-environment" in str(error)
+
+
+@main.command(
+    "quickstart",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+    },
+)
 @click.option(
     "--out",
     type=click.Path(path_type=Path),
-    default=Path("openadapt-quickstart"),
-    show_default=True,
-    help="New directory for the recording, bundle, and run report.",
+    default=None,
+    help=(
+        f"Directory for the recording, bundle, and run report. Default: "
+        f"{_DEFAULT_QUICKSTART_DIR}, suffixed -2, -3, ... when taken."
+    ),
 )
 @click.option(
     "--headed", is_flag=True, help="Show the browser while the tutorial runs."
@@ -129,21 +168,36 @@ def _run_flow(argv: list[str]) -> None:
         "trusting the screen."
     ),
 )
-def quickstart(out: Path, headed: bool, break_it: bool) -> None:
+@click.pass_context
+def quickstart(
+    command_ctx: click.Context, out: Optional[Path], headed: bool, break_it: bool
+) -> None:
     """Run a verified local tutorial against the bundled synthetic app.
 
     This is the shortest path to a real OpenAdapt run. It uses the bundled
     synthetic tutorial, verifies the write through an independent read-only
     system-of-record interface, keeps every artifact on this computer, and
     enables no model or Cloud call. The output directory is never overwritten.
+    Any other flags (for example --guided or --interactive-record) pass
+    through to the engine tutorial unchanged.
     """
     import os
 
-    root = out.expanduser().resolve()
-    if root.exists():
-        raise click.UsageError(
-            f"Output already exists: {root}. Pass --out with a new directory."
-        )
+    _require_supported_python()
+
+    if out is None:
+        root = Path(_DEFAULT_QUICKSTART_DIR).resolve()
+        suffix = 2
+        while root.exists():
+            root = Path(f"{_DEFAULT_QUICKSTART_DIR}-{suffix}").resolve()
+            suffix += 1
+        click.echo(f"Using output directory: {root}")
+    else:
+        root = out.expanduser().resolve()
+        if root.exists():
+            raise click.UsageError(
+                f"Output already exists: {root}. Pass --out with a new directory."
+            )
 
     argv = [
         "tutorial",
@@ -156,6 +210,9 @@ def quickstart(out: Path, headed: bool, break_it: bool) -> None:
         argv.append("--headed")
     if break_it:
         argv.append("--break-it")
+    # Engine-owned flags (--guided, --interactive-record, and future engine
+    # additions) forward verbatim instead of being whitelisted here.
+    argv.extend(command_ctx.args)
 
     # The bundled tutorial contains only fixed synthetic data. Keep an
     # installed-but-unconfigured privacy provider from blocking this known-safe
@@ -165,6 +222,11 @@ def quickstart(out: Path, headed: bool, break_it: bool) -> None:
         os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
     try:
         code = _invoke_flow(argv)
+    except Exception as error:
+        if _is_externally_managed_error(error):
+            _echo_python_remedy()
+            raise click.exceptions.Exit(1) from error
+        raise
     finally:
         if scrub in (None, "auto"):
             if scrub is None:

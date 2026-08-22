@@ -36,8 +36,16 @@ state, the run stops for review.
 
 ## Try it locally
 
-OpenAdapt requires Python 3.10–3.12. Install the browser capability for the
-bundled tutorial:
+OpenAdapt requires Python 3.10–3.12. Easiest install (creates its own
+environment and includes the browser capability for the bundled tutorial):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/main/scripts/install.sh | sh
+```
+
+Manual path with pip — install the browser capability for the bundled
+tutorial:
 
 ```bash
 python -m pip install --upgrade 'openadapt[browser]'
