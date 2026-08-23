@@ -31,11 +31,22 @@ were first committed in `e9897564` after parent `099eac07`; those two SHAs
 describe artifact history, not the runtime used for the measurement. Not
 re-measured on a later release.
 
+**Oracle correction, 2026-07-28 — quote 19/20, not 20/20.** The original
+whole-frame OCR check scored compiled run 20 a success. The stricter
+saved-row contract rejects it: the note stayed in the unsaved form and the
+replayer had already halted safely at step_017. The table above reflects
+the correction. `results.json` carries the machine record under
+`oracle_adjudication`: the exact contract, the retained final frame and
+its SHA-256, and the single changed run. Summaries published before
+2026-08-22 — including the flow CHANGELOG entries for the 2026-07
+releases and earlier website copy — say 20/20 under the weaker original
+oracle.
+
 Failed runs, reported honestly:
 
 Compiled arm:
 
-- compiled run 20: saved-row oracle failed; replayer halted at step_017 — The legacy whole-frame OCR verifier matched the note in the unsaved entry textarea. The retained final frame has no saved row for this note.
+- compiled run 20: saved-row oracle failed; replayer halted at step_017 — The legacy whole-frame OCR verifier matched the note in the unsaved entry textarea. The retained final frame has no saved row for this note. Machine record: `oracle_adjudication` in [results.json](results.json).
 
 Agent arm:
 
