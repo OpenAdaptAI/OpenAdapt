@@ -1256,6 +1256,14 @@ def convert_capture(
             "source": "openadapt-capture",
             "task_description": session.task_description,
         }
+        # Name the space every recorded x/y is in, so a consumer fails closed
+        # instead of assuming. Window and desktop scope are mutually exclusive
+        # (a session carrying both is refused above). A session that declares
+        # neither leaves the key absent, which means the space is undeclared.
+        if window_capture is not None:
+            meta["coordinate_space"] = WINDOW_PIXEL_SPACE
+        elif desktop_provenance is not None:
+            meta["coordinate_space"] = DESKTOP_PIXEL_SPACE
         if window_capture is not None:
             # Additive window provenance (the compiler ignores unknown
             # meta.json keys; a non-window session's meta is unchanged).

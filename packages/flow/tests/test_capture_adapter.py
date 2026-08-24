@@ -775,6 +775,9 @@ def test_window_mode_meta_stamps_provenance_without_guessing_surface(
         "resolved_window_id": 42,
     }
     assert "backend_hints" not in meta
+    # The space every recorded x/y is in, named at the top level so a consumer
+    # fails closed instead of assuming.
+    assert meta["coordinate_space"] == "window_pixels"
 
 
 @pytest.mark.parametrize("surface", ["windows", "macos"])
@@ -1189,6 +1192,7 @@ def test_desktop_mode_uses_combined_frame_coordinates_and_provenance(
     }
     assert "window_capture" not in meta
     assert "producer_extension" not in meta["desktop_capture"]
+    assert meta["coordinate_space"] == "virtual_desktop_pixels"
 
 
 def test_window_and_desktop_scope_are_mutually_exclusive(tmp_path: Path) -> None:
