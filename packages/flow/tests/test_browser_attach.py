@@ -1268,12 +1268,22 @@ def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trial
     try:
         port_file = profile / "DevToolsActivePort"
         deadline = time.monotonic() + 20
-        while not port_file.is_file() and time.monotonic() < deadline:
+        port_line = ""
+        while time.monotonic() < deadline:
             if process.poll() is not None:
                 pytest.fail("Chromium exited before its CDP endpoint was ready")
+            # Chromium CREATES this file and writes the port a moment later, so
+            # existence alone is not readiness: reading it then yields an empty
+            # file. Wait for the port line itself.
+            try:
+                port_line = port_file.read_text().splitlines()[0].strip()
+            except (OSError, IndexError):
+                port_line = ""
+            if port_line:
+                break
             time.sleep(0.05)
-        assert port_file.is_file(), "Chromium CDP endpoint did not become ready"
-        port = int(port_file.read_text().splitlines()[0])
+        assert port_line, "Chromium CDP endpoint did not become ready"
+        port = int(port_line)
         endpoint = f"http://127.0.0.1:{port}"
 
         for trial in range(3):

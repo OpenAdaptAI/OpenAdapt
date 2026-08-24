@@ -58,6 +58,17 @@ from openadapt_flow.terminal_verification_v2 import (
 )
 
 
+def _parse_permit_utc(value: str) -> datetime:
+    """Parse a canonical ``...Z`` permit timestamp on every supported Python.
+
+    ``datetime.fromisoformat`` accepts a ``Z`` suffix only from 3.11, and this
+    package supports 3.10. Normalize the offset exactly as the product-side
+    permit parser does.
+    """
+
+    return datetime.fromisoformat(value[:-1] + "+00:00").astimezone(timezone.utc)
+
+
 @pytest.fixture(autouse=True)
 def _isolated_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Give each test its own external authority database."""
@@ -295,8 +306,7 @@ def _issued_permit_transport(
                 permit_bytes
             ).decode("ascii")
             delivered_at = (
-                datetime.fromisoformat(artifact.payload.issued_at)
-                + timedelta(seconds=10)
+                _parse_permit_utc(artifact.payload.issued_at) + timedelta(seconds=10)
             ).strftime("%Y-%m-%dT%H:%M:%SZ")
             receipt = sign_production_delivery_receipt(
                 ProductionDeliveryReceiptPayload(
