@@ -344,5 +344,13 @@ Attach mode supports local Chromium-family browsers that expose a CDP
 endpoint. It requires a browser process started with remote debugging and a
 separate user-data directory. It does not claim Firefox, WebKit, arbitrary
 Chrome extensions, an ordinary browser process that was not started for local
-debugging, cross-origin tab selection, separately qualified cross-frame/iframe
-recording, multi-page/popup recording, or direct extension replay.
+debugging, cross-origin tab selection, multi-page/popup recording, or direct
+extension replay.
+
+Same-origin iframes are recorded: every emitted coordinate is composed into
+the top-document page space, and structural targets carry the frame chain
+(`structural.frame_path`) that replay re-enters. A frame whose page-space
+position cannot be proven -- a cross-origin parent, or a chain deeper than
+the replay descent limit -- refuses the recording with an explicit error. A
+declared secret field inside an iframe also refuses: the secret pipeline is
+qualified against the top document only.

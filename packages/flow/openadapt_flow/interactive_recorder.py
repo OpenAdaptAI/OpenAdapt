@@ -1624,6 +1624,109 @@ _INIT_JS = r"""
     return null;
   }
 
+  // ---- frame-space composition -------------------------------------------
+  // Every emitted x/y/rect is TOP-DOCUMENT (page viewport) space: frames are
+  // captured with page.screenshot(), and replay projects a top-level point
+  // down the frame chain (PlaywrightBackend._FramePoint). A DOM event inside
+  // an iframe delivers clientX/clientY relative to ITS OWN frame viewport, so
+  // each listener adds the accumulated frame offset before emitting. DOM
+  // reads (elementFromPoint, identity evidence) stay frame-local.
+
+  function frameElementSelector(el, doc) {
+    // Per-document unique selector for an iframe/frame element, in the exact
+    // format replay's frame descent resolves (see _FRAME_SELECTOR_JS in
+    // backends/playwright_backend.py): #id when unique, else an nth-of-type
+    // chain. Returns null when no unique selector exists in `doc`.
+    try {
+      const unique = (selector) => {
+        try { return doc.querySelectorAll(selector).length === 1; }
+        catch (e) { return false; }
+      };
+      if (el.id) {
+        const byId = '#' + CSS.escape(el.id);
+        if (unique(byId)) return byId;
+      }
+      const segments = [];
+      let node = el;
+      while (node && node !== doc.documentElement) {
+        const tag = node.tagName.toLowerCase();
+        let index = 1;
+        for (let sibling = node.previousElementSibling; sibling;
+            sibling = sibling.previousElementSibling) {
+          if (sibling.tagName === node.tagName) index += 1;
+        }
+        segments.unshift(tag + ':nth-of-type(' + index + ')');
+        const candidate = segments.join(' > ');
+        if (unique(candidate)) return candidate;
+        node = node.parentElement;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function frameSpace() {
+    // The accumulated top-document offset and frame chain for THIS document.
+    // Each level adds the frame element's border-box position plus its left/
+    // top border and padding: the child viewport's origin in the parent's
+    // viewport. Returns null when the chain crosses an origin boundary
+    // (window.frameElement is null or throws) or exceeds the replay descent
+    // limit -- the caller refuses the event instead of emitting a point in an
+    // unprovable coordinate space.
+    if (window === window.top) return {dx: 0, dy: 0, path: [], complete: true};
+    try {
+      let dx = 0, dy = 0;
+      const path = [];
+      let complete = true;
+      let win = window;
+      for (let depth = 0; depth < 8 && win !== win.top; depth += 1) {
+        const fe = win.frameElement;
+        if (!fe) return null;
+        const r = fe.getBoundingClientRect();
+        const cs = win.parent.getComputedStyle(fe);
+        dx += r.left + (parseFloat(cs.borderLeftWidth) || 0)
+          + (parseFloat(cs.paddingLeft) || 0);
+        dy += r.top + (parseFloat(cs.borderTopWidth) || 0)
+          + (parseFloat(cs.paddingTop) || 0);
+        const selector = frameElementSelector(fe, fe.ownerDocument);
+        if (selector === null) complete = false;
+        path.unshift(selector);
+        win = win.parent;
+      }
+      if (win !== win.top) return null;
+      return {dx: dx, dy: dy, path: path, complete: complete};
+    } catch (e) { return null; }
+  }
+
+  function refuseFrame() {
+    emit({kind: 'frame_refusal'});
+  }
+
+  function frameStructural(fs, target) {
+    // Attach the frame chain to a structural target. A selector is resolved
+    // WITHIN its frame scope at replay, so a subframe target without an exact
+    // frame_path would be resolved against the wrong document: drop the
+    // structural evidence entirely rather than emit a chain replay cannot
+    // re-prove. The visual anchor (page-space point) remains.
+    if (target === null) return null;
+    if (!fs.path.length) return target;
+    if (!fs.complete) return null;
+    target.frame_path = fs.path;
+    return target;
+  }
+
+  function composeRect(fs, rect) {
+    if (!rect) return rect;
+    return [rect[0] + Math.round(fs.dx), rect[1] + Math.round(fs.dy),
+            rect[2], rect[3]];
+  }
+
+  function emitInFrameSpace(o) {
+    // Declares that this subframe event's coordinates were composed into the
+    // top-document space. Python refuses subframe events without this marker.
+    if (window !== window.top) o.__oaflow_frame_composed = true;
+    emit(o);
+  }
+
   function emit(o) {
     try {
       // AN EVENT CARRIES NO REFLECTED TEXT. This handler runs in the CAPTURE
@@ -1641,7 +1744,12 @@ _INIT_JS = r"""
       // The ORIGIN is structural, not evidence text: Flow already declared it,
       // and a secret never becomes part of it. It cannot go stale inside a
       // document, because leaving the declared origin stops the recording.
-      o.__oaflow_origin = location.origin;
+      // window.origin, not location.origin: they are identical for an
+      // ordinary http(s) document, but a same-origin srcdoc/about:blank frame
+      // reports its ACTUAL (inherited) origin only through window.origin --
+      // location.origin serializes as "null" there. A sandboxed frame without
+      // allow-same-origin stays "null" through both and is refused.
+      o.__oaflow_origin = String(window.origin || location.origin);
       o.__oaflow_doc = DOC_ID;
       o.__oaflow_doc_holds_secret = (
         opaqueSecretActive || documentHeldSecretValue
@@ -1649,9 +1757,17 @@ _INIT_JS = r"""
       );
       o.__oaflow_session = SESSION_ID;
       o.__oaflow_top_level = window === window.top;
-      o.__oaflow_viewport = [Math.round(window.innerWidth),
-                             Math.round(window.innerHeight)];
-      o.__oaflow_dpr = Number(window.devicePixelRatio || 1);
+      // Geometry describes the TOP viewport -- the space every emitted
+      // coordinate is composed into. A cross-origin document cannot read it;
+      // its events are refusals, which carry no coordinates, so the local
+      // fallback is never used as coordinate evidence.
+      let vp = window;
+      if (!o.__oaflow_top_level) {
+        try { void window.top.innerWidth; vp = window.top; } catch (e) {}
+      }
+      o.__oaflow_viewport = [Math.round(vp.innerWidth),
+                             Math.round(vp.innerHeight)];
+      o.__oaflow_dpr = Number(vp.devicePixelRatio || 1);
       const binding = window[BINDING_NAME];
       if (typeof binding === 'function') binding(o);
     } catch (e) {}
@@ -1727,14 +1843,18 @@ _INIT_JS = r"""
       activeSecretElement = null;
       activeSecretState = null;
     }
+    const fs = frameSpace();
+    if (fs === null) { refuseFrame(); return; }
     const target = deepEventTarget(e);
     const rowIdentity = structuredIdentityEvidence(e.clientX, e.clientY, target);
     pointerDown = {
-      x: Math.round(e.clientX), y: Math.round(e.clientY),
+      x: Math.round(e.clientX + fs.dx), y: Math.round(e.clientY + fs.dy),
       sid: rowIdentity.sid,
       sid_withheld: rowIdentity.withheld,
-      structural: structuralTarget(e.clientX, e.clientY, target),
-      idr: identifierRect(),
+      structural: frameStructural(
+        fs, structuralTarget(e.clientX, e.clientY, target)
+      ),
+      idr: composeRect(fs, identifierRect()),
     };
   });
 
@@ -1742,48 +1862,61 @@ _INIT_JS = r"""
     if (e.button !== 0 || !pointerDown) return;
     const start = pointerDown;
     pointerDown = null;
-    const endX = Math.round(e.clientX), endY = Math.round(e.clientY);
+    const fs = frameSpace();
+    if (fs === null) { refuseFrame(); return; }
+    const endX = Math.round(e.clientX + fs.dx);
+    const endY = Math.round(e.clientY + fs.dy);
     if (Math.hypot(endX - start.x, endY - start.y) < 5) return;
     suppressClick = true;
     setTimeout(() => { suppressClick = false; }, 0);
     const dragEvent = {
       kind: 'drag', x: start.x, y: start.y, end_x: endX, end_y: endY,
       sid: start.sid, structural: start.structural,
-      end_structural: structuralTarget(endX, endY, deepEventTarget(e)),
+      end_structural: frameStructural(
+        fs, structuralTarget(e.clientX, e.clientY, deepEventTarget(e))
+      ),
       idr: start.idr,
     };
     if (start.sid_withheld) dragEvent.sid_withheld = start.sid_withheld;
-    emit(dragEvent);
+    emitInFrameSpace(dragEvent);
   });
 
   listen('click', (e) => {
     if (e.button !== 0) return;
     if (suppressClick) { suppressClick = false; return; }
+    const fs = frameSpace();
+    if (fs === null) { refuseFrame(); return; }
     const target = deepEventTarget(e);
     const rowIdentity = structuredIdentityEvidence(e.clientX, e.clientY, target);
     const pointerEvent = {
       kind: 'click',
-      x: Math.round(e.clientX), y: Math.round(e.clientY),
+      x: Math.round(e.clientX + fs.dx), y: Math.round(e.clientY + fs.dy),
       sid: rowIdentity.sid,
-      structural: structuralTarget(e.clientX, e.clientY, target),
-      idr: identifierRect(),
+      structural: frameStructural(
+        fs, structuralTarget(e.clientX, e.clientY, target)
+      ),
+      idr: composeRect(fs, identifierRect()),
     };
     if (rowIdentity.withheld) pointerEvent.sid_withheld = rowIdentity.withheld;
-    emit(pointerEvent);
+    emitInFrameSpace(pointerEvent);
   });
 
   listen('contextmenu', (e) => {
+    const fs = frameSpace();
+    if (fs === null) { refuseFrame(); return; }
     const target = deepEventTarget(e);
     const rowIdentity = structuredIdentityEvidence(e.clientX, e.clientY, target);
     const pointerEvent = {
       kind: 'right_click',
-      x: Math.round(e.clientX), y: Math.round(e.clientY),
+      x: Math.round(e.clientX + fs.dx), y: Math.round(e.clientY + fs.dy),
       sid: rowIdentity.sid,
-      structural: structuralTarget(e.clientX, e.clientY, target),
-      idr: identifierRect(),
+      structural: frameStructural(
+        fs, structuralTarget(e.clientX, e.clientY, target)
+      ),
+      idr: composeRect(fs, identifierRect()),
     };
     if (rowIdentity.withheld) pointerEvent.sid_withheld = rowIdentity.withheld;
-    emit(pointerEvent);
+    emitInFrameSpace(pointerEvent);
   });
 
   // Commit points. After each of these the page can remove the field while
@@ -1797,6 +1930,8 @@ _INIT_JS = r"""
   listenOn(window, 'pagehide', commitSecretValues);
 
   listen('input', (e) => {
+    const fs = frameSpace();
+    if (fs === null) { refuseFrame(); return; }
     refreshSecretBindings();
     const el = inputEventTarget(e);
     if (ambiguousSecretReplacements.has(el)) {
@@ -1871,8 +2006,15 @@ _INIT_JS = r"""
     if (secret && !isTextEntry(el) && closedSecretHosts.has(el)) {
       opaqueSecretActive = true;
     }
-    const r = (el.getBoundingClientRect && el.getBoundingClientRect())
+    const localRect = (el.getBoundingClientRect && el.getBoundingClientRect())
       || { left: 0, top: 0, width: 0, height: 0 };
+    // Page-space, like every other emitted geometry: this rect names the
+    // redaction region for a secret field, so a frame-local rect would black
+    // out the wrong pixels and leave the real field visible.
+    const r = {
+      left: localRect.left + fs.dx, top: localRect.top + fs.dy,
+      width: localRect.width, height: localRect.height,
+    };
     // The receiving field's NAME is machine evidence: it becomes the parameter
     // the compiler binds and the replayer fills. A rewritten name would name a
     // parameter the page does not have, so it is exact or withheld.
@@ -1900,10 +2042,12 @@ _INIT_JS = r"""
     } else {
       o.value = currentSecretValue(el);
     }
-    emit(o);
+    emitInFrameSpace(o);
   });
 
   listen('keydown', (e) => {
+    const fs = frameSpace();
+    if (fs === null) { refuseFrame(); return; }
     refreshSecretBindings();
     const el = inputEventTarget(e);
     if (ambiguousSecretReplacements.has(el)) {
@@ -1924,17 +2068,19 @@ _INIT_JS = r"""
     const shiftedText = modifiers.length === 1
       && modifiers[0] === 'shift' && e.key.length === 1;
     if (modifiers.length && !pureModifier && !shiftedText && !e.repeat) {
-      emit({
+      emitInFrameSpace({
         kind: 'hotkey', key: e.key, modifiers,
         });
       return;
     }
     if (SPECIAL.indexOf(e.key) < 0) return;
-    emit({kind: 'key', key: e.key});
+    emitInFrameSpace({kind: 'key', key: e.key});
   });
 
   listen('wheel', (e) => {
-    emit({
+    const fs = frameSpace();
+    if (fs === null) { refuseFrame(); return; }
+    emitInFrameSpace({
       kind: 'scroll',
       dx: Math.round(e.deltaX), dy: Math.round(e.deltaY),
     });
@@ -2148,9 +2294,10 @@ class InteractiveRecorder:
             else:
                 # add_init_script applies after the next navigation. Install
                 # the same session in every already-open document now. This
-                # includes child frames, whose local coordinates cannot yet be
-                # bound to top-level evidence and therefore emit an explicit
-                # refusal instead of disappearing from the recording.
+                # includes child frames: a same-origin frame composes its
+                # events into the top-document space, and a frame that cannot
+                # prove that space emits an explicit refusal instead of
+                # disappearing from the recording.
                 for frame in list(self.page.frames):
                     try:
                         frame.evaluate(init_js)
@@ -2721,6 +2868,14 @@ class InteractiveRecorder:
             )
             self.done = True
             return
+        if kind == "frame_refusal":
+            self._listener_error = BrowserAttachError(
+                "an action happened inside an iframe whose page-space position "
+                "could not be proven (a cross-origin or too-deep frame chain); "
+                "recording stopped before accepting the event"
+            )
+            self.done = True
+            return
         secret_mask_bound = event.pop("__oaflow_secret_mask_bound", None)
         if (
             kind == "input"
@@ -2749,21 +2904,46 @@ class InteractiveRecorder:
                 return
             event["_oaflow_input_session"] = raw_input_session
         reported_top_level = bool(event.pop("__oaflow_top_level", True))
+        frame_composed = event.pop("__oaflow_frame_composed", None) is True
+        source_page_matches = True
         source_is_selected_top_level = reported_top_level
         if source is not None:
             try:
+                source_page_matches = source.get("page") is self.page
                 source_is_selected_top_level = (
-                    source.get("page") is self.page
-                    and source.get("frame") is self.page.main_frame
+                    source_page_matches and source.get("frame") is self.page.main_frame
                 )
             except Exception:
+                source_page_matches = False
                 source_is_selected_top_level = False
         if not source_is_selected_top_level and kind == "viewport":
             return
-        if not source_is_selected_top_level:
+        # A same-origin subframe event is accepted only when the in-page
+        # closure proved and composed its top-document coordinate space
+        # (frame_composed). Anything else -- another page, or a subframe event
+        # without the composition marker -- is refused, never reinterpreted.
+        if not source_page_matches or not (
+            source_is_selected_top_level or frame_composed
+        ):
             self._listener_error = BrowserAttachError(
-                "an event came from an iframe; cross-frame recording is not "
-                "qualified, so recording stopped before accepting the event"
+                "an event came from a frame outside this recording's "
+                "page-space contract; recording stopped before accepting "
+                "the event"
+            )
+            self.done = True
+            return
+        if (
+            not source_is_selected_top_level
+            and kind == "input"
+            and bool(event.get("secret"))
+        ):
+            # The secret pipeline (closed-shadow scans, mask identity, value
+            # withholding) is qualified against the top document only. Refuse
+            # rather than risk retaining an unmasked secret frame.
+            self._listener_error = BrowserAttachError(
+                "a declared secret field inside an iframe is not qualified "
+                "for browser recording; recording stopped before accepting "
+                "its value"
             )
             self.done = True
             return

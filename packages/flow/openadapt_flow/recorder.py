@@ -3,9 +3,12 @@
 Recording format (DESIGN.md):
 
     <recording>/
-      meta.json          # {"id", "created_at", "viewport": [w,h], "app_url",
+      meta.json          # {"id", "created_at", "viewport": [w,h],
+                         #  "coordinate_space": "page", "app_url",
                          #  "params": {"<param_name>": "<value typed>"}}
       events.jsonl       # {"i":0,"kind":"click","x":123,"y":45,"t":1.20}
+                         # x/y (and every recorded rect) are top-document
+                         # page-viewport coordinates, matching the frames.
                          # right_click uses the same point; drag also carries
                          # end_x/end_y for its independently resolved endpoint.
                          # {"i":1,"kind":"type","text":"...","param":"note",...}
@@ -203,6 +206,13 @@ class Recorder:
             "id": uuid.uuid4().hex,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "viewport": [int(viewport[0]), int(viewport[1])],
+            # Every recorded x/y/rect is top-document (page viewport) space,
+            # the space page.screenshot() captures. Events that happen inside
+            # an iframe are composed into this space at capture time or
+            # refused. A recording without this marker does not declare its
+            # coordinate space: a framed target's point in one may be
+            # frame-local.
+            "coordinate_space": "page",
             "app_url": self._app_url,
             "params": dict(self._params),
             "secret_params": sorted(self._secret_params),
