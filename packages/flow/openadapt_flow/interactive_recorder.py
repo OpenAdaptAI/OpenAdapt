@@ -381,6 +381,11 @@ def select_attached_page(
 # In-page recorder script. Installed via add_init_script so it re-arms on every
 # document (navigations). Emits raw events to the Python side via the
 # __oaflow_emit binding. __SECRET_NAMES__ / __SPECIAL_KEYS__ are substituted in.
+# How long a recorded click stays pending before it is written, so the second
+# click of a double-click gesture can supersede it. Chromium's double-click
+# interval is 500 ms.
+_DOUBLE_CLICK_WINDOW_MS = 500
+
 _INIT_JS = r"""
 (() => {
   const SESSION_ID = __SESSION_ID__;
@@ -1889,7 +1894,11 @@ _INIT_JS = r"""
     const target = deepEventTarget(e);
     const rowIdentity = structuredIdentityEvidence(e.clientX, e.clientY, target);
     const pointerEvent = {
-      kind: 'click',
+      // The second click of a double-click gesture (e.detail === 2) becomes
+      // an explicit double_click event; Python absorbs the pending first
+      // click so the demonstration compiles to ONE DOUBLE_CLICK step, and
+      // replay delivers exactly the two demonstrated clicks.
+      kind: e.detail === 2 ? 'double_click' : 'click',
       x: Math.round(e.clientX + fs.dx), y: Math.round(e.clientY + fs.dy),
       sid: rowIdentity.sid,
       structural: frameStructural(
@@ -1924,7 +1933,18 @@ _INIT_JS = r"""
   // with a summary row is the ordinary case. The value committed here is used
   // for ONE purpose, deciding whether to WITHHOLD identity text, and never for
   // the URL, the title, or any rewrite. See committedSecretValues.
-  listen('change', (e) => commitSecretValueFor(inputEventTarget(e)));
+  listen('change', (e) => {
+    commitSecretValueFor(inputEventTarget(e));
+    // A native <select> commits its option through browser-native dropdown UI
+    // that produces no recordable action events, so the demonstrated choice
+    // would be silently absent from the compiled workflow and replay would
+    // proceed with whatever value the field happens to hold. Refuse loudly at
+    // the moment the operator makes the selection.
+    const el = deepEventTarget(e);
+    if (el && el.matches && el.matches('select')) {
+      emit({kind: 'control_refusal', control: 'select'});
+    }
+  });
   listen('focusout', (e) => commitSecretValueFor(inputEventTarget(e)));
   listen('submit', commitSecretValues);
   listenOn(window, 'pagehide', commitSecretValues);
@@ -2161,6 +2181,8 @@ class InteractiveRecorder:
         self._pyq: list[dict[str, Any]] = []
         self._pending_type: Optional[dict[str, Any]] = None
         self._pending_scroll: Optional[dict[str, Any]] = None
+        self._pending_click: Optional[dict[str, Any]] = None
+        self._pending_click_pumps = 0
         self._listener_error: Optional[BrowserAttachError] = None
         self.done = False
 
@@ -2568,6 +2590,7 @@ class InteractiveRecorder:
             self._finalizing = True
             self._cleanup_page_listeners()
             self._drain_event_queue()
+            self._flush_click()
             self._flush_type()
             self._flush_scroll()
             assert self.recorder is not None
@@ -2876,6 +2899,16 @@ class InteractiveRecorder:
             )
             self.done = True
             return
+        if kind == "control_refusal":
+            control = str(event.get("control") or "control")
+            self._listener_error = BrowserAttachError(
+                f"a native <{control}> selection is not a qualified browser "
+                "recording action; recording stopped so the demonstrated "
+                "selection cannot be silently absent from the compiled "
+                "workflow"
+            )
+            self.done = True
+            return
         secret_mask_bound = event.pop("__oaflow_secret_mask_bound", None)
         if (
             kind == "input"
@@ -2949,6 +2982,7 @@ class InteractiveRecorder:
             return
         if kind not in {
             "click",
+            "double_click",
             "right_click",
             "drag",
             "input",
@@ -3278,6 +3312,24 @@ class InteractiveRecorder:
         kinds = {event.get("kind") for event in batch}
         if kinds == {"scroll"}:
             return
+        if len(batch) == 2:
+            first, second = batch
+            # A double-click gesture delivers its first click and the
+            # double_click marker inside one gesture window with no
+            # intermediate settled frame; they merge into ONE step.
+            try:
+                same_point = (
+                    abs(int(first.get("x", 0)) - int(second.get("x", 0))) <= 5
+                    and abs(int(first.get("y", 0)) - int(second.get("y", 0))) <= 5
+                )
+            except (TypeError, ValueError):
+                same_point = False
+            if (
+                first.get("kind") == "click"
+                and second.get("kind") == "double_click"
+                and same_point
+            ):
+                return
         if kinds == {"input"}:
             sessions = {event.get("_oaflow_input_session") for event in batch}
             fields = {event.get("field") for event in batch}
@@ -3311,25 +3363,80 @@ class InteractiveRecorder:
             # is NOT idle-flushed (a mid-word pause must not split it) — it
             # flushes on the next boundary event or at finish().
             self._flush_scroll()
+            # A click outlives the double-click window unmerged: it is a
+            # single click.
+            if self._pending_click is not None:
+                self._pending_click_pumps -= 1
+                if self._pending_click_pumps <= 0:
+                    self._flush_click()
             return not self._stop_condition_reached()
         return not self._stop_condition_reached()
 
     def _process(self, ev: dict[str, Any]) -> None:
         kind = ev.get("kind")
         if kind == "input":
+            self._flush_click()
             self._flush_scroll()
             self._accumulate_input(ev)
         elif kind == "scroll":
+            self._flush_click()
             self._flush_type()
             self._accumulate_scroll(ev)
-        elif kind in {"click", "right_click", "drag"}:
+        elif kind == "click":
+            self._flush_click()
+            self._flush_type()
+            self._flush_scroll()
+            # Held briefly: the second click of a double-click gesture
+            # supersedes it (see _absorb_pending_click). Any other event, an
+            # idle double-click window, or finish() flushes it unchanged. The
+            # settled after-frame is captured NOW, exactly as an immediate
+            # write would, so nothing that happens during the hold can enter
+            # this click's evidence.
+            assert self.recorder is not None
+            ev["_oaflow_after_frame"] = self.recorder._wait_settled()
+            ev["_oaflow_structural_after"] = self._structural_state()
+            self._pending_click = ev
+            self._pending_click_pumps = max(
+                1, -(-_DOUBLE_CLICK_WINDOW_MS // max(1, self._poll_ms))
+            )
+        elif kind == "double_click":
+            self._flush_type()
+            self._flush_scroll()
+            self._absorb_pending_click(ev)
+            self._record_pointer(ev)
+        elif kind in {"right_click", "drag"}:
+            self._flush_click()
             self._flush_type()
             self._flush_scroll()
             self._record_pointer(ev)
         elif kind in {"key", "hotkey"}:
+            self._flush_click()
             self._flush_type()
             self._flush_scroll()
             self._record_key(ev)
+
+    def _flush_click(self) -> None:
+        pending = self._pending_click
+        self._pending_click = None
+        if pending is not None:
+            self._record_pointer(pending)
+
+    def _absorb_pending_click(self, ev: dict[str, Any]) -> None:
+        """Discard the held first click of this double-click gesture.
+
+        A pending click at another point is a separate action: record it in
+        its demonstrated order instead."""
+
+        pending = self._pending_click
+        self._pending_click = None
+        if pending is None:
+            return
+        if (
+            abs(int(pending["x"]) - int(ev["x"])) <= 5
+            and abs(int(pending["y"]) - int(ev["y"])) <= 5
+        ):
+            return
+        self._record_pointer(pending)
 
     # -- accumulation / flush ------------------------------------------------
 
@@ -3477,13 +3584,20 @@ class InteractiveRecorder:
         idr = ev.get("idr")
         if idr:
             event["identifier_region"] = [int(v) for v in idr]
+        after_png = ev.pop("_oaflow_after_frame", None)
+        structural_after = ev.pop("_oaflow_structural_after", None)
         self.recorder.record_observed(
             event,
             before_png=self._last_frame,
             structural_before=self._last_structural,
             structured_identity=ev.get("sid"),
+            after_png=after_png,
+            structural_after=structural_after,
         )
-        self._advance()
+        if after_png is not None:
+            self._set_last(after_png, structural_after)
+        else:
+            self._advance()
 
     def _record_key(self, ev: dict[str, Any]) -> None:
         assert self.recorder is not None

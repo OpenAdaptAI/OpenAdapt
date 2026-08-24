@@ -354,3 +354,37 @@ position cannot be proven -- a cross-origin parent, or a chain deeper than
 the replay descent limit -- refuses the recording with an explicit error. A
 declared secret field inside an iframe also refuses: the secret pipeline is
 qualified against the top document only.
+
+## Interaction coverage
+
+Recorded as first-class steps: left click, double click (the two-click
+gesture compiles to one `DOUBLE_CLICK` step), right click, drag, text entry
+(including `contenteditable` and `role="textbox"`), special keys, keyboard
+shortcuts, and wheel scrolling.
+
+Refused loudly, never recorded silently wrong:
+
+- A native `<select>` selection. Its option commit happens in browser-native
+  dropdown UI that produces no recordable action events, so the choice would
+  be silently absent from the compiled workflow. The recording stops with an
+  explicit error at the moment of selection.
+- A new tab or popup. The recording is bound to one tab and stops when
+  another page appears.
+- An action in a frame whose page-space position cannot be proven (see
+  above).
+
+Not observed (the step is absent from the recording; replay behavior noted):
+
+- Middle/auxiliary-button clicks.
+- Hover-only interactions. A click on a hover-revealed item is recorded, but
+  the hover that revealed it is not; if replay cannot re-reveal the item, the
+  resolution ladder halts rather than clicking blind.
+- Programmatic scrolling (`scrollTo`, `scrollIntoView`). Replay re-resolves
+  each target and scrolls it into view itself, so an app-driven scroll
+  position difference does not by itself misdirect an action.
+- Native `alert`/`confirm` dialogs and their dismissal.
+
+A step's BEFORE frame is the previous settled frame. When the action itself
+scrolls its target into view, that frame still shows the old scroll position
+and the step's anchor crop can be featureless; demonstrate the scroll as its
+own step first for the crispest anchors.
