@@ -262,9 +262,22 @@ def test_required_context_comments_match_actual_checkrun_names() -> None:
     assert '"validate-claims" to block a PR' not in claims_header
 
 
-def test_macos_deselects_only_redundant_heavy_identity_harness() -> None:
+def test_macos_deselects_only_redundant_platform_neutral_heavy_nodes() -> None:
+    """macOS drops exactly the platform-neutral nodes Ubuntu already counts.
+
+    Both deselected nodes are heavy AND carry no OS-specific signal: the
+    identity harness re-runs one browser/OCR corpus, and the qualification
+    campaign is deterministic with no Docker, network, browser, or model
+    calls. Every canonical Ubuntu leg still runs both in full, so neither
+    contract is weakened -- only its redundant second execution is dropped.
+    Linux must never deselect anything.
+    """
+
     workflow = CI.read_text(encoding="utf-8")
-    node = "tests/test_identity_ladder.py::test_harness_zero_false_accept_all_configs"
+    nodes = (
+        "tests/test_identity_ladder.py::test_harness_zero_false_accept_all_configs",
+        "tests/test_qualification_gate_campaign.py",
+    )
     linux_start = workflow.index(
         "- name: Test (full suite incl. e2e, canonical Ubuntu)"
     )
@@ -279,8 +292,9 @@ def test_macos_deselects_only_redundant_heavy_identity_harness() -> None:
     assert "--deselect" not in linux_step
     assert "pytest -q --basetemp=runs/ci" in linux_step
     assert "if: runner.os == 'macOS'" in macos_step
-    assert macos_step.count(f"--deselect={node}") == 1
-    assert workflow.count(f"--deselect={node}") == 1
+    for node in nodes:
+        assert macos_step.count(f"--deselect={node}") == 1
+        assert workflow.count(f"--deselect={node}") == 1
 
 
 def test_exhaustive_identity_ladder_corpus_runs_in_the_slow_lane_only() -> None:

@@ -667,12 +667,23 @@ jobs:
           mkdir -p runs
           pytest -q --basetemp=runs/ci
 
+      # The gate-standard qualification campaign is deselected on macOS for the
+      # same reason as the identity harness above: it is platform-neutral by
+      # construction (no Docker, no network, no browser, no model calls), it
+      # runs in full on all three canonical Ubuntu legs, and re-running it here
+      # adds no OS-specific coverage. It is also the single most expensive node
+      # in the suite -- 535s measured on an M2 Max, so it exceeds the 600s
+      # per-test budget on a slower macOS runner and errors its whole
+      # module-scoped fixture, taking all seven dependent tests with it. The
+      # trial counts are a release contract (>=3 per condition) and are NOT
+      # reduced to fit a timeout. Pinned by tests/test_ci_workflow_contract.py.
       - name: Test (full suite incl. e2e, macOS platform coverage)
         if: runner.os == 'macOS'
         run: |
           mkdir -p runs
           pytest -q --basetemp=runs/ci \
-            --deselect=tests/test_identity_ladder.py::test_harness_zero_false_accept_all_configs
+            --deselect=tests/test_identity_ladder.py::test_harness_zero_false_accept_all_configs \
+            --deselect=tests/test_qualification_gate_campaign.py
 
       - name: Upload run artifacts
         if: always()
