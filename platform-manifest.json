@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "1.3.0",
-  "generated_at": "2026-08-26T14:19:29+00:00",
+  "generated_at": "2026-08-26T14:37:26+00:00",
   "generation": {
     "files": [
       {
@@ -22,7 +22,7 @@
   "components": {
     "launcher": {
       "package": "openadapt",
-      "version": "1.14.0",
+      "version": "1.15.0",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "requires": {
@@ -112,6 +112,12 @@
         {
           "package": "openadapt-flow",
           "requires": "<2.0.0,>=1.29.0",
+          "extras": "browser,hosted",
+          "marker": null
+        },
+        {
+          "package": "openadapt-flow",
+          "requires": "<2.0.0,>=1.29.0",
           "extras": "capture",
           "marker": "extra == \"all\""
         },
@@ -126,12 +132,6 @@
           "requires": "<2.0.0,>=1.29.0",
           "extras": "capture",
           "marker": "extra == \"core\""
-        },
-        {
-          "package": "openadapt-flow",
-          "requires": "<2.0.0,>=1.29.0",
-          "extras": "hosted",
-          "marker": null
         },
         {
           "package": "openadapt-flow",
@@ -256,23 +256,23 @@
       ],
       "provenance": {
         "repository": "OpenAdaptAI/OpenAdapt",
-        "release_ref": "v1.14.0",
-        "commit": "b9e096535224e0cb4b62d89f097a6b09c318bfe5",
-        "tree": "27a7d4ed881d97cf58aa7d1d83a912e52eecc124",
-        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/v1.14.0"
+        "release_ref": "v1.15.0",
+        "commit": "083414d89f282631071d6914c865f0175b6d8c84",
+        "tree": "ed71c656962d34c583e3357cd279de14436e0271",
+        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/v1.15.0"
       },
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt-1.14.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/d8/9a/2ac1a9748901c11109bf82ee4a37708f03bfe857dfdd25dcc98957acb6fc/openadapt-1.14.0-py3-none-any.whl",
-          "sha256": "ac79ccb3b502f6a6c309fd05fa965ed874bee3470e45cf9ac919ef4df6c0bc8f"
+          "filename": "openadapt-1.15.0-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/92/2e/ce94bea08065173e038f0d61c574ae0c25037cb9f6b78f18510c3da16a49/openadapt-1.15.0-py3-none-any.whl",
+          "sha256": "c7b20b231ba5bdd36e99188f535bdec92af0697ade61b8c76e92336613dde79c"
         },
         {
           "type": "sdist",
-          "filename": "openadapt-1.14.0.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/5e/20/eed353c2356b01fb608f6f472b241c3200eec310b054ff28154f6d7cfb5f/openadapt-1.14.0.tar.gz",
-          "sha256": "0a5456faa6769a2186cd653050134bb3c91cb202e9a147fcd611b0671c52370f"
+          "filename": "openadapt-1.15.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/af/12/2e80151231dfbff6fa5324f48722d90f4bbc02833fb8eb2f179f6582f070/openadapt-1.15.0.tar.gz",
+          "sha256": "db73a1d0bed9a96b58cf795146aecfe40ceae12fa147d4bf7ecd106872a4a81f"
         }
       ]
     },
@@ -570,15 +570,15 @@
   "runtime_units": {
     "launcher_environment": {
       "kind": "launcher-environment",
-      "version": "1.14.0",
+      "version": "1.15.0",
       "source_component": "launcher",
       "entry_point": "openadapt",
       "requirements": {
-        "openadapt": "==1.14.0",
+        "openadapt": "==1.15.0",
         "openadapt-flow": "<2.0.0,>=1.29.0"
       },
       "selected": {
-        "openadapt": "1.14.0",
+        "openadapt": "1.15.0",
         "openadapt-flow": "1.33.0"
       }
     },
@@ -793,7 +793,7 @@
       "scope": "selected-platform",
       "source_role": "launcher",
       "source_package": "openadapt",
-      "source_version": "1.14.0",
+      "source_version": "1.15.0",
       "target_role": "capture",
       "target_package": "openadapt-capture",
       "requires": "<2.0.0,>=1.2.0",
@@ -817,7 +817,7 @@
       "scope": "selected-platform",
       "source_role": "launcher",
       "source_package": "openadapt",
-      "source_version": "1.14.0",
+      "source_version": "1.15.0",
       "target_role": "flow",
       "target_package": "openadapt-flow",
       "requires": "<2.0.0,>=1.29.0",
@@ -840,6 +840,10 @@
           "marker": "extra == \"browser\""
         },
         {
+          "extras": "browser,hosted",
+          "marker": null
+        },
+        {
           "extras": "capture",
           "marker": "extra == \"all\""
         },
@@ -850,10 +854,6 @@
         {
           "extras": "capture",
           "marker": "extra == \"core\""
-        },
-        {
-          "extras": "hosted",
-          "marker": null
         },
         {
           "extras": "linux",
