@@ -74,8 +74,9 @@ green.
 - Add or update tests for any behavior change. The suite mocks browsers/servers
   where it can, so most of it runs with no live VM.
 - Update docs (`README.md`, `DESIGN.md`, `docs/`) when behavior or contracts
-  change. We prefer honest, measured claims — if something is experimental, say
-  so.
+  change. Bind capability claims to exact evidence and qualification boundaries.
+  Product state comes only from active release admissions. Do not add a static
+  lifecycle label for a product target.
 
 ## Licensing and vendored files
 

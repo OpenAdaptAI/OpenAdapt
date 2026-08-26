@@ -10,10 +10,10 @@ result is the same compile-ready recording for both browser entry modes:
   binds one open tab. This mode keeps a browser session that already completed
   sign-in, SSO, or 2FA.
 
-Both modes are part of the Browser / Playwright Beta surface. Attach mode uses
-Chromium DevTools Protocol only as the local connection transport. The
-recorder, schema, compiler, secret handling, and governed replay path do not
-change.
+Required CI and counted attach trials cover both Browser / Playwright modes.
+Attach mode uses Chromium DevTools Protocol only as the local connection
+transport. The recorder, schema, compiler, secret handling, and governed
+replay path do not change.
 
 ## Launch a new recording browser
 

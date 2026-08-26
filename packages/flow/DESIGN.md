@@ -12,7 +12,7 @@ backend owns a structured layer (a browser DOM, a native UIA/AX tree) the
 resolution ladder's TOP rung re-finds the recorded target as an ELEMENT and
 acts on it deterministically (`StructuralActionBackend`, see Resolution ladder).
 Structure is preferred where present; the visual ladder is the fallback floor
-for pixel-only substrates (RDP/Citrix/canvas). Backend maturity is uneven and
+for pixel-only substrates (RDP/Citrix/canvas). Backend evidence varies and is
 stated honestly: the **shipped, end-to-end-exercised** backend is
 Playwright-driven (headless-capable, CI-friendly, permission-free) and is the
 only path proven against a real third-party app. Beyond it, a `WindowsBackend`

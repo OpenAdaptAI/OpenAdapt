@@ -6,12 +6,12 @@ certification, legal advice, a BAA, or an SLA.
 
 ## Deployment lanes
 
-| Lane | Execution location | Network posture | Current status |
+| Lane | Execution location | Network posture | Evidence and admission boundary |
 | --- | --- | --- | --- |
-| Local evaluation | Operator workstation; bundled browser app or an explicitly supplied URL | No model or telemetry egress by default. The target URL is still network traffic when it is remote. | **Beta** on the reference browser path. |
-| On-prem / air-gapped | Customer-controlled host and optional LAN VLM appliance | Site firewall is the primary boundary; systemd/Docker denial and `verify-airgap.sh` add defence in depth. | **Beta deployment foundation** with signed offline update and atomic rollback; see [`ON_PREM.md`](ON_PREM.md). |
-| Hosted control-plane connection | Execution remains local; `login`, governed `push`, and `report-break` make explicit HTTPS requests | Opt-in only. Artifact egress requires a verified derivative and trusted destination. | **Live beta; operated outside this repository.** |
-| Hosted execution | Runner/control-plane implementation is outside this engine repository | Engine installation alone does not move execution. | Consult the deployed service status and substrate matrix. |
+| Local evaluation | Operator workstation; bundled browser app or an explicitly supplied URL | No model or telemetry egress by default. The target URL is still network traffic when it is remote. | Required CI and counted browser attach trials cover the engine path. The exact Flow release state still comes from its active release admission. |
+| On-prem / air-gapped | Customer-controlled host and optional LAN VLM appliance | Site firewall is the primary boundary; systemd/Docker denial and `verify-airgap.sh` add defence in depth. | Release and clean-machine checks cover signed offline update and atomic rollback. The exact site and workflow need their own acceptance and admission; see [`ON_PREM.md`](ON_PREM.md). |
+| Hosted control-plane connection | Execution remains local; `login`, governed `push`, and `report-break` make explicit HTTPS requests | Opt-in only. Artifact egress requires a verified derivative and trusted destination. | The Cloud target and exact workflow require separate active admissions. |
+| Hosted execution | Runner/control-plane implementation is outside this engine repository | Engine installation alone does not move execution. | The exact product releases and exact workflow require active admissions. Consult the deployed service status and substrate matrix. |
 
 ## Components and data flows
 

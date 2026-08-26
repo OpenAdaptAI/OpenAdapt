@@ -3,7 +3,7 @@
 
 The README once claimed "vision-only", "864 tests", and "adapters to come"
 long after each became false. This script makes those drifts a hard CI failure
-instead of a thing a reader eventually notices. It enforces four invariants:
+instead of a thing a reader eventually notices. It enforces five invariants:
 
 * **version** — ``openadapt_flow.__version__`` and the editable root package in
   ``uv.lock`` equal the version in ``pyproject.toml`` (the drift the clean-wheel
@@ -14,6 +14,8 @@ instead of a thing a reader eventually notices. It enforces four invariants:
   comment, actually exists.
 * **banned phrases** — stale or unbounded claims the README must never carry
   again (including substrate universals and single-demonstration guarantees).
+* **product lifecycle** — public Flow status documents cannot assign a static
+  lifecycle label to Flow or another one of the seven product targets.
 * **test count** — the README deliberately carries NO hardcoded test count (a
   number that rots on every test added). If someone reintroduces one, it is
   checked against ``pytest --collect-only`` and must match within a tolerance.
@@ -45,6 +47,23 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Docs whose file references and (for the README) claims are governed here.
 DOC_FILES = ["README.md", "DESIGN.md", "docs/LIMITS.md"]
 README = "README.md"
+
+TARGET_LIFECYCLE_DOCS = [
+    README,
+    "docs/PRODUCT_STATUS.md",
+    "docs/LIMITS.md",
+    "docs/ECOSYSTEM_INTEGRATION.md",
+    "docs/ENTERPRISE_ARCHITECTURE.md",
+    "docs/BROWSER_RECORDING.md",
+]
+
+STATIC_TARGET_LIFECYCLE_PATTERNS = {
+    "Beta": re.compile(r"\bbeta\b", re.IGNORECASE),
+    "Early access": re.compile(r"\bearly[ -]access\b", re.IGNORECASE),
+    "Experimental": re.compile(r"\bexperimental\b", re.IGNORECASE),
+    "Exploratory": re.compile(r"\bexploratory\b", re.IGNORECASE),
+    "reference path": re.compile(r"\breference[ -]path\b", re.IGNORECASE),
+}
 
 # Stale or unbounded claims the README must never carry again. Lowercased
 # substring match. Substrate maturity belongs in the evidence matrix; the
@@ -157,6 +176,27 @@ def check_banned_phrases(readme_text: Optional[str] = None) -> list[str]:
         for phrase in BANNED_PHRASES
         if phrase in low
     ]
+
+
+def check_static_target_lifecycle_labels(
+    doc_texts: Optional[dict[str, str]] = None,
+) -> list[str]:
+    """Reject static lifecycle labels from the public product status surface."""
+    texts = (
+        {rel: read(rel) for rel in TARGET_LIFECYCLE_DOCS}
+        if doc_texts is None
+        else doc_texts
+    )
+    errors: list[str] = []
+    for rel, text in texts.items():
+        for label, pattern in STATIC_TARGET_LIFECYCLE_PATTERNS.items():
+            if pattern.search(text):
+                errors.append(
+                    f"{rel} assigns or repeats static target lifecycle label "
+                    f"{label!r}; use the admission-derived product state and "
+                    "a bounded evidence basis"
+                )
+    return errors
 
 
 # --------------------------------------------------------------------------- #
@@ -297,6 +337,7 @@ def run_all_checks() -> list[str]:
     errors += check_version()
     errors += check_lock_version()
     errors += check_banned_phrases()
+    errors += check_static_target_lifecycle_labels()
     errors += check_test_count()
     errors += check_paths()
     return errors
@@ -309,7 +350,10 @@ def main() -> int:
         for e in errors:
             print(f"  - {e}")
         return 1
-    print("Consistency gate passed: versions, paths, phrases, and test count OK.")
+    print(
+        "Consistency gate passed: versions, paths, phrases, product lifecycle, "
+        "and test count OK."
+    )
     return 0
 
 

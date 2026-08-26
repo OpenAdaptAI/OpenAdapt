@@ -169,7 +169,7 @@ runtime:
   # verifier (screenshots may leave the box). Leave false unless required.
   allow_model_grounding: false
 
-  # Arm the pixel-compare identity tier's VERIFY branch (experimental,
+  # Arm the pixel-compare identity tier's VERIFY branch (disabled by default,
   # evidence-gated). Off by default: the tier can still HALT on a wrong
   # identifier or ABSTAIN, it just never pixel-VERIFIES a match. Only set true
   # on a substrate where the pixel VERIFY gate has been validated for your

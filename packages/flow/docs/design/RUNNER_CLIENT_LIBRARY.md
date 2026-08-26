@@ -1,7 +1,7 @@
 # Runner client library (L1) — verification, lease logic, evidence, command mapping
 
-**Status: Experimental. Library only — no daemon, no network loop, no CLI
-verb.** The cloud half of this protocol (`/api/runners/*` in openadapt-cloud)
+**Evidence: required unit contracts only.** This is a library. It has no daemon,
+network loop, or CLI verb. The cloud half of this protocol (`/api/runners/*` in openadapt-cloud)
 is merged but **mock-gated (410 in live mode)**, and its transport-facing
 contract must change before any customer daemon ships (see “Required contract
 revisions” below). This package (`openadapt_flow.runner`) is the

@@ -84,6 +84,33 @@ def test_real_readme_is_clean_of_banned_phrases():
 
 
 # --------------------------------------------------------------------------- #
+# product target lifecycle is admission-derived
+# --------------------------------------------------------------------------- #
+def test_static_target_lifecycle_labels_are_rejected():
+    for stale in (
+        "Lifecycle: Beta",
+        "Early access",
+        "Status: Experimental",
+        "Exploratory product",
+        "reference path",
+    ):
+        errors = cc.check_static_target_lifecycle_labels({"README.md": stale})
+        assert errors, f"static target lifecycle label was accepted: {stale!r}"
+
+
+def test_admission_derived_product_state_is_accepted():
+    text = (
+        "The exact release enters Production through an active signed, expiring, "
+        "and revocable admission. Otherwise it is not actively admitted."
+    )
+    assert cc.check_static_target_lifecycle_labels({"README.md": text}) == []
+
+
+def test_real_product_status_docs_have_no_static_target_labels():
+    assert cc.check_static_target_lifecycle_labels() == []
+
+
+# --------------------------------------------------------------------------- #
 # test-count check: absent number passes without collecting; wrong number fails
 # --------------------------------------------------------------------------- #
 def test_no_hardcoded_count_skips_collection():

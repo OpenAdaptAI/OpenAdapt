@@ -1,11 +1,11 @@
-# claims.yaml — the machine-readable maturity-claim registry.
+# claims.yaml: the machine-readable capability-claim registry.
 #
 # WHY THIS FILE EXISTS
 # --------------------
-# Every public maturity claim about openadapt-flow ("web is supported today",
+# Every public capability claim about openadapt-flow ("web is supported today",
 # "Windows has scoped acceptance") must be a FUNCTION of automated
 # evidence, not a hand-written adjective that quietly rots. This registry maps
-# each claim -> a maturity `tier` -> the specific backing test(s)/benchmark(s)
+# each claim -> an evidence `tier` -> the specific backing test(s)/benchmark(s)
 # that prove it. `scripts/validate_claims.py` enforces the tier<->evidence
 # contract in CI and regenerates `docs/VERIFICATION.md` from it.
 #

@@ -2,7 +2,7 @@
 
 **Status: current implementation map.** This file replaces the pre-integration
 architecture memo that once described `openadapt-capture` as unimplemented and
-experimental. That statement is obsolete.
+limited to a prototype. That statement is obsolete.
 
 ## Product boundary
 
@@ -11,9 +11,9 @@ The OpenAdapt launcher installs it. Focused packages provide optional input,
 interop, privacy, and operator surfaces. They do not replace Flow's internal
 evidence-rich workflow model.
 
-| Component | Current Flow integration | Lifecycle boundary |
+| Component | Current Flow integration | Qualification and admission boundary |
 | --- | --- | --- |
-| `openadapt-capture` | Supported native capture input through `openadapt-flow[capture]` and `openadapt_flow.adapters.capture` | Capture is Beta. Each native or remote workflow still needs application-specific qualification. |
+| `openadapt-capture` | Supported native capture input through `openadapt-flow[capture]` and `openadapt_flow.adapters.capture` | Capture's exact product state comes from its active release admission. Each native or remote workflow still needs application-specific qualification. |
 | `openadapt-types` | Optional interop boundary through `openadapt-flow[interop]` | The shared schema does not replace Flow's compiled IR or safety contracts. |
 | `openadapt-privacy` | Optional source and artifact privacy controls through `openadapt-flow[privacy]` | A recording never becomes safe to upload only because it compiled. |
 | `openadapt-grounding` | Optional grounding rung | It cannot authorize an action or prove an effect. |
@@ -89,4 +89,4 @@ the declared execution boundary.
 `openadapt-verifier`, `openadapt-grounding`, `openadapt-retrieval`, and
 `openadapt-viewer` are not required to record, compile, replay, or verify a
 workflow. Keep a package integration only when a live product boundary consumes
-it. Do not infer product maturity from a package name or from code presence.
+it. Do not infer product state from a package name or from code presence.

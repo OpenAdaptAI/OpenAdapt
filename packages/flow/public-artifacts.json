@@ -617,7 +617,7 @@
     },
     {
       "path": "claims.yaml",
-      "sha256": "2243e1fd44a68b40496d4be35303c5cdc3d2416c78d5008d5880898e6340bb82"
+      "sha256": "6a20ce8ec0c242e7177f1ca5af174e3072a25e84cbb4d307da7729b240397687"
     },
     {
       "path": "deploy/on-prem/docker-compose.yml",
@@ -657,7 +657,7 @@
     },
     {
       "path": "docs/deployment.example.yaml",
-      "sha256": "e677ef569116e7256600f806b12e8918e9390fe7f2bab73ae23f8d9d8552d4d9"
+      "sha256": "ffd73bb4ab46ea0e285bfd9a30c31df05fc927539552232487c81b9cf361c0de"
     },
     {
       "path": "docs/showcase-encounter-loop/body/manifest.json",
