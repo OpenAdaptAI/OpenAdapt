@@ -2,6 +2,26 @@
 
 <!-- version list -->
 
+## v1.15.1 (2026-08-26)
+
+### Bug Fixes
+
+- **ci**: Use the complete lifecycle action pin
+  ([#1114](https://github.com/OpenAdaptAI/OpenAdapt/pull/1114),
+  [`8abd5cc`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8abd5cc0e20f779de81e0f50021c9bb0d41c31bd))
+
+### Chores
+
+- **release**: Reconcile platform BOM
+  ([`fea7ab0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fea7ab0e0e4326bbc40277d3b44fcaefd67b5880))
+
+### Documentation
+
+- Lead with the verified base-package quickstart
+  ([#1115](https://github.com/OpenAdaptAI/OpenAdapt/pull/1115),
+  [`d83123b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d83123b660b5f87e14c5733b38d9efb49acf56f4))
+
+
 ## v1.15.0 (2026-08-26)
 
 ### Bug Fixes
