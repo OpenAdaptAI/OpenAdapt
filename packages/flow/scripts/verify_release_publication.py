@@ -23,9 +23,7 @@ def artifact_digests(dist: Path) -> dict[str, str]:
     """Return SHA-256 digests for exactly one wheel and one sdist."""
     files = sorted(path for path in dist.iterdir() if path.is_file())
     artifacts = [
-        path
-        for path in files
-        if path.suffix == ".whl" or path.name.endswith(".tar.gz")
+        path for path in files if path.suffix == ".whl" or path.name.endswith(".tar.gz")
     ]
     if len(artifacts) != 2:
         raise PublicationError("dist must contain exactly one wheel and one sdist")
@@ -58,7 +56,9 @@ def _request(
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             return None
-        raise PublicationError(f"publication query failed with HTTP {exc.code}") from exc
+        raise PublicationError(
+            f"publication query failed with HTTP {exc.code}"
+        ) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise PublicationError(f"publication query failed: {exc}") from exc
 
@@ -145,7 +145,9 @@ def verify_github_release(
             accept="application/octet-stream",
         )
         if content is None:
-            raise PublicationError("GitHub release artifact disappeared during download")
+            raise PublicationError(
+                "GitHub release artifact disappeared during download"
+            )
         actual[asset["name"]] = hashlib.sha256(content).hexdigest()
     if actual != expected:
         raise PublicationError(
@@ -157,9 +159,7 @@ def verify_github_release(
 def _write_outputs(path: Path, *, pypi_exists: bool, release_exists: bool) -> None:
     with path.open("a", encoding="utf-8") as output:
         output.write(f"publish_pypi={'false' if pypi_exists else 'true'}\n")
-        output.write(
-            f"create_github_release={'false' if release_exists else 'true'}\n"
-        )
+        output.write(f"create_github_release={'false' if release_exists else 'true'}\n")
 
 
 def main() -> int:
