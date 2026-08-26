@@ -407,64 +407,93 @@ def test_all_workflows_use_pinned_actions() -> None:
     assert mutable == []
 
 
-def test_semantic_release_requires_dispatched_exact_head_production_evidence() -> None:
+def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
 
     triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
-    auto = workflow[
-        workflow.index("\n  auto-release:") : workflow.index("\n  manual-publish:")
+    release = workflow[
+        workflow.index("\n  create-release-tag:") : workflow.index("\n  validate-tag:")
     ]
-    wait_index = auto.index("- name: Wait for exact-head full-matrix qualification")
-    current_main_index = auto.index(
-        "- name: Require dispatched head to remain current protected main"
+    current_main_index = release.index(
+        "- name: Require the reviewed release candidate on current main"
     )
-    release_index = auto.index("- name: Python Semantic Release")
+    qualification_index = release.index(
+        "- name: Require exact-main release qualification"
+    )
+    artifact_index = release.index(
+        "- name: Build and verify the exact release artifacts"
+    )
+    tag_index = release.index("- name: Create and push one annotated release tag")
 
-    assert "  push:" not in triggers
-    assert "operation:" in triggers
-    assert "- semantic-release" in triggers
-    assert "- publish-existing-ref" in triggers
-    assert "inputs.operation == 'semantic-release'" in auto
-    assert "actions: read # inspect exact-head full-matrix CI" in auto
-    assert wait_index < current_main_index < release_index
-    assert "python3 scripts/check_release_ci.py" in auto
-    assert '--repository "$GITHUB_REPOSITORY"' in auto
-    assert '--sha "$GITHUB_SHA"' in auto
-    assert "--wait-seconds 2700" in auto
-    assert "--poll-seconds 10" in auto
+    assert "  workflow_dispatch:" in triggers
+    assert "      version:" in triggers
+    assert "  push:" in triggers
+    assert 'tags: ["v*"]' in triggers
+    assert "environment: release-identity" in release
+    assert "actions/create-github-app-token@" in release
+    assert "vars.OPENADAPT_RELEASE_APP_ID" in release
+    assert "secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY" in release
+    assert "permission-contents: write" in release
+    assert "token: ${{ steps.release-app.outputs.token }}" in release
+    assert current_main_index < qualification_index < artifact_index < tag_index
+    assert "python scripts/check_release_ci.py" in release
+    assert '--repository "${GITHUB_REPOSITORY}"' in release
+    assert '--sha "${GITHUB_SHA}"' in release
+    assert "--wait-seconds 2700" in release
+    assert "--poll-seconds 10" in release
     assert (
-        "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main" in auto
+        "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
+        in release
     )
-    assert 'current_main="$(git rev-parse refs/remotes/origin/main)"' in auto
-    assert '[ "$current_main" != "$GITHUB_SHA" ]' in auto
-    assert "gh api" not in auto
+    assert 'current_main="$(git rev-parse refs/remotes/origin/main)"' in release
+    assert '"${current_main}" != "${GITHUB_SHA}"' in release
+    assert "python scripts/check_release_consistency.py" in release
+    assert "python scripts/validate_claims.py --check --structure-only" in release
+    assert "python scripts/check_release_consistency.py --require-dist" in release
+    assert "git tag --annotate" in release
+    assert 'git push origin "refs/tags/${release_tag}"' in release
+    assert "python-semantic-release/python-semantic-release" not in workflow
+    assert "ADMIN_TOKEN" not in workflow
     gate = (ROOT / "scripts/check_release_ci.py").read_text()
     assert "require_production_qualification" in gate
     assert "quickstart-lifecycle.yml" in gate
 
 
-def test_manual_publish_requires_dispatched_exact_target_full_matrix() -> None:
+def test_tag_publication_requires_exact_tag_oidc_and_digest_verification() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
-    manual = workflow[workflow.index("\n  manual-publish:") :]
-    validate_index = manual.index("Independently validate publication artifacts")
-    publish_index = manual.index("- name: Publish to PyPI")
+    validate = workflow[
+        workflow.index("\n  validate-tag:") : workflow.index("\n  publish-tag:")
+    ]
+    publish = workflow[workflow.index("\n  publish-tag:") :]
+    build_index = publish.index("- name: Build and verify publication artifacts")
+    pypi_index = publish.index("- name: Publish to PyPI with trusted publishing")
+    verify_index = publish.index(
+        "- name: Verify both publication surfaces and artifact digests"
+    )
 
-    assert "github.ref == 'refs/heads/main'" in manual
-    assert "inputs.operation == 'publish-existing-ref'" in manual
-    assert "actions: read" in manual
-    assert "git merge-base --is-ancestor" in manual
-    assert "python3 guard/scripts/check_release_ci.py" in manual
-    assert '--repository "$GITHUB_REPOSITORY"' in manual
-    assert '--sha "$TARGET_SHA"' in manual
-    assert "--wait-seconds" not in manual
-    assert "gh api" not in manual
+    assert "GITHUB_EVENT_NAME" in validate
+    assert "GITHUB_REF_TYPE" in validate
+    assert '${GITHUB_ACTOR}" != "openadapt-release[bot]' in validate
+    assert "GITHUB_TRIGGERING_ACTOR" not in validate
+    assert "^refs/tags/v([0-9]+\\.[0-9]+\\.[0-9]+)$" in validate
+    assert "environment: pypi" in publish
+    assert "id-token: write" in publish
+    assert "persist-credentials: false" in publish
+    assert "git cat-file -t" in publish
+    assert "git merge-base --is-ancestor" in publish
+    assert "python scripts/check_release_ci.py" in publish
+    assert '--sha "${GITHUB_SHA}"' in publish
+    assert "python scripts/validate_claims.py --check --structure-only" in publish
+    assert "python scripts/check_release_consistency.py --require-dist" in publish
+    assert "pypa/gh-action-pypi-publish@" in publish
+    assert "python-semantic-release/publish-action@" in publish
+    assert "scripts/verify_release_publication.py" in publish
+    assert "--allow-missing" in publish
+    assert "--wait-seconds 180" in publish
+    assert build_index < pypi_index < verify_index
     gate = (ROOT / "scripts/check_release_ci.py").read_text()
     assert "require_production_qualification" in gate
     assert "quickstart-lifecycle.yml" in gate
-    assert "--validate-dist-dir target/dist" in manual
-    assert "--license-file target/LICENSE" not in manual
-    assert "packages-dir: target/dist/" in manual
-    assert validate_index < publish_index
 
 
 def _metadata_bytes(*, version: str = "1.0", license_name: str = "MIT") -> bytes:

@@ -52,17 +52,37 @@ intentionally a second lane: it runs nightly and as an explicit release
 qualification, avoiding four redundant full-suite jobs on every routine merge
 without reducing the required merge or exact-main gates.
 
-Before a release, dispatch the full matrix on the exact candidate ref:
+Prepare each release in a reviewed pull request. Update the version in
+`pyproject.toml`, `openadapt_flow/__init__.py`, and the editable root entry in
+`uv.lock`. Add the matching `CHANGELOG.md` section, then run the package and
+claims checks:
+
+```bash
+python scripts/check_release_consistency.py
+python scripts/validate_claims.py --check --structure-only
+uv build --wheel --sdist
+python scripts/check_release_consistency.py --require-dist
+```
+
+After that pull request merges, dispatch the full matrix on the exact candidate
+ref:
 
 ```bash
 gh workflow run ci.yml --ref <candidate-ref>
 ```
 
-Wait for all four `test-matrix` jobs and the unchanged required jobs to pass
-before publishing. The release workflow independently resolves the exact
-candidate SHA and refuses both semantic and recovery publication unless that
-dispatched CI run completed successfully with all four matrix jobs present and
-green.
+Wait for all four `test-matrix` jobs and the unchanged required jobs to pass.
+Then create the reviewed version tag from protected main:
+
+```bash
+gh workflow run release.yml --ref main -f version=<reviewed-version>
+```
+
+The release App can push that annotated tag. It can't push a version commit to
+main. The tag run rebuilds the package, repeats the source, license, and claims
+checks, publishes through PyPI Trusted Publishing, and compares the public
+artifact digests with the local build. If a publication step fails, rerun the
+same tag run. Don't create a recovery tag.
 
 ## Pull request guidelines
 

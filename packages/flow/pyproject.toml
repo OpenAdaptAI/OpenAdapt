@@ -308,10 +308,9 @@ exclude = [
 testpaths = ["tests"]
 timeout = 600
 
-# Auto-release (matches the other openadapt repos). Python Semantic Release
-# computes the next version from Conventional Commit subjects since the last
-# tag: `feat:` -> minor, `fix:`/`perf:` -> patch, `BREAKING CHANGE` -> major.
-# See .github/workflows/release.yml.
+# Release preparation helper. Python Semantic Release can compute the next
+# version from reviewed Conventional Commit subjects. The result must enter
+# main through a pull request before .github/workflows/release.yml can tag it.
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 # Keep the package __version__ in lockstep with the pyproject version so a
