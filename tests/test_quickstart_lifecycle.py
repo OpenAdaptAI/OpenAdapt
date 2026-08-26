@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -95,3 +96,11 @@ def test_workflow_runs_the_public_command_in_one_bounded_weekly_job():
     run = next(step["run"] for step in steps if step.get("name", "").startswith("Run"))
     assert "scripts/quickstart_lifecycle.py" in run
     assert "--browser-with-deps" in run
+
+
+def test_workflow_pins_actions_to_full_commit_shas():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    action_refs = re.findall(r"(?m)^\s*uses:\s+\S+@([^\s#]+)", workflow)
+
+    assert action_refs
+    assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs)
