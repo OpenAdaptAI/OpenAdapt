@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
-from scripts.verify_pypi_release import (
-    MAX_METADATA_BYTES,
-    PYPI_PROJECT,
-    PublicationAbsent,
-    PublicationPending,
-    ReleaseVerificationError,
-    verify_pypi_release,
-)
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "verify_pypi_release.py"
+SPEC = importlib.util.spec_from_file_location("verify_pypi_release", SCRIPT)
+assert SPEC and SPEC.loader
+MODULE = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = MODULE
+SPEC.loader.exec_module(MODULE)
+
+MAX_METADATA_BYTES = MODULE.MAX_METADATA_BYTES
+PYPI_PROJECT = MODULE.PYPI_PROJECT
+PublicationAbsent = MODULE.PublicationAbsent
+PublicationPending = MODULE.PublicationPending
+ReleaseVerificationError = MODULE.ReleaseVerificationError
+verify_pypi_release = MODULE.verify_pypi_release
 
 VERSION = "9.8.7"
 
