@@ -3,6 +3,26 @@
 Source for the OpenAdapt technical paper and its workshop condensation. This is
 a submission draft, not a submitted paper.
 
+## Which paper is this? (the three-tree map)
+
+Three paper trees exist in the organization, and they are different papers:
+
+1. **This tree** — "Compile Once, Govern Every Repair" — the SYSTEMS paper
+   about the engine: compilation, deterministic replay, governed repair.
+2. **`openadapt-attest-bench` `paper/`** (private) — the MEASUREMENT paper
+   lineage ("Silent Wrong Actions..." extended version and its build
+   profiles): false-accept audits and certificates for execution-based
+   checkers. Canonical source for that lineage; tables generate from the
+   committed measurement artifacts.
+3. **`openadapt-internal` `docs/workshop-draft-verify-agents-2026-08-25/`**
+   (private) — the frozen source of the Aug 29, 2026 workshop submission
+   ("Measuring the Checkers"), a condensation of tree 2. After the
+   deadline it points to tree 2.
+
+The two papers cite each other (the measurement paper uses this paper's
+system as its instrument) and must not be merged: different claims,
+different audiences.
+
 Everything mechanically checkable is done: `python paper/check_artifacts.py`
 passes, `make -C paper` builds both PDFs with zero LaTeX warnings, and
 `sh paper/make_arxiv_tarball.sh` produces a verified submission tarball.
