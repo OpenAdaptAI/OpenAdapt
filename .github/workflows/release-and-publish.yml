@@ -262,6 +262,7 @@ jobs:
     needs: [build-and-attest, publish-pypi]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment: pypi
     permissions:
       contents: read
 

@@ -188,6 +188,7 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     assert publish["uses"].startswith("pypa/gh-action-pypi-publish@")
     assert publish["with"] == {"skip-existing": True}
 
+    assert jobs["publish-github"]["environment"] == "pypi"
     publish_steps = jobs["publish-github"]["steps"]
     app = next(step for step in publish_steps if step.get("id") == "release-app")
     assert app["uses"].startswith("actions/create-github-app-token@")
