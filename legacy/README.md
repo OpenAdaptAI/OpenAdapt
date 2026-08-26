@@ -345,7 +345,7 @@ You can assume that you have access to the following functions:
 - `get_events(recording)`: Returns a list of `ActionEvent` objects for the given
   recording.
 
-See [GitBook Documentation](https://openadapt.gitbook.io/openadapt.ai/) for more.
+See the [current OpenAdapt documentation](https://docs.openadapt.ai/) for more.
 
 ### Instructions
 
