@@ -4,6 +4,13 @@
 [![PyPI](https://img.shields.io/pypi/v/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![OpenAdapt GitHub stars](https://img.shields.io/github/stars/OpenAdaptAI/OpenAdapt?label=OpenAdapt%20stars)](https://github.com/OpenAdaptAI/OpenAdapt)
+
+[Try it in your browser](https://app.openadapt.ai/demo) ·
+[Website](https://openadapt.ai) ·
+[Docs](https://docs.openadapt.ai) ·
+[Discussions](https://github.com/OpenAdaptAI/openadapt-flow/discussions) ·
+[Contributing](CONTRIBUTING.md)
 
 **openadapt-flow is the OpenAdapt engine: a governed demonstration compiler.**
 Record a task once, compile it to a deterministic program, and replay that
@@ -47,6 +54,14 @@ measure silent incorrect success, over-halt, effect confirmation, latency, and
 model calls. Read the technical [limits](docs/LIMITS.md) and
 [validation method](docs/validation/VALIDATION.md), including five adversarial
 rounds against the wrong-target check.
+
+Two measured comparisons, both run 2026-07-08 on the same pre-v0.2.0 source
+build (full method and caveats in [Benchmark](#benchmark)):
+
+| Task | Compiled replay | Computer-use agent |
+|---|---|---|
+| OpenEMR public demo, 18-step field run ([method](benchmark/openemr/BENCHMARK.md)) | 19/20 effect-verified at 39.2s median, $0 model cost; run 20 was a safe halt | 10/10 at 70.4s median, about $0.55/run |
+| MockMed bundled fixture, CI-reproducible ([method](benchmark/BENCHMARK.md)) | 100/100 at 4.9s p50, $0 model cost | 20/20 at 37.5s p50, about $0.27/run |
 
 ## Try it
 
@@ -347,14 +362,14 @@ export OPENADAPT_FLOW_SECRET_PASSWORD='…'                 # supplied at replay
 openadapt-flow replay bundle --backend web --url https://your.app
 ```
 
-Evidence splits in two. **Identity evidence** — the DOM selector, the control
+Evidence splits in two. **Identity evidence** is the DOM selector, the control
 role, the accessible name, the clicked row's identity characters, and the
-receiving field's name — is exact or withheld with a stated reason, because
+receiving field's name. It is exact or withheld with a stated reason, because
 replay compares it against the live page and a rewritten copy would compare
-against text the page never showed. **Reflected evidence** — the page URL and
-the title — is sampled from Python once the page has settled, never inside the
-capture-phase listener, which runs before the page's own handlers and so reads
-the previous action's text.
+against text the page never showed. **Reflected evidence** is the page URL and
+the title. It is sampled from Python once the page has settled, never inside
+the capture-phase listener, which runs before the page's own handlers and so
+reads the previous action's text.
 
 Within a document, a URL is reduced by **structure**: Flow reports the origin
 and the path, keeps every parameter name, and drops the value of any parameter
@@ -406,14 +421,18 @@ flowchart LR
   G --> P["replay / run<br/>0 model calls on the healthy path"]
   P -->|bounded drift| H["heal<br/>reviewable diff back into the bundle"]
   H --> P
-  P -->|identity or effect fails| X{{"HALT<br/>for a human or an AI"}}
+  P --> V["verify<br/>independent read of the system of record"]
+  V --> OK{{"VERIFIED"}}
+  P -->|identity fails| X{{"HALT<br/>with evidence, for a human or an AI"}}
+  V -->|effect refuted or unverifiable| X
 ```
 
 *Text summary (PyPI does not render Mermaid): record on any substrate, compile
 the demonstration to a bundle, gate it with lint / certify, then replay or run
 with zero model calls on the healthy path. Bounded drift heals back into the
-bundle as a reviewable diff; an identity or effect failure halts for a human or
-an AI.*
+bundle as a reviewable diff. A configured verifier reads the system of record
+independently; a confirmed effect ends `VERIFIED`, and an identity failure or a
+refuted or unverifiable effect halts with evidence for a human or an AI.*
 
 Each compiled step carries a template crop, an OCR label, geometry landmarks,
 a structural locator, and postconditions derived from what the demo actually
@@ -460,7 +479,7 @@ runtime. Each surface keeps its own deployment and evidence boundary.
 | Remote display (RDP) | Local or customer-controlled | Exact client window or network session, remote-display identity, and an independent effect check |
 | Citrix / VDI | Local or customer-controlled | Exact Workspace, server, application, display, identity, and effect contracts, with counted ICA/HDX trials |
 
-Per-substrate engineering evidence is reported honestly per the
+Per-substrate engineering evidence is reported per the
 [capability and qualification matrix](docs/PRODUCT_STATUS.md):
 
 | Substrate | Selector | Evidence basis | Evidence |
@@ -505,7 +524,7 @@ Compiled workflows can also be emitted as Agent Skills or MCP servers
 A single demonstration under-specifies intent, so openadapt-flow does not stop
 at replaying one. These capabilities layer onto the same $0, model-free runtime:
 
-- **A workflow *program*, not just a line of steps.** Beyond the linear v0
+- **A workflow *program*.** Beyond the linear v0
   bundle, the IR (`openadapt_flow/ir.py`) expresses a parameterized program:
   states and guarded transitions, loops over worklists, subflows, typed
   parameters, predicates, and exception paths (`ProgramGraph` / `State` /
@@ -668,6 +687,20 @@ bundle signs in, opens the patient, starts an encounter, enters the `<note>`
 parameter, and saves it. Each click is re-found from retained evidence rather
 than replayed at a literal screen coordinate.*
 
+## Compared with agents and RPA
+
+| | Computer-use agents | Traditional RPA | openadapt-flow |
+|---|---|---|---|
+| Authoring | Prompt per task | Studio flowcharts and selectors | Record one demonstration |
+| Healthy-run model cost | Metered per model turn; screenshots are billed as image input each step | None, but per-seat or per-robot licensing | $0; zero model calls |
+| Interface drift | Re-reasons from the screen every run, so no two runs are guaranteed alike | Selectors break; fixes are manual or a paid healing add-on | Bounded re-resolution from retained evidence; every fix is a reviewable diff |
+| Success signal | The acting model reports what it sees | The session's own success signals | Independent out-of-band read of the system of record |
+| On uncertainty | Keeps attempting until it believes it is done or its budget runs out | Retry policy per operator configuration | Halts with evidence; uncertain delivery is classified for reconciliation, never blind-retried |
+
+Sourced, dimension-by-dimension comparisons against UiPath, Power Automate,
+browser agents, and computer-use agents:
+[openadapt.ai/compare](https://openadapt.ai/compare).
+
 ## Benchmark
 
 ![OpenEMR: compiled replay vs computer-use agent, latency and cost](benchmark/openemr/latency_cost.png)
@@ -697,10 +730,10 @@ For a controlled, CI-reproducible comparison (the methodology anchor) we
 ran the bundled MockMed task both ways on 2026-07-08, on the same
 openadapt-flow 0.1.0 pre-v0.2.0 source build, with the same OCR
 success check: 100 compiled replays against 20 runs of the same agent.
-Both arms went 100 for 100 and 20 for 20, so on an app this simple the
-story isn't success rate. It's that a compiled replay finishes in 4.9s
-(p50; 5.1s p95) with zero model calls, while the agent takes 37.5s (p50;
-43.4s p95). The measured agent sample cost about $0.27 per run at the model's
+Both arms went 100 for 100 and 20 for 20, so on an app this simple
+success rate does not separate them. Cost and latency do: a compiled
+replay finishes in 4.9s (p50; 5.1s p95) with zero model calls, while the
+agent takes 37.5s (p50; 43.4s p95). The measured agent sample cost about $0.27 per run at the model's
 then-current list price; repeat-run figures are projections and exclude
 authoring, maintenance, and infrastructure. Full
 numbers, methodology, and caveats:
@@ -933,6 +966,45 @@ deployment-bound action service. Add `--remote-decisions` for the outbound
 phone lane when `human_decisions.remote.enabled` names the exact tenant and
 runner and the authenticated runner token is present. The sanitizer uses the
 optional `privacy` extra; hosted transport uses `httpx`.
+
+## FAQ
+
+**How is this different from a computer-use agent?** For a task nobody has
+automated before, an agent is the right tool. For a repeated task, re-reasoning
+on every run costs money, adds variance, and never checks whether the write
+landed: on the OpenEMR field run above, compiled replay went 19/20
+effect-verified at $0 model cost and 39.2s median against the agent's 10/10 at
+about $0.55/run and 70.4s median. Agents are the fallback, not the steady
+state.
+
+**How is this different from RPA?** RPA also replays deterministically, but it
+breaks silently at drift and verifies by what the screen shows. Here drift
+re-resolves from evidence retained at demonstration time into a reviewable
+diff, writes are verified out of band against the system of record, and an
+unverifiable run halts.
+
+**What happens when a run fails?** It halts with a report naming the violated
+expectation, and a step classified irreversible refuses to act on a
+low-confidence match at all. If a backend error leaves delivery uncertain, the
+run returns `RECONCILIATION_REQUIRED` for an operator to reconcile; it never
+blind-retries a write. A durable run pauses at the halt and can resume from the
+last verified checkpoint after approval.
+
+**How are secrets and PHI handled?** Secret input values stay page-local: the
+literal never reaches Python, the bound field region is masked in saved
+frames, and replay injects the value from the environment. Everything runs
+locally, and the healthy path makes zero outbound calls. Bundles can be sealed
+with AES-256-GCM at rest, and the shareable receipt is generated from a closed
+allow-list, so it cannot carry a screenshot, typed value, or URL.
+
+**Is this production-ready?** Production is not a static label here. Flow
+enters Production only through an active signed, expiring, and revocable
+release admission; the current admission-derived state is published at
+[openadapt.ai/status.json](https://openadapt.ai/status.json), and each
+workflow additionally needs its own qualification with counted trials. Browser
+is the strongest substrate today; Windows, macOS, Linux, and RDP carry counted
+3/3 acceptance evidence; Citrix awaits a counted ICA/HDX run. See the
+[capability and qualification matrix](docs/PRODUCT_STATUS.md).
 
 ## Development
 
