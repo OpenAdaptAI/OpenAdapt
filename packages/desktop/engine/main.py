@@ -226,8 +226,8 @@ def main() -> None:
 
     handler = IPCHandler(config=config, services=services)
 
-    # EXPERIMENTAL runner lane: resume the outbound dispatch loop only when the
-    # operator explicitly enabled it (off by default; toggled on the Runner screen).
+    # Resume the outbound dispatch loop only when the operator explicitly enabled
+    # it (off by default; toggled on the Runner screen).
     if config.runner_enabled:
         try:
             handler.dispatcher.runner_status()  # builds the shared service

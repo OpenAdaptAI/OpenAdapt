@@ -1,4 +1,4 @@
-"""Tests for the EXPERIMENTAL runner loop (spec: hosted runner platform, P0 desktop lane).
+"""Tests for the outbound runner loop (spec: hosted runner platform, P0 desktop lane).
 
 Covers, against a FAKE cloud (httpx.MockTransport -- no network):
   * register -> poll -> lease -> execute -> evidence -> ack semantics;

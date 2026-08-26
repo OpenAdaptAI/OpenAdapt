@@ -9,6 +9,8 @@ name: Release and PyPI Publish
 #
 # Ordinary merges run Test and Build artifacts only. Publication is a separate,
 # deliberate operation after the release train's exact main commit is green.
+# Publication creates an unadmitted release candidate. It never changes the
+# admission-driven Production channel.
 #
 # Requires ADMIN_TOKEN (GitHub PAT with repo scope) to push the release commit
 # and tag through branch protection. PyPI publication uses Trusted Publishing.

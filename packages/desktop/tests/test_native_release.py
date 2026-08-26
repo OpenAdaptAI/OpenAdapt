@@ -51,6 +51,17 @@ from scripts.native_release import (
     write_verified_release_index,
     write_website_release_manifest,
 )
+from scripts.production_release import (
+    CHANNEL_PREFIX,
+    DESKTOP_REPOSITORY,
+    PROMOTION_WORKFLOW,
+    build_admission_state,
+    production_channel_asset_name,
+    validate_admission_state,
+    verify_production_channel,
+    write_admission_state,
+    write_production_channel,
+)
 from scripts.verify_native_release_download import (
     verify as verify_download_inventory,
 )
@@ -91,7 +102,7 @@ def test_node_dependencies_are_locked_for_cross_platform_tauri_builds() -> None:
     assert lock["packages"]["node_modules/@tauri-apps/api"]["version"] == "2.11.1"
 
 
-def test_native_workflows_are_pinned_and_preserve_beta_boundary() -> None:
+def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
     build = _workflow("build.yml")
     release = _workflow("native-release.yml")
     uses = _workflow_uses(build) + _workflow_uses(release)
@@ -202,14 +213,14 @@ def test_engine_and_native_release_form_one_attested_acceptance_chain() -> None:
     assert mirror_steps["Attest the verified release index"]["with"] == {
         "subject-path": VERIFIED_RELEASE_INDEX
     }
-    channel = mirror_steps["Write the monotonic stable channel descriptor"]["run"]
+    channel = mirror_steps["Write the monotonic candidate channel descriptor"]["run"]
     assert "write-release-channel" in channel
     assert "--existing prior-channel/openadapt-desktop-channel.json" in channel
     assert "validate-release-channel" in channel
-    assert mirror_steps["Attest the monotonic stable channel descriptor"]["with"] == {
+    assert mirror_steps["Attest the monotonic candidate channel descriptor"]["with"] == {
         "subject-path": VERIFIED_RELEASE_CHANNEL
     }
-    publication = mirror_steps["Publish and reverify the stable channel authority"]["run"]
+    publication = mirror_steps["Publish and reverify the candidate channel authority"]["run"]
     assert "channel_tag=desktop-channel" in publication
     assert "gh attestation verify" in publication
     assert "--clobber" in publication
@@ -336,9 +347,10 @@ def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None
     assert "HEAD:main" not in scripts
     assert "git tag" not in scripts
     assert 'git push origin "refs/tags/' not in scripts
-    assert "dispatch native-release.yml from main" in proposal_steps[
-        "Open or report the protected-main pull request"
-    ]["run"]
+    assert (
+        "dispatch native-release.yml from main"
+        in proposal_steps["Open or report the protected-main pull request"]["run"]
+    )
 
 
 def test_native_version_pr_guard_never_skips_and_judges_content() -> None:
@@ -420,7 +432,7 @@ def test_updater_feed_is_disabled_until_signing_key_lifecycle_exists() -> None:
     assert "updater" not in config["plugins"]
     assert config["bundle"]["targets"] == ["dmg", "msi", "nsis", "deb", "appimage"]
     # Target releases inherit APPLE_SIGNING_IDENTITY and keep hardened runtime.
-    # The explicit ad-hoc overlay is only for unsigned beta artifacts.
+    # The explicit ad-hoc overlay is only for unsigned CI artifacts.
     assert "signingIdentity" not in config["bundle"]["macOS"]
     assert config["bundle"]["macOS"]["entitlements"] == "Entitlements.plist"
     entitlements = (ROOT / "src-tauri" / config["bundle"]["macOS"]["entitlements"]).read_text()
@@ -663,7 +675,7 @@ def test_native_tag_tuple_orders_versions_and_rejects_foreign_tags() -> None:
 
 
 def test_superseded_notes_prepends_marker_and_preserves_body() -> None:
-    body = "<!-- installer-release -->\n\n# Beta Native Installers\n\nDetails.\n"
+    body = "<!-- installer-release -->\n\n# Native Release Candidates\n\nDetails.\n"
 
     updated = superseded_notes(body, "desktop-v0.5.0", "OpenAdaptAI/openadapt-desktop")
 
@@ -812,7 +824,7 @@ def test_native_release_workflow_mirrors_installers_onto_the_engine_release() ->
         ),
     ],
 )
-def test_stage_artifacts_renames_and_labels_beta(
+def test_stage_artifacts_renames_and_labels_candidate(
     tmp_path: Path,
     platform: str,
     signing: str,
@@ -836,13 +848,13 @@ def test_stage_artifacts_renames_and_labels_beta(
     asset_names = [path.name for path in staged if path.suffix != ".json"]
     assert len(asset_names) == len(expected_suffixes)
     current_version = native_version()
-    assert all(f"Beta-v{current_version}" in name for name in asset_names)
+    assert all(f"Candidate-v{current_version}" in name for name in asset_names)
     assert all(any(name.endswith(suffix) for name in asset_names) for suffix in expected_suffixes)
 
     metadata_path = next(path for path in staged if path.suffix == ".json")
     metadata = json.loads(metadata_path.read_text())
     assert metadata["native_version"] == current_version
-    assert metadata["lifecycle"] == "Beta"
+    assert metadata["lifecycle"] == "Candidate"
     assert metadata["surface"] == "installed desktop pairing and authoring companion"
     assert metadata["verification_scope"] == (
         "cross-platform install/uninstall, self-contained Flow runtime, "
@@ -885,7 +897,7 @@ def test_stage_rejects_missing_duplicate_and_wrong_signing(tmp_path: Path) -> No
 
 def test_checksum_round_trip_and_tamper_detection(tmp_path: Path) -> None:
     (tmp_path / "a.bin").write_bytes(b"alpha")
-    (tmp_path / "b.bin").write_bytes(b"beta")
+    (tmp_path / "b.bin").write_bytes(b"candidate")
     manifest = tmp_path / "SHA256SUMS"
 
     entries = write_checksums(tmp_path, manifest)
@@ -917,7 +929,7 @@ def _release(tag: str, *, marked: bool = True, draft: bool = False) -> dict:
         "tag_name": tag,
         "draft": draft,
         "prerelease": True,
-        "body": "<!-- installer-release -->\n" if marked else "Beta installer",
+        "body": "<!-- installer-release -->\n" if marked else "Candidate installer",
     }
 
 
@@ -1142,7 +1154,7 @@ def test_release_provenance_attestation_and_workflow_run_bind_exact_identity(
         "Windows x86_64",
         "Linux x86_64 (GitHub-attested bytes)",
         "Checksum and attest exact release bytes",
-        "Publish the verified Beta prerelease",
+        "Publish the verified candidate prerelease",
     ]
     workflow_payload = {
         "databaseId": 123456,
@@ -1423,7 +1435,7 @@ def _engine_release_file(tmp_path: Path, *, version: str | None = None) -> Path:
     return path
 
 
-def test_engine_release_requires_exact_stable_identity(tmp_path: Path) -> None:
+def test_engine_release_requires_exact_published_identity(tmp_path: Path) -> None:
     release = _engine_release_file(tmp_path)
     validated = validate_engine_release(
         release,
@@ -1436,7 +1448,7 @@ def test_engine_release_requires_exact_stable_identity(tmp_path: Path) -> None:
     payload = json.loads(release.read_text(encoding="utf-8"))
     payload["isPrerelease"] = True
     release.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(ValueError, match="exact published stable release"):
+    with pytest.raises(ValueError, match="exact published engine release"):
         validate_engine_release(
             release,
             repository="OpenAdaptAI/openadapt-desktop",
@@ -1621,7 +1633,7 @@ def test_verified_release_index_is_closed_bound_and_monotonic(tmp_path: Path) ->
         )
 
 
-def test_stable_release_channel_is_hash_bound_and_strictly_monotonic(
+def test_candidate_release_channel_is_hash_bound_and_strictly_monotonic(
     tmp_path: Path,
 ) -> None:
     release, _manifest, checksums = _stage_complete_release(tmp_path / "assets")
@@ -1679,6 +1691,43 @@ def test_stable_release_channel_is_hash_bound_and_strictly_monotonic(
             run_attempt=1,
             existing=channel,
         )
+
+
+def test_candidate_channel_accepts_the_legacy_selector_for_one_way_migration(
+    tmp_path: Path,
+) -> None:
+    release, _manifest, checksums = _stage_complete_release(tmp_path / "assets")
+    index = write_verified_release_index(
+        tmp_path / VERIFIED_RELEASE_INDEX,
+        directory=release,
+        checksums=checksums,
+        provenance_path=release / NATIVE_RELEASE_PROVENANCE,
+        repository=DESKTOP_REPOSITORY,
+        tag=f"desktop-v{native_version()}",
+        source_commit="a" * 40,
+        engine_release_path=_engine_release_file(tmp_path),
+    )
+    (tmp_path / "current").mkdir()
+    channel = write_verified_release_channel(
+        tmp_path / "current" / VERIFIED_RELEASE_CHANNEL,
+        index_path=index,
+        repository=DESKTOP_REPOSITORY,
+        workflow_ref=(
+            f"{DESKTOP_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
+        ),
+        workflow_commit="a" * 40,
+        run_id=123456,
+        run_attempt=2,
+    )
+    legacy_value = json.loads(channel.read_text(encoding="utf-8"))
+    legacy_value["schema"] = "openadapt.desktop-release-channel/v1"
+    legacy_value["channel"] = "stable-native"
+    legacy = tmp_path / "legacy" / VERIFIED_RELEASE_CHANNEL
+    legacy.parent.mkdir()
+    legacy.write_text(json.dumps(legacy_value), encoding="utf-8")
+
+    assert validate_verified_release_channel(legacy)["schema"].endswith("/v1")
+    assert download_verifier.validate_channel(legacy)["channel"] == "stable-native"
 
 
 def test_release_channel_refuses_tag_origin_promotion(tmp_path: Path) -> None:
@@ -2330,3 +2379,333 @@ def test_native_version_at_ref_reads_git_objects_not_the_working_tree() -> None:
 
     assert native_version_at_ref(head) == native_version()
     assert native_version_at_ref("HEAD") == native_version()
+
+
+def _production_admission_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, dict]:
+    version = native_version()
+    release, _manifest, checksums = _stage_complete_release(tmp_path / "native")
+    engine_release = _engine_release_file(tmp_path)
+    index = write_verified_release_index(
+        tmp_path / VERIFIED_RELEASE_INDEX,
+        directory=release,
+        checksums=checksums,
+        provenance_path=release / NATIVE_RELEASE_PROVENANCE,
+        repository=DESKTOP_REPOSITORY,
+        tag=f"desktop-v{version}",
+        source_commit="a" * 40,
+        engine_release_path=engine_release,
+    )
+    engine_directory = tmp_path / "engine-files"
+    engine_directory.mkdir()
+    (engine_directory / f"openadapt_desktop-{version}-py3-none-any.whl").write_bytes(b"wheel")
+    (engine_directory / f"openadapt_desktop-{version}.tar.gz").write_bytes(b"sdist")
+    engine_provenance = write_engine_release_provenance(
+        tmp_path / ENGINE_RELEASE_PROVENANCE,
+        directory=engine_directory,
+        release_path=engine_release,
+        repository=DESKTOP_REPOSITORY,
+        engine_tag=f"v{version}",
+        engine_commit="b" * 40,
+        workflow_ref=(f"{DESKTOP_REPOSITORY}/.github/workflows/release.yml@refs/heads/main"),
+        workflow_commit="a" * 40,
+        run_id=100,
+        run_attempt=1,
+        runner_environment="github-hosted",
+    )
+    receipt = json.loads(engine_provenance.read_text(encoding="utf-8"))
+    index_value = json.loads(index.read_text(encoding="utf-8"))
+    artifacts: list[dict] = []
+    for number, asset in enumerate(receipt["assets"], start=1):
+        kind = "wheel" if asset["name"].endswith(".whl") else "sdist"
+        artifacts.append(
+            {
+                "name": asset["name"],
+                "kind": kind,
+                "authority": "pypi",
+                "url": f"https://files.pythonhosted.org/packages/{number}/{asset['name']}",
+                "sha256": "sha256:" + asset["sha256"],
+                "size_bytes": 10 + number,
+            }
+        )
+    next_asset_id = 1000
+    suffix_to_kind = {
+        ".dmg": "macos-installer",
+        ".msi": "windows-installer",
+        "-nsis-setup.exe": "windows-installer",
+        ".deb": "linux-installer",
+        ".AppImage": "linux-installer",
+    }
+    for asset in index_value["assets"]:
+        kind = next(
+            (
+                artifact_kind
+                for suffix, artifact_kind in suffix_to_kind.items()
+                if asset["name"].endswith(suffix)
+            ),
+            None,
+        )
+        if kind is None:
+            continue
+        artifacts.append(
+            {
+                "name": asset["name"],
+                "kind": kind,
+                "authority": "github_release",
+                "url": (
+                    "https://api.github.com/repos/OpenAdaptAI/openadapt-desktop/"
+                    f"releases/assets/{next_asset_id}"
+                ),
+                "sha256": "sha256:" + asset["sha256"],
+                "size_bytes": next_asset_id,
+            }
+        )
+        next_asset_id += 1
+    artifacts.sort(key=lambda item: (item["kind"], item["name"]))
+    admission = {
+        "admission_id": "production:desktop:1",
+        "target": "desktop",
+        "claim_scope": "qualified_native_workflow_desktop_release",
+        "release_identity": {
+            "schema_version": "openadapt.monotonic-production-release/v1",
+            "channel": "production",
+            "sequence": 1,
+            "previous_admission_sha256": None,
+        },
+        "policy_revision": 1,
+        "release": {
+            "kind": "public_package",
+            "version": version,
+            "tag": f"v{version}",
+            "source_commit": "a" * 40,
+            "immutable_release_url": (
+                "https://github.com/OpenAdaptAI/openadapt-desktop/commit/" + "a" * 40
+            ),
+            "artifacts": artifacts,
+        },
+        "acceptance_evidence": {
+            "summary_url": "https://example.test/summary.json",
+            "summary_sha256": "sha256:" + "1" * 64,
+            "attestation_bundle_url": "https://example.test/bundle.json",
+            "attestation_bundle_sha256": "sha256:" + "2" * 64,
+            "authority_source_commit": "c" * 40,
+        },
+        "issued_at": "2026-08-20T12:00:00Z",
+        "expires_at": "2026-09-19T12:00:00Z",
+        "revoked_at": None,
+    }
+    lifecycle = tmp_path / "lifecycle"
+    (lifecycle / "scripts").mkdir(parents=True)
+    (lifecycle / "production-lifecycle-policy.json").write_text("{}\n", encoding="utf-8")
+    (lifecycle / "production-lifecycle-admissions.json").write_text(
+        json.dumps({"admissions": [admission]}) + "\n", encoding="utf-8"
+    )
+    (lifecycle / "repository-lifecycle.yml").write_text(
+        "lifecycle:\n  production: []\n", encoding="utf-8"
+    )
+    (lifecycle / "scripts" / "validate_production_lifecycle.py").write_text(
+        "# canonical validator fixture\n", encoding="utf-8"
+    )
+    state_value = build_admission_state(
+        lifecycle,
+        central_source_commit="c" * 40,
+        validate_files=lambda _root: {"desktop": admission["admission_id"]},
+    )
+    state = write_admission_state(tmp_path / "admission-state.json", state_value)
+    return state, index, engine_provenance, engine_release, engine_directory, admission
+
+
+def test_canonical_state_keeps_no_admission_as_no_production(tmp_path: Path) -> None:
+    lifecycle = tmp_path / "lifecycle"
+    (lifecycle / "scripts").mkdir(parents=True)
+    (lifecycle / "production-lifecycle-policy.json").write_text("{}\n", encoding="utf-8")
+    (lifecycle / "production-lifecycle-admissions.json").write_text(
+        '{"admissions": []}\n', encoding="utf-8"
+    )
+    (lifecycle / "repository-lifecycle.yml").write_text("lifecycle: {}\n", encoding="utf-8")
+    (lifecycle / "scripts" / "validate_production_lifecycle.py").write_text(
+        "# canonical validator fixture\n", encoding="utf-8"
+    )
+    state_value = build_admission_state(
+        lifecycle,
+        central_source_commit="c" * 40,
+        validate_files=lambda _root: {},
+    )
+    state = write_admission_state(tmp_path / "state.json", state_value)
+    assert validate_admission_state(state)["active_admission"] is None
+    assert state_value["active_admission_sha256"] is None
+
+
+def test_production_channel_is_an_exact_derived_cache(tmp_path: Path) -> None:
+    state, index, receipt, engine_release, engine_directory, admission = (
+        _production_admission_fixture(tmp_path)
+    )
+    channel = write_production_channel(
+        tmp_path / "cache",
+        state_path=state,
+        index_path=index,
+        engine_provenance_path=receipt,
+        engine_release_path=engine_release,
+        engine_directory=engine_directory,
+        repository=DESKTOP_REPOSITORY,
+        workflow_ref=f"{DESKTOP_REPOSITORY}/{PROMOTION_WORKFLOW}@refs/heads/main",
+        workflow_commit="d" * 40,
+        run_id=200,
+        run_attempt=1,
+    )
+    assert channel.name == production_channel_asset_name(admission, "c" * 40)
+    assert channel.name.startswith(CHANNEL_PREFIX)
+    validated = verify_production_channel(
+        channel,
+        state_path=state,
+        index_path=index,
+        engine_provenance_path=receipt,
+        engine_release_path=engine_release,
+        engine_directory=engine_directory,
+    )
+    assert validated["cache_role"] == "derived-only"
+    assert validated["admission"]["admission_id"] == admission["admission_id"]
+    assert validated["release"]["artifacts"] == admission["release"]["artifacts"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("version", "99.0.0"),
+        ("tag", "v99.0.0"),
+        ("source_commit", "f" * 40),
+    ],
+)
+def test_production_channel_refuses_an_unadmitted_candidate_identity(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    state, index, receipt, engine_release, engine_directory, _admission = (
+        _production_admission_fixture(tmp_path)
+    )
+    state_value = json.loads(state.read_text(encoding="utf-8"))
+    state_value["active_admission"]["release"][field] = value
+    canonical = json.dumps(
+        state_value["active_admission"],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    state_value["active_admission_sha256"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    changed = tmp_path / "changed-state.json"
+    changed.write_text(json.dumps(state_value), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"{field} differs"):
+        write_production_channel(
+            tmp_path / "cache",
+            state_path=changed,
+            index_path=index,
+            engine_provenance_path=receipt,
+            engine_release_path=engine_release,
+            engine_directory=engine_directory,
+            repository=DESKTOP_REPOSITORY,
+            workflow_ref=f"{DESKTOP_REPOSITORY}/{PROMOTION_WORKFLOW}@refs/heads/main",
+            workflow_commit="d" * 40,
+            run_id=200,
+            run_attempt=1,
+        )
+
+
+def test_production_channel_refuses_an_unadmitted_artifact(tmp_path: Path) -> None:
+    state, index, receipt, engine_release, engine_directory, _admission = (
+        _production_admission_fixture(tmp_path)
+    )
+    state_value = json.loads(state.read_text(encoding="utf-8"))
+    state_value["active_admission"]["release"]["artifacts"][0]["sha256"] = (
+        "sha256:" + "f" * 64
+    )
+    canonical = json.dumps(
+        state_value["active_admission"],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    state_value["active_admission_sha256"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    changed = tmp_path / "changed-artifact-state.json"
+    changed.write_text(json.dumps(state_value), encoding="utf-8")
+    with pytest.raises(ValueError, match="artifact inventory differs"):
+        write_production_channel(
+            tmp_path / "cache",
+            state_path=changed,
+            index_path=index,
+            engine_provenance_path=receipt,
+            engine_release_path=engine_release,
+            engine_directory=engine_directory,
+            repository=DESKTOP_REPOSITORY,
+            workflow_ref=f"{DESKTOP_REPOSITORY}/{PROMOTION_WORKFLOW}@refs/heads/main",
+            workflow_commit="d" * 40,
+            run_id=200,
+            run_attempt=1,
+        )
+
+
+def test_production_channel_refuses_current_default_drift(tmp_path: Path) -> None:
+    state, index, receipt, engine_release, engine_directory, _admission = (
+        _production_admission_fixture(tmp_path)
+    )
+    channel = write_production_channel(
+        tmp_path / "cache",
+        state_path=state,
+        index_path=index,
+        engine_provenance_path=receipt,
+        engine_release_path=engine_release,
+        engine_directory=engine_directory,
+        repository=DESKTOP_REPOSITORY,
+        workflow_ref=f"{DESKTOP_REPOSITORY}/{PROMOTION_WORKFLOW}@refs/heads/main",
+        workflow_commit="d" * 40,
+        run_id=200,
+        run_attempt=1,
+    )
+    state_value = json.loads(state.read_text(encoding="utf-8"))
+    state_value["canonical_source_commit"] = "e" * 40
+    drifted = tmp_path / "drifted-state.json"
+    drifted.write_text(json.dumps(state_value), encoding="utf-8")
+    with pytest.raises(ValueError, match="canonical main"):
+        verify_production_channel(
+            channel,
+            state_path=drifted,
+            index_path=index,
+            engine_provenance_path=receipt,
+            engine_release_path=engine_release,
+            engine_directory=engine_directory,
+        )
+
+
+def test_production_workflow_keeps_normal_publication_unadmitted() -> None:
+    production = _workflow("production-channel.yml")
+    trigger = production[True]
+    assert set(trigger) == {"workflow_dispatch", "release", "schedule"}
+    assert production["permissions"] == {"contents": "read"}
+    assert production["concurrency"] == {
+        "group": "production-channel",
+        "cancel-in-progress": False,
+    }
+    inspect = production["jobs"]["inspect"]
+    promote = production["jobs"]["promote"]
+    assert "if" not in inspect
+    assert inspect["permissions"] == {"attestations": "read", "contents": "read"}
+    assert promote["environment"] == "production-release"
+    assert promote["permissions"] == {
+        "attestations": "write",
+        "contents": "write",
+        "id-token": "write",
+    }
+    production_text = (ROOT / ".github/workflows/production-channel.yml").read_text()
+    assert "repository: OpenAdaptAI/.github" in production_text
+    assert "ref: ${{ steps.refs.outputs.central_commit }}" in production_text
+    assert "scripts/production_release.py state" in production_text
+    assert "--clobber" not in production_text
+    assert "active central Production admission" in production_text
+    assert '"${GITHUB_REF}" != refs/heads/main' in production_text
+    assert "${observed}-${digest#sha256:}" in production_text
+    assert production_text.count("status --porcelain --untracked-files=all") == 2
+
+    normal_release_text = (ROOT / ".github/workflows/release.yml").read_text()
+    native_release_text = (ROOT / ".github/workflows/native-release.yml").read_text()
+    for text in (normal_release_text, native_release_text):
+        assert "desktop-production-channel" not in text
+        assert "write-channel" not in text
+    assert "unadmitted release candidate" in normal_release_text
+    assert "unadmitted release candidate" in native_release_text

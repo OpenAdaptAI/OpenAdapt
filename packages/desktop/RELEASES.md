@@ -1,8 +1,8 @@
 # Release Policy
 
-This repository publishes from two lanes while the native channel remains
-Beta. This document is the source of truth for what each lane produces, which
-release to download, and how the lanes converge.
+This repository publishes unadmitted candidates from two lanes. Production is
+an admission-driven channel with a separate manual derivation step. This
+document defines the outputs, ordering, and release-selection rules.
 
 ## Active release hold: the current Flow pin is not releasable
 
@@ -24,31 +24,32 @@ following are true, in order:
    and its qualification evidence from that accepted release.
 4. This section is deleted in the same pull request that lands the new pin.
 
-This is a distribution hold, not a claim of production acceptance. Neither lane
-carries a signed qualification-admission record today, so no release note,
-manifest, or installer may state or imply production acceptance.
+This is a distribution hold, not a claim of Production acceptance. A normal
+release never creates a Production admission. No release note, manifest, or
+installer can state or imply Production acceptance before central activation.
 
 ## The two lanes
 
 | Lane | Tag | Trigger | Marked as | Assets |
 | --- | --- | --- | --- | --- |
 | Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from reviewed, green `main` | Regular release ("Latest") | Wheel, sdist, an attested engine-release provenance receipt, PyPI publish attestations, **and a mirrored copy of the matching `desktop-vX.Y.Z` installer set** |
-| Native installers | `desktop-vX.Y.Z` | Explicit `Native Installer Release` dispatch from reviewed, green `main` | Published **prerelease** | Beta installers, platform metadata, SBOM, website manifest, signed build provenance, and `SHA256SUMS` |
-| Stable native channel | `desktop-channel` | Final promotion step in the same native dispatch | Published **prerelease authority** | The attested, strictly monotonic `openadapt-desktop-channel.json` descriptor |
+| Native installers | `desktop-vX.Y.Z` | Explicit `Native Installer Release` dispatch from reviewed, green `main` | Published **prerelease candidate** | Candidate installers, platform metadata, SBOM, website manifest, signed build provenance, and `SHA256SUMS` |
+| Candidate native channel | `desktop-channel` | Final candidate-index step in the same native dispatch | Published **prerelease index** | The attested, strictly monotonic `openadapt-desktop-channel.json` descriptor |
+| Production derived cache | `desktop-production-channel` | Separate manual dispatch after central admission activation | Published **prerelease cache** | One append-only descriptor for each exact active central admission |
 
-The engine lane stays non-prerelease so GitHub's "Latest" pointer always names
-the canonical engine release. The native lane stays prerelease because its
-installer surface is Beta. The native release workflow now requires Developer
+The engine lane stays non-prerelease so GitHub's "Latest" pointer names the
+newest engine candidate. "Latest" is not the Production default. The native
+lane stays prerelease because an artifact does not create admission. The native release workflow requires Developer
 ID plus notarization on macOS, Authenticode on Windows, and GitHub OIDC
 attestation over the exact Linux DEB and AppImage bytes; see
-[docs/BETA_NATIVE_INSTALLERS.md](docs/BETA_NATIVE_INSTALLERS.md)
+[docs/RELEASE_CANDIDATE_INSTALLERS.md](docs/RELEASE_CANDIDATE_INSTALLERS.md)
 for the verification scope and signing states.
 
 ## Which release should I download?
 
 - **Python package / CLI**: install from PyPI (`pip install openadapt-desktop`)
   or take the wheel from the newest `vX.Y.Z` release.
-- **Native installers (Beta)**: use the `vX.Y.Z` engine release selected by the
+- **Native installer candidate**: use the `vX.Y.Z` engine release selected by the
   attested `openadapt-desktop-verified-release.json` channel index. The index
   binds the matching `desktop-vX.Y.Z` source release and the identical mirrored
   bytes. Authenticate `SHA256SUMS`, then verify its exact inventory. Do not use
@@ -83,18 +84,18 @@ bytes. The pointer block is rewritten in place, so pointers never accumulate.
 If the matching engine release or its attested receipt is missing, the
 transaction fails before the platform builds start.
 
-#### Why mirroring does not promote the Beta channel
+#### Why mirroring does not promote the Production channel
 
 The earlier policy here was "linked, not mirrored", on the reasoning that
-putting ~757 MB of Beta binaries on the release GitHub labels "Latest" would
-overstate their maturity. A notes-only link was not
+putting approximately 757 MB of candidate binaries on the release GitHub labels
+"Latest" could be mistaken for Production selection. A notes-only link was not
 enough: `/releases/latest` still showed a visitor nothing but a wheel and an
 sdist, and that link is what launch material points at. The maturity concern is
 addressed directly instead of by withholding the artifact:
 
 - `desktop-vX.Y.Z` **stays a prerelease**. Flipping it to non-prerelease would
   make the native lane GitHub's "Latest" outright, and that remains forbidden.
-- Every filename encodes its trust state — `…-developer-id-notarized.dmg`,
+- Every filename encodes its trust state: `…-developer-id-notarized.dmg`,
   `…-authenticode.msi`, or `…-github-attested.AppImage`.
 - The pointer block leads with the required platform trust contracts and gives
   the `sha256sum -c` and `gh attestation verify` commands.
@@ -106,9 +107,9 @@ addressed directly instead of by withholding the artifact:
   `<!-- installer-release -->` marker, so the machine-readable selection rule
   below is unchanged and download-page consumers keep resolving `desktop-v*`.
 
-`desktop-vX.Y.Z` therefore remains the canonical installer release — build
-provenance, attestations, and supersession notices are bound to it — and
-`vX.Y.Z` carries a byte-identical convenience copy.
+`desktop-vX.Y.Z` therefore remains the canonical installer release. Its build
+provenance, attestations, and supersession notices stay bound to it. `vX.Y.Z`
+carries a byte-identical convenience copy.
 
 ## Freshness automation
 
@@ -124,7 +125,7 @@ were pushed by hand. Three workflows now keep it fresh:
    can rebuild and publish a pre-existing, main-contained ref after checking that
    ref's exact CI; ordinary merges never publish packages.
 2. **Native Installer Freshness** (`.github/workflows/native-freshness.yml`):
-   when that engine release is published, it verifies the stable engine release
+   when that engine release is published, it verifies the published engine release
    and opens a pull request with the exact deterministic transform of
    `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`,
    `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. It never writes to
@@ -133,11 +134,21 @@ were pushed by hand. Three workflows now keep it fresh:
 3. **Native Installer Release** (`.github/workflows/native-release.yml`):
    a maintainer dispatches the workflow from reviewed `main` with the exact
    version. The workflow verifies current main, the five-file version transform,
-   the stable engine release, and its attested receipt before it starts the
+   the published engine release, and its attested receipt before it starts the
    fail-closed signing preflight. The same transaction builds, smoke-tests,
-   attests, publishes, mirrors, writes the verified index, promotes the
-   monotonic channel, updates the pointer, and marks older prereleases
-   superseded. Only this workflow creates `desktop-vX.Y.Z`.
+   attests, publishes, mirrors, writes the verified index, updates the
+   monotonic candidate channel, updates the pointer, and marks older
+   prereleases superseded. Only this workflow creates `desktop-vX.Y.Z`. It
+   never changes the Production channel.
+
+4. **Production channel admission**
+   (`.github/workflows/production-channel.yml`): a maintainer supplies one
+   immutable current `OpenAdaptAI/.github` commit after the canonical ledger
+   activates the exact release. The workflow runs the canonical validator,
+   requires exact version and artifact equality with the unchanged published
+   candidate, and then appends one attested derived-cache descriptor. The
+   descriptor records the central commit, admission ID, admission digest,
+   expiry, and complete artifact inventory. It is not a second authority.
 
 When the external controls below are active, each engine release `vX.Y.Z` can
 get a matching native prerelease `desktop-vX.Y.Z` from the same reviewed source.
@@ -170,11 +181,26 @@ Before the next native tag or release:
 The `native-release` environment reviewer is an additional publish boundary.
 It does not replace the main and tag rulesets.
 
+Production activation is a separate action after candidate publication:
+
+1. Add one exact, evidence-backed Desktop admission to the canonical
+   `OpenAdaptAI/.github` ledger. The canonical validator must select it as the
+   active latest Desktop admission.
+2. Protect the `production-release` environment on Desktop `main`, with no
+   admin bypass. It can cache an active admission. It cannot create one.
+3. Dispatch `production-channel.yml` with `operation=promote` and the exact
+   current central commit. The workflow refuses any version, source, artifact,
+   digest, expiry, or central-current mismatch.
+4. Verify the appended cache attestation and the next scheduled drift check.
+
+Until these steps pass, the candidate is not actively admitted. A failed
+promotion doesn't change or remove a prior cache.
+
 ## Supersession
 
-After the verified index and channel are published, the same transaction edits
+After the verified index and candidate channel are published, the same transaction edits
 every lower marked `desktop-v*` prerelease to carry a prominent "Superseded by
-`desktop-vX.Y.Z` — do not use"
+`desktop-vX.Y.Z`: do not use"
 notice at the top of its notes (machine marker:
 `<!-- openadapt-superseded-by: desktop-vX.Y.Z -->`). CI never
 deletes releases or assets; superseded assets are retained for provenance and
@@ -182,7 +208,7 @@ any deletion is a human decision.
 
 ## Machine-readable selection rule (download pages)
 
-Consumers must not select a release from mutable release notes. Fetch the
+Candidate consumers must not select a release from mutable release notes. Fetch the
 attested `openadapt-desktop-channel.json` asset from the `desktop-channel`
 release. It binds the selected `openadapt-desktop-verified-release.json` on the
 matching engine release. The channel must strictly advance from its prior
@@ -204,6 +230,20 @@ descriptor.
   `verify-openadapt-native-release.py`. The helper refuses an incomplete or
   expanded directory.
 
+The candidate descriptor does not select a Production release. A Production
+consumer first fetches one immutable current `OpenAdaptAI/.github` commit, runs
+its canonical validator, and selects the active latest Desktop admission. It
+then fetches the deterministic cache asset whose filename contains that central
+commit and admission digest. The consumer requires exact central commit, admission,
+expiry, release, artifact, verified-index, and engine-receipt equality. If the
+admission is absent, expired, revoked, or different, Desktop has no Production
+default. It never falls back to an older admission or to PyPI/GitHub "Latest".
+
+The scheduled drift check applies this same rule. A normal release can publish
+a newer candidate without changing Production. A central admission change
+fails the check until the exact derived cache exists. A failed promotion leaves
+all prior cache assets unchanged.
+
 The release-note markers remain useful for human notices and historical
 supersession. They are not a machine trust boundary.
 
@@ -219,7 +259,7 @@ supersession. They are not a machine trust boundary.
 
 ## Convergence plan
 
-The next native release cannot publish until Apple Developer ID plus
+The next native candidate cannot publish until Apple Developer ID plus
 notarization and Windows Authenticode are configured and the Linux exact-byte
 attestations verify. After the first complete trusted release proves the full
 channel, the repository can simplify the two upload targets:

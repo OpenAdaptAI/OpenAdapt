@@ -58,7 +58,7 @@ _ROTATION_STAGE_VERSION = 1
 # ``host`` account holds the RAW bearer token (what the tray reads).
 _CRED_SUFFIX = "|cred"
 
-# Suffix for the runner-lane credential (EXPERIMENTAL, spec 2.1): the per-runner
+# Suffix for the runner-lane credential (spec 2.1): the per-runner
 # id + bearer token minted by POST /api/runners/register. Kept separate from the
 # user session credential -- deleting one never clobbers the other, and the raw
 # ``host`` account keeps holding the session token the tray reads.

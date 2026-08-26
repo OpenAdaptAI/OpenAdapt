@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare and verify honest Beta native release assets."""
+"""Prepare and verify unadmitted native release-candidate assets."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LIFECYCLE = "Beta"
+LIFECYCLE = "Candidate"
 SURFACE = "installed desktop pairing and authoring companion"
 NATIVE_TAG_PREFIX = "desktop-v"
 VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
@@ -65,7 +65,8 @@ ENGINE_RELEASE_PROVENANCE_SCHEMA = "openadapt.engine-release-provenance/v1"
 VERIFIED_RELEASE_INDEX = "openadapt-desktop-verified-release.json"
 VERIFIED_RELEASE_INDEX_SCHEMA = "openadapt.desktop-verified-release/v1"
 VERIFIED_RELEASE_CHANNEL = "openadapt-desktop-channel.json"
-VERIFIED_RELEASE_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v1"
+VERIFIED_RELEASE_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v2"
+LEGACY_VERIFIED_RELEASE_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v1"
 VERIFIED_RELEASE_CHANNEL_TAG = "desktop-channel"
 NATIVE_PROMOTION_WORKFLOW = ".github/workflows/native-release.yml"
 NATIVE_RELEASE_VERIFIER = "verify-openadapt-native-release.py"
@@ -108,7 +109,7 @@ def expected_release_asset_names(version: str) -> set[str]:
     }
     for platform, architecture in EXPECTED_PLATFORMS:
         signing = PRODUCTION_TRUST_MODES[platform]
-        prefix = f"OpenAdapt-Desktop-Beta-v{version}-{platform}-{architecture}-{signing}"
+        prefix = f"OpenAdapt-Desktop-Candidate-v{version}-{platform}-{architecture}-{signing}"
         names.add(f"{prefix}-metadata.json")
         names.update(f"{prefix}{suffix}" for _kind, _pattern, suffix in ARTIFACT_RULES[platform])
     return names
@@ -501,7 +502,7 @@ def superseded_notes(body: str, newer_tag: str, repo: str) -> str | None:
         "> [!CAUTION]\n"
         f"> **Superseded by [{newer_tag}](https://github.com/{repo}/releases/tag/{newer_tag})"
         " — do not use.**\n"
-        "> Newer Beta native installers replace these assets. The assets below are\n"
+        "> A newer admitted or candidate release replaces these assets. The assets below are\n"
         "> retained for provenance only; deleting releases or assets is a maintainer\n"
         "> decision made outside CI."
         f"{SUPERSEDED_SEPARATOR}"
@@ -537,14 +538,15 @@ def installer_pointer_notes(body: str, native_tag: str, repo: str) -> str | None
     block = (
         f"{INSTALLER_POINTER_START}\n"
         "> [!IMPORTANT]\n"
-        "> **Looking for the desktop app? The Beta installers are attached\n"
+        "> **Looking for the desktop app? The release-candidate installers are attached\n"
         "> below.**\n"
         "> macOS DMG (arm64 and x86_64), Windows MSI and NSIS `.exe`, Linux\n"
         "> `.deb` and `.AppImage`, plus `SHA256SUMS` — the same attested bytes\n"
         f"> published at [`{native_tag}`]({base}/tag/{native_tag}), mirrored\n"
         '> here so GitHub\'s "Latest" always carries an installer.\n'
         ">\n"
-        "> **These installers are Beta, but the release trust gate is mandatory.**\n"
+        "> **These installers are not admitted to Production.**\n"
+        "> The release trust gate is mandatory.\n"
         "> macOS requires Developer ID plus notarization. Windows requires\n"
         "> timestamped Authenticode. Linux DEB and AppImage bytes require GitHub\n"
         "> OIDC artifact attestations. The trust state is in every filename.\n"
@@ -602,7 +604,7 @@ def stage_artifacts(
     output.mkdir(parents=True, exist_ok=True)
 
     version = native_version(root)
-    prefix = f"OpenAdapt-Desktop-Beta-v{version}-{platform}-{architecture}-{signing}"
+    prefix = f"OpenAdapt-Desktop-Candidate-v{version}-{platform}-{architecture}-{signing}"
     staged: list[Path] = []
     artifact_names: list[str] = []
     for kind, pattern, suffix in ARTIFACT_RULES[platform]:
@@ -892,7 +894,7 @@ def validate_engine_release(
         or release.get("tagName") != engine_tag
         or release.get("url") != expected_url
     ):
-        raise ValueError("engine release is not the exact published stable release")
+        raise ValueError("engine release is not the exact published engine release")
     if provenance is not None:
         expected = {
             "engine_tag": engine_tag,
@@ -1226,7 +1228,7 @@ def write_verified_release_channel(
     run_attempt: int,
     existing: Path | None = None,
 ) -> Path:
-    """Write the stable, attested, strictly monotonic release descriptor."""
+    """Write the attested, strictly monotonic candidate descriptor."""
 
     repository = _validate_repository(repository)
     index = validate_verified_release_index(index_path)
@@ -1260,7 +1262,7 @@ def write_verified_release_channel(
     payload = {
         "schema": VERIFIED_RELEASE_CHANNEL_SCHEMA,
         "repository": repository,
-        "channel": "stable-native",
+        "channel": "candidate-native",
         "native_tag": index["native_tag"],
         "native_version": index["native_version"],
         "native_source_commit": index["native_source_commit"],
@@ -1302,7 +1304,7 @@ def write_verified_release_channel(
 
 
 def validate_verified_release_channel(path: Path) -> dict:
-    """Validate the closed stable-channel descriptor without network trust."""
+    """Validate the closed candidate-channel descriptor without network trust."""
 
     if path.name != VERIFIED_RELEASE_CHANNEL or not path.is_file() or path.is_symlink():
         raise ValueError(f"release channel must be a regular {VERIFIED_RELEASE_CHANNEL}")
@@ -1325,11 +1327,18 @@ def validate_verified_release_channel(path: Path) -> dict:
         "promotion",
     }
     if not isinstance(data, dict) or set(data) != expected_keys:
-        raise ValueError("release channel does not use the closed v1 schema")
-    if data.get("schema") != VERIFIED_RELEASE_CHANNEL_SCHEMA:
+        raise ValueError("release channel does not use a closed supported schema")
+    schema = data.get("schema")
+    if schema not in {
+        VERIFIED_RELEASE_CHANNEL_SCHEMA,
+        LEGACY_VERIFIED_RELEASE_CHANNEL_SCHEMA,
+    }:
         raise ValueError("release channel has the wrong schema")
     repository = _validate_repository(str(data.get("repository") or ""))
-    if data.get("channel") != "stable-native":
+    expected_channel = (
+        "candidate-native" if schema == VERIFIED_RELEASE_CHANNEL_SCHEMA else "stable-native"
+    )
+    if data.get("channel") != expected_channel:
         raise ValueError("release channel has the wrong channel name")
     native_tag_tuple(str(data.get("native_tag") or ""))
     version = data["native_tag"].removeprefix(NATIVE_TAG_PREFIX)
@@ -1596,7 +1605,7 @@ def validate_release_workflow_run(path: Path, *, provenance: dict) -> int:
         "Windows x86_64",
         "Linux x86_64 (GitHub-attested bytes)",
         "Checksum and attest exact release bytes",
-        "Publish the verified Beta prerelease",
+        "Publish the verified candidate prerelease",
     }
     failed = {
         name: conclusions.get(name) for name in required if conclusions.get(name) != "success"
@@ -1638,7 +1647,7 @@ def validate_release_set(directory: Path) -> int:
             )
         if metadata.get("native_version") != version:
             raise ValueError(f"wrong native version in {metadata_path}")
-        prefix = f"OpenAdapt-Desktop-Beta-v{version}-{platform}-{architecture}-{signing}"
+        prefix = f"OpenAdapt-Desktop-Candidate-v{version}-{platform}-{architecture}-{signing}"
         if metadata_path.name != f"{prefix}-metadata.json":
             raise ValueError(f"metadata filename does not match its labels: {metadata_path.name}")
         expected_artifacts = {f"{prefix}{suffix}" for _, _, suffix in ARTIFACT_RULES[platform]}
@@ -2294,7 +2303,7 @@ def main() -> int:
             )
         elif args.command == "validate-release-channel":
             channel = validate_verified_release_channel(args.file)
-            print(f"Validated stable release channel for {channel['native_tag']}")
+            print(f"Validated candidate release channel for {channel['native_tag']}")
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

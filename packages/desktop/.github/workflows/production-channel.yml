@@ -1,0 +1,429 @@
+name: Production channel admission
+
+# The canonical OpenAdaptAI/.github ledger is the only Production authority.
+# A normal Desktop release publishes an unadmitted candidate and never runs
+# this workflow. This workflow only verifies or caches an already-active,
+# signed central admission for the exact unchanged public artifacts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Production channel operation"
+        required: true
+        type: choice
+        default: verify
+        options:
+          - verify
+          - promote
+      central_commit:
+        description: "Exact current OpenAdaptAI/.github main commit (required for promote)"
+        required: false
+        type: string
+  release:
+    types: [published]
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-channel
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Derive the current Production default from central admission
+    runs-on: ubuntu-22.04
+    permissions:
+      attestations: read
+      contents: read
+    outputs:
+      active: ${{ steps.admission.outputs.active }}
+      cache_exists: ${{ steps.cache.outputs.cache_exists }}
+      central_commit: ${{ steps.refs.outputs.central_commit }}
+      desktop_commit: ${{ steps.refs.outputs.desktop_commit }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PRODUCTION_CHANNEL_TAG: desktop-production-channel
+    steps:
+      - name: Resolve current protected-main commits
+        id: refs
+        env:
+          REQUESTED_CENTRAL_COMMIT: ${{ inputs.central_commit }}
+          OPERATION: ${{ inputs.operation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ] && \
+             [ "${GITHUB_REF}" != refs/heads/main ]; then
+            echo "error: dispatch source is not protected Desktop main" >&2
+            exit 1
+          fi
+          desktop_commit="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+          central_commit="$(gh api repos/OpenAdaptAI/.github/commits/main --jq .sha)"
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ]; then
+            if [ "${GITHUB_SHA}" != "${desktop_commit}" ]; then
+              echo "error: dispatch source is not current protected Desktop main" >&2
+              exit 1
+            fi
+            if [ "${OPERATION}" = promote ] && [ -z "${REQUESTED_CENTRAL_COMMIT}" ]; then
+              echo "error: promotion requires an exact central_commit" >&2
+              exit 1
+            fi
+            if [ -n "${REQUESTED_CENTRAL_COMMIT}" ]; then
+              if ! printf '%s' "${REQUESTED_CENTRAL_COMMIT}" | grep -Eq '^[0-9a-f]{40}$'; then
+                echo "error: central_commit is not a commit id" >&2
+                exit 1
+              fi
+              if [ "${REQUESTED_CENTRAL_COMMIT}" != "${central_commit}" ]; then
+                echo "error: requested central commit is not current central main" >&2
+                exit 1
+              fi
+            fi
+          fi
+          echo "desktop_commit=${desktop_commit}" >> "${GITHUB_OUTPUT}"
+          echo "central_commit=${central_commit}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout the exact current Desktop verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.refs.outputs.desktop_commit }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Checkout one immutable canonical lifecycle commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OpenAdaptAI/.github
+          ref: ${{ steps.refs.outputs.central_commit }}
+          path: production-lifecycle
+          persist-credentials: false
+
+      - name: Run the canonical validator and select Desktop
+        id: admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          observed="$(git -C production-lifecycle rev-parse HEAD)"
+          if [ "${observed}" != "${{ steps.refs.outputs.central_commit }}" ]; then
+            echo "error: canonical checkout differs from its immutable input" >&2
+            exit 1
+          fi
+          git -C production-lifecycle diff --exit-code
+          git -C production-lifecycle diff --cached --exit-code
+          test -z "$(git -C production-lifecycle status --porcelain --untracked-files=all)"
+          python scripts/production_release.py state \
+            --lifecycle-root production-lifecycle \
+            --central-source-commit "${observed}" \
+            --output admission-state.json
+          active="$(jq -r '.active_admission != null' admission-state.json)"
+          echo "active=${active}" >> "${GITHUB_OUTPUT}"
+          if [ "${active}" = true ]; then
+            echo "version=$(jq -r '.active_admission.release.version' admission-state.json)" \
+              >> "${GITHUB_OUTPUT}"
+            digest="$(jq -r '.active_admission_sha256' admission-state.json)"
+            echo "cache_asset=openadapt-desktop-production-channel-${observed}-${digest#sha256:}.json" \
+              >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Refuse promotion without an active central admission
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.operation == 'promote' &&
+          steps.admission.outputs.active != 'true'
+        shell: bash
+        run: |
+          echo "error: Desktop has no active central Production admission" >&2
+          exit 1
+
+      - name: Download and verify the exact admitted candidate
+        if: steps.admission.outputs.active == 'true'
+        env:
+          VERSION: ${{ steps.admission.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine_tag="v${VERSION}"
+          mkdir -p candidate engine-files
+          gh release view "${engine_tag}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > candidate/engine-release.json
+          gh release download "${engine_tag}" --dir candidate \
+            --pattern 'openadapt-desktop-verified-release.json' \
+            --pattern 'openadapt-desktop-engine-release-provenance.json'
+          gh release download "${engine_tag}" --dir engine-files \
+            --pattern '*.whl' \
+            --pattern '*.tar.gz'
+          native_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
+          engine_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main"
+          gh attestation verify candidate/openadapt-desktop-verified-release.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${native_identity}" \
+            --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            --deny-self-hosted-runners
+          gh attestation verify candidate/openadapt-desktop-engine-release-provenance.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${engine_identity}" \
+            --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-verified-index \
+            --file candidate/openadapt-desktop-verified-release.json
+          engine_commit="$(jq -r .engine_commit candidate/openadapt-desktop-verified-release.json)"
+          python scripts/native_release.py validate-engine-provenance \
+            --file candidate/openadapt-desktop-engine-release-provenance.json \
+            --directory engine-files \
+            --release candidate/engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${engine_tag}" \
+            --engine-commit "${engine_commit}"
+
+      - name: Verify the derived cache or report no Production default
+        id: cache
+        env:
+          ACTIVE: ${{ steps.admission.outputs.active }}
+          CACHE_ASSET: ${{ steps.admission.outputs.cache_asset }}
+          OPERATION: ${{ inputs.operation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${ACTIVE}" != true ]; then
+            echo "Desktop has no active Production default."
+            echo "cache_exists=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          exists=false
+          if gh release view "${PRODUCTION_CHANNEL_TAG}" \
+            --json isDraft,isPrerelease,body,assets > production-cache-release.json 2>/dev/null; then
+            if ! jq -e \
+              '.isDraft == false and .isPrerelease == true and
+               (.body | contains("<!-- production-channel-derived-cache -->"))' \
+              production-cache-release.json >/dev/null; then
+              echo "error: Production cache release identity differs" >&2
+              exit 1
+            fi
+            if jq -e --arg name "${CACHE_ASSET}" \
+              '.assets | any(.name == $name)' production-cache-release.json >/dev/null; then
+              exists=true
+            fi
+          fi
+          echo "cache_exists=${exists}" >> "${GITHUB_OUTPUT}"
+          if [ "${exists}" != true ]; then
+            if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ] && [ "${OPERATION}" = promote ]; then
+              echo "The active admission has no derived cache. Promotion can add it."
+              exit 0
+            fi
+            echo "error: the active central Desktop admission has no exact derived channel cache" >&2
+            exit 1
+          fi
+          mkdir published-cache
+          gh release download "${PRODUCTION_CHANNEL_TAG}" --dir published-cache \
+            --pattern "${CACHE_ASSET}"
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/production-channel.yml@refs/heads/main"
+          gh attestation verify "published-cache/${CACHE_ASSET}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            --deny-self-hosted-runners
+          python scripts/production_release.py verify-channel \
+            --file "published-cache/${CACHE_ASSET}" \
+            --state admission-state.json \
+            --index candidate/openadapt-desktop-verified-release.json \
+            --engine-provenance candidate/openadapt-desktop-engine-release-provenance.json \
+            --engine-release candidate/engine-release.json \
+            --engine-directory engine-files
+
+      - name: Confirm central main did not change during derivation
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(gh api repos/OpenAdaptAI/.github/commits/main --jq .sha)"
+          if [ "${current}" != "${{ steps.refs.outputs.central_commit }}" ]; then
+            echo "error: central main changed during Production derivation" >&2
+            exit 1
+          fi
+
+      - name: Retain exact promotion inputs
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.operation == 'promote' &&
+          steps.admission.outputs.active == 'true' &&
+          steps.cache.outputs.cache_exists != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-channel-inputs-${{ github.run_id }}
+          path: |
+            admission-state.json
+            candidate/*
+            engine-files/*
+          if-no-files-found: error
+
+  promote:
+    name: Cache the already-active central Production admission
+    needs: inspect
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'promote' &&
+      needs.inspect.outputs.active == 'true' &&
+      needs.inspect.outputs.cache_exists != 'true'
+    runs-on: ubuntu-22.04
+    environment: production-release
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PRODUCTION_CHANNEL_TAG: desktop-production-channel
+    steps:
+      - name: Checkout the exact current Desktop verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.inspect.outputs.desktop_commit }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Checkout the same immutable canonical lifecycle commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OpenAdaptAI/.github
+          ref: ${{ needs.inspect.outputs.central_commit }}
+          path: production-lifecycle
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: production-channel-inputs-${{ github.run_id }}
+          path: prepared
+
+      - name: Revalidate the unchanged authority and candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          observed="$(git -C production-lifecycle rev-parse HEAD)"
+          if [ "${observed}" != "${{ needs.inspect.outputs.central_commit }}" ]; then
+            echo "error: canonical checkout differs from its immutable input" >&2
+            exit 1
+          fi
+          git -C production-lifecycle diff --exit-code
+          git -C production-lifecycle diff --cached --exit-code
+          test -z "$(git -C production-lifecycle status --porcelain --untracked-files=all)"
+          desktop_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+          central_main="$(gh api repos/OpenAdaptAI/.github/commits/main --jq .sha)"
+          if [ "${desktop_main}" != "${{ needs.inspect.outputs.desktop_commit }}" ] || \
+             [ "${central_main}" != "${{ needs.inspect.outputs.central_commit }}" ]; then
+            echo "error: a protected main branch changed before promotion" >&2
+            exit 1
+          fi
+          python scripts/production_release.py state \
+            --lifecycle-root production-lifecycle \
+            --central-source-commit "${central_main}" \
+            --output current-admission-state.json
+          cmp prepared/admission-state.json current-admission-state.json
+          python scripts/native_release.py validate-verified-index \
+            --file prepared/candidate/openadapt-desktop-verified-release.json
+          engine_tag="$(jq -r .engine_tag prepared/candidate/openadapt-desktop-verified-release.json)"
+          engine_commit="$(jq -r .engine_commit prepared/candidate/openadapt-desktop-verified-release.json)"
+          python scripts/native_release.py validate-engine-provenance \
+            --file prepared/candidate/openadapt-desktop-engine-release-provenance.json \
+            --directory prepared/engine-files \
+            --release prepared/candidate/engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${engine_tag}" \
+            --engine-commit "${engine_commit}"
+
+      - name: Write the derived cache for the active admission
+        id: channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          path="$(python scripts/production_release.py write-channel \
+            --state current-admission-state.json \
+            --index prepared/candidate/openadapt-desktop-verified-release.json \
+            --engine-provenance prepared/candidate/openadapt-desktop-engine-release-provenance.json \
+            --engine-release prepared/candidate/engine-release.json \
+            --engine-directory prepared/engine-files \
+            --output-directory derived-cache \
+            --repository "${GITHUB_REPOSITORY}" \
+            --workflow-ref "${GITHUB_WORKFLOW_REF}" \
+            --workflow-commit "${{ needs.inspect.outputs.desktop_commit }}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}")"
+          echo "path=${path}" >> "${GITHUB_OUTPUT}"
+          echo "name=$(basename "${path}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest the derived cache bytes
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ steps.channel.outputs.path }}
+
+      - name: Publish once and verify the derived cache
+        env:
+          CACHE_ASSET: ${{ steps.channel.outputs.name }}
+          CACHE_PATH: ${{ steps.channel.outputs.path }}
+          DESKTOP_COMMIT: ${{ needs.inspect.outputs.desktop_commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/production-channel.yml@refs/heads/main"
+          gh attestation verify "${CACHE_PATH}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            --deny-self-hosted-runners
+          if gh release view "${PRODUCTION_CHANNEL_TAG}" \
+            --json isDraft,isPrerelease,body,assets > production-cache-release.json 2>/dev/null; then
+            if ! jq -e \
+              '.isDraft == false and .isPrerelease == true and
+               (.body | contains("<!-- production-channel-derived-cache -->"))' \
+              production-cache-release.json >/dev/null; then
+              echo "error: Production cache release identity differs" >&2
+              exit 1
+            fi
+            if jq -e --arg name "${CACHE_ASSET}" \
+              '.assets | any(.name == $name)' production-cache-release.json >/dev/null; then
+              echo "error: the append-only Production cache asset already exists" >&2
+              exit 1
+            fi
+            gh release upload "${PRODUCTION_CHANNEL_TAG}" "${CACHE_PATH}"
+          else
+            if git ls-remote --exit-code --tags origin \
+              "refs/tags/${PRODUCTION_CHANNEL_TAG}" >/dev/null; then
+              create_ref=(--verify-tag)
+            else
+              create_ref=(--target "${DESKTOP_COMMIT}")
+            fi
+            printf '%s\n\n%s\n' \
+              '<!-- production-channel-derived-cache -->' \
+              'Derived cache only. OpenAdaptAI/.github remains the Production authority.' \
+              > production-cache-notes.md
+            gh release create "${PRODUCTION_CHANNEL_TAG}" \
+              "${create_ref[@]}" \
+              --prerelease \
+              --title "OpenAdapt Desktop Production channel cache" \
+              --notes-file production-cache-notes.md \
+              "${CACHE_PATH}"
+          fi
+          mkdir published-cache
+          gh release download "${PRODUCTION_CHANNEL_TAG}" --dir published-cache \
+            --pattern "${CACHE_ASSET}"
+          cmp "${CACHE_PATH}" "published-cache/${CACHE_ASSET}"
+          gh attestation verify "published-cache/${CACHE_ASSET}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            --deny-self-hosted-runners
+          python scripts/production_release.py verify-channel \
+            --file "published-cache/${CACHE_ASSET}" \
+            --state current-admission-state.json \
+            --index prepared/candidate/openadapt-desktop-verified-release.json \
+            --engine-provenance prepared/candidate/openadapt-desktop-engine-release-provenance.json \
+            --engine-release prepared/candidate/engine-release.json \
+            --engine-directory prepared/engine-files

@@ -1,9 +1,9 @@
 <!-- installer-release -->
 
-# Beta Native Installers
+# Native Release Candidates
 
-OpenAdapt Desktop native packages are the **Beta installed authoring,
-teaching, and local-pairing companion** for OpenAdapt. They bundle and start the
+OpenAdapt Desktop native packages are **unadmitted candidates** for the
+installed authoring, teaching, and local-pairing companion. They bundle and start the
 Python sidecar, connect the Tauri/React cockpit to it over local JSON-lines IPC,
 and register the `openadapt://` operating-system handler. The handler accepts
 only the fixed `openadapt://connect` action and forwards it to the sidecar's
@@ -48,15 +48,16 @@ that pull request. The freshness workflow never creates a tag or release. A
 maintainer then dispatches the Native Installer Release workflow from reviewed
 `main`. That one transaction verifies the engine receipt, creates the matching
 `desktop-vX.Y.Z` tag, publishes and verifies the installers, mirrors them to the
-engine release, and promotes the signed stable channel.
-All lower native prereleases receive a prominent "Superseded — do not use"
+engine release, and updates the signed candidate channel. This transaction
+doesn't change the admission-driven Production channel.
+All lower native prereleases receive a prominent "Superseded: do not use"
 notice. Their assets remain for provenance. The full two-lane release policy
 and its planned convergence into a single release are documented in
 [RELEASES.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/RELEASES.md).
 
 ## Artifact labels
 
-Every filename includes `Beta`, the native version, operating system,
+Every new filename includes `Candidate`, the native version, operating system,
 architecture, and signing state. The initial matrix is:
 
 | Platform | Architectures | Packages | Signing labels |
@@ -87,7 +88,7 @@ SBOM, includes it and the public build-provenance identity in the sorted
 `SHA256SUMS` manifest, verifies the exact inventory, and creates a GitHub
 artifact attestation over every named file. It also attests `SHA256SUMS` itself.
 The release verifier requires the signed subjects to equal that inventory. It
-binds the exact reviewed-main workflow, source commit, stable engine tag and
+binds the exact reviewed-main workflow, source commit, published engine tag and
 release, run ID, run attempt, and GitHub-hosted runner. Consumers must
 authenticate `SHA256SUMS` before they trust its digests:
 
@@ -105,7 +106,7 @@ The final helper refuses missing, extra, linked, non-regular, duplicate, or
 digest-mismatched files. The canonical engine release also publishes an
 attested `openadapt-desktop-verified-release.json`. The `desktop-channel`
 release carries the attested, strictly monotonic
-`openadapt-desktop-channel.json` authority. This closed chain
+`openadapt-desktop-channel.json` candidate index. This closed chain
 identifies the exact native tag, engine release, source commits, workflow run,
 checksum digest, and complete asset set. A download service must verify this
 index attestation. It must not select a release from mutable release-note text.
@@ -126,8 +127,8 @@ and Windows signing credential sets. A missing or partial set fails the build.
   SHA-256 and an RFC 3161 timestamp) **or** Azure Trusted Signing
   (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   `TRUSTED_SIGNING_ENDPOINT`, `TRUSTED_SIGNING_ACCOUNT`,
-  `TRUSTED_SIGNING_CERTIFICATE_PROFILE`) — the cheaper, token-free option for a
-  startup. Configure one set, not both. Both produce a publicly trusted,
+  `TRUSTED_SIGNING_CERTIFICATE_PROFILE`), which is the cheaper, token-free option
+  for a startup. Configure one set, not both. Both produce a publicly trusted,
   timestamped `authenticode` artifact.
 - Linux uses the required GitHub OIDC exact-byte attestation above. It has no
   founder-managed secret and is not described as native-signed.
@@ -141,9 +142,9 @@ Before a release, the repository must also have a no-bypass pull-request
 ruleset for `main` and immutable release-tag rules for both `v*` and
 `desktop-v*`. The engine workflow can create `v*`. The explicitly dispatched
 native release workflow can create `desktop-v*`. Neither release identity can
-update or delete a tag. The historical `desktop-v0.15.0` prerelease does not satisfy the new
-trust contract.
+update or delete a tag. The historical `desktop-v0.15.0` prerelease doesn't
+satisfy the new trust contract.
 
-The founder activation runbook — exactly which certificates to buy, their costs,
-how to add each secret, and what each public surface may then truthfully claim —
-is in [CODE_SIGNING.md](CODE_SIGNING.md).
+The founder activation runbook lists the exact certificates to buy, their costs,
+the secrets to add, and the claims each public surface can make. See
+[CODE_SIGNING.md](CODE_SIGNING.md).

@@ -1,5 +1,9 @@
 name: Native Installer Release
 
+# This workflow publishes an exact, verified release candidate. It does not
+# create Production state. Only production-channel.yml can cache an already
+# active central OpenAdaptAI/.github admission.
+
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +17,7 @@ permissions:
 
 concurrency:
   # One protected-main transaction owns tag creation, byte publication,
-  # mirroring, and stable-channel promotion. Never run two transactions at once.
+  # mirroring, and candidate-channel update. Never run two transactions at once.
   group: native-release
   cancel-in-progress: false
 
@@ -641,7 +645,7 @@ jobs:
           --tag "${{ needs.validate.outputs.native_tag }}"
           --sbom release-assets/OpenAdapt-Desktop-${{ needs.validate.outputs.native_tag }}.cyclonedx.json
 
-      - name: Resolve the exact stable engine release identity
+      - name: Resolve the exact published engine release identity
         id: engine_release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -772,7 +776,7 @@ jobs:
           if-no-files-found: error
 
   publish-native:
-    name: Publish the verified Beta prerelease
+    name: Publish the verified candidate prerelease
     needs: [validate, attest]
     runs-on: ubuntu-22.04
     # This is the irreversible boundary. One environment approval authorizes
@@ -852,7 +856,7 @@ jobs:
           python scripts/native_release.py validate-release-order \
             --candidate-tag "${NATIVE_TAG}" \
             --tags remote-native-tags.txt
-          title="OpenAdapt Desktop Beta ${NATIVE_TAG#desktop-v}"
+          title="OpenAdapt Desktop release candidate ${NATIVE_TAG#desktop-v}"
           if gh release view "${NATIVE_TAG}" \
             --json assets,body,isDraft,isPrerelease,tagName > native-release.json 2>/dev/null; then
             if ! jq -e --arg tag "${NATIVE_TAG}" \
@@ -892,7 +896,7 @@ jobs:
               "${create_ref[@]}" \
               --prerelease \
               --title "${title}" \
-              --notes-file docs/BETA_NATIVE_INSTALLERS.md \
+              --notes-file docs/RELEASE_CANDIDATE_INSTALLERS.md \
               release-assets/*
           fi
           mkdir published-release-assets
@@ -1215,7 +1219,7 @@ jobs:
 
           mkdir remote-mirror
           gh release download "${engine_tag}" --dir remote-mirror \
-            --pattern 'OpenAdapt-Desktop-Beta-*' \
+            --pattern 'OpenAdapt-Desktop-Candidate-*' \
             --pattern 'OpenAdapt-Desktop-desktop-v*.cyclonedx.json' \
             --pattern 'openadapt-desktop-release-manifest.json' \
             --pattern 'openadapt-desktop-native-release-provenance.json' \
@@ -1299,7 +1303,7 @@ jobs:
             --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
             --deny-self-hosted-runners
 
-      - name: Write the monotonic stable channel descriptor
+      - name: Write the monotonic candidate channel descriptor
         shell: bash
         run: |
           set -euo pipefail
@@ -1364,12 +1368,12 @@ jobs:
               "${existing[@]}"
           fi
 
-      - name: Attest the monotonic stable channel descriptor
+      - name: Attest the monotonic candidate channel descriptor
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: openadapt-desktop-channel.json
 
-      - name: Publish and reverify the stable channel authority
+      - name: Publish and reverify the candidate channel authority
         shell: bash
         run: |
           set -euo pipefail
@@ -1386,8 +1390,8 @@ jobs:
             gh release create "${channel_tag}" \
               --target "${SOURCE_COMMIT}" \
               --prerelease \
-              --title "OpenAdapt Desktop stable native channel" \
-              --notes "Machine-readable signed authority for the latest verified native release." \
+              --title "OpenAdapt Desktop native release-candidate channel" \
+              --notes "Machine-readable signed index for the latest verified, unadmitted release candidate." \
               openadapt-desktop-channel.json
           fi
           mkdir published-channel

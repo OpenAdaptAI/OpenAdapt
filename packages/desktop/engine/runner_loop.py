@@ -1,4 +1,4 @@
-"""runner_loop -- EXPERIMENTAL outbound runner lane (cloud dispatch -> local execution).
+"""Outbound runner lane for governed cloud dispatch to local execution.
 
 Implements the desktop half of the hosted runner platform (P0): an outbound
 HTTPS long-poll loop against ``/api/runners/*`` on the hosted control plane
@@ -42,9 +42,8 @@ Non-negotiables enforced here:
   completes without a halt is acked ``halted-needs-attention`` with
   :data:`COMPLETION_PROOF_REQUIRED_REASON`; it is NEVER acked ``confirmed``.
 
-The whole lane is experimental and OFF by default (``runner_enabled=false``);
-the cloud half is built in parallel -- this module codes to the spec's wire
-format, not to a particular server implementation.
+The lane is OFF by default (``runner_enabled=false``). This module codes to the
+specified wire format, not to a particular server implementation.
 """
 
 from __future__ import annotations

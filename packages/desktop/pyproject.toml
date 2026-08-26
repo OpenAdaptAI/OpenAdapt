@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "openadapt-desktop"
 version = "0.15.0"
-description = "Beta desktop authoring surface and local capture/review tooling for OpenAdapt workflows"
+description = "Desktop authoring surface and local capture/review tooling for OpenAdapt workflows"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -14,7 +14,6 @@ authors = [
 ]
 keywords = ["desktop", "recording", "workflow-authoring", "human-in-the-loop", "automation"]
 classifiers = [
-    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",

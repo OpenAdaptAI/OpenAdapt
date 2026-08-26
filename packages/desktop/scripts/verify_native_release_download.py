@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Authenticate and verify an OpenAdapt native release download.
 
-The channel mode verifies GitHub attestations for the stable descriptor, its
+The channel mode verifies GitHub attestations for the candidate descriptor, its
 selected index, and ``SHA256SUMS`` before it accepts any installer bytes. It
 then checks the complete descriptor -> index -> checksum -> asset hash chain.
 
@@ -27,7 +27,8 @@ NATIVE_TAG_PREFIX = "desktop-v"
 NATIVE_RELEASE_WORKFLOW = ".github/workflows/native-release.yml"
 GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 CHANNEL_NAME = "openadapt-desktop-channel.json"
-CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v1"
+CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v2"
+LEGACY_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v1"
 INDEX_NAME = "openadapt-desktop-verified-release.json"
 INDEX_SCHEMA = "openadapt.desktop-verified-release/v1"
 PROVENANCE_NAME = "openadapt-desktop-native-release-provenance.json"
@@ -122,7 +123,7 @@ def expected_asset_names(version: str) -> set[str]:
         ("linux", "x86_64", "github-attested", (".deb", ".AppImage")),
     }
     for platform, architecture, signing, suffixes in platforms:
-        prefix = f"OpenAdapt-Desktop-Beta-v{version}-{platform}-{architecture}-{signing}"
+        prefix = f"OpenAdapt-Desktop-Candidate-v{version}-{platform}-{architecture}-{signing}"
         names.add(f"{prefix}-metadata.json")
         names.update(f"{prefix}{suffix}" for suffix in suffixes)
     return names
@@ -143,7 +144,7 @@ def _validate_hash_binding(value: object, *, name: str, url: str, label: str) ->
 def validate_channel(
     path: Path, *, repository: str = DEFAULT_REPOSITORY, raw: bytes | None = None
 ) -> dict:
-    """Validate the closed stable-channel descriptor.
+    """Validate the closed candidate-channel descriptor.
 
     Pass ``raw`` to parse exactly the bytes an earlier check already hashed.
     """
@@ -173,9 +174,14 @@ def validate_channel(
             "promotion",
         },
     )
-    if data.get("schema") != CHANNEL_SCHEMA or data.get("repository") != repository:
+    schema = data.get("schema")
+    if (
+        schema not in {CHANNEL_SCHEMA, LEGACY_CHANNEL_SCHEMA}
+        or data.get("repository") != repository
+    ):
         raise ValueError("release channel identity is invalid")
-    if data.get("channel") != "stable-native":
+    expected_channel = "candidate-native" if schema == CHANNEL_SCHEMA else "stable-native"
+    if data.get("channel") != expected_channel:
         raise ValueError("release channel has the wrong channel name")
     version = str(data.get("native_version") or "")
     _version_tuple(version)
@@ -387,12 +393,8 @@ def verify_authenticated_channel(
         raise ValueError(f"release channel version is below the trusted minimum {minimum_version}")
 
     if previous_channel is not None:
-        previous_bytes = _read_regular_bytes(
-            previous_channel, label="previous release channel"
-        )
-        previous = validate_channel(
-            previous_channel, repository=repository, raw=previous_bytes
-        )
+        previous_bytes = _read_regular_bytes(previous_channel, label="previous release channel")
+        previous = validate_channel(previous_channel, repository=repository, raw=previous_bytes)
         previous_digest = hashlib.sha256(previous_bytes).hexdigest()
         expected_previous = {
             "native_version": previous["native_version"],
@@ -517,7 +519,7 @@ def main() -> int:
     parser.add_argument(
         "--channel",
         type=Path,
-        help="authenticate this stable channel descriptor before verifying assets",
+        help="authenticate this candidate channel descriptor before verifying assets",
     )
     parser.add_argument(
         "--index",

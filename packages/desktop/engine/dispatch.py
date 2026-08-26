@@ -300,7 +300,7 @@ class EngineDispatcher:
             # tray-only UI navigation (relayed to the desktop frontend)
             "open_workflow_library": self.open_workflow_library,
             "open_teach": self.open_teach,
-            # runner lane (EXPERIMENTAL -- outbound /api/runners/* long-poll)
+            # Outbound runner lane (/api/runners/* long-poll).
             "runner_status": self.runner_status,
             "runner_enable": self.runner_enable,
             "runner_disable": self.runner_disable,
@@ -3093,7 +3093,7 @@ class EngineDispatcher:
     # ------------------------------------------------------- runner lane
 
     def _runner_service(self) -> Any:
-        """Lazily build the shared runner-loop service (EXPERIMENTAL lane)."""
+        """Lazily build the shared outbound runner-loop service."""
         if self.services.runner is None:
             from engine.runner_loop import RunnerService
 

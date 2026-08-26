@@ -12,19 +12,23 @@ from scripts.verify_build_artifact import bundled_flow_banner
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_public_metadata_identifies_beta_supporting_surface() -> None:
+def test_public_metadata_identifies_component_role_and_admission_boundary() -> None:
     readme = (ROOT / "README.md").read_text()
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     package = json.loads((ROOT / "package.json").read_text())
     cargo = tomllib.loads((ROOT / "src-tauri" / "Cargo.toml").read_text())
 
-    assert "Lifecycle: Beta supporting surface" in readme
+    assert "Role: installed authoring and operation companion" in readme
+    assert "active Production default" in readme
+    assert "not actively admitted" in readme
+    assert "Experimental" not in readme
+    assert "Beta" not in readme
     assert "openadapt-flow" in readme
     assert "AI training data collection" not in readme
     assert "AI training data collection" not in pyproject["project"]["description"]
     assert "AI training data collection" not in package["description"]
     expected_native_description = (
-        "Beta installed companion for OpenAdapt authoring, teaching, and local pairing"
+        "Installed companion for OpenAdapt authoring, teaching, and local pairing"
     )
     assert package["description"] == expected_native_description
     assert cargo["package"]["description"] == expected_native_description
@@ -207,8 +211,8 @@ def test_release_recovery_ref_is_main_contained_and_exact_ci_green() -> None:
     assert build_index < publish_index
 
 
-def test_beta_release_notes_describe_the_bundled_flow_runtime() -> None:
-    notes = (ROOT / "docs/BETA_NATIVE_INSTALLERS.md").read_text()
+def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
+    notes = (ROOT / "docs/RELEASE_CANDIDATE_INSTALLERS.md").read_text()
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     lock = (ROOT / "uv.lock").read_text()
     native_release = (ROOT / ".github/workflows/native-release.yml").read_text()
@@ -217,7 +221,7 @@ def test_beta_release_notes_describe_the_bundled_flow_runtime() -> None:
     classifiers = pyproject["project"]["classifiers"]
 
     assert not (ROOT / "docs/EXPERIMENTAL_NATIVE_INSTALLERS.md").exists()
-    assert native_release.count("--notes-file docs/BETA_NATIVE_INSTALLERS.md") == 1
+    assert native_release.count("--notes-file docs/RELEASE_CANDIDATE_INSTALLERS.md") == 1
     assert "EXPERIMENTAL_NATIVE_INSTALLERS" not in native_release
     flow_dependencies = [
         dependency for dependency in build_dependencies if dependency.startswith("openadapt-flow")
@@ -230,7 +234,7 @@ def test_beta_release_notes_describe_the_bundled_flow_runtime() -> None:
     assert "openadapt-capture>=1.2.1" in dependencies
     assert 'name = "openadapt-capture"\nversion = "1.2.1"' in lock
     assert "openadapt-privacy>=1.0.0" in dependencies
-    assert "Development Status :: 4 - Beta" in classifiers
+    assert not any(item.startswith("Development Status ::") for item in classifiers)
     assert "Development Status :: 2 - Pre-Alpha" not in classifiers
     assert bundled_flow_version() == "1.31.0"
     assert bundled_flow_banner() == "openadapt-flow 1.31.0"

@@ -48,7 +48,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Resolve the stable engine release
+      - name: Resolve the published engine release
         id: version
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}

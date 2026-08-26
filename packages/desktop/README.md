@@ -4,11 +4,15 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Lifecycle: Beta supporting surface.** OpenAdapt Desktop is the
-> local authoring and teaching cockpit for OpenAdapt. The canonical compiler and
-> governed runtime live in
+> **Role: installed authoring and operation companion.** OpenAdapt Desktop is
+> the local authoring and teaching cockpit for OpenAdapt. The canonical compiler
+> and governed runtime live in
 > [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). This
-> latest published native prerelease is historical and carries its original
+> repository publishes release candidates. An exact release becomes the active
+> Production default only while the canonical signed lifecycle ledger has a
+> current admission for its exact artifacts. An absent, inactive, expired, or
+> revoked admission means that the release is not actively admitted. The latest
+> published native prerelease is historical and carries its original
 > ad-hoc/unsigned labels. The next native release is blocked until macOS has
 > Developer ID plus notarization, Windows has Authenticode, and the exact Linux
 > bytes pass GitHub OIDC attestation verification.
@@ -24,14 +28,14 @@ it **halts instead of guessing** when verification fails.
 Substrates are all first-class in the product design (web, Windows, macOS,
 Linux, RDP, and Citrix/VDI).
 
-Substrate maturity, stated the same way across the OpenAdapt repositories:
+Substrate roles and qualification evidence:
 
-| Substrate | Maturity |
-| --- | --- |
-| Browser (web) | Beta; available in production today through the managed browser product |
-| Native desktop (Windows, macOS, Linux) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
-| Remote display (RDP) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
-| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification is deployment-specific |
+| Substrate | Role | Evidence boundary |
+| --- | --- | --- |
+| Browser (web) | Managed browser recording and execution | Qualification is task- and environment-specific; the signed lifecycle ledger selects the active Production default |
+| Native desktop (Windows, macOS, Linux) | Customer-controlled native recording and execution | Qualification is task- and environment-specific |
+| Remote display (RDP) | Customer-controlled remote-display recording and execution | Qualification is task- and environment-specific |
+| Citrix / VDI | Customer-controlled remote-application recording and execution | ICA/HDX qualification is deployment-specific |
 
 The compiler, replayer, certification, and governed repair all live in
 `openadapt-flow`. This desktop repository is the cockpit and the local wiring
@@ -109,24 +113,24 @@ teaching, escalation, and terminal receipts.
 
 ## Status
 
-| Area | Checked-out implementation | Status |
+| Area | Checked-out implementation | Evidence and admission state |
 | --- | --- | --- |
-| Python capture CLI | Record, list, inspect, scrub, review, approve, local storage, health, and cleanup commands | Beta; covered by tests |
-| Local review gate | Persisted states and egress checks for the capture pipeline | Beta; not the `openadapt-flow` certification system |
-| Tauri/React cockpit | Login, onboarding, workflows, target-aware record/review/replay/governed run, teach, and settings calling the engine through Tauri commands | Beta; browser and customer-controlled native/remote targets are available as scoped above, and the shell renders an engine-offline state when the sidecar binary is absent |
-| Rust commands | Generic `engine_invoke` bridge plus typed commands, sidecar spawn/watchdog/shutdown, and event re-emission to the WebView | Beta; compiled and bundled in CI |
-| Python sidecar IPC | JSON-lines handler backed by a shared `EngineDispatcher` (recording, compile/replay/run/teach, auth, sync/push, review, config) | Beta; unit and e2e tests with mocked boundaries |
-| Tray IPC socket server | Token-authenticated loopback TCP server plus a `~/.openadapt/desktop_ipc.json` discovery file for `openadapt-tray` | Beta; not yet validated end to end against the shipped tray |
+| Python capture CLI | Record, list, inspect, scrub, review, approve, local storage, health, and cleanup commands | Covered by tests; native capture comes from the canonical `openadapt-capture` component |
+| Local review gate | Persisted states and egress checks for the capture pipeline | Separate from the `openadapt-flow` certification system |
+| Tauri/React cockpit | Login, onboarding, workflows, target-aware record/review/replay/governed run, teach, and settings calling the engine through Tauri commands | Browser and customer-controlled native/remote targets are available as scoped above; the shell renders an engine-offline state when the sidecar binary is absent |
+| Rust commands | Generic `engine_invoke` bridge plus typed commands, sidecar spawn/watchdog/shutdown, and event re-emission to the WebView | Compiled and bundled in CI |
+| Python sidecar IPC | JSON-lines handler backed by a shared `EngineDispatcher` (recording, compile/replay/run/teach, auth, sync/push, review, config) | Unit and end-to-end tests use mocked external boundaries |
+| Tray IPC socket server | Token-authenticated loopback TCP server plus a `~/.openadapt/desktop_ipc.json` discovery file for `openadapt-tray` | Desktop and the shipped tray are not yet validated together end to end |
 | Desktop-to-flow handoff | `FlowBridge` launches the pinned Flow runtime embedded in the frozen sidecar as an isolated subprocess | Self-contained; no separate Python or Flow installation |
-| Hosted auth and governed handoff | Browser-PKCE and paste-token sign-in; host-bound keychain credentials; exact `openadapt.push-result/v1` review, accepted-ingest, and uncertain-delivery state; local handoff retention; and halted-run break reports | Beta implementation candidate; distribution requires a release-qualified Flow build and live Cloud acceptance before Desktop updates its exact runtime pin |
-| Attended phone decisions | One-use QR pairing, protected local evidence, typed allowed actions, runner revalidation, receipts, device revocation, and an optional outbound hosted lane | Beta; device pairing does not replace the deployment's authenticated operator principal |
+| Hosted auth and governed handoff | Browser-PKCE and paste-token sign-in; host-bound keychain credentials; exact `openadapt.push-result/v1` review, accepted-ingest, and uncertain-delivery state; local handoff retention; and halted-run break reports | Distribution requires a release-qualified Flow build and live Cloud acceptance before Desktop updates its exact runtime pin |
+| Attended phone decisions | One-use QR pairing, protected local evidence, typed allowed actions, runner revalidation, receipts, device revocation, and an optional outbound hosted lane | Device pairing does not replace the deployment's authenticated operator principal |
 | Build artifacts | Wheel/sdist, a self-contained PyInstaller engine+Flow runtime, and DMG/MSI/NSIS/DEB/AppImage native jobs | Native jobs prove the frozen browser lifecycle, structurally install/uninstall, and label every platform, architecture, and signing state |
-| Native installers | Distinct `desktop-v*` draft-prerelease workflow with final-byte checksums and GitHub provenance, auto-triggered at each engine release | Beta distribution lane; signing state is encoded in every filename and workflow qualification remains specific |
-| Code signing and updater | Apple Developer ID/notarization and Windows Authenticode are credential-gated and fail closed on partial configuration; the updater feed is disabled | In progress; not a supported release channel |
+| Native installers | Distinct `desktop-v*` prerelease workflow with final-byte checksums and GitHub provenance | Unadmitted release-candidate lane; signing state is encoded in every filename and workflow qualification remains specific |
+| Code signing and updater | Apple Developer ID/notarization and Windows Authenticode are credential-gated and fail closed on partial configuration; the updater feed is disabled | Candidate publication requires the complete platform trust set; the updater is outside the current channel |
 
-The self-contained `openadapt-engine` freeze is implemented. External code
-signing/notarization and the signed updater-key lifecycle remain before a
-generally available native release.
+CI builds the self-contained `openadapt-engine` freeze. Candidate publication
+requires the external code-signing and notarization controls. Production
+selection also requires an active central admission for the exact artifacts.
 
 ## Use OpenAdapt today
 
@@ -192,7 +196,7 @@ To work on the shell and frontend you also need Rust, Node.js, and the Tauri
 CLI. A dev shell runs frontend-only and shows the engine as offline until a
 frozen sidecar binary from CI is present.
 
-### Native installers (Beta)
+### Native installer release candidates
 
 Native packages are published under a distinct `desktop-vX.Y.Z` prerelease
 channel, separate from the engine's `vX.Y.Z` PyPI/GitHub releases. The native
@@ -220,7 +224,7 @@ pinned sources, hashes, and modification status are recorded in
 - Which release to download, and the two-lane policy, are in
   [RELEASES.md](RELEASES.md).
 - Artifact names, verification scope, and provenance are in
-  [Beta Native Installers](docs/BETA_NATIVE_INSTALLERS.md).
+  [Native Release Candidates](docs/RELEASE_CANDIDATE_INSTALLERS.md).
 - The signing activation runbook (what to buy, which secrets to add, and what
   each surface may then truthfully claim) is in
   [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md).
@@ -269,9 +273,10 @@ compiler or runtime. Those remain in `openadapt-flow`.
   real-application qualification remains workflow-specific.
 - The frozen `openadapt-engine` sidecar binary is produced only by CI. A plain
   dev checkout runs the shell in frontend-only mode.
-- Native packages remain Beta. The latest published prerelease predates the
-  mandatory platform trust gate. Structural install/uninstall success is not
-  evidence of a validated workflow.
+- Native packages remain unadmitted release candidates until the central
+  Production lifecycle activates an exact release. The latest published
+  prerelease predates the mandatory platform trust gate. Structural
+  install/uninstall success is not evidence of a validated workflow.
 - Apple Developer ID/notarization and Windows Authenticode credentials must be
   provisioned before the next native release. A missing or partial set stops
   the release. The updater and rollback remain disabled pending an independent
@@ -281,7 +286,7 @@ compiler or runtime. Those remain in `openadapt-flow`.
 
 ## CLI surface
 
-The Python engine exposes these Beta commands:
+The Python engine exposes these commands:
 
 | Command | Purpose |
 | --- | --- |
@@ -340,9 +345,9 @@ current public product boundary.
 | --- | --- |
 | [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) | Canonical workflow compiler, runtime, certification, and governed repair engine |
 | [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) | Flagship launcher and meta-repository |
-| [`openadapt-tray`](https://github.com/OpenAdaptAI/openadapt-tray) | Experimental system-tray status and launcher companion for this cockpit |
-| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | Beta canonical native screen, mouse, keyboard, timing, window-scoping, and media-capture component |
-| [`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy) | Experimental PII detection and redaction component |
+| [`openadapt-tray`](https://github.com/OpenAdaptAI/openadapt-tray) | System-tray status and launcher companion for this cockpit |
+| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | Canonical native screen, mouse, keyboard, timing, window-scoping, and media-capture component |
+| [`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy) | PII detection and redaction component |
 
 Documentation for the wider stack lives at
 [docs.openadapt.ai](https://docs.openadapt.ai).

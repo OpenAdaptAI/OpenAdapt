@@ -1,8 +1,9 @@
 # Code Signing Runbook (founder activation)
 
-This is the step-by-step guide to move OpenAdapt Desktop installers from
-**Beta / unsigned** to **signed and trusted**. It lists exactly what to
-buy, which secrets to add, and what each public surface may then truthfully say.
+This guide adds the required platform trust to OpenAdapt Desktop release
+candidates. It lists what to buy, which secrets to add, and what each public
+surface can then truthfully say. Code signing does not create a Production
+admission.
 
 The regular build workflow can still produce explicit ad-hoc or unsigned CI
 artifacts. The native release workflow is stricter. It fails closed unless
@@ -18,7 +19,7 @@ complete Authenticode method. It also fails closed on a partial set.
   - `method` — *how* a signed Windows artifact is produced (`pfx` vs
     `trusted-signing`); `pfx`/`adhoc`/`unsigned` otherwise.
 - The `mode` is baked into every artifact **filename**:
-  `OpenAdapt-Desktop-Beta-v<version>-<os>-<arch>-<signing>.<ext>`.
+  `OpenAdapt-Desktop-Candidate-v<version>-<os>-<arch>-<signing>.<ext>`.
   This is the honesty mechanism — a download page or trust center can read the
   filename token and never overstate maturity. When you configure macOS
   Developer ID, the macOS asset name flips from `-adhoc-` to
@@ -193,10 +194,10 @@ release has actually built. The artifact filename token is the source of truth.
 | Surface | With no secrets | After macOS Developer ID | After Windows Authenticode | Linux OIDC attestation |
 | --- | --- | --- | --- | --- |
 | /download page | No new native release; the release gate stops. | "**Signed and notarized by Apple** on macOS — opens without a Gatekeeper override." | "**Signed with a trusted Authenticode certificate** on Windows." | "Linux DEB and AppImage downloads have **GitHub OIDC attestations over the exact bytes**." |
-| Trust center | Existing historical Beta artifacts keep their encoded signing state. | Add: "macOS DMGs pass Apple notarization (`spctl` accepted, ticket stapled)." | Add: "Windows installers carry a valid, timestamped Authenticode signature." | Add: "Linux packages pass `gh attestation verify` against this repository." |
+| Trust center | Existing historical candidate artifacts keep their encoded signing state. | Add: "macOS DMGs pass Apple notarization (`spctl` accepted, ticket stapled)." | Add: "Windows installers carry a valid, timestamped Authenticode signature." | Add: "Linux packages pass `gh attestation verify` against this repository." |
 | README honesty note | Describe only the latest published artifact set. | Update the note after the first trusted release. | Update the note after the first trusted release. | Update the note after the first trusted release. |
 
-The README signing note and `docs/BETA_NATIVE_INSTALLERS.md` both point
+The README signing note and `docs/RELEASE_CANDIDATE_INSTALLERS.md` both point
 here; update their per-platform wording when each platform's first **trusted**
 release ships (not when the secrets are merely added). The download page needs no
 code change to detect signing — it reads the `-<signing>-` token in the asset
