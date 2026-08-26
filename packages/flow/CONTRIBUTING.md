@@ -33,6 +33,15 @@ pytest -q                          # tests
   from that list is a very welcome PR.
 - **Coverage:** CI reports coverage for visibility. There is no hard floor yet,
   but new code should come with tests.
+- **Repository tree:** a test must never write into the checkout. The session
+  hooks in `tests/conftest.py` snapshot the tracked-file status before the
+  first test and after the last one, and fail the run when a new entry
+  appears, because a regenerated golden can be committed by accident and
+  `scripts/check_release_consistency.py` pins a reviewed SHA-256 inventory of
+  the public files. Write to `tmp_path` (copy a fixture bundle there first)
+  instead. The check reports any tracked file that changed during the run, so
+  editing files yourself while a long suite runs also trips it — set
+  `OPENADAPT_FLOW_ALLOW_DIRTY_TREE=1` for that case.
 
 ### CI execution lanes
 
