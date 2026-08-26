@@ -882,6 +882,23 @@ def _resume_under_lease(
     ContinuationCoordinator(run_dir, key=key).bind_approval(
         continuation_token, approved
     )
+    resumed_screenshots_may_leave_box = bool(
+        getattr(replayer, "_screenshots_may_leave_box", False)
+    )
+    if resumed_screenshots_may_leave_box and not manifest.screenshots_may_leave_box:
+        continuation_guard = getattr(replayer, "_durable_continuation_guard", None)
+        if continuation_guard is None:
+            raise StateDiverged(
+                "durable continuation lost its audit-evidence authority guard"
+            )
+        updated_manifest = manifest.model_copy(
+            update={"screenshots_may_leave_box": True}
+        )
+        store.cas_manifest(store.model_digest(manifest), updated_manifest)
+        # Commit the sticky privacy posture to the same continuation authority
+        # before retained-state checks or resumed execution can call a model.
+        continuation_guard.acknowledge_progress()
+        manifest = updated_manifest
     if pending.delivery_uncertainty is not None:
         last_linear = store.last_checkpoint()
         last_program = store.last_program_checkpoint()

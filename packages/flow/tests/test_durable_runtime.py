@@ -404,6 +404,49 @@ def test_resume_egress_posture_stays_sticky_across_a_second_resume(tmp_path):
     assert manifest.screenshots_may_leave_box is True
 
 
+def test_resume_persists_new_egress_posture_before_an_early_exit(tmp_path):
+    """A crashed resumed leg cannot hide its newly admitted egress posture."""
+
+    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path)
+    store = CheckpointStore(run_dir)
+    manifest = store.read_manifest()
+    assert manifest is not None
+    assert manifest.screenshots_may_leave_box is False
+
+    verifier.refute.clear()
+    resumed_backend = FakeBackend()
+
+    class CrashBeforeResumedStep(Replayer):
+        def _run_step(self, *args, **kwargs):
+            del args, kwargs
+            retained = store.read_manifest()
+            assert retained is not None
+            assert retained.screenshots_may_leave_box is True
+            raise KeyboardInterrupt("simulated early exit before resumed execution")
+
+    with pytest.raises(KeyboardInterrupt, match="simulated early exit"):
+        resume(
+            run_dir,
+            CrashBeforeResumedStep(
+                resumed_backend,
+                vision=_vision_ok(),
+                grounder=_EgressGrounder(),
+                allow_model_grounding=True,
+                effect_verifier=verifier,
+                poll_interval_s=0.01,
+            ),
+            approval=_approval(bundle),
+        )
+
+    retained = store.read_manifest()
+    assert retained is not None
+    assert retained.screenshots_may_leave_box is True
+    assert resumed_backend.actions == []
+    authority = DurableAuthority(run_dir, store).validate(retained)
+    assert authority.progress_digest == store.continuation_state_digest()
+    assert store.read_pending() is not None
+
+
 def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(
     tmp_path,
 ):
