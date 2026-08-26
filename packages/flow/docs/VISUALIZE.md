@@ -81,3 +81,60 @@ openadapt-flow visualize path/to/bundle --format json -o program-graph.json
   vanilla-JS renderer (`openadapt_flow/visualize/static/program_graph.{css,js}`)
   and embeds the spec as JSON, so the page opens offline and renders under a
   strict CSP. The desktop (Tauri, CSP `'self'`) vendors those same two files.
+
+## What `visualize` shows: the bundled MockMed sample
+
+This is the actual Mermaid that `visualize` emits for the bundled MockMed
+triage sample, produced by
+`openadapt-flow visualize docs/showcase/bundle --format mermaid` (nothing
+below is hand-drawn):
+
+```mermaid
+flowchart TD
+  n0("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
+  n1("type 'nurse.demo'")
+  n2("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
+  n3("type 'mockmed-demo-pass'")
+  n4("click 'Sign In'<br/><small>visual template + 2 OCR landmarks</small>")
+  n5("click 'Open'<br/><small>visual template + 2 OCR landmarks</small>")
+  n6("click 'New Encounter'<br/><small>visual template + 2 OCR landmarks</small>")
+  n7("click 'Triage'<br/><small>visual template + 2 OCR landmarks</small>")
+  n8("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
+  n9("type <note>")
+  n10("click 'Save Encounter'<br/><small>visual template + 2 OCR landmarks</small>")
+  n11{{"Success"}}
+  n0 --> n1
+  n1 --> n2
+  n2 --> n3
+  n3 --> n4
+  n4 --> n5
+  n5 --> n6
+  n6 --> n7
+  n7 --> n8
+  n8 --> n9
+  n9 --> n10
+  n10 --> n11
+  classDef irreversible stroke:#b4530a,stroke-width:2px;
+  classDef halt stroke:#b21f2d,stroke-width:2px;
+```
+
+How to read the target labels:
+
+- **`recorded visual target` is not coordinate replay.** It means the control
+  had no readable label, so the bundle retained its visual crop and nearby text
+  instead. The demonstration's point is only the relative offset inside the
+  target after that evidence re-finds it.
+- **`visual template + 2 OCR landmarks` names the retained evidence.** Replay
+  resolves it on a fresh frame; global movement is accepted only when the
+  landmarks do not contradict it, and ambiguous OCR refuses instead of picking
+  a match.
+- **DOM/accessibility is stronger when available.** Browser and native bundles
+  show that structural rung instead; RDP and Citrix intentionally use the
+  visual floor.
+- **The HTML view carries the full contract.** `--format html` expands every
+  resolution rung, identity gate, effect check, postcondition, and halt point.
+
+*Text summary (for renderers without Mermaid): the compiled MockMed triage
+bundle signs in, opens the patient, starts an encounter, enters the `<note>`
+parameter, and saves it. Each click is re-found from retained evidence rather
+than replayed at a literal screen coordinate.*
