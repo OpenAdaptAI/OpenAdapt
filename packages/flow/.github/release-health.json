@@ -2,8 +2,8 @@
   "$comment": [
     "Input to scripts/check_release_health.py. One entry per RELEASE LANE:",
     "a tag namespace plus the workflow that is supposed to publish it.",
-    "Releases here are workflow_dispatch-only by deliberate design, and that",
-    "gate exists because 1.13.0 and 1.14.0 were yanked for shipping AGPL",
+    "Tag creation here is workflow_dispatch-only by deliberate design, and",
+    "that gate exists because 1.13.0 and 1.14.0 were yanked for shipping AGPL",
     "openIMIS benchmark files. Nothing in the release-health lane publishes,",
     "dispatches, or reruns anything: it prints the command a human would run."
   ],
@@ -21,8 +21,8 @@
       "unreleased_grace_hours": 4,
       "tag_without_release_grace_hours": 1,
       "pypi_lag_grace_minutes": 30,
-      "unreleased_remediation": "gh workflow run release.yml --repo OpenAdaptAI/openadapt-flow --ref main -f operation=semantic-release",
-      "pypi_remediation": "gh workflow run release.yml --repo OpenAdaptAI/openadapt-flow --ref main -f operation=publish-existing-ref -f ref={tag}"
+      "unreleased_remediation": "prepare and merge the reviewed version, lock, and changelog update; then run: gh workflow run release.yml --repo OpenAdaptAI/openadapt-flow --ref main -f version=<reviewed-version>",
+      "pypi_remediation": "rerun the exact tag-push release.yml run for {tag}; do not create another tag or ref"
     }
   ]
 }
