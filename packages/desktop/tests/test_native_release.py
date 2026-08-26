@@ -311,6 +311,27 @@ def test_security_workflows_cover_all_languages_and_pin_every_dependency() -> No
         "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" in secret_scan
     )
     assert "sha256sum --check --strict" in secret_scan
+    assert "tests/test_gitleaks_ci.sh" in secret_scan
+    assert "scripts/run_gitleaks_ci.sh" in secret_scan
+    assert (
+        "GITLEAKS_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}"
+        in secret_scan
+    )
+    assert (
+        "GITLEAKS_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}"
+        in secret_scan
+    )
+    assert "GITLEAKS_TREE_SHA: ${{ github.sha }}" in secret_scan
+
+
+def test_gitleaks_runner_scans_only_the_owned_range_and_the_tested_tree() -> None:
+    runner = (ROOT / "scripts" / "run_gitleaks_ci.sh").read_text()
+
+    assert 'log_options="${base_sha}..${head_sha}"' in runner
+    assert 'gitleaks git . --log-opts="${log_options}"' in runner
+    assert 'git archive "${tree_sha}"' in runner
+    assert 'gitleaks dir "${tree_directory}"' in runner
+    assert "gitleaks git . --redact --no-banner" not in runner
 
 
 def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None:

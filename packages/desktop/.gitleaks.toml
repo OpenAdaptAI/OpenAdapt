@@ -1,0 +1,11 @@
+title = "OpenAdapt Desktop Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "The published FFmpeg release-key fingerprint is public provenance, not a secret"
+regexTarget = "secret"
+regexes = [
+  '''^FCF986EA15E6E293A5644F10B4322F04D67658D8$''',
+]
