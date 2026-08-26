@@ -469,6 +469,8 @@ def test_tag_publication_requires_exact_tag_oidc_and_digest_verification() -> No
 
     assert "GITHUB_EVENT_NAME" in validate
     assert "GITHUB_REF_TYPE" in validate
+    assert '${GITHUB_ACTOR}" != "openadapt-release[bot]' in validate
+    assert "GITHUB_TRIGGERING_ACTOR" not in validate
     assert "^refs/tags/v([0-9]+\\.[0-9]+\\.[0-9]+)$" in validate
     assert "environment: pypi" in publish
     assert "id-token: write" in publish

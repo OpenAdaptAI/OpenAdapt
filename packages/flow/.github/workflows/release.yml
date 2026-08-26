@@ -186,6 +186,10 @@ jobs:
             echo "The publication path accepts a pushed tag only."
             exit 1
           fi
+          if [ "${GITHUB_ACTOR}" != "openadapt-release[bot]" ]; then
+            echo "Only the release App can start the tag publication path."
+            exit 1
+          fi
           if [[ ! "${GITHUB_REF}" =~ ^refs/tags/v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "The release tag must be an exact stable semantic version such as v1.34.0."
             exit 1
