@@ -104,13 +104,12 @@ from render_platform_versions import render_markdown
 ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED_KIND = "openadapt-platform-release-manifest"
-EXPECTED_SCHEMA_MAJOR = 1
+EXPECTED_SCHEMA_MAJOR = 2
 EXPECTED_UNSIGNED_STATUS = "unsigned (signing infrastructure pending)"
 STATUS_URL = "https://openadapt.ai/status.json"
 PYPI_URL_TEMPLATE = "https://pypi.org/pypi/{package}/json"
 HTTP_TIMEOUT_SECONDS = 30
 REPORT_PATH = ROOT / "docs" / "platform-compatibility-report.md"
-RELEASE_CHANNELS = {"stable", "beta", "preview", "experimental", "research"}
 EXPECTED_SIGNATURE_PLAN = "docs/platform-manifest.md#signing-plan"
 
 REQUIRED_TOP_LEVEL_FIELDS = (
@@ -118,7 +117,6 @@ REQUIRED_TOP_LEVEL_FIELDS = (
     "schema_version",
     "generated_at",
     "generation",
-    "release_channel",
     "release_selection",
     "components",
     "runtime_units",
@@ -186,12 +184,6 @@ def check_structure(manifest: dict, report: Report) -> None:
         generated = None
     if generated is None or generated.tzinfo != _dt.timezone.utc:
         report.error("generated_at must be an ISO 8601 UTC timestamp")
-    release_channel = manifest.get("release_channel")
-    if release_channel not in RELEASE_CHANNELS:
-        report.error(
-            f"release_channel must be one of {sorted(RELEASE_CHANNELS)!r}, "
-            f"got {release_channel!r}"
-        )
     if manifest.get("generation") != _generation_metadata():
         report.error(
             "generation metadata does not match the exact generator and renderer"
@@ -518,7 +510,7 @@ def check_structure(manifest: dict, report: Report) -> None:
     substrates = manifest.get("substrate_drivers")
     if not isinstance(substrates, list) or not substrates:
         report.error("substrate_drivers must be a non-empty list")
-    elif any(set(row) != {"name", "public_label", "delivery"} for row in substrates):
+    elif any(set(row) != {"name", "delivery"} for row in substrates):
         report.error("substrate_drivers has an invalid row")
 
 
@@ -986,13 +978,6 @@ def check_against_status(manifest: dict, report: Report, strict: bool) -> None:
                 "public/status.json and data/published-version-claims.json "
                 "there)"
             )
-    lifecycle = (status.get("product_lifecycle") or "").lower()
-    if lifecycle and lifecycle != manifest.get("release_channel"):
-        emit(
-            f"release_channel skew: manifest has "
-            f"{manifest.get('release_channel')!r}, status.json lifecycle is "
-            f"{lifecycle!r}"
-        )
     try:
         expected_os = _supported_os_from_status(status)
         expected_substrates = _substrates_from_status(status)

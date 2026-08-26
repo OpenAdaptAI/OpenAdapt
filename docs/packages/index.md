@@ -5,11 +5,15 @@ cockpit, privacy tools, and optional managed control plane.
 
 | Package | Current role | Install route |
 | --- | --- | --- |
-| `openadapt` | Beta launcher and unified CLI | `pip install openadapt` |
-| `openadapt-flow` | Beta compiler and governed runtime; installed by the launcher | `pip install openadapt-flow` for engine-only use |
-| `openadapt-capture` | Experimental native capture component | `pip install 'openadapt[capture]'` |
+| `openadapt` | Launcher and unified CLI | `pip install openadapt` |
+| `openadapt-flow` | Compiler and governed runtime; installed by the launcher | `pip install openadapt-flow` for engine-only use |
+| `openadapt-capture` | Native screen, input, timing, window-scope, and media capture | `pip install 'openadapt[capture]'` |
 | `openadapt-privacy` | Local privacy and sanitization support | `pip install 'openadapt[privacy]'` |
-| `openadapt-desktop` | Beta visual authoring and operator application | [Download an installer](https://openadapt.ai/download) |
+| `openadapt-desktop` | Visual authoring and operator application | [Download an installer](https://openadapt.ai/download) |
+
+Package roles do not assign a lifecycle state. Use the
+[signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
+for the current admission state of each product target.
 
 Install the launcher and run the browser tutorial:
 

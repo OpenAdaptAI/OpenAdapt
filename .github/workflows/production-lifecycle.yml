@@ -1,0 +1,76 @@
+name: README Production lifecycle
+
+on:
+  pull_request:
+    paths:
+      - README.md
+      - production-lifecycle-source.json
+      - scripts/render_readme_maturity.py
+      - tests/test_readme_maturity.py
+      - .github/workflows/production-lifecycle.yml
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - production-lifecycle-source.json
+      - scripts/render_readme_maturity.py
+      - tests/test_readme_maturity.py
+      - .github/workflows/production-lifecycle.yml
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [production-lifecycle-changed]
+
+concurrency:
+  group: readme-production-lifecycle-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Prove the consumer contract
+        run: python -m unittest discover -s tests -p test_readme_maturity.py
+      - name: Validate the exact source and README projection
+        run: >-
+          python scripts/render_readme_maturity.py
+          --check
+          --require-current-source
+
+  report-drift:
+    needs: validate
+    if: >-
+      ${{ always() && needs.validate.result == 'failure' &&
+          (github.event_name == 'schedule' ||
+           github.event_name == 'workflow_dispatch' ||
+           github.event_name == 'repository_dispatch') }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the lifecycle drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "README Production lifecycle source has drifted"
+          BODY: >-
+            The signed Production lifecycle consumer refused the current source
+            or README projection. Review the exact failure at
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
+        run: |
+          set -euo pipefail
+          EXISTING=$(gh issue list --repo "${GITHUB_REPOSITORY}" --state open \
+            --search "in:title \"${TITLE}\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ -n "${EXISTING}" ]; then
+            gh issue edit "${EXISTING}" --repo "${GITHUB_REPOSITORY}" --body "${BODY}"
+          else
+            gh issue create --repo "${GITHUB_REPOSITORY}" --title "${TITLE}" --body "${BODY}"
+          fi

@@ -13,7 +13,6 @@ from email.parser import BytesParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BETA_CLASSIFIER = "Development Status :: 4 - Beta"
 
 
 def _quoted_table_value(text: str, table: str, key: str) -> str:
@@ -133,8 +132,11 @@ def verify_release_artifacts(
             raise ValueError(
                 f"{source} Requires-Python does not match {project_requires_python}"
             )
-        if _lifecycle(metadata) != [BETA_CLASSIFIER]:
-            raise ValueError(f"{source} does not declare the Beta launcher lifecycle")
+        if _lifecycle(metadata):
+            raise ValueError(
+                f"{source} publishes a static lifecycle classifier; "
+                "use the signed public Production record"
+            )
 
     comparable_fields = ("Name", "Version", "Summary", "Requires-Python")
     if any(
