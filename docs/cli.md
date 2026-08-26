@@ -10,7 +10,7 @@ installed `openadapt-flow` engine.
 ## First run
 
 ```bash
-openadapt quickstart [--headed] [--break-it] [--out NEW_DIRECTORY]
+openadapt quickstart [--headed] [--out NEW_DIRECTORY]
 ```
 
 `quickstart` runs the bundled synthetic workflow from recording through an
@@ -99,6 +99,21 @@ openadapt flow push APPROVED_DERIVATIVE --kind recording
 
 Do not upload a raw recording. The push path accepts an approved sanitized
 derivative and validates its exact bytes.
+
+## Advanced effect-verification simulation
+
+After the healthy quickstart succeeds, you can run an optional synthetic case
+in which the application reports success while its independent source rejects
+the write:
+
+```bash
+openadapt quickstart --simulate-rejected-write \
+  --out openadapt-quickstart-rejected-write
+```
+
+OpenAdapt runs the healthy tutorial first. It then uses the same certified
+bundle for the simulated rejection. The independent effect check detects the
+missing write and returns `HALTED`. This doesn't qualify your own workflow.
 
 ## Capture and research commands
 

@@ -114,7 +114,7 @@ def test_quickstart_forwards_the_headed_tutorial_option(monkeypatch):
     assert calls[0][-1] == "--headed"
 
 
-def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
+def test_quickstart_forwards_the_rejected_write_simulation_and_names_the_evidence(
     monkeypatch,
 ):
     calls = []
@@ -127,15 +127,57 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     with runner.isolated_filesystem():
         result = runner.invoke(
             cli_main,
-            ["quickstart", "--break-it", "--out", "break-run"],
+            [
+                "quickstart",
+                "--simulate-rejected-write",
+                "--out",
+                "rejected-write-run",
+            ],
         )
 
     assert result.exit_code == 0, result.output
     assert len(calls) == 1
     assert calls[0][0] == "tutorial"
-    assert calls[0][-1] == "--break-it"
-    assert "run-broken" in result.output
+    assert calls[0][-1] == "--simulate-rejected-write"
+    assert "run-rejected-write" in result.output
     assert "HALTED" in result.output
+
+
+def test_quickstart_hides_and_warns_for_the_deprecated_break_it_alias(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "openadapt.cli._invoke_flow",
+        lambda argv: calls.append(list(argv)) or 0,
+    )
+
+    runner = CliRunner()
+    help_result = runner.invoke(cli_main, ["quickstart", "--help"])
+    assert help_result.exit_code == 0, help_result.output
+    assert "--simulate-rejected-write" in help_result.output
+    assert "--break-it" not in help_result.output
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            cli_main,
+            ["quickstart", "--break-it", "--out", "deprecated-alias-run"],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert calls[0][-1] == "--simulate-rejected-write"
+    assert "Warning: --break-it is deprecated" in result.output
+
+
+def test_quickstart_success_output_leads_to_a_real_workflow(monkeypatch):
+    monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli_main, ["quickstart", "--out", "first-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "--simulate-rejected-write" not in result.output
+    assert "--break-it" not in result.output
+    assert "https://docs.openadapt.ai/guides/record-your-app/" in result.output
 
 
 def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):

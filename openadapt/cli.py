@@ -159,18 +159,27 @@ def _is_externally_managed_error(error: BaseException) -> bool:
     "--headed", is_flag=True, help="Show the browser while the tutorial runs."
 )
 @click.option(
-    "--break-it",
-    "break_it",
+    "--simulate-rejected-write",
+    "simulate_rejected_write",
     is_flag=True,
     help=(
-        "After the verified run, rerun the same certified bundle against a "
-        "fault-injecting backend and watch the engine halt instead of "
-        "trusting the screen."
+        "After the verified run, simulate an application that reports success "
+        "while its independent source rejects the write."
     ),
+)
+@click.option(
+    "--break-it",
+    "deprecated_break_it",
+    is_flag=True,
+    hidden=True,
 )
 @click.pass_context
 def quickstart(
-    command_ctx: click.Context, out: Optional[Path], headed: bool, break_it: bool
+    command_ctx: click.Context,
+    out: Optional[Path],
+    headed: bool,
+    simulate_rejected_write: bool,
+    deprecated_break_it: bool,
 ) -> None:
     """Run a verified local tutorial against the bundled synthetic app.
 
@@ -184,6 +193,13 @@ def quickstart(
     import os
 
     _require_supported_python()
+
+    if deprecated_break_it:
+        click.echo(
+            "Warning: --break-it is deprecated; use --simulate-rejected-write.",
+            err=True,
+        )
+    simulate_rejected_write = simulate_rejected_write or deprecated_break_it
 
     if out is None:
         root = Path(_DEFAULT_QUICKSTART_DIR).resolve()
@@ -208,8 +224,8 @@ def quickstart(
     ]
     if headed:
         argv.append("--headed")
-    if break_it:
-        argv.append("--break-it")
+    if simulate_rejected_write:
+        argv.append("--simulate-rejected-write")
     # Engine-owned flags (--guided, --interactive-record, and future engine
     # additions) forward verbatim instead of being whitelisted here.
     argv.extend(command_ctx.args)
@@ -247,21 +263,15 @@ def quickstart(
         "The synthetic write was confirmed through a read-only system-of-record API."
     )
     click.echo("No model or Cloud call was enabled.")
-    if break_it:
+    if simulate_rejected_write:
         click.echo(
-            "The rerun against the fault-injecting backend HALTED as designed: "
-            "the screen claimed success and the system of record disagreed."
+            "The simulated rejected write HALTED as designed. The application "
+            "reported success, but the independent source rejected the write."
         )
-        click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
+        click.echo(f"Simulation evidence: {root / 'run-rejected-write' / 'REPORT.md'}")
     click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
-    if not break_it:
-        click.echo(
-            "Watch it catch a lie: openadapt quickstart --break-it --out "
-            f"{root}-break-it"
-        )
     click.echo(
-        "See a fail-safe halt: openadapt flow replay "
-        f"{root / 'bundle'} --drift modal --run-dir {root}-halt"
+        "Record your first workflow: https://docs.openadapt.ai/guides/record-your-app/"
     )
     click.echo(
         "Connect this computer when you want Cloud history and collaboration: "

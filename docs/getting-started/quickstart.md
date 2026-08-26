@@ -30,15 +30,6 @@ openadapt flow visualize openadapt-quickstart/bundle --out graph.html
 openadapt flow lint openadapt-quickstart/bundle
 ```
 
-Run the same certified bundle against a fault-injecting backend:
-
-```bash
-openadapt quickstart --break-it --out openadapt-quickstart-broken
-```
-
-The application displays success, but the backend does not save the record.
-The independent effect verifier detects the mismatch and returns `HALTED`.
-
 ## Run the manual demo lifecycle
 
 The engine command is `openadapt-flow`. The launcher provides the equivalent
