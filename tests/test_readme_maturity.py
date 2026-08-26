@@ -173,12 +173,16 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         block = MODULE.render_block(projection, {}, now=NOW)
 
         self.assertIn(MODULE.LIVE_RECORD_URL, block)
-        self.assertIn("active signed product admissions", block)
-        self.assertIn("active signed, expiring, revocable workflow", block)
+        self.assertIn("Current OpenAdapt admission state", block)
+        self.assertIn("Not actively admitted", block)
+        self.assertIn("active signed admissions for all seven product targets", block)
+        self.assertIn("expiring, revocable workflow admission", block)
         self.assertIn("exact compiled workflow version", block)
-        self.assertIn("three trials for each task and condition", block)
+        self.assertIn("at least three trials", block)
+        self.assertIn("each task and condition", block)
         self.assertIn("closed result schema", block)
-        self.assertIn("silent incorrect success and over-halt", block)
+        self.assertIn("silent incorrect", block)
+        self.assertIn("success and over-halt", block)
         self.assertNotIn("Beta", block)
         self.assertNotIn("not Production", block)
 
@@ -192,8 +196,10 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         )
 
         self.assertNotIn(flow["admission_id"], block)
-        self.assertIn("active signed product admissions", block)
-        self.assertIn("active signed, expiring, revocable workflow", block)
+        self.assertIn("Current OpenAdapt admission state", block)
+        self.assertIn("Not actively admitted", block)
+        self.assertIn("active signed admissions for all seven product targets", block)
+        self.assertIn("expiring, revocable workflow admission", block)
 
     def test_active_launcher_renders_only_a_durable_registry_record(self) -> None:
         launcher = _admission(target="openadapt", sequence=1)
@@ -208,7 +214,26 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         self.assertIn(launcher["issued_at"], block)
         self.assertIn(launcher["expires_at"], block)
         self.assertIn("historical record", block)
+        self.assertIn("Not actively admitted", block)
+        self.assertIn("admissions are missing", block)
+        self.assertIn("`flow`", block)
         self.assertNotIn("OpenAdapt is Production", block)
+
+    def test_openadapt_only_admission_does_not_imply_combined_production(self) -> None:
+        launcher = _admission(target="openadapt", sequence=1)
+        projection = _projection([launcher])
+
+        block = MODULE.render_block(
+            projection,
+            {"openadapt": launcher["admission_id"]},
+            now=NOW,
+        )
+
+        self.assertIn("OpenAdapt target admission record", block)
+        self.assertIn("does not establish combined-product Production", block)
+        self.assertIn("product is **Not actively admitted**", block)
+        for target in MODULE.EXPECTED_TARGETS - {"openadapt"}:
+            self.assertIn(f"`{target}`", block)
 
     def test_expired_latest_never_falls_back_to_an_older_record(self) -> None:
         old = _admission(

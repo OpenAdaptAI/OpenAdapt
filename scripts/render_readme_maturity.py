@@ -439,16 +439,17 @@ def _qualification_block() -> str:
     return "\n".join(
         [
             BEGIN,
-            "> **Built for qualified production workflows.** A Production run requires both",
-            "> active signed product admissions for the exact OpenAdapt component and",
-            "> deployment releases, and an active signed, expiring, revocable workflow",
-            "> admission for the exact compiled workflow version. The workflow admission binds",
-            "> the organization and workflow identity; bundle version and digest; admitted",
-            "> runtime release; application and environment; input, action, identity, effect,",
-            "> and policy contracts; evidence authority; and its issue, expiry, and revocation",
-            "> state. Qualification requires at least three trials for each task and condition.",
-            "> A closed result schema must report silent incorrect success and over-halt. Any",
-            "> bound change requires a new qualification.",
+            "> **Built for qualified production workflows.**",
+            "> Current OpenAdapt admission state: **Not actively admitted.** The exact signed",
+            "> ledger has no active admission for this target. The path to Production requires",
+            "> active signed admissions for all seven product targets and an active signed,",
+            "> expiring, revocable workflow admission for the exact compiled workflow version.",
+            "> The workflow admission binds the organization and workflow identity; bundle",
+            "> version and digest; admitted runtime release; application and environment; input,",
+            "> action, identity, effect, and policy contracts; evidence authority; and its issue,",
+            "> expiry, and revocation state. Qualification requires at least three trials for",
+            "> each task and condition. A closed result schema must report silent incorrect",
+            "> success and over-halt. Any bound change requires a new qualification.",
             f"> [Check the live signed Production record]({LIVE_RECORD_URL}).",
             END,
         ]
@@ -481,15 +482,30 @@ def render_block(
         f"{registry_commit}/production-lifecycle-admissions.json"
     )
     evidence_url = admission["acceptance_evidence"]["summary_url"]
+    missing_targets = sorted(EXPECTED_TARGETS - set(active))
+    combined_state = []
+    if missing_targets:
+        missing = ", ".join(f"`{target}`" for target in missing_targets)
+        combined_state = [
+            "> This target record does not establish combined-product Production. The combined",
+            "> product is **Not actively admitted** in this snapshot because required target",
+            f"> admissions are missing: {missing}.",
+        ]
+    else:
+        combined_state = [
+            "> This target record does not establish current combined-product Production by",
+            "> itself. Verify all seven target admissions in the live record.",
+        ]
     return "\n".join(
         [
             BEGIN,
-            "> **Production admission record.** The verified registry issued admission",
+            "> **OpenAdapt target admission record.** The verified registry issued admission",
             f"> `{admission['admission_id']}` for OpenAdapt `{version}` at",
             f"> `{admission['issued_at']}`, with declared expiry `{admission['expires_at']}`",
             "> and no revocation in this exact registry snapshot. This is an immutable",
             "> historical record, not a present-tense maturity assertion. Verify current",
             f"> state in the [live record]({LIVE_RECORD_URL}).",
+            *combined_state,
             f"> [Registry snapshot]({registry_url}) · [Acceptance evidence]({evidence_url})",
             END,
         ]
