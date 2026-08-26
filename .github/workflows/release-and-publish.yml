@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release-identity
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Create a repository-scoped release App token
@@ -129,6 +129,14 @@ jobs:
           set -euo pipefail
           git config user.name "openadapt-release[bot]"
           git config user.email "openadapt-release[bot]@users.noreply.github.com"
+
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main="$(git rev-parse refs/remotes/origin/main)"
+          if [ "$current_main" != "$GITHUB_SHA" ]; then
+            echo "main advanced before the tag push. main=$current_main candidate=$GITHUB_SHA." >&2
+            exit 1
+          fi
+
           git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "OpenAdapt ${RELEASE_TAG#v}"
           git push origin "refs/tags/$RELEASE_TAG"
 
@@ -299,6 +307,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
           RELEASE_TAG: ${{ github.ref_name }}
+          EXPECTED_AUTHOR: openadapt-release[bot]
         run: |
           set -euo pipefail
           python - "$RELEASE_TAG" > /tmp/release-notes.md <<'PY'
@@ -319,23 +328,97 @@ jobs:
           print(match.group("body").strip())
           PY
 
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$RELEASE_TAG" \
-              --notes-file /tmp/release-notes.md \
-              --latest
-          else
+          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          tag_commit="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
+          if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+            echo "The remote release tag does not resolve to the event commit." >&2
+            exit 1
+          fi
+
+          release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
+          release_status="$(curl --silent --show-error \
+            --output /tmp/github-release.json \
+            --write-out '%{http_code}' \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "$release_url")"
+
+          if [ "$release_status" = "404" ]; then
             gh release create "$RELEASE_TAG" \
+              dist/*.whl dist/*.tar.gz \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
               --title "$RELEASE_TAG" \
               --notes-file /tmp/release-notes.md \
               --latest
+            release_status="$(curl --silent --show-error \
+              --output /tmp/github-release.json \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "$release_url")"
+          elif [ "$release_status" = "200" ]; then
+            python scripts/verify_github_release.py \
+              --metadata /tmp/github-release.json \
+              --tag "$RELEASE_TAG" \
+              --author "$EXPECTED_AUTHOR" \
+              --expected-dir dist \
+              --allow-missing \
+              --missing-output /tmp/missing-release-assets.txt
+
+            mkdir /tmp/existing-github-release-assets
+            asset_count="$(python -c \
+              'import json; print(len(json.load(open("/tmp/github-release.json"))["assets"]))')"
+            if [ "$asset_count" -gt 0 ]; then
+              gh release download "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --dir /tmp/existing-github-release-assets
+            fi
+            python scripts/verify_github_release.py \
+              --metadata /tmp/github-release.json \
+              --tag "$RELEASE_TAG" \
+              --author "$EXPECTED_AUTHOR" \
+              --expected-dir dist \
+              --downloaded-dir /tmp/existing-github-release-assets \
+              --allow-missing \
+              --missing-output /tmp/missing-release-assets.txt
+
+            while IFS= read -r missing_asset; do
+              gh release upload "$RELEASE_TAG" "dist/$missing_asset" \
+                --repo "$GITHUB_REPOSITORY"
+            done < /tmp/missing-release-assets.txt
+
+            release_status="$(curl --silent --show-error \
+              --output /tmp/github-release.json \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "$release_url")"
           fi
-          gh release upload "$RELEASE_TAG" dist/*.whl dist/*.tar.gz \
+          if [ "$release_status" != "200" ]; then
+            echo "GitHub returned HTTP $release_status for the exact release." >&2
+            exit 1
+          fi
+
+          python scripts/verify_github_release.py \
+            --metadata /tmp/github-release.json \
+            --tag "$RELEASE_TAG" \
+            --author "$EXPECTED_AUTHOR" \
+            --expected-dir dist
+
+          mkdir /tmp/github-release-assets
+          gh release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --clobber
+            --dir /tmp/github-release-assets
+          python scripts/verify_github_release.py \
+            --metadata /tmp/github-release.json \
+            --tag "$RELEASE_TAG" \
+            --author "$EXPECTED_AUTHOR" \
+            --expected-dir dist \
+            --downloaded-dir /tmp/github-release-assets
 
   verify-publication:
     needs: [build-and-attest, publish-pypi, publish-github]

@@ -97,7 +97,7 @@ def test_release_workflow_pins_actions_and_separates_permissions():
 
     assert document["permissions"] == {"contents": "read"}
     jobs = document["jobs"]
-    assert jobs["create-release-tag"]["permissions"] == {"contents": "write"}
+    assert jobs["create-release-tag"]["permissions"] == {"contents": "read"}
     assert jobs["build-and-attest"]["permissions"] == {
         "contents": "read",
         "id-token": "write",
@@ -132,9 +132,7 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
     create = jobs["create-release-tag"]
     assert create["environment"] == "release-identity"
     assert "github.event_name == 'workflow_dispatch'" in create["if"]
-    app = next(
-        step for step in create["steps"] if step.get("id") == "release-app"
-    )
+    app = next(step for step in create["steps"] if step.get("id") == "release-app")
     assert app["uses"].startswith("actions/create-github-app-token@")
     assert app["with"] == {
         "app-id": "${{ vars.OPENADAPT_RELEASE_APP_ID }}",
@@ -144,9 +142,7 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
         "permission-contents": "write",
     }
 
-    candidate = next(
-        step for step in create["steps"] if step.get("id") == "candidate"
-    )
+    candidate = next(step for step in create["steps"] if step.get("id") == "candidate")
     assert 'GITHUB_REF" != "refs/heads/main' in candidate["run"]
     assert 'current_main" != "$GITHUB_SHA' in candidate["run"]
     assert 'REQUESTED_VERSION" != "$project_version' in candidate["run"]
@@ -158,8 +154,38 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
         for step in create["steps"]
         if step["name"] == "Create and push only the annotated release tag"
     )
+    refresh_index = tag["run"].index(
+        "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
+    )
+    compare_index = tag["run"].index('current_main" != "$GITHUB_SHA')
+    create_index = tag["run"].index('git tag -a "$RELEASE_TAG" "$GITHUB_SHA"')
+    push_index = tag["run"].index('git push origin "refs/tags/$RELEASE_TAG"')
+    assert refresh_index < compare_index < create_index < push_index
     assert 'git tag -a "$RELEASE_TAG" "$GITHUB_SHA"' in tag["run"]
     assert 'git push origin "refs/tags/$RELEASE_TAG"' in tag["run"]
+
+
+def test_release_workflow_rechecks_main_immediately_before_the_app_tag_push():
+    workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
+    document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    create = document["jobs"]["create-release-tag"]
+
+    candidate = next(step for step in create["steps"] if step.get("id") == "candidate")
+    tag = next(
+        step
+        for step in create["steps"]
+        if step["name"] == "Create and push only the annotated release tag"
+    )
+
+    # The candidate check alone is not sufficient. main can advance before the
+    # separate tag-push step starts, so that step must get and compare main too.
+    assert "git fetch --no-tags origin" in candidate["run"]
+    assert "git fetch --no-tags origin" in tag["run"]
+    assert 'current_main="$(git rev-parse refs/remotes/origin/main)"' in tag["run"]
+    assert 'current_main" != "$GITHUB_SHA' in tag["run"]
+    assert tag["run"].rindex('current_main" != "$GITHUB_SHA') < tag["run"].index(
+        'git push origin "refs/tags/$RELEASE_TAG"'
+    )
 
 
 def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
@@ -207,11 +233,20 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     )
     assert publish["env"]["GH_TOKEN"] == "${{ steps.release-app.outputs.token }}"
     assert publish["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
+    assert publish["env"]["EXPECTED_AUTHOR"] == "openadapt-release[bot]"
     assert "gh release create" in publish["run"]
     assert "--verify-tag" in publish["run"]
-    assert "gh release edit" in publish["run"]
-    assert "gh release upload" in publish["run"]
-    assert "--clobber" in publish["run"]
+    assert "dist/*.whl dist/*.tar.gz" in publish["run"]
+    assert "gh release edit" not in publish["run"]
+    assert 'gh release upload "$RELEASE_TAG" "dist/$missing_asset"' in publish["run"]
+    assert "--allow-missing" in publish["run"]
+    assert "--missing-output /tmp/missing-release-assets.txt" in publish["run"]
+    assert "--clobber" not in publish["run"]
+    assert "scripts/verify_github_release.py" in publish["run"]
+    assert "--downloaded-dir /tmp/github-release-assets" in publish["run"]
+    assert 'release_status" = "404"' in publish["run"]
+    assert 'release_status" != "200"' in publish["run"]
+    assert 'tag_commit" != "$GITHUB_SHA' in publish["run"]
     assert "semantic-release" not in publish["run"]
 
 
@@ -263,7 +298,9 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
     assert github_publish["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
 
     checkout = next(
-        step for step in github_steps if step["name"] == "Checkout the exact release tag"
+        step
+        for step in github_steps
+        if step["name"] == "Checkout the exact release tag"
     )
     assert checkout["with"] == {"ref": "${{ github.ref }}", "fetch-depth": 0}
 
