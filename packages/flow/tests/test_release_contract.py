@@ -417,8 +417,12 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
     current_main_index = release.index(
         "- name: Require the reviewed release candidate on current main"
     )
-    qualification_index = release.index("- name: Require exact-main release qualification")
-    artifact_index = release.index("- name: Build and verify the exact release artifacts")
+    qualification_index = release.index(
+        "- name: Require exact-main release qualification"
+    )
+    artifact_index = release.index(
+        "- name: Build and verify the exact release artifacts"
+    )
     tag_index = release.index("- name: Create and push one annotated release tag")
 
     assert "  workflow_dispatch:" in triggers

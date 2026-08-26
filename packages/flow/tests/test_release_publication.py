@@ -31,11 +31,7 @@ def test_artifact_digests_rejects_an_extra_publishable_file(tmp_path: Path) -> N
 
 def test_pypi_verification_requires_the_exact_artifact_digest(monkeypatch) -> None:
     expected = {"package.whl": "a" * 64}
-    payload = {
-        "urls": [
-            {"filename": "package.whl", "digests": {"sha256": "a" * 64}}
-        ]
-    }
+    payload = {"urls": [{"filename": "package.whl", "digests": {"sha256": "a" * 64}}]}
     monkeypatch.setattr(
         publication,
         "_request",
