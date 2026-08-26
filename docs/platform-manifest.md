@@ -44,11 +44,11 @@ ahead of PyPI), pass `--allow-unreleased-launcher`; the manifest still records
 the published version.
 
 The launcher release workflow regenerates and validates the manifest after the
-new launcher artifacts are visible on PyPI, then commits the exact published
-URLs and digests back to `main`. This ordering is intentional: the manifest
-cannot truthfully name a launcher release before its immutable artifacts exist.
-If publication or reconciliation fails, `main` remains red and the release
-workflow opens or updates a failure issue rather than weakening validation.
+new launcher artifacts are visible on PyPI. It retains the exact generated
+files as a workflow artifact and opens an issue for a reviewed update to
+`main`. The release App can't push a manifest commit to the protected branch.
+The manifest also can't name a launcher release before its immutable artifacts
+exist.
 
 Regenerate and commit the manifest manually after other component releases.
 The daily validator catches component, sidecar, and public-status drift.
@@ -124,12 +124,10 @@ are properties of the check rather than of the manifest:
    The schedule is now daily and the job is stdlib-only (no install, no cache),
    costing seconds a day.
 2. **The check failed for a normal condition after every release, so a real failure was
-   invisible.** Two conditions were classified as errors when they are normal:
-   the semantic-release version commit leaves `pyproject.toml` ahead of the
-   not-yet-reconciled manifest, and PyPI's `info.version` lags an upload by
-   minutes. Both now warn, while every digest, URL, and filename comparison
-   stays fatal. A guard that cries wolf at every release gets ignored, and
-   that is exactly what happened.
+   invisible.** The reviewed version commit leaves `pyproject.toml` ahead of
+   the published manifest. PyPI's `info.version` can also lag an upload by
+   several minutes. Both states now warn. Every digest, URL, and filename
+   mismatch still fails. The old false failures hid a real failure.
 
 A failed scheduled or dispatched run also files (or comments on) a
 `platform-manifest.json has drifted` issue, so drift has an owner rather than

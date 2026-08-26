@@ -2,13 +2,11 @@
   "$comment": [
     "Input to scripts/check_release_health.py. One entry per RELEASE LANE:",
     "a tag namespace plus the workflow that is supposed to publish it.",
-    "This repository's release-and-publish.yml runs on every push to main under",
-    "concurrency group 'release' with cancel-in-progress: false, so GitHub",
-    "cancels the PENDING run whenever a third push arrives. Runs 30275153205",
-    "and 30276970325 are exactly that, and both were harmless because a later",
-    "run released the same commits. The detector is state-based for this",
-    "reason: it asks whether anything is still unpublished, not whether a run",
-    "was cancelled."
+    "release-and-publish.yml accepts a reviewed version from protected main.",
+    "The founder-approved release App creates only its annotated tag.",
+    "The tag run publishes through the protected pypi environment and verifies",
+    "the PyPI and GitHub bytes. The detector remains state-based: it asks",
+    "whether a release is still unpublished, not whether one run failed."
   ],
   "repository": "OpenAdaptAI/OpenAdapt",
   "branch": "main",
@@ -27,7 +25,7 @@
       "unreleased_grace_hours": 4,
       "tag_without_release_grace_hours": 1,
       "pypi_lag_grace_minutes": 30,
-      "remediation": "# release-and-publish.yml runs on push to main; re-run the newest run on main.\ngh run rerun --repo OpenAdaptAI/OpenAdapt \"$(gh run list --repo OpenAdaptAI/OpenAdapt --workflow=release-and-publish.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')\""
+      "remediation": "# First merge the reviewed version, changelog, lockfile, and candidate state. Then create the tag from exact main.\ngh workflow run release-and-publish.yml --repo OpenAdaptAI/OpenAdapt --ref main -f version=<reviewed-version>\n# If that exact tag run partially failed, rerun it. Do not create a recovery tag.\ngh run rerun --repo OpenAdaptAI/OpenAdapt <tag-run-id>"
     }
   ]
 }

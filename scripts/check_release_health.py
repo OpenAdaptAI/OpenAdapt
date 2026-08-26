@@ -20,13 +20,12 @@ Two failures happened here and neither produced a signal.
    ``skipped`` are not ``failure``.
 
 The check is deliberately state-based rather than event-based. "A release run
-was cancelled" is not the alarm; "a release-worthy commit or a tag is still
-unpublished" is. That distinction matters because the launcher's release
-workflow fires on every push to main under a ``concurrency: release`` group, so
-routine supersession cancellations are constant and benign. A guard that fired
-on them would go the way of the platform-manifest drift check, which was
-correct but had been benignly red after every single release until nobody could
-tell its real signal from its noise.
+failed" is not the alarm; "a release-worthy commit or a tag is still
+unpublished" is. The launcher's reviewed main-branch dispatch creates one
+annotated tag, and the tag run is the recovery unit. A guard that fired on one
+failed run would go the way of the platform-manifest drift check, which was
+correct but had been benignly red after every release until nobody could tell
+its real signal from its noise.
 
 Detectors (per configured release lane in ``.github/release-health.json``):
 

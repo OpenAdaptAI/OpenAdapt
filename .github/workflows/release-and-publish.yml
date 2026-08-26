@@ -1,81 +1,138 @@
 name: Release and PyPI Publish
 
-# Release credentials are deliberately separated from build and publication:
-# - release: may update protected main and create the tag/release;
-# - build-and-attest: can only read source and issue artifact attestations;
-# - publish-pypi: receives only the project-scoped PyPI token;
-# - publish-github: may only attach assets to the GitHub Release.
-# - reconcile-platform-manifest: updates main only after PyPI exposes the exact
-#   released bytes, then validates the complete platform contract.
+# A release starts from a version, changelog, and lockfile that reached the
+# exact protected main branch through review. The release App can create only
+# the annotated tag. It cannot push a version commit or any other main commit.
 #
-# Every third-party action is pinned to a full commit SHA. Dependabot should
-# propose reviewed SHA updates rather than following mutable tags.
+# A protected v* tag starts the build, attestation, PyPI Trusted Publishing,
+# GitHub Release, and publication-verification jobs. Rerun that exact tag run
+# after a partial publication failure. Do not create a recovery tag.
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Reviewed version on the exact protected main branch"
+        required: true
+        type: string
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: read
 
-# Temporary compatibility pin for GitPython 3.1.60. Upstream PR #1477 removes
-# python-semantic-release's use of Actor.name_email_regex. Return to the pinned
-# published actions after upstream ships that fix in a release.
-env:
-  SEMANTIC_RELEASE_SOURCE: "python-semantic-release @ git+https://github.com/python-semantic-release/python-semantic-release.git@4ad93f1f2a70e092612e9b1709c01ebbb0d35434"
-
+# A tag run is the recovery unit. Do not cancel it when another release starts.
 concurrency:
-  group: release
+  group: release-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  create-release-tag:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: release-identity
     permissions:
       contents: write
-    outputs:
-      released: ${{ steps.release.outputs.released || 'false' }}
-      tag: ${{ steps.release.outputs.tag || '' }}
 
     steps:
-      - name: Checkout repository
+      - name: Create a repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Checkout the exact dispatched main commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
-          token: ${{ secrets.ADMIN_TOKEN }}
+          token: ${{ steps.release-app.outputs.token }}
 
-      - name: Skip the generated release commit
-        id: check_skip
-        run: |
-          if [ "$(git log -1 --pretty=format:'%an')" = "OpenAdapt Bot" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Python for Semantic Release
-        if: steps.check_skip.outputs.skip != 'true'
+      - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
-      - name: Install compatible Semantic Release
-        if: steps.check_skip.outputs.skip != 'true'
-        run: python -m pip install --disable-pip-version-check "$SEMANTIC_RELEASE_SOURCE"
-
-      - name: Python Semantic Release
-        if: steps.check_skip.outputs.skip != 'true'
-        id: release
+      - name: Require an exact reviewed release candidate
+        id: candidate
         env:
-          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          git config user.name "OpenAdapt Bot"
-          git config user.email "bot@openadapt.ai"
-          export GIT_COMMIT_AUTHOR="OpenAdapt Bot <bot@openadapt.ai>"
-          semantic-release -v version
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "Tag creation requires workflow_dispatch." >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Tag creation requires refs/heads/main, not $GITHUB_REF." >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REPOSITORY" != "OpenAdaptAI/OpenAdapt" ]; then
+            echo "Tag creation requires OpenAdaptAI/OpenAdapt." >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main="$(git rev-parse refs/remotes/origin/main)"
+          if [ "$current_main" != "$GITHUB_SHA" ]; then
+            echo "The dispatched commit is stale. main=$current_main dispatch=$GITHUB_SHA." >&2
+            exit 1
+          fi
+
+          project_version="$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as stream:
+              print(tomllib.load(stream)["project"]["version"])
+          PY
+          )"
+          if [ -z "$REQUESTED_VERSION" ] || [ "$REQUESTED_VERSION" != "$project_version" ]; then
+            echo "Version mismatch: input=$REQUESTED_VERSION pyproject=$project_version." >&2
+            exit 1
+          fi
+
+          tag="v${project_version}"
+          python - "$project_version" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          headers = re.findall(r"^## v([^ ]+) \(\d{4}-\d{2}-\d{2}\)$", changelog, re.MULTILINE)
+          if not headers or headers[0] != version:
+              actual = headers[0] if headers else "missing"
+              raise SystemExit(
+                  f"CHANGELOG.md must start with v{version}; found v{actual}."
+              )
+          PY
+          python scripts/verify_release_lock.py
+
+          git fetch --force --tags origin
+          if git show-ref --verify --quiet "refs/tags/$tag"; then
+            echo "Tag $tag already exists. Rerun its tag workflow for recovery." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push only the annotated release tag
+        env:
+          RELEASE_TAG: ${{ steps.candidate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "openadapt-release[bot]"
+          git config user.email "openadapt-release[bot]@users.noreply.github.com"
+          git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "OpenAdapt ${RELEASE_TAG#v}"
+          git push origin "refs/tags/$RELEASE_TAG"
 
   build-and-attest:
-    needs: release
-    if: needs.release.outputs.released == 'true'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -83,15 +140,70 @@ jobs:
       attestations: write
 
     steps:
-      - name: Checkout released tag
+      - name: Checkout the exact release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release.outputs.tag }}
+          ref: ${{ github.ref }}
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+
+      - name: Require the release App tag and exact candidate state
+        env:
+          EXPECTED_ACTOR: openadapt-release[bot]
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "Publication requires a tag push event." >&2
+            exit 1
+          fi
+          if [ "$GITHUB_ACTOR" != "$EXPECTED_ACTOR" ]; then
+            echo "Publication requires $EXPECTED_ACTOR, not $GITHUB_ACTOR." >&2
+            exit 1
+          fi
+
+          project_version="$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as stream:
+              print(tomllib.load(stream)["project"]["version"])
+          PY
+          )"
+          expected_tag="v${project_version}"
+          if [ "$GITHUB_REF" != "refs/tags/$expected_tag" ] || [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
+            echo "Tag mismatch: ref=$GITHUB_REF version=$project_version." >&2
+            exit 1
+          fi
+          if [ "$(git rev-list -n 1 "$GITHUB_REF_NAME")" != "$(git rev-parse HEAD)" ]; then
+            echo "The release tag does not resolve to the checked-out commit." >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "The release tag is not contained in protected main." >&2
+            exit 1
+          fi
+
+          python - "$project_version" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          headers = re.findall(r"^## v([^ ]+) \(\d{4}-\d{2}-\d{2}\)$", changelog, re.MULTILINE)
+          if not headers or headers[0] != version:
+              actual = headers[0] if headers else "missing"
+              raise SystemExit(
+                  f"CHANGELOG.md must start with v{version}; found v{actual}."
+              )
+          PY
+          python scripts/verify_release_lock.py
 
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -99,9 +211,11 @@ jobs:
           version: "0.11.29"
           enable-cache: false
 
+      - name: Check the public source boundary
+        run: python scripts/check_source_boundary.py
+
       - name: Build exact release artifacts
         run: |
-          python scripts/verify_release_lock.py
           uv build --wheel --sdist
           python scripts/verify_release_artifacts.py
 
@@ -115,7 +229,7 @@ jobs:
       - name: Transfer release artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-dists-${{ needs.release.outputs.tag }}
+          name: release-dists-${{ github.ref_name }}
           path: |
             dist/*.whl
             dist/*.tar.gz
@@ -123,153 +237,259 @@ jobs:
           retention-days: 1
 
   publish-pypi:
-    needs: [release, build-and-attest]
+    needs: build-and-attest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment: pypi
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Download attested release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release-dists-${{ needs.release.outputs.tag }}
+          name: release-dists-${{ github.ref_name }}
           path: dist/
 
-      # The launcher currently uses a project-scoped API token. GitHub's
-      # repository attestation above remains verifiable; PyPI-native PEP 740
-      # attestations require a separate Trusted Publisher settings migration.
-      - name: Publish to PyPI
+      - name: Publish to PyPI with Trusted Publishing
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_TOKEN }}
           skip-existing: true
-          attestations: false
 
   publish-github:
-    needs: [release, build-and-attest]
+    needs: [build-and-attest, publish-pypi]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      # The publish action resolves the configured release group from the
-      # current branch. Keep this checkout attached to main; the exact release
-      # is still selected by `tag` and the exact bytes come from the attested
-      # artifact transfer below.
-      - name: Checkout release branch
+      - name: Checkout the exact release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: ${{ github.ref }}
           fetch-depth: 0
-
-      - name: Set up Python for Semantic Release
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-
-      - name: Install compatible Semantic Release
-        run: python -m pip install --disable-pip-version-check "$SEMANTIC_RELEASE_SOURCE"
-
-      - name: Download attested release artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-dists-${{ needs.release.outputs.tag }}
-          path: dist/
-
-      - name: Attach artifacts to GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.release.outputs.tag }}
-        run: semantic-release -v publish --tag "$RELEASE_TAG"
-
-  reconcile-platform-manifest:
-    needs: [release, publish-pypi]
-    if: >-
-      ${{ needs.release.outputs.released == 'true' &&
-          needs.publish-pypi.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout released main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-          fetch-depth: 0
-          token: ${{ secrets.ADMIN_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
-      - name: Regenerate and validate the published platform manifest
+      - name: Download attested release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dists-${{ github.ref_name }}
+          path: dist/
+
+      - name: Publish the GitHub Release and exact artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
+          python - "$RELEASE_TAG" > /tmp/release-notes.md <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          tag = sys.argv[1]
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(
+              rf"^## {re.escape(tag)} \(\d{{4}}-\d{{2}}-\d{{2}}\)\n"
+              rf"(?P<body>.*?)(?=^## v|\Z)",
+              changelog,
+              re.MULTILINE | re.DOTALL,
+          )
+          if match is None:
+              raise SystemExit(f"CHANGELOG.md has no release notes for {tag}.")
+          print(match.group("body").strip())
+          PY
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$RELEASE_TAG" \
+              --notes-file /tmp/release-notes.md \
+              --latest
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$RELEASE_TAG" \
+              --notes-file /tmp/release-notes.md \
+              --latest
+          fi
+          gh release upload "$RELEASE_TAG" dist/*.whl dist/*.tar.gz \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+  verify-publication:
+    needs: [build-and-attest, publish-pypi, publish-github]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout the exact release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download the attested source artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dists-${{ github.ref_name }}
+          path: dist/
+
+      - name: Bind the published PyPI files to the exact release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
           for attempt in $(seq 1 12); do
-            if python scripts/generate_platform_manifest.py; then
+            if python scripts/generate_platform_manifest.py \
+              --output /tmp/published-platform-manifest.json \
+              --report-output /tmp/published-platform-report.md; then
               break
             fi
             if [ "$attempt" -eq 12 ]; then
               echo "PyPI did not expose the released launcher artifacts in time." >&2
               exit 1
             fi
-            echo "Published artifacts are not visible yet; retrying in 15 seconds."
             sleep 15
           done
-          # --require-network: at the release gate an unreachable PyPI must
-          # fail. Elsewhere it only warns, because an index outage is not
-          # evidence of drift and a flaky guard stops being read.
-          python scripts/validate_platform_manifest.py --require-network
-          python scripts/validate_platform_manifest.py --offline
+          python scripts/validate_platform_manifest.py \
+            --manifest /tmp/published-platform-manifest.json \
+            --report /tmp/published-platform-report.md \
+            --require-network
 
-      - name: Commit the reconciled manifest
+          python - <<'PY'
+          import json
+          import urllib.request
+          from pathlib import Path
+
+          manifest = json.loads(
+              Path("/tmp/published-platform-manifest.json").read_text(encoding="utf-8")
+          )
+          target = Path("pypi-dist")
+          target.mkdir()
+          for artifact in manifest["components"]["launcher"]["artifacts"]:
+              urllib.request.urlretrieve(artifact["url"], target / artifact["filename"])
+          PY
+          python scripts/verify_release_artifacts.py dist \
+            | sed 's#  dist/#  #' > /tmp/source.sha256
+          python scripts/verify_release_artifacts.py pypi-dist \
+            | sed 's#  pypi-dist/#  #' > /tmp/pypi.sha256
+          diff -u /tmp/source.sha256 /tmp/pypi.sha256
+
+      - name: Bind the GitHub Release files to the exact release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if git diff --quiet -- \
-            platform-manifest.json docs/platform-compatibility-report.md; then
-            echo "The platform BOM already matches the published release."
-            exit 0
+          set -euo pipefail
+          mkdir github-dist
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "*.whl" \
+            --pattern "*.tar.gz" \
+            --dir github-dist
+          python scripts/verify_release_artifacts.py github-dist \
+            | sed 's#  github-dist/#  #' > /tmp/github.sha256
+          diff -u /tmp/source.sha256 /tmp/github.sha256
+
+      - name: Record whether the committed platform manifest needs a reviewed update
+        id: manifest-drift
+        run: |
+          set -euo pipefail
+          if cmp -s platform-manifest.json /tmp/published-platform-manifest.json && \
+             cmp -s docs/platform-compatibility-report.md /tmp/published-platform-report.md; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
           fi
-          git config user.name "OpenAdapt Bot"
-          git config user.email "bot@openadapt.ai"
-          git add platform-manifest.json docs/platform-compatibility-report.md
-          git commit -m "chore(release): reconcile platform BOM"
-          git push origin HEAD:main
+
+      - name: Retain the exact published platform manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: published-platform-manifest-${{ github.ref_name }}
+          path: |
+            /tmp/published-platform-manifest.json
+            /tmp/published-platform-report.md
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Report the required reviewed manifest update
+        if: steps.manifest-drift.outputs.current != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "platform-manifest.json needs the published launcher release"
+          BODY: >-
+            Release ${{ github.ref_name }} passed PyPI and GitHub byte verification.
+            The committed platform manifest still needs a reviewed update. Download
+            the generated manifest and report from
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$TITLE\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
 
   report-release-failure:
     needs:
-      [release, build-and-attest, publish-pypi, publish-github, reconcile-platform-manifest]
+      - create-release-tag
+      - build-and-attest
+      - publish-pypi
+      - publish-github
+      - verify-publication
     if: >-
       ${{ always() &&
-          (needs.release.result == 'failure' ||
+          (needs.create-release-tag.result == 'failure' ||
            needs.build-and-attest.result == 'failure' ||
            needs.publish-pypi.result == 'failure' ||
            needs.publish-github.result == 'failure' ||
-           needs.reconcile-platform-manifest.result == 'failure') }}
+           needs.verify-publication.result == 'failure') }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
 
     steps:
-      - name: File or update release failure issue
+      - name: File or update the release failure issue
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_RESULT: ${{ needs.release.result }}
+          CREATE_TAG_RESULT: ${{ needs.create-release-tag.result }}
           BUILD_RESULT: ${{ needs.build-and-attest.result }}
           PYPI_RESULT: ${{ needs.publish-pypi.result }}
           GITHUB_RESULT: ${{ needs.publish-github.result }}
-          MANIFEST_RESULT: ${{ needs.reconcile-platform-manifest.result }}
+          VERIFY_RESULT: ${{ needs.verify-publication.result }}
         run: |
-          TITLE="Release workflow failed on main"
+          set -euo pipefail
+          TITLE="Release workflow failed"
           BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          release=${RELEASE_RESULT}, build-and-attest=${BUILD_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, reconcile-platform-manifest=${MANIFEST_RESULT}.
+          create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
 
-          Until this is fixed, do not assume that the Git tag, PyPI files, GitHub assets, and attestations are mutually complete."
-          EXISTING=$(gh issue list --repo "${{ github.repository }}" --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
-          if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --repo "${{ github.repository }}" --body "$BODY"
+          If the annotated tag exists, rerun this exact tag workflow. Do not create a recovery tag."
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$TITLE\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
-            gh issue create --repo "${{ github.repository }}" --title "$TITLE" --body "$BODY"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
           fi
