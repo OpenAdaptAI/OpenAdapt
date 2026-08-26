@@ -111,6 +111,46 @@ def test_release_workflow_pins_actions_and_separates_permissions():
     assert jobs["report-release-failure"]["permissions"] == {"issues": "write"}
 
 
+def test_release_workflow_uses_the_reviewed_gitpython_compatibility_fix():
+    workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
+    document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    source = document["env"]["SEMANTIC_RELEASE_SOURCE"]
+    assert source.endswith("@4ad93f1f2a70e092612e9b1709c01ebbb0d35434")
+    assert "Upstream PR #1477" in workflow
+
+    jobs = document["jobs"]
+    release_steps = jobs["release"]["steps"]
+    publish_steps = jobs["publish-github"]["steps"]
+    release_install = next(
+        step
+        for step in release_steps
+        if step["name"] == "Install compatible Semantic Release"
+    )
+    publish_install = next(
+        step
+        for step in publish_steps
+        if step["name"] == "Install compatible Semantic Release"
+    )
+    assert release_install["run"].endswith('"$SEMANTIC_RELEASE_SOURCE"')
+    assert publish_install["run"] == release_install["run"]
+
+    release = next(
+        step for step in release_steps if step["name"] == "Python Semantic Release"
+    )
+    publish = next(
+        step
+        for step in publish_steps
+        if step["name"] == "Attach artifacts to GitHub Release"
+    )
+    assert "semantic-release -v version" in release["run"]
+    assert release["env"]["GH_TOKEN"] == "${{ secrets.ADMIN_TOKEN }}"
+    assert publish["run"] == 'semantic-release -v publish --tag "$RELEASE_TAG"'
+    assert publish["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert publish["env"]["RELEASE_TAG"] == "${{ needs.release.outputs.tag }}"
+
+
 def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
     workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
     document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
@@ -135,11 +175,33 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
 
     pypi_steps = jobs["publish-pypi"]["steps"]
     github_steps = jobs["publish-github"]["steps"]
-    assert pypi_steps[0]["with"]["name"] == transfer["with"]["name"]
-    assert github_steps[1]["with"]["name"] == transfer["with"]["name"]
-    assert pypi_steps[1]["with"]["attestations"] is False
-    assert github_steps[2]["with"]["tag"] == "${{ needs.release.outputs.tag }}"
+    pypi_download = next(
+        step
+        for step in pypi_steps
+        if step["name"] == "Download attested release artifacts"
+    )
+    github_download = next(
+        step
+        for step in github_steps
+        if step["name"] == "Download attested release artifacts"
+    )
+    pypi_publish = next(
+        step for step in pypi_steps if step["name"] == "Publish to PyPI"
+    )
+    github_publish = next(
+        step
+        for step in github_steps
+        if step["name"] == "Attach artifacts to GitHub Release"
+    )
+    assert pypi_download["with"]["name"] == transfer["with"]["name"]
+    assert github_download["with"]["name"] == transfer["with"]["name"]
+    assert pypi_publish["with"]["attestations"] is False
+    assert github_publish["env"]["RELEASE_TAG"] == (
+        "${{ needs.release.outputs.tag }}"
+    )
 
-    checkout = github_steps[0]
+    checkout = next(
+        step for step in github_steps if step["name"] == "Checkout release branch"
+    )
     assert checkout["name"] == "Checkout release branch"
     assert checkout["with"] == {"ref": "main", "fetch-depth": 0}

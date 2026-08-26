@@ -19,6 +19,12 @@ on:
 permissions:
   contents: read
 
+# Temporary compatibility pin for GitPython 3.1.60. Upstream PR #1477 removes
+# python-semantic-release's use of Actor.name_email_regex. Return to the pinned
+# published actions after upstream ships that fix in a release.
+env:
+  SEMANTIC_RELEASE_SOURCE: "python-semantic-release @ git+https://github.com/python-semantic-release/python-semantic-release.git@4ad93f1f2a70e092612e9b1709c01ebbb0d35434"
+
 concurrency:
   group: release
   cancel-in-progress: false
@@ -46,14 +52,26 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Set up Python for Semantic Release
+        if: steps.check_skip.outputs.skip != 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install compatible Semantic Release
+        if: steps.check_skip.outputs.skip != 'true'
+        run: python -m pip install --disable-pip-version-check "$SEMANTIC_RELEASE_SOURCE"
+
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
         id: release
-        uses: python-semantic-release/python-semantic-release@39dd2052f2ce8282a5d932c31d58a2ca06d2550e # v10.6.1
-        with:
-          github_token: ${{ secrets.ADMIN_TOKEN }}
-          git_committer_name: "OpenAdapt Bot"
-          git_committer_email: "bot@openadapt.ai"
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          git config user.name "OpenAdapt Bot"
+          git config user.email "bot@openadapt.ai"
+          export GIT_COMMIT_AUTHOR="OpenAdapt Bot <bot@openadapt.ai>"
+          semantic-release -v version
 
   build-and-attest:
     needs: release
@@ -145,6 +163,14 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Set up Python for Semantic Release
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install compatible Semantic Release
+        run: python -m pip install --disable-pip-version-check "$SEMANTIC_RELEASE_SOURCE"
+
       - name: Download attested release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -152,10 +178,10 @@ jobs:
           path: dist/
 
       - name: Attach artifacts to GitHub Release
-        uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
-        with:
-          github_token: ${{ github.token }}
-          tag: ${{ needs.release.outputs.tag }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: semantic-release -v publish --tag "$RELEASE_TAG"
 
   reconcile-platform-manifest:
     needs: [release, publish-pypi]
