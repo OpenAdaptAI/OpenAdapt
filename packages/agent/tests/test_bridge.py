@@ -82,7 +82,7 @@ def test_read_only_tools_and_workflow_listing_are_phi_safe(
         "get_attention_item",
     ]
     listing = bridge.dispatch("list_workflows", {})
-    assert listing["lifecycle"] == "beta"
+    assert listing["lifecycle"] == "admission-derived"
     assert listing["run_tools_enabled"] is False
     assert listing["protected_export_enabled"] is False
     item = listing["workflows"][0]
