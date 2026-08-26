@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.16.0 (2026-08-26)
+
+### Bug Fixes
+
+- State inactive admission explicitly ([#1116](https://github.com/OpenAdaptAI/OpenAdapt/pull/1116),
+  [`c929788`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c9297883eb794e2f7347c0596f6e2530078132c2))
+
+### Chores
+
+- **release**: Reconcile platform BOM
+  ([`e68fb33`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e68fb332c0da9da0125e45e0aa9babfdf942595b))
+
+### Features
+
+- Derive launcher lifecycle from signed admissions
+  ([#1116](https://github.com/OpenAdaptAI/OpenAdapt/pull/1116),
+  [`c929788`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c9297883eb794e2f7347c0596f6e2530078132c2))
+
+
 ## v1.15.1 (2026-08-26)
 
 ### Bug Fixes
