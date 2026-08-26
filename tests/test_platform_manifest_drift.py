@@ -299,12 +299,12 @@ def test_propagation_lag_still_verifies_digests(flow_component: dict) -> None:
 
 
 def test_release_in_flight_warns_instead_of_failing() -> None:
-    """The second guaranteed false red must not recur either.
+    """A reviewed version candidate can be ahead of the published manifest.
 
-    python-semantic-release pushes a version-bump commit to main before the
-    reconcile job regenerates the manifest. For that window pyproject.toml is
-    ahead of the manifest, which is correct -- the manifest records only
-    PUBLISHED versions. Failing here made main red after every release.
+    The version and changelog reach protected main through a pull request
+    before the release App creates its tag. For that window pyproject.toml is
+    ahead of the manifest, which is correct because the manifest records only
+    published versions.
     """
     report = Report()
     compare_launcher_to_pyproject("1.8.0", "1.9.0", report)
@@ -341,14 +341,14 @@ def test_matching_launcher_versions_are_silent() -> None:
     assert report.warnings == []
 
 
-def test_release_reconciliation_commits_every_generated_bom_file() -> None:
-    """A launcher release must not leave the generated report stale."""
+def test_release_retains_generated_bom_without_pushing_main() -> None:
+    """Publication emits an exact reviewed-update input without bypassing main."""
     workflow = RELEASE_WORKFLOW_PATH.read_text(encoding="utf-8")
-    generated_files = "platform-manifest.json docs/platform-compatibility-report.md"
-    normalized = " ".join(workflow.replace("\\", "").split())
 
-    assert f"git diff --quiet -- {generated_files}" in normalized
-    assert f"git add {generated_files}" in normalized
+    assert "git push origin HEAD:main" not in workflow
+    assert "published-platform-manifest.json" in workflow
+    assert "published-platform-report.md" in workflow
+    assert "platform-manifest.json needs the published launcher release" in workflow
 
 
 def test_every_manifest_component_is_covered(manifest: dict) -> None:
