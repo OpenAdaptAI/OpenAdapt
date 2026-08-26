@@ -47,6 +47,17 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
 
+      - name: Require the exact release App identity for tag creation
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "Tag creation requires the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+
       - name: Checkout the exact dispatched main commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -302,6 +313,17 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-metadata: read
+
+      - name: Require the exact release App identity for GitHub publication
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "GitHub publication requires the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
 
       - name: Publish the GitHub Release and exact artifacts
         env:

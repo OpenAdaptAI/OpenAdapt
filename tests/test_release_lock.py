@@ -141,6 +141,21 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
         "repositories": "${{ github.event.repository.name }}",
         "permission-contents": "write",
     }
+    identity = next(
+        step
+        for step in create["steps"]
+        if step["name"] == "Require the exact release App identity for tag creation"
+    )
+    assert identity["env"] == {
+        "ACTUAL_APP_SLUG": "${{ steps.release-app.outputs.app-slug }}",
+        "EXPECTED_APP_SLUG": "openadapt-release",
+    }
+    assert 'ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG' in identity["run"]
+    assert create["steps"].index(identity) < next(
+        index
+        for index, step in enumerate(create["steps"])
+        if step["name"] == "Create and push only the annotated release tag"
+    )
 
     candidate = next(step for step in create["steps"] if step.get("id") == "candidate")
     assert 'GITHUB_REF" != "refs/heads/main' in candidate["run"]
@@ -226,11 +241,23 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
         "permission-contents": "write",
         "permission-metadata": "read",
     }
+    identity = next(
+        step
+        for step in publish_steps
+        if step["name"]
+        == "Require the exact release App identity for GitHub publication"
+    )
+    assert identity["env"] == {
+        "ACTUAL_APP_SLUG": "${{ steps.release-app.outputs.app-slug }}",
+        "EXPECTED_APP_SLUG": "openadapt-release",
+    }
+    assert 'ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG' in identity["run"]
     publish = next(
         step
         for step in publish_steps
         if step["name"] == "Publish the GitHub Release and exact artifacts"
     )
+    assert publish_steps.index(identity) < publish_steps.index(publish)
     assert publish["env"]["GH_TOKEN"] == "${{ steps.release-app.outputs.token }}"
     assert publish["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
     assert publish["env"]["EXPECTED_AUTHOR"] == "openadapt-release[bot]"
