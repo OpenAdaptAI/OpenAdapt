@@ -1,21 +1,15 @@
 # OpenAdapt Capture
 
-> [!IMPORTANT]
-> **Status: Experimental.** OpenAdapt Capture records native mouse, keyboard,
-> and screen activity into a time-aligned local capture session. Its current
-> product role is the optional cross-platform desktop recorder used by
-> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
->
-> The OpenAdapt product is the demonstration compiler,
-> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
-> via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
-> (first run: `pip install 'openadapt[browser]'` then `openadapt quickstart`;
-> on Windows `cmd.exe` use `pip install "openadapt[browser]"`): it compiles a
-> demonstrated GUI workflow into a
-> deterministic, locally executable program. Healthy runs make no model calls,
-> and it halts instead of guessing when verification fails. Lifecycle labels for
-> every repository are in the
-> [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
+OpenAdapt Capture records native mouse, keyboard, and screen activity into a
+time-aligned local session. It is the cross-platform desktop recorder used by
+[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+
+> **Product state:** An exact Capture release enters Production only through an
+> active signed, expiring, and revocable release admission. A missing, expired,
+> revoked, mismatched, or unverifiable admission produces **not actively
+> admitted**. The validator doesn't restore an older admission or assign a
+> fallback lifecycle label. Check the
+> [current signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 
 [![Build Status](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
@@ -38,14 +32,11 @@ model calls on the healthy path. When the live screen does not match what was
 demonstrated it halts instead of guessing, using identity gates and independent
 effect verification. Every substrate is first-class.
 
-Substrate maturity, stated the same way across the OpenAdapt repositories:
-
-| Substrate | Maturity |
-| --- | --- |
-| Browser (web) | Beta; available in production today through the managed browser product |
-| Native desktop (Windows, macOS, Linux) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
-| Remote display (RDP) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
-| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification is deployment-specific |
+Each execution surface keeps its own evidence and deployment boundary. Browser
+recording stays in Flow's Playwright path. Native desktop recording uses this
+package. RDP and Citrix/VDI recording remains externally pixel-based and needs
+qualification for the exact workflow, application, environment, identity, and
+effect contract.
 
 The packages in the stack:
 
