@@ -420,6 +420,7 @@ class DurableRun:
     def update_audit_evidence(
         self,
         *,
+        screenshots_may_leave_box: bool,
         model_calls: int,
         external_network_calls: Literal["none", "observed", "unknown"],
     ) -> None:
@@ -428,6 +429,10 @@ class DurableRun:
         self.store.validate_namespace(self._manifest)
         updated = self._manifest.model_copy(
             update={
+                "screenshots_may_leave_box": (
+                    self._manifest.screenshots_may_leave_box
+                    or screenshots_may_leave_box
+                ),
                 "model_calls": model_calls,
                 "external_network_calls": external_network_calls,
             }

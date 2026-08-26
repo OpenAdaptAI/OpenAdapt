@@ -672,6 +672,7 @@ def _configured_replayer(
     production_qualification_guard=None,
     qualification_campaign_guard=None,
     runtime_config=None,
+    checkpoint_key: Optional[str] = None,
 ):
     """Wire the grounding, verification, and actuation layers into a Replayer.
 
@@ -684,9 +685,8 @@ def _configured_replayer(
     from openadapt_flow import crypto
     from openadapt_flow.deployment import build_replayer
 
-    checkpoint_key = None
     profile_name = getattr(governed_authorization, "execution_profile", None)
-    if profile_name is not None:
+    if checkpoint_key is None and profile_name is not None:
         from openadapt_flow.execution_profiles import execution_profile_contract
 
         contract = execution_profile_contract(profile_name)
@@ -2278,7 +2278,6 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     # durable resume entrypoint, which re-binds params from the run manifest.
     from openadapt_flow.backends.factory import _normalize_kind, build_backend
     from openadapt_flow.report import render_run_report
-    from openadapt_flow.runtime import Replayer
     from openadapt_flow.runtime.durable.approval import ResumeRefused
 
     (
@@ -2293,6 +2292,13 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             getattr(args, "param", None), getattr(args, "params_file", None)
         ),
     )
+    if manifest.delivery_authority_kind == "cloud_runner" and allow_egress:
+        print(
+            "Resume REFUSED: this managed runner doesn't permit model grounding "
+            "because its evidence contract requires "
+            "screenshots_may_leave_box=false. Nothing was executed."
+        )
+        return 3
 
     # Route the resumed run through the SAME backend factory as replay/run
     # (--backend / --agent-url / --rdp-host over --config), so a resume drives
@@ -2314,16 +2320,21 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     )
 
     def _resume_with(backend: "Backend") -> "RunReport":
-        replayer = Replayer(
+        replayer = _configured_replayer(
             backend,
+            workflow=workflow,
+            allow_egress=allow_egress,
             effect_verifier=effect_verifier,
             api_actuator=api_actuator,
             durable=True,  # resume forces durability so it can pause again
-            checkpoint_key=ckpt_key,
-            allow_model_grounding=allow_egress,
+            use_structural=True,
+            pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+            governed_authorization=retained_authorization,
             managed_dispatch_binding=managed_binding,
             production_qualification_guard=production_guard,
             qualification_campaign_guard=campaign_guard,
+            runtime_config=cfg.runtime,
+            checkpoint_key=ckpt_key,
         )
         return resume(
             run_dir,

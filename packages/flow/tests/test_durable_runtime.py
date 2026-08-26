@@ -125,6 +125,16 @@ class _ResumeProjectionFailingLedger(IdempotencyLedger):
         raise OSError("terminal ledger projection unavailable")
 
 
+class _EgressGrounder:
+    """An off-box grounder marker that never makes a call in this test."""
+
+    MAY_EGRESS = True
+
+    def locate(self, screen_png, intent, ocr_text=None):
+        del screen_png, intent, ocr_text
+        return None
+
+
 def _vision_ok() -> FakeVision:
     vision = FakeVision()
     # The screen oracle passes for every step (the point is that the DURABLE
@@ -322,6 +332,76 @@ def test_resume_continues_from_last_checkpoint(tmp_path):
     assert [c.step_index for c in store.checkpoints()] == [0, 1, 2]
     # The pending escalation was cleared when the resume started.
     assert store.read_pending() is None
+
+
+def test_resume_egress_posture_stays_sticky_across_a_second_resume(tmp_path):
+    """A later local leg cannot erase egress from an earlier resumed leg."""
+    workflow = Workflow(
+        name="durable-egress-audit",
+        steps=[
+            _key_step(
+                step_id,
+                key,
+                effect=_effect(step_id),
+                risk="irreversible",
+            )
+            for step_id, key in (("s0", "A"), ("s1", "B"), ("s2", "C"), ("s3", "D"))
+        ],
+    )
+    verifier = FakeSoRVerifier()
+    verifier.refute.add((("step", "s2"),))
+    bundle, run_dir = _dirs(tmp_path)
+    workflow.save(bundle)
+
+    initial = Replayer(
+        FakeBackend(),
+        vision=_vision_ok(),
+        effect_verifier=verifier,
+        durable=True,
+        poll_interval_s=0.01,
+    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    assert initial.success is False
+    store = CheckpointStore(run_dir)
+    manifest = store.read_manifest()
+    assert manifest is not None
+    assert manifest.screenshots_may_leave_box is False
+
+    verifier.refute.clear()
+    verifier.refute.add((("step", "s3"),))
+    first_resume = resume(
+        run_dir,
+        Replayer(
+            FakeBackend(),
+            vision=_vision_ok(),
+            grounder=_EgressGrounder(),
+            allow_model_grounding=True,
+            effect_verifier=verifier,
+            poll_interval_s=0.01,
+        ),
+        approval=_approval(bundle),
+    )
+    assert first_resume.success is False
+    assert first_resume.screenshots_may_leave_box is True
+    manifest = store.read_manifest()
+    assert manifest is not None
+    assert manifest.screenshots_may_leave_box is True
+
+    verifier.refute.clear()
+    second_resume = resume(
+        run_dir,
+        Replayer(
+            FakeBackend(),
+            vision=_vision_ok(),
+            effect_verifier=verifier,
+            poll_interval_s=0.01,
+        ),
+        approval=_approval(bundle),
+    )
+    assert second_resume.success is True
+    assert second_resume.screenshots_may_leave_box is True
+    manifest = store.read_manifest()
+    assert manifest is not None
+    assert manifest.screenshots_may_leave_box is True
 
 
 def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(

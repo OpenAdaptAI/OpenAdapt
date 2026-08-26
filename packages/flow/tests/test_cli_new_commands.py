@@ -23,6 +23,15 @@ from openadapt_flow.__main__ import (
 )
 from openadapt_flow.compiler.induction import induce_program
 from openadapt_flow.ir import ActionKind, BackendHints, Step, Workflow
+from openadapt_flow.runner.dispatch_envelope import (
+    ManagedDispatchEnvelope,
+    write_managed_dispatch_envelope_value,
+)
+from openadapt_flow.runner.protocol import dispatch_binding_sha256
+from openadapt_flow.runtime.authorization import (
+    GovernedRunAuthorization,
+    runtime_inputs_digest,
+)
 from openadapt_flow.runtime.durable.approval import approval_pause_digest
 from openadapt_flow.runtime.durable.authority import DurableAuthority
 from openadapt_flow.runtime.durable.checkpoint import (
@@ -169,18 +178,34 @@ def _paused_run(
     *,
     verified_first: bool = True,
     backend_hints: BackendHints | None = None,
+    managed: bool = False,
 ) -> Path:
     run = tmp_path / "run"
     bundle = tmp_path / "b"
     run_id = "cli-test-run"
-    Workflow(
+    workflow = Workflow(
         name="w",
         backend_hints=backend_hints,
         steps=[
             Step(id="s0", intent="first", action=ActionKind.KEY, key="A"),
             Step(id="s1", intent="second", action=ActionKind.KEY, key="B"),
         ],
-    ).save(bundle)
+    )
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    remote_run_id = "018f6c0a-4cce-4f47-8d71-c3d63bf1c001"
+    authorization = None
+    managed_binding_sha256 = None
+    if managed:
+        assert workflow.manifest is not None
+        authorization = GovernedRunAuthorization(
+            bundle_content_digest=workflow.manifest.content_digest,
+            runtime_inputs_digest=runtime_inputs_digest(workflow, {}, {}),
+            admitted_policy_name="managed-test",
+            execution_profile="standard",
+            approval_source="hosted:test",
+        )
+        managed_binding_sha256 = dispatch_binding_sha256(remote_run_id, authorization)
     store = CheckpointStore(run)
     manifest = RunManifest(
         run_id=run_id,
@@ -189,6 +214,10 @@ def _paused_run(
         workflow_name="w",
         bundle_dir=str(bundle),
         params={},
+        governed_authorization=authorization,
+        delivery_authority_kind=("cloud_runner" if managed else "customer_local"),
+        remote_delivery_run_id=(remote_run_id if managed else None),
+        managed_dispatch_binding_sha256=managed_binding_sha256,
     )
     store.write_fresh_manifest(manifest)
     authority = DurableAuthority(run, store)
@@ -546,6 +575,106 @@ def test_resume_web_default_builds_playwright_backend(
     assert seen["execution_target_kind"] == "web"
     # The factory built the browser-backed backend (the fake returns "backend").
     assert captured["ctor"]  # Replayer was constructed for the web path
+
+
+def test_resume_wires_all_configured_appliance_tiers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Resume uses the shared deployment constructor, including VLM handles."""
+    run = _paused_run(tmp_path)
+    main(["approve", str(run)])
+    config = tmp_path / "deployment.yaml"
+    config.write_text("runtime:\n  allow_model_grounding: true\n")
+
+    captured: dict = {}
+    _install_fake_browser(monkeypatch, captured)
+
+    class _Appliance:
+        grounder = object()
+        identity_vlm = object()
+        state_verifier = object()
+
+    appliance = _Appliance()
+
+    import openadapt_flow.runtime.durable as durable_mod
+    import openadapt_flow.runtime.grounder as grounder_mod
+    import openadapt_flow.runtime.remote_vlm as remote_mod
+
+    def _grounder(*, fallback=None):
+        captured["fallback"] = fallback
+        return fallback
+
+    monkeypatch.setattr(remote_mod, "appliance_from_env", lambda: appliance)
+    monkeypatch.setattr(grounder_mod, "build_grounder", _grounder)
+    monkeypatch.setattr(
+        durable_mod,
+        "resume",
+        lambda run_dir, replayer, key=None, execution_target_kind=None: _FakeReport(),
+    )
+
+    rc = main(
+        [
+            "resume",
+            str(run),
+            "--require-approval",
+            "--url",
+            "http://app.example",
+            "--config",
+            str(config),
+        ]
+    )
+
+    assert rc == 0
+    assert captured["fallback"] is appliance.grounder
+    assert captured["ctor"]["grounder"] is appliance.grounder
+    assert captured["ctor"]["identity_vlm"] is appliance.identity_vlm
+    assert captured["ctor"]["state_verifier"] is appliance.state_verifier
+    assert captured["ctor"]["allow_model_grounding"] is True
+    assert captured["ctor"]["durable"] is True
+
+
+def test_managed_resume_refuses_model_grounding_profile(tmp_path: Path, capsys) -> None:
+    """A managed resume preserves its local-only evidence contract."""
+    run = _paused_run(tmp_path, managed=True)
+    main(["approve", str(run)])
+    config = tmp_path / "deployment.yaml"
+    config.write_text("runtime:\n  allow_model_grounding: true\n")
+    manifest = CheckpointStore(run).read_manifest()
+    assert manifest is not None
+    assert manifest.governed_authorization is not None
+    assert manifest.remote_delivery_run_id is not None
+    assert manifest.managed_dispatch_binding_sha256 is not None
+    dispatch_file = write_managed_dispatch_envelope_value(
+        tmp_path / "managed-dispatch.json",
+        ManagedDispatchEnvelope(
+            run_id=manifest.remote_delivery_run_id,
+            bundle_content_digest=(
+                manifest.governed_authorization.bundle_content_digest
+            ),
+            runtime_inputs_digest=(
+                manifest.governed_authorization.runtime_inputs_digest
+            ),
+            authorization=manifest.governed_authorization,
+            dispatch_binding_sha256=manifest.managed_dispatch_binding_sha256,
+        ),
+    )
+
+    rc = main(
+        [
+            "resume",
+            str(run),
+            "--require-approval",
+            "--config",
+            str(config),
+            "--managed-dispatch-file",
+            str(dispatch_file),
+        ]
+    )
+
+    assert rc == 3
+    output = capsys.readouterr().out
+    assert "managed runner doesn't permit model grounding" in output
+    assert "Nothing was executed" in output
 
 
 def test_resume_windows_config_builds_windows_backend(

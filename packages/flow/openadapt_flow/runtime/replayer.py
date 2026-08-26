@@ -2275,6 +2275,7 @@ class Replayer:
 
         report.external_network_calls = _external_network_call_state(report)
         durable_run.update_audit_evidence(
+            screenshots_may_leave_box=report.screenshots_may_leave_box,
             model_calls=report.model_calls,
             external_network_calls=report.external_network_calls,
         )
