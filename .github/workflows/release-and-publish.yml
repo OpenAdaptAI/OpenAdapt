@@ -2,7 +2,8 @@ name: Release and PyPI Publish
 
 # A release starts from a version, changelog, and lockfile that reached the
 # exact protected main branch through review. The release App can create only
-# the annotated tag. It cannot push a version commit or any other main commit.
+# the annotated tag and its matching GitHub Release. It cannot push a version
+# commit or any other main commit.
 #
 # A protected v* tag starts the build, attestation, PyPI Trusted Publishing,
 # GitHub Release, and publication-verification jobs. Rerun that exact tag run
@@ -262,7 +263,7 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout the exact release tag
@@ -282,9 +283,20 @@ jobs:
           name: release-dists-${{ github.ref_name }}
           path: dist/
 
+      - name: Create a repository-scoped release App token for GitHub publication
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-metadata: read
+
       - name: Publish the GitHub Release and exact artifacts
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail

@@ -107,7 +107,7 @@ def test_release_workflow_pins_actions_and_separates_permissions():
         "contents": "read",
         "id-token": "write",
     }
-    assert jobs["publish-github"]["permissions"] == {"contents": "write"}
+    assert jobs["publish-github"]["permissions"] == {"contents": "read"}
     assert jobs["verify-publication"]["permissions"] == {
         "contents": "read",
         "issues": "write",
@@ -189,12 +189,22 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     assert publish["with"] == {"skip-existing": True}
 
     publish_steps = jobs["publish-github"]["steps"]
+    app = next(step for step in publish_steps if step.get("id") == "release-app")
+    assert app["uses"].startswith("actions/create-github-app-token@")
+    assert app["with"] == {
+        "app-id": "${{ vars.OPENADAPT_RELEASE_APP_ID }}",
+        "private-key": "${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}",
+        "owner": "${{ github.repository_owner }}",
+        "repositories": "${{ github.event.repository.name }}",
+        "permission-contents": "write",
+        "permission-metadata": "read",
+    }
     publish = next(
         step
         for step in publish_steps
         if step["name"] == "Publish the GitHub Release and exact artifacts"
     )
-    assert publish["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert publish["env"]["GH_TOKEN"] == "${{ steps.release-app.outputs.token }}"
     assert publish["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
     assert "gh release create" in publish["run"]
     assert "--verify-tag" in publish["run"]
