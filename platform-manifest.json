@@ -1,20 +1,19 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
-  "schema_version": "1.3.0",
+  "schema_version": "2.0.0",
   "generated_at": "2026-08-26T15:52:01+00:00",
   "generation": {
     "files": [
       {
         "path": "scripts/generate_platform_manifest.py",
-        "sha256": "553335f1c45af6cf62ce7c7862d853a7065c100bbf7a5145fc34643d2a849655"
+        "sha256": "fdb5f79c90e61e767a8b76ddeec8723dbc854372fd90d9479965f74371087d6b"
       },
       {
         "path": "scripts/render_platform_versions.py",
-        "sha256": "d63fa4d56e219551be2d416f5c4fea62c49c6c515fcf26183475ec4a1587808e"
+        "sha256": "ae3e52b501e6f5fcf497e1aa3973478a333b3fefe6dd8b9b82514e8f570bdd1f"
       }
     ]
   },
-  "release_channel": "beta",
   "release_selection": {
     "mode": "latest-published",
     "component_versions": {}
@@ -1126,37 +1125,30 @@
   "substrate_drivers": [
     {
       "name": "Browser",
-      "public_label": "Available",
       "delivery": "Local, managed OpenAdapt Cloud, or customer-controlled"
     },
     {
       "name": "Windows",
-      "public_label": "Available",
       "delivery": "Local or customer-controlled"
     },
     {
       "name": "macOS",
-      "public_label": "Available",
       "delivery": "Local or customer-controlled"
     },
     {
       "name": "Linux",
-      "public_label": "Available",
       "delivery": "Local or customer-controlled"
     },
     {
       "name": "RDP",
-      "public_label": "Available",
       "delivery": "Local or customer-controlled"
     },
     {
       "name": "Citrix / VDI",
-      "public_label": "Available",
       "delivery": "Local or customer-controlled"
     },
     {
       "name": "Hosted Cloud",
-      "public_label": "Beta",
       "delivery": "Managed browser runner and control plane"
     }
   ],

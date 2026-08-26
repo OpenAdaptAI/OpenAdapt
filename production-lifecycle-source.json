@@ -1,0 +1,17 @@
+{
+  "schema_version": "openadapt.production-readme-source/v1",
+  "repository": "OpenAdaptAI/openadapt-ops",
+  "source_commit": "ef29c08ad27b05637abc75fc3ceb3e026821fdda",
+  "files": {
+    "projection": {
+      "path": "docs/production-lifecycle.json",
+      "url": "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-ops/ef29c08ad27b05637abc75fc3ceb3e026821fdda/docs/production-lifecycle.json",
+      "sha256": "sha256:6c3819c7c68acb1bea8045fa1f059721e535c960707998b8705438f8541fb3d7"
+    },
+    "schema": {
+      "path": "docs/schemas/production-lifecycle-public.schema.json",
+      "url": "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-ops/ef29c08ad27b05637abc75fc3ceb3e026821fdda/docs/schemas/production-lifecycle-public.schema.json",
+      "sha256": "sha256:f681a9bb47ff727b409df994e69e62e7c45b38e912911af4c99eca7dd3be40eb"
+    }
+  }
+}

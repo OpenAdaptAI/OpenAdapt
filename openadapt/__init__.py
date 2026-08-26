@@ -6,8 +6,8 @@ The lazy exports below preserve compatibility with optional supporting and
 research packages:
 
     pip install openadapt              # launcher + openadapt-flow
-    pip install openadapt[capture]     # experimental native capture
-    pip install openadapt[privacy]     # experimental privacy scrubbing
+    pip install openadapt[capture]     # native capture
+    pip install openadapt[privacy]     # privacy scrubbing
     pip install openadapt[ml,evals]    # research toolkits
 """
 

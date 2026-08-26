@@ -4,13 +4,14 @@ Thank you for your interest in contributing to OpenAdapt!
 
 ## Product boundary
 
-`OpenAdaptAI/OpenAdapt` is the Beta launcher/meta-package and compatibility
+`OpenAdaptAI/OpenAdapt` is the launcher/meta-package and compatibility
 surface. The canonical compiler and governed runtime live in
 [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). New engine,
 replay, repair, policy, and backend work belongs there.
 
-This repository's lifecycle is **Beta**. Each sibling repository publishes its
-own lifecycle status; do not infer that status from package availability here.
+The [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
+provides the current admission state. Do not infer a lifecycle state from
+package availability, repository text, or a sibling repository.
 
 ## Where to Contribute
 

@@ -202,7 +202,7 @@ Not validated yet (planned):
   jobs verify their own installer digests and attestations, but this manifest
   does not fetch or verify those large files yet.
 
-## Schema (v1)
+## Schema (v2)
 
 Top-level fields:
 
@@ -212,7 +212,6 @@ Top-level fields:
 | `schema_version` | Semver of this schema; validators reject unknown majors. |
 | `generated_at` | UTC timestamp of generation. |
 | `generation` | SHA-256 bindings for the generator and report renderer. |
-| `release_channel` | Lowercased product lifecycle from status.json (currently `beta`). |
 | `release_selection` | Latest-published selection or exact published version inputs supplied for an ordered release train. |
 | `components` | `launcher`, `flow`, `capture`, `privacy`, `types`, `desktop`, and `agent`: package name, published version, Python range, dependency constraints and markers, release source commit/tree, and the exact artifact set. |
 | `runtime_units` | Launcher, runner, Desktop, and Agent deployment views. Non-locked units name selected packages. The Desktop sidecar names the exact lock-resolved closure. |
@@ -221,7 +220,7 @@ Top-level fields:
 | `compatibility` | The launcher's supported Python range and its OpenAdapt dependency specifiers, extracted from `pyproject.toml`. |
 | `compatibility_status` | `dependency-compatible` or `dependency-incompatible`, plus the exact failed package edges. The generator computes this field. |
 | `supported_os` | Operating systems the launcher supports. |
-| `substrate_drivers` | Substrate table (name, public label, delivery) read from status.json. |
+| `substrate_drivers` | Substrate name and delivery facts read from status.json. Lifecycle state comes only from the signed Production record. |
 | `qualification_evidence` | Stable evidence IDs pointing at the public status document and the flow evidence-pack manifests. |
 | `signature` | See below. |
 

@@ -466,7 +466,6 @@ def test_status_contract_rejects_fabricated_substrates_and_strict_unreachable(
     manifest: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     status = {
-        "product_lifecycle": manifest["release_channel"],
         "versions": {
             role: component["version"]
             for role, component in manifest["components"].items()
@@ -474,7 +473,7 @@ def test_status_contract_rejects_fabricated_substrates_and_strict_unreachable(
         "substrates": deepcopy(manifest["substrate_drivers"]),
     }
     tampered = deepcopy(manifest)
-    tampered["substrate_drivers"][0]["public_label"] = "Invented"
+    tampered["substrate_drivers"][0]["delivery"] = "Invented"
     monkeypatch.setattr("validate_platform_manifest._fetch_json", lambda _url: status)
     report = Report()
     check_against_status(tampered, report, strict=False)
@@ -501,7 +500,7 @@ def test_status_contract_rejects_fabricated_substrates_and_strict_unreachable(
         ),
         lambda value: value["signature"].update(algorithm="invented"),
         lambda value: value.update(generated_at="not-a-time"),
-        lambda value: value.update(release_channel="invented"),
+        lambda value: value["substrate_drivers"][0].update(public_label="Invented"),
     ],
 )
 def test_structural_provenance_claims_fail_closed(manifest: dict, mutate) -> None:

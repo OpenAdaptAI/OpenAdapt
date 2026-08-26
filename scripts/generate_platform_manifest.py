@@ -54,7 +54,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
 
 ROOT = Path(__file__).resolve().parents[1]
 
-SCHEMA_VERSION = "1.3.0"
+SCHEMA_VERSION = "2.0.0"
 MANIFEST_KIND = "openadapt-platform-release-manifest"
 STATUS_URL = "https://openadapt.ai/status.json"
 PYPI_URL_TEMPLATE = "https://pypi.org/pypi/{package}/json"
@@ -844,7 +844,6 @@ def _substrates_from_status(status: dict) -> list[dict]:
         substrates.append(
             {
                 "name": entry["name"],
-                "public_label": entry["public_label"],
                 "delivery": entry.get("delivery"),
             }
         )
@@ -990,13 +989,6 @@ def generate(
             )
         print(f"WARNING: {message} Recording the published version.")
 
-    release_channel = status.get("product_lifecycle", "").lower() or None
-    if release_channel is None:
-        raise DriftError(
-            f"FATAL: {STATUS_URL} has no product_lifecycle; cannot determine "
-            "the release channel."
-        )
-
     runtime_units = _runtime_units(components)
     dependency_edges = _dependency_edges(components, runtime_units)
     return {
@@ -1006,7 +998,6 @@ def generate(
         .replace(microsecond=0)
         .isoformat(),
         "generation": _generation_metadata(),
-        "release_channel": release_channel,
         "release_selection": {
             "mode": ("explicit-published" if selected_versions else "latest-published"),
             "component_versions": dict(sorted(selected_versions.items())),

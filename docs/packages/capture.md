@@ -1,9 +1,10 @@
 # openadapt-capture
 
-**Lifecycle: Experimental**, as recorded in the canonical
-[organization lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
 `openadapt-capture` is the component OpenAdapt uses for native screen, mouse,
 keyboard, timing, window-scope, and media capture.
+
+An exact Capture release can receive a Production admission only through the
+[live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 
 Repository:
 [`OpenAdaptAI/openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture)
