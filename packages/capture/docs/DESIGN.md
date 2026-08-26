@@ -7,10 +7,12 @@ screen media, native input, timing, window geometry, and optional action-time UI
 structure into one local session. `openadapt-flow` consumes the session, applies
 the compiler and qualification contracts, and owns governed replay.
 
-The package lifecycle is **Experimental**. A successful unit test or a runnable package
-does not by itself make a recording path production-qualified. A release must
-also pass the exact-commit clean-install and interactive native qualification
-described below.
+An exact Capture release gets its product state from the signed Production
+admission record. A missing, expired, revoked, mismatched, or unverifiable
+admission means **not actively admitted**. A successful unit test or a runnable
+package doesn't admit a recording path. A release must also pass the
+exact-commit clean-install and interactive native qualification described
+below.
 
 Capture is local-first. It does not upload a recording. A raw session can
 contain screen text, typed secrets, accessibility text, and optional narration.
