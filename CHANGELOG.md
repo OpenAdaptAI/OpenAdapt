@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v1.15.0 (2026-08-26)
+
+### Bug Fixes
+
+- Keep release compatible with GitPython 3.1.60
+  ([#1113](https://github.com/OpenAdaptAI/OpenAdapt/pull/1113),
+  [`8d5627a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8d5627a69b86565a4eabe71929820fd573f1bb88))
+
+### Chores
+
+- Refresh Flow 1.33.0 platform manifest
+  ([#1111](https://github.com/OpenAdaptAI/OpenAdapt/pull/1111),
+  [`753f3d2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/753f3d28ca4e5c2e18761be097fd57e75753a23a))
+
+- **release**: Reconcile platform BOM
+  ([`60fe15a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/60fe15a01632ccc980e3daf39eb366f93e92b33f))
+
+### Documentation
+
+- State OpenEMR field result as 19/20 per oracle adjudication
+  ([#1109](https://github.com/OpenAdaptAI/OpenAdapt/pull/1109),
+  [`da7b0f1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/da7b0f11d41b6597e56163a51594423264ae8368))
+
+### Features
+
+- Include browser quickstart in base install
+  ([#1111](https://github.com/OpenAdaptAI/OpenAdapt/pull/1111),
+  [`753f3d2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/753f3d28ca4e5c2e18761be097fd57e75753a23a))
+
+
 ## v1.14.0 (2026-08-22)
 
 ### Build System

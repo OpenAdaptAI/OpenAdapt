@@ -1,6 +1,6 @@
 [project]
 name = "openadapt"
-version = "1.14.0"
+version = "1.15.0"
 description = "Compile a demonstrated GUI workflow into a deterministic, locally executable program. Zero model calls on healthy runs; halts instead of guessing."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
