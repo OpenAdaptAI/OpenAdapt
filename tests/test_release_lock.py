@@ -228,6 +228,22 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     )
     assert publish["uses"].startswith("pypa/gh-action-pypi-publish@")
     assert publish["with"] == {"skip-existing": True}
+    preflight = next(
+        step
+        for step in pypi["steps"]
+        if step["name"] == "Refuse conflicting immutable PyPI files"
+    )
+    strict = next(
+        step
+        for step in pypi["steps"]
+        if step["name"] == "Verify immutable PyPI publication bytes"
+    )
+    assert pypi["steps"].index(preflight) < pypi["steps"].index(publish)
+    assert pypi["steps"].index(publish) < pypi["steps"].index(strict)
+    assert "scripts/verify_pypi_release.py" in preflight["run"]
+    assert "--allow-matching-subset" in preflight["run"]
+    assert "scripts/verify_pypi_release.py" in strict["run"]
+    assert "--allow-matching-subset" not in strict["run"]
 
     assert jobs["publish-github"]["environment"] == "pypi"
     publish_steps = jobs["publish-github"]["steps"]
@@ -324,6 +340,14 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
     assert pypi_publish["with"] == {"skip-existing": True}
     assert github_publish["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
 
+    pypi_checkout = next(
+        step for step in pypi_steps if step["name"] == "Checkout the exact release tag"
+    )
+    assert pypi_checkout["with"] == {
+        "ref": "${{ github.ref }}",
+        "persist-credentials": False,
+    }
+
     checkout = next(
         step
         for step in github_steps
@@ -341,3 +365,18 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
     assert "gh release download" in verification_text
     assert "diff -u /tmp/source.sha256 /tmp/pypi.sha256" in verification_text
     assert "diff -u /tmp/source.sha256 /tmp/github.sha256" in verification_text
+
+
+def test_release_failure_requires_failed_job_rerun_in_the_same_run():
+    workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
+    document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    report = document["jobs"]["report-release-failure"]
+    run = next(
+        step["run"]
+        for step in report["steps"]
+        if step["name"] == "File or update the release failure issue"
+    )
+
+    assert "gh run rerun ${{ github.run_id }} --failed" in run
+    assert "Do not start a new full run" in run
+    assert "or create a recovery tag" in run
