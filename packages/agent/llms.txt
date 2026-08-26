@@ -1,6 +1,6 @@
 # openadapt-agent
 
-> The local agent bridge for [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow). It exposes compiled workflows and PHI-safe Needs Attention items to MCP clients and emits Agent Skills without becoming a second automation runtime. Healthy execution uses Flow's governed `run` command; a halted or refused run is returned as that exact non-success outcome. Flow remains the authority for policy, identity, verification, durable pauses, attended decisions, repair, and audit. Status: Beta (v2).
+> The local agent bridge for [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow). It exposes compiled workflows and PHI-safe Needs Attention items to MCP clients and emits Agent Skills without becoming a second automation runtime. Healthy execution uses Flow's governed `run` command; a halted or refused run is returned as that exact non-success outcome. Flow remains the authority for policy, identity, verification, durable pauses, attended decisions, repair, and audit. The Agent target's product state comes from its signed Production admission. Missing, expired, revoked, mismatched, or unverifiable admission evidence produces not actively admitted.
 
 ## What it provides
 

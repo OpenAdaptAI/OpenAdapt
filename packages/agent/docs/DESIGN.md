@@ -1,6 +1,9 @@
 # OpenAdapt Agent design
 
-**Lifecycle: Beta.**
+An exact Agent release gets its product state from the signed Production
+admission record. A missing, expired, revoked, mismatched, or unverifiable
+admission means **not actively admitted**. The validator doesn't restore an
+older admission or assign a fallback lifecycle label.
 
 `openadapt-agent` is the local agent-facing bridge for compiled
 `openadapt-flow` workflows. It exposes two complementary interfaces:

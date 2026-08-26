@@ -292,7 +292,7 @@ class AgentBridge:
     def _list_workflows(self) -> dict:
         result = {
             "schema_version": 1,
-            "lifecycle": "beta",
+            "lifecycle": "admission-derived",
             "run_tools_enabled": self.allow_run,
             "protected_export_enabled": self.allow_protected_export,
             "synthetic_recorded_defaults_enabled": self.allow_recorded_defaults,

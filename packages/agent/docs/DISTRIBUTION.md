@@ -1,7 +1,9 @@
 # Distribution & discoverability — openadapt-agent
 
-**Status: Beta (v2).** This document describes how the package is
-made installable and discoverable as an MCP server, the security-relevant
+The Agent target's product state comes from its signed Production admission.
+A missing, expired, revoked, mismatched, or unverifiable admission means **not
+actively admitted**. This document describes how the package is made
+installable and discoverable as an MCP server, the security-relevant
 distinction between the *public capability* and a *user's private
 bundle*, and the exact founder-owned steps to publish and list it. The
 publish/submission steps are **not automated here** — they mint public,
@@ -55,8 +57,8 @@ and [`../manifest.json`](../manifest.json).
 - **Name (reverse-DNS, official registry):** `io.github.OpenAdaptAI/openadapt-agent`
 - **Display name:** OpenAdapt Agent (openadapt-flow bridge)
 - **PyPI package:** `openadapt-agent`
-- **Version:** `2.0.2` (Beta)
-- **Description:** Local Beta bridge for governed openadapt-flow workflows and attended actions.
+- **Version:** `2.0.2`
+- **Description:** Local bridge for governed openadapt-flow workflows and attended actions.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
 - **License:** MIT

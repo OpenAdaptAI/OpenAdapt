@@ -1,10 +1,16 @@
 # OpenAdapt Agent
 
-[![Lifecycle: Beta](https://img.shields.io/badge/lifecycle-Beta-2563eb)](https://github.com/OpenAdaptAI/openadapt-agent)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
 
 `mcp-name: io.github.OpenAdaptAI/openadapt-agent`
+
+> **Product state:** An exact Agent release enters Production only through an
+> active signed, expiring, and revocable release admission. A missing, expired,
+> revoked, mismatched, or unverifiable admission produces **not actively
+> admitted**. The validator doesn't restore an older admission or assign a
+> fallback lifecycle label. Check the
+> [current signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 
 The local agent bridge for
 [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
