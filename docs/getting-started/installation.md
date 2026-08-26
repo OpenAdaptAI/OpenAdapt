@@ -7,19 +7,12 @@
 OpenAdapt supports Python 3.10, 3.11, and 3.12. Use a virtual environment for
 an isolated install.
 
-## Browser tutorial
+## Install and run the browser tutorial
 
-Install the launcher with the browser capability:
+Install the launcher:
 
 ```bash
-python -m pip install --upgrade 'openadapt[browser]'
-openadapt quickstart
-```
-
-On Windows `cmd.exe`, use double quotes:
-
-```bat
-python -m pip install --upgrade "openadapt[browser]"
+python -m pip install --upgrade openadapt
 openadapt quickstart
 ```
 
@@ -34,8 +27,9 @@ profile with no model or Cloud call.
 
 ## Capability-specific installs
 
-The base install includes the launcher and the Flow engine. Add only the
-capabilities that the target workflow needs:
+The base install includes the launcher, the Flow engine, and the Playwright
+driver for the browser tutorial. Chromium downloads only on the first browser
+action. Add the applicable capability for a native or remote workflow:
 
 ```bash
 python -m pip install 'openadapt[capture]'          # local human demonstration

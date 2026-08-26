@@ -222,10 +222,11 @@ def test_distribution_metadata_matches_engine_python_range():
     assert {term.strip() for term in actual.split(",")} == {">=3.10", "<3.13"}
 
 
-def test_doctor_lists_flow_as_core_not_extras():
-    """`openadapt doctor` must treat openadapt-flow as core and the opt-in
-    extras (capture/ml/evals/viewer/...) as optional, never flagging a
-    missing extra as a failure."""
+def test_doctor_lists_quickstart_dependencies_as_core_not_extras():
+    """`openadapt doctor` must treat Flow and Playwright as base dependencies.
+
+    The other capabilities stay optional and must not cause a failure.
+    """
     runner = CliRunner()
     result = runner.invoke(cli_main, ["doctor"])
     assert result.exit_code == 0, result.output
@@ -238,8 +239,10 @@ def test_doctor_lists_flow_as_core_not_extras():
     core_section = out[core_idx:optional_idx]
     optional_section = out[optional_idx:]
 
-    # flow is core.
+    # Flow and the browser tutorial driver are core.
     assert "openadapt_flow" in core_section
+    assert "playwright" in core_section
+    assert "playwright" not in optional_section
     # The excluded-by-default extras must appear only in the optional
     # section and must not be reported as [MISSING].
     for extra_pkg in (
@@ -263,7 +266,10 @@ def test_launcher_flow_and_substrate_extras_metadata():
     )["project"]
     extras = metadata["optional-dependencies"]
 
-    assert metadata["dependencies"].count("openadapt-flow[hosted]>=1.29.0,<2.0.0") == 1
+    assert (
+        metadata["dependencies"].count("openadapt-flow[browser,hosted]>=1.29.0,<2.0.0")
+        == 1
+    )
     assert extras["flow"] == ["openadapt-flow>=1.29.0,<2.0.0"]
     assert extras["browser"] == ["openadapt-flow[browser]>=1.29.0,<2.0.0"]
     assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
@@ -414,7 +420,10 @@ def test_deploy_preflight_fails_without_web_runtime(monkeypatch):
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "web"])
 
     assert result.exit_code != 0
-    assert "[SETUP] install the web extra" in result.output
+    assert (
+        "[MISSING] the base OpenAdapt install does not contain Playwright"
+        in result.output
+    )
     assert "Preflight failed" in result.output
     assert "Preflight passed" not in result.output
 

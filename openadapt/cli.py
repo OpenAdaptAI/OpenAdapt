@@ -61,7 +61,7 @@ def main():
 
     \b
     Quick Start:
-        python -m pip install --upgrade 'openadapt[browser]'
+        python -m pip install --upgrade openadapt
         openadapt quickstart
 
     \b
@@ -112,7 +112,7 @@ _DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
 _PYTHON_REMEDY = (
     "OpenAdapt needs Python 3.10\u20133.12. Easiest fix: "
     "curl -LsSf https://astral.sh/uv/install.sh | sh && "
-    "uv venv --python 3.12 && uv pip install 'openadapt[browser]'\n"
+    "uv venv --python 3.12 && uv pip install openadapt\n"
     "Or use the installer script: https://raw.githubusercontent.com/"
     "OpenAdaptAI/openadapt-flow/main/scripts/install.sh"
 )
@@ -366,8 +366,8 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
         else:
             failures.append("browser")
             click.echo(
-                "  [SETUP] install the web extra before recording or replay: "
-                "python -m pip install 'openadapt[browser]'"
+                "  [MISSING] the base OpenAdapt install does not contain "
+                "Playwright. Run: python -m pip install --upgrade openadapt"
             )
     elif backend == "rdp":
         if find_spec("aardwolf") is not None:
@@ -1034,11 +1034,9 @@ def doctor(backend: str | None):
     else:
         playwright = find_spec("playwright") is not None
         if not playwright:
-            prefix = "[SETUP]" if backend == "web" else "[--]"
             click.echo(
-                f"  {prefix} Browser: optional and not installed. Run "
-                "`python -m pip install 'openadapt[browser]'` before a web "
-                "recording or replay."
+                "  [MISSING] Browser: the base install does not contain "
+                "Playwright. Run `python -m pip install --upgrade openadapt`."
             )
         else:
             try:
@@ -1060,6 +1058,7 @@ def doctor(backend: str | None):
     click.echo("\nCore packages (installed with `pip install openadapt`):")
     core = [
         "openadapt_flow",
+        "playwright",
     ]
     for pkg in core:
         # find_spec checks installability without executing package code
@@ -1078,7 +1077,6 @@ def doctor(backend: str | None):
     # install it rather than flagging it. Maps import name -> extra name.
     click.echo("\nOptional packages (install with `pip install openadapt[...]`):")
     optional = [
-        ("playwright", "browser"),
         ("openadapt_capture", "capture"),
         ("openadapt_ml", "ml"),
         ("openadapt_evals", "evals"),

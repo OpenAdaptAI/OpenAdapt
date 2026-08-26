@@ -189,7 +189,7 @@ def run_lifecycle(
                 "-m",
                 "pip",
                 "install",
-                f"{launcher_wheel}[browser]",
+                str(launcher_wheel),
             ],
             cwd=artifacts,
             env=env,
