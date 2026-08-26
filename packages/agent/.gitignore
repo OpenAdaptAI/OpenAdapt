@@ -143,3 +143,8 @@ sessions/
 # Never-publish workspace material (strategy, prospect research, counsel packs,
 # personal contact details). Created ad hoc; must never reach a remote.
 .private/
+
+# Cover every .env variant, not one at a time. Negate the committed
+# template so it stays tracked.
+.env.*
+!.env.example
