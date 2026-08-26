@@ -36,22 +36,24 @@ state, the run stops for review.
 
 ## Try it locally
 
-OpenAdapt requires Python 3.10–3.12. Easiest install (creates its own
-environment):
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/main/scripts/install.sh | sh
-```
-
-Manual path with pip:
+OpenAdapt requires Python 3.10–3.12. Install the complete local quickstart:
 
 ```bash
 python -m pip install --upgrade openadapt
+openadapt quickstart
 ```
 
-Run the complete bundled tutorial with one command. It needs no account,
-target application, API key, or operating-system automation permissions:
+The base package includes the browser driver for the tutorial. It downloads its
+matching Chromium build only when the first browser action starts. You do not
+need an account, an API key, or a second package extra.
+
+For an isolated command-line installation, use the public installer:
+
+```bash
+curl -fsSL https://openadapt.ai/install.sh | sh
+```
+
+Then run the complete bundled tutorial with one command:
 
 ```bash
 openadapt quickstart
