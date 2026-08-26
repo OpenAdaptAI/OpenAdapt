@@ -11,10 +11,10 @@ cockpit, privacy tools, and optional managed control plane.
 | `openadapt-privacy` | Local privacy and sanitization support | `pip install 'openadapt[privacy]'` |
 | `openadapt-desktop` | Beta visual authoring and operator application | [Download an installer](https://openadapt.ai/download) |
 
-Install the browser tutorial path:
+Install the launcher and run the browser tutorial:
 
 ```bash
-python -m pip install --upgrade 'openadapt[browser]'
+python -m pip install --upgrade openadapt
 openadapt quickstart
 ```
 

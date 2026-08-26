@@ -8,11 +8,9 @@
 Use Python 3.10, 3.11, or 3.12:
 
 ```bash
-python -m pip install --upgrade 'openadapt[browser]'
+python -m pip install --upgrade openadapt
 openadapt quickstart
 ```
-
-On Windows `cmd.exe`, use double quotes around the install target.
 
 The command runs one complete local lifecycle against synthetic MockMed data:
 

@@ -97,7 +97,7 @@ def test_pep668_error_prints_the_same_remedy(monkeypatch):
 
     assert result.exit_code != 0
     assert "OpenAdapt needs Python 3.10\u20133.12" in result.output
-    assert "uv pip install 'openadapt[browser]'" in result.output
+    assert "uv pip install openadapt" in result.output
 
 
 @pytest.mark.parametrize(

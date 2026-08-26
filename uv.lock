@@ -2319,7 +2319,7 @@ version = "1.14.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
-    { name = "openadapt-flow", extra = ["hosted"] },
+    { name = "openadapt-flow", extra = ["browser", "hosted"] },
 ]
 
 [package.optional-dependencies]
@@ -2400,7 +2400,7 @@ requires-dist = [
     { name = "openadapt-flow", marker = "extra == 'flow'", specifier = ">=1.29.0,<2.0.0" },
     { name = "openadapt-flow", extras = ["browser"], marker = "extra == 'browser'", specifier = ">=1.29.0,<2.0.0" },
     { name = "openadapt-flow", extras = ["capture"], marker = "extra == 'capture'", specifier = ">=1.29.0,<2.0.0" },
-    { name = "openadapt-flow", extras = ["hosted"], specifier = ">=1.29.0,<2.0.0" },
+    { name = "openadapt-flow", extras = ["browser", "hosted"], specifier = ">=1.29.0,<2.0.0" },
     { name = "openadapt-flow", extras = ["linux"], marker = "sys_platform == 'linux' and extra == 'linux'", specifier = ">=1.29.0,<2.0.0" },
     { name = "openadapt-flow", extras = ["macos"], marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=1.29.0,<2.0.0" },
     { name = "openadapt-flow", extras = ["privacy"], marker = "extra == 'privacy'", specifier = ">=1.29.0,<2.0.0" },

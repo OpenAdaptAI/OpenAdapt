@@ -197,7 +197,7 @@ def test_all_artifact_metadata_selects_platform_substrate_dependencies(
     assert {"all", "capture", "windows", "macos", "linux", "rdp"} <= provided_extras
 
     flow_extras = _flow_extras_selected_by_launcher_all(sys_platform)
-    assert {"hosted", "capture", "privacy", "windows", "rdp"} <= flow_extras
+    assert {"browser", "hosted", "capture", "privacy", "windows", "rdp"} <= flow_extras
     if platform_extra is not None:
         assert platform_extra in flow_extras
     assert flow_extras.isdisjoint(excluded_extra)

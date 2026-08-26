@@ -37,22 +37,18 @@ state, the run stops for review.
 ## Try it locally
 
 OpenAdapt requires Python 3.10–3.12. Easiest install (creates its own
-environment and includes the browser capability for the bundled tutorial):
+environment):
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/main/scripts/install.sh | sh
 ```
 
-Manual path with pip — install the browser capability for the bundled
-tutorial:
+Manual path with pip:
 
 ```bash
-python -m pip install --upgrade 'openadapt[browser]'
+python -m pip install --upgrade openadapt
 ```
-
-On Windows `cmd.exe`, use double quotes:
-`python -m pip install --upgrade "openadapt[browser]"`.
 
 Run the complete bundled tutorial with one command. It needs no account,
 target application, API key, or operating-system automation permissions:
@@ -89,8 +85,9 @@ effect verifiers, fault cases, and deployment policy. Continue with the
 
 ## Record your workflow
 
-The browser path is an explicit capability, so native and remote-only installs
-do not carry the Playwright driver:
+The base package includes the Playwright driver for the bundled tutorial.
+Chromium downloads only when the first browser action starts. Native and
+remote workflows do not start or download Chromium:
 
 ```bash
 openadapt flow record --backend web --url https://your-app.example --out rec
