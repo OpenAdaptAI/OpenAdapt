@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "2.0.0",
-  "generated_at": "2026-08-26T17:32:09+00:00",
+  "generated_at": "2026-08-26T21:02:14+00:00",
   "generation": {
     "files": [
       {
@@ -1146,10 +1146,6 @@
     {
       "name": "Citrix / VDI",
       "delivery": "Local or customer-controlled"
-    },
-    {
-      "name": "Hosted Cloud",
-      "delivery": "Managed browser runner and control plane"
     }
   ],
   "qualification_evidence": [
