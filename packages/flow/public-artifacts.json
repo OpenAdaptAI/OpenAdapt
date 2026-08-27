@@ -5769,7 +5769,7 @@
     },
     {
       "path": "source-policy.public.json",
-      "sha256": "ed13dab92b33d9915078f388c4307518e808529a57992854f6822bc85a441a9d"
+      "sha256": "b03b1f9bb0d3b4631c84db1c7e1dd7f26f1cd04e9b4d4d18f6cab2776eed7eb6"
     },
     {
       "path": "tests/fixtures/runtime-validation-canonical-vector.json",
