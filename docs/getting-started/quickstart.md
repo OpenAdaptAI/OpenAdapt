@@ -1,9 +1,64 @@
-# Run the OpenAdapt quickstart
+# Create your first workflow
 
 > **Current product path.** The canonical walkthrough is at
-> [docs.openadapt.ai/get-started](https://docs.openadapt.ai/get-started/).
+> [docs.openadapt.ai/get-started/first-workflow](https://docs.openadapt.ai/get-started/first-workflow/).
 
-## Run the verified tutorial
+## Start in OpenAdapt Desktop
+
+[Download OpenAdapt Desktop](https://openadapt.ai/download), open it, and grant
+the screen and input permissions it requests. Desktop guides you through the
+first recording, review, supervised run, and saved result.
+
+Choose one small task in a real application. Use test data and keep the task
+read-only. Opening a known test record and checking one value works well. Don't
+start with a task that saves, submits, creates, deletes, or sends data.
+
+## Record the task once
+
+Select the application and describe the result you expect. Perform the task
+once, then stop when that result is visible. Desktop compiles the recording
+into an inspectable workflow.
+
+Keep the demonstration direct. Exploratory clicks make the intended path less
+clear.
+
+## Review before the first run
+
+Read every compiled step and detected input. Confirm that the task uses test
+data and that each action is read-only. If an action can change state, has
+unknown risk, or needs an identity, effect, or policy contract, open the
+qualification review before OpenAdapt acts.
+
+## Run it once while you watch
+
+Keep the application visible for the complete run. Stop if OpenAdapt opens the
+wrong record, leaves the demonstrated path, or reaches an unexpected screen.
+
+The first run stays supervised. It doesn't qualify the workflow for a real
+write or unattended use.
+
+## Check the saved result
+
+Confirm the expected value in the application. Then inspect the run saved in
+Desktop. The report must show the expected test application and data, no write
+or consequential action, and the evidence for every step.
+
+If the report disagrees with what you saw, keep the recording and report. Fix
+or record the workflow again before another run.
+
+## Qualify wider use
+
+Complete [workflow qualification](https://docs.openadapt.ai/guides/qualify-a-workflow/)
+before any state-changing, unknown, consequential, irreversible, or unattended
+use. Qualification binds the exact application and environment, action risks,
+identity checks, independent effect checks, fault cases, and policy to one
+workflow version.
+
+## Optional command-line installation check
+
+The synthetic quickstart checks the local launcher, engine, browser driver,
+and effect verifier. It doesn't touch your application or qualify your
+workflow.
 
 Use Python 3.10, 3.11, or 3.12:
 
@@ -12,65 +67,15 @@ python -m pip install --upgrade openadapt
 openadapt quickstart
 ```
 
-The command runs one complete local lifecycle against synthetic MockMed data:
-
-1. It records a demonstrated browser workflow.
-2. It compiles the recording into an inspectable bundle.
-3. It certifies the bundle with the shipped tutorial policy.
-4. It runs the bundle under the Standard profile.
-5. It verifies the saved record through a separate read-only interface.
-6. It writes a report and a privacy-safe synthetic receipt.
-
-The healthy run returns `VERIFIED`. It makes no model or Cloud call.
-
-Inspect the artifacts:
+A healthy run returns `VERIFIED` for the bundled MockMed task. It makes no
+model or Cloud call. Inspect its local artifacts if you want to see the bundle
+and report formats:
 
 ```bash
 openadapt flow visualize openadapt-quickstart/bundle --out graph.html
 openadapt flow lint openadapt-quickstart/bundle
 ```
 
-## Run the manual demo lifecycle
-
-The engine command is `openadapt-flow`. The launcher provides the equivalent
-two-word form `openadapt flow`. There is no standalone `demo-record` command.
-
-```bash
-openadapt flow demo-record --out rec
-openadapt flow compile rec --out bundle --name my-task
-openadapt flow lint bundle --strict
-openadapt flow certify bundle --policy permissive
-openadapt flow replay bundle --run-dir run
-```
-
-The strict lint step returns a nonzero exit code. The bundled manual demo has
-an unarmed irreversible click. The permissive certification is only a smoke
-gate. The Demo replay returns `COMPLETED_UNVERIFIED`, not `VERIFIED`.
-
-Use `openadapt quickstart` for the effect-verified first run. For a real
-workflow, add the application boundary, action risks, identity requirements,
-effect verifier, fault cases, and deployment policy before production use.
-
-## Record a browser workflow
-
-```bash
-openadapt flow record --backend web --url https://your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --backend web \
-  --url https://your-app.example --run-dir run
-```
-
-Password fields and fields declared with `--secret` exclude their values at
-record time. Read the
-[canonical recording guide](https://docs.openadapt.ai/guides/record-your-app/)
-before a real-data demonstration.
-
-## Production qualification
-
-A runnable workflow is not automatically a qualified production workflow. A
-qualification binds the exact application, version, environment, input schema,
-identity checks, effect checks, policy, and verification rules. A Production
-run gate must reject an absent, expired, revoked, or mismatched qualification.
-Check the
-[live signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
-for the current admitted releases.
+The optional rejected-write simulation is an advanced effect-verification
+check. It is documented in the [CLI reference](../cli.md#advanced-effect-verification-simulation),
+after the real first-workflow path.

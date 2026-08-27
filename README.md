@@ -49,68 +49,61 @@ state, the run stops for review.
 > [Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 <!-- END PRODUCTION LIFECYCLE -->
 
-## Try it locally
+## Create your first workflow
 
-OpenAdapt requires Python 3.10–3.12. Install the complete local quickstart:
+[Download OpenAdapt Desktop](https://openadapt.ai/download) and choose one
+small task in a real application. Use test data and keep the task read-only. A
+good first task opens a known test record and checks one value without saving,
+submitting, creating, deleting, or sending anything.
+
+Desktop guides you through the complete first workflow:
+
+1. Record the task once.
+2. Review every compiled step and detected input.
+3. Run it once while you keep the application in view.
+4. Confirm the expected value, then inspect the run saved in Desktop.
+
+If a compiled action can change state, has unknown risk, is consequential or
+irreversible, or needs a missing safety contract, open the qualification review
+before OpenAdapt acts. Complete qualification before any unattended use.
+
+Follow the [first-workflow guide](https://docs.openadapt.ai/get-started/first-workflow/)
+for the exact recording, review, supervised replay, and run-report checks.
+
+### Optional command-line installation check
+
+OpenAdapt requires Python 3.10–3.12. The synthetic quickstart checks the local
+launcher, engine, browser driver, and effect verifier. It doesn't touch your
+application or qualify your workflow.
 
 ```bash
 python -m pip install --upgrade openadapt
 openadapt quickstart
 ```
 
-The base package includes the browser driver for the tutorial. It downloads its
-matching Chromium build only when the first browser action starts. You do not
-need an account, an API key, or a second package extra.
+The base package includes the browser driver for the tutorial. It downloads
+the matching Chromium build when the first browser action starts. You don't
+need an account, API key, or second package extra.
 
 For an isolated command-line installation, use the public installer:
 
 ```bash
 curl -fsSL https://openadapt.ai/install.sh | sh
-```
-
-Then run the complete bundled tutorial with one command:
-
-```bash
 openadapt quickstart
 ```
 
-The tutorial records and compiles a task in MockMed (a synthetic
-practice-management fixture), certifies it with the
-shipped clinical-write policy, and runs it under the Standard profile. A
-separate read-only API confirms the saved record outside the screen that
-performed the write. The healthy run returns `VERIFIED` with no model or Cloud
-call.
+A healthy run returns `VERIFIED` for the bundled MockMed task with no model or
+Cloud call. The local output includes the recording, compiled bundle, run
+report, and privacy-safe synthetic receipt.
 
-You now have:
-
-- `openadapt-quickstart/recording/`: the demonstrated interaction and retained target evidence
-- `openadapt-quickstart/bundle/`: the inspectable compiled workflow
-- `openadapt-quickstart/run/REPORT.md`: the ordered actions, evidence, outcome, and any halt reason
-- `openadapt-quickstart/run/receipt.json`: the privacy-safe local receipt for the synthetic verified run
-
-Inspect the program and its deployment gaps:
+Inspect the synthetic bundle and report formats:
 
 ```bash
 openadapt flow visualize openadapt-quickstart/bundle --out graph.html
 openadapt flow lint openadapt-quickstart/bundle
 ```
 
-The bundled workflow is a tutorial, not a production certification. Qualifying
-a real workflow adds its application boundary, action risks, identities,
-effect verifiers, fault cases, and deployment policy. Continue with the
-[five-minute walkthrough](https://docs.openadapt.ai/get-started/).
-
-## Record your workflow
-
-The base package includes the Playwright driver for the bundled tutorial.
-Chromium downloads only when the first browser action starts. Native and
-remote workflows do not start or download Chromium:
-
-```bash
-openadapt flow record --backend web --url https://your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --url https://your-app.example --run-dir run
-```
+## Install a native or remote capability
 
 The first browser action downloads its matching Chromium build once. A native
 desktop, RDP, or Citrix workflow never downloads or imports it.
@@ -125,9 +118,6 @@ python -m pip install "openadapt[capture,linux]"    # Linux AT-SPI
 python -m pip install "openadapt[capture,rdp]"      # RDP transport
 python -m pip install "openadapt[privacy]"          # PII/PHI scrubbing
 ```
-
-For the visual authoring and review experience, install
-[OpenAdapt Desktop](https://openadapt.ai/download).
 
 ![Synthetic OpenAdapt Desktop PR #93 preview of a verified six-step workflow and its evidence contract](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/desktop-replay-verified.png)
 

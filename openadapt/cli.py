@@ -60,20 +60,23 @@ def main():
     training/evaluation commands are research.
 
     \b
-    Quick Start:
+    Recommended First Workflow:
+        1. Download OpenAdapt Desktop: https://openadapt.ai/download
+        2. Record one small read-only task with test data.
+        3. Review the compiled steps and inputs.
+        4. Run it once while you watch.
+        5. Check the saved result and run report.
+
+    Qualify the workflow before any state-changing, unknown, consequential,
+    irreversible, or unattended use.
+
+    \b
+    Optional Installation Check:
         python -m pip install --upgrade openadapt
         openadapt quickstart
 
-    \b
-    Manual Demo Lifecycle:
-        openadapt flow demo-record --out rec
-        openadapt flow compile rec --out bundle --name demo
-        openadapt flow lint bundle --strict
-        openadapt flow certify bundle --policy permissive
-        openadapt flow replay bundle
-
-    The manual demo is runnable but not certified for consequential work.
-    Use `openadapt quickstart` for the effect-verified first run.
+    The optional check uses a bundled synthetic application. It doesn't
+    qualify your workflow.
     """
     pass
 
@@ -181,14 +184,13 @@ def quickstart(
     simulate_rejected_write: bool,
     deprecated_break_it: bool,
 ) -> None:
-    """Run a verified local tutorial against the bundled synthetic app.
+    """Run the optional synthetic installation check.
 
-    This is the shortest path to a real OpenAdapt run. It uses the bundled
-    synthetic tutorial, verifies the write through an independent read-only
-    system-of-record interface, keeps every artifact on this computer, and
-    enables no model or Cloud call. The output directory is never overwritten.
-    Any other flags (for example --guided or --interactive-record) pass
-    through to the engine tutorial unchanged.
+    This checks the local launcher, engine, browser driver, and effect verifier.
+    It keeps every artifact on this computer and enables no model or Cloud call.
+    Use OpenAdapt Desktop for your first real workflow. The output directory is
+    never overwritten. Any other flags (for example --guided or
+    --interactive-record) pass through to the engine tutorial unchanged.
     """
     import os
 
@@ -255,7 +257,7 @@ def quickstart(
             f"Any completed artifacts remain in {root}."
         )
 
-    click.echo("\nLocal quickstart complete.")
+    click.echo("\nOptional installation check complete.")
     click.echo(f"Bundle: {root / 'bundle'}")
     click.echo(f"Run evidence: {root / 'run'}")
     click.echo("Outcome: VERIFIED under the Standard profile.")
@@ -269,15 +271,23 @@ def quickstart(
             "reported success, but the independent source rejected the write."
         )
         click.echo(f"Simulation evidence: {root / 'run-rejected-write' / 'REPORT.md'}")
-    click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
+    click.echo(f"Inspect the synthetic bundle: openadapt flow lint {root / 'bundle'}")
+    click.echo("\nNext: create your first real workflow in OpenAdapt Desktop.")
+    click.echo("Download Desktop: https://openadapt.ai/download")
+    click.echo("Choose one small read-only task with test data.")
+    click.echo("Review the compiled steps, then run it once while you watch.")
+    click.echo("Check the saved result and run report before you continue.")
     click.echo(
-        "Record your first workflow: https://docs.openadapt.ai/guides/record-your-app/"
+        "First-workflow guide: https://docs.openadapt.ai/get-started/first-workflow/"
     )
     click.echo(
         "Connect this computer when you want Cloud history and collaboration: "
         "https://app.openadapt.ai/dashboard/settings/ingest"
     )
-    click.echo("Qualify a consequential workflow: https://openadapt.ai/qualify")
+    click.echo(
+        "Qualify before any state-changing, unknown, consequential, irreversible, "
+        "or unattended use: https://openadapt.ai/qualify"
+    )
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")

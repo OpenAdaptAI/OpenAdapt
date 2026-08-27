@@ -7,15 +7,27 @@
 The launcher command is `openadapt`. It delegates the product lifecycle to the
 installed `openadapt-flow` engine.
 
-## First run
+## Recommended first workflow
+
+Use [OpenAdapt Desktop](https://openadapt.ai/download) for the guided first
+workflow. Choose one small read-only task with test data. Desktop lets you
+review the compiled steps and inputs, run the workflow once while you watch,
+and inspect the saved result.
+
+Complete [workflow qualification](https://docs.openadapt.ai/guides/qualify-a-workflow/)
+before any state-changing, unknown, consequential, irreversible, or unattended
+use.
+
+## Optional installation check
 
 ```bash
 openadapt quickstart [--headed] [--out NEW_DIRECTORY]
 ```
 
-`quickstart` runs the bundled synthetic workflow from recording through an
-independently verified Standard-profile result. It refuses to overwrite an
-existing output directory.
+`quickstart` checks the local launcher, engine, browser driver, and effect
+verifier with a bundled synthetic workflow. It refuses to overwrite an
+existing output directory. A verified synthetic result does not qualify your
+workflow.
 
 ## Flow lifecycle
 
@@ -46,27 +58,27 @@ is not a standalone executable.
 | `approve-sanitized` | Bind approval to the exact derivative bytes. |
 | `repair` | Review, test, promote, or roll back a repair candidate. |
 
-The manual synthetic lifecycle is:
+## Command-line first workflow
 
-```bash
-openadapt flow demo-record --out rec
-openadapt flow compile rec --out bundle --name my-task
-openadapt flow lint bundle --strict
-openadapt flow certify bundle --policy permissive
-openadapt flow replay bundle --run-dir run
-```
-
-The strict lint step refuses the unarmed demo write. The permissive policy is a
-smoke gate. The replay uses the Demo profile and returns
-`COMPLETED_UNVERIFIED`.
-
-## Record and replay one surface
+Desktop is the recommended path. If you use the CLI, keep the first task
+read-only and use test data:
 
 ```bash
 openadapt flow record --backend web --url https://your-app.example --out rec
+openadapt flow compile rec --out bundle --name my-workflow
+openadapt flow lint bundle --strict
 openadapt flow replay bundle --backend web \
-  --url https://your-app.example --run-dir run
+  --url https://your-app.example --headed --run-dir runs/first-workflow
 ```
+
+Review every compiled action before replay. Continue only when strict lint and
+your review confirm that the task is read-only and non-consequential. If an
+action changes state, has unknown risk, is consequential or irreversible, or
+needs a missing safety contract, qualify the workflow before OpenAdapt acts.
+
+Keep the application visible during replay. Confirm the expected value in the
+application, then inspect `runs/first-workflow/REPORT.md` and
+`runs/first-workflow/report.json`.
 
 Supported selectors are `web`, `windows`, `macos`, `linux`, `rdp`, and
 `citrix`. The required target flags differ by surface. Run these commands for

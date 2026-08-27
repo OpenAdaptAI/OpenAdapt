@@ -153,6 +153,8 @@ def test_quickstart_hides_and_warns_for_the_deprecated_break_it_alias(monkeypatc
     runner = CliRunner()
     help_result = runner.invoke(cli_main, ["quickstart", "--help"])
     assert help_result.exit_code == 0, help_result.output
+    assert "optional synthetic installation check" in help_result.output
+    assert "Use OpenAdapt Desktop for your first real workflow" in help_result.output
     assert "--simulate-rejected-write" in help_result.output
     assert "--break-it" not in help_result.output
 
@@ -167,7 +169,7 @@ def test_quickstart_hides_and_warns_for_the_deprecated_break_it_alias(monkeypatc
     assert "Warning: --break-it is deprecated" in result.output
 
 
-def test_quickstart_success_output_leads_to_a_real_workflow(monkeypatch):
+def test_quickstart_success_output_leads_to_desktop_first_workflow(monkeypatch):
     monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)
 
     runner = CliRunner()
@@ -177,7 +179,13 @@ def test_quickstart_success_output_leads_to_a_real_workflow(monkeypatch):
     assert result.exit_code == 0, result.output
     assert "--simulate-rejected-write" not in result.output
     assert "--break-it" not in result.output
-    assert "https://docs.openadapt.ai/guides/record-your-app/" in result.output
+    assert "Optional installation check complete" in result.output
+    assert "https://openadapt.ai/download" in result.output
+    assert "one small read-only task with test data" in result.output
+    assert "run it once while you watch" in result.output
+    assert "saved result and run report" in result.output
+    assert "https://docs.openadapt.ai/get-started/first-workflow/" in result.output
+    assert "state-changing, unknown, consequential, irreversible" in result.output
 
 
 def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):
@@ -504,10 +512,13 @@ def test_top_level_help_leads_with_flow():
     runner = CliRunner()
     result = runner.invoke(cli_main, ["--help"])
     assert result.exit_code == 0
-    # Quick Start headline and Commands listing both lead with flow.
-    assert "openadapt flow demo-record" in result.output
+    # The help leads with the real Desktop workflow and keeps Flow first in the
+    # command listing.
+    assert "Recommended First Workflow" in result.output
+    assert "https://openadapt.ai/download" in result.output
+    assert "small read-only task with test data" in result.output
+    assert "Optional Installation Check" in result.output
     assert "openadapt quickstart" in result.output
-    assert "effect-verified first run" in result.output
     assert "Standalone local human GUI capture" in result.output
     assert "Research: evaluate" in result.output
     assert "Research: train" in result.output

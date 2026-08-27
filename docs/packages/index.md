@@ -15,12 +15,18 @@ Package roles do not assign a lifecycle state. Use the
 [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
 for the current admission state of each product target.
 
-Install the launcher and run the browser tutorial:
+Use [OpenAdapt Desktop](https://openadapt.ai/download) for the recommended first
+workflow. Start with a small read-only task and test data. Review the compiled
+steps, run once under supervision, and inspect the saved result.
+
+Install the launcher and run the optional synthetic check:
 
 ```bash
 python -m pip install --upgrade openadapt
 openadapt quickstart
 ```
+
+The synthetic result checks the installation. It doesn't qualify a workflow.
 
 Install a native or remote capability:
 

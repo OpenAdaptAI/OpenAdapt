@@ -7,23 +7,42 @@
 OpenAdapt supports Python 3.10, 3.11, and 3.12. Use a virtual environment for
 an isolated install.
 
-## Install and run the browser tutorial
+## Install OpenAdapt Desktop
+
+[Download OpenAdapt Desktop](https://openadapt.ai/download) for the recommended
+first-workflow path. Start with one small read-only task in a real application
+and use test data. Desktop lets you review the compiled workflow, run it once
+under supervision, and inspect the saved result.
+
+Qualify the workflow before any state-changing, unknown, consequential,
+irreversible, or unattended use. Follow the
+[first-workflow guide](https://docs.openadapt.ai/get-started/first-workflow/)
+for the complete path.
+
+## Install the command-line launcher
 
 Install the launcher:
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt quickstart
 ```
 
-The launcher installs the compatible `openadapt-flow` engine. Do not install
-the launcher and engine separately. The first browser action downloads the
-matching Chromium build once.
+The launcher installs the compatible `openadapt-flow` engine. Don't install
+the launcher and engine separately.
+
+### Optional installation check
+
+Run the bundled synthetic workflow if you want to check the launcher, engine,
+browser driver, and effect verifier before you touch your application:
+
+```bash
+openadapt quickstart
+```
 
 The tutorial uses the bundled synthetic MockMed application. It records,
 compiles, certifies, and replays one workflow. A separate read-only interface
 verifies the saved record. The healthy result is `VERIFIED` under the Standard
-profile with no model or Cloud call.
+profile with no model or Cloud call. It doesn't qualify your workflow.
 
 ## Capability-specific installs
 
@@ -52,9 +71,6 @@ openadapt doctor --backend web
 openadapt flow --help
 ```
 
-For the visual authoring and review interface, install
-[OpenAdapt Desktop](https://openadapt.ai/download).
-
 ## Development install
 
 ```bash
@@ -69,7 +85,7 @@ Read its `CONTRIBUTING.md` before a package or release change.
 
 ## Next steps
 
-- [Run the local tutorial](quickstart.md)
-- [Read the canonical first-workflow guide](https://docs.openadapt.ai/get-started/)
+- [Create your first workflow](quickstart.md)
+- [Read the canonical first-workflow guide](https://docs.openadapt.ai/get-started/first-workflow/)
 - [Review current substrate evidence](https://docs.openadapt.ai/get-started/what-works-today/)
 - [Read the CLI reference](https://docs.openadapt.ai/reference/cli/)
