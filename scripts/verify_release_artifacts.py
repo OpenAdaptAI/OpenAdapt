@@ -90,13 +90,22 @@ def verify_release_artifacts(
     root: Path = ROOT,
 ) -> tuple[Path, Path]:
     """Return the verified ``(wheel, sdist)`` paths or raise ``ValueError``."""
+    if dist_dir.is_symlink() or not dist_dir.is_dir():
+        raise ValueError(
+            f"release artifact directory is missing or invalid: {dist_dir}"
+        )
     package_name, project_version, project_requires_python = _project_identity(root)
     wheel_name = re.sub(r"[-_.]+", "_", package_name)
     sdist_name = re.sub(r"[-_.]+", "-", package_name)
 
     wheels = sorted(dist_dir.glob(f"{wheel_name}-{project_version}-*.whl"))
     sdist = dist_dir / f"{sdist_name}-{project_version}.tar.gz"
-    if len(wheels) != 1 or not sdist.is_file():
+    if (
+        len(wheels) != 1
+        or wheels[0].is_symlink()
+        or not sdist.is_file()
+        or sdist.is_symlink()
+    ):
         raise ValueError(
             f"expected one {wheel_name}-{project_version}-*.whl and {sdist.name}"
         )
@@ -104,11 +113,21 @@ def verify_release_artifacts(
     expected = {wheels[0], sdist}
     marker = dist_dir / ".gitignore"
     allowed = set(expected)
+    if marker.is_symlink():
+        raise ValueError("dist/.gitignore must not be a symlink")
     if marker.is_file():
         if marker.read_bytes() not in {b"", b"\n", b"*"}:
             raise ValueError("dist/.gitignore contains unexpected data")
         allowed.add(marker)
-    actual = {path for path in dist_dir.iterdir() if path.is_file()}
+    entries = set(dist_dir.iterdir())
+    invalid = sorted(
+        path.name for path in entries if path.is_symlink() or not path.is_file()
+    )
+    if invalid:
+        raise ValueError(
+            f"release artifact directory contains invalid entries: {', '.join(invalid)}"
+        )
+    actual = entries
     if actual != allowed:
         unexpected = ", ".join(sorted(path.name for path in actual - allowed))
         missing = ", ".join(sorted(path.name for path in allowed - actual))

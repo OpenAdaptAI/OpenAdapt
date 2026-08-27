@@ -96,6 +96,10 @@ def test_release_workflow_pins_actions_and_separates_permissions():
     assert 'requires = ["hatchling==1.32.0"]' in metadata
 
     assert document["permissions"] == {"contents": "read"}
+    assert document["concurrency"] == {
+        "group": "release-publication",
+        "cancel-in-progress": False,
+    }
     jobs = document["jobs"]
     assert jobs["create-release-tag"]["permissions"] == {"contents": "read"}
     assert jobs["build-and-attest"]["permissions"] == {
@@ -245,7 +249,7 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     assert "scripts/verify_pypi_release.py" in strict["run"]
     assert "--allow-matching-subset" not in strict["run"]
 
-    assert jobs["publish-github"]["environment"] == "pypi"
+    assert jobs["publish-github"]["environment"] == "release-identity"
     publish_steps = jobs["publish-github"]["steps"]
     app = next(step for step in publish_steps if step.get("id") == "release-app")
     assert app["uses"].startswith("actions/create-github-app-token@")
@@ -254,6 +258,7 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
         "private-key": "${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}",
         "owner": "${{ github.repository_owner }}",
         "repositories": "${{ github.event.repository.name }}",
+        "permission-administration": "read",
         "permission-contents": "write",
         "permission-metadata": "read",
     }
@@ -277,11 +282,17 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     assert publish["env"]["GH_TOKEN"] == "${{ steps.release-app.outputs.token }}"
     assert publish["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
     assert publish["env"]["EXPECTED_AUTHOR"] == "openadapt-release[bot]"
-    assert "gh release create" in publish["run"]
+    assert '"$GH_CLI" release create' in publish["run"]
     assert "--verify-tag" in publish["run"]
+    assert "--draft" in publish["run"]
     assert "dist/*.whl dist/*.tar.gz" in publish["run"]
-    assert "gh release edit" not in publish["run"]
-    assert 'gh release upload "$RELEASE_TAG" "dist/$missing_asset"' in publish["run"]
+    assert '"$GH_CLI" release edit "$RELEASE_TAG"' in publish["run"]
+    assert "--draft=false" in publish["run"]
+    assert "--latest" not in publish["run"]
+    assert (
+        '"$GH_CLI" release upload "$RELEASE_TAG" "dist/$missing_asset"'
+        in publish["run"]
+    )
     assert "--allow-missing" in publish["run"]
     assert "--missing-output /tmp/missing-release-assets.txt" in publish["run"]
     assert "--clobber" not in publish["run"]
@@ -290,7 +301,17 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     assert 'release_status" = "404"' in publish["run"]
     assert 'release_status" != "200"' in publish["run"]
     assert 'tag_commit" != "$GITHUB_SHA' in publish["run"]
+    assert "immutable-releases" in publish["run"]
+    assert 'document.get("enabled") is not True' in publish["run"]
+    assert '"$GH_CLI" release verify "$RELEASE_TAG"' in publish["run"]
+    assert '"$GH_CLI" release verify-asset "$RELEASE_TAG" "$artifact"' in publish["run"]
     assert "semantic-release" not in publish["run"]
+
+    cli = next(step for step in publish_steps if step.get("id") == "release-cli")
+    assert "gh_2.98.0_linux_amd64.tar.gz" in cli["run"]
+    assert (
+        "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de" in cli["run"]
+    )
 
 
 def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
@@ -314,6 +335,7 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
         "dist/*.tar.gz",
     ]
     assert transfer["with"]["if-no-files-found"] == "error"
+    assert transfer["with"]["retention-days"] == 30
 
     pypi_steps = jobs["publish-pypi"]["steps"]
     github_steps = jobs["publish-github"]["steps"]
@@ -359,7 +381,10 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
     verification_text = "\n".join(
         str(step.get("run", "")) for step in verification["steps"]
     )
+    assert "release_platform_versions.py" in verification_text
+    assert '"${component_args[@]}"' in verification_text
     assert "generate_platform_manifest.py" in verification_text
+    assert "--require-compatible" in verification_text
     assert "--require-network" in verification_text
     assert "urllib.request.urlretrieve" in verification_text
     assert "gh release download" in verification_text
