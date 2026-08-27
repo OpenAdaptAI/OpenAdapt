@@ -89,7 +89,9 @@ jobs:
         run: uv python install 3.12
 
       - name: Install external video tools
-        run: choco install ffmpeg -y --no-progress
+        run: |
+          choco install ffmpeg -y --no-progress
+          Get-Command ffmpeg -ErrorAction Stop
 
       - name: Install dependencies
         run: uv sync --extra dev
