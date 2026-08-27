@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import multiprocessing
 import os
@@ -18,6 +20,7 @@ from types import SimpleNamespace
 
 import psutil
 import pytest
+from PIL import Image
 
 from openadapt_capture import control
 from openadapt_capture import recorder as recorder_module
@@ -31,6 +34,7 @@ from openadapt_capture.control import (
     stop_recording,
 )
 from openadapt_capture.db import create_db, crud
+from openadapt_capture.terminal import verify_capture_artifacts
 
 
 def _terminal_payload(capture_dir: Path, session_id: str) -> dict:
@@ -164,6 +168,10 @@ def test_subprocess_ready_status_stop_and_complete(tmp_path: Path) -> None:
         assert terminal["integrity_verified"] is True
         assert "token" not in terminal
         assert "capture_dir" not in terminal
+        _, manifest = verify_capture_artifacts(capture_dir)
+        assert "capture-state.json" in {
+            artifact.path for artifact in manifest.artifacts
+        }
         assert discover_recorders(runtime_dir) == []
     finally:
         if child.poll() is None:
@@ -506,6 +514,45 @@ def test_pid_reuse_descriptor_is_marked_crashed_and_removed(tmp_path: Path) -> N
     assert recovered["complete"] is False
 
 
+def test_staged_complete_state_without_a_seal_is_marked_crashed(
+    tmp_path: Path,
+) -> None:
+    capture_dir = tmp_path / "capture"
+    session_id = str(uuid.uuid4())
+    process_started_at = psutil.Process().create_time() - 100.0
+    staged = _terminal_payload(capture_dir, session_id)
+    staged.update(
+        {
+            "process_started_at": process_started_at,
+            "phase": "complete",
+            "complete": True,
+            "integrity_verified": True,
+            "finalized_at": time.time(),
+        }
+    )
+    control.write_terminal_state(capture_dir, staged)
+    descriptor = control._ControlDescriptor(
+        session_id=session_id,
+        pid=os.getpid(),
+        process_started_at=process_started_at,
+        capture_dir=str(capture_dir),
+        host="127.0.0.1",
+        port=65534,
+        created_at=time.time(),
+        path=tmp_path / "unused.json",
+        token="x" * 64,
+    )
+
+    control._mark_crashed_if_bound(descriptor)
+
+    recovered = json.loads(
+        (capture_dir / control.TERMINAL_STATE_FILENAME).read_text(encoding="utf-8")
+    )
+    assert recovered["phase"] == "crashed"
+    assert recovered["complete"] is False
+    assert recovered["integrity_verified"] is False
+
+
 def test_exited_but_inspectable_process_is_not_live(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -772,6 +819,60 @@ def test_integrity_verification_rejects_missing_committed_events(tmp_path: Path)
 
     with pytest.raises(RuntimeError, match="lost action_event events"):
         recorder._verify_completed_capture()
+
+
+def test_completion_revalidates_the_exact_sealed_database_snapshot(
+    tmp_path: Path,
+) -> None:
+    capture_dir = tmp_path / "capture"
+    _create_minimal_recording(capture_dir)
+    output = io.BytesIO()
+    Image.new("RGB", (2, 2), "black").save(output, format="PNG")
+    png = output.getvalue()
+    engine, session_factory = create_db(str(capture_dir / "recording.db"))
+    session = session_factory()
+    try:
+        recording = session.query(crud.Recording).one()
+        crud.insert_screenshot(
+            session,
+            recording,
+            recording.timestamp + 1,
+            {
+                "source_ordinal": 1,
+                "png_data": png,
+                "png_sha256": hashlib.sha256(png).hexdigest(),
+            },
+        )
+    finally:
+        session.close()
+        engine.dispose()
+
+    recorder = recorder_module.Recorder(
+        str(capture_dir),
+        capture_video=False,
+        capture_images=True,
+    )
+    recorder._num_screen_events.value = 1
+    recorder._last_source_ordinal = 1
+    recorder._verify_completed_capture()
+
+    database = create_db(str(capture_dir / "recording.db"))[0]
+    try:
+        with database.begin() as connection:
+            connection.exec_driver_sql(
+                "UPDATE screenshot SET png_sha256 = ?",
+                ("f" * 64,),
+            )
+    finally:
+        database.dispose()
+
+    recorder._stage_completed_control_state()
+    with pytest.raises(ValueError, match="PNG digest differs"):
+        recorder._seal_completed_capture()
+
+    status = recorder._control_payload()
+    assert status["complete"] is False
+    assert status["integrity_verified"] is False
 
 
 def test_integrity_verification_rejects_malformed_browser_event(tmp_path: Path) -> None:

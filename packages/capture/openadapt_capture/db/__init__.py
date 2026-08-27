@@ -3,6 +3,9 @@
 Copied from legacy OpenAdapt db/db.py, adapted for per-capture databases.
 """
 
+import sqlite3
+from pathlib import Path
+
 import sqlalchemy as sa
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
@@ -164,5 +167,26 @@ def get_session_for_path(db_path: str, echo: bool = False):
         # A corrupt/unreadable db raises above; dispose the engine so its
         # pooled connection does not keep the file handle open (on Windows
         # a lingering handle makes the capture directory undeletable).
+        engine.dispose()
+        raise
+
+
+def get_immutable_session_for_path(db_path: str, echo: bool = False):
+    """Open an already-verified SQLite snapshot without schema migration."""
+
+    immutable_uri = f"{Path(db_path).resolve().as_uri()}?mode=ro&immutable=1"
+
+    def _connect() -> sqlite3.Connection:
+        return sqlite3.connect(
+            immutable_uri,
+            uri=True,
+            check_same_thread=False,
+        )
+
+    engine = create_engine("sqlite://", creator=_connect, echo=echo)
+    Session = get_session_maker(engine)
+    try:
+        return Session()
+    except Exception:
         engine.dispose()
         raise

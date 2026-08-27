@@ -343,8 +343,18 @@ def post_process_events(session: SaSession, recording: Recording) -> None:
     screenshot_timestamp_to_id_map = {
         screenshot.timestamp: screenshot.id for screenshot in screenshots_list
     }
+    screenshot_ordinal_to_id_map = {
+        screenshot.source_ordinal: screenshot.id
+        for screenshot in screenshots_list
+        if screenshot.source_ordinal is not None
+    }
     window_event_timestamp_to_id_map = {
         window_event.timestamp: window_event.id for window_event in window_events_list
+    }
+    window_event_ordinal_to_id_map = {
+        window_event.source_ordinal: window_event.id
+        for window_event in window_events_list
+        if window_event.source_ordinal is not None
     }
     browser_event_timestamp_to_id_map = {
         browser_event.timestamp: browser_event.id
@@ -352,11 +362,15 @@ def post_process_events(session: SaSession, recording: Recording) -> None:
     }
 
     for action_event in action_events_list:
-        action_event.screenshot_id = screenshot_timestamp_to_id_map.get(
-            action_event.screenshot_timestamp
+        action_event.screenshot_id = (
+            screenshot_ordinal_to_id_map.get(action_event.screenshot_source_ordinal)
+            if action_event.screenshot_source_ordinal is not None
+            else screenshot_timestamp_to_id_map.get(action_event.screenshot_timestamp)
         )
-        action_event.window_event_id = window_event_timestamp_to_id_map.get(
-            action_event.window_event_timestamp
+        action_event.window_event_id = (
+            window_event_ordinal_to_id_map.get(action_event.window_event_source_ordinal)
+            if action_event.window_event_source_ordinal is not None
+            else window_event_timestamp_to_id_map.get(action_event.window_event_timestamp)
         )
         action_event.browser_event_id = browser_event_timestamp_to_id_map.get(
             action_event.browser_event_timestamp

@@ -90,19 +90,69 @@ def _first_structural_observation(
     return None
 
 
-def _bound_screenshot_timestamp(events: list[ActionEvent]) -> float | None:
-    """Keep the frame bound where the merged action completed.
-
-    The recorder binds an action to the screen frame retained when the action
-    was emitted (a click at button-up, a typed run at its last key), so the
-    merged event carries the LAST child's binding, not the first's.
-    """
-
-    bound: float | None = None
-    for event in events:
-        if event.screenshot_timestamp is not None:
-            bound = event.screenshot_timestamp
-    return bound
+def _merged_frame_binding(events: list[ActionEvent]) -> dict[str, float | int | None]:
+    """Return the aggregate's initial before-frame and reject a mixed epoch."""
+    if not events:
+        return {
+            "source_ordinal": None,
+            "screenshot_timestamp": None,
+            "screenshot_source_ordinal": None,
+            "after_screenshot_timestamp": None,
+            "after_screenshot_source_ordinal": None,
+            "window_event_timestamp": None,
+            "window_event_source_ordinal": None,
+            "after_window_event_timestamp": None,
+            "after_window_event_source_ordinal": None,
+            "window_geometry_generation": None,
+            "after_window_geometry_generation": None,
+        }
+    generations = [event.window_geometry_generation for event in events]
+    if any(value is not None for value in generations):
+        if any(value is None for value in generations):
+            raise ValueError(
+                "cannot merge native action primitives with an incomplete geometry binding"
+            )
+        if len(set(generations)) != 1:
+            raise ValueError(
+                "cannot merge native action primitives across geometry epochs"
+            )
+        for event in events:
+            if (
+                event.screenshot_timestamp is None
+                or event.screenshot_source_ordinal is None
+                or event.after_screenshot_timestamp is None
+                or event.after_screenshot_source_ordinal is None
+                or event.window_event_timestamp is None
+                or event.window_event_source_ordinal is None
+                or event.after_window_event_timestamp is None
+                or event.after_window_event_source_ordinal is None
+                or event.after_window_geometry_generation is None
+                or event.screenshot_timestamp != event.window_event_timestamp
+                or event.screenshot_source_ordinal
+                != event.window_event_source_ordinal
+                or event.after_screenshot_timestamp
+                != event.after_window_event_timestamp
+                or event.after_screenshot_source_ordinal
+                != event.after_window_event_source_ordinal
+            ):
+                raise ValueError(
+                    "cannot merge a native action without atomic before/after pairs"
+                )
+    initial = events[0]
+    terminal = events[-1]
+    return {
+        "source_ordinal": terminal.source_ordinal,
+        "screenshot_timestamp": initial.screenshot_timestamp,
+        "screenshot_source_ordinal": initial.screenshot_source_ordinal,
+        "after_screenshot_timestamp": terminal.after_screenshot_timestamp,
+        "after_screenshot_source_ordinal": terminal.after_screenshot_source_ordinal,
+        "window_event_timestamp": initial.window_event_timestamp,
+        "window_event_source_ordinal": initial.window_event_source_ordinal,
+        "after_window_event_timestamp": terminal.after_window_event_timestamp,
+        "after_window_event_source_ordinal": terminal.after_window_event_source_ordinal,
+        "window_geometry_generation": initial.window_geometry_generation,
+        "after_window_geometry_generation": terminal.after_window_geometry_generation,
+    }
 
 
 # =============================================================================
@@ -265,9 +315,7 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
                         structural_observation=_first_structural_observation(
                             list(keyboard_buffer)
                         ),
-                        screenshot_timestamp=_bound_screenshot_timestamp(
-                            list(keyboard_buffer)
-                        ),
+                        **_merged_frame_binding(list(keyboard_buffer)),
                     )
                 )
         else:
@@ -284,7 +332,7 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
                 structural_observation=_first_structural_observation(
                     list(keyboard_buffer)
                 ),
-                screenshot_timestamp=_bound_screenshot_timestamp(list(keyboard_buffer)),
+                **_merged_frame_binding(list(keyboard_buffer)),
             )
             result.append(type_event)
 
@@ -347,7 +395,7 @@ def merge_consecutive_mouse_move_events(events: list[ActionEvent]) -> list[Actio
                 structural_observation=_first_structural_observation(
                     list(move_buffer)
                 ),
-                screenshot_timestamp=_bound_screenshot_timestamp(list(move_buffer)),
+                **_merged_frame_binding(list(move_buffer)),
             )
             result.append(merged)
 
@@ -400,7 +448,7 @@ def merge_consecutive_mouse_scroll_events(events: list[ActionEvent]) -> list[Act
                 structural_observation=_first_structural_observation(
                     list(scroll_buffer)
                 ),
-                screenshot_timestamp=_bound_screenshot_timestamp(list(scroll_buffer)),
+                **_merged_frame_binding(list(scroll_buffer)),
             )
             result.append(merged)
 
@@ -445,58 +493,76 @@ def merge_consecutive_mouse_click_events(
     def calculate_distance(x1: float, y1: float, x2: float, y2: float) -> float:
         return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
 
-    # Build timestamp mappings for down -> up and down -> next_down (for double-click)
-    down_events: list[MouseDownEvent] = []
-    down_to_up: dict[float, MouseUpEvent] = {}
-    down_to_next_down: dict[float, MouseDownEvent] = {}
+    # Use capture order for identity. Wall-clock timestamps can repeat or reset;
+    # they remain valid only for interval calculations.
+    def event_identity(event: ActionEvent, index: int) -> tuple[str, int]:
+        if event.source_ordinal is not None:
+            return "source", event.source_ordinal
+        return "index", index
+
+    identities = [event_identity(event, index) for index, event in enumerate(events)]
+    source_identities = [identity for identity in identities if identity[0] == "source"]
+    if len(source_identities) != len(set(source_identities)):
+        raise ValueError("cannot merge actions with duplicate source ordinals")
+
+    down_events: list[tuple[tuple[str, int], MouseDownEvent]] = []
+    down_to_up: dict[
+        tuple[str, int], tuple[tuple[str, int], MouseUpEvent]
+    ] = {}
+    down_to_next_down: dict[
+        tuple[str, int], tuple[tuple[str, int], MouseDownEvent]
+    ] = {}
 
     # First pass: collect all down events and map to their up events
-    prev_down: MouseDownEvent | None = None
-    for event in events:
+    prev_down: tuple[tuple[str, int], MouseDownEvent] | None = None
+    for event_index, event in enumerate(events):
+        identity = identities[event_index]
         if isinstance(event, MouseDownEvent):
-            down_events.append(event)
+            down_events.append((identity, event))
             # Check if this could be second click of a double-click
             if prev_down is not None:
-                dt = event.timestamp - prev_down.timestamp
-                dx = abs(event.x - prev_down.x)
-                dy = abs(event.y - prev_down.y)
+                prev_identity, prev_event = prev_down
+                dt = event.timestamp - prev_event.timestamp
+                dx = abs(event.x - prev_event.x)
+                dy = abs(event.y - prev_event.y)
                 if (
                     dt <= double_click_interval
                     and dx <= double_click_distance
                     and dy <= double_click_distance
-                    and event.button == prev_down.button
+                    and event.button == prev_event.button
                 ):
-                    down_to_next_down[prev_down.timestamp] = event
-            prev_down = event
+                    down_to_next_down[prev_identity] = (identity, event)
+            prev_down = (identity, event)
         elif isinstance(event, MouseUpEvent):
             # Find the most recent unmatched down with same button
-            for down in reversed(down_events):
-                if down.button == event.button and down.timestamp not in down_to_up:
+            for down_identity, down in reversed(down_events):
+                if down.button == event.button and down_identity not in down_to_up:
                     # Only map if distance is small enough (not a drag)
                     dist = calculate_distance(down.x, down.y, event.x, event.y)
                     if dist <= drag_distance_threshold:
-                        down_to_up[down.timestamp] = event
+                        down_to_up[down_identity] = (identity, event)
                     break
 
     # Second pass: generate merged events
     result = []
-    skip_timestamps: set[float] = set()
+    skip_identities: set[tuple[str, int]] = set()
 
-    for event in events:
-        if event.timestamp in skip_timestamps:
+    for event_index, event in enumerate(events):
+        identity = identities[event_index]
+        if identity in skip_identities:
             continue
 
         if isinstance(event, MouseDownEvent):
             down = event
 
-            if down.timestamp in down_to_up:
-                up = down_to_up[down.timestamp]
+            if identity in down_to_up:
+                up_identity, up = down_to_up[identity]
 
                 # Check if this is the start of a double-click
-                if down.timestamp in down_to_next_down:
-                    next_down = down_to_next_down[down.timestamp]
-                    if next_down.timestamp in down_to_up:
-                        next_up = down_to_up[next_down.timestamp]
+                if identity in down_to_next_down:
+                    next_down_identity, next_down = down_to_next_down[identity]
+                    if next_down_identity in down_to_up:
+                        next_up_identity, next_up = down_to_up[next_down_identity]
 
                         # Create double-click
                         double_click = MouseDoubleClickEvent(
@@ -508,14 +574,12 @@ def merge_consecutive_mouse_click_events(
                             structural_observation=_first_structural_observation(
                                 [down, up, next_down, next_up]
                             ),
-                            screenshot_timestamp=_bound_screenshot_timestamp(
-                                [down, up, next_down, next_up]
-                            ),
+                            **_merged_frame_binding([down, up, next_down, next_up]),
                         )
                         result.append(double_click)
-                        skip_timestamps.add(up.timestamp)
-                        skip_timestamps.add(next_down.timestamp)
-                        skip_timestamps.add(next_up.timestamp)
+                        skip_identities.add(up_identity)
+                        skip_identities.add(next_down_identity)
+                        skip_identities.add(next_up_identity)
                         continue
 
                 # Create single click
@@ -528,10 +592,10 @@ def merge_consecutive_mouse_click_events(
                     structural_observation=_first_structural_observation(
                         [down, up]
                     ),
-                    screenshot_timestamp=_bound_screenshot_timestamp([down, up]),
+                    **_merged_frame_binding([down, up]),
                 )
                 result.append(single_click)
-                skip_timestamps.add(up.timestamp)
+                skip_identities.add(up_identity)
             else:
                 # Unmatched down event
                 result.append(event)
@@ -596,9 +660,7 @@ def detect_drag_events(
                         structural_observation=_first_structural_observation(
                             [down_event] + moves + [event]
                         ),
-                        screenshot_timestamp=_bound_screenshot_timestamp(
-                            [down_event] + moves + [event]
-                        ),
+                        **_merged_frame_binding([down_event] + moves + [event]),
                     )
                     result.append(drag)
                 else:

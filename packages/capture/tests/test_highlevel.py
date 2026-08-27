@@ -8,15 +8,18 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 from openadapt_capture import recorder as recorder_module
 from openadapt_capture import video
-from openadapt_capture.capture import Capture, InvalidCaptureEvent
+from openadapt_capture.capture import Capture, CaptureSession, InvalidCaptureEvent
 from openadapt_capture.db import create_db, crud
 from openadapt_capture.platform import DisplayMetricsUnavailable
 from openadapt_capture.recorder import Recorder
+from openadapt_capture.terminal import CaptureSealError
 
 # Sessions/engines created by _create_test_recording, released by the
 # temp_capture_dir teardown BEFORE the TemporaryDirectory is removed. Both
@@ -26,6 +29,32 @@ from openadapt_capture.recorder import Recorder
 # recording.db makes the rmtree fail with WinError 32 (sharing violation).
 _HELPER_SESSIONS = []
 _HELPER_ENGINES = []
+
+
+def _spawn_write_screen_with_explicit_retention(
+    db_path: str,
+    recording_id: int,
+    perf_queue,
+) -> None:
+    """Spawn target whose imported config keeps the default image posture."""
+    from openadapt_capture import utils
+    from openadapt_capture.db import get_session_for_path
+    from openadapt_capture.db.models import Recording
+    from openadapt_capture.recorder import Event, write_screen_event
+
+    utils.set_start_time()
+    session = get_session_for_path(db_path)
+    try:
+        recording = session.get(Recording, recording_id)
+        write_screen_event(
+            session,
+            recording,
+            Event(2.0, "screen", Image.new("RGB", (2, 1), "blue"), 1),
+            perf_queue,
+            record_images=True,
+        )
+    finally:
+        session.close()
 
 
 @pytest.fixture
@@ -93,6 +122,46 @@ class TestRecorder:
         )
         assert rec.task_description == "test"
 
+    def test_explicit_image_retention_crosses_the_spawn_boundary(self, tmp_path):
+        db_path = str(tmp_path / "recording.db")
+        engine, session_factory = create_db(db_path)
+        session = session_factory()
+        recording = crud.insert_recording(
+            session,
+            {
+                "timestamp": 1.0,
+                "monitor_width": 2,
+                "monitor_height": 1,
+                "double_click_interval_seconds": 0.5,
+                "double_click_distance_pixels": 5,
+                "platform": "test",
+                "task_description": "spawn override",
+            },
+        )
+        recording_id = recording.id
+        session.close()
+        engine.dispose()
+        context = multiprocessing.get_context("spawn")
+        perf_queue = context.Queue()
+        process = context.Process(
+            target=_spawn_write_screen_with_explicit_retention,
+            args=(db_path, recording_id, perf_queue),
+        )
+
+        process.start()
+        process.join(timeout=30)
+
+        assert process.exitcode == 0
+        engine, session_factory = create_db(db_path)
+        session = session_factory()
+        try:
+            screenshot = session.query(crud.Screenshot).one()
+            assert screenshot.source_ordinal == 1
+            assert screenshot.png_data
+        finally:
+            session.close()
+            engine.dispose()
+
     def test_recorder_event_count_property(self):
         """Test Recorder has event_count property starting at 0."""
         rec = Recorder("/tmp/test_never_created")
@@ -123,6 +192,39 @@ class TestRecorder:
         """Test Recorder.capture is None before recording."""
         rec = Recorder("/tmp/test_never_created")
         assert rec.capture is None
+
+    def test_recorder_capture_waits_for_seal_and_uses_verified_loader(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        rec = Recorder(str(tmp_path / "capture"))
+        rec._record_thread = SimpleNamespace(is_alive=lambda: True)
+        rec._terminate_processing.set()
+        assert rec.capture is None
+        capture_dir = tmp_path / "capture"
+        capture_dir.mkdir()
+        (capture_dir / "recording.db").touch()
+
+        loaded = object()
+        monkeypatch.setattr(
+            CaptureSession,
+            "load_verified",
+            classmethod(lambda _cls, _path: loaded),
+        )
+        rec._finalized_event.set()
+
+        assert rec.capture is loaded
+
+    def test_recorder_capture_does_not_hide_missing_seal_metadata(self, tmp_path):
+        capture_dir = tmp_path / "capture"
+        capture_dir.mkdir()
+        (capture_dir / "recording.db").touch()
+        rec = Recorder(str(capture_dir))
+        rec._finalized_event.set()
+
+        with pytest.raises(CaptureSealError, match="capture artifact is missing"):
+            _ = rec.capture
 
     def test_recorder_screen_count_property(self):
         """Test Recorder has screen_count property."""

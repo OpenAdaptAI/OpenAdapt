@@ -135,7 +135,7 @@ def _install_fake_popen(monkeypatch, process: _FakeProcess):
 
 def _png_bytes(color: str = "black") -> bytes:
     output = io.BytesIO()
-    Image.new("RGB", (2, 2), color).save(output, format="PNG")
+    Image.new("RGB", (2, 1), color).save(output, format="PNG")
     return output.getvalue()
 
 
@@ -962,9 +962,9 @@ def test_real_external_mpeg4_preserves_metadata_and_nearest_frame(tmp_path):
         Fraction(24),
         [(0, 0.0), (24, 1.0), (25, 25 / 24)],
     )
-    # The duplicated first frame and the finalized last frame each bind to
-    # their exact capture wall-clock timestamps.
-    assert captures == [(0, start), (24, start + 1), (25, start + 1)]
+    # Finalization can extend playback, but retained evidence has one binding
+    # per source frame.
+    assert captures == [(0, start), (24, start + 1)]
     bound_frame = video.extract_exact_frame(output, start + 1, ffmpeg_path=executable)
     assert bound_frame.getpixel((10, 10))[2] > bound_frame.getpixel((10, 10))[0]
     frame = video.extract_frame(
@@ -977,4 +977,4 @@ def test_real_external_mpeg4_preserves_metadata_and_nearest_frame(tmp_path):
 
     video.move_moov_atom(output, ffmpeg_path=executable)
     _, _, moved_captures = video._read_timing_box(output)
-    assert moved_captures == [(0, start), (24, start + 1), (25, start + 1)]
+    assert moved_captures == [(0, start), (24, start + 1)]

@@ -151,6 +151,7 @@ class _RawKeyboardTransition:
     flags: int
     keyboard_layout: int
     timestamp: float
+    receipt: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +164,7 @@ class _RawMouseTransition:
     mouse_data: int
     flags: int
     timestamp: float
+    receipt: object | None = None
 
 
 _RawInputTransition = _RawKeyboardTransition | _RawMouseTransition
@@ -823,16 +825,42 @@ class WindowsInputObserver(ThreadedInputObserver):
                     else self._translate_mouse(item)
                 )
                 if event is not None:
-                    self._emit(event)
+                    self._emit_received(event, item.receipt)
+                elif item.receipt is not None:
+                    raise InputObserverError(
+                        "Windows reserved an input receipt that did not normalize "
+                        "to a recordable event"
+                    )
             except BaseException as exc:
                 failure = (
                     exc
                     if isinstance(exc, InputObserverError)
                     else InputObserverError(f"Windows input translation failed: {exc}")
                 )
+                if isinstance(
+                    item,
+                    (_RawKeyboardTransition, _RawMouseTransition),
+                ):
+                    self._fail_receipt(item.receipt, failure)
                 self._fail(failure)
+                self._discard_translation_queue(failure)
                 return
             finally:
+                self._translation_queue.task_done()
+
+    def _discard_translation_queue(self, failure: BaseException) -> None:
+        """Fail receipts left behind by a stopped translation worker."""
+        while True:
+            try:
+                item = self._translation_queue.get_nowait()
+            except queue.Empty:
+                return
+            else:
+                if isinstance(
+                    item,
+                    (_RawKeyboardTransition, _RawMouseTransition),
+                ):
+                    self._fail_receipt(item.receipt, failure)
                 self._translation_queue.task_done()
 
     def _start_input_translation(self) -> None:
@@ -888,6 +916,8 @@ class WindowsInputObserver(ThreadedInputObserver):
         wparam: int,
         lparam: int,
     ) -> int:
+        receipt: object | None = None
+        callback_entered = False
         try:
             if code == HC_ACTION and wparam in {
                 WM_KEYDOWN,
@@ -895,13 +925,18 @@ class WindowsInputObserver(ThreadedInputObserver):
                 WM_SYSKEYDOWN,
                 WM_SYSKEYUP,
             }:
+                self._begin_native_callback()
+                callback_entered = True
                 timestamp = self._clock()
                 payload = ctypes.cast(
                     lparam,
                     ctypes.POINTER(KBDLLHOOKSTRUCT),
                 ).contents
                 injected = bool(payload.flags & (LLKHF_INJECTED | LLKHF_LOWER_IL_INJECTED))
-                if not injected:
+                if injected:
+                    self._mark_native_activity()
+                else:
+                    receipt = self._reserve_receipt(timestamp)
                     keyboard_layout = self._foreground_keyboard_layout()
                     self._enqueue_input(
                         _RawKeyboardTransition(
@@ -911,11 +946,20 @@ class WindowsInputObserver(ThreadedInputObserver):
                             flags=int(payload.flags),
                             keyboard_layout=keyboard_layout,
                             timestamp=timestamp,
+                            receipt=receipt,
                         )
                     )
         except BaseException as exc:
+            self._fail_receipt(receipt, exc)
             self._record_callback_failure(exc)
-        return self._call_next(self._keyboard_hook, code, wparam, lparam)
+        try:
+            return self._call_next(self._keyboard_hook, code, wparam, lparam)
+        finally:
+            if callback_entered:
+                try:
+                    self._end_native_callback()
+                except BaseException as exc:
+                    self._record_callback_failure(exc)
 
     def _mouse_hook_callback(
         self,
@@ -923,25 +967,55 @@ class WindowsInputObserver(ThreadedInputObserver):
         wparam: int,
         lparam: int,
     ) -> int:
+        receipt: object | None = None
+        callback_entered = False
         try:
             if code == HC_ACTION:
-                timestamp = self._clock()
-                payload = ctypes.cast(
-                    lparam,
-                    ctypes.POINTER(MSLLHOOKSTRUCT),
-                ).contents
-                injected = bool(payload.flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED))
-                if not injected and (wparam != WM_MOUSEMOVE or self.capture_mouse_moves):
-                    self._enqueue_input(
-                        _RawMouseTransition(
-                            message=wparam,
-                            x=int(payload.pt.x),
-                            y=int(payload.pt.y),
-                            mouse_data=int(payload.mouseData),
-                            flags=int(payload.flags),
-                            timestamp=timestamp,
-                        )
+                observed_message = (
+                    wparam in _BUTTON_MESSAGES
+                    or wparam in {
+                        WM_XBUTTONDOWN,
+                        WM_XBUTTONUP,
+                        WM_MOUSEWHEEL,
+                        WM_MOUSEHWHEEL,
+                    }
+                    or (wparam == WM_MOUSEMOVE and self.capture_mouse_moves)
+                )
+                if observed_message:
+                    self._begin_native_callback()
+                    callback_entered = True
+                    timestamp = self._clock()
+                    payload = ctypes.cast(
+                        lparam,
+                        ctypes.POINTER(MSLLHOOKSTRUCT),
+                    ).contents
+                    injected = bool(
+                        payload.flags
+                        & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED)
                     )
+                    if injected:
+                        self._mark_native_activity()
+                    else:
+                        receipt = self._reserve_receipt(timestamp)
+                        self._enqueue_input(
+                            _RawMouseTransition(
+                                message=wparam,
+                                x=int(payload.pt.x),
+                                y=int(payload.pt.y),
+                                mouse_data=int(payload.mouseData),
+                                flags=int(payload.flags),
+                                timestamp=timestamp,
+                                receipt=receipt,
+                            )
+                        )
         except BaseException as exc:
+            self._fail_receipt(receipt, exc)
             self._record_callback_failure(exc)
-        return self._call_next(self._mouse_hook, code, wparam, lparam)
+        try:
+            return self._call_next(self._mouse_hook, code, wparam, lparam)
+        finally:
+            if callback_entered:
+                try:
+                    self._end_native_callback()
+                except BaseException as exc:
+                    self._record_callback_failure(exc)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import threading
 import time
 
 import pytest
@@ -261,6 +262,80 @@ def test_control_reply_marker_discards_pre_boundary_input_then_arms(
     assert observer._pending is not None
     assert observer._pending.detail == 38
     assert len(freed) == 3
+
+
+def test_frame_cut_rejects_batched_input_and_blocks_post_marker_records() -> None:
+    observer = make_observer()
+    observer._setup_complete = True
+    observer._accepting_events = True
+    observer._control_display = object()
+    observer._root = 1
+    observer._control_id_base = 0x400000
+    callback_threads: list[threading.Thread] = []
+    include_device_before_marker = True
+    post_marker_processed = threading.Event()
+
+    class FakeXtst:
+        def XRecordFreeData(self, _pointer) -> None:
+            return
+
+    class FakeX11:
+        def XQueryPointer(self, *_args) -> int:
+            def deliver_batch() -> None:
+                if include_device_before_marker:
+                    intercept_record(
+                        observer,
+                        category=linux_module._XRECORD_FROM_SERVER,
+                        payload=wire_event(
+                            event_type=linux_module._KEY_PRESS,
+                            detail=38,
+                            event_time=100,
+                        ),
+                    )
+                marker = bytearray(32)
+                marker[0] = 1
+                intercept_record(
+                    observer,
+                    category=linux_module._XRECORD_FROM_SERVER,
+                    payload=bytes(marker),
+                    id_base=observer._control_id_base,
+                )
+                intercept_record(
+                    observer,
+                    category=linux_module._XRECORD_FROM_SERVER,
+                    payload=wire_event(
+                        event_type=linux_module._MOTION_NOTIFY,
+                        detail=0,
+                        event_time=101,
+                        root_x=12,
+                        root_y=34,
+                    ),
+                )
+                post_marker_processed.set()
+
+            thread = threading.Thread(target=deliver_batch)
+            callback_threads.append(thread)
+            thread.start()
+            return 1
+
+    observer._xtst = FakeXtst()
+    observer._x11 = FakeX11()
+
+    dirty = observer.begin_frame_capture()
+    assert not observer.finish_frame_capture(dirty)
+    assert not post_marker_processed.is_set()
+    observer.complete_frame_capture(dirty)
+    callback_threads[-1].join(timeout=1)
+    assert post_marker_processed.is_set()
+
+    include_device_before_marker = False
+    post_marker_processed.clear()
+    clean = observer.begin_frame_capture()
+    assert observer.finish_frame_capture(clean)
+    assert not post_marker_processed.is_set()
+    observer.complete_frame_capture(clean)
+    callback_threads[-1].join(timeout=1)
+    assert post_marker_processed.is_set()
 
 
 def test_xkb_lookup_uses_state_from_delivered_event() -> None:
@@ -529,6 +604,57 @@ def test_normative_device_then_duplicate_deliveries_then_next_device_order(
         ),
     ]
     assert x11.lookup_states == [0x0001, 0x0001]
+
+
+def test_device_stream_reserves_receipt_before_delivered_event_correlation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reserved_timestamps = []
+
+    class Receipt:
+        finished = False
+
+        def fail(self, _error) -> None:
+            self.finished = True
+
+    def consume(_event) -> None:
+        return
+
+    def reserve(timestamp):
+        reserved_timestamps.append(timestamp)
+        return Receipt()
+
+    setattr(consume, "_openadapt_input_receipt", reserve)
+    observer = LinuxXInputObserver(
+        consume,
+        observe_keyboard=True,
+        observe_mouse=True,
+        capture_mouse_moves=True,
+        environ={"DISPLAY": ":0", "XDG_SESSION_TYPE": "x11"},
+    )
+    monkeypatch.setattr(linux_module.time, "time", lambda: 100.0)
+    monkeypatch.setattr(linux_module.time, "monotonic", lambda: 200.0)
+
+    observer._handle_device_event(
+        _CoreWireEvent(
+            linux_module._KEY_PRESS,
+            38,
+            False,
+            900,
+            0,
+            0,
+            0,
+            50,
+            60,
+            0,
+            0,
+            0x0001,
+        )
+    )
+
+    assert reserved_timestamps == [100.0]
+    assert observer._pending is not None
+    assert observer._pending.receipt is not None
 
 
 def test_unmatched_key_keeps_physical_identity_and_suppresses_later_text(

@@ -19,6 +19,7 @@ import ctypes
 import ctypes.util
 import os
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -65,6 +66,15 @@ _LOOP_INTERVAL_SECONDS = 0.010
 _XKB_COMPOSE_COMPOSING = 1
 _XKB_COMPOSE_COMPOSED = 2
 _XKB_COMPOSE_CANCELLED = 3
+
+
+@dataclass(slots=True)
+class _FrameCaptureCut:
+    """One pixel-capture interval closed by an ordered X RECORD marker."""
+
+    start_device_count: int
+    marker_seen: threading.Event
+    release_marker: threading.Event
 
 _SPECIAL_KEY_NAMES = {
     "Alt_L": "alt",
@@ -220,6 +230,7 @@ class _PendingDeviceEvent:
     receipt_timestamp: float
     deadline: float
     candidate: _DeliveredCandidate | None = None
+    receipt: object | None = None
 
 
 def _event_byteorder(*, client_swapped: bool) -> str:
@@ -375,6 +386,10 @@ class LinuxXInputObserver(ThreadedInputObserver):
         self._compose_context: Any = None
         self._compose_table: Any = None
         self._compose_state: Any = None
+        self._device_event_count = 0
+        self._frame_cut_serial = threading.Lock()
+        self._frame_cut_state_lock = threading.Lock()
+        self._frame_cut: _FrameCaptureCut | None = None
 
     def _setup(self) -> None:
         if not sys.platform.startswith("linux"):
@@ -736,20 +751,27 @@ class LinuxXInputObserver(ThreadedInputObserver):
                     f"{byte_length} bytes"
                 )
             payload = ctypes.string_at(recorded.data, byte_length)
-            if (
-                self._waiting_baseline_marker
-                and int(recorded.id_base) == self._control_id_base
-                and payload[0] == 1
-            ):
-                self._waiting_baseline_marker = False
-                if (
-                    self._stop_requested.is_set()
-                    or self._startup_failure is not None
-                ):
-                    self._accepting_events = False
+            if int(recorded.id_base) == self._control_id_base and payload[0] == 1:
+                if self._waiting_baseline_marker:
+                    self._waiting_baseline_marker = False
+                    if (
+                        self._stop_requested.is_set()
+                        or self._startup_failure is not None
+                    ):
+                        self._accepting_events = False
+                        return
+                    self._baseline_marker_seen = True
+                    self._accepting_events = True
                     return
-                self._baseline_marker_seen = True
-                self._accepting_events = True
+                with self._frame_cut_state_lock:
+                    frame_cut = self._frame_cut
+                if frame_cut is not None:
+                    frame_cut.marker_seen.set()
+                    if not frame_cut.release_marker.wait(timeout=self.shutdown_timeout):
+                        raise InputObserverError(
+                            "the screen reader did not complete the X RECORD "
+                            "frame boundary before its deadline"
+                        )
                 return
             if self._delivery_start_was_aborted():
                 # XRecordProcessReplies may have copied a complete native batch
@@ -786,6 +808,7 @@ class LinuxXInputObserver(ThreadedInputObserver):
             else:
                 self._handle_delivered_event(event, id_base=int(recorded.id_base))
         except BaseException as exc:
+            self._fail_unqueued_receipts(exc)
             if self._record_callback_failure is None:
                 self._record_callback_failure = exc
             self._stop_requested.set()
@@ -818,8 +841,94 @@ class LinuxXInputObserver(ThreadedInputObserver):
             )
         self._last_pointer = (float(root_x.value), float(root_y.value))
 
+    def _send_frame_cut_marker(self) -> None:
+        """Place an ordered reply after all server input seen before this call."""
+        root_return = ctypes.c_ulong()
+        child_return = ctypes.c_ulong()
+        root_x = ctypes.c_int()
+        root_y = ctypes.c_int()
+        window_x = ctypes.c_int()
+        window_y = ctypes.c_int()
+        mask = ctypes.c_uint()
+        if not self._x11.XQueryPointer(
+            self._control_display,
+            self._root,
+            ctypes.byref(root_return),
+            ctypes.byref(child_return),
+            ctypes.byref(root_x),
+            ctypes.byref(root_y),
+            ctypes.byref(window_x),
+            ctypes.byref(window_y),
+            ctypes.byref(mask),
+        ):
+            raise InputObserverError(
+                "X11 could not close the input interval around a captured frame"
+            )
+
+    def begin_frame_capture(self) -> object:
+        """Record the native-device count before the screen reader grabs pixels."""
+        if not self._frame_cut_serial.acquire(timeout=self.shutdown_timeout):
+            raise InputObserverError("another X RECORD frame boundary did not complete")
+        try:
+            self.check_health()
+            if not self._setup_complete or not self._accepting_events:
+                raise InputObserverError(
+                    "X RECORD cannot start a frame boundary before input is armed"
+                )
+            with self._frame_cut_state_lock:
+                if self._frame_cut is not None:
+                    raise InputObserverError("an X RECORD frame boundary is already active")
+                return _FrameCaptureCut(
+                    start_device_count=self._device_event_count,
+                    marker_seen=threading.Event(),
+                    release_marker=threading.Event(),
+                )
+        except BaseException:
+            self._frame_cut_serial.release()
+            raise
+
+    def finish_frame_capture(self, token: object | None) -> bool:
+        """Flush through a marker and reject pixels concurrent with native input."""
+        if not isinstance(token, _FrameCaptureCut):
+            raise InputObserverError("X RECORD received an invalid frame-boundary token")
+        with self._frame_cut_state_lock:
+            if self._frame_cut is not None:
+                raise InputObserverError("an X RECORD frame marker is already pending")
+            self._frame_cut = token
+        try:
+            self._send_frame_cut_marker()
+            if not token.marker_seen.wait(timeout=self.shutdown_timeout):
+                raise InputObserverError(
+                    "X RECORD did not deliver the post-capture frame marker "
+                    f"within {self.shutdown_timeout:.1f}s"
+                )
+            self.check_health()
+            with self._frame_cut_state_lock:
+                return self._device_event_count == token.start_device_count
+        except BaseException as exc:
+            self.complete_frame_capture(token)
+            self._fail(exc)
+            raise
+
+    def complete_frame_capture(self, token: object | None) -> None:
+        """Let X RECORD process events after the frame commit boundary."""
+        if not isinstance(token, _FrameCaptureCut):
+            return
+        release_serial = False
+        with self._frame_cut_state_lock:
+            if self._frame_cut is token:
+                self._frame_cut = None
+                release_serial = True
+            elif not token.release_marker.is_set():
+                release_serial = True
+        token.release_marker.set()
+        if release_serial:
+            self._frame_cut_serial.release()
+
     def _handle_device_event(self, event: _CoreWireEvent) -> None:
         """Accept the next event in the global device stream."""
+        with self._frame_cut_state_lock:
+            self._device_event_count += 1
         self._finalize_pending()
         observed_at = time.time()
         if event.event_type == _MOTION_NOTIFY:
@@ -828,14 +937,18 @@ class LinuxXInputObserver(ThreadedInputObserver):
             position = (float(event.root_x), float(event.root_y))
             self._last_pointer = position
             if self.capture_mouse_moves:
-                self._emit(
-                    ObservedMouseMove(
-                        x=position[0],
-                        y=position[1],
-                        injected=event.injected,
-                        timestamp=observed_at,
-                    )
+                receipt = (
+                    None
+                    if event.injected
+                    else self._reserve_receipt(observed_at)
                 )
+                observed = ObservedMouseMove(
+                    x=position[0],
+                    y=position[1],
+                    injected=event.injected,
+                    timestamp=observed_at,
+                )
+                self._emit_received(observed, receipt)
             return
         if event.event_type in {_KEY_PRESS, _KEY_RELEASE}:
             if not self.observe_keyboard:
@@ -845,6 +958,21 @@ class LinuxXInputObserver(ThreadedInputObserver):
                 return
         else:  # pragma: no cover - guarded by the callback range check
             return
+        recordable_button = not (
+            event.event_type == _BUTTON_RELEASE and event.detail in {4, 5, 6, 7}
+        ) and not (
+            event.event_type in {_BUTTON_PRESS, _BUTTON_RELEASE}
+            and event.detail <= 0
+        )
+        receipt = (
+            self._reserve_receipt(observed_at)
+            if not event.injected
+            and (
+                event.event_type in {_KEY_PRESS, _KEY_RELEASE}
+                or recordable_button
+            )
+            else None
+        )
         self._pending = _PendingDeviceEvent(
             event_type=event.event_type,
             detail=event.detail,
@@ -852,6 +980,7 @@ class LinuxXInputObserver(ThreadedInputObserver):
             injected=event.injected,
             receipt_timestamp=observed_at,
             deadline=time.monotonic() + _CORRELATION_TIMEOUT_SECONDS,
+            receipt=receipt,
         )
 
     def _handle_delivered_event(
@@ -913,38 +1042,36 @@ class LinuxXInputObserver(ThreadedInputObserver):
                 self._text_state_uncertain = True
                 if self._compose_state is not None:
                     self._xkbcommon.xkb_compose_state_reset(self._compose_state)
-                self._emit(
-                    normalize_xinput_key_event(
-                        keycode=pending.detail,
-                        pressed=pressed,
-                        keysym_name=None,
-                        injected=injected,
-                        character=None,
-                        derive_character=False,
-                        timestamp=pending.receipt_timestamp,
-                    )
+                observed = normalize_xinput_key_event(
+                    keycode=pending.detail,
+                    pressed=pressed,
+                    keysym_name=None,
+                    injected=injected,
+                    character=None,
+                    derive_character=False,
+                    timestamp=pending.receipt_timestamp,
                 )
+                self._emit_received(observed, pending.receipt)
                 return
             keysym, keysym_name = self._lookup_keysym(
                 pending.detail,
                 candidate.state,
             )
-            self._emit(
-                normalize_xinput_key_event(
+            observed = normalize_xinput_key_event(
+                keycode=pending.detail,
+                pressed=pressed,
+                keysym_name=keysym_name,
+                injected=injected,
+                character=self._resolved_character(
                     keycode=pending.detail,
-                    pressed=pressed,
+                    keysym=keysym,
                     keysym_name=keysym_name,
-                    injected=injected,
-                    character=self._resolved_character(
-                        keycode=pending.detail,
-                        keysym=keysym,
-                        keysym_name=keysym_name,
-                        pressed=pressed,
-                    ),
-                    derive_character=False,
-                    timestamp=pending.receipt_timestamp,
-                )
+                    pressed=pressed,
+                ),
+                derive_character=False,
+                timestamp=pending.receipt_timestamp,
             )
+            self._emit_received(observed, pending.receipt)
             return
 
         if candidate is not None:
@@ -966,7 +1093,14 @@ class LinuxXInputObserver(ThreadedInputObserver):
             timestamp=pending.receipt_timestamp,
         )
         if event is not None:
-            self._emit(event)
+            self._emit_received(event, pending.receipt)
+        elif pending.receipt is not None:
+            failure = InputObserverError(
+                "X RECORD reserved an input receipt that did not normalize "
+                "to a recordable event"
+            )
+            self._fail_receipt(pending.receipt, failure)
+            raise failure
 
     def _finalize_expired_pending(self) -> None:
         pending = self._pending
@@ -1260,6 +1394,15 @@ class LinuxXInputObserver(ThreadedInputObserver):
         self._baseline_marker_seen = False
         self._control_id_base = 0
         self._root = 0
+        if self._pending is not None and self._pending.receipt is not None:
+            failure = (
+                cleanup_failures[0]
+                if cleanup_failures
+                else InputObserverError(
+                    "X RECORD stopped before a reserved input was delivered"
+                )
+            )
+            self._fail_receipt(self._pending.receipt, failure)
         self._pending = None
         self._delivered_correlation_uncertain = False
         self._last_pointer = None
@@ -1269,6 +1412,7 @@ class LinuxXInputObserver(ThreadedInputObserver):
         self._unverifiable_keycodes.clear()
         if cleanup_failures:
             primary = cleanup_failures[0]
+            self._fail_unqueued_receipts(primary)
             for secondary in cleanup_failures[1:]:
                 add_exception_note(
                     primary,

@@ -782,9 +782,23 @@ def _mark_crashed_if_bound(descriptor: _ControlDescriptor) -> None:
         or payload.get("session_id") != descriptor.session_id
         or payload.get("pid") != descriptor.pid
         or payload.get("process_started_at") != descriptor.process_started_at
-        or payload.get("complete") is True
     ):
         return
+    if payload.get("complete") is True:
+        from openadapt_capture.terminal import (
+            CaptureSealError,
+            verify_capture_artifacts,
+        )
+
+        try:
+            verify_capture_artifacts(descriptor.capture_dir)
+        except (CaptureSealError, OSError, ValueError):
+            # The process exited between staging the final state and sealing.
+            # A success-shaped state file without its exact immutable seal is
+            # not a completed capture.
+            pass
+        else:
+            return
     payload.update(
         {
             "phase": "crashed",

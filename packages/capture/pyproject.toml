@@ -44,6 +44,8 @@ dependencies = [
     # Native Windows structural observation. Platform-gated so non-Windows
     # installs and imports do not load the Windows UIA stack.
     "pywinauto>=0.6.9; sys_platform == 'win32'",
+    # Checked X11 metadata and XComposite named-window pixels on Linux.
+    "xcffib>=1.8.0; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]

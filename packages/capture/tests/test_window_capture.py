@@ -13,6 +13,7 @@ on an interactive macOS/Windows desktop (e.g. the Parallels rig):
     OPENADAPT_WINDOW_SMOKE_OWNER=Parallels pytest tests/test_window_capture.py -m slow
 """
 
+import multiprocessing
 import os
 import queue
 import sys
@@ -24,9 +25,22 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
+import openadapt_capture.recorder as recorder_module
+import openadapt_capture.window_capture as window_capture_module
 from openadapt_capture.capture import CaptureSession
 from openadapt_capture.db import create_db, crud
-from openadapt_capture.recorder import Recorder, read_screen_events
+from openadapt_capture.desktop_capture import DesktopCaptureScope
+from openadapt_capture.events import WindowCaptureStateV2, window_geometry_epoch_sha256
+from openadapt_capture.input_observer import ObservedMouseButton, ThreadedInputObserver
+from openadapt_capture.recorder import (
+    Event,
+    NativeInputFrameBoundary,
+    OrderedEventJournal,
+    Recorder,
+    WindowScopedFrame,
+    read_input_events,
+    read_screen_events,
+)
 from openadapt_capture.window_capture import (
     TargetWindow,
     WindowCaptureError,
@@ -39,6 +53,734 @@ from openadapt_capture.window_capture import (
 # ---------------------------------------------------------------------------
 # translate_point: exact inverse of flow's replay mapping
 # ---------------------------------------------------------------------------
+
+
+def test_journal_orders_concurrent_observations_by_reservation_not_timestamp():
+    journal = OrderedEventJournal()
+    later_clock = journal.reserve(20.0)
+    earlier_clock = journal.reserve(10.0)
+
+    earlier_clock.complete(Event(10.0, "action", {}))
+    later_clock.complete(Event(20.0, "action", {}))
+
+    first = journal.get_nowait()
+    second = journal.get_nowait()
+    assert (first.timestamp, first.source_ordinal) == (20.0, 1)
+    assert (second.timestamp, second.source_ordinal) == (10.0, 2)
+
+
+def test_journal_accepts_a_frame_after_a_process_clock_reset(scope):
+    journal = OrderedEventJournal()
+    first_image, _ = scope.capture_frame(publish=False)
+    first_generation = scope.current_generation()
+    journal.commit_window_frame(
+        Event(
+            20.0,
+            "screen",
+            WindowScopedFrame(
+                image=first_image,
+                window_event_data=scope.window_event_data(),
+                geometry_generation=first_generation,
+            ),
+        ),
+        scope,
+        first_generation,
+    )
+
+    second_image, _ = scope.capture_frame(publish=False)
+    second_generation = scope.current_generation()
+    journal.commit_window_frame(
+        Event(
+            10.0,
+            "screen",
+            WindowScopedFrame(
+                image=second_image,
+                window_event_data=scope.window_event_data(),
+                geometry_generation=second_generation,
+            ),
+        ),
+        scope,
+        second_generation,
+    )
+
+    assert [journal.get_nowait().source_ordinal for _ in range(2)] == [1, 2]
+
+
+def test_action_reservation_cannot_bind_a_later_frame_generation(scope, fake, monkeypatch):
+    scope.capture_frame()
+    journal = OrderedEventJournal()
+    translation_entered = threading.Event()
+    allow_translation = threading.Event()
+    original_translate = scope.translate_with_generation
+
+    def blocked_translate(x, y):
+        binding = original_translate(x, y)
+        translation_entered.set()
+        assert allow_translation.wait(timeout=5)
+        return binding
+
+    monkeypatch.setattr(scope, "translate_with_generation", blocked_translate)
+    action_result = {}
+
+    def reserve_action():
+        reservation, binding = journal.reserve_window_action(1.0, scope, 310.0, 170.0)
+        action_result["binding"] = binding
+        reservation.complete(Event(1.0, "action", {"window_geometry_generation": binding[2]}))
+
+    action_thread = threading.Thread(target=reserve_action)
+    action_thread.start()
+    assert translation_entered.wait(timeout=5)
+
+    fake.bounds = (500.0, 250.0, 800.0, 600.0)
+    image, _ = scope.capture_frame(publish=False)
+    generation = scope.current_generation()
+    frame_thread = threading.Thread(
+        target=lambda: journal.commit_window_frame(
+            Event(
+                2.0,
+                "screen",
+                WindowScopedFrame(
+                    image=image,
+                    window_event_data=scope.window_event_data(),
+                    geometry_generation=generation,
+                ),
+            ),
+            scope,
+            generation,
+        )
+    )
+    frame_thread.start()
+    allow_translation.set()
+    action_thread.join(timeout=5)
+    frame_thread.join(timeout=5)
+
+    assert action_result["binding"][2] == 1
+    action = journal.get_nowait()
+    frame = journal.get_nowait()
+    assert (action.source_ordinal, frame.source_ordinal) == (1, 2)
+    assert frame.data.geometry_generation == 2
+
+
+def test_native_receipt_snapshot_does_not_call_window_or_topology_apis(
+    scope,
+    monkeypatch,
+):
+    image, _ = scope.capture_frame(publish=False)
+    generation = scope.current_generation()
+    journal = OrderedEventJournal()
+    journal.commit_window_frame(
+        Event(
+            1.0,
+            "screen",
+            WindowScopedFrame(
+                image=image,
+                window_event_data=scope.window_event_data(),
+                geometry_generation=generation,
+            ),
+        ),
+        scope,
+        generation,
+    )
+
+    def forbidden_io(*_args, **_kwargs):
+        pytest.fail("native receipt reservation performed live window or topology I/O")
+
+    monkeypatch.setattr(scope, "resolve", forbidden_io)
+    monkeypatch.setattr(scope, "_assert_display_topology", forbidden_io)
+
+    receipt = journal.reserve_window_action_receipt(2.0, scope)
+    assert receipt.source_ordinal == 2
+    receipt.fail(RuntimeError("test cleanup"))
+
+
+def test_screen_reader_discards_a_frame_with_concurrent_native_input(
+    scope,
+    monkeypatch,
+):
+    boundary = NativeInputFrameBoundary()
+    clean_results = iter((False, True))
+    completed_tokens: list[object] = []
+
+    class CheckedTerminate(threading.Event):
+        def wait(self, timeout=None):
+            if timeout is not None:
+                assert completed_tokens
+            return super().wait(timeout)
+
+    terminate = CheckedTerminate()
+
+    class FakeObserver:
+        def begin_frame_capture(self) -> object:
+            return object()
+
+        def finish_frame_capture(self, _token: object) -> bool:
+            return next(clean_results)
+
+        def complete_frame_capture(self, token: object) -> None:
+            completed_tokens.append(token)
+
+    boundary.attach(FakeObserver())
+    capture_calls = 0
+    original_capture = scope.capture_frame
+
+    def counted_capture(*, publish=True):
+        nonlocal capture_calls
+        capture_calls += 1
+        result = original_capture(publish=publish)
+        if capture_calls == 2:
+            terminate.set()
+        return result
+
+    monkeypatch.setattr(scope, "capture_frame", counted_capture)
+    journal = OrderedEventJournal()
+    read_screen_events(
+        journal,
+        terminate,
+        SimpleNamespace(timestamp=time.time()),
+        threading.Event(),
+        window_scope=scope,
+        input_frame_boundary=boundary,
+    )
+
+    assert capture_calls == 2
+    assert len(completed_tokens) == 2
+    frame = journal.get_nowait()
+    assert frame.type == "screen"
+    assert frame.source_ordinal == 1
+    with pytest.raises(queue.Empty):
+        journal.get_nowait()
+
+
+def test_terminal_frame_seals_native_input_before_commit(scope, monkeypatch):
+    terminate = threading.Event()
+    terminate.set()
+    input_finished = threading.Event()
+    input_finished.set()
+    terminal_finished = threading.Event()
+    boundary = NativeInputFrameBoundary()
+    sealed = False
+    completed = False
+
+    class FakeObserver:
+        def begin_frame_capture(self) -> object:
+            return object()
+
+        def finish_frame_capture(self, _token: object) -> bool:
+            return True
+
+        def seal_frame_capture(self, _token: object) -> None:
+            nonlocal sealed
+            sealed = True
+
+        def complete_frame_capture(self, _token: object) -> None:
+            nonlocal completed
+            completed = True
+
+    boundary.attach(FakeObserver())
+    journal = OrderedEventJournal()
+    original_commit = journal.commit_window_frame
+
+    def checked_commit(*args, **kwargs):
+        assert sealed
+        return original_commit(*args, **kwargs)
+
+    monkeypatch.setattr(journal, "commit_window_frame", checked_commit)
+    read_screen_events(
+        journal,
+        terminate,
+        SimpleNamespace(timestamp=time.time()),
+        threading.Event(),
+        window_scope=scope,
+        input_finished=input_finished,
+        input_frame_boundary=boundary,
+        terminal_frame_finished=terminal_finished,
+    )
+
+    assert terminal_finished.is_set()
+    assert completed
+    assert journal.get_nowait().type == "screen"
+
+
+def test_terminal_frame_retries_an_input_dirty_capture_before_signaling(
+    scope,
+    monkeypatch,
+):
+    monkeypatch.setattr(recorder_module.config, "SCREEN_CAPTURE_FPS", 0)
+    terminate = threading.Event()
+    terminate.set()
+    input_finished = threading.Event()
+    input_finished.set()
+    terminal_finished = threading.Event()
+    boundary = NativeInputFrameBoundary()
+    clean_results = iter((False, True))
+    seals = 0
+    completes = 0
+
+    class FakeObserver:
+        def begin_frame_capture(self) -> object:
+            return object()
+
+        def finish_frame_capture(self, _token: object) -> bool:
+            return next(clean_results)
+
+        def seal_frame_capture(self, _token: object) -> None:
+            nonlocal seals
+            seals += 1
+
+        def complete_frame_capture(self, _token: object) -> None:
+            nonlocal completes
+            completes += 1
+
+    boundary.attach(FakeObserver())
+    journal = OrderedEventJournal()
+    read_screen_events(
+        journal,
+        terminate,
+        SimpleNamespace(timestamp=time.time()),
+        threading.Event(),
+        window_scope=scope,
+        input_finished=input_finished,
+        input_frame_boundary=boundary,
+        terminal_frame_finished=terminal_finished,
+    )
+
+    assert terminal_finished.is_set()
+    assert seals == 1
+    assert completes == 2
+    assert journal.get_nowait().type == "screen"
+
+
+def test_terminal_frame_deadline_does_not_signal_without_a_clean_cut(
+    scope,
+    monkeypatch,
+):
+    monkeypatch.setattr(recorder_module.config, "SCREEN_CAPTURE_FPS", 0)
+    monkeypatch.setattr(recorder_module, "TERMINAL_FRAME_SEAL_TIMEOUT_SECONDS", 0.0)
+    terminate = threading.Event()
+    terminate.set()
+    terminal_finished = threading.Event()
+    boundary = NativeInputFrameBoundary()
+    seals = 0
+    completes = 0
+
+    class DirtyObserver:
+        def begin_frame_capture(self) -> object:
+            return object()
+
+        def finish_frame_capture(self, _token: object) -> bool:
+            return False
+
+        def seal_frame_capture(self, _token: object) -> None:
+            nonlocal seals
+            seals += 1
+
+        def complete_frame_capture(self, _token: object) -> None:
+            nonlocal completes
+            completes += 1
+
+    boundary.attach(DirtyObserver())
+    journal = OrderedEventJournal()
+
+    with pytest.raises(WindowCaptureError, match="terminal-frame deadline"):
+        read_screen_events(
+            journal,
+            terminate,
+            SimpleNamespace(timestamp=time.time()),
+            threading.Event(),
+            window_scope=scope,
+            input_frame_boundary=boundary,
+            terminal_frame_finished=terminal_finished,
+        )
+
+    assert not terminal_finished.is_set()
+    assert seals == 0
+    assert completes == 1
+    with pytest.raises(queue.Empty):
+        journal.get_nowait()
+
+
+def test_processor_binds_first_later_frame_as_the_exact_action_after(scope):
+    journal = queue.Queue()
+    frames = []
+    for timestamp, ordinal in ((1.0, 1), (3.0, 3)):
+        image, _ = scope.capture_frame(publish=False)
+        frames.append(
+            Event(
+                timestamp,
+                "screen",
+                WindowScopedFrame(
+                    image=image,
+                    window_event_data=scope.window_event_data(),
+                    geometry_generation=scope.current_generation(),
+                ),
+                ordinal,
+            )
+        )
+    journal.put(frames[0])
+    journal.put(
+        Event(
+            2.0,
+            "action",
+            {
+                "name": "click",
+                "mouse_x": 1.0,
+                "mouse_y": 2.0,
+                "mouse_button_name": "left",
+                "mouse_pressed": True,
+                "window_geometry_generation": 1,
+            },
+            2,
+        )
+    )
+    journal.put(frames[1])
+    queues = [queue.Queue() for _ in range(6)]
+    counters = [multiprocessing.Value("i", 0) for _ in range(5)]
+    terminate = threading.Event()
+    terminate.set()
+
+    recorder_module.process_events(
+        journal,
+        queues[0],
+        queues[1],
+        queues[2],
+        queues[3],
+        queues[4],
+        queues[5],
+        SimpleNamespace(timestamp=0.0),
+        terminate,
+        threading.Event(),
+        *counters,
+    )
+
+    action = queues[1].get_nowait()
+    assert action.data["screenshot_source_ordinal"] == 1
+    assert action.data["after_screenshot_source_ordinal"] == 3
+    assert action.data["after_window_event_source_ordinal"] == 3
+    assert action.data["after_window_geometry_generation"] == 1
+
+
+def test_processor_refuses_a_native_action_without_a_terminal_after_frame(scope):
+    image, _ = scope.capture_frame(publish=False)
+    journal = queue.Queue()
+    journal.put(
+        Event(
+            1.0,
+            "screen",
+            WindowScopedFrame(
+                image=image,
+                window_event_data=scope.window_event_data(),
+                geometry_generation=scope.current_generation(),
+            ),
+            1,
+        )
+    )
+    journal.put(
+        Event(
+            2.0,
+            "action",
+            {"name": "press", "key_char": "a", "window_geometry_generation": 1},
+            2,
+        )
+    )
+    queues = [queue.Queue() for _ in range(6)]
+    counters = [multiprocessing.Value("i", 0) for _ in range(5)]
+    terminate = threading.Event()
+    terminate.set()
+
+    with pytest.raises(WindowCaptureError, match="pending actions received an after frame"):
+        recorder_module.process_events(
+            journal,
+            queues[0],
+            queues[1],
+            queues[2],
+            queues[3],
+            queues[4],
+            queues[5],
+            SimpleNamespace(timestamp=0.0),
+            terminate,
+            threading.Event(),
+            *counters,
+        )
+
+
+def test_input_observation_precedes_an_in_flight_window_frame(fake):
+    capture_entered = threading.Event()
+    release_capture = threading.Event()
+    terminate = threading.Event()
+    block_capture = threading.Event()
+
+    def capturer(window):
+        if block_capture.is_set():
+            capture_entered.set()
+            assert release_capture.wait(timeout=5)
+            terminate.set()
+        return fake.capturer(window)
+
+    scope = WindowCaptureScope(
+        WindowTarget(owner="FakeApp"),
+        resolver=fake.resolver,
+        capturer=capturer,
+    )
+    scope.bind_display_topology(
+        {
+            "schema_version": "openadapt.capture.display-topology/v1",
+            "topology_sha256": "a" * 64,
+        },
+        lambda **_kwargs: None,
+    )
+    journal = OrderedEventJournal()
+    image, _ = scope.capture_frame(publish=False)
+    generation = scope.current_generation()
+    journal.commit_window_frame(
+        Event(
+            time.time(),
+            "screen",
+            WindowScopedFrame(
+                image=image,
+                window_event_data=scope.window_event_data(),
+                geometry_generation=generation,
+            ),
+        ),
+        scope,
+        generation,
+    )
+
+    block_capture.set()
+    screen_reader = threading.Thread(
+        target=read_screen_events,
+        args=(
+            journal,
+            terminate,
+            SimpleNamespace(timestamp=time.time()),
+            threading.Event(),
+        ),
+        kwargs={"window_scope": scope},
+    )
+    screen_reader.start()
+    assert capture_entered.wait(timeout=5)
+
+    action_finished = threading.Event()
+    action_binding: dict[str, int] = {}
+
+    def reserve_action():
+        action_timestamp = time.time()
+        reservation, binding = journal.reserve_window_action(
+            action_timestamp,
+            scope,
+            310.0,
+            170.0,
+        )
+        action_binding["generation"] = binding[2]
+        reservation.complete(
+            Event(
+                action_timestamp,
+                "action",
+                {"window_geometry_generation": binding[2]},
+            )
+        )
+        action_finished.set()
+
+    action_reader = threading.Thread(target=reserve_action)
+    action_reader.start()
+    assert action_finished.wait(timeout=5)
+
+    # The in-flight frame can include the action's result. It must remain
+    # unpublished until after the action has bound the previous exact frame.
+    initial = journal.get_nowait()
+    action = journal.get_nowait()
+    assert [initial.type, action.type] == ["screen", "action"]
+    assert action_binding["generation"] == initial.data.geometry_generation
+    assert journal.empty()
+
+    release_capture.set()
+    screen_reader.join(timeout=5)
+    action_reader.join(timeout=5)
+
+    assert not screen_reader.is_alive()
+    assert not action_reader.is_alive()
+    assert journal.get_nowait().type == "screen"
+
+
+def test_native_receipt_reserves_before_async_input_delivery(scope, monkeypatch):
+    """A delayed observer callback cannot bind a post-input frame."""
+
+    class ReadyObserver(ThreadedInputObserver):
+        def __init__(self, callback):
+            super().__init__(
+                callback,
+                observe_keyboard=False,
+                observe_mouse=True,
+                capture_mouse_moves=True,
+                shutdown_timeout=1.0,
+            )
+            self.release_loop = threading.Event()
+
+        def _setup(self):
+            return
+
+        def _run_loop(self):
+            self.release_loop.wait()
+
+        def _teardown(self):
+            return
+
+        def _wake(self):
+            self.release_loop.set()
+
+    journal = OrderedEventJournal()
+    first_image, _ = scope.capture_frame(publish=False)
+    first_generation = scope.current_generation()
+    journal.commit_window_frame(
+        Event(
+            1.0,
+            "screen",
+            WindowScopedFrame(
+                image=first_image,
+                window_event_data=scope.window_event_data(),
+                geometry_generation=first_generation,
+            ),
+        ),
+        scope,
+        first_generation,
+    )
+
+    observation_entered = threading.Event()
+    release_observation = threading.Event()
+
+    class BlockingStructuralObserver:
+        def open_current_thread(self):
+            return
+
+        def close_current_thread(self):
+            return
+
+        def observe(self, _request):
+            observation_entered.set()
+            assert release_observation.wait(timeout=5)
+            return None
+
+    observers = []
+
+    def create_observer(callback, **_kwargs):
+        observer = ReadyObserver(callback)
+        observers.append(observer)
+        return observer
+
+    monkeypatch.setattr(recorder_module, "create_input_observer", create_observer)
+    terminate = threading.Event()
+    started = threading.Event()
+    input_reader = threading.Thread(
+        target=read_input_events,
+        args=(
+            journal,
+            terminate,
+            SimpleNamespace(timestamp=time.time()),
+            started,
+        ),
+        kwargs={
+            "coordinate_scope": scope,
+            "structural_observer": BlockingStructuralObserver(),
+        },
+    )
+    input_reader.start()
+    assert started.wait(timeout=5)
+    observer = observers[0]
+    native_event = ObservedMouseButton(
+        x=310.0,
+        y=170.0,
+        button="left",
+        pressed=True,
+        timestamp=1.5,
+    )
+    receipt = observer._reserve_receipt(native_event.timestamp)
+    observer._emit(
+        native_event,
+        receipt=receipt,
+    )
+    assert observation_entered.wait(timeout=5)
+
+    later_image, _ = scope.capture_frame(publish=False)
+    later_generation = scope.current_generation()
+    journal.commit_window_frame(
+        Event(
+            2.0,
+            "screen",
+            WindowScopedFrame(
+                image=later_image,
+                window_event_data=scope.window_event_data(),
+                geometry_generation=later_generation,
+            ),
+        ),
+        scope,
+        later_generation,
+    )
+    release_observation.set()
+    deadline = time.monotonic() + 5
+    while not bool(getattr(receipt, "finished", False)):
+        if time.monotonic() >= deadline:
+            pytest.fail("native receipt was not completed")
+        time.sleep(0.001)
+    terminate.set()
+    input_reader.join(timeout=5)
+    assert not input_reader.is_alive()
+
+    initial = journal.get_nowait()
+    action = journal.get_nowait()
+    later = journal.get_nowait()
+    assert [(initial.type, initial.source_ordinal), (action.type, action.source_ordinal)] == [
+        ("screen", 1),
+        ("action", 2),
+    ]
+    assert (later.type, later.source_ordinal) == ("screen", 3)
+    assert action.data["window_geometry_generation"] == first_generation
+
+
+def test_window_capture_state_rejects_scales_not_derived_from_content(scope):
+    scope.capture_frame()
+    state = scope.window_event_data()["state"]
+    state["scale"] = 999.0
+    state["scale_x"] = 999.0
+    state["scale_y"] = 999.0
+    state["geometry_epoch_sha256"] = window_geometry_epoch_sha256(
+        {key: value for key, value in state.items() if key != "geometry_epoch_sha256"}
+    )
+
+    with pytest.raises(ValueError, match="axis scales"):
+        WindowCaptureStateV2.model_validate(state)
+
+
+def test_macos_resolver_ignores_a_larger_hidden_matching_window(monkeypatch):
+    hidden = {
+        "kCGWindowOwnerName": "FakeApp",
+        "kCGWindowName": "Document",
+        "kCGWindowLayer": 0,
+        "kCGWindowIsOnscreen": False,
+        "kCGWindowBounds": {"X": 0, "Y": 0, "Width": 2000, "Height": 1200},
+        "kCGWindowOwnerPID": 100,
+        "kCGWindowNumber": 1,
+    }
+    visible = {
+        "kCGWindowOwnerName": "FakeApp",
+        "kCGWindowName": "Document",
+        "kCGWindowLayer": 0,
+        "kCGWindowIsOnscreen": True,
+        "kCGWindowBounds": {"X": 10, "Y": 10, "Width": 800, "Height": 600},
+        "kCGWindowOwnerPID": 100,
+        "kCGWindowNumber": 2,
+    }
+    quartz = SimpleNamespace(
+        kCGWindowListOptionAll=1,
+        kCGNullWindowID=0,
+        CGWindowListCopyWindowInfo=lambda *_args: [hidden, visible],
+    )
+    monkeypatch.setitem(sys.modules, "Quartz", quartz)
+    monkeypatch.setattr(window_capture_module, "_process_start_time", lambda _pid: 123.0)
+
+    resolved = window_capture_module._resolve_window_macos(WindowTarget(owner="FakeApp"))
+
+    assert resolved is not None
+    assert resolved.window_id == 2
+    assert resolved.on_screen is True
 
 
 class TestTranslatePoint:
@@ -138,6 +880,7 @@ class FakePlatform:
         self.window_id = 42
         self.title = "Fake Window"
         self.missing = False
+        self.process_start_time = 123.5
 
     def resolver(self, target: WindowTarget):
         if self.missing:
@@ -148,6 +891,8 @@ class FakePlatform:
             title=self.title,
             pid=1234,
             bounds=self.bounds,
+            process_start_time=self.process_start_time,
+            coordinate_source="test-screen-points",
         )
 
     def capturer(self, window: TargetWindow) -> Image.Image:
@@ -163,11 +908,19 @@ def fake():
 
 @pytest.fixture
 def scope(fake):
-    return WindowCaptureScope(
+    result = WindowCaptureScope(
         WindowTarget(owner="FakeApp"),
         resolver=fake.resolver,
         capturer=fake.capturer,
     )
+    result.bind_display_topology(
+        {
+            "schema_version": "openadapt.capture.display-topology/v1",
+            "topology_sha256": "a" * 64,
+        },
+        lambda **_kwargs: None,
+    )
+    return result
 
 
 class TestWindowCaptureScope:
@@ -227,9 +980,16 @@ class TestWindowCaptureScope:
             ]
         )
         scope = WindowCaptureScope(
-            WindowTarget(owner="Parallels"),
+            WindowTarget(owner="FakeApp"),
             resolver=fake.resolver,
             capturer=lambda _window: next(images),
+        )
+        scope.bind_display_topology(
+            {
+                "schema_version": "openadapt.capture.display-topology/v1",
+                "topology_sha256": "a" * 64,
+            },
+            lambda **_kwargs: None,
         )
         scope.capture_frame()
         scope.capture_frame()
@@ -260,9 +1020,10 @@ class TestWindowCaptureScope:
         fake.bounds = (100.0, 50.0, 800.0, 600.0)
         scope.resolve()
 
-        # A resolver poll alone cannot commit geometry. Translation changes
-        # only after the corresponding frame has been captured.
-        assert scope.translate(310.0, 170.0) == (20.0, 40.0)
+        # A resolver poll alone cannot commit geometry. Input stops until a
+        # frame with the new bounds is captured and published.
+        with pytest.raises(WindowCaptureError, match="moved or resized"):
+            scope.translate(310.0, 170.0)
         scope.capture_frame()
         assert scope.translate(310.0, 170.0) == (420.0, 240.0)
 
@@ -289,6 +1050,28 @@ class TestWindowCaptureScope:
                 threading.Event(),
                 window_scope=scope,
             )
+
+    def test_screen_reader_retains_terminal_frame_after_input_finishes(self, scope):
+        journal = OrderedEventJournal()
+        terminate = threading.Event()
+        terminate.set()
+        input_finished = threading.Event()
+        input_finished.set()
+
+        read_screen_events(
+            journal,
+            terminate,
+            SimpleNamespace(timestamp=time.time()),
+            threading.Event(),
+            window_scope=scope,
+            input_finished=input_finished,
+        )
+
+        event = journal.get_nowait()
+        assert event.source_ordinal == 1
+        assert isinstance(event.data, WindowScopedFrame)
+        assert event.data.geometry_generation == 1
+        assert journal.empty()
 
     def test_window_event_data_matches_window_event_columns(self, scope):
         scope.capture_frame()
@@ -429,6 +1212,7 @@ class TestActionTranslation:
         from openadapt_capture.recorder import trigger_action_event
 
         utils.set_start_time()
+        scope.capture_frame()
         q = queue.Queue()
         trigger_action_event(q, {"name": "press", "key_char": "a"}, scope)
         (event,) = self._drain(q)
@@ -775,7 +1559,7 @@ class TestWindowCaptureLive:
     def _scope(self) -> WindowCaptureScope:
         scope = WindowCaptureScope(WindowTarget(owner=_SMOKE_OWNER, title=_SMOKE_TITLE))
         try:
-            scope.resolve()
+            resolved = scope.resolve()
         except WindowCaptureError as exc:
             if _PRODUCTION_QUALIFICATION:
                 raise AssertionError(
@@ -787,6 +1571,12 @@ class TestWindowCaptureLive:
                 f"title {_SMOKE_TITLE!r} on this desktop; open one (or set "
                 "OPENADAPT_WINDOW_SMOKE_OWNER) to run the live smoke test"
             )
+        if not resolved.on_screen:
+            if _PRODUCTION_QUALIFICATION:
+                raise AssertionError("the production qualification window is not on screen")
+            pytest.skip("the matching live smoke-test window is not on screen")
+        desktop = DesktopCaptureScope.current()
+        scope.bind_display_topology(desktop.snapshot(), desktop.assert_current)
         return scope
 
     def test_live_window_frame_and_translation(self):
@@ -830,6 +1620,8 @@ class TestWindowCaptureLive:
         # an owner-only selector from switching to another large window after
         # the target changes size.
         scope = WindowCaptureScope(WindowTarget(owner=target.owner, title=target.title))
+        desktop = DesktopCaptureScope.current()
+        scope.bind_display_topology(desktop.snapshot(), desktop.assert_current)
         initial_image, initial_changed = scope.capture_frame()
         assert initial_changed is True
         initial_data = scope.window_event_data()
@@ -885,5 +1677,12 @@ class TestWindowCaptureLive:
 
     def test_live_missing_window_fails_loud(self):
         scope = WindowCaptureScope(WindowTarget(owner="no-such-app-obviously-not-running-xyz"))
+        scope.bind_display_topology(
+            {
+                "schema_version": "openadapt.capture.display-topology/v1",
+                "topology_sha256": "a" * 64,
+            },
+            lambda **_kwargs: None,
+        )
         with pytest.raises(WindowCaptureError, match="no window matching"):
             scope.capture_frame()

@@ -7,12 +7,17 @@ battle-tested implementation.
 
 from __future__ import annotations
 
+import math
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from openadapt_capture.structural import StructuralObservation
+from openadapt_capture.window_capture import (
+    WINDOW_CAPTURE_SCHEMA_VERSION,
+    window_geometry_epoch_sha256,
+)
 
 
 class EventType(str, Enum):
@@ -59,9 +64,125 @@ class BaseEvent(BaseModel):
     """
 
     timestamp: float = Field(description="Unix timestamp in seconds (float for sub-ms precision)")
+    source_ordinal: int | None = Field(
+        default=None,
+        ge=1,
+        description="Exact 1-based position in the ordered native source journal",
+    )
     type: EventType = Field(description="Event type identifier")
 
     model_config = {"use_enum_values": True}
+
+
+class WindowCaptureStateV2(BaseModel):
+    """Exact native geometry retained with one atomic screen frame."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["openadapt.capture.window-scoped/v2"]
+    window_capture: Literal[True]
+    window_id: str = Field(min_length=1)
+    owner: str = Field(min_length=1)
+    pid: int = Field(gt=0)
+    process_start_time: float = Field(gt=0)
+    coordinate_source: str = Field(min_length=1)
+    geometry_generation: int = Field(ge=1)
+    geometry_epoch_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    display_topology_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    bounds: tuple[float, float, float, float]
+    scale: float = Field(gt=0)
+    scale_x: float = Field(gt=0)
+    scale_y: float = Field(gt=0)
+    viewport: tuple[int, int]
+    source_viewport: tuple[int, int]
+    content_rect: tuple[int, int, int, int]
+    fit_scale: float = Field(gt=0)
+    on_screen: bool
+
+    @model_validator(mode="after")
+    def _closed_geometry(self) -> "WindowCaptureStateV2":
+        if self.schema_version != WINDOW_CAPTURE_SCHEMA_VERSION:
+            raise ValueError("unsupported window-capture schema version")
+        numeric = (
+            self.process_start_time,
+            *self.bounds,
+            self.scale,
+            self.scale_x,
+            self.scale_y,
+            self.fit_scale,
+        )
+        if not all(math.isfinite(float(value)) for value in numeric):
+            raise ValueError("window capture geometry must be finite")
+        if self.bounds[2] <= 0 or self.bounds[3] <= 0:
+            raise ValueError("window capture bounds must have positive dimensions")
+        if any(value <= 0 for value in (*self.viewport, *self.source_viewport)):
+            raise ValueError("window capture viewports must be positive")
+        left, top, width, height = self.content_rect
+        if (
+            left < 0
+            or top < 0
+            or width <= 0
+            or height <= 0
+            or left + width > self.viewport[0]
+            or top + height > self.viewport[1]
+        ):
+            raise ValueError("window capture content rectangle is outside its viewport")
+        expected_fit = min(
+            self.viewport[0] / self.source_viewport[0],
+            self.viewport[1] / self.source_viewport[1],
+        )
+        expected_width = max(
+            1,
+            min(self.viewport[0], round(self.source_viewport[0] * expected_fit)),
+        )
+        expected_height = max(
+            1,
+            min(self.viewport[1], round(self.source_viewport[1] * expected_fit)),
+        )
+        expected_rect = (
+            (self.viewport[0] - expected_width) // 2,
+            (self.viewport[1] - expected_height) // 2,
+            expected_width,
+            expected_height,
+        )
+        if not math.isclose(self.fit_scale, expected_fit) or self.content_rect != expected_rect:
+            raise ValueError("window capture normalization differs from its viewports")
+        expected_scale_x = width / self.bounds[2]
+        expected_scale_y = height / self.bounds[3]
+        if not math.isclose(self.scale_x, expected_scale_x) or not math.isclose(
+            self.scale_y,
+            expected_scale_y,
+        ):
+            raise ValueError("window capture axis scales differ from its content geometry")
+        if not math.isclose(self.scale, self.scale_x):
+            raise ValueError("legacy window scale differs from exact x scale")
+        if self.geometry_epoch_sha256 != window_geometry_epoch_sha256(
+            self.model_dump(mode="json", exclude={"geometry_epoch_sha256"})
+        ):
+            raise ValueError("window geometry epoch digest is invalid")
+        return self
+
+
+class CapturedWindowEvent(BaseModel):
+    """Public validated view of one stored WindowEvent row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    timestamp: float
+    source_ordinal: int | None = Field(default=None, ge=1)
+    title: str | None = None
+    left: int | None = None
+    top: int | None = None
+    width: int | None = None
+    height: int | None = None
+    window_id: str | None = None
+    state: dict[str, Any]
+
+    @property
+    def window_capture_v2(self) -> WindowCaptureStateV2 | None:
+        if self.state.get("schema_version") != WINDOW_CAPTURE_SCHEMA_VERSION:
+            return None
+        return WindowCaptureStateV2.model_validate(self.state)
 
 
 class ActionBaseEvent(BaseEvent):
@@ -78,6 +199,48 @@ class ActionBaseEvent(BaseEvent):
             "is bound to. Extract that exact frame instead of guessing a "
             "nearest one."
         ),
+    )
+    screenshot_source_ordinal: int | None = Field(
+        default=None,
+        ge=1,
+        description="Source journal ordinal of the exact retained screen frame",
+    )
+    after_screenshot_timestamp: float | None = Field(
+        default=None,
+        description="Exact timestamp of the first retained frame after this action",
+    )
+    after_screenshot_source_ordinal: int | None = Field(
+        default=None,
+        ge=1,
+        description="Source journal ordinal of the exact retained after frame",
+    )
+    window_event_timestamp: float | None = Field(
+        default=None,
+        description="Exact WindowEvent timestamp paired with the bound frame",
+    )
+    window_event_source_ordinal: int | None = Field(
+        default=None,
+        ge=1,
+        description="Source journal ordinal of the geometry paired with the frame",
+    )
+    after_window_event_timestamp: float | None = Field(
+        default=None,
+        description="Exact WindowEvent timestamp paired with the retained after frame",
+    )
+    after_window_event_source_ordinal: int | None = Field(
+        default=None,
+        ge=1,
+        description="Source journal ordinal of geometry paired with the after frame",
+    )
+    window_geometry_generation: int | None = Field(
+        default=None,
+        ge=1,
+        description="Exact native geometry generation bound to this action",
+    )
+    after_window_geometry_generation: int | None = Field(
+        default=None,
+        ge=1,
+        description="Exact native geometry generation paired with the after frame",
     )
 
 

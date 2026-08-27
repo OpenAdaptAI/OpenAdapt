@@ -80,6 +80,29 @@ ObservedInput: TypeAlias = (
 InputCallback: TypeAlias = Callable[[ObservedInput], None]
 
 
+@dataclass(frozen=True, slots=True)
+class _ObservedDelivery:
+    """One normalized event plus its native-receipt reservation."""
+
+    event: ObservedInput
+    receipt: object | None
+
+
+@dataclass(slots=True)
+class _ReceiptFrameCapture:
+    """One platform-neutral cut around window-pixel acquisition."""
+
+    start_receipt_count: int
+    start_callback_generation: int
+    started_with_active_callback: bool
+    finish_called: bool = False
+    cut_held: bool = False
+    completed: bool = False
+
+
+_SEALED_FRAME_RECEIPT = object()
+
+
 def add_exception_note(error: BaseException, note: str) -> None:
     """Attach cleanup context when supported without masking the primary error."""
     add_note = getattr(error, "add_note", None)
@@ -101,6 +124,23 @@ class InputObserver(ABC):
     @abstractmethod
     def stop(self) -> None:
         """Stop and join the observer, surfacing any observer failure."""
+
+    def begin_frame_capture(self) -> object | None:
+        """Start an input-stable frame capture transaction."""
+        return None
+
+    def finish_frame_capture(self, token: object | None) -> bool:
+        """Close the capture interval and report whether it contained input."""
+        del token
+        return True
+
+    def complete_frame_capture(self, token: object | None) -> None:
+        """Release an input-stable frame after it is published or discarded."""
+        del token
+
+    def seal_frame_capture(self, token: object | None) -> None:
+        """Stop accepting native input at an exact terminal-frame boundary."""
+        del token
 
     def __enter__(self) -> "InputObserver":
         self.start()
@@ -139,10 +179,11 @@ class ThreadedInputObserver(InputObserver):
         self._stop_requested = threading.Event()
         self._thread: threading.Thread | None = None
         self._delivery_thread: threading.Thread | None = None
-        self._delivery_queue: queue.Queue[ObservedInput | object] = queue.Queue(
+        self._delivery_queue: queue.Queue[_ObservedDelivery | object] = queue.Queue(
             maxsize=delivery_queue_size
         )
         self._delivery_sentinel = object()
+        self._delivery_ready = threading.Event()
         self._delivery_stop_requested = threading.Event()
         self._delivery_decided = threading.Event()
         self._delivery_state_lock = threading.Lock()
@@ -150,6 +191,12 @@ class ThreadedInputObserver(InputObserver):
         self._failure: BaseException | None = None
         self._failure_lock = threading.Lock()
         self._startup_failure: BaseException | None = None
+        self._receipt_lock = threading.Lock()
+        self._unqueued_receipts: list[object] = []
+        self._input_receipt_count = 0
+        self._native_callback_generation = 0
+        self._active_native_callbacks = 0
+        self._capture_sealed = False
 
     @abstractmethod
     def _setup(self) -> None:
@@ -166,29 +213,205 @@ class ThreadedInputObserver(InputObserver):
     def _wake(self) -> None:
         """Wake a blocked event loop during shutdown, when needed."""
 
-    def _emit(self, event: ObservedInput) -> None:
+    def _reserve_receipt(self, timestamp: float | None) -> object | None:
+        """Reserve source order at the first native receipt boundary."""
+        reserve = getattr(self.callback, "_openadapt_input_receipt", None)
+        with self._receipt_lock:
+            if self._capture_sealed:
+                return _SEALED_FRAME_RECEIPT
+            self._input_receipt_count += 1
+            if not callable(reserve):
+                return None
+            if timestamp is None:
+                raise InputObserverError(
+                    "native input has no receipt timestamp for source-order reservation"
+                )
+            receipt = reserve(timestamp)
+            if receipt is not None:
+                self._unqueued_receipts.append(receipt)
+        return receipt
+
+    def _mark_native_activity(self) -> None:
+        """Make an unrecorded native transition invalidate an in-flight frame."""
+        with self._receipt_lock:
+            if not self._capture_sealed:
+                self._input_receipt_count += 1
+
+    def _begin_native_callback(self) -> None:
+        """Mark an OS input callback active before it can deliver its input."""
+        with self._receipt_lock:
+            self._native_callback_generation += 1
+            self._active_native_callbacks += 1
+
+    def _end_native_callback(self) -> None:
+        """Close an OS input callback only after its downstream hook returns."""
+        with self._receipt_lock:
+            if self._active_native_callbacks <= 0:
+                raise InputObserverError(
+                    "native input callback completion has no matching start"
+                )
+            self._active_native_callbacks -= 1
+            self._native_callback_generation += 1
+
+    @staticmethod
+    def _fail_receipt(receipt: object | None, failure: BaseException) -> None:
+        """Release a reserved consumer position after observation fails."""
+        if receipt is None:
+            return
+        fail = getattr(receipt, "fail", None)
+        if callable(fail):
+            fail(failure)
+
+    def _forget_unqueued_receipt(self, receipt: object | None) -> None:
+        if receipt is None:
+            return
+        with self._receipt_lock:
+            for index, pending in enumerate(self._unqueued_receipts):
+                if pending is receipt:
+                    self._unqueued_receipts.pop(index)
+                    return
+
+    def _fail_unqueued_receipts(self, failure: BaseException) -> int:
+        """Fail reservations that normalization has not queued for delivery."""
+        with self._receipt_lock:
+            pending = self._unqueued_receipts
+            self._unqueued_receipts = []
+        for receipt in pending:
+            self._fail_receipt(receipt, failure)
+        return len(pending)
+
+    def _emit(
+        self,
+        event: ObservedInput,
+        *,
+        receipt: object | None = None,
+    ) -> None:
+        if receipt is _SEALED_FRAME_RECEIPT:
+            return
+        if receipt is None:
+            with self._receipt_lock:
+                if self._capture_sealed:
+                    return
+        with self._delivery_state_lock:
+            if self._delivery_state in {"aborted", "inactive"}:
+                if receipt is None:
+                    return
+                failure = InputObserverError(
+                    f"{type(self).__name__} discarded reserved input after "
+                    "delivery stopped"
+                )
+                self._forget_unqueued_receipt(receipt)
+                self._fail_receipt(receipt, failure)
+                raise failure
+
         # Keep the state check and enqueue atomic with startup cancellation.
         # Otherwise an abort could drain the queue and exit its delivery thread
         # between these two operations, leaving a late setup event stranded.
         failure: InputObserverError | None = None
         with self._delivery_state_lock:
             if self._delivery_state in {"aborted", "inactive"}:
-                return
-            try:
-                self._delivery_queue.put_nowait(event)
-            except queue.Full:
                 failure = InputObserverError(
-                    f"{type(self).__name__} input delivery queue overflowed; "
-                    "recording coverage is incomplete"
+                    f"{type(self).__name__} discarded input after delivery stopped"
                 )
+            else:
+                self._forget_unqueued_receipt(receipt)
+                try:
+                    self._delivery_queue.put_nowait(
+                        _ObservedDelivery(event, receipt)
+                    )
+                except queue.Full:
+                    failure = InputObserverError(
+                        f"{type(self).__name__} input delivery queue overflowed; "
+                        "recording coverage is incomplete"
+                    )
         if failure is not None:
+            self._fail_receipt(receipt, failure)
             # Wake hooks are platform-defined and may re-enter lifecycle code;
             # never call them while holding the delivery-state lock.
             self._fail(failure)
             raise failure
 
+    def _emit_received(
+        self,
+        event: ObservedInput,
+        receipt: object | None,
+    ) -> None:
+        """Queue one normalized event with its optional receipt reservation."""
+        if receipt is _SEALED_FRAME_RECEIPT:
+            return
+        if receipt is None:
+            self._emit(event)
+        else:
+            self._emit(event, receipt=receipt)
+
+    def begin_frame_capture(self) -> object:
+        """Snapshot accepted input before the screen reader acquires pixels."""
+        self.check_health()
+        with self._receipt_lock:
+            if self._capture_sealed:
+                raise InputObserverError(
+                    "native input was already sealed before frame capture"
+                )
+            return _ReceiptFrameCapture(
+                start_receipt_count=self._input_receipt_count,
+                start_callback_generation=self._native_callback_generation,
+                started_with_active_callback=self._active_native_callbacks > 0,
+            )
+
+    def finish_frame_capture(self, token: object | None) -> bool:
+        """Reject an input-dirty frame and hold a clean cut through commit."""
+        if not isinstance(token, _ReceiptFrameCapture):
+            raise InputObserverError("native input received an invalid frame token")
+        if token.finish_called or token.completed:
+            raise InputObserverError("native input frame token was already finished")
+        if not self._receipt_lock.acquire(timeout=self.shutdown_timeout):
+            raise InputObserverError(
+                "native input could not close the frame cut before timeout"
+            )
+        token.finish_called = True
+        token.cut_held = True
+        try:
+            self.check_health()
+            if (
+                token.started_with_active_callback
+                or self._active_native_callbacks > 0
+                or self._native_callback_generation
+                != token.start_callback_generation
+                or self._input_receipt_count != token.start_receipt_count
+            ):
+                token.cut_held = False
+                self._receipt_lock.release()
+                return False
+            return True
+        except BaseException:
+            token.cut_held = False
+            self._receipt_lock.release()
+            raise
+
+    def complete_frame_capture(self, token: object | None) -> None:
+        """Release native callbacks after a clean frame enters the journal."""
+        if not isinstance(token, _ReceiptFrameCapture) or token.completed:
+            return
+        token.completed = True
+        if token.cut_held:
+            token.cut_held = False
+            self._receipt_lock.release()
+
+    def seal_frame_capture(self, token: object | None) -> None:
+        """Close native receipt acceptance before a terminal frame commits."""
+        if isinstance(token, _ReceiptFrameCapture):
+            if not token.cut_held or token.completed:
+                raise InputObserverError(
+                    "terminal input seal requires an active clean frame cut"
+                )
+            self._capture_sealed = True
+            return
+        with self._receipt_lock:
+            self._capture_sealed = True
+
     def _fail(self, failure: BaseException) -> None:
         primary = self._store_failure(failure)
+        self._fail_unqueued_receipts(primary)
         self._stop_requested.set()
         try:
             self._wake()
@@ -217,7 +440,7 @@ class ThreadedInputObserver(InputObserver):
             self._discard_delivery_queue()
             return
         if delivery_state != "committed":
-            self._fail(
+            self._abort_failed_delivery(
                 InputObserverError(
                     f"{type(self).__name__} delivery started without a valid "
                     "startup decision"
@@ -237,6 +460,7 @@ class ThreadedInputObserver(InputObserver):
         try:
             if callable(start_hook):
                 start_hook()
+            self._delivery_ready.set()
             while True:
                 if (
                     self._delivery_stop_requested.is_set()
@@ -250,7 +474,30 @@ class ThreadedInputObserver(InputObserver):
                 try:
                     if item is self._delivery_sentinel:
                         return
-                    self.callback(item)  # type: ignore[arg-type]
+                    if not isinstance(item, _ObservedDelivery):
+                        raise InputObserverError(
+                            f"{type(self).__name__} delivery queue contained "
+                            "an invalid item"
+                        )
+                    if item.receipt is None:
+                        self.callback(item.event)
+                    else:
+                        deliver = getattr(
+                            self.callback,
+                            "_openadapt_input_delivery",
+                            None,
+                        )
+                        if not callable(deliver):
+                            raise InputObserverError(
+                                "a native input receipt was reserved without "
+                                "a matching delivery consumer"
+                            )
+                        deliver(item.event, item.receipt)
+                        if not bool(getattr(item.receipt, "finished", False)):
+                            raise InputObserverError(
+                                "the input consumer returned without completing "
+                                "its native receipt reservation"
+                            )
                 except BaseException as exc:
                     failure = (
                         exc
@@ -259,7 +506,9 @@ class ThreadedInputObserver(InputObserver):
                             f"{type(self).__name__} input consumer failed: {exc}"
                         )
                     )
-                    self._fail(failure)
+                    if isinstance(item, _ObservedDelivery):
+                        self._fail_receipt(item.receipt, failure)
+                    self._abort_failed_delivery(failure)
                     return
                 finally:
                     self._delivery_queue.task_done()
@@ -271,7 +520,7 @@ class ThreadedInputObserver(InputObserver):
                     f"{type(self).__name__} input delivery setup failed: {exc}"
                 )
             )
-            self._fail(failure)
+            self._abort_failed_delivery(failure)
         finally:
             if callable(stop_hook):
                 try:
@@ -283,14 +532,33 @@ class ThreadedInputObserver(InputObserver):
                         )
                     )
 
-    def _discard_delivery_queue(self) -> None:
+    def _abort_failed_delivery(self, failure: BaseException) -> None:
+        """Close delivery and fail every receipt that cannot reach its consumer."""
+        with self._delivery_state_lock:
+            self._delivery_state = "aborted"
+            self._delivery_decided.set()
+        self._delivery_stop_requested.set()
+        self._fail(failure)
+        self._discard_delivery_queue(failure)
+        self._delivery_ready.set()
+
+    def _discard_delivery_queue(
+        self,
+        failure: BaseException | None = None,
+    ) -> None:
         """Discard every event buffered by a startup that did not commit."""
+        if failure is None:
+            failure = InputObserverError(
+                f"{type(self).__name__} discarded input from an aborted startup"
+            )
         while True:
             try:
-                self._delivery_queue.get_nowait()
+                item = self._delivery_queue.get_nowait()
             except queue.Empty:
                 return
             else:
+                if isinstance(item, _ObservedDelivery):
+                    self._fail_receipt(item.receipt, failure)
                 self._delivery_queue.task_done()
 
     def _abort_delivery_start(self) -> None:
@@ -324,6 +592,7 @@ class ThreadedInputObserver(InputObserver):
                 "previous lifecycle; stop it or create a new observer"
             )
         self._delivery_queue = queue.Queue(maxsize=self.delivery_queue_size)
+        self._delivery_ready.clear()
         self._delivery_stop_requested.clear()
         self._delivery_decided.clear()
         with self._delivery_state_lock:
@@ -461,6 +730,17 @@ class ThreadedInputObserver(InputObserver):
             self._commit_delivery_start()
         except BaseException as exc:
             self._abort_start(exc)
+        if not self._delivery_ready.wait(self.startup_timeout):
+            self._abort_start(
+                InputObserverError(
+                    f"{type(self).__name__} delivery setup did not become ready within "
+                    f"{self.startup_timeout:.1f}s"
+                )
+            )
+        try:
+            self.check_health()
+        except BaseException as exc:
+            self._abort_start(exc)
 
     def _abort_start(
         self,
@@ -517,6 +797,12 @@ class ThreadedInputObserver(InputObserver):
             )
         else:
             self._thread = None
+        incomplete_receipt = InputObserverError(
+            f"{type(self).__name__} stopped before reserved native input "
+            "reached delivery"
+        )
+        if self._fail_unqueued_receipts(incomplete_receipt):
+            self._store_failure(incomplete_receipt)
         self._stop_delivery()
         raise primary
 
@@ -563,6 +849,12 @@ class ThreadedInputObserver(InputObserver):
                 )
         else:
             self._thread = None
+        incomplete_receipt = InputObserverError(
+            f"{type(self).__name__} stopped before reserved native input "
+            "reached delivery"
+        )
+        if self._fail_unqueued_receipts(incomplete_receipt):
+            self._store_failure(incomplete_receipt)
         self._stop_delivery()
         if primary is not None:
             with self._failure_lock:

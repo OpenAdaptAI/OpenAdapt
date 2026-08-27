@@ -340,6 +340,59 @@ def test_callbacks_emit_normalized_events_filter_injected_and_chain() -> None:
     observer.stop()
 
 
+def test_injected_transition_invalidates_an_in_flight_frame() -> None:
+    observer = make_observer(lambda _event: None)
+    observer.start()
+    cut = observer.begin_frame_capture()
+    payload = KBDLLHOOKSTRUCT(
+        vkCode=0x41,
+        scanCode=30,
+        flags=LLKHF_INJECTED,
+    )
+
+    observer._keyboard_hook_callback(
+        HC_ACTION,
+        WM_KEYDOWN,
+        ctypes.addressof(payload),
+    )
+
+    assert not observer.finish_frame_capture(cut)
+    observer.complete_frame_capture(cut)
+    observer.stop()
+
+
+def test_native_callback_active_before_frame_invalidates_the_cut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observer = make_observer(lambda _event: None)
+    callback_reserved = threading.Event()
+    release_callback = threading.Event()
+    original_enqueue = observer._enqueue_input
+
+    def hold_after_reservation(transition) -> None:
+        callback_reserved.set()
+        assert release_callback.wait(timeout=2)
+        original_enqueue(transition)
+
+    monkeypatch.setattr(observer, "_enqueue_input", hold_after_reservation)
+    observer.start()
+    payload = KBDLLHOOKSTRUCT(vkCode=0x41, scanCode=30)
+    callback_thread = threading.Thread(
+        target=observer._keyboard_hook_callback,
+        args=(HC_ACTION, WM_KEYDOWN, ctypes.addressof(payload)),
+    )
+    callback_thread.start()
+    assert callback_reserved.wait(timeout=2)
+
+    cut = observer.begin_frame_capture()
+    release_callback.set()
+    callback_thread.join(timeout=2)
+    assert not callback_thread.is_alive()
+    assert not observer.finish_frame_capture(cut)
+    observer.complete_frame_capture(cut)
+    observer.stop()
+
+
 def test_partial_setup_permission_failure_rolls_back_installed_hook() -> None:
     user32 = FakeUser32(
         hook_results=[501, 0],
@@ -725,6 +778,60 @@ def test_blocked_keyboard_translation_does_not_block_hook_or_reorder_mouse() -> 
             timestamp=222.5,
         ),
     ]
+    observer.stop()
+
+
+def test_keyboard_hook_reserves_receipt_before_translation_queue() -> None:
+    translation_entered = threading.Event()
+    translation_release = threading.Event()
+    user32 = FakeUser32(
+        translation_entered=translation_entered,
+        translation_release=translation_release,
+    )
+    reserved_timestamps = []
+    events = []
+
+    class Receipt:
+        finished = False
+
+        def fail(self, _error) -> None:
+            self.finished = True
+
+    def consume(_event) -> None:
+        raise AssertionError("reserved input must use the receipt consumer")
+
+    def reserve(timestamp):
+        reserved_timestamps.append(timestamp)
+        return Receipt()
+
+    def deliver(event, receipt) -> None:
+        events.append(event)
+        receipt.finished = True
+
+    setattr(consume, "_openadapt_input_receipt", reserve)
+    setattr(consume, "_openadapt_input_delivery", deliver)
+    observer = make_observer(
+        consume,
+        user32=user32,
+        clock=lambda: 111.25,
+    )
+    observer.start()
+    key = KBDLLHOOKSTRUCT(vkCode=0x41, scanCode=0x1E)
+
+    assert (
+        observer._keyboard_hook_callback(
+            HC_ACTION,
+            WM_KEYDOWN,
+            ctypes.addressof(key),
+        )
+        == 73
+    )
+    assert translation_entered.wait(timeout=1)
+    assert reserved_timestamps == [111.25]
+    assert events == []
+
+    translation_release.set()
+    assert wait_until(lambda: len(events) == 1)
     observer.stop()
 
 

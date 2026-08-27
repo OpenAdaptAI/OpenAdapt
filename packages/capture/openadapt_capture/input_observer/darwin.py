@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any
 
@@ -116,6 +117,8 @@ class DarwinInputObserver(ThreadedInputObserver):
         )
         self._quartz = _quartz
         self._application_services = _application_services
+        self._delivery_barrier_lock = threading.Lock()
+        self._pending_delivery_barriers = 0
         self._event_tap: Any | None = None
         self._cf_run_loop: Any | None = None
         self._run_loop_source: Any | None = None
@@ -153,6 +156,11 @@ class DarwinInputObserver(ThreadedInputObserver):
                     "macOS denied global input observation. Enable Input Monitoring "
                     "for OpenAdapt in System Settings > Privacy & Security."
                 )
+        if not self._has_active_filter_permission():
+            raise InputObserverPermissionError(
+                "macOS denied the ordered input barrier. Enable Accessibility "
+                "for OpenAdapt in System Settings > Privacy & Security."
+            )
 
         event_mask = 0
         for event_type in self._observed_event_types():
@@ -160,9 +168,9 @@ class DarwinInputObserver(ThreadedInputObserver):
 
         self._tap_callback_ref = self._event_callback
         self._event_tap = quartz.CGEventTapCreate(
-            quartz.kCGHIDEventTap,
+            quartz.kCGSessionEventTap,
             quartz.kCGHeadInsertEventTap,
-            quartz.kCGEventTapOptionListenOnly,
+            quartz.kCGEventTapOptionDefault,
             event_mask,
             self._tap_callback_ref,
             None,
@@ -174,7 +182,7 @@ class DarwinInputObserver(ThreadedInputObserver):
                     "OpenAdapt was starting"
                 )
             raise InputObserverUnavailableError(
-                "macOS could not create a listen-only Quartz event tap"
+                "macOS could not create an active Quartz event barrier"
             )
 
         self._cf_run_loop = quartz.CFRunLoopGetCurrent()
@@ -215,6 +223,19 @@ class DarwinInputObserver(ThreadedInputObserver):
             return bool(accessibility_check())
         raise InputObserverUnavailableError(
             "macOS does not expose an input-observation permission API"
+        )
+
+    def _has_active_filter_permission(self) -> bool:
+        accessibility_check = getattr(
+            self._application_services,
+            "AXIsProcessTrusted",
+            None,
+        )
+        if callable(accessibility_check):
+            return bool(accessibility_check())
+        raise InputObserverUnavailableError(
+            "macOS does not expose the Accessibility permission required for "
+            "ordered input"
         )
 
     def _observed_event_types(self) -> tuple[int, ...]:
@@ -259,6 +280,21 @@ class DarwinInputObserver(ThreadedInputObserver):
                 0.1,
                 False,
             )
+            self._complete_delivery_barriers()
+        self._complete_delivery_barriers()
+
+    def _defer_delivery_barrier(self) -> None:
+        """Keep the callback active until control returns from the CF run loop."""
+        with self._delivery_barrier_lock:
+            self._pending_delivery_barriers += 1
+
+    def _complete_delivery_barriers(self) -> None:
+        """Release callbacks only after Quartz has accepted their returned events."""
+        with self._delivery_barrier_lock:
+            pending = self._pending_delivery_barriers
+            self._pending_delivery_barriers = 0
+        for _ in range(pending):
+            self._end_native_callback()
 
     def _wake(self) -> None:
         if self._cf_run_loop is not None and self._quartz is not None:
@@ -311,7 +347,11 @@ class DarwinInputObserver(ThreadedInputObserver):
             )
             return event
 
+        callback_entered = False
         try:
+            if event_type in self._observed_event_types():
+                self._begin_native_callback()
+                callback_entered = True
             self._handle_event(event_type, event, timestamp=time.time())
         except BaseException as exc:
             failure = (
@@ -320,6 +360,23 @@ class DarwinInputObserver(ThreadedInputObserver):
                 else InputObserverError(f"macOS input callback failed: {exc}")
             )
             self._fail(failure)
+        finally:
+            if callback_entered:
+                try:
+                    # This callback is an active filter at the head of the
+                    # session event stream. Quartz cannot deliver the returned
+                    # event while Python is still inside this function. Keep
+                    # the frame barrier active until CFRunLoopRunInMode returns.
+                    self._defer_delivery_barrier()
+                except BaseException as exc:
+                    failure = (
+                        exc
+                        if isinstance(exc, InputObserverError)
+                        else InputObserverError(
+                            f"macOS input callback completion failed: {exc}"
+                        )
+                    )
+                    self._fail(failure)
         return event
 
     def _handle_event(
@@ -335,6 +392,14 @@ class DarwinInputObserver(ThreadedInputObserver):
         # for direct normalization calls makes the pure helper independently
         # testable without inventing a second observation moment.
         observed_at = timestamp
+        observed_type = event_type in self._observed_event_types()
+        if injected and observed_type:
+            self._mark_native_activity()
+            receipt = None
+        elif observed_type:
+            receipt = self._reserve_receipt(observed_at)
+        else:
+            receipt = None
 
         if event_type in self._mouse_move_event_types():
             if self.observe_mouse and self.capture_mouse_moves:
@@ -345,7 +410,8 @@ class DarwinInputObserver(ThreadedInputObserver):
                         y=y,
                         injected=injected,
                         timestamp=observed_at,
-                    )
+                    ),
+                    receipt=receipt,
                 )
             return
 
@@ -356,7 +422,7 @@ class DarwinInputObserver(ThreadedInputObserver):
             timestamp=observed_at,
         )
         if button_event is not None:
-            self._emit(button_event)
+            self._emit(button_event, receipt=receipt)
             return
 
         if event_type == quartz.kCGEventScrollWheel and self.observe_mouse:
@@ -379,7 +445,8 @@ class DarwinInputObserver(ThreadedInputObserver):
                     ),
                     injected=injected,
                     timestamp=observed_at,
-                )
+                ),
+                receipt=receipt,
             )
             return
 
@@ -391,7 +458,8 @@ class DarwinInputObserver(ThreadedInputObserver):
                         pressed=event_type == quartz.kCGEventKeyDown,
                         injected=injected,
                         timestamp=observed_at,
-                    )
+                    ),
+                    receipt=receipt,
                 )
             return
 
@@ -409,7 +477,8 @@ class DarwinInputObserver(ThreadedInputObserver):
                     injected=injected,
                     include_character=False,
                     timestamp=observed_at,
-                )
+                ),
+                receipt=receipt,
             )
 
     def _modifier_pressed(self, event: Any, keycode: int) -> bool:

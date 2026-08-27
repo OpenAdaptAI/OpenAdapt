@@ -219,8 +219,9 @@ retain window-scoped pixels and coordinates for Flow's remote visual compiler.
 **Status: implemented, with display-free unit coverage on every
 supported operating system.** The production release gate also requires live
 window capture, input injection, movement, resize, video verification, and no
-skipped tests on interactive macOS and Windows runners. A customer RDP or
-Citrix deployment still requires task- and environment-specific qualification.
+skipped tests on interactive macOS and Windows runners. Linux X11 has a separate
+opt-in live window check. A customer RDP or Citrix deployment still requires
+task- and environment-specific qualification.
 
 By default the recorder captures the full screen. Window-scoped mode records
 ONE window in that window's own pixel space. This is the mode built for
@@ -240,18 +241,20 @@ with Recorder(
     input("Perform the task, then press Enter...")
 ```
 
-`owner` matches the application (macOS: window owner name; Windows: process
-executable name) and `title` optionally disambiguates among its windows; both
-are case-insensitive substrings, mirroring how `openadapt-flow`'s
-remote-display backend identifies the same window at replay time. The
-selectors can also be set via config/environment
+`owner` matches the application. macOS uses the window owner name. Windows and
+Linux use the process executable name. `title` optionally disambiguates among
+the application's windows. Both selectors are case-insensitive substrings,
+matching how `openadapt-flow` identifies the same window at replay time. The
+selectors can also be set through config or environment
 (`RECORD_WINDOW_OWNER` / `RECORD_WINDOW_TITLE`).
 
 In this mode:
 
 - **Frames are the target window's pixels.** macOS captures the window's own
   buffer (`CGWindowListCreateImage`, the identical call flow's replay uses);
-  Windows grabs the window's screen region, so keep the window unoccluded.
+  Linux X11 reads an XComposite named-window pixmap. It doesn't use a root
+  screenshot, so another window cannot replace the target pixels. Windows
+  grabs the window's screen region, so keep the window unoccluded.
 - **Input coordinates are translated at capture time** into the captured
   frame's pixel space (`pixel = (global_point - window_origin) * scale`, the
   exact inverse of the replay mapping). Input outside the window records
@@ -262,6 +265,13 @@ In this mode:
   (`CaptureSession.window_capture`), and the window is re-resolved every
   frame with bounds changes recorded as window events, a bounds timeline
   converters can use to be exact even when the window moves.
+- **Each frame has one ordered geometry identity.** Current window captures
+  store the frame and its window event under the same source ordinal. An action
+  stores a later ordinal and names the exact earlier pair it used. The pair
+  binds the process start identity, display topology, bounds, scale, fixed
+  viewport, and geometry generation. Recorder shutdown retains one final frame
+  after input has stopped, so a consumer can select an exact after-action frame
+  by ordinal instead of by nearest timestamp.
 - **Window movement and resize are supported.** The first frame fixes the
   encoded video size. Later source frames scale to fit and letterbox into that
   viewport. Input uses the exact current bounds and content rectangle. No frame
@@ -273,9 +283,23 @@ In this mode:
   lost window, capture failure, or unexpected output-frame size fails the
   session instead of producing complete-looking media with an evidence gap.
 
+Linux window mode requires an X11 session with EWMH and XComposite. Capture
+won't start window mode in a native Wayland or XWayland-only session. A future
+Wayland producer must bind the portal-selected window, its pixel stream, and
+event-time coordinates before it can replace this refusal.
+
 Note for converters: window-mode coordinates are already in captured-frame
 pixels (`coordinate_space == "window_pixels"`); do not rescale them by
 `pixel_ratio`.
+
+After every producer and writer has stopped, `Recorder` verifies the database
+and writes `capture-artifact-manifest.json` plus `capture-terminal.json`. The
+terminal binds the complete artifact inventory, event counts, final source
+ordinal, capture session identity, and completion time. A current native
+consumer should use `CaptureSession.load_verified()`. It checks the seal, copies
+the exact artifacts into a private snapshot, and opens the copied database in
+SQLite immutable read-only mode. A current window capture without this seal is
+incomplete and must not be compiled as native geometry evidence.
 
 ## Multiple monitors
 
@@ -413,6 +437,14 @@ permissions:
 
 ```bash
 uv run pytest -m slow
+```
+
+The Linux X11 window check also requires an explicit target:
+
+```bash
+OPENADAPT_CAPTURE_LINUX_WINDOW_QUALIFICATION=1 \
+OPENADAPT_WINDOW_SMOKE_OWNER=citrix \
+uv run pytest tests/test_window_capture_linux.py -m slow
 ```
 
 ## License

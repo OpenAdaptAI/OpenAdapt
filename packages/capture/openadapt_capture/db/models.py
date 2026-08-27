@@ -95,14 +95,21 @@ class ActionEvent(Base):
     __tablename__ = "action_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
+    source_ordinal = sa.Column(sa.Integer)
     name = sa.Column(sa.String)
     timestamp = sa.Column(ForceFloat)
     recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     screenshot_timestamp = sa.Column(ForceFloat)
+    screenshot_source_ordinal = sa.Column(sa.Integer)
     screenshot_id = sa.Column(sa.ForeignKey("screenshot.id"))
+    after_screenshot_timestamp = sa.Column(ForceFloat)
+    after_screenshot_source_ordinal = sa.Column(sa.Integer)
     window_event_timestamp = sa.Column(ForceFloat)
+    window_event_source_ordinal = sa.Column(sa.Integer)
     window_event_id = sa.Column(sa.ForeignKey("window_event.id"))
+    after_window_event_timestamp = sa.Column(ForceFloat)
+    after_window_event_source_ordinal = sa.Column(sa.Integer)
     browser_event_timestamp = sa.Column(ForceFloat)
     browser_event_id = sa.Column(sa.ForeignKey("browser_event.id"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
@@ -127,6 +134,11 @@ class ActionEvent(Base):
     # Versioned optional accessibility evidence captured at action time.
     # Nullable + additive migration keep older recording.db files readable.
     structural_observation = sa.Column(sa.JSON)
+    # Exact native geometry generation bound to the action's retained frame.
+    # Nullable keeps legacy and full-desktop captures readable.
+    window_geometry_generation = sa.Column(sa.Integer)
+    # Exact geometry generation paired with the first retained after frame.
+    after_window_geometry_generation = sa.Column(sa.Integer)
     disabled = sa.Column(sa.Boolean, default=False)
 
     children = sa.orm.relationship("ActionEvent")
@@ -167,6 +179,7 @@ class WindowEvent(Base):
     __tablename__ = "window_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
+    source_ordinal = sa.Column(sa.Integer)
     recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     timestamp = sa.Column(ForceFloat)
@@ -188,6 +201,7 @@ class BrowserEvent(Base):
     __tablename__ = "browser_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
+    source_ordinal = sa.Column(sa.Integer)
     recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     message = sa.Column(sa.JSON)
@@ -203,10 +217,12 @@ class Screenshot(Base):
     __tablename__ = "screenshot"
 
     id = sa.Column(sa.Integer, primary_key=True)
+    source_ordinal = sa.Column(sa.Integer)
     recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     timestamp = sa.Column(ForceFloat)
     png_data = sa.Column(sa.LargeBinary)
+    png_sha256 = sa.Column(sa.String)
     png_diff_data = sa.Column(sa.LargeBinary, nullable=True)
     png_diff_mask_data = sa.Column(sa.LargeBinary, nullable=True)
 

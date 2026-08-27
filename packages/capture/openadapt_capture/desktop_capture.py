@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import threading
 import time
 from dataclasses import dataclass
@@ -147,7 +149,7 @@ class DesktopCaptureScope:
     def snapshot(self) -> dict[str, Any]:
         """Return privacy-safe topology metadata retained with the session."""
 
-        return {
+        payload = {
             "coordinate_space": "virtual_desktop_pixels",
             "origin": [self.left, self.top],
             "viewport": [self.width, self.height],
@@ -161,6 +163,23 @@ class DesktopCaptureScope:
                 ]
                 for monitor in self.monitors
             ],
+        }
+        digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "schema_domain": "openadapt.capture.display-topology/v1",
+                    **payload,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        return {
+            "schema_version": "openadapt.capture.display-topology/v1",
+            **payload,
+            "topology_sha256": digest,
         }
 
 

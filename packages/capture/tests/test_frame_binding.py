@@ -20,7 +20,8 @@ import pytest
 from PIL import Image
 
 from openadapt_capture import video
-from openadapt_capture.capture import Action
+from openadapt_capture.capture import Action, CaptureSession
+from openadapt_capture.db import create_db, crud
 from openadapt_capture.events import (
     KeyDownEvent,
     KeyTypeEvent,
@@ -49,11 +50,13 @@ def test_timing_box_round_trips_exact_capture_bindings(tmp_path):
     path.write_bytes(b"\x00\x00\x00\x08ftyp")
     frames = [(0, 0.0), (3, 3 / 24), (4, 4 / 24)]
     captures = [(0, 1000.5), (3, 1001.25)]
+    sources = [(0, 1), (3, 4)]
     video._append_timing_box(
         path,
         fps=Fraction(24),
         frames=frames,
         captures=captures,
+        sources=sources,
     )
 
     fps, read_frames, read_captures = video._read_timing_box(path)
@@ -62,6 +65,7 @@ def test_timing_box_round_trips_exact_capture_bindings(tmp_path):
     # JSON float round-trip preserves the double exactly.
     assert read_captures == captures
     assert read_captures[1][1] == 1001.25
+    assert video._read_timing_metadata(path)[3] == sources
 
 
 def test_timing_box_without_bindings_reads_as_none(tmp_path):
@@ -178,10 +182,9 @@ def test_extract_exact_frame_decodes_the_bound_index(tmp_path, monkeypatch):
     assert frame.size == (2, 1)
 
 
-def test_extract_exact_frame_prefers_the_first_duplicate_binding(
-    tmp_path, monkeypatch
+def test_extract_exact_frame_refuses_an_ambiguous_timestamp_binding(
+    tmp_path,
 ):
-    """The duplicated first frame binds twice; decode its first index."""
     executable = tmp_path / "ffmpeg"
     executable.write_bytes(b"fake")
     path = tmp_path / "capture.mp4"
@@ -192,14 +195,37 @@ def test_extract_exact_frame_prefers_the_first_duplicate_binding(
         frames=[(0, 0.0), (1, 1 / 24)],
         captures=[(0, 500.0), (1, 500.0)],
     )
+    with pytest.raises(LookupError, match="2 frame bindings"):
+        video.extract_exact_frame(path, 500.0, ffmpeg_path=executable)
+
+
+def test_extract_exact_frame_decodes_one_source_ordinal(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    path = tmp_path / "capture.mp4"
+    path.write_bytes(b"\x00\x00\x00\x08ftyp")
+    video._append_timing_box(
+        path,
+        fps=Fraction(24),
+        frames=[(0, 0.0), (1, 1 / 24)],
+        captures=[(0, 500.0)],
+        sources=[(0, 7), (1, 9)],
+    )
     decoded = {}
     monkeypatch.setattr(
         video,
         "_extract_frame_index_png",
         lambda _path, index, _provision: decoded.setdefault("index", index),
     )
-    video.extract_exact_frame(path, 500.0, ffmpeg_path=executable)
-    assert decoded["index"] == 0
+
+    video.extract_exact_frame(
+        path,
+        500.0,
+        source_ordinal=9,
+        ffmpeg_path=executable,
+    )
+
+    assert decoded["index"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +296,7 @@ def _png_bytes(color: str = "black") -> bytes:
     import io
 
     output = io.BytesIO()
-    Image.new("RGB", (2, 2), color).save(output, format="PNG")
+    Image.new("RGB", (2, 1), color).save(output, format="PNG")
     return output.getvalue()
 
 
@@ -297,13 +323,14 @@ def test_stage_frame_binds_only_newly_captured_frames(tmp_path, monkeypatch):
     blue = Image.new("RGB", (2, 1), "blue")
 
     # Frame at pts 27 fills three PTS slots (two gap fillers + itself).
-    stage.stage_frame(red, 24, capture_timestamp=111.0)
-    stage.stage_frame(blue, 27, capture_timestamp=113.5)
+    stage.stage_frame(red, 24, capture_timestamp=111.0, source_ordinal=1)
+    stage.stage_frame(blue, 27, capture_timestamp=113.5, source_ordinal=4)
     stage.close()
 
     _, logical, captures = video._read_timing_box(output)
     assert [index for index, _ in logical] == [0, 3]
     assert captures == [(0, 111.0), (3, 113.5)]
+    assert video._read_timing_metadata(output)[3] == [(0, 1), (3, 4)]
 
 
 def test_stage_frame_refuses_a_non_finite_capture_timestamp(tmp_path, monkeypatch):
@@ -328,29 +355,60 @@ def _click_pair(down_ts=10.0, up_ts=10.05, down_bound=9.9, up_bound=10.0):
     return down, up
 
 
-def test_click_merge_keeps_the_up_childs_binding():
+def test_click_merge_keeps_the_down_childs_before_binding():
     down, up = _click_pair()
     (merged,) = merge_consecutive_mouse_click_events([down, up])
     assert isinstance(merged, MouseClickEvent)
-    assert merged.screenshot_timestamp == 10.0
+    assert merged.screenshot_timestamp == 9.9
 
 
-def test_drag_merge_keeps_the_final_bindings():
+def test_click_merge_keeps_the_terminal_childs_source_and_after_bindings():
+    down = MouseDownEvent(
+        timestamp=10.0,
+        source_ordinal=2,
+        x=1.0,
+        y=2.0,
+        button="left",
+        screenshot_timestamp=9.9,
+        screenshot_source_ordinal=1,
+        after_screenshot_timestamp=10.0,
+        after_screenshot_source_ordinal=3,
+    )
+    up = MouseUpEvent(
+        timestamp=10.05,
+        source_ordinal=4,
+        x=1.0,
+        y=2.0,
+        button="left",
+        screenshot_timestamp=10.0,
+        screenshot_source_ordinal=3,
+        after_screenshot_timestamp=10.1,
+        after_screenshot_source_ordinal=5,
+    )
+
+    (merged,) = merge_consecutive_mouse_click_events([down, up])
+
+    assert merged.source_ordinal == 4
+    assert merged.screenshot_source_ordinal == 1
+    assert merged.after_screenshot_source_ordinal == 5
+
+
+def test_drag_merge_keeps_the_initial_before_binding():
     down = MouseDownEvent(timestamp=1.0, x=1.0, y=2.0, button="left", screenshot_timestamp=0.9)
     move = MouseMoveEvent(timestamp=1.5, x=30.0, y=30.0, screenshot_timestamp=1.6)
     up = MouseUpEvent(timestamp=2.0, x=30.0, y=30.0, button="left", screenshot_timestamp=2.0)
     (drag,) = detect_drag_events([down, move, up])
     assert isinstance(drag, MouseDragEvent)
-    assert drag.screenshot_timestamp == 2.0
+    assert drag.screenshot_timestamp == 0.9
 
 
-def test_type_merge_keeps_the_last_key_binding():
+def test_type_merge_keeps_the_first_key_before_binding():
     first = KeyDownEvent(timestamp=20.0, key_char="a", screenshot_timestamp=19.5)
     second = KeyDownEvent(timestamp=21.0, key_char="b", screenshot_timestamp=20.75)
     (merged,) = merge_consecutive_keyboard_events([first, second])
     assert isinstance(merged, KeyTypeEvent)
     assert merged.text == "ab"
-    assert merged.screenshot_timestamp == 20.75
+    assert merged.screenshot_timestamp == 19.5
 
 
 def test_merge_leaves_legacy_children_unbound():
@@ -367,11 +425,16 @@ def test_merge_leaves_legacy_children_unbound():
 
 class _StubCapture:
     def __init__(self):
-        self.exact_calls: list[float] = []
+        self.exact_calls: list[tuple[float, int | None]] = []
         self.lenient_calls: list[float] = []
 
-    def get_exact_frame(self, capture_timestamp: float) -> Image.Image:
-        self.exact_calls.append(capture_timestamp)
+    def get_exact_frame(
+        self,
+        capture_timestamp: float,
+        *,
+        source_ordinal: int | None = None,
+    ) -> Image.Image:
+        self.exact_calls.append((capture_timestamp, source_ordinal))
         return Image.new("RGB", (1, 1), "red")
 
     def get_frame_at(self, timestamp: float) -> Image.Image:
@@ -384,9 +447,101 @@ def test_action_screenshot_uses_exact_binding():
     _, up = _click_pair()
     action = Action(event=up, _capture=stub)
     image = action.screenshot
-    assert stub.exact_calls == [10.0]
+    assert stub.exact_calls == [(10.0, None)]
     assert stub.lenient_calls == []
     assert image.getpixel((0, 0)) == (255, 0, 0)
+
+
+def test_action_after_screenshot_uses_exact_binding():
+    stub = _StubCapture()
+    event = MouseUpEvent(
+        timestamp=10.05,
+        x=1.0,
+        y=2.0,
+        button="left",
+        after_screenshot_timestamp=10.1,
+        after_screenshot_source_ordinal=5,
+    )
+
+    image = Action(event=event, _capture=stub).after_screenshot
+
+    assert image is not None
+    assert stub.exact_calls == [(10.1, 5)]
+    assert stub.lenient_calls == []
+    assert image.getpixel((0, 0)) == (255, 0, 0)
+
+
+def test_capture_session_joins_database_action_to_exact_mp4_source_frame(
+    tmp_path,
+    monkeypatch,
+):
+    capture_dir = tmp_path / "capture"
+    capture_dir.mkdir()
+    engine, session_factory = create_db(str(capture_dir / "recording.db"))
+    session = session_factory()
+    recording = crud.insert_recording(
+        session,
+        {
+            "timestamp": 1.0,
+            "monitor_width": 2,
+            "monitor_height": 1,
+            "double_click_interval_seconds": 0.5,
+            "double_click_distance_pixels": 5,
+            "platform": "test",
+            "task_description": "exact media binding",
+        },
+    )
+    crud.insert_screenshot(
+        session,
+        recording,
+        5.0,
+        {"source_ordinal": 7, "png_data": _png_bytes("red")},
+    )
+    crud.insert_action_event(
+        session,
+        recording,
+        6.0,
+        {
+            "source_ordinal": 8,
+            "name": "click",
+            "mouse_x": 1,
+            "mouse_y": 1,
+            "mouse_button_name": "left",
+            "mouse_pressed": True,
+            "screenshot_timestamp": 5.0,
+            "screenshot_source_ordinal": 7,
+        },
+    )
+    session.close()
+    engine.dispose()
+
+    video_path = capture_dir / "video.mp4"
+    video_path.write_bytes(b"\x00\x00\x00\x08ftyp")
+    video._append_timing_box(
+        video_path,
+        fps=Fraction(24),
+        frames=[(0, 0.0), (3, 3 / 24)],
+        captures=[(0, 4.0), (3, 5.0)],
+        sources=[(0, 3), (3, 7)],
+    )
+    decoded = {}
+    monkeypatch.setattr(video, "resolve_ffmpeg", lambda *_args, **_kwargs: object())
+
+    def decode(_path, index, _provision):
+        decoded["index"] = index
+        return Image.new("RGB", (2, 1), "blue")
+
+    monkeypatch.setattr(
+        video,
+        "_extract_frame_index_png",
+        decode,
+    )
+
+    with CaptureSession.load(capture_dir) as capture:
+        image = next(capture.actions(include_moves=True)).screenshot
+
+    assert decoded["index"] == 3
+    assert image.getpixel((0, 0)) == (0, 0, 255)
 
 
 def test_action_screenshot_falls_back_for_legacy_events():

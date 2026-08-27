@@ -416,6 +416,225 @@ def test_async_delivery_preserves_native_receipt_timestamp_and_order() -> None:
     assert [event.timestamp for event in public_events] == [10.25, 10.5]
 
 
+def test_stop_fails_a_native_receipt_that_never_reached_delivery() -> None:
+    journal = recorder_module.OrderedEventJournal()
+
+    def consume(_event) -> None:
+        return
+
+    setattr(consume, "_openadapt_input_receipt", journal.reserve)
+    observer = _ReadyObserver(consume)
+    observer.start()
+    receipt = observer._reserve_receipt(1.0)
+
+    with pytest.raises(InputObserverError, match="stopped before reserved native input"):
+        observer.stop()
+
+    assert receipt is not None
+    assert receipt.finished
+    with pytest.raises(recorder_module.EventJournalReservationError):
+        journal.get_nowait()
+
+
+def test_terminal_frame_seal_keeps_prior_receipts_and_drops_later_input() -> None:
+    journal = recorder_module.OrderedEventJournal()
+
+    def consume(_event) -> None:
+        pytest.fail("reserved input must use the receipt consumer")
+
+    def deliver(event, receipt) -> None:
+        receipt.complete(
+            recorder_module.Event(event.timestamp, "action", {"key": event.key_char})
+        )
+
+    setattr(consume, "_openadapt_input_receipt", journal.reserve)
+    setattr(consume, "_openadapt_input_delivery", deliver)
+    observer = _ReadyObserver(consume)
+    observer.start()
+
+    accepted = ObservedKey(pressed=True, key_char="a", timestamp=1.0)
+    accepted_receipt = observer._reserve_receipt(accepted.timestamp)
+    observer.seal_frame_capture(None)
+    observer._emit_received(accepted, accepted_receipt)
+
+    outside = ObservedKey(pressed=True, key_char="b", timestamp=2.0)
+    outside_receipt = observer._reserve_receipt(outside.timestamp)
+    observer._emit_received(outside, outside_receipt)
+
+    deadline = time.monotonic() + 1
+    while not bool(getattr(accepted_receipt, "finished", False)):
+        if time.monotonic() >= deadline:
+            pytest.fail("the pre-seal receipt did not finish")
+        time.sleep(0.001)
+    observer.stop()
+
+    action = journal.get_nowait()
+    assert (action.data["key"], action.source_ordinal) == ("a", 1)
+    with pytest.raises(queue.Empty):
+        journal.get_nowait()
+
+
+def test_generic_frame_cut_rejects_dirty_pixels_and_orders_post_cut_input() -> None:
+    journal = recorder_module.OrderedEventJournal()
+
+    def consume(_event) -> None:
+        pytest.fail("reserved input must use the receipt consumer")
+
+    def deliver(event, receipt) -> None:
+        receipt.complete(
+            recorder_module.Event(event.timestamp, "action", {"key": event.key_char})
+        )
+
+    setattr(consume, "_openadapt_input_receipt", journal.reserve)
+    setattr(consume, "_openadapt_input_delivery", deliver)
+    observer = _ReadyObserver(consume)
+    observer.start()
+
+    dirty_cut = observer.begin_frame_capture()
+    dirty_event = ObservedKey(pressed=True, key_char="a", timestamp=1.0)
+    dirty_receipt = observer._reserve_receipt(dirty_event.timestamp)
+    assert not observer.finish_frame_capture(dirty_cut)
+    observer.complete_frame_capture(dirty_cut)
+    observer._emit_received(dirty_event, dirty_receipt)
+
+    clean_cut = observer.begin_frame_capture()
+    assert observer.finish_frame_capture(clean_cut)
+    reserve_started = threading.Event()
+    post_cut: dict[str, object] = {}
+
+    def reserve_post_cut_input() -> None:
+        reserve_started.set()
+        post_cut["receipt"] = observer._reserve_receipt(3.0)
+
+    reserve_thread = threading.Thread(target=reserve_post_cut_input)
+    reserve_thread.start()
+    assert reserve_started.wait(timeout=1)
+    time.sleep(0.01)
+    assert "receipt" not in post_cut
+    journal.put(recorder_module.Event(2.0, "screen", {}))
+    observer.complete_frame_capture(clean_cut)
+    reserve_thread.join(timeout=1)
+    assert not reserve_thread.is_alive()
+
+    post_cut_event = ObservedKey(pressed=True, key_char="b", timestamp=3.0)
+    observer._emit_received(post_cut_event, post_cut["receipt"])
+    deadline = time.monotonic() + 1
+    while not bool(getattr(post_cut["receipt"], "finished", False)):
+        if time.monotonic() >= deadline:
+            pytest.fail("the post-cut receipt did not finish")
+        time.sleep(0.001)
+    observer.stop()
+
+    assert [journal.get_nowait().type for _ in range(3)] == [
+        "action",
+        "screen",
+        "action",
+    ]
+
+
+def test_consumer_failure_fails_later_queued_receipts() -> None:
+    delivery_entered = threading.Event()
+    release_delivery = threading.Event()
+    receipts = []
+
+    class Receipt:
+        def __init__(self) -> None:
+            self.finished = False
+
+        def fail(self, _error) -> None:
+            self.finished = True
+
+    def consume(_event) -> None:
+        raise AssertionError("reserved input must use the receipt consumer")
+
+    def reserve(_timestamp):
+        receipt = Receipt()
+        receipts.append(receipt)
+        return receipt
+
+    def deliver(_event, _receipt) -> None:
+        delivery_entered.set()
+        assert release_delivery.wait(timeout=1)
+        raise RuntimeError("consumer failed")
+
+    setattr(consume, "_openadapt_input_receipt", reserve)
+    setattr(consume, "_openadapt_input_delivery", deliver)
+    observer = _ReadyObserver(consume)
+    observer.start()
+    first = ObservedKey(pressed=True, key_char="a", timestamp=1.0)
+    observer._emit(first, receipt=observer._reserve_receipt(first.timestamp))
+    assert delivery_entered.wait(timeout=1)
+    second = ObservedKey(pressed=False, key_char="a", timestamp=2.0)
+    observer._emit(second, receipt=observer._reserve_receipt(second.timestamp))
+    release_delivery.set()
+
+    deadline = time.monotonic() + 1
+    while not all(receipt.finished for receipt in receipts):
+        if time.monotonic() >= deadline:
+            pytest.fail("queued native receipts were not failed")
+        time.sleep(0.001)
+
+    with pytest.raises(InputObserverError, match="consumer failed"):
+        observer.stop()
+
+
+def test_delivery_start_hook_failure_fails_an_already_queued_receipt() -> None:
+    journal = recorder_module.OrderedEventJournal()
+    hook_entered = threading.Event()
+    release_hook = threading.Event()
+
+    class Callback:
+        def __call__(self, _event) -> None:
+            pytest.fail("reserved input must use the receipt consumer")
+
+        def _openadapt_input_receipt(self, timestamp):
+            return journal.reserve(timestamp)
+
+        def _openadapt_input_delivery(self, _event, _receipt) -> None:
+            pytest.fail("the failed delivery hook must prevent event delivery")
+
+        def _openadapt_delivery_thread_start(self) -> None:
+            hook_entered.set()
+            assert release_hook.wait(timeout=1)
+            raise RuntimeError("delivery start hook failed")
+
+    class SetupReceiptObserver(_ReadyObserver):
+        def _setup(self) -> None:
+            event = ObservedKey(pressed=True, key_char="a", timestamp=1.0)
+            self.receipt = self._reserve_receipt(event.timestamp)
+            self._emit_received(event, self.receipt)
+
+    observer = SetupReceiptObserver(Callback())
+    start_errors: list[BaseException] = []
+
+    def start_observer() -> None:
+        try:
+            observer.start()
+        except BaseException as exc:
+            start_errors.append(exc)
+
+    start_thread = threading.Thread(target=start_observer)
+    start_thread.start()
+    assert hook_entered.wait(timeout=1)
+    assert start_thread.is_alive()
+    release_hook.set()
+    start_thread.join(timeout=1)
+    assert not start_thread.is_alive()
+    assert len(start_errors) == 1
+    assert isinstance(start_errors[0], InputObserverError)
+    assert "delivery start hook failed" in str(start_errors[0])
+
+    deadline = time.monotonic() + 1
+    while not observer.receipt.finished:
+        if time.monotonic() >= deadline:
+            pytest.fail("delivery start failure did not fail the queued receipt")
+        time.sleep(0.001)
+
+    assert observer._delivery_queue.empty()
+    with pytest.raises(recorder_module.EventJournalReservationError):
+        journal.get_nowait()
+
+
 def test_stop_sequence_callback_can_stop_listener_from_delivery_thread(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

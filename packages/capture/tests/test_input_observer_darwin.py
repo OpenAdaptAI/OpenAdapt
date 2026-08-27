@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import threading
 import time
 from types import SimpleNamespace
 
@@ -66,8 +69,10 @@ class FakeQuartz:
     kCGEventFlagMaskSecondaryFn = 1 << 5
 
     kCGHIDEventTap = 300
+    kCGSessionEventTap = 303
     kCGHeadInsertEventTap = 301
     kCGEventTapOptionListenOnly = 302
+    kCGEventTapOptionDefault = 304
     kCFRunLoopDefaultMode = "default"
 
     def __init__(
@@ -115,9 +120,9 @@ class FakeQuartz:
         callback,
         refcon,
     ):
-        assert tap_location == self.kCGHIDEventTap
+        assert tap_location == self.kCGSessionEventTap
         assert placement == self.kCGHeadInsertEventTap
-        assert options == self.kCGEventTapOptionListenOnly
+        assert options == self.kCGEventTapOptionDefault
         assert refcon is None
         self.event_mask = event_mask
         self.callback = callback
@@ -259,13 +264,26 @@ def test_accessibility_permission_is_fallback_on_older_macos() -> None:
     assert quartz.callback is None
 
 
+def test_active_event_barrier_requires_accessibility_permission() -> None:
+    quartz = FakeQuartz()
+    observer = make_observer(
+        quartz,
+        lambda _event: None,
+        application_services=FakeApplicationServices(trusted=False),
+    )
+
+    with pytest.raises(InputObserverPermissionError, match="ordered input barrier"):
+        observer.start()
+    assert quartz.callback is None
+
+
 def test_event_tap_creation_failure_is_explicit() -> None:
     quartz = FakeQuartz(create_tap=False)
     observer = make_observer(quartz, lambda _event: None)
 
     with pytest.raises(
         InputObserverUnavailableError,
-        match="listen-only Quartz event tap",
+        match="active Quartz event barrier",
     ):
         observer.start()
 
@@ -326,6 +344,267 @@ def test_mouse_move_button_and_scroll_normalization() -> None:
         ),
         ObservedMouseScroll(x=70, y=80, dx=-2, dy=3),
     ]
+
+
+def test_injected_transition_invalidates_an_in_flight_frame() -> None:
+    quartz = FakeQuartz()
+    observer = make_observer(quartz, lambda _event: None)
+    observer.start()
+    cut = observer.begin_frame_capture()
+
+    observer._handle_event(
+        quartz.kCGEventKeyDown,
+        FakeEvent(
+            fields={
+                quartz.kCGEventSourceUnixProcessID: 4242,
+                quartz.kCGKeyboardEventKeycode: 0,
+            },
+            text="a",
+        ),
+        timestamp=1.0,
+    )
+
+    assert not observer.finish_frame_capture(cut)
+    observer.complete_frame_capture(cut)
+    observer.stop()
+
+
+def test_native_callback_active_before_frame_invalidates_the_cut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quartz = FakeQuartz()
+    observer = make_observer(quartz, lambda _event: None)
+    callback_reserved = threading.Event()
+    release_callback = threading.Event()
+    original_emit = observer._emit
+
+    def hold_after_reservation(event, *, receipt=None) -> None:
+        callback_reserved.set()
+        assert release_callback.wait(timeout=2)
+        original_emit(event, receipt=receipt)
+
+    monkeypatch.setattr(observer, "_emit", hold_after_reservation)
+    observer.start()
+    callback_thread = threading.Thread(
+        target=observer._event_callback,
+        args=(
+            None,
+            quartz.kCGEventKeyDown,
+            FakeEvent(
+                fields={
+                    quartz.kCGEventSourceUnixProcessID: 0,
+                    quartz.kCGKeyboardEventKeycode: 0,
+                },
+                text="a",
+            ),
+            None,
+        ),
+    )
+    callback_thread.start()
+    assert callback_reserved.wait(timeout=2)
+
+    cut = observer.begin_frame_capture()
+    release_callback.set()
+    callback_thread.join(timeout=2)
+    assert not callback_thread.is_alive()
+    assert not observer.finish_frame_capture(cut)
+    observer.complete_frame_capture(cut)
+    observer.stop()
+
+
+def test_frame_waits_for_quartz_to_accept_the_returned_event() -> None:
+    quartz = FakeQuartz()
+    observer = make_observer(quartz, lambda _event: None)
+
+    observer._event_callback(
+        None,
+        quartz.kCGEventKeyDown,
+        FakeEvent(
+            fields={
+                quartz.kCGEventSourceUnixProcessID: 0,
+                quartz.kCGKeyboardEventKeycode: 0,
+            },
+            text="a",
+        ),
+        None,
+    )
+    crossed_cut = observer.begin_frame_capture()
+
+    observer._complete_delivery_barriers()
+    assert not observer.finish_frame_capture(crossed_cut)
+    observer.complete_frame_capture(crossed_cut)
+
+    clean_cut = observer.begin_frame_capture()
+    assert observer.finish_frame_capture(clean_cut)
+    observer.complete_frame_capture(clean_cut)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS Quartz")
+@pytest.mark.skipif(
+    os.getenv("OPENADAPT_DARWIN_EVENT_TAP_SMOKE") != "1",
+    reason="set OPENADAPT_DARWIN_EVENT_TAP_SMOKE=1 on an interactive macOS runner",
+)
+def test_active_tap_holds_annotated_delivery_until_frame_commit() -> None:
+    import ApplicationServices
+    import Quartz
+
+    downstream_ready = threading.Event()
+    downstream_received = threading.Event()
+    downstream_stop = threading.Event()
+    barrier_entered = threading.Event()
+    marker = 0x0A0A_DA7A
+    downstream_state: dict[str, object] = {}
+
+    def downstream_callback(_proxy, _event_type, event, _refcon):
+        value = Quartz.CGEventGetIntegerValueField(
+            event,
+            Quartz.kCGEventSourceUserData,
+        )
+        if value == marker:
+            downstream_received.set()
+        return event
+
+    def downstream_main() -> None:
+        callback_ref = downstream_callback
+        event_mask = Quartz.CGEventMaskBit(Quartz.kCGEventMouseMoved)
+        tap = Quartz.CGEventTapCreate(
+            Quartz.kCGAnnotatedSessionEventTap,
+            Quartz.kCGTailAppendEventTap,
+            Quartz.kCGEventTapOptionListenOnly,
+            event_mask,
+            callback_ref,
+            None,
+        )
+        assert tap is not None
+        source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
+        assert source is not None
+        loop = Quartz.CFRunLoopGetCurrent()
+        downstream_state.update(tap=tap, source=source, loop=loop, callback=callback_ref)
+        Quartz.CFRunLoopAddSource(loop, source, Quartz.kCFRunLoopDefaultMode)
+        Quartz.CGEventTapEnable(tap, True)
+        downstream_ready.set()
+        while not downstream_stop.is_set():
+            Quartz.CFRunLoopRunInMode(
+                Quartz.kCFRunLoopDefaultMode,
+                0.05,
+                False,
+            )
+        Quartz.CGEventTapEnable(tap, False)
+        Quartz.CFRunLoopRemoveSource(loop, source, Quartz.kCFRunLoopDefaultMode)
+        Quartz.CFRunLoopSourceInvalidate(source)
+        Quartz.CFMachPortInvalidate(tap)
+
+    class BarrierProbeObserver(DarwinInputObserver):
+        def _mark_native_activity(self) -> None:
+            barrier_entered.set()
+            super()._mark_native_activity()
+
+    downstream_thread = threading.Thread(target=downstream_main, daemon=True)
+    downstream_thread.start()
+    assert downstream_ready.wait(timeout=2)
+    observer = BarrierProbeObserver(
+        lambda _event: None,
+        observe_keyboard=True,
+        observe_mouse=True,
+        capture_mouse_moves=True,
+        startup_timeout=2,
+        shutdown_timeout=2,
+        _quartz=Quartz,
+        _application_services=ApplicationServices,
+    )
+    observer.start()
+    cut = observer.begin_frame_capture()
+    assert observer.finish_frame_capture(cut)
+
+    current = Quartz.CGEventCreate(None)
+    location = Quartz.CGEventGetLocation(current)
+    event = Quartz.CGEventCreateMouseEvent(
+        None,
+        Quartz.kCGEventMouseMoved,
+        location,
+        Quartz.kCGMouseButtonLeft,
+    )
+    Quartz.CGEventSetIntegerValueField(
+        event,
+        Quartz.kCGEventSourceUserData,
+        marker,
+    )
+    Quartz.CGEventPost(Quartz.kCGSessionEventTap, event)
+
+    try:
+        assert barrier_entered.wait(timeout=2)
+        assert not downstream_received.wait(timeout=0.1)
+        observer.complete_frame_capture(cut)
+        assert downstream_received.wait(timeout=2)
+    finally:
+        observer.complete_frame_capture(cut)
+        observer.stop()
+        downstream_stop.set()
+        loop = downstream_state.get("loop")
+        if loop is not None:
+            Quartz.CFRunLoopStop(loop)
+        downstream_thread.join(timeout=2)
+    assert not downstream_thread.is_alive()
+
+
+def test_event_handler_reserves_receipt_before_mouse_normalization() -> None:
+    quartz = FakeQuartz()
+    location_entered = threading.Event()
+    release_location = threading.Event()
+    reserved_timestamps = []
+    events = []
+
+    def blocked_location(event):
+        location_entered.set()
+        assert release_location.wait(timeout=1)
+        return event.location
+
+    quartz.CGEventGetLocation = blocked_location
+
+    class Receipt:
+        finished = False
+
+        def fail(self, _error) -> None:
+            self.finished = True
+
+    def consume(_event) -> None:
+        raise AssertionError("reserved input must use the receipt consumer")
+
+    def reserve(timestamp):
+        reserved_timestamps.append(timestamp)
+        return Receipt()
+
+    def deliver(event, receipt) -> None:
+        events.append(event)
+        receipt.finished = True
+
+    setattr(consume, "_openadapt_input_receipt", reserve)
+    setattr(consume, "_openadapt_input_delivery", deliver)
+    observer = make_observer(quartz, consume)
+    observer.start()
+    handler = threading.Thread(
+        target=observer._handle_event,
+        args=(
+            quartz.kCGEventMouseMoved,
+            FakeEvent(fields={quartz.kCGEventSourceUnixProcessID: 0}),
+        ),
+        kwargs={"timestamp": 111.25},
+    )
+    handler.start()
+
+    assert location_entered.wait(timeout=1)
+    assert reserved_timestamps == [111.25]
+    assert events == []
+
+    release_location.set()
+    handler.join(timeout=1)
+    deadline = time.monotonic() + 1
+    while not events:
+        if time.monotonic() >= deadline:
+            pytest.fail("reserved macOS event was not delivered")
+        time.sleep(0.001)
+    observer.stop()
 
 
 def test_move_filter_does_not_disable_buttons() -> None:

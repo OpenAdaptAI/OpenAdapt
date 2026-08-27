@@ -42,13 +42,22 @@ One recording has these stages:
 2. Resolve the initial native-window or virtual-desktop coordinate scope.
 3. Create the per-capture SQLite database and media staging path.
 4. Observe native input and screen frames on separate workers.
-5. Put all observed events onto one timestamped processing queue.
-6. Associate actionable input with the preceding screen observation and
-   optional structural observation.
-7. Stream RGB frames to a separately provisioned FFmpeg process.
-8. Close, verify, and atomically promote the MP4. Retain an incomplete partial
+5. Reserve each observation in one ordered source journal before any optional
+   structural lookup. A failed reservation fails the session; later events
+   cannot pass it.
+6. For a native window, enqueue each frame and its window geometry as one
+   source-ordinal pair. Publish that geometry to input observers only after the
+   pair enters the journal.
+7. Bind each actionable input to the last published frame pair and optional
+   structural observation. Retain one ordinal-later frame after input stops.
+8. Stream RGB frames to a separately provisioned FFmpeg process.
+9. Close, verify, and atomically promote the MP4. Retain an incomplete partial
    file on an encoder failure and never report it as complete media.
-9. Post-process raw input into the public action view.
+10. Post-process raw input into the public action view. A merged action keeps
+    its terminal primitive's source binding and refuses mixed geometry epochs.
+11. Reconcile committed rows with producer counts, verify the v2 frame/action
+    relations, inventory every immutable artifact, and write the completion
+    seal.
 
 A worker failure stops the session and propagates through the recording
 boundary. A frame whose size violates the fixed stream contract is an error. It
@@ -91,6 +100,32 @@ window changed size.
 Input outside the selected window remains out of range. Capture does not clamp
 it into a valid-looking target coordinate.
 
+Each current window frame carries a process-bound window identity, display
+topology digest, and geometry epoch digest. The window and screenshot rows use
+the same source ordinal. An action uses a later ordinal and names the exact pair
+that supplied its coordinates. Capture refuses process replacement, topology
+drift, off-screen state, mixed generations, or a missing pair.
+
+## Completion and consumer boundary
+
+A recorder session becomes complete only after all producers and writers have
+stopped and the database has passed its integrity and relationship checks.
+Capture then writes two create-only files:
+
+- `capture-artifact-manifest.json` inventories every immutable regular file by
+  relative path, size, and SHA-256 digest.
+- `capture-terminal.json` binds that manifest, the source session identity,
+  event counts, last source ordinal, and completion interval.
+
+Both files use canonical JSON and domain-separated digests. Mutable local
+control state is not part of the artifact inventory.
+
+`CaptureSession.load_verified()` checks the complete inventory before it opens
+the database. It copies the verified files to a private temporary directory and
+opens the copied database with SQLite `mode=ro&immutable=1`. It never migrates
+or writes the source capture. A current v2 window session without the terminal
+and manifest is incomplete evidence.
+
 ## Native input
 
 Capture records these primitive event classes:
@@ -104,6 +139,10 @@ Platform observers have one ordered callback contract. They identify injected
 events when the operating system provides that information. Capture can exclude
 its own injected qualification events from a normal session. It refuses an
 incomplete observer startup instead of reporting partial coverage as complete.
+On macOS, an active pass-through session tap holds downstream event delivery
+only while Capture commits a clean frame. This requires both Input Monitoring
+and Accessibility permission. The interactive macOS qualification proves that
+an annotated downstream event cannot pass that cut before the frame commit.
 
 The post-processing layer merges primitive events into higher-level actions.
 The compiler remains responsible for refusing action forms that its selected

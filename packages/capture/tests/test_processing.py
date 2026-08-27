@@ -247,6 +247,73 @@ class TestMergeConsecutiveMouseClickEvents:
         assert len(result) == 2
         assert all(isinstance(r, MouseClickEvent) for r in result)
 
+    def test_same_timestamp_does_not_skip_an_unrelated_event(self):
+        down = MouseDownEvent(
+            timestamp=1.0,
+            source_ordinal=1,
+            x=100.0,
+            y=100.0,
+            button=MouseButton.LEFT,
+        )
+        unrelated = KeyDownEvent(
+            timestamp=1.1,
+            source_ordinal=2,
+            key_char="a",
+        )
+        up = MouseUpEvent(
+            timestamp=1.1,
+            source_ordinal=3,
+            x=100.0,
+            y=100.0,
+            button=MouseButton.LEFT,
+        )
+
+        result = merge_consecutive_mouse_click_events([down, unrelated, up])
+
+        assert len(result) == 2
+        assert isinstance(result[0], MouseClickEvent)
+        assert result[1] is unrelated
+
+    def test_same_timestamp_clicks_use_source_identity(self):
+        events = [
+            MouseDownEvent(
+                timestamp=1.0,
+                source_ordinal=1,
+                x=100.0,
+                y=100.0,
+                button=MouseButton.LEFT,
+            ),
+            MouseUpEvent(
+                timestamp=1.1,
+                source_ordinal=2,
+                x=100.0,
+                y=100.0,
+                button=MouseButton.LEFT,
+            ),
+            MouseDownEvent(
+                timestamp=1.0,
+                source_ordinal=3,
+                x=200.0,
+                y=200.0,
+                button=MouseButton.RIGHT,
+            ),
+            MouseUpEvent(
+                timestamp=1.1,
+                source_ordinal=4,
+                x=200.0,
+                y=200.0,
+                button=MouseButton.RIGHT,
+            ),
+        ]
+
+        result = merge_consecutive_mouse_click_events(events)
+
+        assert len(result) == 2
+        assert [event.button for event in result] == [
+            MouseButton.LEFT,
+            MouseButton.RIGHT,
+        ]
+
 
 class TestDetectDragEvents:
     """Tests for detect_drag_events."""
