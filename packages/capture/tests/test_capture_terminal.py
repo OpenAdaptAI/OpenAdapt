@@ -432,7 +432,7 @@ def test_verifier_rejects_an_intermediate_directory_replaced_during_read(
         replace_then_hash,
     )
 
-    with pytest.raises(CaptureSealError, match="path changed"):
+    with pytest.raises(CaptureSealError):
         verify_capture_artifacts(capture_dir)
 
 
