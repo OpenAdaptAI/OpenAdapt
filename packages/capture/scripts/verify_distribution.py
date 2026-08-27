@@ -22,8 +22,10 @@ FORBIDDEN_ARCHIVE_PATHS = (
     "chrome_extension/",
     "docs/images/demo.gif",
     "docs/whisper-integration-plan.md",
+    "examples/",
     "scripts/",
     "tests/",
+    "uv.lock",
     "openadapt_capture/browser_bridge.py",
 )
 

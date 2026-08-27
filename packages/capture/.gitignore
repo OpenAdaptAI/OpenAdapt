@@ -43,9 +43,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# uv
-uv.lock
-
 # Environment variables (contains API keys)
 .env
 

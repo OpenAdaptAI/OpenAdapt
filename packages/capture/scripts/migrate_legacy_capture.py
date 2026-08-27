@@ -18,14 +18,15 @@ One thing is reconstructed rather than recovered. A legacy capture stored its
 frames in ``video.mp4`` and kept only a curated subset as PNGs under
 ``screenshots/``; nothing recorded which ``screen.frame`` each PNG came from. So
 frame timestamps are distributed evenly across the recording window. Action
-timestamps are exact, and every action is attached to the screenshot nearest in
-time. That is accurate enough for a demo fixture and is not evidence of
-anything; do not use a migrated capture for measurement.
+timestamps are retained, and every action is attached to the newest synthetic
+frame timestamp at or before it. The recording config marks the result as
+reconstructed and ineligible for qualification. Do not seal or measure it.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sqlite3
@@ -71,6 +72,14 @@ def migrate(src: Path, dest: Path) -> dict:
 
     started = float(cap["started_at"])
     ended = float(cap["ended_at"] or started)
+    source_capture_sha256 = hashlib.sha256((src / "capture.db").read_bytes()).hexdigest()
+    source_screenshots = [
+        {
+            "name": shot.name,
+            "sha256": hashlib.sha256(shot.read_bytes()).hexdigest(),
+        }
+        for shot in shots
+    ]
     recording = Recording(
         timestamp=started,
         monitor_width=cap["screen_width"],
@@ -81,6 +90,20 @@ def migrate(src: Path, dest: Path) -> dict:
         double_click_interval_seconds=cap["double_click_interval_seconds"],
         double_click_distance_pixels=cap["double_click_distance_pixels"],
         video_start_time=cap["video_start_time"],
+        config={
+            "fixture": {
+                "schema_version": "openadapt.capture.reconstructed-legacy-fixture/v1",
+                "synthetic": False,
+                "reconstructed": True,
+                "sealed": False,
+                "qualification_eligible": False,
+                "frame_timing": "evenly_distributed_over_retained_recording_window",
+                "action_timing": "retained_from_legacy_event_rows",
+                "action_binding": "newest_reconstructed_frame_timestamp_at_or_before_action",
+                "source_capture_db_sha256": source_capture_sha256,
+                "source_screenshots": source_screenshots,
+            }
+        },
     )
     session.add(recording)
     session.flush()
@@ -120,12 +143,9 @@ def migrate(src: Path, dest: Path) -> dict:
             continue
         pending.append((float(row["timestamp"]), name, pressed, payload))
 
-    # source_ordinal is one sequence over the whole capture stream. An action
-    # must carry a strictly greater ordinal than the frame it is bound to,
-    # because the frame is the evidence captured before the action happened
-    # (capture.py enforces this for sealed actions). So interleave frames and
-    # actions by time, number them once, and bind each action to the newest
-    # frame at or before it.
+    # The ordinal relation is only a reconstructed fixture ordering. It does
+    # not prove that the curated frame preceded the native action. Interleave
+    # rows by their declared timestamps and retain that limitation in config.
     timeline = [(started + i * stride, 0, i) for i in range(len(shots))]
     timeline += [(when, 1, idx) for idx, (when, *_rest) in enumerate(pending)]
     timeline.sort(key=lambda entry: (entry[0], entry[1]))
@@ -134,7 +154,7 @@ def migrate(src: Path, dest: Path) -> dict:
     action_ordinal: dict[int, int] = {}
     action_binding: dict[int, int] = {}
     latest_shot: int | None = None
-    for ordinal, (_when, kind, index) in enumerate(timeline):
+    for ordinal, (_when, kind, index) in enumerate(timeline, start=1):
         if kind == 0:
             shot_ordinal[index] = ordinal
             latest_shot = index
@@ -144,12 +164,14 @@ def migrate(src: Path, dest: Path) -> dict:
 
     screenshots = []
     for index, png in enumerate(shots):
+        png_data = png.read_bytes()
         shot = Screenshot(
             recording_id=recording.id,
             recording_timestamp=started,
             timestamp=started + index * stride,
             source_ordinal=shot_ordinal[index],
-            png_data=png.read_bytes(),
+            png_data=png_data,
+            png_sha256=hashlib.sha256(png_data).hexdigest(),
         )
         session.add(shot)
         screenshots.append(shot)
@@ -183,7 +205,10 @@ def migrate(src: Path, dest: Path) -> dict:
         counts[name] = counts.get(name, 0) + 1
 
     session.commit()
+    bind = session.get_bind()
     session.close()
+    if bind is not None:
+        bind.dispose()
     legacy.close()
     return {
         "destination": str(db_path),

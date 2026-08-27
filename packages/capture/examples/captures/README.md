@@ -1,38 +1,37 @@
-# Demo captures
+# Public demo captures
 
-Two small captures used as fixtures. The screenshot workflow in
-`openadapt-viewer` reads them to regenerate the viewer images embedded in that
-project's README, so the documented UI does not drift from the shipped one.
+The two captures in this directory drive the screenshot workflow in
+`openadapt-viewer`. The generator uses public JSON specs and OpenAdapt-owned
+drawing code. It doesn't read a desktop, personal account, voice, transcript,
+device name, or third-party image asset.
 
-| capture | what it shows | frames | actions |
-|---|---|---|---|
-| `turn-off-nightshift` | macOS System Settings, turning Night Shift off | 20 | 20 |
-| `demo_new` | Spotlight opening Calculator, computing 2 × 3 | 14 | 14 |
+| capture | synthetic workflow | frames | actions |
+|---|---|---:|---:|
+| `turn-off-nightshift` | change a display setting in a generated settings UI | 20 | 20 |
+| `demo_new` | compute `2 X 3` in a generated calculator UI | 14 | 14 |
 
-Each directory holds a single `recording.db`. Frames live in it as
-`Screenshot.png_data`, so nothing else is needed to load or render a capture.
+Run this command after a source spec or the renderer changes:
 
-## Provenance, and one honest caveat
+```console
+uv sync --locked --no-install-project --python 3.12.13
+uv run --locked --no-sync python -m scripts.generate_synthetic_captures
+```
 
-Both were recorded in December 2025, before PR #28 (2026-07-17) replaced the
-bespoke `capture.db` with the current SQLAlchemy `recording.db`. They were
-converted with `scripts/migrate_legacy_capture.py`.
+The generator writes `recording.db`, `capture-state.json`,
+`synthetic-provenance.json`, `capture-artifact-manifest.json`, and
+`capture-terminal.json`. `CaptureSession.load_verified()` checks the terminal,
+manifest, database rows, frame hashes, source ordinals, and each before/after
+action binding. CI runs the generator again and compares every output byte.
 
-Actions are exact: real timestamps, real coordinates, real keys, mapped through
-the correspondence documented in `openadapt_capture/events.py`.
+## Evidence boundary
 
-**Frame timestamps are reconstructed, not recovered.** A legacy capture kept its
-frames in `video.mp4` and retained only a curated subset as PNGs; nothing
-recorded which frame each PNG came from. The converter spreads them evenly
-across the real recording window and binds each action to the newest frame at or
-before it. That is fine for a fixture and for a screenshot of the viewer.
+The JSON source declares every synthetic timestamp and action coordinate. The
+provenance file records the exact source and generator hashes, the full frame
+timeline, and every action's two frame ordinals. The database repeats that
+provenance in its recording config. The provenance also binds the exact SQLite
+and SQLAlchemy builder versions that produce the committed database bytes.
 
-**Do not measure anything with these.** Frame timing is approximate by
-construction. Record a fresh capture for anything that needs real timing.
-
-One key event in `turn-off-nightshift` carried no key identity at all and was
-dropped, because `capture.py` refuses such an event and is right to.
-
-Audio and video are deliberately absent. Both repositories are public, the
-original recordings contain the founder's voice, and the workflow reads neither.
-`create_html(..., include_audio=True)` degrades cleanly when there is no audio.
+The seal proves artifact integrity. These fixtures don't measure an operating
+system, application, recorder hook, or human action. Their machine-readable
+provenance sets `qualification_eligible` to `false`, so they cannot support a
+workflow qualification claim.
