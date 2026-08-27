@@ -29,9 +29,9 @@ operation exports it.
 | Browser | `openadapt-flow` owns the supported Playwright recorder. The Chrome extension and bridge in this repository are source-only development prototypes and are excluded from Capture release artifacts. |
 
 Capture supports native input observation on macOS, Windows, and X11 Linux.
-Windows can also retain UI Automation evidence at action time. The structural
-schema permits another injected provider, but the package does not currently
-ship macOS Accessibility or Linux AT-SPI structural observers.
+It retains action-time structure through Windows UI Automation, macOS
+Accessibility, and Linux AT-SPI when the local provider is available. The
+public structural protocol also accepts an injected read-only provider.
 
 ## Session pipeline
 
@@ -159,14 +159,20 @@ schema can retain:
 - bounded ancestry
 - exact candidate cardinality and its matching fields
 
-The package currently creates a Windows UIA observer. A missing optional field
-stays missing. Capture does not infer an accessibility value from a screenshot,
-coordinate, or neighboring control. Provider text has strict length and depth
-bounds. A transient provider failure omits the optional observation without
-corrupting the screen and input evidence.
+The package creates a Windows UIA, macOS Accessibility, or Linux AT-SPI
+observer for the current platform. A missing optional field stays missing.
+Capture doesn't infer an accessibility value from a screenshot, coordinate, or
+neighboring control. Provider text has strict length and depth bounds. A
+transient provider failure omits the optional observation without corrupting
+the screen and input evidence.
 
-UIA describes the local accessibility tree. It does not describe controls
-inside an RDP or Citrix pixel stream.
+The Linux provider uses the GObject AT-SPI binding. The `linux` package extra
+installs the reviewed `PyGObject>=3.46,<3.50` range, which supports systems with
+GLib 2.64 or newer. The host supplies the PyGObject build packages, the AT-SPI
+typelib/runtime, and an interactive desktop accessibility bus.
+
+The native provider describes the local accessibility tree. It does not
+describe controls inside an RDP or Citrix pixel stream.
 
 ## Video and frame timing
 

@@ -90,3 +90,25 @@ def test_tag_publication_requires_exact_tag_oidc_and_digest_verification() -> No
     assert "scripts/verify_release_publication.py" in publish
     assert "--allow-missing" in publish
     assert "--wait-seconds 180" in publish
+
+
+def test_native_observers_are_part_of_each_interactive_qualification() -> None:
+    workflow = (ROOT / ".github/workflows/production-qualification.yml").read_text(
+        encoding="utf-8"
+    )
+    linux = workflow[
+        workflow.index("\n  interactive-linux:") : workflow.index(
+            "\n  interactive-macos:"
+        )
+    ]
+    macos = workflow[
+        workflow.index("\n  interactive-macos:") : workflow.index(
+            "\n  interactive-windows:"
+        )
+    ]
+    windows = workflow[workflow.index("\n  interactive-windows:") :]
+
+    assert '"${candidate_wheels[0]}[linux]"' in linux
+    for job in (linux, macos, windows):
+        assert 'tests/test_structural_observation.py"' in job
+        assert 'OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"' in job

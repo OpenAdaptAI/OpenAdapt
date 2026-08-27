@@ -69,9 +69,15 @@ share = [
     "magic-wormhole>=0.17.0",
 ]
 
+# Native Linux AT-SPI observation. The host must also provide the AT-SPI
+# typelib/runtime (for example gir1.2-atspi-2.0 on Debian/Ubuntu).
+linux = [
+    "PyGObject>=3.46,<3.50; sys_platform == 'linux'",
+]
+
 # Everything
 all = [
-    "openadapt-capture[transcribe-fast,transcribe,privacy,share]",
+    "openadapt-capture[transcribe-fast,transcribe,privacy,share,linux]",
 ]
 
 dev = [

@@ -113,6 +113,11 @@ def test_source_distribution_refuses_a_version_without_release_notes(tmp_path: P
         "README.md": "# OpenAdapt Capture\n",
         "pyproject.toml": pyproject,
         "openadapt_capture/__init__.py": "",
+        "openadapt_capture/structural.py": "",
+        "openadapt_capture/structural_observer/__init__.py": "",
+        "openadapt_capture/structural_observer/linux.py": "",
+        "openadapt_capture/structural_observer/macos.py": "",
+        "openadapt_capture/structural_observer/windows.py": "",
         f"openadapt_capture-{next_version}.dist-info/PKG-INFO": (
             "Metadata-Version: 2.4\n"
             "Name: openadapt-capture\n"

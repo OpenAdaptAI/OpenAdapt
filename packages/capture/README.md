@@ -188,17 +188,18 @@ Desktop provisions and probes that exact closure.
 
 ## Native structural observations
 
-On Windows, the recorder can retain a versioned UI Automation observation
-beside the native action that produced it. When UIA exposes the information,
-the observation includes the target's AutomationId, role/control type, name,
-bounds, supported patterns, process/window identity, ancestry, and exact
-candidate cardinality within the top-level window. Unavailable values remain
-absent; capture never infers structural fields from coordinates or pixels.
+The recorder can retain a versioned native accessibility observation beside
+each action. It uses Windows UI Automation, macOS Accessibility, or Linux
+AT-SPI. When the provider exposes them, Capture records the target identifier,
+role/control type, name, bounds, supported actions, process/window identity,
+and ancestry. Windows UIA also records exact candidate cardinality within the
+top-level window. Unavailable values remain absent. Capture never infers a
+structural field from coordinates or pixels.
 
-This evidence is stored in `recording.db`, exposed on raw events and processed
-`Action` objects, and remains optional so existing recordings and non-Windows
-hosts continue to load unchanged. It is enabled by default on Windows and can
-be disabled with
+Capture stores this evidence in `recording.db` and exposes it on raw events and
+processed `Action` objects. The field is optional, so existing recordings still
+load unchanged. Native observation is enabled by default when its provider is
+available. Disable it with
 `Recorder(..., capture_structural_observations=False)`. Applications can inject
 another read-only observer through `Recorder(..., structural_observer=...)`
 using the public `StructuralObserver` protocol.
@@ -206,13 +207,20 @@ using the public `StructuralObserver` protocol.
 Accessibility text remains inside the local raw-capture boundary and is bounded
 to 512 characters per field. Longer provider values are omitted rather than
 truncated, so partial text is never presented to the compiler as exact identity
-evidence. The versioned observation contract accepts namespaced provider IDs for
-future macOS Accessibility and Linux AT-SPI observers, but this package currently
-emits only `windows_uia` observations.
+evidence. Capture emits `windows_uia`, `macos_ax`, or `linux_atspi`. macOS
+requires Accessibility permission. Linux requires an available desktop AT-SPI
+bus and the system AT-SPI typelib. Install your distribution's PyGObject build
+packages and `gir1.2-atspi-2.0` first. The
+[PyGObject install guide](https://pygobject.gnome.org/getting_started.html)
+lists the current package names. Then install the `linux` extra:
 
-UIA describes the local Windows accessibility tree. It does not cross an
-RDP/Citrix pixel boundary into the remote application; those demonstrations
-retain window-scoped pixels and coordinates for Flow's remote visual compiler.
+```bash
+pip install "openadapt-capture[linux]"
+```
+
+The native provider describes the local accessibility tree. It can't see
+controls across an RDP or Citrix pixel boundary. Those demonstrations retain
+window-scoped pixels and coordinates for Flow's remote visual compiler.
 
 ## Window-scoped recording
 
@@ -388,8 +396,9 @@ session is required. See the
 
 - Native recording requires a visible user session plus the operating system's
   screen-recording and input-monitoring permissions.
-- Native Windows capture retains UIA evidence when the application exposes it;
-  opaque remote applications still require Flow's visual and OCR bindings.
+- Native Windows, macOS, and Linux capture retain accessibility evidence when
+  the application and local provider expose it. Opaque remote applications
+  still require Flow's visual and OCR bindings.
 - The Flow adapter compiles left and right clicks, left-button drags, typed
   text, named keys, modifier chords, and scrolling. It rejects unsupported
   input such as middle clicks, non-left-button drags, malformed shortcuts, and

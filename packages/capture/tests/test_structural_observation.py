@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import queue
 import sqlite3
+import sys
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,10 +18,23 @@ from openadapt_capture.recorder import on_click, write_action_event
 from openadapt_capture.structural import (
     MAX_STRUCTURAL_ANCESTRY_DEPTH,
     MAX_STRUCTURAL_TEXT_LENGTH,
+    StructuralBounds,
     StructuralElement,
     StructuralObservation,
     StructuralObservationRequest,
     create_structural_observer,
+    observe_structural_action,
+)
+from openadapt_capture.structural_observer.linux import (
+    LinuxATSpiStructuralObserver,
+    _GIAtspiRuntime,
+)
+from openadapt_capture.structural_observer.linux import (
+    _fields as _atspi_fields,
+)
+from openadapt_capture.structural_observer.macos import (
+    MacOSAXStructuralObserver,
+    _AXRuntime,
 )
 from openadapt_capture.structural_observer.windows import (
     WindowsUIAStructuralObserver,
@@ -160,9 +175,7 @@ def test_windows_uia_observer_returns_exact_available_evidence() -> None:
     )
     observer = WindowsUIAStructuralObserver(
         runtime=runtime,
-        process_name_resolver=lambda process_id: (
-            "example.exe" if process_id == 42 else None
-        ),
+        process_name_resolver=lambda process_id: "example.exe" if process_id == 42 else None,
         clock=lambda: 101.25,
     )
 
@@ -245,6 +258,13 @@ def test_structural_contract_accepts_namespaced_extension_provider() -> None:
     assert observation.provider == "example_macos_ax"
 
 
+def test_structural_bounds_reject_non_finite_or_inverted_provider_geometry() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        StructuralBounds(left=0, top=0, right=float("nan"), bottom=10)
+    with pytest.raises(ValueError, match="inverted"):
+        StructuralBounds(left=10, top=0, right=5, bottom=10)
+
+
 def test_windows_uia_ancestry_depth_is_bounded() -> None:
     with pytest.raises(ValueError, match="maximum_ancestry_depth"):
         WindowsUIAStructuralObserver(
@@ -253,13 +273,373 @@ def test_windows_uia_ancestry_depth_is_bounded() -> None:
         )
 
 
+class _AXFakeRuntime:
+    def __init__(self) -> None:
+        self.window = object()
+        self.parent = object()
+        self.target = object()
+        self.attributes = {
+            (self.target, "AXIdentifier"): "submit-order",
+            (self.target, "AXRole"): "AXButton",
+            (self.target, "AXTitle"): "Submit",
+            (self.target, "AXParent"): self.parent,
+            (self.target, "AXWindow"): self.window,
+            (self.parent, "AXRole"): "AXGroup",
+            (self.parent, "AXTitle"): "Order",
+            (self.parent, "AXParent"): self.window,
+            (self.window, "AXRole"): "AXWindow",
+            (self.window, "AXTitle"): "Orders",
+            (self.window, "AXWindowNumber"): 44,
+        }
+
+    def attribute(self, element, name):
+        return self.attributes.get((element, name))
+
+    def element_at_point(self, x, y):
+        assert (x, y) == (25, 35)
+        return self.target
+
+    def focused_element(self):
+        return self.target
+
+    def process_id(self, element):
+        assert element is self.target
+        return 42
+
+    def actions(self, element):
+        return ["AXPress"] if element is self.target else None
+
+    def bounds(self, element):
+        if element is self.target:
+            from openadapt_capture.structural import StructuralBounds
+
+            return StructuralBounds(left=10, top=20, right=110, bottom=60)
+        return None
+
+
+def test_macos_ax_observer_returns_action_time_evidence() -> None:
+    observer = MacOSAXStructuralObserver(
+        runtime=_AXFakeRuntime(),
+        process_name_resolver=lambda pid: "Example" if pid == 42 else None,
+        clock=lambda: 101.25,
+    )
+
+    observed = observer.observe(
+        StructuralObservationRequest(
+            event_timestamp=101.0,
+            action_name="click",
+            x=25,
+            y=35,
+        )
+    )
+
+    assert observed is not None
+    assert observed.provider == "macos_ax"
+    assert observed.query_kind == "point"
+    assert observed.element.automation_id == "submit-order"
+    assert observed.element.supported_patterns == ["AXPress"]
+    assert observed.process is not None
+    assert observed.process.process_name == "Example"
+    assert observed.window is not None
+    assert observed.window.native_window_handle == 44
+    assert [item.role for item in observed.ancestry or []] == [
+        "AXGroup",
+        "AXWindow",
+    ]
+
+
+def test_macos_ax_runtime_falls_back_to_the_frontmost_application() -> None:
+    system = object()
+    application = object()
+    focused = object()
+    calls: list[tuple[object, str]] = []
+
+    runtime = _AXRuntime.__new__(_AXRuntime)
+    runtime.system = system
+    runtime.frontmost_process_id = lambda: 42
+    runtime.ax = SimpleNamespace(
+        kAXErrorSuccess=0,
+        AXUIElementCreateApplication=lambda process_id: (
+            application if process_id == 42 else None
+        ),
+        AXUIElementCopyAttributeValue=lambda element, name, _output: (
+            calls.append((element, name))
+            or (0, focused if element is application else None)
+        ),
+    )
+
+    assert runtime.focused_element() is focused
+    assert calls == [
+        (system, "AXFocusedUIElement"),
+        (application, "AXFocusedUIElement"),
+    ]
+
+
+class _ATSpiElement:
+    def __init__(self, name: str, parent=None) -> None:
+        self.name = name
+        self.parent = parent
+
+
+class _ATSpiFakeRuntime:
+    def __init__(self) -> None:
+        self.application = _ATSpiElement("Example")
+        self.window = _ATSpiElement("Orders", self.application)
+        self.parent_element = _ATSpiElement("Order", self.window)
+        self.target = _ATSpiElement("Submit", self.parent_element)
+
+    def element_at_point(self, x, y):
+        assert (x, y) == (25, 35)
+        return self.target
+
+    def focused_element(self):
+        return self.target
+
+    def parent(self, element):
+        return element.parent
+
+    def attributes(self, element):
+        if element is self.target:
+            return {"accessible-id": "submit-order", "class": "GtkButton"}
+        return {}
+
+    def role_name(self, element):
+        return {
+            self.target: "push button",
+            self.parent_element: "panel",
+            self.window: "frame",
+            self.application: "application",
+        }[element]
+
+    def bounds(self, element):
+        if element is self.target:
+            from openadapt_capture.structural import StructuralBounds
+
+            return StructuralBounds(left=10, top=20, right=110, bottom=60)
+        return None
+
+    def action_names(self, element):
+        return ["click"] if element is self.target else None
+
+    def process_id(self, element):
+        assert element is self.target
+        return 42
+
+
+def test_linux_atspi_observer_returns_action_time_evidence() -> None:
+    observer = LinuxATSpiStructuralObserver(
+        runtime=_ATSpiFakeRuntime(),
+        process_name_resolver=lambda pid: "example" if pid == 42 else None,
+        clock=lambda: 101.5,
+    )
+
+    observed = observer.observe(
+        StructuralObservationRequest(
+            event_timestamp=101.0,
+            action_name="press",
+        )
+    )
+
+    assert observed is not None
+    assert observed.provider == "linux_atspi"
+    assert observed.query_kind == "focused"
+    assert observed.element.automation_id == "submit-order"
+    assert observed.element.class_name == "GtkButton"
+    assert observed.element.supported_patterns == ["click"]
+    assert observed.process is not None
+    assert observed.process.process_name == "example"
+    assert observed.window is not None
+    assert observed.window.title == "Orders"
+    assert [item.role for item in observed.ancestry or []] == [
+        "panel",
+        "frame",
+        "application",
+    ]
+
+
+def test_gi_atspi_runtime_descends_from_desktop_point_query() -> None:
+    class StateSet:
+        def __init__(self, *states) -> None:
+            self.states = set(states)
+
+        def contains(self, state) -> bool:
+            return state in self.states
+
+    class Component:
+        def __init__(self, child=None) -> None:
+            self.child = child
+
+        def get_accessible_at_point(self, x, y, coordinates):
+            assert (x, y, coordinates) == (25, 35, "screen")
+            return self.child
+
+    class Node:
+        def __init__(self, *, child=None, states=()) -> None:
+            self.component = Component(child)
+            self.states = StateSet(*states)
+
+        def get_component_iface(self):
+            return self.component
+
+        def get_state_set(self):
+            return self.states
+
+    target = Node(states=("focused",))
+    window = Node(child=target, states=("active",))
+    application = Node(child=window)
+    desktop = Node(child=application)
+    runtime = _GIAtspiRuntime.__new__(_GIAtspiRuntime)
+    runtime.atspi = SimpleNamespace(
+        CoordType=SimpleNamespace(SCREEN="screen"),
+        StateType=SimpleNamespace(ACTIVE="active", FOCUSED="focused"),
+    )
+    runtime.desktop = desktop
+
+    assert runtime.element_at_point(25, 35) is target
+
+
+def test_gi_atspi_runtime_omits_a_point_query_beyond_the_depth_bound() -> None:
+    class Component:
+        def __init__(self) -> None:
+            self.child = None
+
+        def get_accessible_at_point(self, _x, _y, _coordinates):
+            return self.child
+
+    class Node:
+        def __init__(self) -> None:
+            self.component = Component()
+
+        def get_component_iface(self):
+            return self.component
+
+    nodes = [Node() for _ in range(MAX_STRUCTURAL_ANCESTRY_DEPTH + 3)]
+    for current, child in zip(nodes, nodes[1:]):
+        current.component.child = child
+    runtime = _GIAtspiRuntime.__new__(_GIAtspiRuntime)
+    runtime.atspi = SimpleNamespace(CoordType=SimpleNamespace(SCREEN="screen"))
+    runtime.desktop = nodes[0]
+
+    assert runtime.element_at_point(25, 35) is None
+
+
+def test_gi_atspi_runtime_refuses_an_unbounded_child_list() -> None:
+    node = SimpleNamespace(
+        get_child_count=lambda: _GIAtspiRuntime._MAX_NODES + 1,
+    )
+    runtime = _GIAtspiRuntime.__new__(_GIAtspiRuntime)
+
+    with pytest.raises(RuntimeError, match="child count"):
+        runtime.children(node)
+
+
+def test_gi_atspi_focused_search_refuses_a_truncated_tree() -> None:
+    class Node:
+        def __init__(self, *children, focused=False) -> None:
+            self.children = list(children)
+            self.focused = focused
+
+        def get_child_count(self):
+            return len(self.children)
+
+        def get_child_at_index(self, index):
+            return self.children[index]
+
+        def get_state_set(self):
+            return SimpleNamespace(contains=lambda state: state == "focused" and self.focused)
+
+    first = Node(focused=True)
+    second = Node()
+    desktop = Node(first, second)
+    runtime = _GIAtspiRuntime.__new__(_GIAtspiRuntime)
+    runtime._MAX_NODES = 1
+    runtime.atspi = SimpleNamespace(
+        StateType=SimpleNamespace(FOCUSED="focused"),
+    )
+    runtime.desktop = desktop
+
+    assert runtime.focused_element() is None
+
+
+def test_gi_atspi_process_id_ascends_past_an_unowned_element() -> None:
+    parent = SimpleNamespace(
+        get_process_id=lambda: 42,
+        parent=None,
+    )
+    target = SimpleNamespace(
+        get_process_id=lambda: 0,
+        parent=parent,
+    )
+    runtime = _GIAtspiRuntime.__new__(_GIAtspiRuntime)
+
+    assert runtime.process_id(target) == 42
+
+
+def test_atspi_fields_prefer_the_native_accessible_id() -> None:
+    target = SimpleNamespace(
+        name="Submit",
+        get_accessible_id=lambda: "native-submit",
+    )
+    runtime = SimpleNamespace(
+        attributes=lambda _element: {"accessible-id": "legacy-submit"},
+        role_name=lambda _element: "push button",
+        bounds=lambda _element: None,
+        action_names=lambda _element: None,
+    )
+
+    fields = _atspi_fields(runtime, target)
+
+    assert fields["automation_id"] == "native-submit"
+
+
+@pytest.mark.parametrize(
+    "observer_type",
+    [MacOSAXStructuralObserver, LinuxATSpiStructuralObserver],
+)
+def test_cross_platform_runtime_is_owned_by_the_delivery_thread(observer_type) -> None:
+    lifecycle: list[tuple[str, int]] = []
+    fake = _AXFakeRuntime() if observer_type is MacOSAXStructuralObserver else _ATSpiFakeRuntime()
+
+    class Runtime:
+        def __getattr__(self, name):
+            return getattr(fake, name)
+
+        def close(self):
+            lifecycle.append(("close", threading.get_ident()))
+
+    def factory():
+        lifecycle.append(("create", threading.get_ident()))
+        return Runtime()
+
+    observer = observer_type(runtime_factory=factory)
+
+    def deliver() -> None:
+        observer.open_current_thread()
+        try:
+            observation = observer.observe(
+                StructuralObservationRequest(
+                    event_timestamp=101.0,
+                    action_name="press",
+                )
+            )
+            assert observation is not None
+        finally:
+            observer.close_current_thread()
+
+    thread = threading.Thread(target=deliver)
+    thread.start()
+    thread.join()
+
+    assert [name for name, _thread_id in lifecycle] == ["create", "close"]
+    assert len({thread_id for _name, thread_id in lifecycle}) == 1
+
+
 def test_pywinauto_runtime_quantizes_points_and_uses_exact_focused_api() -> None:
     calls: list[tuple[str, object]] = []
     desktop = SimpleNamespace(
         from_point=lambda x, y: calls.append(("point", (x, y))) or "point-target",
         backend=SimpleNamespace(
-            generic_wrapper_class=lambda info: calls.append(("wrap", info))
-            or "focused-target"
+            generic_wrapper_class=lambda info: calls.append(("wrap", info)) or "focused-target"
         ),
     )
     iui = SimpleNamespace(
@@ -324,6 +704,7 @@ def test_uia_observer_owns_one_balanced_observation_thread() -> None:
         runtime_factory=Runtime,
         apartment_factory=Apartment,
     )
+
     def observe_on_delivery_thread() -> None:
         observer.open_current_thread()
         try:
@@ -443,9 +824,7 @@ def test_legacy_action_table_is_migrated_without_fabricated_evidence(
 
     database_path = capture_dir / "recording.db"
     connection = sqlite3.connect(database_path)
-    connection.execute(
-        "ALTER TABLE action_event DROP COLUMN structural_observation"
-    )
+    connection.execute("ALTER TABLE action_event DROP COLUMN structural_observation")
     connection.commit()
     connection.close()
 
@@ -454,16 +833,34 @@ def test_legacy_action_table_is_migrated_without_fabricated_evidence(
         assert event.structural_observation is None
 
     connection = sqlite3.connect(database_path)
-    columns = {
-        row[1]
-        for row in connection.execute("PRAGMA table_info(action_event)")
-    }
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(action_event)")}
     connection.close()
     assert "structural_observation" in columns
 
 
-def test_non_windows_factory_is_headless_safe() -> None:
-    assert create_structural_observer(platform_name="linux") is None
+@pytest.mark.parametrize(
+    ("platform_name", "target"),
+    [
+        (
+            "darwin",
+            "openadapt_capture.structural_observer.macos.MacOSAXStructuralObserver",
+        ),
+        (
+            "linux",
+            "openadapt_capture.structural_observer.linux.LinuxATSpiStructuralObserver",
+        ),
+    ],
+)
+def test_factory_selects_each_native_structural_provider(
+    monkeypatch, platform_name, target
+) -> None:
+    sentinel = object()
+    monkeypatch.setattr(target, lambda: sentinel)
+    assert create_structural_observer(platform_name=platform_name) is sentinel
+
+
+def test_unsupported_platform_factory_is_headless_safe() -> None:
+    assert create_structural_observer(platform_name="freebsd") is None
 
 
 def test_windows_factory_omits_optional_evidence_when_uia_cannot_start(
@@ -503,3 +900,33 @@ def test_lazy_uia_start_failure_does_not_abort_native_capture() -> None:
     assert observer.observe(request) is None
     assert observer.observe(request) is None
     assert attempts == 1
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    os.environ.get("OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION") != "1",
+    reason="requires the explicit interactive production qualification rig",
+)
+def test_live_native_structural_provider_returns_exact_focused_evidence() -> None:
+    observer = create_structural_observer()
+    assert observer is not None, "the native structural provider is required"
+    expected_provider = {
+        "win32": "windows_uia",
+        "darwin": "macos_ax",
+        "linux": "linux_atspi",
+    }["linux" if sys.platform.startswith("linux") else sys.platform]
+    observation = observe_structural_action(
+        observer,
+        StructuralObservationRequest(
+            event_timestamp=101.0,
+            action_name="press",
+        ),
+    )
+    assert observation is not None
+    assert observation.provider == expected_provider
+    assert observation.query_kind == "focused"
+    assert observation.event_timestamp == 101.0
+    assert observation.element.model_dump(exclude_none=True)
+    assert observation.process is not None
+    assert observation.process.process_id is not None
+    assert observation.window is not None

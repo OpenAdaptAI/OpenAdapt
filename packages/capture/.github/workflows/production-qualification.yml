@@ -152,9 +152,15 @@ jobs:
           set -euo pipefail
           qualification_root="${RUNNER_TEMP}/capture-qualification-${GITHUB_RUN_ID}-${GITHUB_JOB}"
           qualification_python="${qualification_root}/bin/python"
+          candidate_wheels=(dist/*.whl)
+          if [ "${#candidate_wheels[@]}" -ne 1 ]; then
+            echo "Expected exactly one candidate wheel."
+            exit 1
+          fi
           uv venv --clear --python 3.12 "${qualification_root}"
           uv pip install --python "${qualification_python}" \
-            dist/*.whl pytest==9.1.1 pytest-timeout==2.4.0 pynput==1.8.2
+            "${candidate_wheels[0]}[linux]" \
+            pytest==9.1.1 pytest-timeout==2.4.0 pynput==1.8.2
           echo "QUALIFICATION_PYTHON=${qualification_python}" >> "${GITHUB_ENV}"
 
       - name: Require the reviewed external video tools
@@ -186,6 +192,7 @@ jobs:
             echo "::group::Linux trial ${trial}"
             "${QUALIFICATION_PYTHON}" -m pytest \
               "${GITHUB_WORKSPACE}/tests/test_performance.py" \
+              "${GITHUB_WORKSPACE}/tests/test_structural_observation.py" \
               -m slow -v --timeout=300 --import-mode=importlib \
               "--junitxml=${GITHUB_WORKSPACE}/evidence/trial-${trial}-linux.xml"
             echo "::endgroup::"
@@ -287,6 +294,7 @@ jobs:
             echo "::group::macOS trial ${trial}"
             "${QUALIFICATION_PYTHON}" -m pytest \
               "${GITHUB_WORKSPACE}/tests/test_performance.py" \
+              "${GITHUB_WORKSPACE}/tests/test_structural_observation.py" \
               "${GITHUB_WORKSPACE}/tests/test_window_capture.py" \
               -m slow -v --timeout=300 --import-mode=importlib \
               "--junitxml=${GITHUB_WORKSPACE}/evidence/trial-${trial}-macos.xml"
@@ -394,6 +402,7 @@ jobs:
               Write-Host "::group::Windows trial $trial"
               & $env:QUALIFICATION_PYTHON -m pytest `
                 "$env:GITHUB_WORKSPACE/tests/test_performance.py" `
+                "$env:GITHUB_WORKSPACE/tests/test_structural_observation.py" `
                 "$env:GITHUB_WORKSPACE/tests/test_window_capture.py" `
                 -m slow -v --timeout=300 --import-mode=importlib `
                 "--junitxml=$env:GITHUB_WORKSPACE/evidence/trial-$trial-windows.xml"

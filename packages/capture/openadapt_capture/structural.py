@@ -8,15 +8,14 @@ being guessed from pixels, coordinates, or neighboring controls.
 from __future__ import annotations
 
 import logging
+import math
 import sys
 from dataclasses import dataclass
 from typing import Annotated, Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-STRUCTURAL_OBSERVATION_SCHEMA_VERSION = (
-    "openadapt.capture.structural-observation/v1"
-)
+STRUCTURAL_OBSERVATION_SCHEMA_VERSION = "openadapt.capture.structural-observation/v1"
 MAX_STRUCTURAL_TEXT_LENGTH = 512
 MAX_STRUCTURAL_ANCESTRY_DEPTH = 32
 
@@ -39,6 +38,16 @@ class StructuralBounds(BaseModel):
     top: float
     right: float
     bottom: float
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "StructuralBounds":
+        """Reject a non-finite or inverted provider rectangle."""
+        values = (self.left, self.top, self.right, self.bottom)
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("structural bounds must be finite")
+        if self.right < self.left or self.bottom < self.top:
+            raise ValueError("structural bounds must not be inverted")
+        return self
 
 
 class StructuralElement(BaseModel):
@@ -102,9 +111,7 @@ class StructuralCandidateContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scope: Literal["top_level_window"]
-    matched_fields: list[
-        Literal["automation_id", "control_type", "name"]
-    ] = Field(min_length=1)
+    matched_fields: list[Literal["automation_id", "control_type", "name"]] = Field(min_length=1)
 
 
 class StructuralObservation(BaseModel):
@@ -112,13 +119,13 @@ class StructuralObservation(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[
-        "openadapt.capture.structural-observation/v1"
-    ] = STRUCTURAL_OBSERVATION_SCHEMA_VERSION
+    schema_version: Literal["openadapt.capture.structural-observation/v1"] = (
+        STRUCTURAL_OBSERVATION_SCHEMA_VERSION
+    )
     provider: _ProviderIdentifier = Field(
         description=(
-            "Accessibility-provider identifier. Capture currently emits "
-            "windows_uia; other providers remain opt-in observer extensions."
+            "Accessibility-provider identifier. Native Capture providers are "
+            "windows_uia, macos_ax, and linux_atspi."
         ),
     )
     event_timestamp: float
@@ -167,17 +174,32 @@ def create_structural_observer(
     if not enabled:
         return None
     resolved_platform = platform_name or sys.platform
-    if resolved_platform != "win32":
-        return None
-
     try:
-        from openadapt_capture.structural_observer.windows import (
-            WindowsUIAStructuralObserver,
-        )
+        if resolved_platform == "win32":
+            from openadapt_capture.structural_observer.windows import (
+                WindowsUIAStructuralObserver,
+            )
 
-        return WindowsUIAStructuralObserver()
+            return WindowsUIAStructuralObserver()
+        if resolved_platform == "darwin":
+            from openadapt_capture.structural_observer.macos import (
+                MacOSAXStructuralObserver,
+            )
+
+            return MacOSAXStructuralObserver()
+        if resolved_platform.startswith("linux"):
+            from openadapt_capture.structural_observer.linux import (
+                LinuxATSpiStructuralObserver,
+            )
+
+            return LinuxATSpiStructuralObserver()
+        return None
     except Exception as exc:
-        _logger.warning("Windows UIA structural observation is unavailable: %s", exc)
+        _logger.warning(
+            "%s structural observation is unavailable: %s",
+            resolved_platform,
+            exc,
+        )
         return None
 
 
