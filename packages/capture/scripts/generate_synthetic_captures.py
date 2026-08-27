@@ -25,7 +25,7 @@ from openadapt_capture.desktop_capture import DesktopCaptureScope
 from openadapt_capture.terminal import seal_capture
 
 SOURCE_SCHEMA = "openadapt.capture.synthetic-fixture-source/v1"
-PROVENANCE_SCHEMA = "openadapt.capture.synthetic-fixture-provenance/v1"
+PROVENANCE_SCHEMA = "openadapt.capture.synthetic-fixture-provenance/v2"
 FIXTURE_SCHEMA = "openadapt.capture.synthetic-fixture/v1"
 GENERATED_FILENAMES = {
     "capture-artifact-manifest.json",
@@ -36,7 +36,11 @@ GENERATED_FILENAMES = {
 }
 VIEWPORT = (960, 540)
 FRAME_INTERVAL_US = 1_000_000
-BUILDER_LOCK_PATH = "uv.lock"
+# The committed fixture bytes are produced by the source spec, this generator,
+# the repository's own writer code, and the two library versions below.
+# `require_exact_builder` refuses any other writer, and
+# `check_generated` regenerates every artifact and compares it byte for byte,
+# so a change to any determinant fails the fixture suite.
 REQUIRED_SQLALCHEMY_VERSION = "2.0.52"
 REQUIRED_SQLITE_VERSION = "3.53.1"
 
@@ -433,9 +437,6 @@ def generate_fixture(
     _remove_previous_generated_files(destination)
     source_sha256 = sha256_bytes(spec_raw)
     generator_sha256 = sha256_file(generator_path)
-    builder_lock = generator_path.parents[1] / BUILDER_LOCK_PATH
-    if not builder_lock.is_file():
-        raise RuntimeError(f"the tracked builder lock is missing: {builder_lock}")
     frames, actions = _timeline(spec)
     start_us = int(spec["start_timestamp_us"])
     started_at = start_us / 1_000_000
@@ -460,8 +461,6 @@ def generate_fixture(
             "sqlite_version": REQUIRED_SQLITE_VERSION,
             "sqlalchemy_version": REQUIRED_SQLALCHEMY_VERSION,
             "database_normalization": "vacuum_4096_writer_version_zero",
-            "lock_path": BUILDER_LOCK_PATH,
-            "lock_sha256": sha256_file(builder_lock),
         },
         "timing": {
             "kind": "declared_synthetic",
