@@ -69,43 +69,6 @@ def test_journal_orders_concurrent_observations_by_reservation_not_timestamp():
     assert (second.timestamp, second.source_ordinal) == (10.0, 2)
 
 
-def test_journal_accepts_a_frame_after_a_process_clock_reset(scope):
-    journal = OrderedEventJournal()
-    first_image, _ = scope.capture_frame(publish=False)
-    first_generation = scope.current_generation()
-    journal.commit_window_frame(
-        Event(
-            20.0,
-            "screen",
-            WindowScopedFrame(
-                image=first_image,
-                window_event_data=scope.window_event_data(),
-                geometry_generation=first_generation,
-            ),
-        ),
-        scope,
-        first_generation,
-    )
-
-    second_image, _ = scope.capture_frame(publish=False)
-    second_generation = scope.current_generation()
-    journal.commit_window_frame(
-        Event(
-            10.0,
-            "screen",
-            WindowScopedFrame(
-                image=second_image,
-                window_event_data=scope.window_event_data(),
-                geometry_generation=second_generation,
-            ),
-        ),
-        scope,
-        second_generation,
-    )
-
-    assert [journal.get_nowait().source_ordinal for _ in range(2)] == [1, 2]
-
-
 def test_action_reservation_cannot_bind_a_later_frame_generation(scope, fake, monkeypatch):
     scope.capture_frame()
     journal = OrderedEventJournal()

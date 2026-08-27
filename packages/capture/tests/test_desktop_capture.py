@@ -17,6 +17,7 @@ from openadapt_capture.capture import CaptureSession
 from openadapt_capture.db import create_db, crud
 from openadapt_capture.desktop_capture import DesktopCaptureError, DesktopCaptureScope
 from openadapt_capture.recorder import (
+    Event,
     NativeInputFrameBoundary,
     OrderedEventJournal,
     create_recording,
@@ -163,6 +164,69 @@ def test_recording_rejects_ambiguous_coordinate_scopes(tmp_path) -> None:
             window_capture_info={"coordinate_space": "window_pixels"},
             desktop_capture_info={"coordinate_space": "virtual_desktop_pixels"},
         )
+
+
+def test_desktop_screen_reader_preserves_the_initial_frame_clock(
+    monkeypatch,
+) -> None:
+    """A later screen frame uses the initial frame's monotonic epoch."""
+    monkeypatch.setattr(recorder_module.config, "SCREEN_CAPTURE_FPS", 0)
+    terminate = threading.Event()
+    capture_entered = threading.Event()
+    release_capture = threading.Event()
+    monotonic_now = [10.5]
+    monotonic_origin = [10.0]
+    wall_origin = 100.0
+    reset_calls: list[float] = []
+
+    def get_timestamp() -> float:
+        return wall_origin + monotonic_now[0] - monotonic_origin[0]
+
+    def reset_clock(value: float) -> None:
+        reset_calls.append(value)
+        monotonic_origin[0] = monotonic_now[0]
+
+    def take_screenshot() -> Image.Image:
+        capture_entered.set()
+        assert release_capture.wait(timeout=5)
+        terminate.set()
+        return Image.new("RGB", (4480, 1440), "black")
+
+    monkeypatch.setattr(recorder_module.utils, "get_timestamp", get_timestamp)
+    monkeypatch.setattr(recorder_module.utils, "set_start_time", reset_clock)
+    monkeypatch.setattr(recorder_module.utils, "take_screenshot", take_screenshot)
+
+    journal = OrderedEventJournal()
+    journal.put(
+        Event(
+            get_timestamp(),
+            "screen",
+            Image.new("RGB", (4480, 1440), "white"),
+        )
+    )
+
+    reader = threading.Thread(
+        target=read_screen_events,
+        args=(
+            journal,
+            terminate,
+            SimpleNamespace(timestamp=wall_origin),
+            threading.Event(),
+        ),
+        kwargs={"desktop_scope": _two_monitor_scope()},
+    )
+    monotonic_now[0] = 11.0
+    reader.start()
+    assert capture_entered.wait(timeout=5)
+    monotonic_now[0] = 11.25
+    release_capture.set()
+    reader.join(timeout=5)
+
+    assert not reader.is_alive()
+    frames = [journal.get_nowait(), journal.get_nowait()]
+    assert [frame.source_ordinal for frame in frames] == [1, 2]
+    assert frames[0].timestamp < frames[1].timestamp
+    assert reset_calls == []
 
 
 def test_desktop_screen_reader_discards_a_frame_crossed_by_native_input(

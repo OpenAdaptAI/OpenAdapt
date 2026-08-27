@@ -147,7 +147,12 @@ class TestRecorderIntegration:
             assert rec.screen_count >= 1
 
         with CaptureSession.load(capture_dir) as capture:
-            assert capture.frames(), "capture completed without an initial frame"
+            frames = capture.frames()
+            assert len(frames) >= 2, "capture completed without a later retained frame"
+            timestamps = [frame.timestamp for frame in frames]
+            assert all(
+                earlier < later for earlier, later in zip(timestamps, timestamps[1:])
+            ), "retained frame capture times did not increase"
 
     @pytest.mark.skipif(_NO_INPUT_INJECTION, reason=_INJECTION_SKIP_REASON)
     def test_record_and_load_roundtrip(self, capture_dir):

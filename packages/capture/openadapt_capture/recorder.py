@@ -758,8 +758,6 @@ def process_events(
         processing_aborted: Stop without publishing a completed journal after a
             startup failure leaves a producer alive.
     """
-    utils.set_start_time(recording.timestamp)
-
     logger.info("Starting")
 
     prev_event = None
@@ -1691,8 +1689,6 @@ def read_screen_events(
     """
     if window_scope is not None and desktop_scope is not None:
         raise ValueError("screen reader cannot use both window and desktop scopes")
-    utils.set_start_time(recording.timestamp)
-
     fps = config.SCREEN_CAPTURE_FPS
     min_interval = 1.0 / fps if fps > 0 else 0.0
 
@@ -1870,8 +1866,6 @@ def read_window_events(
         recording: The recording object.
         started_event: Event to set once started.
     """
-    utils.set_start_time(recording.timestamp)
-
     # Refuse at the boundary. Without this the loop below polls a backend that
     # can never answer, never sets started_event, and the recording hangs in
     # startup with no stated cause.
@@ -2206,7 +2200,6 @@ def read_input_events(
         setattr(on_observed, "_openadapt_input_receipt", reserve_observed)
         setattr(on_observed, "_openadapt_input_delivery", deliver_observed)
 
-    utils.set_start_time(recording.timestamp)
     observer = None
     started = False
     observer_failed = False
@@ -2558,6 +2551,11 @@ def record(
         desktop_capture_info=(desktop_scope.snapshot() if desktop_scope is not None else None),
     )
     recording_timestamp = recording.timestamp
+
+    # create_recording() established the one shared clock epoch for this
+    # capture. Every thread producer inherits that epoch. A thread must not
+    # call set_start_time() again because doing so can place a later frame
+    # before the retained initial frame in capture time.
 
     event_q = OrderedEventJournal()
     producers_finished = threading.Event()
