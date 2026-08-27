@@ -49,11 +49,12 @@ uv.lock
 # Environment variables (contains API keys)
 .env
 
-# Demo captures (large data files)
-demo_*/
-
-# Test captures (large data files)
-turn-off-nightshift/
+# Scratch captures written by `capture record` at the repository root
+# (large data files). Anchored with a leading slash on purpose: an unanchored
+# `demo_*/` also matches examples/captures/demo_new/, which silently excluded
+# the committed demo fixtures.
+/demo_*/
+/turn-off-nightshift/
 
 # Never-publish workspace material (strategy, prospect research, counsel packs,
 # personal contact details). Created ad hoc; must never reach a remote.
