@@ -172,6 +172,20 @@ def test_release_artifacts_reject_unexpected_files(tmp_path: Path):
         verify_release_artifacts(dist, root=tmp_path)
 
 
+def test_release_artifacts_reject_directory_and_symlink_entries(tmp_path: Path):
+    dist, wheel = _release_tree(tmp_path)
+    (dist / "nested").mkdir()
+
+    with pytest.raises(ValueError, match="invalid entries: nested"):
+        verify_release_artifacts(dist, root=tmp_path)
+
+    (dist / "nested").rmdir()
+    wheel.unlink()
+    wheel.symlink_to(tmp_path / "pyproject.toml")
+    with pytest.raises(ValueError, match="expected one"):
+        verify_release_artifacts(dist, root=tmp_path)
+
+
 def test_release_artifacts_reject_metadata_version_drift(tmp_path: Path):
     dist, _ = _release_tree(tmp_path, artifact_version="1.9.9")
 

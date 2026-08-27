@@ -34,12 +34,15 @@ def release_candidate(tmp_path: Path) -> tuple[Path, Path, dict]:
         "tag_name": "v1.16.0",
         "draft": False,
         "prerelease": False,
+        "immutable": True,
+        "published_at": "2026-08-27T12:00:00Z",
         "author": {"login": "openadapt-release[bot]"},
         "assets": [
             {
                 "name": path.name,
                 "size": path.stat().st_size,
                 "digest": f"sha256:{_sha256(path)}",
+                "uploader": {"login": "openadapt-release[bot]"},
             }
             for path in (wheel, sdist)
         ],
@@ -63,12 +66,27 @@ def test_exact_existing_release_is_idempotently_accepted(release_candidate):
     _verify(expected, downloaded, metadata)
 
 
+def test_exact_draft_is_accepted_before_one_way_publication(release_candidate):
+    expected, downloaded, metadata = release_candidate
+    metadata.update(draft=True, immutable=False, published_at=None)
+
+    MODULE.verify_release(
+        metadata,
+        expected_tag="v1.16.0",
+        expected_author="openadapt-release[bot]",
+        expected_dir=expected,
+        downloaded_dir=downloaded,
+        expected_state="draft",
+    )
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
         ("tag_name", "v1.15.0", "release tag mismatch"),
-        ("draft", True, "is a draft"),
+        ("draft", True, "is not published"),
         ("prerelease", True, "is a prerelease"),
+        ("immutable", False, "is mutable"),
         ("author", {"login": "abrichr"}, "release author mismatch"),
     ],
 )
@@ -130,6 +148,14 @@ def test_release_asset_digest_mismatch_fails_closed(release_candidate):
         _verify(expected, downloaded, metadata)
 
 
+def test_release_asset_uploader_mismatch_fails_closed(release_candidate):
+    expected, downloaded, metadata = release_candidate
+    metadata["assets"][0]["uploader"] = {"login": "abrichr"}
+
+    with pytest.raises(ValueError, match="asset uploader mismatch"):
+        _verify(expected, downloaded, metadata)
+
+
 def test_downloaded_release_byte_mismatch_fails_closed(release_candidate):
     expected, downloaded, metadata = release_candidate
     name = metadata["assets"][0]["name"]
@@ -138,4 +164,19 @@ def test_downloaded_release_byte_mismatch_fails_closed(release_candidate):
     path.write_bytes(b"X" + original[1:])
 
     with pytest.raises(ValueError, match="downloaded release asset bytes mismatch"):
+        _verify(expected, downloaded, metadata)
+
+
+def test_release_asset_directories_and_symlinks_fail_closed(release_candidate):
+    expected, downloaded, metadata = release_candidate
+    (downloaded / "nested").mkdir()
+
+    with pytest.raises(ValueError, match="invalid entries: nested"):
+        _verify(expected, downloaded, metadata)
+
+    (downloaded / "nested").rmdir()
+    name = metadata["assets"][0]["name"]
+    (downloaded / name).unlink()
+    (downloaded / name).symlink_to(expected / name)
+    with pytest.raises(ValueError, match="invalid entries"):
         _verify(expected, downloaded, metadata)
