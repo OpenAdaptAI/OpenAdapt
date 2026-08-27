@@ -764,6 +764,60 @@ def test_recorder_uses_one_observer_and_preserves_cross_device_receipt_order(
     ]
 
 
+def test_input_reader_skips_terminal_wait_after_startup_cancellation(
+    monkeypatch,
+) -> None:
+    terminate = threading.Event()
+    terminate.set()
+    terminal_waiting = threading.Event()
+
+    class TrackingEvent(threading.Event):
+        def wait(self, timeout=None):
+            terminal_waiting.set()
+            return super().wait(timeout)
+
+    terminal_finished = TrackingEvent()
+    terminal_cancelled = threading.Event()
+    boundary = recorder_module.NativeInputFrameBoundary()
+    stopped = threading.Event()
+
+    class FakeObserver:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            stopped.set()
+
+    monkeypatch.setattr(
+        recorder_module,
+        "create_input_observer",
+        lambda *_args, **_kwargs: FakeObserver(),
+    )
+
+    reader = threading.Thread(
+        target=recorder_module.read_input_events,
+        args=(
+            queue.Queue(),
+            terminate,
+            SimpleNamespace(timestamp=100.0),
+            threading.Event(),
+        ),
+        kwargs={
+            "input_frame_boundary": boundary,
+            "terminal_frame_finished": terminal_finished,
+            "terminal_frame_cancelled": terminal_cancelled,
+        },
+    )
+    reader.start()
+    assert terminal_waiting.wait(timeout=1)
+    terminal_cancelled.set()
+    reader.join(timeout=1)
+
+    assert not reader.is_alive()
+    assert stopped.is_set()
+    assert not terminal_finished.is_set()
+
+
 @pytest.mark.parametrize(
     ("detail", "pressed", "expected"),
     [

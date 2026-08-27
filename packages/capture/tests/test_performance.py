@@ -140,6 +140,15 @@ def capture_dir(tmp_path):
 class TestRecorderIntegration:
     """Integration tests that run the full recording pipeline."""
 
+    def test_initial_frame_ready_without_input(self, capture_dir):
+        """Readiness requires one retained frame before any input action."""
+        with Recorder(capture_dir, task_description="Initial frame test") as rec:
+            assert rec.wait_for_ready(timeout=120), "recorder failed to start"
+            assert rec.screen_count >= 1
+
+        with CaptureSession.load(capture_dir) as capture:
+            assert capture.frames(), "capture completed without an initial frame"
+
     @pytest.mark.skipif(_NO_INPUT_INJECTION, reason=_INJECTION_SKIP_REASON)
     def test_record_and_load_roundtrip(self, capture_dir):
         """Record synthetic input, stop, reload, and verify events round-trip."""

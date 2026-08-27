@@ -459,6 +459,204 @@ def test_processor_binds_first_later_frame_as_the_exact_action_after(scope):
     assert action.data["after_window_geometry_generation"] == 1
 
 
+def test_processor_retains_initial_desktop_frame_without_an_action():
+    from openadapt_capture.config import RecordingConfig, config_override
+
+    image = Image.new("RGB", (4, 3), "blue")
+    journal = queue.Queue()
+    journal.put(Event(1.0, "screen", image, 1))
+    queues = [queue.Queue() for _ in range(6)]
+    counters = [multiprocessing.Value("i", 0) for _ in range(5)]
+    producers_finished = threading.Event()
+    producers_finished.set()
+
+    with config_override(
+        RecordingConfig(
+            capture_video=True,
+            capture_images=False,
+            capture_full_video=False,
+            capture_window_data=False,
+        )
+    ):
+        recorder_module.process_events(
+            journal,
+            queues[0],
+            queues[1],
+            queues[2],
+            queues[3],
+            queues[4],
+            queues[5],
+            SimpleNamespace(timestamp=0.0),
+            threading.Event(),
+            threading.Event(),
+            *counters,
+            producers_finished,
+        )
+
+    retained = queues[0].get_nowait()
+    video = queues[4].get_nowait()
+    assert retained.source_ordinal == 1
+    assert retained.data is None
+    assert video.source_ordinal == 1
+    assert video.data is image
+    assert counters[0].value == 1
+    assert counters[4].value == 1
+
+
+def test_processor_retains_the_contiguous_desktop_action_journal():
+    from openadapt_capture.config import RecordingConfig, config_override
+
+    images = [Image.new("RGB", (4, 3), color) for color in ("red", "green", "blue")]
+    journal = queue.Queue()
+    journal.put(Event(1.0, "screen", images[0], 1))
+    journal.put(Event(2.0, "screen", images[1], 2))
+    journal.put(Event(3.0, "action", {"name": "mouse.down"}, 3))
+    journal.put(Event(4.0, "screen", images[2], 4))
+    queues = [queue.Queue() for _ in range(6)]
+    counters = [multiprocessing.Value("i", 0) for _ in range(5)]
+    producers_finished = threading.Event()
+    producers_finished.set()
+
+    with config_override(
+        RecordingConfig(
+            capture_video=True,
+            capture_images=False,
+            capture_full_video=False,
+            capture_window_data=False,
+        )
+    ):
+        recorder_module.process_events(
+            journal,
+            queues[0],
+            queues[1],
+            queues[2],
+            queues[3],
+            queues[4],
+            queues[5],
+            SimpleNamespace(timestamp=0.0),
+            threading.Event(),
+            threading.Event(),
+            *counters,
+            producers_finished,
+        )
+
+    retained_ordinals = [queues[0].get_nowait().source_ordinal for _ in range(3)]
+    video_ordinals = [queues[4].get_nowait().source_ordinal for _ in range(3)]
+    action = queues[1].get_nowait()
+    assert retained_ordinals == [1, 2, 4]
+    assert video_ordinals == retained_ordinals
+    assert action.source_ordinal == 3
+    assert action.data["screenshot_source_ordinal"] == 2
+    assert action.data["after_screenshot_source_ordinal"] == 4
+    assert counters[0].value == 3
+    assert counters[1].value == 1
+    assert counters[4].value == 3
+
+
+def test_processor_retains_desktop_window_events_without_an_action():
+    from openadapt_capture.config import RecordingConfig, config_override
+
+    image = Image.new("RGB", (4, 3), "blue")
+    journal = queue.Queue()
+    journal.put(Event(1.0, "screen", image, 1))
+    journal.put(Event(2.0, "window", {"title": "Fixture"}, 2))
+    journal.put(Event(3.0, "screen", image, 3))
+    queues = [queue.Queue() for _ in range(6)]
+    counters = [multiprocessing.Value("i", 0) for _ in range(5)]
+    producers_finished = threading.Event()
+    producers_finished.set()
+
+    with config_override(
+        RecordingConfig(
+            capture_video=False,
+            capture_images=True,
+            capture_window_data=True,
+        )
+    ):
+        recorder_module.process_events(
+            journal,
+            queues[0],
+            queues[1],
+            queues[2],
+            queues[3],
+            queues[4],
+            queues[5],
+            SimpleNamespace(timestamp=0.0),
+            threading.Event(),
+            threading.Event(),
+            *counters,
+            producers_finished,
+        )
+
+    retained_ordinals = [queues[0].get_nowait().source_ordinal for _ in range(2)]
+    window = queues[2].get_nowait()
+    assert retained_ordinals == [1, 3]
+    assert window.source_ordinal == 2
+    assert counters[0].value == 2
+    assert counters[2].value == 1
+
+
+def test_processor_can_abort_without_claiming_that_producers_finished():
+    queues = [queue.Queue() for _ in range(7)]
+    counters = [multiprocessing.Value("i", 0) for _ in range(5)]
+    producers_finished = threading.Event()
+    processing_aborted = threading.Event()
+    processing_aborted.set()
+
+    recorder_module.process_events(
+        queues[0],
+        queues[1],
+        queues[2],
+        queues[3],
+        queues[4],
+        queues[5],
+        queues[6],
+        SimpleNamespace(timestamp=0.0),
+        threading.Event(),
+        threading.Event(),
+        *counters,
+        producers_finished,
+        processing_aborted,
+    )
+
+    assert not producers_finished.is_set()
+    assert all(counter.value == 0 for counter in counters)
+
+
+def test_processor_fails_loud_when_an_action_precedes_configured_window_evidence():
+    from openadapt_capture.config import RecordingConfig, config_override
+
+    journal = queue.Queue()
+    journal.put(Event(1.0, "screen", Image.new("RGB", (4, 3), "blue"), 1))
+    journal.put(Event(2.0, "action", {"name": "mouse.down"}, 2))
+    queues = [queue.Queue() for _ in range(6)]
+    counters = [multiprocessing.Value("i", 0) for _ in range(5)]
+    producers_finished = threading.Event()
+    producers_finished.set()
+
+    with config_override(
+        RecordingConfig(
+            capture_video=False,
+            capture_images=True,
+            capture_window_data=True,
+        )
+    ), pytest.raises(WindowCaptureError, match="configured window evidence"):
+        recorder_module.process_events(
+            journal,
+            queues[0],
+            queues[1],
+            queues[2],
+            queues[3],
+            queues[4],
+            queues[5],
+            SimpleNamespace(timestamp=0.0),
+            threading.Event(),
+            threading.Event(),
+            *counters,
+            producers_finished,
+        )
+
+
 def test_processor_refuses_a_native_action_without_a_terminal_after_frame(scope):
     image, _ = scope.capture_frame(publish=False)
     journal = queue.Queue()

@@ -214,6 +214,42 @@ def test_desktop_screen_reader_discards_a_frame_crossed_by_native_input(
         journal.get_nowait()
 
 
+def test_startup_failure_wakes_a_screen_reader_waiting_for_observer_attach() -> None:
+    boundary = NativeInputFrameBoundary()
+    terminate = threading.Event()
+    terminal_cancelled = threading.Event()
+    journal = OrderedEventJournal()
+    errors: list[BaseException] = []
+
+    def run_reader() -> None:
+        try:
+            read_screen_events(
+                journal,
+                terminate,
+                SimpleNamespace(timestamp=time.time()),
+                threading.Event(),
+                desktop_scope=_two_monitor_scope(),
+                input_frame_boundary=boundary,
+                terminal_frame_cancelled=terminal_cancelled,
+            )
+        except BaseException as exc:
+            errors.append(exc)
+
+    reader = threading.Thread(target=run_reader)
+    reader.start()
+    time.sleep(0.01)
+
+    failure = RuntimeError("observer setup timed out")
+    terminal_cancelled.set()
+    boundary.fail(failure)
+    terminate.set()
+    reader.join(timeout=1)
+
+    assert not reader.is_alive()
+    assert errors == [failure]
+    assert journal.empty()
+
+
 def test_desktop_terminal_frame_seals_input_before_journal_commit(
     monkeypatch,
 ) -> None:

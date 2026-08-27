@@ -221,6 +221,7 @@ def _desktop_capture_directory(
     root: Path,
     *,
     frame_ordinals: tuple[int, ...] = (1, 3),
+    window_ordinals: tuple[int, ...] = (),
     action_ordinal: int | None = 2,
     before_binding_ordinal: int | None = None,
     after_binding_ordinal: int | None = None,
@@ -280,6 +281,22 @@ def _desktop_capture_directory(
             )
             session.add(screenshot)
             frames[ordinal] = screenshot
+        for ordinal in window_ordinals:
+            session.add(
+                WindowEvent(
+                    recording_id=recording.id,
+                    recording_timestamp=10.0,
+                    timestamp=10.0 + ordinal,
+                    source_ordinal=ordinal,
+                    title="Fixture Window",
+                    left=0,
+                    top=0,
+                    width=80,
+                    height=60,
+                    window_id="fixture-window",
+                    state={},
+                )
+            )
         if action_ordinal is not None:
             before_ordinal = before_binding_ordinal or frame_ordinals[0]
             before = frames[before_ordinal]
@@ -318,11 +335,14 @@ def _desktop_capture_directory(
         event_counts={
             "action": int(action_ordinal is not None),
             "screen": len(frame_ordinals),
-            "window": 0,
+            "window": len(window_ordinals),
             "browser": 0,
             "video": 0,
         },
-        last_source_ordinal=max((*frame_ordinals, action_ordinal or 0)) or None,
+        last_source_ordinal=max(
+            (*frame_ordinals, *window_ordinals, action_ordinal or 0)
+        )
+        or None,
     )
     return capture_dir
 
@@ -619,6 +639,39 @@ def test_verified_loader_requires_a_desktop_after_frame_for_every_action(
 
     with pytest.raises(ValueError, match="incomplete before/after frame binding"):
         CaptureSession.load_verified(capture_dir)
+
+
+def test_verified_loader_accepts_a_complete_desktop_source_journal(
+    tmp_path,
+) -> None:
+    capture_dir = _desktop_capture_directory(
+        tmp_path,
+        frame_ordinals=(1, 2, 4),
+        action_ordinal=3,
+        before_binding_ordinal=2,
+    )
+
+    with CaptureSession.load_verified(capture_dir) as capture:
+        assert [frame.source_ordinal for frame in capture.frames()] == [1, 2, 4]
+        action = capture.raw_events()[0]
+        assert action.source_ordinal == 3
+        assert action.screenshot_source_ordinal == 2
+        assert action.after_screenshot_source_ordinal == 4
+
+
+def test_verified_loader_accepts_desktop_window_evidence_without_an_action(
+    tmp_path,
+) -> None:
+    capture_dir = _desktop_capture_directory(
+        tmp_path,
+        frame_ordinals=(1, 3),
+        window_ordinals=(2,),
+        action_ordinal=None,
+    )
+
+    with CaptureSession.load_verified(capture_dir) as capture:
+        assert [frame.source_ordinal for frame in capture.frames()] == [1, 3]
+        assert [event.source_ordinal for event in capture.window_events()] == [2]
 
 
 def test_verified_loader_rejects_a_skipped_desktop_nearest_before_frame(

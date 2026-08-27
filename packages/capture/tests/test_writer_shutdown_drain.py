@@ -23,6 +23,7 @@ These tests need no display, listeners, or injected input.
 from __future__ import annotations
 
 import multiprocessing
+import queue
 import threading
 import time
 from types import SimpleNamespace
@@ -32,7 +33,11 @@ import pytest
 from openadapt_capture.db import create_db, crud
 from openadapt_capture.extensions import synchronized_queue as sq
 from openadapt_capture.recorder import Event as RecorderEvent
-from openadapt_capture.recorder import write_events, write_window_event
+from openadapt_capture.recorder import (
+    _wait_for_tasks_started,
+    write_events,
+    write_window_event,
+)
 
 NUM_EVENTS = 64
 JOIN_TIMEOUT = 30.0
@@ -175,6 +180,70 @@ def test_writer_terminating_mid_stream_keeps_the_tail(tmp_path, perf_q):
 
     assert not writer.is_alive(), "writer hung after mid-stream terminate"
     assert _count_window_events(db_path) == NUM_EVENTS
+
+
+def test_writer_readiness_can_require_the_first_committed_event(tmp_path, perf_q):
+    recording, db_path = _make_recording(tmp_path)
+    write_q = sq.SynchronizedQueue()
+    write_q.put(_window_event(recording, 0))
+    terminate = multiprocessing.Event()
+    ready = multiprocessing.Event()
+    write_started = threading.Event()
+    allow_commit = threading.Event()
+
+    def gated_write_fn(session, rec, event, perf_queue):
+        write_started.set()
+        assert allow_commit.wait(timeout=JOIN_TIMEOUT)
+        write_window_event(session, rec, event, perf_queue)
+
+    writer = threading.Thread(
+        target=write_events,
+        args=(
+            "window",
+            gated_write_fn,
+            write_q,
+            multiprocessing.Value("i", 1),
+            perf_q,
+            recording,
+            db_path,
+            terminate,
+            ready,
+        ),
+        kwargs={"ready_after_first_event": True},
+    )
+    writer.start()
+
+    assert write_started.wait(timeout=JOIN_TIMEOUT)
+    assert not ready.is_set()
+    allow_commit.set()
+    assert ready.wait(timeout=JOIN_TIMEOUT)
+
+    terminate.set()
+    writer.join(timeout=JOIN_TIMEOUT)
+    assert not writer.is_alive()
+    assert _count_window_events(db_path) == 1
+
+
+def test_startup_readiness_timeout_records_a_fail_loud_error():
+    terminate = threading.Event()
+    task_errors: queue.Queue = queue.Queue()
+    ready = threading.Event()
+    task = SimpleNamespace(is_alive=lambda: True)
+
+    startup_ready = _wait_for_tasks_started(
+        {"screen_event_writer": task},
+        {"screen_event_writer": ready},
+        terminate,
+        task_errors,
+        timeout=0.01,
+    )
+
+    assert startup_ready is False
+    assert terminate.is_set()
+    task_name, error = task_errors.get_nowait()
+    assert task_name == "startup_readiness"
+    assert isinstance(error, TimeoutError)
+    assert "retain its initial frame" in str(error)
 
 
 def test_producer_exits_before_release_and_the_tail_survives(tmp_path, perf_q):

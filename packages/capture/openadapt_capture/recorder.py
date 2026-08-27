@@ -522,6 +522,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
 }
 NUM_MEMORY_STATS_TO_LOG = 3
 STARTUP_WAIT_POLL_SECONDS = 0.1
+STARTUP_READY_TIMEOUT_SECONDS = 30.0
 PRE_READY_TASK_JOIN_TIMEOUT_SECONDS = 2.0
 TERMINAL_FRAME_SEAL_TIMEOUT_SECONDS = 10.0
 
@@ -547,6 +548,9 @@ def _wait_for_tasks_started(
     task_by_name: dict[str, Any],
     task_started_events: dict[str, Any],
     terminate_processing: Any,
+    task_errors: queue.Queue | None = None,
+    *,
+    timeout: float = STARTUP_READY_TIMEOUT_SECONDS,
 ) -> bool:
     """Wait for pipeline readiness while honoring shutdown and worker failure.
 
@@ -555,6 +559,7 @@ def _wait_for_tasks_started(
     startup and signals the rest of the pipeline to stop.
     """
     expected_starts = len(task_by_name)
+    deadline = time.monotonic() + timeout
     logger.info(f"{expected_starts=}")
 
     while True:
@@ -565,6 +570,19 @@ def _wait_for_tasks_started(
         waiting_for = [name for name, event in task_started_events.items() if not event.is_set()]
         if not waiting_for:
             return True
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            detail = ", ".join(sorted(waiting_for))
+            error = TimeoutError(
+                "recording startup did not retain its initial frame and start all "
+                f"required tasks within {timeout:.1f}s; unresolved readiness: {detail}"
+            )
+            logger.error(str(error))
+            if task_errors is not None:
+                task_errors.put(("startup_readiness", error))
+            terminate_processing.set()
+            return False
 
         stopped_before_ready = [
             name
@@ -578,7 +596,7 @@ def _wait_for_tasks_started(
 
         logger.info(f"Waiting for tasks to start: {waiting_for}")
         logger.info(f"Started tasks: {expected_starts - len(waiting_for)}/{expected_starts}")
-        terminate_processing.wait(STARTUP_WAIT_POLL_SECONDS)
+        terminate_processing.wait(min(STARTUP_WAIT_POLL_SECONDS, remaining))
 
 
 def _join_tasks(
@@ -714,6 +732,7 @@ def process_events(
     num_browser_events: multiprocessing.Value,
     num_video_events: multiprocessing.Value,
     producers_finished: threading.Event | None = None,
+    processing_aborted: threading.Event | None = None,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -736,6 +755,8 @@ def process_events(
         producers_finished: Set after every event-journal producer has exited.
             When supplied, the processor drains the journal to empty after that
             boundary instead of racing the shared stop signal.
+        processing_aborted: Stop without publishing a completed journal after a
+            startup failure leaves a producer alive.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -752,6 +773,8 @@ def process_events(
     started = False
 
     def processing_complete() -> bool:
+        if processing_aborted is not None and processing_aborted.is_set():
+            return True
         if producers_finished is not None:
             return producers_finished.is_set() and event_q.empty()
         return terminate_processing.is_set() and event_q.empty()
@@ -802,6 +825,29 @@ def process_events(
                 )
             write_bound_action(action_event)
         pending_action_events.clear()
+
+    def retain_screen_frame(screen_event: Event) -> None:
+        """Queue one exact screen frame for durable pixel retention."""
+        nonlocal prev_saved_screen_timestamp, prev_saved_screen_ordinal
+        process_event(
+            screen_event if config.RECORD_IMAGES else screen_event._replace(data=None),
+            screen_write_q,
+            write_screen_event,
+            recording,
+            perf_q,
+        )
+        num_screen_events.value += 1
+        prev_saved_screen_timestamp = screen_event.timestamp
+        prev_saved_screen_ordinal = screen_event.source_ordinal or 0
+        if config.RECORD_VIDEO and not config.RECORD_FULL_VIDEO:
+            process_event(
+                screen_event._replace(type="screen/video"),
+                video_write_q,
+                write_video_event,
+                recording,
+                perf_q,
+            )
+            num_video_events.value += 1
 
     while not processing_complete():
         # Bounded get: a bare event_q.get() deadlocks shutdown when terminate
@@ -873,17 +919,8 @@ def process_events(
                     perf_q,
                 )
                 num_video_events.value += 1
+            retain_screen_frame(event)
             if scoped_pair:
-                process_event(
-                    event if config.RECORD_IMAGES else event._replace(data=None),
-                    screen_write_q,
-                    write_screen_event,
-                    recording,
-                    perf_q,
-                )
-                num_screen_events.value += 1
-                prev_saved_screen_timestamp = event.timestamp
-                prev_saved_screen_ordinal = event.source_ordinal or 0
                 assert prev_window_event is not None
                 process_event(
                     prev_window_event,
@@ -895,17 +932,18 @@ def process_events(
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
                 prev_saved_window_ordinal = prev_window_event.source_ordinal or 0
-                if config.RECORD_VIDEO and not config.RECORD_FULL_VIDEO:
-                    process_event(
-                        event._replace(type="screen/video"),
-                        video_write_q,
-                        write_video_event,
-                        recording,
-                        perf_q,
-                    )
-                    num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
+            process_event(
+                event,
+                window_write_q,
+                write_window_event,
+                recording,
+                perf_q,
+            )
+            num_window_events.value += 1
+            prev_saved_window_timestamp = event.timestamp
+            prev_saved_window_ordinal = event.source_ordinal or 0
         elif event.type == "browser":
             if config.RECORD_BROWSER_EVENTS:
                 process_event(
@@ -918,16 +956,16 @@ def process_events(
                 num_browser_events.value += 1
         elif event.type == "action":
             if prev_screen_event is None:
-                logger.warning("Discarding action that came before screen")
-                continue
+                raise WindowCaptureError("a native action arrived before its initial frame")
             else:
                 event.data["screenshot_timestamp"] = prev_screen_event.timestamp
                 event.data["screenshot_source_ordinal"] = prev_screen_event.source_ordinal
 
             if prev_window_event is None:
                 if config.RECORD_WINDOW_DATA:
-                    logger.warning("Discarding action that came before window")
-                    continue
+                    raise WindowCaptureError(
+                        "a native action arrived before its configured window evidence"
+                    )
                 # Window capture disabled — skip window timestamp requirement
             else:
                 event.data["window_event_timestamp"] = prev_window_event.timestamp
@@ -958,30 +996,7 @@ def process_events(
                 else prev_saved_screen_timestamp < prev_screen_event.timestamp
             )
             if screen_is_new:
-                process_event(
-                    (
-                        prev_screen_event
-                        if config.RECORD_IMAGES
-                        else prev_screen_event._replace(data=None)
-                    ),
-                    screen_write_q,
-                    write_screen_event,
-                    recording,
-                    perf_q,
-                )
-                num_screen_events.value += 1
-                prev_saved_screen_timestamp = prev_screen_event.timestamp
-                prev_saved_screen_ordinal = prev_screen_event.source_ordinal or 0
-                if config.RECORD_VIDEO and not config.RECORD_FULL_VIDEO:
-                    prev_video_event = prev_screen_event._replace(type="screen/video")
-                    process_event(
-                        prev_video_event,
-                        video_write_q,
-                        write_video_event,
-                        recording,
-                        perf_q,
-                    )
-                    num_video_events.value += 1
+                retain_screen_frame(prev_screen_event)
             if prev_window_event is not None:
                 window_is_new = (
                     prev_window_event.source_ordinal > prev_saved_window_ordinal
@@ -1137,6 +1152,8 @@ def write_events(
     started_event: multiprocessing.Event,
     pre_callback: Callable[[float], dict] | None = None,
     post_callback: Callable[[dict], None] | None = None,
+    *,
+    ready_after_first_event: bool = False,
 ) -> None:
     """Write events of a specific type to the db using the provided write function.
 
@@ -1154,6 +1171,8 @@ def write_events(
             timestamp as only argument, returns a state dict.
         post_callback: Optional function to call after main loop. Takes state dict as
             only argument, returns None.
+        ready_after_first_event: Delay the readiness signal until the first event
+            has been committed by ``write_fn``.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -1184,7 +1203,7 @@ def write_events(
             # been processed
             for _ in range(num_processed):
                 progress.update()
-        if not started:
+        if not started and not ready_after_first_event:
             started_event.set()
             started = True
         try:
@@ -1194,6 +1213,9 @@ def write_events(
         assert event.type == event_type, (event_type, event)
         state = write_fn(session, recording, event, perf_q, **(state or {}))
         num_processed += 1
+        if not started:
+            started_event.set()
+            started = True
         with num_events.get_lock():
             if progress is not None:
                 if progress.total < num_events.value:
@@ -1635,6 +1657,7 @@ def read_screen_events(
     input_finished: threading.Event | None = None,
     input_frame_boundary: NativeInputFrameBoundary | None = None,
     terminal_frame_finished: threading.Event | None = None,
+    terminal_frame_cancelled: threading.Event | None = None,
 ) -> None:
     """Read screen events and add them to the event queue.
 
@@ -1663,6 +1686,8 @@ def read_screen_events(
         input_frame_boundary: Active observer bridge for input-stable frames.
         terminal_frame_finished: Signals that the exact terminal frame sealed
             native input and entered the ordered journal.
+        terminal_frame_cancelled: Cancels terminal-frame coordination after a
+            startup failure that cannot produce a completed capture.
     """
     if window_scope is not None and desktop_scope is not None:
         raise ValueError("screen reader cannot use both window and desktop scopes")
@@ -1800,8 +1825,13 @@ def read_screen_events(
             t_end = time.perf_counter()
             _screen_timing.append((t_screenshot - t_start, t_end - t_start))
 
-    if (window_scope is not None or desktop_scope is not None) and (
-        terminal_frame_finished is not None
+    terminal_cancelled = (
+        terminal_frame_cancelled is not None and terminal_frame_cancelled.is_set()
+    )
+    if (
+        (window_scope is not None or desktop_scope is not None)
+        and terminal_frame_finished is not None
+        and not terminal_cancelled
     ):
         timing = capture_one(seal_input=True)
         if timing is None:
@@ -2064,6 +2094,7 @@ def read_input_events(
     finished_event: threading.Event | None = None,
     input_frame_boundary: NativeInputFrameBoundary | None = None,
     terminal_frame_finished: threading.Event | None = None,
+    terminal_frame_cancelled: threading.Event | None = None,
 ) -> None:
     """Read globally ordered keyboard and mouse events from one native observer."""
     stop_sequences = [sequence for sequence in config.STOP_SEQUENCES if sequence]
@@ -2202,12 +2233,30 @@ def read_input_events(
     finally:
         if started and observer is not None:
             terminal_error = None
-            if terminal_frame_finished is not None and not observer_failed:
+            terminal_cancelled = (
+                terminal_frame_cancelled is not None
+                and terminal_frame_cancelled.is_set()
+            )
+            if (
+                terminal_frame_finished is not None
+                and not observer_failed
+                and not terminal_cancelled
+            ):
                 terminal_timeout = max(
                     10.0,
                     float(getattr(observer, "shutdown_timeout", 5.0)) * 2,
                 )
-                if not terminal_frame_finished.wait(timeout=terminal_timeout):
+                terminal_deadline = time.monotonic() + terminal_timeout
+                while not terminal_frame_finished.wait(timeout=0.1):
+                    if (
+                        terminal_frame_cancelled is not None
+                        and terminal_frame_cancelled.is_set()
+                    ):
+                        terminal_cancelled = True
+                        break
+                    if time.monotonic() >= terminal_deadline:
+                        break
+                if not terminal_frame_finished.is_set() and not terminal_cancelled:
                     terminal_error = InputObserverError(
                         "the terminal frame did not seal before native input shutdown"
                     )
@@ -2514,7 +2563,9 @@ def record(
     producers_finished = threading.Event()
     input_finished = threading.Event()
     terminal_frame_finished = threading.Event()
+    terminal_frame_cancelled = threading.Event()
     input_frame_boundary = NativeInputFrameBoundary()
+    processing_aborted = threading.Event()
     if window_scope is not None:
         # The preflight frame sizes the fixed stream. Capture again after the
         # recording clock starts, then publish pixels and geometry atomically
@@ -2607,6 +2658,7 @@ def record(
                 input_finished,
                 input_frame_boundary,
                 terminal_frame_finished,
+                terminal_frame_cancelled,
             ),
             terminate_processing,
             task_errors,
@@ -2625,6 +2677,7 @@ def record(
         input_finished,
         input_frame_boundary,
         terminal_frame_finished,
+        terminal_frame_cancelled,
     )
     input_event_reader = threading.Thread(
         target=_run_task_fail_loud,
@@ -2668,6 +2721,7 @@ def record(
         num_browser_events,
         num_video_events,
         producers_finished,
+        processing_aborted,
     )
     event_processor = threading.Thread(
         target=_run_task_fail_loud,
@@ -2684,7 +2738,9 @@ def record(
     task_by_name["event_processor"] = event_processor
 
     screen_event_writer = multiprocessing.Process(
-        target=utils.WrapStdout(write_events),
+        target=utils.WrapStdout(
+            partial(write_events, ready_after_first_event=True)
+        ),
         args=(
             "screen",
             partial(write_screen_event, record_images=bool(config.RECORD_IMAGES)),
@@ -2719,7 +2775,9 @@ def record(
 
     if config.RECORD_WINDOW_DATA or window_scope is not None:
         window_event_writer = multiprocessing.Process(
-            target=utils.WrapStdout(write_events),
+            target=utils.WrapStdout(
+                partial(write_events, ready_after_first_event=True)
+            ),
             args=(
                 "window",
                 write_window_event,
@@ -2737,7 +2795,9 @@ def record(
 
     if config.RECORD_VIDEO:
         video_writer = multiprocessing.Process(
-            target=utils.WrapStdout(write_events),
+            target=utils.WrapStdout(
+                partial(write_events, ready_after_first_event=True)
+            ),
             args=(
                 "screen/video",
                 write_video_event,
@@ -2821,6 +2881,7 @@ def record(
         task_by_name,
         task_started_events,
         terminate_processing,
+        task_errors,
     )
     if startup_ready:
         for _ in range(5):
@@ -2837,6 +2898,12 @@ def record(
             terminate_processing.set()
     else:
         logger.info("Tearing down recording after incomplete startup")
+        terminal_frame_cancelled.set()
+        input_frame_boundary.fail(
+            WindowCaptureError(
+                "recording startup ended before the native frame boundary was ready"
+            )
+        )
     terminate_processing.set()
 
     if status_pipe:
@@ -2847,7 +2914,7 @@ def record(
         log_memory_usage(_tracker, performance_snapshots)
 
     pre_ready_timeout = None if startup_ready else PRE_READY_TASK_JOIN_TIMEOUT_SECONDS
-    _join_tasks(
+    lingering_tasks = _join_tasks(
         task_by_name,
         [
             "window_event_reader",
@@ -2858,9 +2925,23 @@ def record(
         timeout=pre_ready_timeout,
     )
 
-    # The processor can now drain every completed reservation. No producer can
-    # append a later event after it observes an empty journal.
-    producers_finished.set()
+    journal_producers = {
+        "window_event_reader",
+        "input_event_reader",
+        "screen_event_reader",
+    }
+    lingering_producers = sorted(journal_producers.intersection(lingering_tasks))
+    producer_shutdown_error = None
+    if lingering_producers:
+        producer_shutdown_error = RuntimeError(
+            "recording startup failed with live journal producers: "
+            + ", ".join(lingering_producers)
+        )
+        processing_aborted.set()
+    else:
+        # The processor can now drain every completed reservation. No producer
+        # can append a later event after it observes an empty journal.
+        producers_finished.set()
     _join_tasks(
         task_by_name,
         ["event_processor"],
@@ -2894,7 +2975,11 @@ def record(
     if not task_errors.empty():
         task_name, task_error = task_errors.get_nowait()
         add_exception_note(task_error, f"recording task {task_name!r} failed")
+        if producer_shutdown_error is not None:
+            add_exception_note(task_error, str(producer_shutdown_error))
         raise task_error
+    if producer_shutdown_error is not None:
+        raise producer_shutdown_error
     _raise_for_failed_processes(task_by_name)
     if window_scope is not None:
         window_scope.assert_current()
