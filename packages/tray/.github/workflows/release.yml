@@ -30,12 +30,19 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-
-      - name: Python Semantic Release
-        id: release
-        uses: python-semantic-release/python-semantic-release@39dd2052f2ce8282a5d932c31d58a2ca06d2550e # v10.6.1
         with:
-          github_token: ${{ secrets.ADMIN_TOKEN }}
+          version: "0.12.5"
+
+      - name: Install the locked release runtime
+        run: uv sync --locked --extra release
+
+      - name: Run the locked Python Semantic Release CLI
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: >-
+          uv run --locked --extra release
+          python scripts/run_semantic_release.py
 
       - name: Verify release workspace
         if: steps.release.outputs.released == 'true'

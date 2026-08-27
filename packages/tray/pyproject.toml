@@ -52,6 +52,16 @@ dev = [
 ]
 release = [
     "uv==0.12.5",
+    # Build inside this reviewed environment. An isolated `uv build` would
+    # resolve the backend again and bypass uv.lock.
+    "hatchling==1.31.0",
+    # Keep the release CLI outside its Docker action. That action resolves
+    # transitive packages during each run, so the fixed action SHA did not
+    # prevent GitPython 3.1.60 from breaking PSR 10.6.1 on 2026-08-25.
+    "python-semantic-release==10.6.1",
+    # Remove this cap only with the reviewed PSR release that contains
+    # https://github.com/python-semantic-release/python-semantic-release/pull/1477.
+    "GitPython==3.1.59",
 ]
 all = [
     "openadapt-tray[macos-native]",
@@ -71,7 +81,7 @@ Repository = "https://github.com/OpenAdaptAI/openadapt-tray"
 
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -120,11 +130,10 @@ commit_message = "chore: release {version}"
 allow_zero_version = true
 major_on_zero = false
 build_command = """
-python -m pip install --disable-pip-version-check "uv==0.12.5" &&
 python scripts/check_release_consistency.py --write-lock &&
 uv lock --locked --offline &&
 git add uv.lock &&
-uv build --wheel --sdist &&
+uv build --no-build-isolation --wheel --sdist &&
 python scripts/check_release_consistency.py --require-dist
 """
 
