@@ -82,6 +82,11 @@ _LEASE_ARMED = 1
 _LEASE_INVALIDATED = 2
 _SESSION_DIGEST_HEX_LENGTH = 64
 
+_MACOS_CHROME_AX_TITLE_SUFFIXES = {
+    "Google Chrome": "Google Chrome",
+    "Google Chrome for Testing": "Google Chrome for Testing",
+}
+
 
 class RemoteDisplayError(RuntimeError):
     """A remote-display capture/inject operation failed (or is not permitted)."""
@@ -118,6 +123,16 @@ class WindowInfo:
     pid: int
     bounds: tuple[float, float, float, float]
     on_screen: bool = True
+
+
+def _macos_ax_title_matches(window: WindowInfo, ax_title: object) -> bool:
+    """Match one CG title to AX without widening beyond known Chrome suffixes."""
+
+    candidate = str(ax_title or "")
+    exact = candidate == window.title
+    suffix = _MACOS_CHROME_AX_TITLE_SUFFIXES.get(window.owner)
+    known_suffix = suffix is not None and candidate == f"{window.title} - {suffix}"
+    return exact or known_suffix
 
 
 # macOS US-layout virtual key codes for printable characters. A synthetic
@@ -1907,10 +1922,11 @@ class MacWindowClient:
 
         App activation alone does not select a document when macOS restores
         several windows into one process. Match the already-unique
-        CoreGraphics target by its exact AX title, require one AX candidate,
-        and perform ``AXRaise``. The native backend independently re-checks
-        the exact CoreGraphics window id afterward, so a stale title or failed
-        AX mapping remains a fail-closed refusal.
+        CoreGraphics target by its exact AX title, or by one explicitly allowed
+        Chrome application-name suffix, require one AX candidate, and perform
+        ``AXRaise``. The native backend independently re-checks the exact
+        CoreGraphics window id afterward, so a stale title or failed AX mapping
+        remains a fail-closed refusal.
         """
         try:
             from ApplicationServices import (
@@ -1937,7 +1953,7 @@ class MacWindowClient:
                 title_error, title = AXUIElementCopyAttributeValue(
                     candidate, kAXTitleAttribute, None
                 )
-                if title_error == 0 and str(title or "") == window.title:
+                if title_error == 0 and _macos_ax_title_matches(window, title):
                     matches.append(candidate)
             if len(matches) != 1:
                 return False
@@ -2006,7 +2022,7 @@ class MacWindowClient:
                 title_error, title = AXUIElementCopyAttributeValue(
                     candidate, kAXTitleAttribute, None
                 )
-                if title_error == 0 and str(title or "") == window.title:
+                if title_error == 0 and _macos_ax_title_matches(window, title):
                     matching_windows.append(candidate)
             if len(matching_windows) != 1:
                 return None
@@ -2039,7 +2055,7 @@ class MacWindowClient:
             top_title_error, top_title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
             )
-            if top_title_error != 0 or str(top_title or "") != window.title:
+            if top_title_error != 0 or not _macos_ax_title_matches(window, top_title):
                 return None
             return focused
         except Exception:  # noqa: BLE001 - unknown AX focus fails closed
@@ -2090,7 +2106,7 @@ class MacWindowClient:
                 kAXTitleAttribute,
                 None,
             )
-            if title_error != 0 or str(title or "") != window.title:
+            if title_error != 0 or not _macos_ax_title_matches(window, title):
                 return None
 
             # A hit test may return an internal text child while AX focus is on
@@ -2179,7 +2195,8 @@ class MacWindowClient:
         delivery. Accessibility selected-text replacement is layout independent
         and returns an explicit delivery result. This method requires a unique
         AX window title and proves that the focused element belongs to it before
-        writing; the caller separately verifies the exact topmost CG id. The
+        writing; only an explicitly allowed Chrome application-name suffix may
+        differ. The caller separately verifies the exact topmost CG id. The
         active-app PID remains mandatory only for global/physical input.
         """
         try:
@@ -2208,7 +2225,7 @@ class MacWindowClient:
                 title_error, title = AXUIElementCopyAttributeValue(
                     candidate, kAXTitleAttribute, None
                 )
-                if title_error == 0 and str(title or "") == window.title:
+                if title_error == 0 and _macos_ax_title_matches(window, title):
                     matching_windows.append(candidate)
             if len(matching_windows) != 1:
                 return False
@@ -2241,7 +2258,7 @@ class MacWindowClient:
             top_title_error, top_title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
             )
-            if top_title_error != 0 or str(top_title or "") != window.title:
+            if top_title_error != 0 or not _macos_ax_title_matches(window, top_title):
                 return False
             if top_level != target:
                 return False
@@ -2281,7 +2298,7 @@ class MacWindowClient:
                 title_error, title = AXUIElementCopyAttributeValue(
                     candidate, kAXTitleAttribute, None
                 )
-                if title_error == 0 and str(title or "") == window.title:
+                if title_error == 0 and _macos_ax_title_matches(window, title):
                     matches.append(candidate)
             if len(matches) != 1:
                 return False

@@ -14,8 +14,8 @@ import pytest
 from openadapt_flow.backends.remote_display import MacWindowClient, WindowInfo
 
 
-def _window() -> WindowInfo:
-    return WindowInfo(41, "TextEdit", "oa-trial.txt", 9001, (0, 0, 400, 300))
+def _window(*, owner: str = "TextEdit", title: str = "oa-trial.txt") -> WindowInfo:
+    return WindowInfo(41, owner, title, 9001, (0, 0, 400, 300))
 
 
 def test_find_windows_requires_exact_case_insensitive_identity(monkeypatch) -> None:
@@ -240,7 +240,9 @@ def test_window_id_at_point_includes_nonzero_layer_overlay(monkeypatch) -> None:
 def _ax_module(
     *,
     focused_title: str = "oa-trial.txt",
+    target_title: str = "oa-trial.txt",
     duplicate: bool = False,
+    duplicate_title: str | None = None,
     focused_window_matches: bool = True,
     is_main: bool = True,
     selected_settable: bool = True,
@@ -265,8 +267,8 @@ def _ax_module(
     other = object()
     values = {
         (app, "windows"): [target, duplicate_target] if duplicate else [target],
-        (target, "title"): "oa-trial.txt",
-        (duplicate_target, "title"): "oa-trial.txt",
+        (target, "title"): target_title,
+        (duplicate_target, "title"): duplicate_title or target_title,
         (app, "focused-window"): target if focused_window_matches else other,
         (target, "main"): is_main,
         (app, "focused-element"): focused,
@@ -319,6 +321,105 @@ def test_raise_window_selects_exact_ax_document_and_requests_key_state(
         ("set", target, "focused", True),
         ("action", target, "raise"),
     ]
+
+
+@pytest.mark.parametrize(
+    ("owner", "suffix"),
+    [
+        ("Google Chrome", "Google Chrome"),
+        ("Google Chrome for Testing", "Google Chrome for Testing"),
+    ],
+)
+def test_raise_window_accepts_only_corresponding_known_chrome_ax_suffix(
+    monkeypatch, owner: str, suffix: str
+) -> None:
+    cg_title = "Example Order Management"
+    module, app, target, _focused, calls = _ax_module(
+        target_title=f"{cg_title} - {suffix}"
+    )
+    monkeypatch.setitem(sys.modules, "ApplicationServices", module)
+
+    assert MacWindowClient().raise_window(_window(owner=owner, title=cg_title)) is True
+    assert calls == [
+        ("set", app, "focused-window", target),
+        ("set", target, "main", True),
+        ("set", target, "focused", True),
+        ("action", target, "raise"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("owner", "cg_title", "ax_title", "expected"),
+    [
+        (
+            "Google Chrome",
+            "Example Order Management",
+            "Example Order Management",
+            True,
+        ),
+        (
+            "Google Chrome",
+            "Example Order Management",
+            "Example Order Management - Google Chrome",
+            True,
+        ),
+        (
+            "Google Chrome for Testing",
+            "Example Order Management",
+            "Example Order Management - Google Chrome for Testing",
+            True,
+        ),
+        (
+            "Google Chrome",
+            "Example Order Management",
+            "Different Application",
+            False,
+        ),
+        (
+            "Google Chrome",
+            "Example Order Management",
+            "Example - Google Chrome Order Management",
+            False,
+        ),
+        (
+            "TextEdit",
+            "Example Order Management",
+            "Example Order Management - Google Chrome",
+            False,
+        ),
+    ],
+)
+def test_exact_window_focused_main_applies_only_known_chrome_suffixes(
+    monkeypatch,
+    owner: str,
+    cg_title: str,
+    ax_title: str,
+    expected: bool,
+) -> None:
+    module, _app, _target, _focused, _calls = _ax_module(target_title=ax_title)
+    monkeypatch.setitem(sys.modules, "ApplicationServices", module)
+
+    assert (
+        MacWindowClient().exact_window_focused_main(
+            _window(owner=owner, title=cg_title)
+        )
+        is expected
+    )
+
+
+def test_chrome_suffix_matching_preserves_ax_ambiguity(monkeypatch) -> None:
+    cg_title = "Example Order Management"
+    module, _app, _target, _focused, calls = _ax_module(
+        target_title=cg_title,
+        duplicate=True,
+        duplicate_title=f"{cg_title} - Google Chrome",
+    )
+    monkeypatch.setitem(sys.modules, "ApplicationServices", module)
+    window = _window(owner="Google Chrome", title=cg_title)
+
+    assert MacWindowClient().raise_window(window) is False
+    assert MacWindowClient().exact_window_focused_main(window) is False
+    assert calls == []
 
 
 def test_raise_window_refuses_duplicate_exact_ax_titles(monkeypatch) -> None:
