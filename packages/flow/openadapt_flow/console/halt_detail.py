@@ -53,6 +53,7 @@ from typing import Any, Literal, Optional, get_args
 from openadapt_flow.console import data
 from openadapt_flow.ir import ActionKind, Anchor, Rung, Step, Workflow
 from openadapt_flow.runtime import identity as _id
+from openadapt_flow.runtime.authorization import runtime_params_for_gui
 from openadapt_flow.runtime.durable.checkpoint import CheckpointStore, PendingEscalation
 
 #: The resolution ladder in strongest-first order, taken from the engine's own
@@ -444,9 +445,9 @@ def halt_detail(
     anchor = step.anchor if step is not None else None
     params: dict[str, str] = {}
     if report is not None and getattr(report, "params", None):
-        params = dict(report.params)
+        params = runtime_params_for_gui(report.params)
     elif pending is not None:
-        params = dict(pending.params)
+        params = runtime_params_for_gui(pending.params)
 
     role, label = _safe_target_label(step, params)
     resolved_rung = None

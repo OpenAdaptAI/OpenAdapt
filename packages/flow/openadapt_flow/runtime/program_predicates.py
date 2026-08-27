@@ -269,7 +269,7 @@ def predicate_uses_frame(predicate: Predicate | None) -> bool:
 def evaluate_program_predicate(
     predicate: Predicate,
     frame_png: bytes,
-    params: Mapping[str, str],
+    params: Mapping[str, object],
     *,
     vision: Any,
     viewport: tuple[int, int] | None,
@@ -308,9 +308,11 @@ def evaluate_program_predicate(
     if kind is PredicateKind.TEXT_ABSENT:
         return not (predicate.text and vision.text_present(frame_png, predicate.text))
     if kind is PredicateKind.PARAM_EQUALS:
-        return predicate.param is not None and str(params.get(predicate.param)) == str(
-            predicate.value
-        )
+        if predicate.param is None or predicate.param not in params:
+            return False
+        from openadapt_flow.runtime.authorization import runtime_param_text
+
+        return runtime_param_text(params[predicate.param]) == predicate.value  # type: ignore[arg-type]
     if kind is PredicateKind.AND:
         return all(
             evaluate_program_predicate(

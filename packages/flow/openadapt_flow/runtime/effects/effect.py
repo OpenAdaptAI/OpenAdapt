@@ -93,7 +93,7 @@ class ValueExpr(BaseModel):
             raise ValueError("effect parameter name must not be empty")
         return self
 
-    def resolve(self, params: Mapping[str, str]) -> Optional[str]:
+    def resolve(self, params: Mapping[str, object]) -> Optional[str]:
         """Resolve to a concrete string against ``params``.
 
         A ``param`` reference reads ``params[param]`` (``None`` when the run did
@@ -102,10 +102,16 @@ class ValueExpr(BaseModel):
         record). A pure literal returns its literal unchanged.
         """
         if self.param is not None:
-            return params.get(self.param)
+            if self.param not in params:
+                return None
+            # Keep the authorized JSON scalar typed until this exact
+            # string-only effect-verifier boundary.
+            from openadapt_flow.runtime.authorization import runtime_param_text
+
+            return runtime_param_text(params[self.param])  # type: ignore[arg-type]
         return self.literal
 
-    def resolved(self, params: Mapping[str, str]) -> "ValueExpr":
+    def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
         """Return a pure-literal copy of this expression bound to ``params``."""
         return ValueExpr(literal=self.resolve(params))
 
@@ -482,7 +488,7 @@ class Effect(BaseModel):
     # -- run-time parameter binding (P0-3) -----------------------------------
     def resolve(
         self,
-        params: Mapping[str, str],
+        params: Mapping[str, object],
         *,
         opaque_param_sha256: Mapping[str, str] | None = None,
     ) -> "Effect":
@@ -519,7 +525,7 @@ class Effect(BaseModel):
 
     def resolved_contract_hash(
         self,
-        params: Mapping[str, str],
+        params: Mapping[str, object],
         *,
         opaque_param_sha256: Mapping[str, str] | None = None,
     ) -> str:
@@ -538,14 +544,14 @@ class Effect(BaseModel):
                 char not in "0123456789abcdef" for char in digest
             ):
                 raise ValueError(f"opaque parameter {name!r} has an invalid digest")
-            if (
-                name in params
-                and hashlib.sha256(str(params[name]).encode("utf-8")).hexdigest()
-                != digest
-            ):
-                raise ValueError(
-                    f"opaque parameter {name!r} digest does not match its value"
-                )
+            if name in params:
+                resolved_value = ValueExpr(param=name).resolve(params)
+                if resolved_value is None or (
+                    hashlib.sha256(resolved_value.encode("utf-8")).hexdigest() != digest
+                ):
+                    raise ValueError(
+                        f"opaque parameter {name!r} digest does not match its value"
+                    )
         missing = self.referenced_params().difference(params).difference(opaque)
         if missing:
             raise ValueError("effect contract references an unavailable parameter")
@@ -558,7 +564,7 @@ class Effect(BaseModel):
                     "opaque_param": expr.param,
                     "sha256": opaque[expr.param],
                 }
-            return str(expr.resolved(params))
+            return expr.resolve(params)
 
         payload: dict[str, object] = {
             "kind": self.kind.value,

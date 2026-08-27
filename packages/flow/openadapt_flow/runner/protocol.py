@@ -17,11 +17,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from openadapt_flow.runtime.authorization import GovernedRunAuthorization
+from openadapt_flow.runtime.authorization import (
+    GovernedRunAuthorization,
+    RuntimeParamScalar,
+    is_runtime_param_scalar,
+    normalize_runtime_param_scalar,
+)
 
 #: The only job kind the v1 client executes.
 JOB_KIND_GOVERNED_RUN = "governed_run"
@@ -34,6 +40,21 @@ DISPATCH_LEASE_TTL_S = 900
 #: Cloud long-poll ceiling (runners.ts POLL_MAX_WAIT_S).
 POLL_MAX_WAIT_S = 25
 
+# This is the exact closed grammar used by Cloud's production runtime schema.
+# Keeping hosted parameter keys in ASCII also makes Python and JavaScript key
+# ordering byte-identical for the authorization digest.
+RUNTIME_PARAM_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+_RUNTIME_PARAM_NAME = re.compile(RUNTIME_PARAM_NAME_PATTERN)
+
+
+def validate_runtime_param_name(name: str) -> str:
+    """Refuse a hosted parameter name outside the shared Cloud grammar."""
+
+    if _RUNTIME_PARAM_NAME.fullmatch(name) is None:
+        raise ValueError("runtime parameter name is invalid")
+    return name
+
+
 #: Runtime-local v2 authority bindings are deliberately OUTSIDE the dispatch
 #: binding digest. The digest grammar is a cross-repo contract: Cloud and Flow
 #: must hash byte-identical payloads, so fields Cloud does not emit may not
@@ -43,6 +64,8 @@ POLL_MAX_WAIT_S = 25
 #: v2 permit carries its own admission and authority digests.
 DISPATCH_BINDING_LOCAL_FIELDS = frozenset(
     {
+        "qualification_admission",
+        "qualification_admission_sha256",
         "production_qualification_admission_id",
         "production_qualification_admission_sha256",
         "production_qualification_evidence_identity_sha256",
@@ -108,13 +131,30 @@ class DispatchParamsValues(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    values: dict[str, str]
+    values: dict[str, RuntimeParamScalar] = Field(max_length=100)
+
+    @model_validator(mode="after")
+    def _finite_json_scalars(self) -> "DispatchParamsValues":
+        normalized: dict[str, RuntimeParamScalar] = {}
+        for key, value in self.values.items():
+            validate_runtime_param_name(key)
+            if not is_runtime_param_scalar(value):
+                raise ValueError(
+                    "runtime parameters must be finite JSON-safe scalar values"
+                )
+            normalized[key] = normalize_runtime_param_scalar(value)
+        object.__setattr__(self, "values", normalized)
+        return self
 
 
 class DispatchParamsRef(BaseModel):
-    """Regulated-lane params-by-reference. Parsed, but refused in v1: the
-    local reference resolver does not exist yet, and guessing values would
-    break the runtime-inputs digest binding."""
+    """Regulated-lane reference to protected customer-local parameters.
+
+    The hosted adapter treats ``ref`` only as a relative path under the
+    operator-configured protected root. It refuses URLs, traversal, and links,
+    then checks ``expected_digest`` after typed local resolution. Resolved
+    values stay local and never enter the callback.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -133,7 +173,7 @@ class RunnerDispatchPayload(BaseModel):
     # exact UUID across runner restart and reassignment.
     run_id: str = Field(
         pattern=(
-            "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
         )
     )
     workflow_id: str

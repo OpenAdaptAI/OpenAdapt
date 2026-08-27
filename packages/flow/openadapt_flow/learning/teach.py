@@ -65,6 +65,7 @@ from openadapt_flow.learning.library import SkillLibrary
 from openadapt_flow.learning.loop import Inducer, LearnOutcome
 from openadapt_flow.learning.synth_stream import StructuralDiffInducer
 from openadapt_flow.learning.trace import ExecutionTrace, TraceStep
+from openadapt_flow.runtime.authorization import runtime_params_for_gui
 
 
 class TeachError(Exception):
@@ -245,7 +246,7 @@ def _correction_from_spec(
         resolution_steps=resolution_steps,
         tail_intents=tail,
         trace_id=f"{report.workflow_name}-correction",
-        params=spec.params or dict(report.params),
+        params=spec.params or runtime_params_for_gui(report.params),
     )
     return correction, _baseline_success(program, report, tail)
 

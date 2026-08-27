@@ -47,6 +47,7 @@ from openadapt_flow.learning.loop import (
     learn_from_traces,
 )
 from openadapt_flow.learning.trace import ExecutionTrace, TraceStep
+from openadapt_flow.runtime.authorization import runtime_params_for_gui
 from openadapt_flow.runtime.healing.governance import RegressionGate
 
 
@@ -78,7 +79,7 @@ def execution_trace_from_halt(
         outcome="failure",
         steps=steps,
         facts=facts,
-        params=dict(params or report.params),
+        params=runtime_params_for_gui(params or report.params),
         failure_reason=halt.reason,
     )
 

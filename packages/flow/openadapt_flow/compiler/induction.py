@@ -110,6 +110,7 @@ from openadapt_flow.ir import (
     Transition,
     Workflow,
 )
+from openadapt_flow.runtime.authorization import runtime_param_text
 
 TraceInput = Union[Workflow, str, Path]
 
@@ -717,7 +718,10 @@ def induce_program(
         program=program,
         subflows=subflows,
         param_specs=param_specs,
-        params={k: (v.example or "") for k, v in param_specs.items()},
+        params={
+            key: runtime_param_text(spec.example) if spec.example is not None else ""
+            for key, spec in param_specs.items()
+        },
         data_sources=data_sources,
     )
     result.program = program

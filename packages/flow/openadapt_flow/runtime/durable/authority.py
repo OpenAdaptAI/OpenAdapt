@@ -52,9 +52,10 @@ from openadapt_flow.terminal_verification_v2 import (
 
 AUTHORITY_DB_ENV = "OPENADAPT_DURABLE_AUTHORITY_DB"
 REMOTE_AUTHORITY_URL_ENV = "OPENADAPT_DURABLE_AUTHORITY_URL"
-# Reuse the enrolled runner credential. The operator configures one trust
-# relationship with the control plane, not a second delivery-only secret.
+# The managed parent injects a run-scoped delivery-authority credential. Keep
+# the established environment name for child-runtime compatibility.
 REMOTE_AUTHORITY_TOKEN_ENV = "OPENADAPT_RUNNER_TOKEN"
+REMOTE_DISPATCH_SESSION_ID_ENV = "OPENADAPT_DURABLE_DISPATCH_SESSION_ID"
 # This observer exists only for the closed synthetic Execute acceptance run.
 # A Modal launcher owns the fixed, pre-opened non-blocking pipe at descriptor
 # three. A bundle, CLI invocation, or remote caller cannot select a path,
@@ -70,9 +71,8 @@ AUTHORITY_SCHEMA_VERSION = 1
 JOURNAL_GENESIS_DIGEST = "sha256:" + hashlib.sha256(b"").hexdigest()
 JOURNAL_MAC_DOMAIN = b"openadapt-attended-journal-v1\0"
 _REMOTE_UUID_RE = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-"
-    r"[89ab][0-9a-f]{3}-[0-9a-f]{12}",
-    re.IGNORECASE,
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-"
+    r"[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
 _REMOTE_AUTHORITY_ID_RE = _REMOTE_UUID_RE
 _REMOTE_TOKEN_RE = re.compile(r"[a-f0-9]{32}")
@@ -2006,6 +2006,7 @@ class DurableAuthority:
             )
         url = os.getenv(REMOTE_AUTHORITY_URL_ENV, "")
         token = os.getenv(REMOTE_AUTHORITY_TOKEN_ENV, "")
+        expected_dispatch_session_id = os.getenv(REMOTE_DISPATCH_SESSION_ID_ENV, "")
         if not url or not token:
             raise DurableAuthorityBusy(
                 "production delivery requires configured remote authority credentials"
@@ -2121,6 +2122,10 @@ class DurableAuthority:
             and _REMOTE_UUID_RE.fullmatch(response["permit_id"])
             and isinstance(response["dispatch_session_id"], str)
             and _REMOTE_UUID_RE.fullmatch(response["dispatch_session_id"])
+            and (
+                not expected_dispatch_session_id
+                or response["dispatch_session_id"] == expected_dispatch_session_id
+            )
             and isinstance(response["one_use_claim_id"], str)
             and _REMOTE_UUID_RE.fullmatch(response["one_use_claim_id"])
             and isinstance(response["permit_artifact_sha256"], str)

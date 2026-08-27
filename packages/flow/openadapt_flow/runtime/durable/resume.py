@@ -30,6 +30,7 @@ workflow to the SAME deterministic replayer, never to a free-form agent.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,6 +38,10 @@ from typing import Any, Optional
 
 from openadapt_flow.ir import ExecutionTargetKind, RunReport, Step, Workflow
 from openadapt_flow.policy import effects_for_actuation
+from openadapt_flow.runtime.authorization import (
+    RuntimeParamScalar,
+    runtime_params_for_gui,
+)
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
     ApprovalRequired,
@@ -62,13 +67,13 @@ from openadapt_flow.runtime.effects import Effect
 def _resolved_step_effects(
     step: Step,
     *,
-    params: dict[str, str],
+    params: Mapping[str, RuntimeParamScalar],
     run_id: str,
     actuation: Optional[str],
 ) -> list[Effect]:
     """Resolve the exact path-specific effects declared by one retained step."""
 
-    namespace = {**params, "__run_id__": run_id}
+    namespace = {**runtime_params_for_gui(params), "__run_id__": run_id}
     return [
         effect.resolve(namespace) for effect in effects_for_actuation(step, actuation)
     ]
@@ -77,7 +82,7 @@ def _resolved_step_effects(
 def _validate_retained_step_proof(
     *,
     step: Step,
-    params: dict[str, str],
+    params: Mapping[str, RuntimeParamScalar],
     run_id: str,
     skipped: bool,
     actuation: Optional[str],
@@ -1103,7 +1108,7 @@ def _resume_program(
     checkpoint: Optional[ProgramCheckpoint],
     checkpoints: list[ProgramCheckpoint],
     bundle_dir: Path,
-    params: dict[str, str],
+    params: dict[str, RuntimeParamScalar],
     worklists: dict[str, list[dict[str, str]]],
     save_healed_to: Optional[Path | str],
     live_bundle_version: str,

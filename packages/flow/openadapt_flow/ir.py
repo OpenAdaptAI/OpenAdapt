@@ -29,7 +29,7 @@ import secrets
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Final, Iterator, Literal, Optional
+from typing import TYPE_CHECKING, Any, Final, Iterator, Literal, Optional, Union
 
 from pydantic import (
     BaseModel,
@@ -637,6 +637,7 @@ class ParamKind(str, Enum):
     DATE = "date"
     ENUM = "enum"
     NUMBER = "number"
+    BOOLEAN = "boolean"
     ENTITY_REF = "entity_ref"
 
 
@@ -651,7 +652,7 @@ class ParamSpec(BaseModel):
 
     name: str
     type: ParamKind = ParamKind.STRING
-    example: Optional[str] = Field(
+    example: Optional[Union[str, bool, int, float]] = Field(
         default=None,
         description="Recorded demo value; also the replay default when the "
         "caller supplies no value for this parameter.",
@@ -3634,7 +3635,7 @@ class RunReport(BaseModel):
     )
     required_identity_step_ids: list[str] = Field(default_factory=list)
     approved_unverified_effect_step_ids: list[str] = Field(default_factory=list)
-    params: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, Union[str, bool, int, float]] = Field(default_factory=dict)
     results: list[StepResult] = Field(default_factory=list)
     success: bool = False
     # Workflow-program IR, Phase 2: the outcome of the terminal state the graph

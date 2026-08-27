@@ -182,6 +182,29 @@ def test_missing_required_param_fails_fast_naming_it(bundle, run_dir):
     assert backend.actions == []  # nothing ran
 
 
+@pytest.mark.parametrize(
+    ("kind", "value"),
+    [(ParamKind.BOOLEAN, False), (ParamKind.NUMBER, 0)],
+)
+def test_required_false_and_zero_are_present(kind, value, bundle, run_dir):
+    wf = Workflow(
+        name="wf",
+        param_specs={"required": ParamSpec(name="required", type=kind, required=True)},
+        steps=[key_step()],
+    )
+    backend = FakeBackend()
+    report = Replayer(backend, vision=FakeVision()).run(
+        wf,
+        params={"required": value},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is True
+    assert report.params["required"] == value
+    assert type(report.params["required"]) is type(value)
+    assert backend.actions == [("press", "Enter")]
+
+
 # -- wait_until: bounded readiness, fail-safe HALT on timeout -----------------
 
 

@@ -118,7 +118,7 @@ ENTRY_POINT_GROUP = "openadapt_flow.effect_verifiers"
 #: run parameters for ``ValueExpr({param: ...})`` binding. A factory must fail
 #: LOUD (raise ``ValueError``) on missing config or secrets -- never construct
 #: a silently broken verifier.
-VerifierFactory = Callable[[Any, Optional[Mapping[str, str]]], Any]
+VerifierFactory = Callable[[Any, Optional[Mapping[str, object]]], Any]
 
 
 class ConnectionProbe(BaseModel):

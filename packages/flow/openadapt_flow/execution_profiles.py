@@ -26,6 +26,11 @@ from openadapt_flow.action_evidence import (
     action_evidence_error,
 )
 from openadapt_flow.decision_delivery import DecisionDeliveryTier
+from openadapt_flow.runtime.authorization import (
+    RuntimeParamScalar,
+    runtime_param_text,
+    runtime_params_for_gui,
+)
 from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:
@@ -289,7 +294,7 @@ def _api_identity_evidence_is_exact(
     workflow: Workflow,
     step: Any,
     check: Any,
-    scoped_params: Mapping[str, str],
+    scoped_params: Mapping[str, RuntimeParamScalar],
     effects: list[Any],
 ) -> bool:
     """Return whether an API result matches its exact identity binding.
@@ -302,6 +307,10 @@ def _api_identity_evidence_is_exact(
 
     binding = step.api_binding
     if binding is None or not binding.identity or check is None:
+        return False
+    try:
+        text_params = runtime_params_for_gui(scoped_params)
+    except ValueError:
         return False
     project = workflow.qualification
     policy = project.identity_policies.get(step.id) if project is not None else None
@@ -316,7 +325,7 @@ def _api_identity_evidence_is_exact(
                 check=check,
                 step=step,
                 actuation_path="api",
-                runtime_params=scoped_params,
+                runtime_params=text_params,
                 recorded_params=workflow.params,
             )
             is not None
@@ -353,7 +362,7 @@ def _api_identity_evidence_is_exact(
         return False
 
     for identity in binding.identity:
-        if not scoped_params.get(identity.param):
+        if identity.param not in text_params or text_params[identity.param] == "":
             return False
         effect_path = tuple(identity.effect_field.split("."))
         if not any(
@@ -413,7 +422,7 @@ def _program_action_trace(
     workflow: Workflow,
     visited_states: list[str],
     *,
-    runtime_params: Mapping[str, str] | None = None,
+    runtime_params: Mapping[str, str | bool | int | float] | None = None,
     runtime_worklists: Mapping[str, list[dict[str, str]]] | None = None,
     transition_evidence: list[Any] | None = None,
     exception_evidence: list[Any] | None = None,
@@ -498,7 +507,7 @@ def _program_action_trace(
         return None if declared is None else list(declared.rows)
 
     def _reported_guard_value(
-        predicate: Any, current_params: Mapping[str, str]
+        predicate: Any, current_params: Mapping[str, str | bool | int | float]
     ) -> bool | None:
         """Recompute guards whose inputs are retained in the run report.
 
@@ -511,9 +520,13 @@ def _program_action_trace(
 
         kind = predicate.kind
         if kind is PredicateKind.PARAM_EQUALS:
-            return predicate.param is not None and str(
-                current_params.get(predicate.param)
-            ) == str(predicate.value)
+            return (
+                predicate.param is not None
+                and predicate.value is not None
+                and predicate.param in current_params
+                and runtime_param_text(current_params[predicate.param])
+                == predicate.value
+            )
         if kind is PredicateKind.AND:
             values = [
                 _reported_guard_value(item, current_params)
@@ -618,7 +631,7 @@ def _program_action_trace(
         graph_id: str,
         state: Any,
         scope: tuple[Any, ...],
-        current_params: Mapping[str, str],
+        current_params: Mapping[str, str | bool | int | float],
     ) -> str | None:
         nonlocal evaluator_contract_sha256
         group = _matching_evidence_group(
@@ -726,7 +739,7 @@ def _program_action_trace(
                 recomputed_visual = evaluate_program_predicate(
                     transition.guard,
                     frame,
-                    current_params,
+                    runtime_params_for_gui(current_params),
                     vision=transition_predicate_vision,
                     viewport=item.observed_viewport,
                     asset_loader=retained_assets.get,
@@ -745,7 +758,7 @@ def _program_action_trace(
         graph_id: str,
         state: Any,
         scope: tuple[Any, ...],
-        current_params: Mapping[str, str],
+        current_params: Mapping[str, str | bool | int | float],
     ) -> tuple[bool, str | None, str | None]:
         nonlocal attended_evidence_cursor, expected_evidence_decision_index
         evidence = attended_transition_evidence or []
@@ -869,7 +882,7 @@ def _program_action_trace(
         graph_id: str,
         state: Any,
         scope: tuple[Any, ...],
-        current_params: dict[str, str],
+        current_params: dict[str, str | bool | int | float],
     ) -> str:
         nonlocal business_evidence_cursor, expected_evidence_decision_index
         evidence = business_decision_evidence or []
@@ -1013,7 +1026,7 @@ def _program_action_trace(
 
     def _selected_transition_target(
         state: Any,
-        current_params: dict[str, str],
+        current_params: Mapping[str, str | bool | int | float],
         *,
         graph_id: str,
         scope: tuple[Any, ...],
@@ -1064,7 +1077,7 @@ def _program_action_trace(
         state: Any,
         graph: Any,
         occurrence_index: int | None,
-        current_params: dict[str, str],
+        current_params: Mapping[str, str | bool | int | float],
         *,
         graph_id: str,
         scope: tuple[Any, ...],
@@ -1219,7 +1232,7 @@ def _program_action_trace(
         scope: tuple[Any, ...],
         *,
         depth: int,
-        current_params: dict[str, str],
+        current_params: dict[str, str | bool | int | float],
     ) -> None:
         nonlocal cursor, halted_at_requested_action
         if depth > 64:
@@ -1677,7 +1690,7 @@ def classify_execution_outcome(
     assert minimum is not None
     from openadapt_flow.ir import ActionKind
 
-    def _scoped_params(result: Any) -> dict[str, str] | None:
+    def _scoped_params(result: Any) -> dict[str, str | bool | int | float] | None:
         if workflow.program is None and result.program_scope:
             return None
         scoped = dict(report.params)
@@ -1697,16 +1710,20 @@ def classify_execution_outcome(
         return scoped
 
     def _reported_parameter_predicate_value(
-        predicate: Any, current_params: Mapping[str, str]
+        predicate: Any, current_params: Mapping[str, str | bool | int | float]
     ) -> bool | None:
         """Recompute a guard only when all of its inputs are report-bound."""
 
         from openadapt_flow.ir import PredicateKind
 
         if predicate.kind is PredicateKind.PARAM_EQUALS:
-            return predicate.param is not None and str(
-                current_params.get(predicate.param)
-            ) == str(predicate.value)
+            return (
+                predicate.param is not None
+                and predicate.value is not None
+                and predicate.param in current_params
+                and runtime_param_text(current_params[predicate.param])
+                == predicate.value
+            )
         if predicate.kind is PredicateKind.AND:
             values = [
                 _reported_parameter_predicate_value(item, current_params)
@@ -1802,7 +1819,7 @@ def classify_execution_outcome(
                     check=result.identity,
                     step=step,
                     actuation_path=("api" if result.actuation == "api" else "gui"),
-                    runtime_params=scoped_params,
+                    runtime_params=runtime_params_for_gui(scoped_params),
                     recorded_params=workflow.params,
                     evidence_root=transition_evidence_root,
                     recorded_asset_sha256=recorded_asset_sha256,
@@ -1928,7 +1945,7 @@ def classify_execution_outcome(
         try:
             expected_hashes = Counter(
                 effect.resolved_contract_hash(
-                    scoped_params,
+                    runtime_params_for_gui(scoped_params),
                     opaque_param_sha256=opaque,
                 )
                 for effect in effects
@@ -1976,7 +1993,7 @@ def classify_execution_outcome(
             )
             try:
                 effect_hash = effect.resolved_contract_hash(
-                    scoped_params,
+                    runtime_params_for_gui(scoped_params),
                     opaque_param_sha256=opaque,
                 )
             except ValueError:
@@ -2163,7 +2180,7 @@ def build_outcome_envelope(
         envelope_requirements = ()
         effect_requirements_valid = False
 
-    def _scoped_params(result: Any) -> dict[str, str] | None:
+    def _scoped_params(result: Any) -> dict[str, str | bool | int | float] | None:
         if workflow.program is None and result.program_scope:
             return None
         scoped = dict(report.params)
@@ -2279,7 +2296,7 @@ def build_outcome_envelope(
                                     "qualified effect contract does not match"
                                 )
                             effect_hash = effect.resolved_contract_hash(
-                                scoped_params,
+                                runtime_params_for_gui(scoped_params),
                                 opaque_param_sha256=opaque,
                             )
                             expected_hashes.append(effect_hash)

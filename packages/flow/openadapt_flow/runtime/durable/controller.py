@@ -43,7 +43,10 @@ from openadapt_flow.ir import (
     StepResult,
     Workflow,
 )
-from openadapt_flow.runtime.authorization import GovernedRunAuthorization
+from openadapt_flow.runtime.authorization import (
+    GovernedRunAuthorization,
+    RuntimeParamScalar,
+)
 from openadapt_flow.runtime.durable.approval import StateDiverged
 from openadapt_flow.runtime.durable.checkpoint import (
     CheckpointStore,
@@ -262,7 +265,7 @@ class DurableRun:
         run_id: str,
         workflow_name: str,
         bundle_dir: Path | str,
-        params: dict[str, str],
+        params: dict[str, RuntimeParamScalar],
         worklists: dict[str, list[dict[str, str]]],
         idempotency_key: Optional[str] = None,
         save_healed_to: Optional[Path | str] = None,
@@ -452,7 +455,7 @@ class DurableRun:
         step_index: int,
         step: Step,
         result: StepResult,
-        params: dict[str, str],
+        params: dict[str, RuntimeParamScalar],
         *,
         workflow: Optional[Workflow] = None,
         transition_observation: Optional["TransitionObservation"] = None,
@@ -617,7 +620,7 @@ class DurableRun:
         state_id: str,
         intent: str,
         result: StepResult,
-        params: dict[str, str],
+        params: dict[str, RuntimeParamScalar],
         workflow: Optional[Workflow] = None,
         transition_observation: Optional["TransitionObservation"] = None,
         program_frames: Optional[list[GraphFrame]] = None,

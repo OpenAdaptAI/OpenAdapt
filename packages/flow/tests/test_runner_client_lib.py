@@ -333,7 +333,7 @@ class TestProtocol:
             dispatch_binding_sha256(
                 "11111111-1111-4111-8111-111111111111", authorization
             )
-            == "sha256:efd01f7c8c56a0df02200d684a5ab6104e47ec769090b2d76eb090624cdcc272"
+            == "sha256:367411c4ff350c05d6dad465db3dd1f57e8d47d620d3c0f16b70adec0857047e"
         )
 
     def test_dispatch_binding_refuses_changed_run_or_authorization(self, sealed):
@@ -491,6 +491,44 @@ class TestVerifyAdmits:
         assert verdict.consequential_steps == 1
         assert verdict.effect_covered_consequential_steps == 0
         assert verdict.workflow.manifest is not None
+
+    def test_param_domains_use_canonical_scalar_text(self, tmp_path, sealed, profile):
+        workflow, bundle = sealed
+        params = {
+            "enabled": False,
+            "count": 0,
+            "small": 1e-7,
+            "fixed": 1e20,
+            "large": 1e21,
+        }
+        manifest = write_manifest(
+            tmp_path,
+            f"""
+[runner]
+name = "n"
+[profiles]
+default = "{profile}"
+[[bundles]]
+content_digest = "{workflow.manifest.content_digest}"
+path = "{bundle}"
+[bundles.param_patterns]
+enabled = '^false$'
+count = '^0$'
+small = '^1e-7$'
+fixed = '^100000000000000000000$'
+large = '^1e[+]21$'
+""",
+        )
+        cfg = load_runner_config(manifest)
+        authorization = mint_authorization(workflow, params)
+        verdict = verified_or_refusal(
+            workflow,
+            cfg,
+            params={"values": params},
+            authorization=authorization,
+        )
+        assert not isinstance(verdict, Refusal)
+        assert verdict.params == params
 
 
 class TestVerifyRefusals:

@@ -2556,7 +2556,11 @@ def _case_run_report_integrity_error(
             QualificationRefusalCode.CASE_ATTESTATION_INVALID,
             "case-input bytes do not match the signed case-result binding",
         )
-    from openadapt_flow.runtime.authorization import parse_runtime_inputs_bytes
+    from openadapt_flow.runtime.authorization import (
+        parse_runtime_inputs_bytes,
+        runtime_param_text,
+        runtime_params_for_gui,
+    )
 
     try:
         case_params, case_worklists = parse_runtime_inputs_bytes(
@@ -2569,7 +2573,9 @@ def _case_run_report_integrity_error(
             "case input is not a valid canonical governed-input artifact",
         )
 
-    def scoped_case_params(item: Any) -> Optional[dict[str, str]]:
+    def scoped_case_params(
+        item: Any,
+    ) -> Optional[dict[str, str | bool | int | float]]:
         if workflow.program is None:
             return dict(case_params) if not item.program_scope else None
         if not item.program_scope or item.program_scope[0].graph_id != "__program__":
@@ -3155,9 +3161,10 @@ def _case_run_report_integrity_error(
             )
             if selected_value is None or step.selection_commit_key is None:
                 return "selection delivery receipt lacks its compiled input contract"
+            selected_text = runtime_param_text(selected_value)
             if (
                 receipt.selection_value_sha256
-                != hashlib.sha256(selected_value.encode("utf-8")).hexdigest()
+                != hashlib.sha256(selected_text.encode("utf-8")).hexdigest()
                 or receipt.selection_commit_key != step.selection_commit_key
             ):
                 return "selection delivery receipt differs from the compiled input"
@@ -3238,7 +3245,7 @@ def _case_run_report_integrity_error(
                 check=item.identity,
                 step=step,
                 actuation_path=actuation_path,
-                runtime_params=scoped,
+                runtime_params=runtime_params_for_gui(scoped),
                 recorded_params=workflow.params,
                 evidence_root=run_evidence_root,
                 recorded_asset_sha256=recorded_asset_sha256,
@@ -3248,7 +3255,7 @@ def _case_run_report_integrity_error(
             check=item.identity,
             step=step,
             actuation_path=actuation_path,
-            runtime_params=scoped,
+            runtime_params=runtime_params_for_gui(scoped),
             recorded_params=workflow.params,
             evidence_root=run_evidence_root,
             recorded_asset_sha256=recorded_asset_sha256,
@@ -3277,7 +3284,7 @@ def _case_run_report_integrity_error(
                 (
                     index,
                     effect.resolved_contract_hash(
-                        scoped,
+                        runtime_params_for_gui(scoped),
                         opaque_param_sha256={"__run_id__": result.run_id_sha256 or ""},
                     ),
                     effect_policies.get((step.id, actuation_path, index)),
@@ -3913,7 +3920,7 @@ def _case_run_report_integrity_error(
                         (
                             index,
                             effect.resolved_contract_hash(
-                                resolved_params,
+                                runtime_params_for_gui(resolved_params),
                                 opaque_param_sha256={
                                     "__run_id__": result.run_id_sha256 or ""
                                 },
@@ -4006,7 +4013,11 @@ def _case_run_report_integrity_error(
                             check=item.identity,
                             step=step,
                             actuation_path=actuation_path,
-                            runtime_params=scoped_case_params(item),
+                            runtime_params=(
+                                runtime_params_for_gui(scoped)
+                                if (scoped := scoped_case_params(item)) is not None
+                                else None
+                            ),
                             recorded_params=workflow.params,
                             evidence_root=run_evidence_root,
                             recorded_asset_sha256=(

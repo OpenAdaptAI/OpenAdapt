@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Callable, Optional
 
+from openadapt_flow.runtime.authorization import runtime_param_text
 from openadapt_flow.visualize.spec import (
     BundleMeta,
     EdgeKind,
@@ -293,7 +294,11 @@ def _bundle_meta(
                 type=spec.type.value,
                 required=spec.required,
                 secret=name in (workflow.secret_params or []),
-                example=spec.example,
+                example=(
+                    runtime_param_text(spec.example)
+                    if spec.example is not None
+                    else None
+                ),
                 choices=list(spec.choices),
             )
         )

@@ -76,6 +76,25 @@ class TestRestKitConfig:
         assert "applicant=OpenAdapt%20Synthetic" in v.records_path
         assert v.headers == {"Authorization": "Bearer tok"}
 
+    def test_path_params_render_typed_scalars_with_json_text(self):
+        cfg = EffectsConfig(
+            kind="rest",
+            base_url="http://sor.local",
+            records_path="/x?enabled={enabled}&count={count}&ratio={ratio}",
+            path_params={
+                "enabled": {"param": "enabled"},
+                "count": {"param": "count"},
+                "ratio": {"param": "ratio"},
+            },
+        )
+
+        verifier = build_effect_verifier(
+            cfg,
+            params={"enabled": False, "count": 0, "ratio": 1e-7},
+        )
+
+        assert verifier.records_path == "/x?enabled=false&count=0&ratio=1e-7"
+
     def test_auth_headers_sent_on_reads_only_when_configured(self):
         class _Session:
             def __init__(self):

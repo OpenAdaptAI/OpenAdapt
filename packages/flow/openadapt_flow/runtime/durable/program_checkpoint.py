@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -40,6 +41,7 @@ from openadapt_flow.ir import (
     ProgramTransitionEvidence,
     Resolution,
 )
+from openadapt_flow.runtime.authorization import RuntimeParamScalar
 
 #: The synthetic ``graph_id`` of the top-level ``Workflow.program`` graph (every
 #: OTHER graph is a named entry in ``Workflow.subflows`` -- including a loop
@@ -142,7 +144,7 @@ class GraphFrame(BaseModel):
     state_id: str
     #: The parameter bindings in scope for this graph frame (a loop body frame's
     #: scope is the parent's params merged with the current row).
-    params: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, RuntimeParamScalar] = Field(default_factory=dict)
     #: Present iff this frame is a loop-body iteration -- the loop's cursor.
     loop: Optional[LoopCursor] = None
 
@@ -156,7 +158,7 @@ def control_frames_hash(frames: list[GraphFrame]) -> str:
     return "sha256:" + hashlib.sha256(canonical).hexdigest()
 
 
-def bound_params_sha256(params: dict[str, str]) -> str:
+def bound_params_sha256(params: Mapping[str, RuntimeParamScalar]) -> str:
     """Return a PHI-free digest of one exact attended parameter scope."""
 
     canonical = json.dumps(
@@ -227,7 +229,7 @@ class ProgramCheckpoint(BaseModel):
     #: :class:`GraphFrame`). ``frames[-1]`` is the leaf (the verified state).
     frames: list[GraphFrame] = Field(min_length=1)
     #: The parameter bindings in scope at the leaf (resume re-binds these).
-    bound_params: dict[str, str] = Field(default_factory=dict)
+    bound_params: dict[str, RuntimeParamScalar] = Field(default_factory=dict)
     #: Contract hashes (``Effect.contract_hash``) of the effects CONFIRMED AT
     #: THIS state -- appended to the run's completed-effect ledger. Union across
     #: all checkpoints = every already-performed consequential write, so a resume

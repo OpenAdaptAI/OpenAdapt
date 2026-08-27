@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Mapping, TypeAlias, Union, cast
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -30,22 +31,167 @@ _CONSUMED_IDS: set[str] = set()
 _CONSUMED_LOCK = threading.Lock()
 _QUALIFICATION_ID_RE = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 
+RuntimeParamScalar: TypeAlias = Union[str, bool, int, float]
+_JS_SAFE_INTEGER = 9_007_199_254_740_991
+
+
+def is_runtime_param_scalar(value: object) -> bool:
+    """Return whether ``value`` is one exact supported finite JSON scalar."""
+
+    if type(value) in {str, bool}:
+        return True
+    if type(value) is int:
+        if -_JS_SAFE_INTEGER <= value <= _JS_SAFE_INTEGER:
+            return True
+        # JSON has one Number type. Admit a large integer spelling only when
+        # the JavaScript renderer of its finite IEEE-754 value returns that
+        # same spelling. The normalizer converts it to that Number before any
+        # retained artifact.
+        try:
+            number = float(value)
+        except OverflowError:
+            return False
+        return math.isfinite(number) and _javascript_number_text(number) == str(value)
+    return type(value) is float and math.isfinite(value)
+
+
+def normalize_runtime_param_scalar(value: object) -> RuntimeParamScalar:
+    """Return one exact finite JSON scalar in its cross-language representation."""
+
+    if not is_runtime_param_scalar(value):
+        raise ValueError("runtime parameter is not a finite interoperable JSON scalar")
+    if type(value) is int and not -_JS_SAFE_INTEGER <= value <= _JS_SAFE_INTEGER:
+        return float(value)
+    return cast(RuntimeParamScalar, value)
+
+
+def _javascript_number_text(value: int | float) -> str:
+    """Return the finite number text used by JavaScript ``JSON.stringify``.
+
+    The hosted service uses ``JSON.stringify`` for primitive values in its
+    sorted-key canonical JSON. Python and JavaScript choose different exponent
+    formatting thresholds, so ordinary ``json.dumps`` is not interoperable.
+    An out-of-safe-range Python integer reaches this function only when its
+    spelling is the canonical JavaScript rendering of the normalized Number.
+    """
+
+    if type(value) is int:
+        if not is_runtime_param_scalar(value):
+            raise ValueError("integer parameter exceeds the JSON safe-integer range")
+        if not -_JS_SAFE_INTEGER <= value <= _JS_SAFE_INTEGER:
+            return _javascript_number_text(float(value))
+        return str(value)
+    if type(value) is not float or not math.isfinite(value):
+        raise ValueError("number parameter must be finite")
+    if value == 0:
+        return "0"
+
+    negative = value < 0
+    source = repr(abs(value)).lower()
+    mantissa, separator, exponent_text = source.partition("e")
+    exponent = int(exponent_text) if separator else 0
+    integer, dot, fraction = mantissa.partition(".")
+    digits = integer + (fraction if dot else "")
+    decimal_exponent = exponent - len(fraction)
+    while len(digits) > 1 and digits.endswith("0"):
+        digits = digits[:-1]
+        decimal_exponent += 1
+    decimal_point = len(digits) + decimal_exponent
+
+    absolute = abs(value)
+    if 1e-6 <= absolute < 1e21:
+        if decimal_point <= 0:
+            rendered = "0." + ("0" * -decimal_point) + digits
+        elif decimal_point >= len(digits):
+            rendered = digits + ("0" * (decimal_point - len(digits)))
+        else:
+            rendered = digits[:decimal_point] + "." + digits[decimal_point:]
+    else:
+        scientific_exponent = decimal_point - 1
+        rendered = digits[0]
+        if len(digits) > 1:
+            rendered += "." + digits[1:]
+        rendered += "e" + ("+" if scientific_exponent >= 0 else "")
+        rendered += str(scientific_exponent)
+    return ("-" if negative else "") + rendered
+
+
+def _hosted_canonical_json(value: object) -> str:
+    """Match the hosted sorted-key ``canonicalJson`` implementation exactly."""
+
+    if value is None:
+        return "null"
+    if type(value) is bool:
+        return "true" if value else "false"
+    if type(value) in {int, float}:
+        return _javascript_number_text(cast(Union[int, float], value))
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(value, list):
+        return "[" + ",".join(_hosted_canonical_json(item) for item in value) + "]"
+    if isinstance(value, dict):
+        if any(not isinstance(key, str) for key in value):
+            raise ValueError("canonical JSON object keys must be strings")
+        # JavaScript Array.sort compares UTF-16 code units. Python's default
+        # string order compares Unicode code points, which differs for astral
+        # characters versus BMP characters at U+D800 and above.
+        ordered_keys = sorted(value, key=lambda key: key.encode("utf-16-be"))
+        members = (
+            json.dumps(key, ensure_ascii=False)
+            + ":"
+            + _hosted_canonical_json(value[key])
+            for key in ordered_keys
+        )
+        return "{" + ",".join(members) + "}"
+    raise ValueError(f"unsupported canonical JSON value: {type(value).__name__}")
+
+
+def runtime_param_text(value: RuntimeParamScalar) -> str:
+    """Render one admitted scalar only at the final GUI text boundary."""
+
+    value = normalize_runtime_param_scalar(value)
+    if isinstance(value, str):
+        return value
+    if type(value) is bool:
+        return "true" if value else "false"
+    return _javascript_number_text(value)
+
+
+def runtime_params_for_gui(
+    params: Mapping[str, RuntimeParamScalar],
+) -> dict[str, str]:
+    """Convert the already-authorized typed parameter set to GUI text."""
+
+    return {name: runtime_param_text(value) for name, value in params.items()}
+
 
 def effective_runtime_params(
-    workflow: Workflow, supplied: dict[str, str] | None
-) -> dict[str, str]:
+    workflow: Workflow, supplied: Mapping[str, RuntimeParamScalar] | None
+) -> dict[str, RuntimeParamScalar]:
     """Resolve defaults exactly as :meth:`Replayer.run` does."""
-    merged = dict(workflow.params)
+    merged: dict[str, RuntimeParamScalar] = dict(workflow.params)
     for name, spec in workflow.param_specs.items():
         if spec.example is not None:
             merged.setdefault(name, spec.example)
     merged.update(supplied or {})
-    return merged
+    try:
+        return {
+            name: normalize_runtime_param_scalar(value)
+            for name, value in merged.items()
+        }
+    except ValueError as exc:
+        invalid = [
+            name for name, value in merged.items() if not is_runtime_param_scalar(value)
+        ]
+        raise ValueError(
+            "runtime parameters must be strings, Booleans, or finite JSON-safe "
+            "numbers: " + ", ".join(sorted(invalid))
+        ) from exc
 
 
 def runtime_inputs_bytes(
     workflow: Workflow,
-    params: dict[str, str] | None,
+    params: Mapping[str, RuntimeParamScalar] | None,
     worklists: dict[str, list[dict[str, str]]] | None,
     *,
     interstitials: list[Interstitial] | None = None,
@@ -64,9 +210,7 @@ def runtime_inputs_bytes(
         payload["interstitials"] = [
             interstitial.model_dump(mode="json") for interstitial in interstitials
         ]
-    canonical = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    )
+    canonical = _hosted_canonical_json(payload)
     return canonical.encode("utf-8")
 
 
@@ -74,7 +218,7 @@ def parse_runtime_inputs_bytes(
     value: bytes,
     *,
     workflow: Workflow,
-) -> tuple[dict[str, str], dict[str, list[dict[str, str]]]]:
+) -> tuple[dict[str, RuntimeParamScalar], dict[str, list[dict[str, str]]]]:
     """Parse bytes that this workflow's runtime serializer can emit exactly."""
 
     try:
@@ -88,7 +232,7 @@ def parse_runtime_inputs_bytes(
     params = payload.get("params")
     worklists = payload.get("worklists")
     if not isinstance(params, dict) or any(
-        not isinstance(key, str) or not isinstance(item, str)
+        not isinstance(key, str) or not is_runtime_param_scalar(item)
         for key, item in params.items()
     ):
         raise ValueError("runtime-input artifact has invalid parameters")
@@ -135,12 +279,12 @@ def parse_runtime_inputs_bytes(
     )
     if canonical != value:
         raise ValueError("runtime-input artifact is not in canonical form")
-    return dict(params), canonical_worklists
+    return effective_runtime_params(workflow, dict(params)), canonical_worklists
 
 
 def runtime_inputs_digest(
     workflow: Workflow,
-    params: dict[str, str] | None,
+    params: Mapping[str, RuntimeParamScalar] | None,
     worklists: dict[str, list[dict[str, str]]] | None,
     *,
     interstitials: list[Interstitial] | None = None,
@@ -692,7 +836,7 @@ class GovernedRunAuthorization(BaseModel):
         workflow: Workflow,
         *,
         bundle_dir: Path | str,
-        params: dict[str, str] | None,
+        params: Mapping[str, RuntimeParamScalar] | None,
         worklists: dict[str, list[dict[str, str]]] | None,
         interstitials: list[Interstitial] | None = None,
         continuation: bool = False,
@@ -713,7 +857,7 @@ class GovernedRunAuthorization(BaseModel):
         workflow: Workflow,
         *,
         bundle_dir: Path | str,
-        params: dict[str, str] | None,
+        params: Mapping[str, RuntimeParamScalar] | None,
         worklists: dict[str, list[dict[str, str]]] | None,
         interstitials: list[Interstitial] | None = None,
         continuation: bool = False,

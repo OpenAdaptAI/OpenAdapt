@@ -65,13 +65,23 @@ import json
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Literal, Optional, Sequence, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Iterator,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    cast,
+)
 from urllib.parse import urlsplit
 from uuid import UUID
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.backend import Backend
     from openadapt_flow.ir import ExecutionTargetKind, RunReport
+    from openadapt_flow.runtime.authorization import RuntimeParamScalar
     from openadapt_flow.tutorial import BreakItResult
 
 _VIEWPORT = {"width": 1280, "height": 800}
@@ -258,7 +268,7 @@ def _resolve_record_capture_window(
 def _replay_params(
     pairs: Sequence[str] | None,
     params_file: str | None = None,
-) -> dict[str, str]:
+) -> dict[str, "RuntimeParamScalar"]:
     """Load replay bindings without requiring sensitive values in argv.
 
     ``--params-file`` is intended for managed runners: the file can be staged
@@ -267,7 +277,9 @@ def _replay_params(
     """
     import json
 
-    params: dict[str, str] = {}
+    from openadapt_flow.runtime.authorization import is_runtime_param_scalar
+
+    params: dict[str, RuntimeParamScalar] = {}
     if params_file:
         path = Path(params_file)
         try:
@@ -281,11 +293,9 @@ def _replay_params(
         for key, value in raw.items():
             if not isinstance(key, str) or not key:
                 raise SystemExit("--params-file keys must be non-empty strings")
-            if not isinstance(value, (str, int, float, bool)) or isinstance(
-                value, (dict, list)
-            ):
+            if not is_runtime_param_scalar(value):
                 raise SystemExit(f"--params-file value for {key!r} must be a scalar")
-            params[key] = str(value)
+            params[key] = value
     params.update(_parse_params(pairs))
     return params
 
@@ -400,7 +410,10 @@ def _deployment_sections(args: argparse.Namespace):
     return cfg, effects, actuation
 
 
-def _deployment_runtime(args: argparse.Namespace, params: dict[str, str] | None = None):
+def _deployment_runtime(
+    args: argparse.Namespace,
+    params: Mapping[str, "RuntimeParamScalar"] | None = None,
+):
     """Resolve the deployment wiring for a replay/run from ``--config`` + flags.
 
     Returns ``(cfg, effect_verifier, api_actuator, durable, allow_egress)``.
@@ -416,10 +429,14 @@ def _deployment_runtime(args: argparse.Namespace, params: dict[str, str] | None 
     ignores it.
     """
     from openadapt_flow.deployment import build_api_actuator, build_effect_verifier
+    from openadapt_flow.runtime.authorization import runtime_params_for_gui
 
     cfg, effects, actuation = _deployment_sections(args)
     try:
-        effect_verifier = build_effect_verifier(effects, params=params)
+        effect_verifier = build_effect_verifier(
+            effects,
+            params=runtime_params_for_gui(params or {}),
+        )
         api_actuator = build_api_actuator(actuation)
     except ValueError as e:
         raise SystemExit(str(e))

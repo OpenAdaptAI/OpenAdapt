@@ -38,6 +38,7 @@ from openadapt_flow.runtime.durable.authority import (
     AUTHORITY_DB_ENV,
     REMOTE_AUTHORITY_TOKEN_ENV,
     REMOTE_AUTHORITY_URL_ENV,
+    REMOTE_DISPATCH_SESSION_ID_ENV,
     SYNTHETIC_DELIVERY_MARKER_ENABLED_ENV,
     SYNTHETIC_DELIVERY_MARKER_RUN_ID_ENV,
     DurableAuthority,
@@ -532,6 +533,52 @@ def test_v2_permit_remains_pending_until_signed_receipt_commits_edge(
     assert entry.input_edge_sequence == 1
     assert entry.authority_sequence == 0
     assert entry.runtime_delivery_sequence == 0
+
+
+def test_remote_permit_refuses_a_different_hosted_dispatch_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transport = _issued_permit_transport("wrong-session", "4" * 64)
+    manifest, authority = _remote_initial_authority(tmp_path, monkeypatch, transport)
+    monkeypatch.setenv(
+        REMOTE_DISPATCH_SESSION_ID_ENV,
+        "30000000-0000-4000-8000-000000000002",
+    )
+
+    with pytest.raises(DurableAuthorityBusy, match="does not match request"):
+        authority.before_initial_delivery(manifest)
+
+    assert authority.validate(manifest).delivery_sequence == 0
+
+
+def test_lost_delivery_acknowledgment_response_blocks_replay_dispatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    issued = _issued_permit_transport("lost-ack", "5" * 64)
+    permit_calls = 0
+    acknowledgment_calls = 0
+
+    def transport(url: str, headers: dict[str, str], body: bytes) -> bytes:
+        nonlocal permit_calls, acknowledgment_calls
+        response = issued(url, headers, body)
+        if url.endswith("/managed-delivery-acknowledgment"):
+            acknowledgment_calls += 1
+            raise TimeoutError("acknowledgment response lost after server commit")
+        permit_calls += 1
+        return response
+
+    manifest, authority = _remote_initial_authority(tmp_path, monkeypatch, transport)
+    permit = authority.before_initial_delivery(manifest)
+    assert permit is not None
+
+    with pytest.raises(DurableAuthorityBusy, match="unavailable or refused"):
+        authority.acknowledge_remote_delivery(manifest, permit)
+    with pytest.raises(DurableAuthorityBusy, match="lacks an acknowledgment"):
+        authority.before_initial_delivery(manifest)
+
+    assert permit_calls == 1
+    assert acknowledgment_calls == 1
+    assert authority.validate(manifest).delivery_sequence == 0
 
 
 def test_receipt_digest_mismatch_keeps_delivery_uncertain_and_blocks_next_edge(

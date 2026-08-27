@@ -1389,7 +1389,7 @@ def test_cli_run_params_file_binds_authorization_without_values_in_argv(
     expected = {
         "patient_id": secret_value,
         "count": "3",
-        "approved": "True",
+        "approved": True,
     }
     authorization = captured["authorization"]
     assert authorization.runtime_inputs_digest == runtime_inputs_digest(

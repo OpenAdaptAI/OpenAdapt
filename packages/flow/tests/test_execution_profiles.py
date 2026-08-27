@@ -69,7 +69,9 @@ from openadapt_flow.run_gate import (
 from openadapt_flow.runner.evidence import summary_status
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
+    RuntimeParamScalar,
     runtime_inputs_digest,
+    runtime_param_text,
 )
 from openadapt_flow.runtime.durable import ApprovalRequired, CheckpointStore, resume
 from openadapt_flow.runtime.effects import (
@@ -1523,21 +1525,26 @@ def test_program_outcome_recomputes_ordered_parameter_transitions():
             ),
         )
 
-    def _report(workflow: Workflow, *, route: str) -> RunReport:
+    def _report(
+        workflow: Workflow,
+        *,
+        route: RuntimeParamScalar,
+        selected_state: str = "second",
+    ) -> RunReport:
         report = RunReport(
             workflow_name=workflow.name,
             started_at="2026-07-28T00:00:00Z",
             success=True,
             execution_completed=True,
             terminal_outcome="success",
-            visited_states=["pick", "second", "done"],
+            visited_states=["pick", selected_state, "done"],
             params={"route": route},
             governed_authorization_id="authorization-1",
             governed_runtime_inputs_digest="b" * 64,
             results=[
                 StepResult(
-                    step_id="second",
-                    intent="second",
+                    step_id=selected_state,
+                    intent=selected_state,
                     ok=True,
                     starting_state_settled=True,
                     delivery_attempted=True,
@@ -1550,7 +1557,9 @@ def test_program_outcome_recomputes_ordered_parameter_transitions():
         _bind_report_to_workflow(report, workflow)
         pick = workflow.program.states["pick"]
         first_guard_matches = bool(
-            pick.transitions[0].guard is not None and route == "first"
+            pick.transitions[0].guard is not None
+            and pick.transitions[0].guard.value is not None
+            and runtime_param_text(route) == pick.transitions[0].guard.value
         )
         report.program_transition_evidence = [
             *_transition_evidence(
@@ -1562,7 +1571,7 @@ def test_program_outcome_recomputes_ordered_parameter_transitions():
             ),
             *_transition_evidence(
                 decision_index=1,
-                state=workflow.program.states["second"],
+                state=workflow.program.states[selected_state],
                 verdicts=[True],
                 target="done",
                 inputs_digest=report.governed_runtime_inputs_digest or "",
@@ -1611,6 +1620,34 @@ def test_program_outcome_recomputes_ordered_parameter_transitions():
         )
         is ExecutionOutcome.VERIFIED
     )
+    for value, expected_text in [
+        (False, "false"),
+        (0, "0"),
+        (1e-7, "1e-7"),
+        (1e20, "100000000000000000000"),
+        (1e21, "1e+21"),
+    ]:
+        typed_guard = _workflow(
+            [
+                Transition(
+                    guard=Predicate(
+                        kind=PredicateKind.PARAM_EQUALS,
+                        param="route",
+                        value=expected_text,
+                    ),
+                    target="first",
+                ),
+                Transition(target="second"),
+            ]
+        )
+        assert (
+            classify_execution_outcome(
+                _report(typed_guard, route=value, selected_state="first"),
+                typed_guard,
+                ExecutionProfile.STANDARD,
+            )
+            is ExecutionOutcome.VERIFIED
+        )
     exact = _report(ordered_guard, route="second")
     for update in (
         {"graph_id": "forged-graph"},

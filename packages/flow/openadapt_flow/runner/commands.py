@@ -3,9 +3,8 @@
 The runner never grows a private execution path: a dispatched run is the same
 fail-closed ``openadapt-flow run`` admission gate + shared replayer the local
 CLI uses, in a child process (crash isolation; the design doc's "the agent
-shells them"). This module only BUILDS argv — executing it belongs to the
-future daemon, which is deliberately not in this library (see
-``docs/design/RUNNER_CLIENT_LIBRARY.md``).
+shells them"). This module only builds argv. The hosted adapter executes that
+argv in the managed child process.
 
 Verb coverage, honestly stated:
 
@@ -51,6 +50,7 @@ def build_run_argv(
     params_file: Optional[Path],
     *,
     managed_dispatch_file: Path,
+    qualification_authority_file: Optional[Path] = None,
 ) -> list[str]:
     """The exact governed CLI invocation for a verified ``run`` dispatch.
 
@@ -81,6 +81,8 @@ def build_run_argv(
     ]
     if params_file is not None:
         argv += ["--params-file", str(params_file)]
+    if qualification_authority_file is not None:
+        argv += ["--qualification-authority-file", str(qualification_authority_file)]
     if verified.bundle.policy:
         argv += ["--policy", verified.bundle.policy]
     if (

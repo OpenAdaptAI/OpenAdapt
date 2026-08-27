@@ -908,7 +908,7 @@ def build_replayer(
 def _resolve_config_exprs(
     section: str,
     exprs: Mapping[str, ValueExpr],
-    params: Optional[Mapping[str, str]],
+    params: Optional[Mapping[str, object]],
 ) -> dict[str, str]:
     """Resolve a config's ``ValueExpr`` mapping against the run's params.
 
@@ -945,7 +945,7 @@ def _require_env(name: str, what: str) -> str:
 
 
 def build_effect_verifier(
-    cfg: EffectsConfig, params: Optional[Mapping[str, str]] = None
+    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
 ) -> Optional[Any]:
     """Construct the configured ``EffectVerifier`` (or None for ``kind: none``).
 
@@ -1073,7 +1073,7 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
 
 
 def _build_effect_verifier_unredacted(
-    cfg: EffectsConfig, params: Optional[Mapping[str, str]] = None
+    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
 ) -> Optional[Any]:
     """The per-kind construction behind :func:`build_effect_verifier`."""
     kind = (cfg.kind or "none").strip().lower()

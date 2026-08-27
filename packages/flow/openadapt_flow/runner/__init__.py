@@ -1,15 +1,8 @@
-"""EXPERIMENTAL runner-client LIBRARY (verification, lease logic, evidence,
-command mapping) for the hosted control-plane / local-execution-plane runner
-protocol. NO daemon, NO network loop, NO CLI verb — deliberately.
+"""Flow-owned hosted-runner verification and execution library.
 
-Scope: the merged ``/api/runners/*`` control-plane surface in openadapt-cloud
-(``src/lib/runners.ts``) is mock-gated (410 in live) and its transport-facing
-half is scheduled to CHANGE before any customer daemon can ship (poll cadence
-and hosting economics, lease renewal + sleep reclaim, control-verb channel,
-mandatory params-by-reference for regulated orgs — see
-``docs/design/RUNNER_CLIENT_LIBRARY.md`` for the verified findings and the
-required revisions). This package therefore contains only the transport-
-agnostic half that SURVIVES that revision:
+Desktop owns the authenticated register, poll, and callback transport loop.
+This package owns the transport-independent trust, admission, one-use,
+governed-execution, and terminal-classification boundary:
 
 * :mod:`~openadapt_flow.runner.protocol` — strict typed models of the
   dispatch wire contract (contract drift is a refusal, not a best guess);
@@ -31,7 +24,9 @@ agnostic half that SURVIVES that revision:
   evidence queue (a run that finishes offline reports late, never never);
 * :mod:`~openadapt_flow.runner.commands` — mapping of governed dispatch verbs
   onto the EXISTING CLI entry points (``run`` / ``resume``); unmappable verbs
-  refuse.
+  refuse;
+* :mod:`~openadapt_flow.runner.hosted_adapter` — the strict Cloud lease wire,
+  protected local trust, managed child bridge, and no-replay result contract.
 """
 
 from openadapt_flow.runner.commands import (
@@ -51,6 +46,23 @@ from openadapt_flow.runner.dispatch_envelope import (
     ManagedDispatchEnvelopeError,
     read_managed_dispatch_envelope,
     write_managed_dispatch_envelope,
+)
+from openadapt_flow.runner.hosted_adapter import (
+    RUNNER_RENEWAL_HEADER,
+    CallbackRequest,
+    CallbackResponse,
+    DeliveryAuthority,
+    HostedDispatch,
+    HostedDispatchRefusal,
+    HostedRecoveryBinding,
+    HostedRunnerAdapter,
+    HostedRunnerTransport,
+    HostedRunResult,
+    PollRequest,
+    RegisterCapabilities,
+    RegisterRequest,
+    RegisterResponse,
+    registration_renewal_headers,
 )
 from openadapt_flow.runner.lease import (
     CompletionDisposition,
@@ -78,8 +90,17 @@ from openadapt_flow.runner.verify import (
 
 __all__ = [
     "CompletionDisposition",
+    "CallbackRequest",
+    "CallbackResponse",
+    "DeliveryAuthority",
     "DispatchParseError",
     "EvidenceOutbox",
+    "HostedDispatch",
+    "HostedDispatchRefusal",
+    "HostedRecoveryBinding",
+    "HostedRunResult",
+    "HostedRunnerAdapter",
+    "HostedRunnerTransport",
     "LeaseError",
     "ManagedDispatchEnvelope",
     "ManagedDispatchEnvelopeError",
@@ -88,6 +109,11 @@ __all__ = [
     "LeasedDispatch",
     "Refusal",
     "RefusalCode",
+    "PollRequest",
+    "RUNNER_RENEWAL_HEADER",
+    "RegisterCapabilities",
+    "RegisterRequest",
+    "RegisterResponse",
     "RunnerConfig",
     "RunnerConfigError",
     "RunnerDispatchPayload",
@@ -103,6 +129,7 @@ __all__ = [
     "map_control_verb",
     "read_managed_dispatch_envelope",
     "parse_dispatch",
+    "registration_renewal_headers",
     "server_reclaim_outcome",
     "verify_dispatch",
     "write_managed_dispatch_envelope",

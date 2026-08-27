@@ -62,7 +62,10 @@ from openadapt_flow.ir import (
     ProgramTransitionEvidence,
     Resolution,
 )
-from openadapt_flow.runtime.authorization import GovernedRunAuthorization
+from openadapt_flow.runtime.authorization import (
+    GovernedRunAuthorization,
+    RuntimeParamScalar,
+)
 from openadapt_flow.runtime.durable.approval import ApprovalRecord
 from openadapt_flow.runtime.durable.program_checkpoint import (
     GraphFrame,
@@ -115,7 +118,7 @@ class RunManifest(BaseModel):
     bundle_dir: str
     #: The run's fully-resolved parameter bindings (defaults + caller
     #: overrides), so a resume re-binds identically.
-    params: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, RuntimeParamScalar] = Field(default_factory=dict)
     #: Stable at-most-once reservation for the complete logical durable run.
     #: A resumed leg reuses it only after it proves ownership in the ledger.
     idempotency_key: Optional[str] = None
@@ -206,7 +209,7 @@ class RunCheckpoint(BaseModel):
     #: point at an arbitrary successor state.
     next_step_index: int
     #: The run's parameter bindings at checkpoint time (resume re-binds these).
-    params: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, RuntimeParamScalar] = Field(default_factory=dict)
     #: Verification evidence carried for the audit trail / operator.
     effect_verified: Optional[bool] = None
     effect_approved_unverified: bool = False
@@ -295,7 +298,7 @@ class PendingEscalation(BaseModel):
     resume_from_index: int = 0
     resume_from_step_id: Optional[str] = None
     #: The run's parameter bindings, so an approved resume re-binds identically.
-    params: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, RuntimeParamScalar] = Field(default_factory=dict)
     #: ``rejected`` is TERMINAL: an operator answered the attended pause with
     #: ``reject``, asserting this run must not proceed. The file is retained
     #: rather than cleared so the audit trail keeps WHY the run stopped and

@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from typing import Any, Optional
 
 from openadapt_flow.ir import ActionKind, Step
+from openadapt_flow.runtime.authorization import RuntimeParamScalar, runtime_param_text
 
 AUTOMATED_GUI_ACTUATIONS = frozenset(
     {"uia", "dom", "guarded_coordinate", "guarded_keyboard", "remote_guarded"}
@@ -177,7 +178,7 @@ def _delivery_receipt_error(
     step: Step,
     result: Any,
     *,
-    params: Mapping[str, str],
+    params: Mapping[str, RuntimeParamScalar],
 ) -> Optional[str]:
     receipt = result.delivery_receipt
     if receipt is None:
@@ -226,7 +227,10 @@ def _delivery_receipt_error(
         return "non-drag delivery receipt contains a destination fingerprint"
 
     if step.action is ActionKind.SELECT_OPTION:
-        selected = params.get(step.param) if step.param is not None else step.text
+        selected_value = params.get(step.param) if step.param is not None else step.text
+        selected = (
+            runtime_param_text(selected_value) if selected_value is not None else None
+        )
         if selected is None or step.selection_commit_key is None:
             return "selection delivery receipt lacks its compiled input contract"
         if (
@@ -287,7 +291,7 @@ def action_evidence_error(
     step: Step,
     result: Any,
     *,
-    params: Mapping[str, str] | None = None,
+    params: Mapping[str, RuntimeParamScalar] | None = None,
     identity_required: bool = False,
     strict_production: bool = True,
 ) -> Optional[str]:

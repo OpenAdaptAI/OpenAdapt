@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import pytest
@@ -28,6 +29,7 @@ from openadapt_flow.runtime.actuators import ActuationStatus, ApiActuationResult
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     UnverifiedWriteApproval,
+    runtime_inputs_bytes,
     runtime_inputs_digest,
 )
 from openadapt_flow.runtime.durable import (
@@ -117,6 +119,60 @@ def _authorization(
         admitted_policy_name="test-governed",
         required_identity_step_ids=required,
     )
+
+
+def test_runtime_inputs_match_hosted_javascript_scalar_vector() -> None:
+    workflow = Workflow(name="cross-language-scalars")
+    params = {
+        "whole": 7,
+        "float": 1.5,
+        "small": 1e-7,
+        "mid": 1e20,
+        "large": 1e21,
+        "bool_true": True,
+        "bool_false": False,
+        "string_int": "7",
+        "string_float": "1.5",
+        "string_bool": "true",
+    }
+    expected = (
+        b'{"params":{"bool_false":false,"bool_true":true,"float":1.5,'
+        b'"large":1e+21,"mid":100000000000000000000,"small":1e-7,'
+        b'"string_bool":"true",'
+        b'"string_float":"1.5","string_int":"7","whole":7},'
+        b'"worklists":{}}'
+    )
+
+    actual = runtime_inputs_bytes(workflow, params, None)
+
+    assert actual == expected
+    assert hashlib.sha256(actual).hexdigest() == (
+        "1f9cf0ab74f3194d4759be349239e6f7bbeef13f1f4641bd9e4e55b018728293"
+    )
+
+
+def test_runtime_inputs_sort_object_keys_as_javascript_utf16() -> None:
+    workflow = Workflow(name="cross-language-unicode-order")
+    params = {"\ue000": 1, "\U0001f600": 2}
+    expected = '{"params":{"😀":2,"":1},"worklists":{}}'.encode()
+
+    actual = runtime_inputs_bytes(workflow, params, None)
+
+    assert actual == expected
+    assert hashlib.sha256(actual).hexdigest() == (
+        "f70fa507dff3b9f0d54ab13325e5588a18b718f697d3e4a7877eadf06dcc7196"
+    )
+    assert runtime_inputs_digest(workflow, params, None) != runtime_inputs_digest(
+        workflow,
+        {name: str(value) for name, value in params.items()},
+        None,
+    )
+
+
+@pytest.mark.parametrize("value", [9_007_199_254_740_993, float("nan"), float("inf")])
+def test_runtime_inputs_refuse_non_interoperable_numbers(value: object) -> None:
+    with pytest.raises(ValueError, match="runtime parameters"):
+        runtime_inputs_bytes(Workflow(name="unsafe-number"), {"value": value}, None)
 
 
 def test_in_memory_semantic_mutation_halts_before_action(tmp_path):

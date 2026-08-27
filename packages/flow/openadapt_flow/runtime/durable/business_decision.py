@@ -27,6 +27,7 @@ from openadapt_flow.ir import (
     ProgramExecutionScopeFrame,
     Workflow,
 )
+from openadapt_flow.runtime.authorization import RuntimeParamScalar
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
     ApprovalRequired,
@@ -806,7 +807,7 @@ class BusinessDecisionStore:
         graph_id: str,
         state_id: str,
         frames: list[GraphFrame],
-        params: dict[str, str],
+        params: dict[str, RuntimeParamScalar],
         spec: BusinessDecisionSpec,
         governed_runtime_inputs_digest: str | None,
         now: datetime | None = None,
@@ -933,7 +934,7 @@ class BusinessDecisionStore:
         graph_id: str,
         state_id: str,
         frames: list[GraphFrame],
-        params: dict[str, str],
+        params: dict[str, RuntimeParamScalar],
         spec: BusinessDecisionSpec,
         governed_runtime_inputs_digest: str | None,
     ) -> None:
@@ -1183,7 +1184,7 @@ class BusinessDecisionStore:
         graph_id: str,
         state_id: str,
         frames: list[GraphFrame],
-        params: dict[str, str],
+        params: dict[str, RuntimeParamScalar],
         spec: BusinessDecisionSpec,
         governed_runtime_inputs_digest: str | None,
         now: datetime | None = None,

@@ -49,6 +49,7 @@ from openadapt_flow.policy import (
     effects_for_actuation,
     project_step_safety,
 )
+from openadapt_flow.runtime.authorization import RuntimeParamScalar
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
     ApprovalRequired,
@@ -2749,7 +2750,7 @@ def _validated_attended_result(
     *,
     identity: Optional[IdentityCheck],
     skipped: bool,
-    params: dict[str, str],
+    params: dict[str, RuntimeParamScalar],
     manifest: Any,
 ) -> StepResult:
     """Return the exact evidence shape emitted by an attended completion."""
@@ -2813,7 +2814,7 @@ def checkpoint_human_completed_step(
     capability: AttendedPauseCapability,
     approval: ApprovalRecord,
     result: StepResult,
-    params: dict[str, str],
+    params: dict[str, RuntimeParamScalar],
     key: Optional[str] = None,
 ) -> RunCheckpoint:
     """Advance a linear resume point after outcome verification, without acting."""
@@ -3344,7 +3345,7 @@ class BoundAttendedExecutor:
         store: CheckpointStore,
         workflow: Workflow,
         capability: AttendedPauseCapability,
-    ) -> tuple[PendingEscalation, State, dict[str, str]]:
+    ) -> tuple[PendingEscalation, State, dict[str, RuntimeParamScalar]]:
         pending = store.read_pending()
         state = _program_pause_state(workflow, pending) if pending is not None else None
         if (
@@ -3370,7 +3371,7 @@ class BoundAttendedExecutor:
         approval: ApprovalRecord,
         pending: PendingEscalation,
         state: State,
-        params: dict[str, str],
+        params: dict[str, RuntimeParamScalar],
         result: StepResult,
         skipped: bool,
         target_state_id: Optional[str],
@@ -3753,7 +3754,12 @@ class BoundAttendedExecutor:
         approval: ApprovalRecord,
     ) -> AttendedExecutionResult:
         program_context: Optional[
-            tuple[PendingEscalation, State, dict[str, str], Optional[str]]
+            tuple[
+                PendingEscalation,
+                State,
+                dict[str, RuntimeParamScalar],
+                Optional[str],
+            ]
         ] = None
         try:
             store, manifest, workflow = self._load(run_dir, capability)
@@ -3907,7 +3913,12 @@ class BoundAttendedExecutor:
             )
         reconciliation_delivery_state = capability.delivery_state
         program_context: Optional[
-            tuple[PendingEscalation, State, dict[str, str], Optional[str]]
+            tuple[
+                PendingEscalation,
+                State,
+                dict[str, RuntimeParamScalar],
+                Optional[str],
+            ]
         ] = None
         try:
             store, manifest, workflow = self._load(run_dir, capability)
@@ -4087,7 +4098,12 @@ class BoundAttendedExecutor:
         approval: ApprovalRecord,
     ) -> AttendedExecutionResult:
         program_context: Optional[
-            tuple[PendingEscalation, State, dict[str, str], Optional[str]]
+            tuple[
+                PendingEscalation,
+                State,
+                dict[str, RuntimeParamScalar],
+                Optional[str],
+            ]
         ] = None
         try:
             store, manifest, workflow = self._load(run_dir, capability)
