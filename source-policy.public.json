@@ -70,8 +70,8 @@
     }
   },
   "generated_from": "OpenAdaptAI/openadapt-internal:source-policy.yaml",
-  "policy_digest": "sha256:09e5092a6f84cbad0b588a9aec65cc7d26492dced2ddce26ca288a3ff81992c9",
-  "policy_last_updated": "2026-07-28",
+  "policy_digest": "sha256:d626f2ad18d2111c1b0cc0f715b1aa8b3a9d73dbb4723a2b2776cce0a9d47199",
+  "policy_last_updated": "2026-08-27",
   "policy_version": 1,
   "public_repositories": {
     ".github": {
