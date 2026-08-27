@@ -3,7 +3,7 @@
   "generated_at": "2026-08-27",
   "desktop": {
     "repository": "https://github.com/OpenAdaptAI/openadapt-desktop",
-    "commit": "609dbf2a43a7ddcd70e8bb353053ff736b181c33",
+    "commit": "b6599e728a67efcf79a7f8a1d5cbaa9c5858c6c5",
     "generator": "scripts/capture_portal_scenarios.py",
     "command": "uv run --extra build python scripts/capture_portal_scenarios.py --out /tmp/openadapt-desktop-phone-current --frame <public-openemr-poster>",
     "viewport": {
