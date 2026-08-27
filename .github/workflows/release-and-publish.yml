@@ -23,9 +23,9 @@ on:
 permissions:
   contents: read
 
-# A tag run is the recovery unit. Do not cancel it when another release starts.
+# Serialize release mutations. A newer candidate must not race an older recovery.
 concurrency:
-  group: release-${{ github.event_name }}-${{ github.ref }}
+  group: release-publication
   cancel-in-progress: false
 
 jobs:
@@ -254,7 +254,7 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
 
   publish-pypi:
     needs: build-and-attest
@@ -314,7 +314,7 @@ jobs:
     needs: [build-and-attest, publish-pypi]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    environment: pypi
+    environment: release-identity
     permissions:
       contents: read
 
@@ -344,6 +344,7 @@ jobs:
           private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-administration: read
           permission-contents: write
           permission-metadata: read
 
@@ -358,9 +359,26 @@ jobs:
             exit 1
           fi
 
+      - name: Install the pinned GitHub release verification CLI
+        id: release-cli
+        run: |
+          set -euo pipefail
+          archive=/tmp/gh_2.98.0_linux_amd64.tar.gz
+          curl --fail --location --silent --show-error \
+            https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz \
+            --output "$archive"
+          echo "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de  $archive" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory /tmp
+          cli=/tmp/gh_2.98.0_linux_amd64/bin/gh
+          test -x "$cli"
+          "$cli" version
+          echo "path=$cli" >> "$GITHUB_OUTPUT"
+
       - name: Publish the GitHub Release and exact artifacts
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          GH_CLI: ${{ steps.release-cli.outputs.path }}
           RELEASE_TAG: ${{ github.ref_name }}
           EXPECTED_AUTHOR: openadapt-release[bot]
         run: |
@@ -390,36 +408,68 @@ jobs:
             exit 1
           fi
 
+          immutable_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/immutable-releases"
+          immutable_status="$(curl --silent --show-error \
+            --output /tmp/immutable-releases.json \
+            --write-out '%{http_code}' \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "$immutable_url")"
+          if [ "$immutable_status" != "200" ]; then
+            echo "GitHub immutable releases are unavailable (HTTP $immutable_status)." >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          document = json.loads(
+              Path("/tmp/immutable-releases.json").read_text(encoding="utf-8")
+          )
+          if document.get("enabled") is not True:
+              raise SystemExit("GitHub immutable releases are not enabled.")
+          PY
+
           release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
           release_status="$(curl --silent --show-error \
             --output /tmp/github-release.json \
             --write-out '%{http_code}' \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer $GH_TOKEN" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
             "$release_url")"
 
           if [ "$release_status" = "404" ]; then
-            gh release create "$RELEASE_TAG" \
+            "$GH_CLI" release create "$RELEASE_TAG" \
               dist/*.whl dist/*.tar.gz \
               --repo "$GITHUB_REPOSITORY" \
+              --draft \
               --verify-tag \
               --title "$RELEASE_TAG" \
-              --notes-file /tmp/release-notes.md \
-              --latest
+              --notes-file /tmp/release-notes.md
             release_status="$(curl --silent --show-error \
               --output /tmp/github-release.json \
               --write-out '%{http_code}' \
               --header "Accept: application/vnd.github+json" \
               --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
               "$release_url")"
-          elif [ "$release_status" = "200" ]; then
+          fi
+          if [ "$release_status" != "200" ]; then
+            echo "GitHub returned HTTP $release_status for the exact release." >&2
+            exit 1
+          fi
+
+          release_state="$(python -c \
+            'import json; print("draft" if json.load(open("/tmp/github-release.json"))["draft"] else "published")')"
+          if [ "$release_state" = "draft" ]; then
             python scripts/verify_github_release.py \
               --metadata /tmp/github-release.json \
               --tag "$RELEASE_TAG" \
               --author "$EXPECTED_AUTHOR" \
               --expected-dir dist \
+              --state draft \
               --allow-missing \
               --missing-output /tmp/missing-release-assets.txt
 
@@ -427,7 +477,7 @@ jobs:
             asset_count="$(python -c \
               'import json; print(len(json.load(open("/tmp/github-release.json"))["assets"]))')"
             if [ "$asset_count" -gt 0 ]; then
-              gh release download "$RELEASE_TAG" \
+              "$GH_CLI" release download "$RELEASE_TAG" \
                 --repo "$GITHUB_REPOSITORY" \
                 --dir /tmp/existing-github-release-assets
             fi
@@ -437,11 +487,12 @@ jobs:
               --author "$EXPECTED_AUTHOR" \
               --expected-dir dist \
               --downloaded-dir /tmp/existing-github-release-assets \
+              --state draft \
               --allow-missing \
               --missing-output /tmp/missing-release-assets.txt
 
             while IFS= read -r missing_asset; do
-              gh release upload "$RELEASE_TAG" "dist/$missing_asset" \
+              "$GH_CLI" release upload "$RELEASE_TAG" "dist/$missing_asset" \
                 --repo "$GITHUB_REPOSITORY"
             done < /tmp/missing-release-assets.txt
 
@@ -450,12 +501,40 @@ jobs:
               --write-out '%{http_code}' \
               --header "Accept: application/vnd.github+json" \
               --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
               "$release_url")"
-          fi
-          if [ "$release_status" != "200" ]; then
-            echo "GitHub returned HTTP $release_status for the exact release." >&2
-            exit 1
+            if [ "$release_status" != "200" ]; then
+              echo "GitHub returned HTTP $release_status for the completed draft." >&2
+              exit 1
+            fi
+
+            mkdir /tmp/completed-draft-release-assets
+            "$GH_CLI" release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir /tmp/completed-draft-release-assets
+            python scripts/verify_github_release.py \
+              --metadata /tmp/github-release.json \
+              --tag "$RELEASE_TAG" \
+              --author "$EXPECTED_AUTHOR" \
+              --expected-dir dist \
+              --downloaded-dir /tmp/completed-draft-release-assets \
+              --state draft
+
+            "$GH_CLI" release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft=false
+
+            release_status="$(curl --silent --show-error \
+              --output /tmp/github-release.json \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              "$release_url")"
+            if [ "$release_status" != "200" ]; then
+              echo "GitHub returned HTTP $release_status after publication." >&2
+              exit 1
+            fi
           fi
 
           python scripts/verify_github_release.py \
@@ -465,7 +544,7 @@ jobs:
             --expected-dir dist
 
           mkdir /tmp/github-release-assets
-          gh release download "$RELEASE_TAG" \
+          "$GH_CLI" release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --dir /tmp/github-release-assets
           python scripts/verify_github_release.py \
@@ -474,6 +553,23 @@ jobs:
             --author "$EXPECTED_AUTHOR" \
             --expected-dir dist \
             --downloaded-dir /tmp/github-release-assets
+
+          for attempt in $(seq 1 12); do
+            if "$GH_CLI" release verify "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --format json > /tmp/github-release-attestation.json; then
+              break
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              echo "GitHub did not produce a valid release attestation in time." >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          for artifact in dist/*.whl dist/*.tar.gz; do
+            "$GH_CLI" release verify-asset "$RELEASE_TAG" "$artifact" \
+              --repo "$GITHUB_REPOSITORY"
+          done
 
   verify-publication:
     needs: [build-and-attest, publish-pypi, publish-github]
@@ -507,10 +603,23 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          test "$RELEASE_TAG" = "v${version}"
+          python scripts/release_platform_versions.py \
+            --manifest platform-manifest.json \
+            --launcher-version "$version" \
+            > /tmp/release-component-versions.txt
+
+          component_args=()
+          while IFS= read -r component_version; do
+            component_args+=(--component-version "$component_version")
+          done < /tmp/release-component-versions.txt
+
           for attempt in $(seq 1 12); do
             if python scripts/generate_platform_manifest.py \
               --output /tmp/published-platform-manifest.json \
-              --report-output /tmp/published-platform-report.md; then
+              --report-output /tmp/published-platform-report.md \
+              "${component_args[@]}"; then
               break
             fi
             if [ "$attempt" -eq 12 ]; then
@@ -522,6 +631,7 @@ jobs:
           python scripts/validate_platform_manifest.py \
             --manifest /tmp/published-platform-manifest.json \
             --report /tmp/published-platform-report.md \
+            --require-compatible \
             --require-network
 
           python - <<'PY'
