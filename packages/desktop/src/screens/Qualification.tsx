@@ -17,6 +17,7 @@ import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
 import { QualificationJourney } from "../ui/QualificationJourney";
 import { BusinessDecisionAuthoring } from "../ui/BusinessDecisionAuthoring";
 import { JudgmentCaseCapture } from "../ui/JudgmentCaseCapture";
+import { ProgramWorkbench } from "../ui/ProgramWorkbench";
 import { QualificationLifecycle } from "./QualificationLifecycle";
 
 const POLICY = "clinical-write";
@@ -269,18 +270,6 @@ export function Qualification({
     () => project?.graph.nodes.filter((node) => node.kind === "action") || [],
     [project],
   );
-  const edgesBySource = useMemo(() => {
-    const grouped = new Map<
-      string,
-      QualificationProject["graph"]["edges"]
-    >();
-    for (const edge of project?.graph.edges || []) {
-      const edges = grouped.get(edge.source) || [];
-      edges.push(edge);
-      grouped.set(edge.source, edges);
-    }
-    return grouped;
-  }, [project]);
   const parameters = useMemo(
     () => project?.controls.parameters.filter((parameter) => !parameter.secret) || [],
     [project],
@@ -1039,59 +1028,11 @@ export function Qualification({
 
           <Card id="qualification-graph-section">
             <CardHead
-              eyebrow="Graph review"
-              title="Workflow structure"
-              sub="Branches, loops, exception paths, and terminal outcomes from the compiled program."
+              eyebrow="Program workbench"
+              title="Compiled structure and evidence contract"
+              sub="Inspect the exact topology, recorded target evidence, identity gates, independent checks, and stop rules before you qualify this version."
             />
-            <table>
-              <thead>
-                <tr>
-                  <th className="num">#</th>
-                  <th>Node</th>
-                  <th>Type</th>
-                  <th>Target evidence</th>
-                  <th>Next</th>
-                </tr>
-              </thead>
-              <tbody>
-                {project.graph.nodes.map((node) => (
-                  <tr key={`graph-${node.id}`}>
-                    <td className="num">{node.index + 1}</td>
-                    <td>
-                      <strong>{actionTitle(node)}</strong>
-                      <div className="page-sub mono">{node.id}</div>
-                      {node.badges.length > 0 && (
-                        <div className="row" style={{ marginTop: "var(--space-1)" }}>
-                          {node.badges.map((badge) => (
-                            <Pill key={`${node.id}-${badge}`} tone="neutral">
-                              {badge}
-                            </Pill>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <Pill tone={node.kind === "terminal" ? "ok" : "neutral"}>
-                        {node.kind}
-                      </Pill>
-                    </td>
-                    <td>
-                      <TargetEvidence node={node} />
-                    </td>
-                    <td>
-                      {(edgesBySource.get(node.id) || []).map((edge, index) => (
-                        <div key={`${edge.source}-${edge.target}-${index}`}>
-                          <span className="mono">{edge.target}</span>
-                          {edge.label && (
-                            <span className="page-sub"> · {edge.label}</span>
-                          )}
-                        </div>
-                      ))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ProgramWorkbench graph={project.graph} />
           </Card>
 
           {project.project && (
