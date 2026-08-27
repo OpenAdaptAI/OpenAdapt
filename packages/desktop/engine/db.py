@@ -9,6 +9,7 @@ Uses WAL mode for concurrent read access from monitoring threads.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -112,6 +113,16 @@ CREATE TABLE IF NOT EXISTS halts (
     teach_url TEXT,
     created_at TEXT NOT NULL,
     resolved_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS first_workflow_state (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    stage TEXT NOT NULL,
+    capture_id TEXT,
+    workflow_id TEXT,
+    target_json TEXT,
+    task TEXT DEFAULT '',
+    updated_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_captures_review ON captures(review_status);
@@ -346,6 +357,54 @@ class IndexDB:
     def update_bundle(self, bundle_id: str, **fields: object) -> None:
         """Update fields on a bundle record."""
         _update(self.conn, "bundles", "bundle_id", bundle_id, fields, _BUNDLE_COLUMNS)
+
+    # --- Durable first-workflow journey ---
+
+    def get_first_workflow_state(self) -> dict | None:
+        """Return the one local first-workflow journey, if it is active."""
+
+        row = self.conn.execute(
+            "SELECT * FROM first_workflow_state WHERE singleton = 1"
+        ).fetchone()
+        if row is None:
+            return None
+        state = dict(row)
+        raw_target = state.pop("target_json", None)
+        try:
+            target = json.loads(raw_target) if raw_target else None
+        except (TypeError, json.JSONDecodeError):
+            target = None
+        state["target"] = target if isinstance(target, dict) else None
+        state.pop("singleton", None)
+        return state
+
+    def set_first_workflow_state(
+        self,
+        *,
+        stage: str,
+        capture_id: str | None = None,
+        workflow_id: str | None = None,
+        target: dict | None = None,
+        task: str = "",
+    ) -> None:
+        """Store one exact first-workflow stage atomically."""
+
+        target_json = (
+            json.dumps(target, sort_keys=True, separators=(",", ":"))
+            if target is not None
+            else None
+        )
+        self.conn.execute(
+            "INSERT INTO first_workflow_state "
+            "(singleton, stage, capture_id, workflow_id, target_json, task, updated_at) "
+            "VALUES (1, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(singleton) DO UPDATE SET "
+            "stage = excluded.stage, capture_id = excluded.capture_id, "
+            "workflow_id = excluded.workflow_id, target_json = excluded.target_json, "
+            "task = excluded.task, updated_at = excluded.updated_at",
+            (stage, capture_id, workflow_id, target_json, task, _now()),
+        )
+        self.conn.commit()
 
     # --- Run operations (local replay/run executions) ---
 

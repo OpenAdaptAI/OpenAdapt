@@ -23,6 +23,8 @@ export const CMD = {
   GET_STATUS: "get_status",
   // library / captures / workflows
   GET_WORKFLOWS: "get_workflows",
+  GET_FIRST_WORKFLOW_STATE: "get_first_workflow_state",
+  SET_FIRST_WORKFLOW_STAGE: "set_first_workflow_stage",
   GET_CAPTURES: "get_captures",
   GET_STORAGE_USAGE: "get_storage_usage",
   GET_PRESENTATION_EXPORT_STATUS: "get_presentation_export_status",
@@ -30,6 +32,7 @@ export const CMD = {
   // the loop: compile -> replay/run -> teach
   COMPILE_RECORDING: "compile_recording",
   REPLAY_WORKFLOW: "replay_workflow",
+  REPLAY_FIRST_WORKFLOW: "replay_first_workflow",
   RUN_WORKFLOW: "run_workflow",
   GET_RUN_REPORT: "get_run_report",
   RETRY_RUN_PERSISTENCE: "retry_run_persistence",

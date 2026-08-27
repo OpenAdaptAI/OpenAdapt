@@ -126,6 +126,45 @@ describe("Qualification effect requirements", () => {
   beforeEach(() => mockedEngineInvoke.mockReset());
   afterEach(cleanup);
 
+  it("uses the sealed non-web target without inventing an application", async () => {
+    const draft = projectWithTiers({ review: 3, submit: 2 });
+    draft.draft_environment = true;
+    mockedEngineInvoke.mockResolvedValue(draft);
+
+    render(<Qualification workflowId="wf-1" onBack={() => {}} />);
+
+    const target = (await screen.findByLabelText(
+      "Execution surface",
+    )) as HTMLSelectElement;
+    const application = screen.getByLabelText("Application") as HTMLInputElement;
+    expect(target.value).toBe("rdp");
+    expect(application.value).toBe("");
+
+    fireEvent.change(application, { target: { value: "Remote test records" } });
+    fireEvent.change(screen.getByLabelText("Application version"), {
+      target: { value: "2026.1" },
+    });
+    fireEvent.change(
+      screen.getByLabelText("Operator-defined environment identifier"),
+      { target: { value: "rdp-test-vda" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start qualification project" }),
+    );
+
+    await waitFor(() =>
+      expect(mockedEngineInvoke).toHaveBeenCalledWith(
+        CMD.INITIALIZE_QUALIFICATION,
+        expect.objectContaining({
+          target_kind: "rdp",
+          application: "Remote test records",
+          application_version: "2026.1",
+          environment_label: "rdp-test-vda",
+        }),
+      ),
+    );
+  });
+
   it("saves the selected action's tier without carrying the prior action's value", async () => {
     mockedEngineInvoke
       .mockResolvedValueOnce(projectWithTiers({ review: 3, submit: 2 }))

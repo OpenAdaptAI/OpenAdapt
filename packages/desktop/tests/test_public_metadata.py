@@ -94,6 +94,7 @@ def test_record_lifecycle_uses_workflow_command_timeout() -> None:
 
     assert '"start_recording"' in workflow_match
     assert '"stop_recording"' in workflow_match
+    assert '"replay_first_workflow"' in workflow_match
     assert '"export_presentation_video"' in workflow_match
 
 

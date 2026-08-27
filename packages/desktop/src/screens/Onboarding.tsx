@@ -96,14 +96,14 @@ export function Onboarding({ onStart }: { onStart: () => void }) {
           ▁▂▄▆█
         </div>
         <p className="eyebrow">Welcome to OpenAdapt</p>
-        <h1>Record your first workflow</h1>
+        <h1>Choose your first task</h1>
         <p>
-          Demonstrate a task once. OpenAdapt compiles it into a deterministic
-          workflow you can watch run, correct, and promote — no scripting.
+          Start with a small task in a real app. Use test data and choose a
+          result you can check at a glance. You'll show the task once.
         </p>
         <div className="row" style={{ justifyContent: "center" }}>
           <Button variant="primary" disabled={!ready} onClick={onStart}>
-            Start recording
+            Choose an app and task
           </Button>
           <Button variant="ghost" onClick={refresh}>
             Re-check permissions

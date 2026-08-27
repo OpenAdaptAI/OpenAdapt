@@ -194,10 +194,14 @@ export function Qualification({
   workflowId,
   onBack,
   onOpenWorkflow = () => undefined,
+  backLabel = "Back to workflows",
+  reviewOnly = false,
 }: {
   workflowId: string;
   onBack: () => void;
   onOpenWorkflow?: (workflowId: string) => void;
+  backLabel?: string;
+  reviewOnly?: boolean;
 }) {
   const [project, setProject] = useState<QualificationProject | null>(null);
   const [error, setError] = useState("");
@@ -241,7 +245,10 @@ export function Qualification({
         setError(response.error);
         return;
       }
-      if (response.migration_required && !application) {
+      if (response.draft_environment && response.project) {
+        setTargetKind(response.project.environment.target_kind);
+        setApplication("");
+      } else if (response.migration_required && !application) {
         setApplication(response.graph.bundle.name);
       }
       setProject(response);
@@ -676,7 +683,7 @@ export function Qualification({
           <h1>{project?.graph.bundle.name || "Workflow review"}</h1>
           <span className="page-sub mono">{workflowId}</span>
         </div>
-        <Button onClick={onBack}>Back to workflows</Button>
+        <Button onClick={onBack}>{backLabel}</Button>
       </div>
 
       {error && (
@@ -691,11 +698,75 @@ export function Qualification({
             {busy === "loading" ? "Opening the sealed workflow…" : "No workflow loaded."}
           </p>
         </Card>
+      ) : reviewOnly ? (
+        <>
+          <Callout tone="info" title="Review the actions before the first run">
+            Mark an action as read-only only when it cannot change the target
+            application. Then return to the supervised run.
+          </Callout>
+          <Card id="qualification-actions-section">
+            <CardHead
+              eyebrow="Action review"
+              title="What can each action change?"
+              sub="Mark every action as read-only before you start the supervised run."
+            />
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Risk</th>
+                  <th>Target evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {actions.map((node) => (
+                  <tr key={`first-review-${node.id}`}>
+                    <td>
+                      <strong>{actionTitle(node)}</strong>
+                      <div className="page-sub mono">{node.id}</div>
+                    </td>
+                    <td>
+                      <select
+                        className="input"
+                        aria-label={`Risk for ${actionTitle(node)}`}
+                        value={
+                          project.controls.actions[node.id]?.classification
+                            ?.classification === "unknown"
+                            ? ""
+                            : project.controls.actions[node.id]?.classification
+                                ?.classification || ""
+                        }
+                        disabled={busy === node.id}
+                        onChange={(event) =>
+                          void setRisk(
+                            node.id,
+                            event.target.value as QualificationRisk,
+                          )
+                        }
+                      >
+                        <option value="" disabled>
+                          Review required
+                        </option>
+                        <option value="read_only">Read-only</option>
+                        <option value="state_changing">State-changing</option>
+                        <option value="consequential">Consequential</option>
+                        <option value="irreversible">Irreversible</option>
+                      </select>
+                    </td>
+                    <td>
+                      <TargetEvidence node={node} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </>
       ) : (
         <>
           <QualificationJourney project={project} />
 
-          {project.migration_required && (
+          {(project.migration_required || project.draft_environment) && (
             <Card id="qualification-environment-section">
               <CardHead
                 eyebrow="Environment boundary"
@@ -873,7 +944,12 @@ export function Qualification({
               <span className="spacer" />
               <Button
                 variant="primary"
-                disabled={busy === "certify" || project.migration_required}
+                disabled={
+                  busy === "certify" ||
+                  project.migration_required ||
+                  project.draft_environment ||
+                  reviewOnly
+                }
                 onClick={certify}
               >
                 {busy === "certify" ? "Certifying…" : "Run certification"}

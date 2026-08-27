@@ -31,6 +31,19 @@ QualificationIdentityEnforcement = Literal["canonical_ladder", "signal_quorum"]
 QualificationTargetKind = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
 DEFAULT_QUALIFICATION_POLICY = "clinical-write"
 ENVIRONMENT_IDENTIFIER_DERIVATION = "sha256(trimmed UTF-8 operator identifier)"
+FIRST_REPLAY_DRAFT_APPLICATION_VERSION = (
+    "openadapt-desktop-first-replay-draft/v1"
+)
+_FIRST_REPLAY_DRAFT_APPLICATIONS = frozenset(
+    {
+        "Browser application",
+        "Windows application",
+        "macOS application",
+        "Linux application",
+        "RDP application",
+        "Citrix application",
+    }
+)
 
 
 class QualificationError(RuntimeError):
@@ -787,6 +800,170 @@ def inspect_bundle(
     }
 
 
+def first_replay_review_is_draft(
+    bundle_dir: Path,
+    *,
+    bundle_key: str | None = None,
+) -> bool:
+    """Return whether the sealed project has Desktop's draft environment."""
+
+    workflow = _load(bundle_dir, key=bundle_key)
+    project = workflow.qualification
+    return _project_is_first_replay_draft(project)
+
+
+def _project_is_first_replay_draft(project: object) -> bool:
+    environment = getattr(project, "environment", None)
+    return bool(
+        environment is not None
+        and environment.application_version
+        == FIRST_REPLAY_DRAFT_APPLICATION_VERSION
+        and environment.application in _FIRST_REPLAY_DRAFT_APPLICATIONS
+    )
+
+
+def initialize_first_replay_review(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    target_kind: QualificationTargetKind,
+    application: str,
+    environment_digest: str,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Create or return the sealed draft project used for first-run review.
+
+    The draft supplies Flow's canonical revision and action classifications. It
+    is not an exact qualification environment and Desktop must not certify it.
+    """
+
+    api = _flow_api()
+    workflow = _load(bundle_dir, key=bundle_key)
+    if workflow.qualification is None:
+        try:
+            environment = api["EnvironmentBoundary"](
+                target_kind=target_kind,
+                application=application,
+                application_version=FIRST_REPLAY_DRAFT_APPLICATION_VERSION,
+                environment_digest=environment_digest,
+                runtime_version=_runtime_version(),
+                required_capabilities=[],
+            )
+            api["init_project"](
+                workflow,
+                environment=environment,
+                minimum_effect_tier=api["VerificationTier"](3),
+            )
+            _save(workflow, bundle_dir, key=bundle_key)
+        except (ValueError, TypeError) as exc:
+            raise QualificationError(str(exc)) from exc
+    return inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+
+
+def admit_first_supervised_replay(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    expected_project_revision: int,
+    expected_bundle_content_digest: str,
+    expected_environment_digest: str,
+    bundle_key: str | None = None,
+) -> dict[str, Any]:
+    """Admit one exact reviewed read-only bundle for supervised replay.
+
+    The frontend supplies only the revision and digest that the operator
+    reviewed. The engine reloads the sealed bundle and makes the action-risk
+    decision from Flow's canonical qualification project. This check does not
+    grant authority to a state-changing action.
+    """
+
+    if (
+        isinstance(expected_project_revision, bool)
+        or not isinstance(expected_project_revision, int)
+        or expected_project_revision < 1
+    ):
+        raise QualificationError(
+            "The reviewed workflow revision is invalid. Open the current review before running it."
+        )
+    if (
+        not isinstance(expected_bundle_content_digest, str)
+        or len(expected_bundle_content_digest) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in expected_bundle_content_digest
+        )
+    ):
+        raise QualificationError(
+            "The reviewed workflow digest is invalid. Open the current review before running it."
+        )
+    if (
+        not isinstance(expected_environment_digest, str)
+        or len(expected_environment_digest) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in expected_environment_digest
+        )
+    ):
+        raise QualificationError(
+            "The reviewed application target is invalid. Open the current review before running it."
+        )
+
+    api = _flow_api()
+    workflow = _load(bundle_dir, key=bundle_key)
+    project = workflow.qualification
+    manifest = workflow.manifest
+    if project is None or manifest is None or not manifest.content_digest:
+        raise QualificationError(
+            "This workflow needs qualification before its first supervised run."
+        )
+    if (
+        project.revision != expected_project_revision
+        or manifest.content_digest != expected_bundle_content_digest
+    ):
+        raise QualificationError(
+            "The workflow changed after review. Open the current review before running it."
+        )
+    if project.environment.environment_digest != expected_environment_digest:
+        raise QualificationError(
+            "The application target changed after recording. Use the recorded "
+            "target for the first supervised run."
+        )
+
+    steps = list(api["iter_workflow_steps"](workflow))
+    if not steps:
+        raise QualificationError("This workflow has no reviewed actions to run.")
+    required_actions, _required_identity = api["qualification_action_requirements"](
+        workflow
+    )
+    if required_actions:
+        raise QualificationError(
+            "Qualification is required before the first run can change application state."
+        )
+    for step in steps:
+        classification = project.action_classifications.get(step.id)
+        if (
+            classification is None
+            or not classification.operator_confirmed
+            or classification.classification.value != "read_only"
+        ):
+            raise QualificationError(
+                "Qualification is required before the first run can change application state."
+            )
+
+    return {
+        "workflow_id": workflow_id,
+        "project_revision": project.revision,
+        "bundle_content_digest": manifest.content_digest,
+        "environment_digest": project.environment.environment_digest,
+    }
+
+
 def initialize_qualification(
     bundle_dir: Path,
     *,
@@ -800,6 +977,7 @@ def initialize_qualification(
     minimum_effect_tier: int = 3,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
     bundle_key: str | None = None,
+    replace_first_replay_draft: bool = False,
 ) -> dict:
     """Attach the canonical v1 project to an existing compiled workflow."""
 
@@ -818,7 +996,10 @@ def initialize_qualification(
 
     api = _flow_api()
     workflow = _load(bundle_dir, key=bundle_key)
-    if workflow.qualification is not None:
+    existing_is_draft = _project_is_first_replay_draft(workflow.qualification)
+    if workflow.qualification is not None and not (
+        replace_first_replay_draft and existing_is_draft
+    ):
         raise QualificationError(
             "This workflow already has a qualification project; reopen it to continue."
         )
@@ -835,6 +1016,7 @@ def initialize_qualification(
             workflow,
             environment=environment,
             minimum_effect_tier=api["VerificationTier"](minimum_effect_tier),
+            replace=replace_first_replay_draft and existing_is_draft,
         )
         _save(workflow, bundle_dir, key=bundle_key)
     except (ValueError, TypeError) as exc:

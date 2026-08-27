@@ -127,6 +127,7 @@ impl SidecarInner {
             | "stop_recording"
             | "compile_recording"
             | "replay_workflow"
+            | "replay_first_workflow"
             | "run_workflow"
             | "teach_fix"
             | "export_presentation_video" => WORKFLOW_COMMAND_TIMEOUT,

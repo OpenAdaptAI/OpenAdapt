@@ -982,6 +982,42 @@ select.input:focus {
   flex: 1;
 }
 
+.first-workflow-steps,
+.first-workflow-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-5);
+  padding-left: var(--space-6);
+}
+.first-workflow-steps li,
+.first-workflow-inputs li {
+  align-items: center;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+.first-workflow-steps li {
+  display: list-item;
+}
+.first-workflow-steps li > .pill {
+  float: right;
+  margin-left: var(--space-3);
+}
+.first-workflow-inputs {
+  list-style: none;
+  padding-left: 0;
+}
+.first-workflow-inputs li {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-2);
+}
+.first-workflow-confirmation {
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+}
+
 /* record pulse */
 .rec-dot {
   width: 10px;

@@ -63,6 +63,13 @@ jobs:
           uv run pytest
           tests/test_engine/test_qualification.py
           tests/test_engine/test_qualification_capabilities.py
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_refuses_state_change_before_flow
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_refuses_a_stale_exact_bundle_binding
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_refuses_a_changed_execution_target
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_runs_an_exact_reviewed_read_only_bundle
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_fresh_first_compile_creates_review_and_reaches_supervised_replay
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_uncertain_first_replay_requires_reconciliation_before_retry
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_completed_first_workflow_allows_exact_environment_on_draft_descendant
           -v
 
       # The capture floor is only checkable where the bundled Flow runtime is

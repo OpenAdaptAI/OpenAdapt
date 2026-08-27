@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -93,6 +94,16 @@ class ExecutionTarget(BaseModel):
     def _strip_optional_text(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip() or None
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def _validate_web_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("web target URL must be an HTTP(S) page URL")
         return value
 
     @model_validator(mode="after")
