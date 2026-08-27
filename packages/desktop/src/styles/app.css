@@ -104,7 +104,7 @@ a:hover {
 .desktop-shell {
   z-index: 100;
   flex: 0 0 auto;
-  background: var(--surface);
+  background: var(--panel);
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
 }
@@ -189,11 +189,11 @@ a:hover {
 }
 .nav-item:hover {
   color: var(--text);
-  background: var(--surface-hover);
+  background: var(--panel-hover);
 }
 .nav-item.active {
   color: var(--text-strong);
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   border-bottom-color: var(--brand);
 }
 .nav-item .glyph {
@@ -222,7 +222,7 @@ a:hover {
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   text-transform: capitalize;
   white-space: nowrap;
 }
@@ -321,7 +321,7 @@ a:hover {
 .program-workbench-topbar {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
 }
 .program-workbench-topbar > div {
   display: flex;
@@ -365,7 +365,7 @@ a:hover {
   gap: var(--space-1);
   padding: var(--space-2) var(--space-3) 0;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--panel);
 }
 .program-tabs button {
   padding: var(--space-2) var(--space-3);
@@ -459,7 +459,7 @@ a:hover {
   padding: 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius-2);
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
   color: var(--text);
   cursor: pointer;
   font: inherit;
@@ -552,7 +552,7 @@ a:hover {
 .program-inspector {
   padding: var(--space-4);
   border-left: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
 }
 .program-inspector-head {
   display: flex;
@@ -668,7 +668,7 @@ a:hover {
   min-width: 760px;
 }
 .program-matrix thead th {
-  background: var(--surface);
+  background: var(--panel);
   color: var(--text-faint);
 }
 .program-matrix tbody td {
@@ -706,7 +706,7 @@ a:hover {
   border: 1px solid var(--border);
   border-left: 2px solid var(--attention);
   border-radius: var(--radius-1);
-  background: var(--surface);
+  background: var(--panel);
 }
 .program-stop-list article > span {
   color: var(--text-faint);
@@ -792,7 +792,7 @@ a:hover {
   color: var(--text);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: var(--surface-hover);
+  background: var(--panel-hover);
   border-color: var(--text-faint);
 }
 .btn-danger {
@@ -816,7 +816,7 @@ a:hover {
    Cards / panels
    -------------------------------------------------------------------------- */
 .card {
-  background: var(--surface);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-2);
   padding: var(--space-5);
@@ -845,7 +845,7 @@ a:hover {
 }
 .qualification-journey-button {
   align-items: center;
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   border: 1px solid var(--border);
   border-radius: var(--radius-1);
   color: var(--text);
@@ -869,7 +869,7 @@ a:hover {
 }
 .qualification-journey-index {
   align-items: center;
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   color: var(--text-muted);
@@ -912,7 +912,7 @@ a:hover {
   grid-template-columns: repeat(3, 1fr);
 }
 .card-inset {
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   border: 1px solid var(--border);
   border-radius: var(--radius-1);
   padding: var(--space-3);
@@ -1015,7 +1015,7 @@ tbody td {
   color: var(--text);
 }
 tbody tr:hover td {
-  background: var(--surface-hover);
+  background: var(--panel-hover);
 }
 td.num,
 th.num {
@@ -1062,7 +1062,7 @@ td.id {
 .input,
 textarea.input,
 select.input {
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   border: 1px solid var(--border);
   border-radius: var(--radius-1);
   padding: var(--space-2) var(--space-3);
@@ -1097,13 +1097,13 @@ select.input:focus {
   font: inherit;
   font-size: var(--fs-sm);
   padding: var(--space-2) var(--space-4);
-  background: var(--surface);
+  background: var(--panel);
   color: var(--text-muted);
   border: none;
   cursor: pointer;
 }
 .seg button.active {
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   color: var(--text-strong);
 }
 .seg button + button {
@@ -1123,7 +1123,7 @@ select.input:focus {
   padding: var(--space-2) var(--space-4);
 }
 .radio-seg label.active {
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   color: var(--text-strong);
 }
 .radio-seg input {
@@ -1174,7 +1174,7 @@ select.input:focus {
    -------------------------------------------------------------------------- */
 .callout {
   border-left: 2px solid var(--brand);
-  background: var(--surface);
+  background: var(--panel);
   border-radius: var(--radius-1);
   padding: var(--space-3) var(--space-4);
   font-size: var(--fs-sm);
@@ -1270,7 +1270,7 @@ select.input:focus {
 }
 
 .log {
-  background: var(--surface-sunk);
+  background: var(--panel-sunk);
   border: 1px solid var(--border);
   border-radius: var(--radius-0);
   padding: var(--space-3);
@@ -1492,7 +1492,7 @@ select.input:focus {
   transform: translateX(-50%);
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--panel);
   box-shadow: var(--shadow-pop);
   color: var(--text);
   font-size: 14px;
@@ -1523,7 +1523,9 @@ select.input:focus {
   align-items: flex-start;
 }
 .pairing-qr {
-  background: #fff;
+  /* A QR reader needs the quiet zone lighter than the modules, so this is the
+     lightest surface in the system rather than the panel it sits on. */
+  background: var(--paper-1);
   padding: var(--space-3);
   border-radius: 10px;
   width: 196px;
@@ -1540,7 +1542,7 @@ select.input:focus {
   padding: var(--space-2) var(--space-3);
   border-radius: 8px;
   border: 1px solid var(--line-strong);
-  background: var(--bg, #10151a);
+  background: var(--bg);
   color: inherit;
 }
 .list {

@@ -66,6 +66,15 @@ jobs:
       - name: Exercise qualification interaction and build
         run: npm run test:ui && npm run build
 
+      # The offline half of this guard runs in test:ui above. This half needs
+      # the network: it fails when openadapt-web moves the canonical palette and
+      # the vendored copy here does not follow, which is how the installed app
+      # and the marketing site drift into looking like two products.
+      - name: Check the vendored design tokens against openadapt-web
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run tokens:check
+
   python-distribution:
     name: Python distribution
     needs: artifact-scope

@@ -1,9 +1,9 @@
 {
   "schema_version": "openadapt.desktop-phone-capture-provenance/v1",
-  "generated_at": "2026-08-08",
+  "generated_at": "2026-08-27",
   "desktop": {
     "repository": "https://github.com/OpenAdaptAI/openadapt-desktop",
-    "commit": "c149db9b81f96001bf92f95ebad2cf273cc6be69",
+    "commit": "b6599e728a67efcf79a7f8a1d5cbaa9c5858c6c5",
     "generator": "scripts/capture_portal_scenarios.py",
     "command": "uv run --extra build python scripts/capture_portal_scenarios.py --out /tmp/openadapt-desktop-phone-current --frame <public-openemr-poster>",
     "viewport": {
@@ -26,7 +26,7 @@
       "state": "Identity decision request before an operator action",
       "width": 780,
       "height": 1688,
-      "sha256": "67fa5c2f6cbecb9a102a8719b4558f9ecfd1462c98004ab8ca98d9a13342c9c6"
+      "sha256": "1a4954f123104d7fb8aa4195a6363c75f838f5c05061d9aa871bac2b04f29d88"
     },
     {
       "file": "result-checks-passed.png",
@@ -34,7 +34,7 @@
       "state": "Runner result after the permitted check-and-continue request",
       "width": 780,
       "height": 1688,
-      "sha256": "a719b5d139dd80bee75b336a325b2c657ac0e4f4a0e6f03f728765734ee908dc"
+      "sha256": "7899cbb28feda25162f139613ec57099bd31fbccf8cfc3a8c2accf6de164255a"
     }
   ],
   "semantic_scope": "Deterministic presentation fixture for the Desktop phone shell. It is not a customer run or a complete workflow effect-verification result."

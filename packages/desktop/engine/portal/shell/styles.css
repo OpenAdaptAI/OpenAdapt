@@ -1,20 +1,27 @@
 /* Mobile-first task shell. One decision, thumb-reachable actions, safe areas. */
 
+/* The phone shell is served by the engine as plain files with no bundler, so it
+   cannot import the vendored token stylesheet. Each value below is copied from
+   the canonical design tokens in src/styles/vendor/openadapt-web/tokens.json,
+   and tests/test_portal/test_shell_palette.py fails if one stops matching. */
 :root {
   color-scheme: light;
-  --bg: #f4f3ed;
-  --panel: #fffef9;
-  --panel-2: #eeede5;
-  --line: #d6d8ce;
-  --text: #252a22;
-  --muted: #687066;
-  --accent: #2f7154;
+  --bg: #F5F7FA;      /* --surface        */
+  --panel: #FFFFFF;   /* --surface-raised */
+  --panel-2: #EDF1F6; /* --surface-sunken */
+  --line: #DEE4EC;    /* --hairline       */
+  --text: #0B1220;    /* --ink            */
+  --muted: #414E63;   /* --text-secondary */
+  --accent: #0B7A5A;  /* --accent-verified */
   /* Used only to mark stakes. Never on a button: nothing in the action bar is
      allowed to be more salient than anything else in it. */
-  --warn: #a66a25;
-  --success: #2e7c5a;
-  --danger: #a34f4c;
-  --teach: #356f9f;
+  --warn: #9A5B0A;    /* --accent-halt    */
+  --success: #0B7A5A; /* --accent-verified */
+  --danger: #B3261E;  /* --accent-danger  */
+  /* A correction is neither a halt nor a refusal, so it needs a hue of its own.
+     --link-visited is the one cool non-brand hue in the canonical set that is
+     not the focus ring, which must never read as a state. */
+  --teach: #574FB0;   /* --link-visited   */
   /* Measured from the real action bar by app.js. A constant was wrong once the
      bar carried three two-line buttons, and the outcome line -- the last thing
      in the card -- ended up underneath it. */
@@ -68,7 +75,7 @@ html, body {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 17px;
-  box-shadow: 0 14px 34px rgba(33, 39, 31, .07);
+  box-shadow: 0 14px 34px rgba(11, 18, 32, .07);
 }
 
 .card h1 { font-size: 21px; line-height: 1.35; margin: 6px 0 12px; }
@@ -168,11 +175,11 @@ html, body {
 .outcome[hidden] { display: none; }
 .outcome strong { font-size: 12px; letter-spacing: .08em; }
 .outcome span { font-size: 15px; line-height: 1.45; }
-.outcome.pending { border-color: color-mix(in srgb, var(--accent) 38%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #dcece5); }
-.outcome.success { border-color: color-mix(in srgb, var(--success) 44%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #dff1e8); }
-.outcome.halted { border-color: color-mix(in srgb, var(--warn) 44%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #f6ead7); }
-.outcome.uncertain { border-color: color-mix(in srgb, var(--danger) 46%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #f7e4e2); }
-.outcome.teach { border-color: color-mix(in srgb, var(--teach) 42%, var(--line)); background: color-mix(in srgb, var(--panel) 86%, #e0ebf5); }
+.outcome.pending { border-color: color-mix(in srgb, var(--accent) 38%, var(--line)); background: color-mix(in srgb, var(--panel) 92%, var(--accent)); }
+.outcome.success { border-color: color-mix(in srgb, var(--success) 44%, var(--line)); background: color-mix(in srgb, var(--panel) 92%, var(--success)); }
+.outcome.halted { border-color: color-mix(in srgb, var(--warn) 44%, var(--line)); background: color-mix(in srgb, var(--panel) 92%, var(--warn)); }
+.outcome.uncertain { border-color: color-mix(in srgb, var(--danger) 46%, var(--line)); background: color-mix(in srgb, var(--panel) 92%, var(--danger)); }
+.outcome.teach { border-color: color-mix(in srgb, var(--teach) 42%, var(--line)); background: color-mix(in srgb, var(--panel) 92%, var(--teach)); }
 .outcome.neutral { background: var(--panel-2); }
 .outcome.terminal {
   min-height: min(520px, calc(100vh - 160px));
@@ -191,7 +198,7 @@ html, body {
   margin-bottom: 12px;
   border-radius: 22px;
   background: var(--success);
-  color: #fff;
+  color: var(--panel);
   font-size: 34px;
   font-weight: 800;
 }
@@ -204,8 +211,8 @@ html, body {
 .result-card { padding: 10px; }
 
 .task-kicker { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.task-hero { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px; border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line)); border-radius: 16px; background: color-mix(in srgb, var(--panel) 86%, #dcece5); }
-.task-hero > span { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: var(--accent); color: #fff; font-size: 21px; font-weight: 900; }
+.task-hero { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px; border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line)); border-radius: 16px; background: color-mix(in srgb, var(--panel) 92%, var(--accent)); }
+.task-hero > span { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: var(--accent); color: var(--panel); font-size: 21px; font-weight: 900; }
 .task-hero p { margin: 1px 0 3px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .task-hero h1 { margin: 0; font-size: 21px; line-height: 1.28; }
 .task-reason { margin: 14px 0 0; font-size: 14px; line-height: 1.5; }
@@ -213,7 +220,7 @@ html, body {
 .task-signals > span { display: grid; gap: 2px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
 .task-signals small { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .task-signals strong { font-size: 12px; line-height: 1.35; }
-.task-next { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; align-items: start; margin: 14px 0 0; padding: 11px; border-radius: 12px; background: color-mix(in srgb, var(--panel) 86%, #dcece5); }
+.task-next { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; align-items: start; margin: 14px 0 0; padding: 11px; border-radius: 12px; background: color-mix(in srgb, var(--panel) 92%, var(--accent)); }
 .task-next > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--panel); color: var(--accent); }
 .task-next p { display: grid; gap: 1px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .task-next strong { color: var(--text); font-size: 12px; }
