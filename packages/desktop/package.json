@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test:ui": "vitest run",
+    "tokens:check": "node scripts/vendor-design-tokens.mjs --check",
+    "capture:cockpit": "node scripts/capture-cockpit-previews.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
