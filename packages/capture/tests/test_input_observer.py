@@ -933,6 +933,14 @@ def test_record_boundary_reraises_setup_failure(
     def fail_scope(*args, **kwargs):
         raise RuntimeError("native observer setup failed")
 
+    monkeypatch.setattr(
+        recorder_module.video,
+        "require_video_encoder",
+        lambda **_kwargs: recorder_module.video.FFmpegProvision(
+            executable="test-ffmpeg",
+            source="test",
+        ),
+    )
     monkeypatch.setattr(recorder_module, "build_window_scope", fail_scope)
     with pytest.raises(RuntimeError, match="native observer setup failed"):
         recorder_module.record("test", capture_dir=str(tmp_path))
