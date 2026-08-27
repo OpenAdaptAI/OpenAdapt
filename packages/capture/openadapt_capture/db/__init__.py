@@ -20,6 +20,10 @@ NAMING_CONVENTION = {
     "pk": "pk_%(table_name)s",
 }
 
+# Keep SQLite's existing bounded wait explicit so lock-recovery tests can use a
+# short timeout without making production captures fail faster.
+SQLITE_BUSY_TIMEOUT_SECONDS = 5.0
+
 
 class BaseModel:
     """The base model for database tables."""
@@ -65,7 +69,10 @@ def get_engine(db_url: str, echo: bool = False) -> sa.engine:
     """
     engine = create_engine(
         db_url,
-        connect_args={"check_same_thread": False},
+        connect_args={
+            "check_same_thread": False,
+            "timeout": SQLITE_BUSY_TIMEOUT_SECONDS,
+        },
         echo=echo,
     )
     return engine

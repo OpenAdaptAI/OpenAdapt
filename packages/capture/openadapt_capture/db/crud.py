@@ -5,6 +5,8 @@ Only import paths are changed; function signatures and logic are identical.
 """
 
 import json
+import sqlite3
+from time import sleep
 from typing import Any, TypeVar
 
 import sqlalchemy as sa
@@ -27,12 +29,76 @@ BaseModelType = TypeVar("BaseModelType")
 
 BATCH_SIZE = 1
 
+# A SQLite connection already waits up to five seconds for a writer lock. Two
+# more bounded attempts cover a short competing transaction without hiding a
+# lock that persists. The worst-case database wait remains below the recorder's
+# 30-second shutdown contract.
+SQLITE_LOCK_RETRY_DELAYS_SECONDS = (0.05, 0.2)
+_SQLITE_LOCK_PRIMARY_CODES = {
+    getattr(sqlite3, "SQLITE_BUSY", 5),
+    getattr(sqlite3, "SQLITE_LOCKED", 6),
+}
+
 action_events = []
 screenshots = []
 window_events = []
 browser_events = []
 performance_stats = []
 memory_stats = []
+
+
+def _is_sqlite_lock_error(error: sa.exc.OperationalError) -> bool:
+    """Return whether an OperationalError is SQLite lock contention."""
+    original = error.orig
+    if not isinstance(original, sqlite3.OperationalError):
+        return False
+
+    error_code = getattr(original, "sqlite_errorcode", None)
+    if isinstance(error_code, int):
+        primary_code = error_code & 0xFF
+        return primary_code in _SQLITE_LOCK_PRIMARY_CODES
+
+    message = str(original).lower()
+    return any(
+        lock_message in message
+        for lock_message in (
+            "database is locked",
+            "database table is locked",
+            "database schema is locked",
+        )
+    )
+
+
+def _execute_insert_with_lock_retry(
+    session: SaSession,
+    table: sa.Table,
+    to_insert: list[dict[str, Any]],
+) -> sa.engine.Result:
+    """Commit one insert, with bounded recovery from SQLite writer contention."""
+    for attempt in range(len(SQLITE_LOCK_RETRY_DELAYS_SECONDS) + 1):
+        try:
+            result = session.execute(sa.insert(table), to_insert)
+            session.commit()
+            return result
+        except sa.exc.OperationalError as exc:
+            if not _is_sqlite_lock_error(exc):
+                raise
+
+            # A failed execute or commit can leave the Session transaction
+            # unusable. Roll it back before either retrying or failing loud.
+            session.rollback()
+            if attempt == len(SQLITE_LOCK_RETRY_DELAYS_SECONDS):
+                raise
+
+            delay = SQLITE_LOCK_RETRY_DELAYS_SECONDS[attempt]
+            logger.warning(
+                "SQLite writer lock during insert; retrying in "
+                f"{delay:.2f}s ({attempt + 1}/"
+                f"{len(SQLITE_LOCK_RETRY_DELAYS_SECONDS)})"
+            )
+            sleep(delay)
+
+    raise AssertionError("unreachable SQLite insert retry state")
 
 
 def _insert(
@@ -69,8 +135,7 @@ def _insert(
 
     if buffer is None or len(buffer) >= BATCH_SIZE:
         to_insert = buffer or [db_obj]
-        result = session.execute(sa.insert(table), to_insert)
-        session.commit()
+        result = _execute_insert_with_lock_retry(session, table, to_insert)
         if buffer:
             buffer.clear()
         # Note: this does not contain the inserted row(s)
