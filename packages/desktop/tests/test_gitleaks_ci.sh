@@ -73,4 +73,49 @@ if run_scan "${ref_repo}" "${tree_head}" "${tree_head}"; then
   exit 1
 fi
 
-printf 'Gitleaks commit-range and tree self-tests passed.\n'
+# Each FFmpeg provenance allowlist entry must match one exact published value.
+# A different value in the same variable must still be reported, so the
+# allowlist can never widen into a rule-wide or path-wide exemption.
+allow_root="${test_root}/allowlist-scope"
+mkdir -p "${allow_root}"
+python3 - "${repo_root}/.gitleaks.toml" "${allow_root}/allowed.py" \
+  "${allow_root}/rotated.py" <<'PY'
+import re
+import sys
+
+config_path, allowed_path, rotated_path = sys.argv[1:4]
+config = open(config_path, encoding="utf-8").read()
+values = re.findall(r"'''\^([0-9A-Fa-f]{40,64})\$'''", config)
+if len(values) != 2:
+    raise SystemExit(f"expected 2 anchored allowlist values, found {len(values)}")
+
+with open(allowed_path, "w", encoding="utf-8") as handle:
+    for index, value in enumerate(values):
+        handle.write(f'SIGNING_KEY_ALLOWED_{index} = "{value}"\n')
+
+with open(rotated_path, "w", encoding="utf-8") as handle:
+    for index, value in enumerate(values):
+        rotated = ("0" if value[0] != "0" else "1") + value[1:]
+        handle.write(f'SIGNING_KEY_ROTATED_{index} = "{rotated}"\n')
+PY
+
+scan_file() {
+  gitleaks dir "$1" --config "${repo_root}/.gitleaks.toml" \
+    --redact --no-banner >/dev/null 2>&1
+}
+
+mkdir -p "${allow_root}/allowed" "${allow_root}/rotated"
+mv "${allow_root}/allowed.py" "${allow_root}/allowed/"
+mv "${allow_root}/rotated.py" "${allow_root}/rotated/"
+
+if ! scan_file "${allow_root}/allowed"; then
+  printf 'A published FFmpeg provenance value is not allowlisted.\n' >&2
+  exit 1
+fi
+
+if scan_file "${allow_root}/rotated"; then
+  printf 'The FFmpeg provenance allowlist is wider than its exact values.\n' >&2
+  exit 1
+fi
+
+printf 'Gitleaks commit-range, tree, and allowlist-scope self-tests passed.\n'

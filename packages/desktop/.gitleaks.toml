@@ -9,3 +9,10 @@ regexTarget = "secret"
 regexes = [
   '''^FCF986EA15E6E293A5644F10B4322F04D67658D8$''',
 ]
+
+[[allowlists]]
+description = "The SHA-256 of FFmpeg's published signing key file is public provenance, not a secret"
+regexTarget = "secret"
+regexes = [
+  '''^397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5$''',
+]
