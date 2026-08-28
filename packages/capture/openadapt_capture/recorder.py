@@ -536,10 +536,16 @@ STARTUP_READY_TIMEOUT_SECONDS = 30.0
 # Check the two against each other here rather than trusting a comment beside
 # either one: whichever a later change moves, the package refuses to import
 # with a budget that cannot fit.
-if crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS >= STARTUP_READY_TIMEOUT_SECONDS:
+#
+# Use the worst case the retry helper can actually produce, which is its budget
+# plus one attempt that ran long, not the budget alone.
+SQLITE_WRITE_LOCK_WORST_CASE_SECONDS = (
+    crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS + crud.SQLITE_LOCK_ATTEMPT_CEILING_SECONDS
+)
+if SQLITE_WRITE_LOCK_WORST_CASE_SECONDS >= STARTUP_READY_TIMEOUT_SECONDS:
     raise RuntimeError(
-        "The SQLite write-lock budget "
-        f"({crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS:.1f}s) must leave a writer "
+        "The worst-case SQLite write-lock wait "
+        f"({SQLITE_WRITE_LOCK_WORST_CASE_SECONDS:.1f}s) must leave a writer "
         "time to announce readiness within "
         f"{STARTUP_READY_TIMEOUT_SECONDS:.1f}s."
     )

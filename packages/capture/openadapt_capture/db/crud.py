@@ -46,16 +46,21 @@ BATCH_SIZE = 1
 # deadline when it is imported.
 SQLITE_WRITE_LOCK_BUDGET_SECONDS = 20.0
 
-# The most one attempt is allowed to cost.
+# The room one more attempt needs before the helper will begin it.
 #
 # Every statement of the transaction may wait the connection's busy timeout,
-# and SQLite's busy handler overshoots that timeout under contention. The
-# helper below refuses to BEGIN an attempt unless this much of the budget
-# remains, which is what makes the budget an upper bound on the total wait
-# rather than an estimate of it.
+# and SQLite's busy handler overshoots that timeout under contention, so an
+# attempt costs somewhat more than the timeout it was given. The helper refuses
+# to BEGIN an attempt unless this much of the budget remains.
+#
+# That gives the bound its exact shape. The last attempt starts strictly before
+# BUDGET - CEILING, so the total wait is under BUDGET whenever an attempt costs
+# at most the ceiling, and under BUDGET + CEILING even when a loaded machine
+# makes it cost twice that. recorder.py checks the second, weaker figure
+# against its readiness deadline, because that is the one that always holds.
 #
 # tests/test_db_lock_retry.py measures a real attempt against a real held lock
-# and fails if it costs more than this.
+# with the production busy timeout and fails if it costs more than this.
 SQLITE_LOCK_ATTEMPT_CEILING_SECONDS = 2.0
 
 # Back off between attempts so the writers do not resample the lock in step,
@@ -115,10 +120,11 @@ def _write_with_lock_retry(
     corruption.
 
     The retry runs against a clock, not a counter. It re-enters the race for as
-    long as ``SQLITE_WRITE_LOCK_BUDGET_SECONDS`` allows, and it stops as soon
-    as too little of that budget remains to finish another attempt. The total
-    wait is therefore never more than the budget, whatever one attempt costs on
-    the machine underneath.
+    long as ``SQLITE_WRITE_LOCK_BUDGET_SECONDS`` allows, and it never begins an
+    attempt once less than ``SQLITE_LOCK_ATTEMPT_CEILING_SECONDS`` of that
+    budget remains. The total wait is therefore bounded by the budget plus, at
+    worst, one attempt that ran long -- never by whatever a count of attempts
+    happens to cost on the machine underneath.
     """
     deadline = monotonic() + SQLITE_WRITE_LOCK_BUDGET_SECONDS
     backoff = SQLITE_LOCK_FIRST_RETRY_SECONDS

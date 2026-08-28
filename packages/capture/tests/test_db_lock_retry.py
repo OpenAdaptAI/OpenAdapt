@@ -463,9 +463,17 @@ def test_the_total_wait_never_runs_past_the_declared_budget(tmp_path, monkeypatc
         session.close()
         engine.dispose()
 
-    assert elapsed <= crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS, (
+    # The helper starts its last attempt strictly before BUDGET - CEILING, so
+    # the total is over the budget only by however long that one attempt ran.
+    # A loaded runner does make it run long: this measured 2.05s against a 2.0s
+    # budget on hosted macOS. Bound it by what always holds.
+    worst_case = (
+        crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS
+        + crud.SQLITE_LOCK_ATTEMPT_CEILING_SECONDS
+    )
+    assert elapsed <= worst_case, (
         f"a permanently held lock cost {elapsed:.2f}s, over the declared "
-        f"{crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS:.1f}s budget"
+        f"{worst_case:.1f}s worst case"
     )
     # ... and it is spent, not abandoned. The replaced policy stopped after
     # three attempts, which against this lock is under a tenth of the budget.
@@ -482,8 +490,13 @@ def test_the_write_lock_budget_fits_the_readiness_deadline():
     ``recorder`` refuses to import when this does not hold, so this test states
     the same contract where a reader of the database code can see it.
     """
+    assert recorder.SQLITE_WRITE_LOCK_WORST_CASE_SECONDS == (
+        crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS
+        + crud.SQLITE_LOCK_ATTEMPT_CEILING_SECONDS
+    )
     assert (
-        crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS < recorder.STARTUP_READY_TIMEOUT_SECONDS
+        recorder.SQLITE_WRITE_LOCK_WORST_CASE_SECONDS
+        < recorder.STARTUP_READY_TIMEOUT_SECONDS
     )
 
 
