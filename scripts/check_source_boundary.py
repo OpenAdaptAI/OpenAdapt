@@ -36,10 +36,10 @@ Two kinds of matching, so a rename cannot dodge the check:
   denylisted regular expression, or carry a private-artifact banner, fails.
 
 It complements, and deliberately overlaps with, the packaging-time guard in
-openadapt-flow's scripts/check_release_consistency.py (which inspects built
-wheels/sdists and reads the same rendered policy). This script inspects the
-REPOSITORY TREE, so the leak is caught at PR time in any public core repo, not
-only when an artifact is built.
+openadapt-flow's scripts/check_release_consistency.py. This script inspects the
+repository tree and, when ``--dist`` is set, the actual wheel and source archive
+members. This catches a leak at PR time and again after the build tool generates
+the release artifacts.
 
 Files that legitimately DISCUSS the boundary (this script, the rendered policy
 itself, policy docs, contributor docs) are covered by the allowlist below. That
@@ -48,6 +48,7 @@ boundary -- and is deliberately not part of the shared policy.
 
 Usage:
     python scripts/check_source_boundary.py [--root PATH] [--repo NAME]
+        [--dist PATH]
 
 --root defaults to this repository. Point it at another checkout to run the
 same gate in that repo's CI without vendoring a divergent copy; the rules are
@@ -59,8 +60,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import stat
 import subprocess
 import sys
+import tarfile
+import zipfile
 from pathlib import Path
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[1]
@@ -100,6 +104,9 @@ SKIP_CONTENT_SUFFIXES = {
 }
 
 MAX_CONTENT_BYTES = 5 * 1024 * 1024
+MAX_ARTIFACT_MEMBER_BYTES = 20 * 1024 * 1024
+MAX_ARTIFACT_TOTAL_BYTES = 100 * 1024 * 1024
+MAX_ARTIFACT_MEMBERS = 10_000
 
 
 class PolicyError(RuntimeError):
@@ -139,6 +146,16 @@ class SourcePolicy:
         )
         self.private_path_segments = frozenset(
             _require_strings(enforcement, "private_path_segments", where="enforcement")
+        )
+
+        built = enforcement.get("built_artifacts")
+        if not isinstance(built, dict):
+            raise PolicyError("enforcement.built_artifacts: block is missing")
+        self.built_artifact_path_prefixes = tuple(
+            prefix.rstrip("/")
+            for prefix in _require_strings(
+                built, "path_prefixes", where="enforcement.built_artifacts"
+            )
         )
 
         tree = enforcement.get("repository_tree")
@@ -295,6 +312,188 @@ def scan(root: Path, policy: SourcePolicy) -> list[str]:
     return violations
 
 
+def _safe_archive_member_name(name: str, *, directory: bool) -> str | None:
+    candidate = name[:-1] if directory and name.endswith("/") else name
+    if (
+        not candidate
+        or candidate.startswith("/")
+        or "\\" in candidate
+        or (len(candidate) >= 2 and candidate[0].isalpha() and candidate[1] == ":")
+    ):
+        return None
+    if any(part in {"", ".", ".."} for part in candidate.split("/")):
+        return None
+    return candidate
+
+
+def _artifact_path_violations(
+    artifact: str, member: str, policy: SourcePolicy
+) -> list[str]:
+    violations: list[str] = []
+    lower = member.lower()
+    token = next((item for item in policy.path_tokens if item in lower), None)
+    if token is not None:
+        violations.append(
+            f"{artifact}:{member}: path contains denylisted token {token!r}"
+        )
+    segment = next(
+        (part for part in lower.split("/") if part in policy.private_path_segments),
+        None,
+    )
+    if segment is not None:
+        violations.append(
+            f"{artifact}:{member}: path lies under private segment {segment!r}"
+        )
+    prefix = next(
+        (
+            item
+            for item in policy.built_artifact_path_prefixes
+            if lower == item
+            or lower.startswith(item + "/")
+            or ("/" + item + "/") in ("/" + lower + "/")
+        ),
+        None,
+    )
+    if prefix is not None:
+        violations.append(
+            f"{artifact}:{member}: path matches private artifact prefix {prefix!r}"
+        )
+    return violations
+
+
+def _artifact_content_violations(
+    artifact: str, member: str, raw: bytes, policy: SourcePolicy
+) -> list[str]:
+    for signature in policy.content_signatures:
+        if signature.encode("utf-8") in raw:
+            return [f"{artifact}:{member}: content carries the private-artifact banner"]
+    text = raw.decode("utf-8", errors="ignore")
+    match = policy.content_regex.search(text)
+    if match:
+        line = text.count("\n", 0, match.start()) + 1
+        return [
+            f"{artifact}:{member}:{line}: content matches denylisted pattern "
+            f"{match.group(0)!r}"
+        ]
+    return []
+
+
+def _scan_zip_artifact(path: Path, policy: SourcePolicy) -> list[str]:
+    violations: list[str] = []
+    seen: set[str] = set()
+    total_bytes = 0
+    with zipfile.ZipFile(path) as archive:
+        members = archive.infolist()
+        if len(members) > MAX_ARTIFACT_MEMBERS:
+            return [f"{path.name}: archive contains too many members"]
+        for info in members:
+            member = _safe_archive_member_name(info.filename, directory=info.is_dir())
+            if member is None:
+                violations.append(f"{path.name}:{info.filename}: unsafe archive path")
+                continue
+            if member in seen:
+                violations.append(f"{path.name}:{member}: duplicate archive path")
+                continue
+            seen.add(member)
+            violations.extend(_artifact_path_violations(path.name, member, policy))
+
+            mode = (info.external_attr >> 16) & 0xFFFF
+            entry_type = stat.S_IFMT(mode)
+            if info.is_dir():
+                if entry_type not in {0, stat.S_IFDIR}:
+                    violations.append(
+                        f"{path.name}:{member}: directory has an invalid entry type"
+                    )
+                continue
+            if entry_type not in {0, stat.S_IFREG}:
+                violations.append(
+                    f"{path.name}:{member}: symlink or special entry is not permitted"
+                )
+                continue
+            if info.flag_bits & 0x1:
+                violations.append(
+                    f"{path.name}:{member}: encrypted archive entry is not permitted"
+                )
+                continue
+            if info.file_size > MAX_ARTIFACT_MEMBER_BYTES:
+                violations.append(f"{path.name}:{member}: archive member is too large")
+                continue
+            total_bytes += info.file_size
+            if total_bytes > MAX_ARTIFACT_TOTAL_BYTES:
+                violations.append(f"{path.name}: expanded archive is too large")
+                break
+            violations.extend(
+                _artifact_content_violations(
+                    path.name, member, archive.read(info), policy
+                )
+            )
+    return violations
+
+
+def _scan_tar_artifact(path: Path, policy: SourcePolicy) -> list[str]:
+    violations: list[str] = []
+    seen: set[str] = set()
+    total_bytes = 0
+    with tarfile.open(path, mode="r:gz") as archive:
+        members = archive.getmembers()
+        if len(members) > MAX_ARTIFACT_MEMBERS:
+            return [f"{path.name}: archive contains too many members"]
+        for info in members:
+            member = _safe_archive_member_name(info.name, directory=info.isdir())
+            if member is None:
+                violations.append(f"{path.name}:{info.name}: unsafe archive path")
+                continue
+            if member in seen:
+                violations.append(f"{path.name}:{member}: duplicate archive path")
+                continue
+            seen.add(member)
+            violations.extend(_artifact_path_violations(path.name, member, policy))
+            if info.isdir():
+                continue
+            if not info.isfile():
+                violations.append(
+                    f"{path.name}:{member}: symlink or special entry is not permitted"
+                )
+                continue
+            if info.size > MAX_ARTIFACT_MEMBER_BYTES:
+                violations.append(f"{path.name}:{member}: archive member is too large")
+                continue
+            total_bytes += info.size
+            if total_bytes > MAX_ARTIFACT_TOTAL_BYTES:
+                violations.append(f"{path.name}: expanded archive is too large")
+                break
+            stream = archive.extractfile(info)
+            if stream is None:
+                violations.append(f"{path.name}:{member}: archive member is unreadable")
+                continue
+            violations.extend(
+                _artifact_content_violations(path.name, member, stream.read(), policy)
+            )
+    return violations
+
+
+def scan_built_artifacts(dist: Path, policy: SourcePolicy) -> list[str]:
+    """Return policy and archive-structure violations in built distributions."""
+    if dist.is_symlink() or not dist.is_dir():
+        raise PolicyError(f"built artifact directory is missing or invalid: {dist}")
+    artifacts = sorted(
+        path
+        for path in dist.iterdir()
+        if path.name.endswith(".whl") or path.name.endswith(".tar.gz")
+    )
+    if not artifacts:
+        raise PolicyError(f"built artifact directory has no wheel or sdist: {dist}")
+    violations: list[str] = []
+    for path in artifacts:
+        if path.is_symlink() or not path.is_file():
+            violations.append(f"{path.name}: artifact is not a regular file")
+        elif path.name.endswith(".whl"):
+            violations.extend(_scan_zip_artifact(path, policy))
+        else:
+            violations.extend(_scan_tar_artifact(path, policy))
+    return violations
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -316,6 +515,12 @@ def main() -> int:
         type=Path,
         default=POLICY_PATH,
         help="Rendered policy to enforce (default: the copy in this repository).",
+    )
+    parser.add_argument(
+        "--dist",
+        type=Path,
+        default=None,
+        help="Built wheel and source archive directory to scan after the tree.",
     )
     args = parser.parse_args()
     root = args.root.resolve()
@@ -341,8 +546,13 @@ def main() -> int:
 
     try:
         violations = scan(root, policy)
+        if args.dist is not None:
+            violations.extend(scan_built_artifacts(args.dist.resolve(), policy))
     except subprocess.CalledProcessError as exc:
         print(f"FATAL: git ls-files failed in {root}: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, PolicyError, tarfile.TarError, zipfile.BadZipFile) as exc:
+        print(f"FATAL: built artifact scan failed: {exc}", file=sys.stderr)
         return 2
 
     if violations:
@@ -358,7 +568,8 @@ def main() -> int:
         return 1
 
     print(
-        f"OK: no boundary violations in {name} "
+        f"OK: no boundary violations in {name}"
+        f"{' and its built artifacts' if args.dist is not None else ''} "
         f"(policy {policy.policy_digest}, updated {policy.policy_last_updated})."
     )
     return 0

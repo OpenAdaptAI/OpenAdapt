@@ -5,9 +5,10 @@ name: Release and PyPI Publish
 # the annotated tag and its matching GitHub Release. It cannot push a version
 # commit or any other main commit.
 #
-# A protected v* tag starts the build, attestation, PyPI Trusted Publishing,
-# GitHub Release, and publication-verification jobs. Rerun that exact tag run
-# after a partial publication failure. Do not create a recovery tag.
+# An annotated v* tag created by the release App starts the build, attestation,
+# PyPI Trusted Publishing, GitHub Release, and publication-verification jobs.
+# Rerun that exact tag run after a partial publication failure. Do not create a
+# recovery tag.
 
 on:
   workflow_dispatch:
@@ -45,7 +46,9 @@ jobs:
           private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-administration: read
           permission-contents: write
+          permission-metadata: read
 
       - name: Require the exact release App identity for tag creation
         env:
@@ -73,6 +76,7 @@ jobs:
       - name: Require an exact reviewed release candidate
         id: candidate
         env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
           REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -125,6 +129,19 @@ jobs:
               )
           PY
           python scripts/verify_release_lock.py
+          python scripts/release_platform_versions.py \
+            --manifest platform-manifest.json \
+            --launcher-version "$project_version" \
+            > /tmp/release-component-versions.txt
+          python scripts/validate_platform_manifest.py \
+            --manifest platform-manifest.json \
+            --report docs/platform-compatibility-report.md \
+            --offline \
+            --require-compatible
+          python scripts/check_source_boundary.py
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$tag"
 
           git fetch --force --tags origin
           if git show-ref --verify --quiet "refs/tags/$tag"; then
@@ -224,6 +241,15 @@ jobs:
               )
           PY
           python scripts/verify_release_lock.py
+          python scripts/release_platform_versions.py \
+            --manifest platform-manifest.json \
+            --launcher-version "$project_version" \
+            > /tmp/release-component-versions.txt
+          python scripts/validate_platform_manifest.py \
+            --manifest platform-manifest.json \
+            --report docs/platform-compatibility-report.md \
+            --offline \
+            --require-compatible
 
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -238,6 +264,7 @@ jobs:
         run: |
           uv build --wheel --sdist
           python scripts/verify_release_artifacts.py
+          python scripts/check_source_boundary.py --dist dist
 
       - name: Attest release artifacts
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -256,8 +283,56 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  publish-pypi:
+  preflight-github:
     needs: build-and-attest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: release-identity
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout the exact release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Create a repository-scoped release App token for the preflight
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: read
+          permission-contents: read
+          permission-metadata: read
+
+      - name: Require the GitHub publication identity and hosting controls
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "GitHub publication requires the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG"
+
+  publish-pypi:
+    needs: [build-and-attest, preflight-github]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi
@@ -311,7 +386,7 @@ jobs:
             --poll-seconds 10
 
   publish-github:
-    needs: [build-and-attest, publish-pypi]
+    needs: [build-and-attest, preflight-github, publish-pypi]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: release-identity
@@ -408,28 +483,9 @@ jobs:
             exit 1
           fi
 
-          immutable_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/immutable-releases"
-          immutable_status="$(curl --silent --show-error \
-            --output /tmp/immutable-releases.json \
-            --write-out '%{http_code}' \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer $GH_TOKEN" \
-            --header "X-GitHub-Api-Version: 2026-03-10" \
-            "$immutable_url")"
-          if [ "$immutable_status" != "200" ]; then
-            echo "GitHub immutable releases are unavailable (HTTP $immutable_status)." >&2
-            exit 1
-          fi
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          document = json.loads(
-              Path("/tmp/immutable-releases.json").read_text(encoding="utf-8")
-          )
-          if document.get("enabled") is not True:
-              raise SystemExit("GitHub immutable releases are not enabled.")
-          PY
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG"
 
           release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
           release_status="$(curl --silent --show-error \
@@ -715,6 +771,7 @@ jobs:
     needs:
       - create-release-tag
       - build-and-attest
+      - preflight-github
       - publish-pypi
       - publish-github
       - verify-publication
@@ -722,6 +779,7 @@ jobs:
       ${{ always() &&
           (needs.create-release-tag.result == 'failure' ||
            needs.build-and-attest.result == 'failure' ||
+           needs.preflight-github.result == 'failure' ||
            needs.publish-pypi.result == 'failure' ||
            needs.publish-github.result == 'failure' ||
            needs.verify-publication.result == 'failure') }}
@@ -735,6 +793,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CREATE_TAG_RESULT: ${{ needs.create-release-tag.result }}
           BUILD_RESULT: ${{ needs.build-and-attest.result }}
+          GITHUB_PREFLIGHT_RESULT: ${{ needs.preflight-github.result }}
           PYPI_RESULT: ${{ needs.publish-pypi.result }}
           GITHUB_RESULT: ${{ needs.publish-github.result }}
           VERIFY_RESULT: ${{ needs.verify-publication.result }}
@@ -743,7 +802,7 @@ jobs:
           TITLE="Release workflow failed"
           BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
+          create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, preflight-github=${GITHUB_PREFLIGHT_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
 
           If the annotated tag exists, rerun only the failed jobs in this run with gh run rerun ${{ github.run_id }} --failed. Do not start a new full run or create a recovery tag."
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \

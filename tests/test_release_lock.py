@@ -143,7 +143,9 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
         "private-key": "${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}",
         "owner": "${{ github.repository_owner }}",
         "repositories": "${{ github.event.repository.name }}",
+        "permission-administration": "read",
         "permission-contents": "write",
+        "permission-metadata": "read",
     }
     identity = next(
         step
@@ -166,6 +168,8 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
     assert 'current_main" != "$GITHUB_SHA' in candidate["run"]
     assert 'REQUESTED_VERSION" != "$project_version' in candidate["run"]
     assert "CHANGELOG.md must start with" in candidate["run"]
+    assert "scripts/verify_release_hosting.py" in candidate["run"]
+    assert candidate["env"]["GH_TOKEN"] == "${{ steps.release-app.outputs.token }}"
     assert "Tag $tag already exists" in candidate["run"]
 
     tag = next(
@@ -207,6 +211,43 @@ def test_release_workflow_rechecks_main_immediately_before_the_app_tag_push():
     )
 
 
+def test_release_workflow_checks_the_platform_selection_before_any_release_write():
+    workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
+    document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    jobs = document["jobs"]
+
+    create = jobs["create-release-tag"]
+    candidate = next(step for step in create["steps"] if step.get("id") == "candidate")
+    tag = next(
+        step
+        for step in create["steps"]
+        if step["name"] == "Create and push only the annotated release tag"
+    )
+    assert "scripts/release_platform_versions.py" in candidate["run"]
+    assert "--manifest platform-manifest.json" in candidate["run"]
+    assert '--launcher-version "$project_version"' in candidate["run"]
+    assert "scripts/validate_platform_manifest.py" in candidate["run"]
+    assert "--offline" in candidate["run"]
+    assert "--require-compatible" in candidate["run"]
+    assert "scripts/check_source_boundary.py" in candidate["run"]
+    assert create["steps"].index(candidate) < create["steps"].index(tag)
+
+    build = jobs["build-and-attest"]
+    guard = next(
+        step
+        for step in build["steps"]
+        if step["name"] == "Require the release App tag and exact candidate state"
+    )
+    artifact_build = next(
+        step
+        for step in build["steps"]
+        if step["name"] == "Build exact release artifacts"
+    )
+    assert "scripts/release_platform_versions.py" in guard["run"]
+    assert "scripts/validate_platform_manifest.py" in guard["run"]
+    assert build["steps"].index(guard) < build["steps"].index(artifact_build)
+
+
 def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
     document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
@@ -226,6 +267,7 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     assert "git merge-base --is-ancestor HEAD refs/remotes/origin/main" in guard["run"]
 
     pypi = jobs["publish-pypi"]
+    assert pypi["needs"] == ["build-and-attest", "preflight-github"]
     assert pypi["environment"] == "pypi"
     publish = next(
         step for step in pypi["steps"] if step["name"].startswith("Publish to PyPI")
@@ -249,7 +291,39 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     assert "scripts/verify_pypi_release.py" in strict["run"]
     assert "--allow-matching-subset" not in strict["run"]
 
-    assert jobs["publish-github"]["environment"] == "release-identity"
+    preflight = jobs["preflight-github"]
+    assert preflight["needs"] == "build-and-attest"
+    assert preflight["environment"] == "release-identity"
+    preflight_steps = preflight["steps"]
+    preflight_app = next(
+        step for step in preflight_steps if step.get("id") == "release-app"
+    )
+    assert preflight_app["with"] == {
+        "app-id": "${{ vars.OPENADAPT_RELEASE_APP_ID }}",
+        "private-key": "${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}",
+        "owner": "${{ github.repository_owner }}",
+        "repositories": "${{ github.event.repository.name }}",
+        "permission-administration": "read",
+        "permission-contents": "read",
+        "permission-metadata": "read",
+    }
+    preflight_guard = next(
+        step
+        for step in preflight_steps
+        if step["name"]
+        == "Require the GitHub publication identity and hosting controls"
+    )
+    assert "scripts/verify_release_hosting.py" in preflight_guard["run"]
+    assert '--repository "$GITHUB_REPOSITORY"' in preflight_guard["run"]
+    assert '--tag "$RELEASE_TAG"' in preflight_guard["run"]
+
+    github = jobs["publish-github"]
+    assert github["needs"] == [
+        "build-and-attest",
+        "preflight-github",
+        "publish-pypi",
+    ]
+    assert github["environment"] == "release-identity"
     publish_steps = jobs["publish-github"]["steps"]
     app = next(step for step in publish_steps if step.get("id") == "release-app")
     assert app["uses"].startswith("actions/create-github-app-token@")
@@ -301,8 +375,7 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     assert 'release_status" = "404"' in publish["run"]
     assert 'release_status" != "200"' in publish["run"]
     assert 'tag_commit" != "$GITHUB_SHA' in publish["run"]
-    assert "immutable-releases" in publish["run"]
-    assert 'document.get("enabled") is not True' in publish["run"]
+    assert "scripts/verify_release_hosting.py" in publish["run"]
     assert '"$GH_CLI" release verify "$RELEASE_TAG"' in publish["run"]
     assert '"$GH_CLI" release verify-asset "$RELEASE_TAG" "$artifact"' in publish["run"]
     assert "semantic-release" not in publish["run"]
@@ -325,6 +398,15 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
     )
     transfer = next(
         step for step in build_steps if step["name"] == "Transfer release artifacts"
+    )
+    build_run = next(
+        step["run"]
+        for step in build_steps
+        if step["name"] == "Build exact release artifacts"
+    )
+    assert "python scripts/check_source_boundary.py --dist dist" in build_run
+    assert build_run.index("uv build --wheel --sdist") < build_run.index(
+        "python scripts/check_source_boundary.py --dist dist"
     )
     assert attest["with"]["subject-path"].splitlines() == [
         "dist/*.whl",
