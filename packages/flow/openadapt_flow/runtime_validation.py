@@ -406,13 +406,22 @@ def create_runtime_validation_attestation(
         )
     challenge = _validate_challenge(challenge)
 
+    # Both derivatives fail the same checks with the same wording. Name the
+    # flag that carried the failing path: an operator who has just approved one
+    # of the two otherwise reads the other one's refusal as that approval
+    # failing.
     try:
         recording_manifest = load_and_verify_derivative(recording_derivative)
         recording_approval = load_valid_approval(recording_derivative)
+    except SanitizationError as exc:
+        raise RuntimeValidationError(
+            f"--recording {recording_derivative}: {exc}"
+        ) from exc
+    try:
         bundle_manifest = load_and_verify_derivative(bundle_derivative)
         bundle_approval = load_valid_approval(bundle_derivative)
     except SanitizationError as exc:
-        raise RuntimeValidationError(str(exc)) from exc
+        raise RuntimeValidationError(f"--bundle {bundle_derivative}: {exc}") from exc
     if recording_manifest.get("kind") != "recording":
         raise RuntimeValidationError("Validation source must be a recording derivative")
     if bundle_manifest.get("kind") != "bundle":

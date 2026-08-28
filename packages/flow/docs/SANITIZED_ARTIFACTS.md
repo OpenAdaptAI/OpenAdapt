@@ -67,6 +67,13 @@ compression are fixed. Approval binds reviewer, time, policy, derivative tree,
 manifest, archive SHA-256, and archive byte size. `push` verifies all hashes and
 sends that exact ZIP without reconstructing it.
 
+The approval record lands in `<derivative>/.openadapt-approval.json`, outside the
+archive, because it binds that archive's own SHA-256. Unzipping
+`<derivative>.approved.zip` somewhere else gives you the reviewed bytes without
+the review, and `compile`, `validate-hosted`, and `push` all read that copy as
+unapproved. To move an approved derivative, copy the whole directory, hidden
+approval file included, next to its sibling ZIP.
+
 ## Destination trust
 
 Execution lane and egress destination are independent:

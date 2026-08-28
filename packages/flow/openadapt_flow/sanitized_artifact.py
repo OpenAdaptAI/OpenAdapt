@@ -1159,8 +1159,22 @@ def load_valid_approval(destination: Path) -> dict[str, Any]:
     manifest = load_and_verify_derivative(destination)
     path = approval_path(destination)
     if not path.is_file():
+        archive = approved_archive_path(destination)
+        if archive.is_file():
+            # The approval binds the archive's SHA-256, so `approve-sanitized`
+            # never writes the approval into the archive it is hashing.
+            # Extracting that archive therefore rebuilds the reviewed bytes
+            # without the review.
+            raise SanitizationError(
+                f"{destination} has not been approved: {APPROVAL_NAME} is missing "
+                f"even though {archive.name} is beside it. Extracting an approved "
+                "archive does not restore its approval. Copy the reviewed "
+                f"directory with its {APPROVAL_NAME}, or review and approve this "
+                "copy here."
+            )
         raise SanitizationError(
-            "Sanitized artifact has not been approved. Review it locally, then approve it."
+            f"{destination} has not been approved (no {APPROVAL_NAME}). Review it "
+            "locally, then approve it."
         )
     try:
         approval = json.loads(path.read_text(encoding="utf-8"))

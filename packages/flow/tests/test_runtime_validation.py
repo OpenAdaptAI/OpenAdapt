@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,7 +31,14 @@ from openadapt_flow.runtime_validation import (
     request_validation_challenge,
     verify_runtime_validation_attestation,
 )
-from openadapt_flow.sanitized_artifact import approve_derivative, sanitize_artifact
+from openadapt_flow.sanitized_artifact import (
+    APPROVAL_NAME,
+    approval_path,
+    approve_derivative,
+    approved_archive_path,
+    load_and_verify_derivative,
+    sanitize_artifact,
+)
 
 _TARGET_URL = "https://mockmed.example.com/login"
 _TARGET_ORIGIN = "https://mockmed.example.com"
@@ -830,3 +838,69 @@ def test_unrelated_recording_or_same_name_report_cannot_attest(tmp_path):
                 if key != "bundle_derivative"
             },
         )
+
+
+def test_recording_materialized_by_extracting_its_approved_archive_is_named(tmp_path):
+    """A hosted requalification runner extracts ``<derivative>.approved.zip``.
+
+    The approval record is deliberately absent from that archive, so the
+    extracted tree is unapproved. The refusal must name the recording role, the
+    exact path, and the extraction that produced it; otherwise the operator
+    reads a bundle they just approved successfully into a recording failure.
+    """
+    recording, bundle, run_dir = _approved_artifacts(tmp_path)
+
+    materialized = tmp_path / "runner" / "recording"
+    materialized.parent.mkdir(parents=True)
+    archive = approved_archive_path(recording)
+    with zipfile.ZipFile(archive) as source_archive:
+        assert APPROVAL_NAME not in source_archive.namelist()
+        source_archive.extractall(materialized)
+    approved_archive_path(materialized).write_bytes(archive.read_bytes())
+
+    # The extracted tree is a valid derivative; only its approval is absent.
+    assert load_and_verify_derivative(materialized)["kind"] == "recording"
+    assert not approval_path(materialized).is_file()
+
+    with pytest.raises(RuntimeValidationError) as excinfo:
+        create_runtime_validation_attestation(
+            recording_derivative=materialized,
+            bundle_derivative=bundle,
+            run_dir=run_dir,
+            policy_source="permissive",
+            risk_class="low",
+            environment="local-test/mockmed-v1",
+            target_url=_TARGET_URL,
+            host=hosted.DEFAULT_HOST,
+            token="oai_ingest_test",
+            challenge=_challenge(),
+        )
+    message = str(excinfo.value)
+    assert "--recording" in message
+    assert str(materialized) in message
+    assert APPROVAL_NAME in message
+    assert approved_archive_path(materialized).name in message
+    assert "has not been approved" in message
+
+
+def test_bundle_approval_failure_names_the_bundle_flag(tmp_path):
+    recording, bundle, run_dir = _approved_artifacts(tmp_path)
+    approval_path(bundle).unlink()
+
+    with pytest.raises(RuntimeValidationError) as excinfo:
+        create_runtime_validation_attestation(
+            recording_derivative=recording,
+            bundle_derivative=bundle,
+            run_dir=run_dir,
+            policy_source="permissive",
+            risk_class="low",
+            environment="local-test/mockmed-v1",
+            target_url=_TARGET_URL,
+            host=hosted.DEFAULT_HOST,
+            token="oai_ingest_test",
+            challenge=_challenge(),
+        )
+    message = str(excinfo.value)
+    assert "--bundle" in message
+    assert str(bundle) in message
+    assert "--recording" not in message
