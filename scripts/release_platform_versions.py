@@ -31,7 +31,7 @@ def _object(value: Any, context: str) -> dict[str, Any]:
 def release_component_versions(
     document: dict[str, Any], launcher_version: str
 ) -> dict[str, str]:
-    """Return the closed seven-package selection for the release transaction."""
+    """Return the launcher candidate and exact reviewed published dependencies."""
 
     if document.get("manifest_kind") != MANIFEST_KIND:
         raise ValueError("platform manifest kind is invalid")
@@ -69,8 +69,14 @@ def release_component_versions(
         if selected_versions.get(role) != version:
             raise ValueError(f"{role} release selection does not match its component")
         versions[role] = version
-    if versions["launcher"] != launcher_version:
-        raise ValueError("launcher release selection does not match the candidate")
+    published_launcher = versions["launcher"]
+    published_parts = tuple(int(part) for part in published_launcher.split("."))
+    candidate_parts = tuple(int(part) for part in launcher_version.split("."))
+    if candidate_parts < published_parts:
+        raise ValueError(
+            "launcher candidate must not be older than the published platform launcher"
+        )
+    versions["launcher"] = launcher_version
     return versions
 
 

@@ -82,6 +82,13 @@ def test_release_refuses_a_nonstable_launcher_version() -> None:
         MODULE.release_component_versions(_manifest(), "2.0.0rc1")
 
 
-def test_release_refuses_a_launcher_candidate_outside_the_exact_selection() -> None:
-    with pytest.raises(ValueError, match="does not match the candidate"):
-        MODULE.release_component_versions(_manifest(), "2.0.1")
+def test_release_allows_new_launcher_with_reviewed_published_defaults() -> None:
+    versions = MODULE.release_component_versions(_manifest(), "2.0.1")
+
+    assert versions["launcher"] == "2.0.1"
+    assert versions["flow"] == "1.0.2"
+
+
+def test_release_refuses_launcher_older_than_published_platform() -> None:
+    with pytest.raises(ValueError, match="must not be older"):
+        MODULE.release_component_versions(_manifest(), "1.9.9")

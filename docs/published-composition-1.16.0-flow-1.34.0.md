@@ -15,6 +15,10 @@ customer-environment behavior.
 - Test date: 2026-08-28
 - Host: macOS 15.7.3 (24G419), arm64
 - Python: 3.12.7
+- Lifecycle script source: launcher tag `v1.16.0`, commit
+  `089c27c046f5cd972d299361f9d68285c1896c71`
+- Lifecycle script SHA-256:
+  `da8dfd1c292af5d1dbb32880c9b3846c0a79aedec41e2427af9d2686eee8dcbc`
 - Launcher wheel: `openadapt-1.16.0-py3-none-any.whl`
 - Launcher SHA-256: `371693e7607d1cdc1ea360ef5d657c1af791a0af39677fa2ce5933e7ba712719`
 - Flow wheel: `openadapt_flow-1.34.0-py3-none-any.whl`
@@ -31,11 +35,25 @@ The commands below replace the run's disposable directory with
 the test environment's import path.
 
 ```bash
-python3 -m pip download --only-binary=:all: --no-deps \
+git clone https://github.com/OpenAdaptAI/OpenAdapt.git published-composition-source
+git -C published-composition-source checkout --detach \
+  089c27c046f5cd972d299361f9d68285c1896c71
+printf '%s  %s\n' \
+  da8dfd1c292af5d1dbb32880c9b3846c0a79aedec41e2427af9d2686eee8dcbc \
+  published-composition-source/scripts/quickstart_lifecycle.py \
+  | shasum -a 256 -c -
+
+python3.12 -m pip download --only-binary=:all: --no-deps \
   --dest published-composition-proof/wheels \
   openadapt==1.16.0 openadapt-flow==1.34.0
+printf '%s  %s\n%s  %s\n' \
+  371693e7607d1cdc1ea360ef5d657c1af791a0af39677fa2ce5933e7ba712719 \
+  published-composition-proof/wheels/openadapt-1.16.0-py3-none-any.whl \
+  56d32818989cb3a92830080ead39e10b08718c55e00988117f22cbfeaac98854 \
+  published-composition-proof/wheels/openadapt_flow-1.34.0-py3-none-any.whl \
+  | shasum -a 256 -c -
 
-python scripts/quickstart_lifecycle.py \
+python3.12 published-composition-source/scripts/quickstart_lifecycle.py \
   --launcher-wheel published-composition-proof/wheels/openadapt-1.16.0-py3-none-any.whl \
   --flow-wheel published-composition-proof/wheels/openadapt_flow-1.34.0-py3-none-any.whl \
   --work-dir published-composition-proof/lifecycle \
