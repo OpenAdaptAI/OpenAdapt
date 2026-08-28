@@ -135,6 +135,428 @@ const REPORTS = {
   [VERIFIED_WORKFLOW]: VERIFIED_REPORT,
 };
 
+// The compiled program behind the halted workflow, as the qualification
+// projection shapes it for src/ui/ProgramWorkbench.tsx. The six run steps above
+// are the executable actions here; the loop, branch, and terminal nodes are the
+// control structure the compiler recovered around them.
+const QUALIFICATION_LADDER = (present) => [
+  { name: 'structural', label: 'Structural', present: present.includes('structural'), detail: '' },
+  { name: 'template', label: 'Template', present: present.includes('template'), detail: '' },
+  { name: 'ocr', label: 'OCR anchor', present: present.includes('ocr'), detail: '' },
+  { name: 'geometry', label: 'Geometry', present: present.includes('geometry'), detail: '' },
+];
+
+const ARMED_IDENTITY = {
+  applicable: true,
+  armed: true,
+  phi_free: true,
+  has_structured: true,
+  has_identifier_crop: true,
+};
+
+const QUALIFICATION_NODES = [
+  {
+    id: 'open_portal',
+    index: 0,
+    kind: 'action',
+    title: 'Open the practice portal',
+    action: 'open',
+    resolution: { top_rung: 'structural', rungs: QUALIFICATION_LADDER(['structural', 'template']) },
+    risk: 'reversible',
+    identity: null,
+    effects: [],
+    postconditions: ['the portal home view is visible'],
+    halts: ['the portal does not reach a signed-in state'],
+    badges: [],
+  },
+  {
+    id: 'for_each_claim',
+    index: 1,
+    kind: 'loop',
+    title: 'For each claim in the worklist',
+    action: null,
+    resolution: null,
+    risk: null,
+    identity: null,
+    effects: [],
+    postconditions: [],
+    halts: [],
+    badges: [],
+  },
+  {
+    id: 'open_claims_tab',
+    index: 2,
+    kind: 'action',
+    title: 'Open the claims tab',
+    action: 'click',
+    resolution: { top_rung: 'structural', rungs: QUALIFICATION_LADDER(['structural', 'template', 'ocr']) },
+    risk: 'reversible',
+    identity: null,
+    effects: [],
+    postconditions: ['the claims list is visible'],
+    halts: ['the claims tab cannot be resolved uniquely'],
+    badges: [],
+  },
+  {
+    id: 'type_member_id',
+    index: 3,
+    kind: 'action',
+    title: 'Enter the member identifier',
+    action: 'type',
+    resolution: { top_rung: 'structural', rungs: QUALIFICATION_LADDER(['structural', 'template']) },
+    risk: 'reversible',
+    identity: ARMED_IDENTITY,
+    effects: [],
+    postconditions: ['the member identifier field holds the declared value'],
+    halts: ['the identifier field is not editable'],
+    badges: ['identity armed'],
+  },
+  {
+    id: 'search_claim',
+    index: 4,
+    kind: 'action',
+    title: 'Search for the member record',
+    action: 'click',
+    resolution: { top_rung: 'template', rungs: QUALIFICATION_LADDER(['template', 'ocr', 'geometry']) },
+    risk: 'reversible',
+    identity: ARMED_IDENTITY,
+    effects: [],
+    postconditions: ['exactly one member record is shown'],
+    halts: ['identity does not match', 'more than one record matches'],
+    badges: ['identity armed'],
+  },
+  {
+    id: 'save_status_note',
+    index: 5,
+    kind: 'action',
+    title: 'Save the claim status note',
+    action: 'click',
+    resolution: { top_rung: 'structural', rungs: QUALIFICATION_LADDER(['structural', 'template']) },
+    risk: 'irreversible',
+    identity: ARMED_IDENTITY,
+    effects: [
+      { kind: 'record_written', risk: 'irreversible', needs_operator_confirmation: false },
+    ],
+    postconditions: ['the saved note is readable on the member record'],
+    halts: ['the fresh frame changed', 'the effect cannot be verified independently'],
+    badges: ['consequential'],
+  },
+  {
+    id: 'close_claim',
+    index: 6,
+    kind: 'action',
+    title: 'Close the claim',
+    action: 'click',
+    resolution: { top_rung: 'structural', rungs: QUALIFICATION_LADDER(['structural']) },
+    risk: 'reversible',
+    identity: null,
+    effects: [],
+    postconditions: ['the worklist is visible again'],
+    halts: ['the claim view does not close'],
+    badges: [],
+  },
+  {
+    id: 'more_claims',
+    index: 7,
+    kind: 'branch',
+    title: 'More claims in the worklist?',
+    action: null,
+    resolution: null,
+    risk: null,
+    identity: null,
+    effects: [],
+    postconditions: [],
+    halts: [],
+    badges: [],
+  },
+  {
+    id: 'done',
+    index: 8,
+    kind: 'terminal',
+    title: 'End of declared steps',
+    action: null,
+    resolution: null,
+    risk: null,
+    identity: null,
+    effects: [],
+    postconditions: [],
+    halts: [],
+    badges: [],
+  },
+];
+
+const QUALIFICATION_GRAPH = {
+  bundle: {
+    name: 'Claims review handoff',
+    action_count: 6,
+    irreversible_count: 1,
+    identity_armed_count: 3,
+    identity_unarmed_count: 0,
+    effect_count: 1,
+    encrypted: false,
+    provenance: { content_digest: '3f9b17c4a2d0' },
+  },
+  nodes: QUALIFICATION_NODES,
+  edges: [
+    { source: 'open_portal', target: 'for_each_claim', kind: 'next', label: 'portal ready' },
+    { source: 'for_each_claim', target: 'open_claims_tab', kind: 'loop_body', label: 'next claim' },
+    { source: 'for_each_claim', target: 'done', kind: 'loop_exit', label: 'worklist empty' },
+    { source: 'open_claims_tab', target: 'type_member_id', kind: 'next', label: 'claims list shown' },
+    { source: 'type_member_id', target: 'search_claim', kind: 'next', label: 'identifier entered' },
+    { source: 'search_claim', target: 'save_status_note', kind: 'next', label: 'identity verified' },
+    { source: 'save_status_note', target: 'close_claim', kind: 'next', label: 'effect verified' },
+    { source: 'close_claim', target: 'more_claims', kind: 'next', label: 'claim closed' },
+    { source: 'more_claims', target: 'for_each_claim', kind: 'branch', label: 'more' },
+    { source: 'more_claims', target: 'done', kind: 'branch', label: 'complete' },
+  ],
+};
+
+const actionControls = (stepId, classification, armed) => ({
+  step_id: stepId,
+  execution_paths: ['gui'],
+  classification: {
+    step_id: stepId,
+    classification,
+    explanation: 'Reviewed and confirmed by the operator during qualification.',
+    operator_confirmed: true,
+  },
+  identity: {
+    can_arm: armed,
+    armed,
+    sources: armed
+      ? [{ kind: 'structured', label: 'Member identifier field', match: 'normalized' }]
+      : [],
+    policy: armed
+      ? {
+          step_id: stepId,
+          enforcement: 'canonical_ladder',
+          signals: [
+            {
+              key: 'record_id',
+              source: 'structured',
+              match: 'normalized',
+              normalizers: ['unicode_nfkc', 'collapse_whitespace'],
+              region: null,
+              extract_pattern: null,
+              expected_value: null,
+              params: ['member_id'],
+            },
+          ],
+          quorum: 1,
+        }
+      : null,
+  },
+  effects: stepId === 'save_status_note'
+    ? [
+        {
+          index: 0,
+          kind: 'record_written',
+          match: { record_id: { source: 'parameter', value: 'member_id' } },
+          field: 'status_note',
+          value: { source: 'parameter', value: 'status_note' },
+          expected_count: 1,
+          idempotency_key: null,
+          key_field: 'claim_id',
+          count_new_only: true,
+          risk: 'irreversible',
+          needs_operator_confirmation: false,
+          verification_tier: 2,
+          effect_contract_hash: 'b71d5a0c94e2f338',
+        },
+      ]
+    : [],
+});
+
+// The qualification projection for the halted workflow. Every value is
+// invented. There is no project, policy engine, certification, or case runner
+// behind it; the table below answers `get_qualification` so the cockpit's own
+// qualification screen renders exactly as it does against a real engine.
+export const QUALIFICATION = {
+  ok: true,
+  workflow_id: HALTED_WORKFLOW,
+  policy: 'clinical-write',
+  qualification_schema: 'openadapt.qualification-project/v1',
+  migration_required: false,
+  draft_environment: false,
+  project: {
+    schema_version: 'openadapt.qualification-project/v1',
+    project_id: 'proj-claims-review-handoff',
+    revision: 4,
+    environment: {
+      target_kind: 'web',
+      application: 'Practice portal',
+      application_version: '11.4',
+      environment_digest: 'e2c81f4a6b90',
+      runtime_version: '0.15.0',
+      required_capabilities: ['web.chromium', 'ocr.local'],
+    },
+    minimum_effect_tier: 2,
+    cases: [
+      {
+        id: 'case-nominal',
+        kind: 'nominal',
+        description: 'One claim in the worklist reaches a saved status note.',
+        input_ref: null,
+        expected_outcome: 'The status note is readable on the member record.',
+        required: true,
+        results: [
+          {
+            project_revision: 4,
+            runner_capabilities: ['web.chromium', 'ocr.local'],
+            status: 'passed',
+            observed_outcome: 'The status note is readable on the member record.',
+            evidence: [
+              { kind: 'report', sha256: '9c2a4e17f0b6d853', relative_path: 'cases/case-nominal/report.json' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'case-wrong-record',
+        kind: 'fault',
+        description: 'The search returns a member who is not the declared member.',
+        input_ref: null,
+        expected_outcome: 'The run halts before the write.',
+        required: true,
+        results: [
+          {
+            project_revision: 4,
+            runner_capabilities: ['web.chromium', 'ocr.local'],
+            status: 'passed',
+            observed_outcome: 'The run halted before the write.',
+            evidence: [
+              { kind: 'report', sha256: '4d70b83c15ae2f69', relative_path: 'cases/case-wrong-record/report.json' },
+            ],
+          },
+        ],
+      },
+    ],
+    last_certification: null,
+  },
+  capability_coverage: {
+    required: ['web.chromium', 'ocr.local'],
+    observed: ['web.chromium', 'ocr.local'],
+    missing: [],
+    satisfied: true,
+    cases: [
+      {
+        case_id: 'case-nominal',
+        has_current_receipt: true,
+        has_current_result: true,
+        status: 'passed',
+        observed: ['web.chromium', 'ocr.local'],
+        missing: [],
+        runtime_version: '0.15.0',
+        target_kind: 'web',
+      },
+      {
+        case_id: 'case-wrong-record',
+        has_current_receipt: true,
+        has_current_result: true,
+        status: 'passed',
+        observed: ['web.chromium', 'ocr.local'],
+        missing: [],
+        runtime_version: '0.15.0',
+        target_kind: 'web',
+      },
+    ],
+  },
+  report: {
+    schema_version: 'openadapt.qualification-report/v1',
+    passed: true,
+    action_count: 6,
+    state_changing_action_count: 2,
+    consequential_action_count: 1,
+    identity_covered_action_count: 1,
+    effect_required_action_count: 1,
+    effect_covered_action_count: 1,
+    minimum_effect_tier: 2,
+    case_count: 2,
+    passed_case_count: 2,
+    refusals: [],
+  },
+  certification_current: false,
+  graph: QUALIFICATION_GRAPH,
+  lint: {
+    findings: [
+      {
+        severity: 'info',
+        code: 'identity_armed',
+        step_id: 'save_status_note',
+        message: 'The consequential write carries an armed identity gate and an independent effect check.',
+      },
+    ],
+    consequential_steps: 1,
+    effect_covered_consequential_steps: 1,
+  },
+  certification: {
+    policy_name: 'clinical-write',
+    workflow_name: 'Claims review handoff',
+    passed: true,
+    n_steps: 6,
+    violations: [],
+  },
+  provenance: {
+    policy_name: 'clinical-write',
+    certified: false,
+    certification_status: 'not_run_for_this_revision',
+    certified_at: null,
+  },
+  controls: {
+    parameters: [
+      { name: 'member_id', type: 'string', secret: false, required: true, example: 'M-4821', choices: [] },
+      { name: 'status_note', type: 'string', secret: false, required: true, example: 'Reviewed', choices: [] },
+    ],
+    actions: {
+      open_portal: actionControls('open_portal', 'read_only', false),
+      open_claims_tab: actionControls('open_claims_tab', 'read_only', false),
+      type_member_id: actionControls('type_member_id', 'state_changing', true),
+      search_claim: actionControls('search_claim', 'state_changing', true),
+      save_status_note: actionControls('save_status_note', 'irreversible', true),
+      close_claim: actionControls('close_claim', 'read_only', false),
+    },
+    business_decisions: {
+      available: true,
+      required_flow_capability: 'qualification.set_business_decision',
+      graphs: [
+        {
+          id: 'claims-review-handoff',
+          label: 'Claims review handoff',
+          entry: 'open_portal',
+          states: [
+            {
+              id: 'more_claims',
+              kind: 'branch',
+              title: 'More claims in the worklist?',
+              has_revalidation_anchor: true,
+              can_insert_before: true,
+              decision: null,
+            },
+          ],
+        },
+      ],
+    },
+    judgment_cases: {
+      available: false,
+      required_flow_capability: 'qualification.set_judgment_cases',
+      contexts: [],
+      report: null,
+    },
+  },
+};
+
+const QUALIFICATIONS = {
+  [HALTED_WORKFLOW]: QUALIFICATION,
+  // The verified workflow has no qualification fixture. A refusal is the shape
+  // the engine sends, so a mis-aimed capture shows an honest message instead of
+  // a half-rendered screen.
+  [VERIFIED_WORKFLOW]: {
+    ok: false,
+    workflow_id: VERIFIED_WORKFLOW,
+    error: 'This workflow has no qualification project yet.',
+  },
+};
+
 // The IPC surface, as a plain table so it serializes into the page.
 export function ipcTable({ authenticated, workflows, permissions }) {
   return {
@@ -155,7 +577,7 @@ export function ipcTable({ authenticated, workflows, permissions }) {
     get_capabilities: CAPABILITY_REPORT,
     check_permissions: permissions,
     get_run_report: REPORTS,
-    get_qualification: null,
+    get_qualification: QUALIFICATIONS,
     get_effective_policy: null,
     get_presentation_export_status: { ready: false, reason: 'Nothing is recorded yet.' },
     get_config: {

@@ -1,21 +1,31 @@
 #!/usr/bin/env node
-// Reproduces the Desktop cockpit screenshots that openadapt.ai publishes under
-// public/desktop-preview/cockpit/.
+// Reproduces every published Desktop screenshot.
 //
-// Before this existed, those eight images came from a fixture adapter that
+// Before this existed, the cockpit images came from a fixture adapter that
 // lived only in one branch, so re-shooting them after a UI or palette change
-// meant rebuilding the adapter from scratch. The eight images then sat on the
-// marketing site through a palette change that the app itself never received.
+// meant rebuilding the adapter from scratch. They then sat on the marketing
+// site through a palette change that the app itself never received.
 //
-// scripts/cockpit-targets.mjs holds the whole published set. openadapt-web pins
-// the same eight names in public/desktop-preview/MANIFEST.json, and
-// scripts/cockpitTargets.test.ts fails if the two lists stop agreeing — a
-// partial re-shoot that leaves some states on the old palette is exactly how
-// the last set went stale.
+// scripts/cockpit-targets.mjs holds the whole published set and names each
+// target's consumer, because two repositories publish from it:
+//
+//   openadapt-web  public/desktop-preview/cockpit/, pinned by name, hash and
+//                  geometry in public/desktop-preview/MANIFEST.json.
+//   openadapt-ops  docs/assets/screenshots/program-workbench-desktop.png on
+//                  docs.openadapt.ai, pinned by hash and measured palette in
+//                  docs/assets/visual-palette.json. That image had no
+//                  generator at all before it became a target here.
+//
+// scripts/cockpitTargets.test.ts fails if either list stops agreeing with the
+// targets — a partial re-shoot that leaves some states on the old palette is
+// exactly how the last set went stale.
 //
 // Usage:
 //   npm run dev                                          # in one shell
 //   node scripts/capture-cockpit-previews.mjs --out ./captures
+//
+// `npm run dev` and not a preview build: the program-workbench route is gated
+// on import.meta.env.DEV in src/main.tsx, so a production build cannot reach it.
 //
 // Playwright is not a dependency of this app: it runs by hand after a UI
 // change, and adding a browser download to every `npm ci` would be a poor
@@ -32,7 +42,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ipcTable } from './cockpit-fixtures.mjs';
-import { TARGETS, VIEWPORT } from './cockpit-targets.mjs';
+import { TARGETS, VIEWPORT, viewportFor } from './cockpit-targets.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -124,10 +134,13 @@ async function settle(page) {
   await page.waitForLoadState('load');
   await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
   await page.evaluate(() => document.fonts?.ready).catch(() => {});
-  // Freeze anything that would make two runs of this script disagree.
+  // Freeze anything that would make two runs of this script disagree. Smooth
+  // scrolling is in that set: the in-app jump links animate, so a screenshot
+  // taken straight after a jump lands at an arbitrary scroll offset.
   await page.addStyleTag({
     content: '*, *::before, *::after { animation: none !important;'
-      + ' transition: none !important; caret-color: transparent !important; }',
+      + ' transition: none !important; caret-color: transparent !important;'
+      + ' scroll-behavior: auto !important; }',
   });
   await page.waitForTimeout(500);
 }
@@ -136,31 +149,35 @@ for (const target of TARGETS) {
   if (only && !target.file.includes(only)) continue;
   console.log(`\n${target.file}  <-  ${target.surface}`);
 
-  const table = ipcTable(target.session);
+  const viewport = viewportFor(target);
   const context = await browser.newContext({
-    viewport: VIEWPORT,
+    viewport,
     deviceScaleFactor: 1,
     reducedMotion: 'reduce',
     colorScheme: 'light',
   });
-  await context.addInitScript(
-    ({ table: t, key, localSession, source }) => {
-      // eslint-disable-next-line no-new-func
-      new Function('table', 'localSessionKey', 'localSession', `(${source})(table, localSessionKey, localSession)`)(
-        t, key, localSession,
-      );
-    },
-    {
-      table,
-      key: 'openadapt.desktop.local-session.v1',
-      localSession: target.session.localSession,
-      source: installTauriHost.toString(),
-    },
-  );
+  // A surface that renders from static data inside the app needs no fixture
+  // host, and installing one would claim provenance the image does not have.
+  if (target.session) {
+    await context.addInitScript(
+      ({ table: t, key, localSession, source }) => {
+        // eslint-disable-next-line no-new-func
+        new Function('table', 'localSessionKey', 'localSession', `(${source})(table, localSessionKey, localSession)`)(
+          t, key, localSession,
+        );
+      },
+      {
+        table: ipcTable(target.session),
+        key: 'openadapt.desktop.local-session.v1',
+        localSession: target.session.localSession,
+        source: installTauriHost.toString(),
+      },
+    );
+  }
 
   const page = await context.newPage();
   page.on('pageerror', (error) => console.warn(`  ! page error: ${error.message}`));
-  await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.goto(`${base}/${target.query || ''}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await settle(page);
 
   if (target.nav) {
@@ -176,6 +193,14 @@ for (const target of TARGETS) {
     await page.waitForTimeout(900);
   }
 
+  // The qualification screen is longer than one viewport. Its journey steps are
+  // the in-app jump links an operator uses, so the shot frames the section the
+  // same way the application does.
+  if (target.journey) {
+    await page.getByRole('button', { name: `Open ${target.journey}`, exact: true }).click();
+    await page.waitForTimeout(500);
+  }
+
   await settle(page);
 
   const absolute = path.join(outDir, target.file);
@@ -183,12 +208,13 @@ for (const target of TARGETS) {
   const bytes = fs.readFileSync(absolute);
   const entry = {
     file: target.file,
+    consumer: target.consumer,
     surface: target.surface,
     shows: target.shows,
     bytes: bytes.byteLength,
     sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
-    width: VIEWPORT.width,
-    height: VIEWPORT.height,
+    width: viewport.width,
+    height: viewport.height,
   };
   results.push(entry);
   console.log(`  ${entry.bytes} bytes  ${entry.sha256}`);
@@ -203,6 +229,8 @@ fs.writeFileSync(
     base,
     captured_at: new Date().toISOString(),
     synthetic_fixture: true,
+    // The cockpit geometry. A target that overrides it records its own width
+    // and height in its result below.
     viewport: VIEWPORT,
     results,
   }, null, 2)}\n`,
