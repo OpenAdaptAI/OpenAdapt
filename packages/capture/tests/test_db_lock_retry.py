@@ -379,6 +379,32 @@ def test_finalizing_a_capture_removes_the_write_log(tmp_path):
         read_only.close()
 
 
+def test_create_recording_releases_its_setup_connection(tmp_path, monkeypatch):
+    """The live recorder must not hold its first WAL connection until GC.
+
+    ``record`` returns from its writer pipeline before it changes the database
+    back to the rollback journal. An attached setup session can keep an idle
+    pooled connection open until cyclic garbage collection runs, which makes
+    that final journal-mode change fail intermittently on macOS.
+    """
+    monkeypatch.setattr(recorder.utils, "get_monitor_dims", lambda: (100, 80))
+    monkeypatch.setattr(recorder.platform, "get_display_pixel_ratio", lambda: 1.0)
+    monkeypatch.setattr(recorder.utils, "get_double_click_distance_pixels", lambda: 5.0)
+    monkeypatch.setattr(recorder.utils, "get_double_click_interval_seconds", lambda: 0.5)
+    capture_dir = tmp_path / "capture"
+    capture_dir.mkdir()
+
+    recording, db_path = recorder.create_recording(
+        "setup connection lifecycle",
+        str(capture_dir),
+    )
+
+    assert sa.inspect(recording).detached
+    db.finalize_capture_database(db_path)
+    assert not Path(f"{db_path}-wal").exists()
+    assert not Path(f"{db_path}-shm").exists()
+
+
 def _hold_the_write_lock(db_path, recording_id, release_from_another_thread=False):
     """Take the one write lock and hold it."""
     competitor = sqlite3.connect(

@@ -1313,57 +1313,59 @@ def write_events(
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     session = get_session_for_path(db_path)
+    try:
+        if pre_callback:
+            state = pre_callback(session, recording)
+        else:
+            state = None
 
-    if pre_callback:
-        state = pre_callback(session, recording)
-    else:
-        state = None
+        num_processed = 0
+        progress = None
+        started = False
+        while not terminate_processing.is_set() or not write_q.empty():
+            if terminate_processing.is_set() and progress is None:
+                # if processing is over, create a progress bar
+                total_events = num_events.value
+                progress = tqdm(
+                    total=total_events,
+                    desc=f"Writing {event_type} events...",
+                    unit="event",
+                    colour="green",
+                    dynamic_ncols=True,
+                )
+                # update the progress bar with the number of events that have already
+                # been processed
+                for _ in range(num_processed):
+                    progress.update()
+            if not started and not ready_after_first_event:
+                started_event.set()
+                started = True
+            try:
+                event = write_q.get_nowait()
+            except queue.Empty:
+                continue
+            assert event.type == event_type, (event_type, event)
+            state = write_fn(session, recording, event, perf_q, **(state or {}))
+            num_processed += 1
+            if not started:
+                started_event.set()
+                started = True
+            with num_events.get_lock():
+                if progress is not None:
+                    if progress.total < num_events.value:
+                        # update the total number of events in the progress bar
+                        progress.total = num_events.value
+                        progress.refresh()
+                    progress.update()
+            logger.debug(f"{event_type=} written")
 
-    num_processed = 0
-    progress = None
-    started = False
-    while not terminate_processing.is_set() or not write_q.empty():
-        if terminate_processing.is_set() and progress is None:
-            # if processing is over, create a progress bar
-            total_events = num_events.value
-            progress = tqdm(
-                total=total_events,
-                desc=f"Writing {event_type} events...",
-                unit="event",
-                colour="green",
-                dynamic_ncols=True,
-            )
-            # update the progress bar with the number of events that have already
-            # been processed
-            for _ in range(num_processed):
-                progress.update()
-        if not started and not ready_after_first_event:
-            started_event.set()
-            started = True
-        try:
-            event = write_q.get_nowait()
-        except queue.Empty:
-            continue
-        assert event.type == event_type, (event_type, event)
-        state = write_fn(session, recording, event, perf_q, **(state or {}))
-        num_processed += 1
-        if not started:
-            started_event.set()
-            started = True
-        with num_events.get_lock():
-            if progress is not None:
-                if progress.total < num_events.value:
-                    # update the total number of events in the progress bar
-                    progress.total = num_events.value
-                    progress.refresh()
-                progress.update()
-        logger.debug(f"{event_type=} written")
+        if post_callback:
+            post_callback(state)
 
-    if post_callback:
-        post_callback(state)
-
-    if progress is not None:
-        progress.close()
+        if progress is not None:
+            progress.close()
+    finally:
+        close_capture_session(session)
 
     logger.info(f"{event_type=} done")
 
@@ -2071,22 +2073,25 @@ def performance_stats_writer(
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     started = False
     session = get_session_for_path(db_path)
-    while not terminate_processing.is_set() or not perf_q.empty():
-        if not started:
-            started_event.set()
-            started = True
-        try:
-            event_type, start_time, end_time = perf_q.get_nowait()
-        except queue.Empty:
-            continue
+    try:
+        while not terminate_processing.is_set() or not perf_q.empty():
+            if not started:
+                started_event.set()
+                started = True
+            try:
+                event_type, start_time, end_time = perf_q.get_nowait()
+            except queue.Empty:
+                continue
 
-        crud.insert_perf_stat(
-            session,
-            recording,
-            event_type,
-            start_time,
-            end_time,
-        )
+            crud.insert_perf_stat(
+                session,
+                recording,
+                event_type,
+                start_time,
+                end_time,
+            )
+    finally:
+        close_capture_session(session)
     logger.info("Performance stats writer done")
 
 
@@ -2118,34 +2123,37 @@ def memory_writer(
 
     started = False
     session = get_session_for_path(db_path)
-    while not terminate_processing.is_set():
-        if not started:
-            started_event.set()
-            started = True
-        memory_usage_bytes = 0
+    try:
+        while not terminate_processing.is_set():
+            if not started:
+                started_event.set()
+                started = True
+            memory_usage_bytes = 0
 
-        memory_info = process.memory_info()
-        rss = memory_info.rss  # Resident Set Size: non-swapped physical memory
-        memory_usage_bytes += rss
+            memory_info = process.memory_info()
+            rss = memory_info.rss  # Resident Set Size: non-swapped physical memory
+            memory_usage_bytes += rss
 
-        for child in process.children(recursive=True):
-            # after ctrl+c, children may terminate before the next line
-            try:
-                child_memory_info = child.memory_info()
-            except psutil.NoSuchProcess:
-                continue
-            child_rss = child_memory_info.rss
-            rss += child_rss
+            for child in process.children(recursive=True):
+                # after ctrl+c, children may terminate before the next line
+                try:
+                    child_memory_info = child.memory_info()
+                except psutil.NoSuchProcess:
+                    continue
+                child_rss = child_memory_info.rss
+                rss += child_rss
 
-        timestamp = utils.get_timestamp()
+            timestamp = utils.get_timestamp()
 
-        crud.insert_memory_stat(
-            session,
-            recording,
-            rss,
-            timestamp,
-        )
-        time.sleep(1)  # sample once per second instead of tight loop
+            crud.insert_memory_stat(
+                session,
+                recording,
+                rss,
+                timestamp,
+            )
+            time.sleep(1)  # sample once per second instead of tight loop
+    finally:
+        close_capture_session(session)
     logger.info("Memory writer done")
 
 
@@ -2210,8 +2218,13 @@ def create_recording(
     # Several writer processes share this file: give it a write log.
     engine, Session = create_db(db_path, journal_mode=SQLITE_CAPTURE_JOURNAL_MODE)
     session = Session()
-    recording = crud.insert_recording(session, recording_data)
-    logger.info(f"{recording=}")
+    try:
+        recording = crud.insert_recording(session, recording_data)
+        logger.info(f"{recording=}")
+        session.expunge(recording)
+    finally:
+        session.close()
+        engine.dispose()
     return recording, db_path
 
 
