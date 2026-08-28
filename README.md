@@ -2,37 +2,204 @@
 
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
-[![Downloads](https://img.shields.io/pypi/dm/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-**Automate the work your systems still make people do.**
+Show OpenAdapt a task once. It compiles your demonstration into a program that
+runs the task again without a model in the loop, and it checks the result
+against the system of record before it calls the run a success.
 
-OpenAdapt provides verified automation from demonstration. Show it a repeated
-task and it compiles the demonstration into an inspectable, deterministic
-program for browser, Windows, macOS, Linux, RDP, or Citrix/VDI. Healthy runs
-make no generative-model calls. OpenAdapt checks identities before
-consequential actions and checks the declared result before it reports
-`VERIFIED`.
+This is the installer and the `openadapt` command. The compiler and the runtime
+live in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), and
+this repository doesn't reimplement them.
 
-OpenAdapt fits repeated work where the interface is unavoidable and the result
-needs proof. If the required evidence is missing or disagrees with the live
-state, the run stops for review.
-
-[Website](https://openadapt.ai) ·
 [Documentation](https://docs.openadapt.ai) ·
 [Desktop downloads](https://openadapt.ai/download) ·
-[OpenAdapt Cloud](https://app.openadapt.ai) ·
-[OpenAdapt Execute](https://openadapt.ai/execute) ·
-[Qualify a workflow](https://openadapt.ai/qualify)
+[Website](https://openadapt.ai) ·
+[Discord](https://discord.gg/yF527cQbDG)
 
-> **Repository role:** this is the flagship OpenAdapt project, the source of
-> `pip install openadapt`, and the stable community entry point. The compiler
-> and governed runtime are implemented in
-> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). This
-> repository provides the unified `openadapt` CLI and compatibility surface,
-> not a second engine.
+## Run it
+
+```bash
+python -m pip install --upgrade openadapt
+openadapt quickstart
+```
+
+Python 3.10 through 3.12. No account, no API key, no extra. Chromium downloads
+itself the first time a browser action runs.
+
+`quickstart` records and compiles a task in MockMed, a synthetic
+practice-management fixture, certifies it against the shipped clinical-write
+policy, runs it under the Standard profile, then confirms the saved record
+through a read-only API that the screen doing the writing never touches:
+
+```
+[1/5] Record the demonstration against a real persistence boundary
+[2/5] Compile, mining the effect contract from the observed delta
+      2 system-of-record effect(s) derived from the demonstration's record delta on step_005
+[3/5] Certify against the clinical-write policy
+[4/5] Admit and execute under the standard profile
+      VERIFIED in 4.1s; 0 model calls; the system of record holds 1 record(s)
+[5/5] Emit the local run receipt
+
+VERIFIED: openadapt-quickstart/run/REPORT.md
+  transaction     VERIFIED
+  profile         standard
+  model calls     0
+  effects         2/2 confirmed at evidence tier 1 (independent system of record)
+```
+
+Real output from `openadapt` 1.16.0 on macOS, 2026-08-28, with absolute paths
+shortened. You now have `openadapt-quickstart/recording/` (the demonstration
+and its retained target evidence), `openadapt-quickstart/bundle/` (the compiled
+workflow, which you can read), and `openadapt-quickstart/run/` (the ordered
+actions, the evidence, and the outcome).
+
+Then watch it refuse to lie to you:
+
+```bash
+openadapt quickstart --break-it
+```
+
+Same certified bundle. This time the backend rejects the write after the app
+has already painted its success banner, so every on-screen check passes and the
+run halts anyway, because the independent read of the record store disagrees.
+That halt is the whole product in one command.
+
+Inspect what compiled, and what it failed to cover:
+
+```bash
+openadapt flow visualize openadapt-quickstart/bundle --out graph.html
+openadapt flow lint openadapt-quickstart/bundle
+```
+
+The bundled workflow is a tutorial. Qualifying a real one means declaring its
+application boundary, its action risks, its identities, its effect verifiers,
+its fault cases, and its deployment policy. Start with the
+[five-minute walkthrough](https://docs.openadapt.ai/get-started/).
+
+## Record your own workflow
+
+```bash
+openadapt flow record --backend web --url https://your-app.example --out rec
+openadapt flow compile rec --out bundle --name my-workflow
+openadapt flow replay bundle --url https://your-app.example --run-dir run
+```
+
+Native and remote workflows never start or download Chromium. Install only the
+capability you need:
+
+```bash
+python -m pip install "openadapt[capture]"          # local human demonstration
+python -m pip install "openadapt[capture,windows]"  # Windows UI Automation
+python -m pip install "openadapt[capture,macos]"    # macOS Accessibility
+python -m pip install "openadapt[capture,linux]"    # Linux AT-SPI
+python -m pip install "openadapt[capture,rdp]"      # RDP transport
+python -m pip install "openadapt[privacy]"          # PII/PHI scrubbing
+```
+
+For visual authoring and review, there's
+[OpenAdapt Desktop](https://openadapt.ai/download).
+
+## How a run ends
+
+A click landing is not evidence that a transaction committed. Every terminal
+run says what the runtime actually knows about the business effect, and these
+outcomes are not interchangeable:
+
+| Outcome | Meaning |
+|---|---|
+| `VERIFIED` | Every declared effect and collateral-effect check passed at the required evidence tier. The only production success. |
+| `HALTED_BEFORE_EFFECT` | The run stopped, with positive evidence that no consequential effect occurred. |
+| `RECONCILIATION_REQUIRED` | Delivery or persistence is uncertain, conflicting, or temporarily unverifiable. Never blind-retried. |
+| `FAILED_PLATFORM` | An OpenAdapt failure before any possible business effect. |
+| `CANCELED` | Canceled before any business effect. |
+| `REJECTED_POLICY` | Authorization, identity, qualification, or environment policy refused execution before any effect. |
+| `COMPLETED_UNVERIFIED` | A Demo run finished without production-grade effect evidence. |
+| `ROLLED_BACK` | A duplicate or collateral write was compensated and re-verified. |
+
+A resumed `RECONCILIATION_REQUIRED` run has to reacquire and reconcile the live
+state before it does anything else.
+
+Before a consequential action the runtime can check authorization, workflow
+state, record identity, target uniqueness, and a fresh view of the application.
+Afterwards it waits for state to settle and evaluates the declared effect. When
+it can't establish the contract, it returns the evidence and stops.
+
+When it stops, a halted run can send one signed question to the
+[phone view](https://app.openadapt.ai/demo/attention): which record, which of
+these two targets, did you complete the manual step. The phone shows only what
+the sealed pause capability permits. It never clicks the application and it
+never declares success. After an answer, the customer-controlled runner reads
+the live application again and rechecks pause, session, workflow state,
+identity, target, and effect before continuing. Screenshots stay on the runner.
+
+Repairs are versioned changes rather than permission to improvise. A candidate
+repair gets reviewed, tested against the workflow's qualification contract,
+promoted, and rolled back if it turns out wrong.
+
+## Surfaces
+
+Workflow intent stays portable; the bindings are environment-specific. Each
+qualification pins the exact surface, application, version, environment,
+identity contract, and effect verifier, so nothing inherits a blanket platform
+claim.
+
+| Substrate | Evidence available to a qualified workflow |
+| --- | --- |
+| Browser (web) | DOM, accessibility, visual, OCR, field geometry, source-time secret exclusion |
+| Native desktop (Windows, macOS, Linux) | Visual, OCR, local window scope, plus UI Automation, Accessibility, or AT-SPI where the adapter supplies it |
+| Remote display (RDP) | External pixels, OCR, anchors, keyboard, mouse, fresh-frame verification |
+| Citrix / VDI | External pixels, OCR, anchors, keyboard, mouse, deployment-bound verification |
+
+Remote execution drives the visible client from a customer-controlled runner.
+Nothing gets installed inside the remote session. See the
+[substrate model](https://docs.openadapt.ai/concepts/substrate-model/),
+[what works today](https://docs.openadapt.ai/get-started/what-works-today/), and
+the [CLI reference](https://docs.openadapt.ai/reference/cli/).
+
+## Where your data lives
+
+| Operating model | Best for | Where data and execution live |
+|---|---|---|
+| Local / self-hosted | Community use and local automation | Your machine |
+| Customer-controlled | Sensitive data, native apps, RDP, Citrix, private networks | Your declared boundary; Cloud coordinates approved metadata only |
+| Managed execution | Approved browser and non-sensitive workflows | OpenAdapt-managed runners |
+
+Raw recordings and live observations stay local by default. An artifact crosses
+a boundary only through explicit sanitization and exact-byte approval. Read the
+[trust center](https://openadapt.ai/security) before you pick one.
+
+The launcher, compiler, runtime, Desktop app, substrate adapters, verification
+interfaces, and basic qualification tools are MIT. OpenAdapt Cloud is the
+commercial multi-tenant control plane for managed operation, fleet governance,
+billing, and enterprise integrations. Local safety-critical verification is not
+paywalled.
+
+## Evidence
+
+| Evidence | Result |
+|---|---|
+| Public OpenEMR reference workflow | 19/20 effect-verified runs at 39.2s median with 0 model calls; run 20 was a safe halt under the corrected saved-row oracle |
+| Heart-care RVU audit, customer deployment | About $75,000/year in recovered billables, and several hours of monthly audit work |
+
+Both belong to their named task and environment. Qualifying a new workflow is
+what decides what can be claimed about it. Method and comparison:
+[openadapt.ai/compare](https://openadapt.ai/compare) and the
+[RVU audit case study](https://openadapt.ai/customers/rvu-audit-heart-care).
+
+## OpenAdapt Execute
+
+[OpenAdapt Execute](https://openadapt.ai/execute) is a private partner service
+for providers who need an authorized transaction completed inside an
+application they cannot integrate with. The partner sends structured input and
+business authorization; OpenAdapt runs the qualified workflow in the
+customer-controlled environment, verifies the declared effect, and returns an
+asynchronous receipt with `VERIFIED` or a precise non-success outcome. It
+starts with one named transaction in one qualified environment, and it isn't a
+self-service API. Partner contract and qualification process:
+[the Execute guide](https://docs.openadapt.ai/commercial/oem-brief/).
 
 <!-- BEGIN PRODUCTION LIFECYCLE -->
 > **Built for qualified production workflows.**
@@ -49,300 +216,60 @@ state, the run stops for review.
 > [Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 <!-- END PRODUCTION LIFECYCLE -->
 
-## Try it locally
+## Where the code is
 
-OpenAdapt requires Python 3.10–3.12. Install the complete local quickstart:
-
-```bash
-python -m pip install --upgrade openadapt
-openadapt quickstart
-```
-
-The base package includes the browser driver for the tutorial. It downloads its
-matching Chromium build only when the first browser action starts. You do not
-need an account, an API key, or a second package extra.
-
-For an isolated command-line installation, use the public installer:
-
-```bash
-curl -fsSL https://openadapt.ai/install.sh | sh
-```
-
-Then run the complete bundled tutorial with one command:
-
-```bash
-openadapt quickstart
-```
-
-The tutorial records and compiles a task in MockMed (a synthetic
-practice-management fixture), certifies it with the
-shipped clinical-write policy, and runs it under the Standard profile. A
-separate read-only API confirms the saved record outside the screen that
-performed the write. The healthy run returns `VERIFIED` with no model or Cloud
-call.
-
-You now have:
-
-- `openadapt-quickstart/recording/`: the demonstrated interaction and retained target evidence
-- `openadapt-quickstart/bundle/`: the inspectable compiled workflow
-- `openadapt-quickstart/run/REPORT.md`: the ordered actions, evidence, outcome, and any halt reason
-- `openadapt-quickstart/run/receipt.json`: the privacy-safe local receipt for the synthetic verified run
-
-Inspect the program and its deployment gaps:
-
-```bash
-openadapt flow visualize openadapt-quickstart/bundle --out graph.html
-openadapt flow lint openadapt-quickstart/bundle
-```
-
-The bundled workflow is a tutorial, not a production certification. Qualifying
-a real workflow adds its application boundary, action risks, identities,
-effect verifiers, fault cases, and deployment policy. Continue with the
-[five-minute walkthrough](https://docs.openadapt.ai/get-started/).
-
-## Record your workflow
-
-The base package includes the Playwright driver for the bundled tutorial.
-Chromium downloads only when the first browser action starts. Native and
-remote workflows do not start or download Chromium:
-
-```bash
-openadapt flow record --backend web --url https://your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --url https://your-app.example --run-dir run
-```
-
-The first browser action downloads its matching Chromium build once. A native
-desktop, RDP, or Citrix workflow never downloads or imports it.
-
-Install only the capabilities needed for native or remote work:
-
-```bash
-python -m pip install "openadapt[capture]"          # local human demonstration
-python -m pip install "openadapt[capture,windows]"  # Windows UI Automation
-python -m pip install "openadapt[capture,macos]"    # macOS Accessibility
-python -m pip install "openadapt[capture,linux]"    # Linux AT-SPI
-python -m pip install "openadapt[capture,rdp]"      # RDP transport
-python -m pip install "openadapt[privacy]"          # PII/PHI scrubbing
-```
-
-For the visual authoring and review experience, install
-[OpenAdapt Desktop](https://openadapt.ai/download).
-
-![Synthetic OpenAdapt Desktop PR #93 preview of a verified six-step workflow and its evidence contract](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/desktop-replay-verified.png)
-
-*Image provenance: headless synthetic fixture from Desktop PR #93 commit `1f50259ffb052776742b284a493eb9c735caa122`; no live run, engine sidecar, account, customer data, or physical input. SHA-256: `5616f0b0812a5e366f58e448689600e16eeab234aaf92ec6d49133efa0be33ee`. The final release hash will be updated after Desktop 0.15.*
-
-## What the runtime checks
-
-### Verified business effects
-
-A click succeeding is not proof that the intended transaction committed.
-OpenAdapt separates action delivery from outcome verification. Workflows can
-bind consequential writes to an independent interface, a separate read-only
-session, or persisted-state reacquisition before reporting `VERIFIED`.
-
-### Fail-closed execution
-
-Before a consequential action, the runtime can check authorization, workflow
-state, record identity, target uniqueness, and the fresh application view.
-Afterward it waits for settled state and evaluates the declared effect. If the
-contract cannot be established, it returns evidence and halts.
-
-### Complete run outcomes
-
-Every terminal run records what the runtime knows about the business effect:
-
-| Outcome | Meaning |
-|---|---|
-| `VERIFIED` | Every declared effect and collateral-effect check passed at the required evidence tier. This is the only production success. |
-| `HALTED_BEFORE_EFFECT` | The run stopped and positive evidence established that no consequential effect occurred. |
-| `RECONCILIATION_REQUIRED` | Delivery or persistence is uncertain, conflicting, or temporarily unverifiable. The runtime never blind-retries it. |
-| `FAILED_PLATFORM` | An OpenAdapt platform failure occurred before any possible business effect. |
-| `CANCELED` | The run was canceled before any business effect. |
-| `REJECTED_POLICY` | Authorization, identity, qualification, or environment policy refused execution before any effect. |
-| `COMPLETED_UNVERIFIED` | A Demo run completed without production-grade effect evidence. |
-| `ROLLED_BACK` | A detected duplicate or collateral write was compensated and re-verified. |
-
-These terminal outcomes are not interchangeable. A resumed
-`RECONCILIATION_REQUIRED` run must first reacquire and reconcile the live state.
-
-### Authorized human decisions
-
-A halted run can send one signed task to the OpenAdapt phone view. The task can
-ask about record identity, target ambiguity, a required human step, a saved
-result, uncertain delivery, or an optional step. The phone shows only the
-actions that the current sealed pause capability permits. It does not click the
-application or declare success.
-
-After an answer, the customer-controlled runner reads the live application
-again. It checks the current pause, session, workflow state, identity, target,
-and effect requirements before it continues. Protected screenshots stay on the
-runner. The hosted path carries closed status values and counts; a customer-run
-local portal can show the full evidence inside the customer's boundary.
-
-[Try the interactive mobile decision demo](https://app.openadapt.ai/demo/attention)
-with synthetic application data. A domain label in the demo comes from that
-fixture. A production workflow uses the reviewed entity class in its exact
-qualification contract, or the neutral `record` or `item` label.
-
-### Deterministic healthy runs
-
-The compiler retains structural, accessibility, visual, OCR, spatial, and
-transition evidence from the demonstration. The runtime uses the strongest
-signals available on each surface. A generative model may propose a governed
-repair when explicitly allowed, but it is not on the healthy execution path.
-
-### Governed repair
-
-Repairs are versioned changes, not permission to improvise. Candidate repairs
-can be reviewed, tested against the workflow’s qualification contract,
-promoted, and rolled back.
-
-## One workflow model, multiple surfaces
-
-OpenAdapt keeps portable workflow intent separate from environment-specific
-bindings:
-
-| Product family | Execution surfaces | Strongest available evidence |
-|---|---|---|
-| Browser | Chromium-based web applications | DOM, accessibility, visual, OCR |
-| Native desktop | Windows, macOS, Linux | UI Automation, Accessibility, AT-SPI, visual |
-| Remote applications | RDP, Citrix Workspace, VDI | External pixels, OCR, anchors, keyboard, mouse |
-
-Remote execution operates from a customer-controlled runner through the visible
-client. It does not require OpenAdapt software inside the remote session.
-Every workflow is qualified against its exact application, version,
-environment, identity contract, and effect verifier rather than inheriting a
-blanket platform claim.
-
-Each qualification binds the exact surface, application, version, environment,
-identity contract, and effect verifier:
-
-| Substrate | Evidence available to a qualified workflow |
-| --- | --- |
-| Browser (web) | DOM, accessibility, visual, OCR, field geometry, and source-time secret exclusion |
-| Native desktop (Windows, macOS, Linux) | Visual, OCR, and local window scope, plus adapter-supplied UI Automation, Accessibility, or AT-SPI evidence when present |
-| Remote display (RDP) | External pixels, OCR, anchors, keyboard, mouse, and fresh-frame verification |
-| Citrix / VDI | External pixels, OCR, anchors, keyboard, mouse, and deployment-bound verification |
-
-See the [substrate model](https://docs.openadapt.ai/concepts/substrate-model/),
-[qualification evidence](https://docs.openadapt.ai/get-started/what-works-today/),
-and [CLI reference](https://docs.openadapt.ai/reference/cli/) for the full
-contracts.
-
-## Local, customer-controlled, or managed
-
-| Operating model | Best for | Where application data and execution live |
-|---|---|---|
-| Local / self-hosted | Community use and local automation | Your machine or infrastructure |
-| Customer-controlled | Sensitive data, native apps, RDP, Citrix, private networks | Your declared boundary; Cloud can coordinate approved metadata and artifacts |
-| Managed execution | Approved browser and non-sensitive workflows | OpenAdapt-managed runners and control plane |
-
-Raw recordings and live observations stay local by default. Artifacts cross a
-boundary only through explicit sanitization and exact-byte approval. Review the
-[trust center](https://openadapt.ai/security) before choosing a deployment.
-
-The local launcher, compiler/runtime, Desktop application, substrate adapters,
-verification interfaces, and basic qualification tools are MIT licensed.
-OpenAdapt Cloud is the commercial multi-tenant control plane for managed
-operation, fleet governance, billing, and enterprise integrations. Local
-safety-critical verification is not paywalled.
-
-## OpenAdapt Execute for partners
-
-[OpenAdapt Execute](https://openadapt.ai/execute) is the private partner
-service for software and service providers that need to complete an authorized
-transaction in an application they cannot directly integrate with. The partner
-supplies structured input and business authorization. OpenAdapt runs the exact
-qualified workflow in the customer-controlled environment, verifies the
-declared business effect, and returns an asynchronous receipt with `VERIFIED`
-or a precise non-success outcome.
-
-OpenAdapt Execute starts with one named transaction and one qualified customer
-environment. It is a private pilot service, not a public self-service API. See
-the [OpenAdapt Execute guide](https://docs.openadapt.ai/commercial/oem-brief/)
-for the partner contract and qualification process.
-
-## Evidence
-
-| Evidence | Result |
-|---|---|
-| Public OpenEMR reference workflow | 19/20 effect-verified runs (run 20 was a safe halt under the corrected saved-row oracle), 39.2s median, 0 model calls |
-| Heart-care RVU audit customer case | Approximately $75,000/year in recovered billables and several hours of monthly audit work saved |
-
-Read the [benchmark method and comparison](https://openadapt.ai/compare) and
-the [RVU audit case study](https://openadapt.ai/customers/rvu-audit-heart-care).
-Results belong to their named task and environment; workflow qualification
-defines what can be claimed for a new deployment.
-
-## Project map
-
-- **This repository:** installer, unified CLI, release compatibility, and
-  stable project URL
-- **[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow):**
-  canonical compiler, governed runtime, CLI implementation, and conformance
-  tests
+- **Here:** installer, the unified `openadapt` CLI, release compatibility, and
+  the stable project URL.
+- **[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow):** the
+  compiler, the governed runtime, the CLI implementation, conformance tests.
 - **[`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture):**
-  native screen, mouse, keyboard, timing, window-scope, and media capture
-  component used by the Flow desktop recording path
+  native screen, mouse, keyboard, timing, and window-scope capture.
 - **[`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy):**
-  local sanitization and review mechanisms for approved derivatives
-- **[Documentation](https://docs.openadapt.ai):** installation, workflow
-  authoring, qualification, operation, deployment, and reference material
-- **[Desktop](https://github.com/OpenAdaptAI/openadapt-desktop):** native
-  record, inspect, qualify, execute, and review application
-
-The pre-1.0 monolith remains available under [`legacy/`](legacy/) for migration
-history. New compiler and runtime development belongs in `openadapt-flow`.
+  local sanitization and review for approved derivatives.
+- **[Desktop](https://github.com/OpenAdaptAI/openadapt-desktop):** the native
+  record, inspect, qualify, execute, and review application.
 
 <details>
-<summary><strong>Research and legacy history</strong></summary>
+<summary><strong>Research packages and the pre-1.0 monolith</strong></summary>
 
-These surfaces are preserved for continuity and are not part of the supported
-product. None of them are required to record, compile, replay, or verify a
-workflow, and the compiler makes no generative-model calls on its healthy path.
+None of this is required to record, compile, replay, or verify a workflow.
 
-**Research packages.** A separate research line studies whether human
-demonstrations can improve the accuracy of general computer-use models. It is a
-different question from compiling one demonstration into a deterministic script.
-
-| Package | Research focus | Repository |
-|---------|----------------|------------|
-| `openadapt-ml` | Training and inference for multimodal GUI-action models | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
-| `openadapt-evals` | Benchmark evaluation for GUI agents | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
-| `openadapt-retrieval` | Multimodal demonstration retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
-| `openadapt-grounding` | UI element localization / grounding models | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
-
-Install with `pip install "openadapt[ml,evals]"`. See the
+A separate research line asks whether human demonstrations can improve the
+accuracy of general computer-use models. That's a different question from
+compiling one demonstration into a deterministic script, and it lives in
+[openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) (training and
+inference for multimodal GUI-action models),
+[openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) (benchmark
+evaluation for GUI agents),
+[openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval)
+(multimodal demonstration retrieval), and
+[openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) (UI
+element localization). Install with `pip install "openadapt[ml,evals]"`; the
 [research thesis](https://github.com/OpenAdaptAI/openadapt-ml/blob/main/docs/research_thesis.md)
-for methodology, results, and limits.
+has the methodology, results, and limits.
 
-**Development and operations tooling.** `openadapt-wright`, `openadapt-herald`,
-`openadapt-crier`, `openadapt-consilium`, `openadapt-telemetry`, and
-`openadapt-viewer` support development and operations. They are not required by
-the compiler runtime.
+`openadapt-wright`, `openadapt-herald`, `openadapt-crier`,
+`openadapt-consilium`, `openadapt-telemetry`, and `openadapt-viewer` support
+development and operations. The runtime doesn't need any of them.
 
-**Pre-1.0 monolith.** The historical monolithic codebase (v0.46.0) is frozen
-under [`legacy/`](legacy/) and remains installable with
-`pip install openadapt==0.46.0`. See
-[docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) for the migration guide. Early
-demonstrations:
+The pre-1.0 monolith (v0.46.0) is frozen under [`legacy/`](legacy/) and still
+installable with `pip install openadapt==0.46.0`. Migration guide:
+[docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md). Early demonstrations are on
 [Twitter](https://twitter.com/abrichr/status/1784307190062342237) and
 [Loom](https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0).
 
 </details>
 
-## Contributing and support
+## Contributing
 
-Launcher, packaging, and unified-CLI changes belong here. Compiler, runtime,
+Launcher, packaging, and CLI changes belong here. Compiler, runtime,
 verification, repair, and backend changes belong in `openadapt-flow`.
 
-- [Contribution guide](CONTRIBUTING.md)
-- [Open an issue](https://github.com/OpenAdaptAI/OpenAdapt/issues)
-- [GitHub Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions)
-- [Discord community](https://discord.gg/yF527cQbDG)
-- [Report a vulnerability privately](SECURITY.md)
+[Contribution guide](CONTRIBUTING.md) ·
+[Issues](https://github.com/OpenAdaptAI/OpenAdapt/issues) ·
+[Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions) ·
+[Discord](https://discord.gg/yF527cQbDG) ·
+[Report a vulnerability](SECURITY.md)
 
-OpenAdapt is maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) and
-released under the [MIT License](LICENSE).
+Maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) under the
+[MIT License](LICENSE).
