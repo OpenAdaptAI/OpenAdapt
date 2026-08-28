@@ -88,8 +88,24 @@ that you wrote the contribution or otherwise have the right to submit it
 under the MIT License. Signing off your commits (`git commit -s`) is
 appreciated but the certification applies to every contribution regardless.
 
-A Contributor License Agreement (CLA) is under consideration but has not
-been adopted; today the DCO plus the MIT License govern contributions.
+## Contributor License Agreement
+
+A Contributor License Agreement is published:
+[`openadapt-flow/CLA.md`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/CLA.md)
+for individuals, and
+[`openadapt-flow/CCLA.md`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/CCLA.md)
+for companies whose employees contribute on company time. It gives MLDSAI Inc.
+an explicit copyright and patent license, which the MIT License alone doesn't
+provide, and it keeps the option of relicensing the combined work later.
+
+It is not enforced here yet. You don't agree to it by opening a pull request,
+and nothing is implied. You agree when you sign, either through the automated
+CLA check once that check is turned on for this repository, or by email. Until
+then the DCO and the MIT License are what govern your contribution.
+
+The open-core boundary above is the reason this matters. Your contribution may
+end up in the proprietary products MLDSAI Inc. builds on this code. The MIT
+License already permits that. The CLA says it out loud so nobody is surprised.
 
 ## Questions?
 
