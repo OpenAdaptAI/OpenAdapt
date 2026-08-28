@@ -22,6 +22,12 @@ _This release is published under the MIT License._
 - Capture native structural observations
   ([#96](https://github.com/OpenAdaptAI/openadapt-capture/pull/96),
   [`7a96690`](https://github.com/OpenAdaptAI/openadapt-capture/commit/7a96690bf8684be3f61fb7c14d783813003e221e))
+- Install FFmpeg with one command, `capture install-ffmpeg`. The wheel and
+  the source archive carry no FFmpeg bytes and nothing downloads unless the
+  operator runs that command, which fetches one digest-pinned LGPL-2.1-or-later
+  build
+  ([#118](https://github.com/OpenAdaptAI/openadapt-capture/pull/118),
+  [`9701237`](https://github.com/OpenAdaptAI/openadapt-capture/commit/9701237a89c9b939f6978dc6c88c4ccdba09b02e))
 - Qualify resilient native capture
   ([#78](https://github.com/OpenAdaptAI/openadapt-capture/pull/78),
   [`b04e829`](https://github.com/OpenAdaptAI/openadapt-capture/commit/b04e8292aad9b2df36bcd9c63fe9ea0c04d5b760))
@@ -48,6 +54,9 @@ _This release is published under the MIT License._
 - **release**: Let the changelog document the pending release candidate
   ([#110](https://github.com/OpenAdaptAI/openadapt-capture/pull/110),
   [`854f015`](https://github.com/OpenAdaptAI/openadapt-capture/commit/854f015fd994b0aa1992948791c18c2e6c571029))
+- **test**: Do not assert a POSIX execute bit on Windows
+  ([#119](https://github.com/OpenAdaptAI/openadapt-capture/pull/119),
+  [`9f8672c`](https://github.com/OpenAdaptAI/openadapt-capture/commit/9f8672c86b61ac22e3c98a87980e0aa07ce14408))
 - Refuse capture before recorder readiness
   ([#62](https://github.com/OpenAdaptAI/openadapt-capture/pull/62),
   [`3e6b933`](https://github.com/OpenAdaptAI/openadapt-capture/commit/3e6b933f2ccdff72d27bf79aea0c56eb8662f341))
@@ -137,6 +146,9 @@ _This release is published under the MIT License._
 - **release**: Prepare 1.2.3
   ([#113](https://github.com/OpenAdaptAI/openadapt-capture/pull/113),
   [`0a15199`](https://github.com/OpenAdaptAI/openadapt-capture/commit/0a1519951de7ebb1719919b099c37509f44385cd))
+- **release**: Prepare 1.3.0
+  ([#117](https://github.com/OpenAdaptAI/openadapt-capture/pull/117),
+  [`2a3ef96`](https://github.com/OpenAdaptAI/openadapt-capture/commit/2a3ef969b28f68278ed0f9a753a34e6248ce4bbd))
 - Ignore every .env variant, not one at a time
   ([#93](https://github.com/OpenAdaptAI/openadapt-capture/pull/93),
   [`5ed28e6`](https://github.com/OpenAdaptAI/openadapt-capture/commit/5ed28e6c63e70cdedf32c760f0272841adb1063b))
