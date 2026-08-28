@@ -67,7 +67,6 @@ jobs:
 
   build-candidate:
     name: Build candidate distributions
-    if: vars.CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS == '1'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -425,6 +424,167 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: capture-interactive-windows-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  # Hosted Windows runs the same four live recorder tests as the required
+  # macOS lane, but it does not gate a release. On 2026-08-28 it failed the
+  # same way in both qualification dispatches of ecdd9c02 (runs 33186627127
+  # and 33189604580): the video_writer child exits 1 during startup, the
+  # recorder reports "Recording tasks exited before readiness", and an
+  # orphaned child then holds the step open until the job timeout. The same
+  # four tests pass in test.yml's windows-latest leg on the same commit, so
+  # this reproduces only from an isolated wheel install. It is a real defect
+  # and it stays visible here until it is fixed, rather than blocking every
+  # release while it is open.
+  hosted-live-recorder-windows:
+    name: Hosted live recorder qualification (${{ matrix.os }})
+    needs: build-candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - name: Checkout the exact candidate source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Download the exact candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: capture-candidate-${{ github.sha }}
+          path: dist
+
+      - name: Install the exact wheel into an isolated environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          qualification_root="${HOME}/capture-qualification-${GITHUB_RUN_ID}"
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            qualification_python="${qualification_root}/Scripts/python.exe"
+            workspace="$(cygpath -u "${GITHUB_WORKSPACE}")"
+          else
+            qualification_python="${qualification_root}/bin/python"
+            workspace="${GITHUB_WORKSPACE}"
+          fi
+          candidate_wheels=(dist/*.whl)
+          if [ "${#candidate_wheels[@]}" -ne 1 ]; then
+            echo "Expected exactly one candidate wheel."
+            exit 1
+          fi
+          uv venv --clear --python 3.12 "${qualification_root}"
+          uv pip install --python "${qualification_python}" \
+            "${candidate_wheels[0]}" \
+            pytest==9.1.1 pytest-timeout==2.4.0 pynput==1.8.2
+          echo "QUALIFICATION_PYTHON=${qualification_python}" >> "${GITHUB_ENV}"
+          echo "QUALIFICATION_WORKSPACE=${workspace}" >> "${GITHUB_ENV}"
+
+      - name: Install the reviewed external video tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            choco install ffmpeg -y --no-progress
+          else
+            brew install ffmpeg
+          fi
+
+      - name: Require the reviewed external video tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -version > evidence/ffmpeg-version.txt
+          ffprobe -version > evidence/ffprobe-version.txt
+
+      # A GitHub-hosted runner exposes exactly one virtual display. The
+      # multiple-monitor contract is proven only by the self-hosted lanes in
+      # live-qualification.yml. This step still records the exact topology the
+      # trials ran against, and still fails on a topology that changes during
+      # qualification.
+      - name: Record a stable single-monitor desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${QUALIFICATION_PYTHON}" scripts/check_display_topology.py \
+            --minimum-monitors 1 \
+            --output evidence/display-topology.json
+
+      # These four live tests drive the real recorder against the real display
+      # of the hosted runner: they start it, wait for a real first frame, prove
+      # the capture database is created, prove memory stays bounded, and prove
+      # a clean shutdown. They are named one by one, and the trial evidence is
+      # rejected below unless exactly four of them ran, so a rename or a
+      # deletion fails the gate instead of silently shrinking it.
+      #
+      # The three input-injection tests of this file are deliberately NOT here.
+      # Injected input does not reach the native low-level hooks in a hosted
+      # runner session, measured on all three hosted operating systems on
+      # 2026-08-28. live-qualification.yml runs them on a qualified host.
+      # A failing trial can leave a recorder child process holding this step's
+      # output pipe open, and the step then sits until the job timeout rather
+      # than reporting the failure. Three trials take under three minutes on a
+      # healthy runner, so bound the step itself.
+      - name: Run three counted live recorder trials
+        timeout-minutes: 12
+        shell: bash
+        env:
+          OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"
+        run: |
+          set -euo pipefail
+          cd "${HOME}"
+          for trial in 1 2 3; do
+            echo "::group::${RUNNER_OS} trial ${trial}"
+            "${QUALIFICATION_PYTHON}" -m pytest \
+              "${QUALIFICATION_WORKSPACE}/tests/test_performance.py" \
+              -m slow -v --timeout=300 --import-mode=importlib \
+              -k "test_initial_frame_ready_without_input or test_shutdown_time or test_memory_bounded or test_db_file_created" \
+              "--junitxml=${QUALIFICATION_WORKSPACE}/evidence/trial-${trial}-${{ matrix.os }}.xml"
+            echo "::endgroup::"
+          done
+
+      - name: Reject skipped, incomplete, or shrunken qualification trials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for trial in 1 2 3; do
+            python scripts/check_junit_no_skips.py \
+              --expected-tests 4 \
+              "evidence/trial-${trial}-${{ matrix.os }}.xml"
+          done
+
+      - name: Aggregate the counted trial evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/aggregate_qualification_trials.py \
+            --os "${{ matrix.os }}" \
+            --candidate-sha "${GITHUB_SHA}" \
+            --expected-trials 3 \
+            "evidence/trial-1-${{ matrix.os }}.xml" \
+            "evidence/trial-2-${{ matrix.os }}.xml" \
+            "evidence/trial-3-${{ matrix.os }}.xml" \
+            --output "evidence/qualification-summary-${{ matrix.os }}.json"
+
+      - name: Upload hosted live recorder evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: capture-hosted-live-${{ matrix.os }}-${{ github.sha }}
           path: evidence/
           if-no-files-found: error
           retention-days: 30
