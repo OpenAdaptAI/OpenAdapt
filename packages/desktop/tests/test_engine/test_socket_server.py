@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from engine.config import EngineConfig
-from engine.socket_server import DesktopSocketServer
+from engine.socket_server import IPC_PROTOCOL_VERSION, DesktopSocketServer
 
 
 @pytest.fixture
@@ -40,8 +40,9 @@ def _read_frame(sock: socket.socket) -> dict:
 
 class TestDiscoveryFile:
     def test_discovery_file_shape(self, server) -> None:
-        """The tray reads {host, port, token} from the discovery file."""
+        """The tray reads the versioned endpoint and token from discovery."""
         data = json.loads(server.discovery_path.read_text())
+        assert data["protocol_version"] == IPC_PROTOCOL_VERSION
         assert data["host"] == "127.0.0.1"
         assert data["port"] == server.port
         assert data["token"] == server.token
@@ -69,6 +70,7 @@ class TestCommandDispatch:
             sock.close()
         assert event["type"] == "status_update"
         assert "recording" in event["data"]
+        assert event["data"]["state"] == "IDLE"
 
     def test_bad_token_rejected(self, server) -> None:
         """A frame with the wrong session token is rejected as unauthorized."""
@@ -94,6 +96,60 @@ class TestCommandDispatch:
             sock.close()
         assert event["type"] == "sync_state"
         assert event["data"]["state"] == "pushing"
+
+    @pytest.mark.parametrize("state", ["compiled", "failed", "review_failed"])
+    def test_compile_terminal_states_use_the_current_tray_contract(
+        self, server, state: str
+    ) -> None:
+        sock = _connect(server)
+        time.sleep(0.2)
+        try:
+            server._broadcast(
+                "compile_progress",
+                {"state": state, "capture_id": "capture-1"},
+            )
+            event = _read_frame(sock)
+        finally:
+            sock.close()
+        assert event["data"]["done"] is True
+        assert event["data"]["name"] == "capture-1"
+
+    def test_recording_started_preserves_capture_identity_for_tray(self, server) -> None:
+        sock = _connect(server)
+        time.sleep(0.2)
+        try:
+            server._broadcast("recording_started", {"capture_id": "capture-1"})
+            event = _read_frame(sock)
+        finally:
+            sock.close()
+        assert event["data"] == {"capture_id": "capture-1", "name": "capture-1"}
+
+    def test_injected_dispatcher_fans_out_without_sending_unknown_tray_events(
+        self, tmp_path: Path
+    ) -> None:
+        class FakeDispatcher:
+            def __init__(self) -> None:
+                self.events: list[tuple[str, dict]] = []
+                self.emit = lambda event, data: self.events.append((event, data))
+
+            def dispatch(self, _cmd: str, _params: dict) -> dict:
+                return {"recording": False}
+
+        config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+        dispatcher = FakeDispatcher()
+        original_emit = dispatcher.emit
+        srv = DesktopSocketServer(
+            config,
+            discovery_path=tmp_path / "desktop_ipc.json",
+            dispatcher=dispatcher,  # type: ignore[arg-type]
+        )
+        assert srv.dispatcher is dispatcher
+
+        dispatcher.emit("open_window", {"view": "workflow_library"})
+        assert dispatcher.events == [("open_window", {"view": "workflow_library"})]
+
+        srv.stop()
+        assert dispatcher.emit is original_emit
 
     def test_non_tray_events_are_filtered(self, server) -> None:
         """Events the tray enum can't decode are never forwarded."""

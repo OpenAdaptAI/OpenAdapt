@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from typing import Any
 
 from loguru import logger
@@ -47,22 +48,25 @@ class IPCHandler:
             ``config`` otherwise). Injected in tests.
     """
 
-    def __init__(
-        self, config: EngineConfig, services: EngineServices | None = None
-    ) -> None:
+    def __init__(self, config: EngineConfig, services: EngineServices | None = None) -> None:
         self.config = config
-        self.dispatcher = EngineDispatcher(
-            config, services=services, emit=self.send_event
-        )
+        self.dispatcher = EngineDispatcher(config, services=services, emit=self.send_event)
+        self.dispatch_lock = threading.RLock()
+        self._write_lock = threading.Lock()
         self._handlers: dict[str, Any] = {}
         self._register_handlers()
 
     def _register_handlers(self) -> None:
         """Register a handler per command name from the shared dispatcher."""
         self._handlers = {
-            cmd: (lambda _cmd=cmd, **params: self.dispatcher.dispatch(_cmd, params))
+            cmd: (lambda _cmd=cmd, **params: self._dispatch_command(_cmd, params))
             for cmd in self.dispatcher.commands
         }
+
+    def _dispatch_command(self, cmd: str, params: dict) -> dict | None:
+        """Serialize commands from the two local IPC wires."""
+        with self.dispatch_lock:
+            return self.dispatcher.dispatch(cmd, params)
 
     def run(self) -> None:
         """Start the IPC message loop. Blocks until stdin is closed."""
@@ -140,5 +144,6 @@ class IPCHandler:
             obj: The object to serialize and write.
         """
         line = json.dumps(obj)
-        sys.stdout.write(line + "\n")
-        sys.stdout.flush()
+        with self._write_lock:
+            sys.stdout.write(line + "\n")
+            sys.stdout.flush()

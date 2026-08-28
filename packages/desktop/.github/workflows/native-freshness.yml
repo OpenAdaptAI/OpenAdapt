@@ -107,8 +107,25 @@ jobs:
             echo "exists=false" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Check whether protected main already has the release version
+        id: main-version
+        env:
+          NATIVE_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(python scripts/native_release.py version)"
+          if [ "${current}" = "${NATIVE_VERSION}" ]; then
+            echo "matches=true" >> "${GITHUB_OUTPUT}"
+            echo "Protected main already has native version ${NATIVE_VERSION}; no version pull request is necessary."
+          else
+            echo "matches=false" >> "${GITHUB_OUTPUT}"
+          fi
+
       - name: Create or validate the exact version branch
-        if: steps.tag.outputs.exists == 'false'
+        if: >-
+          steps.tag.outputs.exists == 'false' &&
+          steps.main-version.outputs.matches == 'false'
         id: branch
         env:
           BRANCH: ${{ steps.version.outputs.branch }}
@@ -148,7 +165,9 @@ jobs:
           fi
 
       - name: Open or report the protected-main pull request
-        if: steps.tag.outputs.exists == 'false'
+        if: >-
+          steps.tag.outputs.exists == 'false' &&
+          steps.main-version.outputs.matches == 'false'
         env:
           BRANCH: ${{ steps.version.outputs.branch }}
           ENGINE_TAG: ${{ steps.version.outputs.engine_tag }}

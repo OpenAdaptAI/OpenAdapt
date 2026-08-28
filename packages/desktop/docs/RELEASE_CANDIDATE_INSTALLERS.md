@@ -41,12 +41,12 @@ remain the admission boundary.
 
 Native releases use a distinct `desktop-vX.Y.Z` tag and prerelease channel. The
 native version comes from `package.json`, `src-tauri/Cargo.toml`, and
-`src-tauri/tauri.conf.json`. The Native Installer Freshness workflow opens a
-pull request with the exact deterministic five-file version transform for each
-published engine release. The protected `main` branch must review and merge
-that pull request. The freshness workflow never creates a tag or release. A
-maintainer then dispatches the Native Installer Release workflow from reviewed
-`main`. That one transaction verifies the engine receipt, creates the matching
+`src-tauri/tauri.conf.json`, with matching entries in both lockfiles. The
+semantic-release commit usually updates all five files. Native Installer
+Freshness checks them. If they don't match, it opens a protected-main pull
+request. The freshness workflow never creates a tag or release. A maintainer
+then dispatches the Native Installer Release workflow from reviewed `main`.
+That transaction verifies the engine receipt, creates the matching
 `desktop-vX.Y.Z` tag, publishes and verifies the installers, mirrors them to the
 engine release, and updates the signed candidate channel. This transaction
 doesn't change the admission-driven Production channel.

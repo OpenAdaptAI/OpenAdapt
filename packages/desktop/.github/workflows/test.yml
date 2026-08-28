@@ -58,6 +58,19 @@ jobs:
       - name: Install Desktop and the exact bundled Flow runtime
         run: uv sync --locked --extra dev --extra build
 
+      - name: Checkout the exact Tray protocol peer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OpenAdaptAI/openadapt-tray
+          ref: 3d6ffbeda50af2fc4769ae0f1ce55e3d5d49435c
+          path: .integration/openadapt-tray
+          persist-credentials: false
+
+      - name: Exercise the Desktop and Tray IPC contract
+        env:
+          OPENADAPT_TRAY_SOURCE: .integration/openadapt-tray/src
+        run: uv run pytest tests/test_tray_integration.py -v
+
       - name: Exercise qualification safety contracts
         run: >-
           uv run pytest

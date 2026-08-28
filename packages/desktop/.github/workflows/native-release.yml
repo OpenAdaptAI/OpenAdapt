@@ -44,6 +44,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Enforce the public source boundary
+        run: python scripts/check_source_boundary.py
+
       - name: Require current reviewed main and the signed engine receipt
         id: release
         env:

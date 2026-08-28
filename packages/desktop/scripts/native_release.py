@@ -117,12 +117,24 @@ def expected_release_asset_names(version: str) -> set[str]:
 
 def native_versions(root: Path = ROOT) -> dict[str, str]:
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    package_lock = json.loads((root / "package-lock.json").read_text(encoding="utf-8"))
     tauri = json.loads((root / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))
     cargo = tomllib.loads((root / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8"))
+    cargo_lock = tomllib.loads((root / "src-tauri" / "Cargo.lock").read_text(encoding="utf-8"))
+    cargo_lock_packages = [
+        item
+        for item in cargo_lock.get("package", [])
+        if isinstance(item, dict) and item.get("name") == "openadapt-desktop"
+    ]
+    if len(cargo_lock_packages) != 1:
+        raise ValueError("Cargo.lock must contain exactly one openadapt-desktop package")
     return {
         "package.json": package["version"],
+        "package-lock.json": package_lock["version"],
+        'package-lock.json packages[""]': package_lock["packages"][""]["version"],
         "src-tauri/tauri.conf.json": tauri["version"],
         "src-tauri/Cargo.toml": cargo["package"]["version"],
+        "src-tauri/Cargo.lock": cargo_lock_packages[0]["version"],
     }
 
 

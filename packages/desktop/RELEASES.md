@@ -125,8 +125,10 @@ were pushed by hand. Three workflows now keep it fresh:
    can rebuild and publish a pre-existing, main-contained ref after checking that
    ref's exact CI; ordinary merges never publish packages.
 2. **Native Installer Freshness** (`.github/workflows/native-freshness.yml`):
-   when that engine release is published, it verifies the published engine release
-   and opens a pull request with the exact deterministic transform of
+   when that engine release is published, it verifies the release and checks the
+   native version on protected `main`. The semantic-release commit usually has
+   the same version, so the workflow has nothing to propose. If it doesn't, the
+   workflow opens a pull request that changes only
    `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`,
    `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. It never writes to
    `main`, create a native tag, or publish a release. A manual backfill uses the

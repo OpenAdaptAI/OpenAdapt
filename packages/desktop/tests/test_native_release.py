@@ -24,6 +24,7 @@ from scripts.native_release import (
     native_tag_tuple,
     native_version,
     native_version_at_ref,
+    native_versions,
     select_latest_native_release,
     set_native_version,
     stage_artifacts,
@@ -89,7 +90,16 @@ def _workflow_uses(payload: dict) -> list[str]:
 
 
 def test_native_versions_are_synchronized() -> None:
-    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", native_version())
+    version = native_version()
+    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+    assert set(native_versions()) == {
+        "package.json",
+        "package-lock.json",
+        'package-lock.json packages[""]',
+        "src-tauri/tauri.conf.json",
+        "src-tauri/Cargo.toml",
+        "src-tauri/Cargo.lock",
+    }
 
 
 def test_node_dependencies_are_locked_for_cross_platform_tauri_builds() -> None:
@@ -117,6 +127,11 @@ def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
     assert release["concurrency"]["cancel-in-progress"] is False
 
     jobs = release["jobs"]
+    validate_steps = _job_steps(jobs["validate"])
+    assert (
+        validate_steps["Enforce the public source boundary"]["run"]
+        == "python scripts/check_source_boundary.py"
+    )
     assert jobs["publish-native"]["environment"] == "native-release"
     assert jobs["publish-native"]["permissions"] == {
         "contents": "write",
@@ -177,6 +192,26 @@ def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
     assert attest_steps["Attest SHA256SUMS as the consumer trust root"]["with"] == {
         "subject-path": "release-assets/SHA256SUMS"
     }
+
+
+def test_qualification_pins_and_runs_the_exact_tray_protocol_peer() -> None:
+    workflow = _workflow("test.yml")
+    steps = workflow["jobs"]["qualification-contract"]["steps"]
+    checkout = next(
+        step for step in steps if step.get("name") == "Checkout the exact Tray protocol peer"
+    )
+    assert checkout["uses"] == ("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
+    assert checkout["with"] == {
+        "repository": "OpenAdaptAI/openadapt-tray",
+        "ref": "3d6ffbeda50af2fc4769ae0f1ce55e3d5d49435c",
+        "path": ".integration/openadapt-tray",
+        "persist-credentials": False,
+    }
+    contract = next(
+        step for step in steps if step.get("name") == "Exercise the Desktop and Tray IPC contract"
+    )
+    assert contract["env"] == {"OPENADAPT_TRAY_SOURCE": ".integration/openadapt-tray/src"}
+    assert contract["run"] == "uv run pytest tests/test_tray_integration.py -v"
 
 
 def test_engine_and_native_release_form_one_attested_acceptance_chain() -> None:
@@ -318,8 +353,7 @@ def test_security_workflows_cover_all_languages_and_pin_every_dependency() -> No
         in secret_scan
     )
     assert (
-        "GITLEAKS_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}"
-        in secret_scan
+        "GITLEAKS_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}" in secret_scan
     )
     assert "GITLEAKS_TREE_SHA: ${{ github.sha }}" in secret_scan
 
@@ -363,6 +397,16 @@ def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None
     assert 'git push origin "HEAD:refs/heads/${BRANCH}"' in branch_script
     assert "HEAD:main" not in branch_script
     assert "gh pr create" in proposal_steps["Open or report the protected-main pull request"]["run"]
+    version_step = proposal_steps["Check whether protected main already has the release version"]
+    assert "native_release.py version" in version_step["run"]
+    assert (
+        "steps.main-version.outputs.matches == 'false'"
+        in proposal_steps["Create or validate the exact version branch"]["if"]
+    )
+    assert (
+        "steps.main-version.outputs.matches == 'false'"
+        in proposal_steps["Open or report the protected-main pull request"]["if"]
+    )
 
     scripts = "\n".join(step.get("run", "") for step in proposal["steps"])
     assert "HEAD:main" not in scripts
@@ -568,6 +612,51 @@ def test_set_native_version_synchronizes_every_source_and_lockfile(tmp_path: Pat
     assert 'version = "0.5.0"' in cargo_toml
     assert 'serde = { version = "1.0" }' in cargo_toml
     assert validate_tag("desktop-v0.5.0", tmp_path) == "desktop-v0.5.0"
+
+
+@pytest.mark.parametrize("lock_source", ["package-root", "package-entry", "cargo"])
+def test_native_version_refuses_a_drifted_lockfile(tmp_path: Path, lock_source: str) -> None:
+    _write_native_version_fixture(tmp_path, "0.5.0")
+    if lock_source.startswith("package"):
+        path = tmp_path / "package-lock.json"
+        lock = json.loads(path.read_text(encoding="utf-8"))
+        if lock_source == "package-root":
+            lock["version"] = "0.4.0"
+        else:
+            lock["packages"][""]["version"] = "0.4.0"
+        path.write_text(json.dumps(lock), encoding="utf-8")
+    else:
+        path = tmp_path / "src-tauri" / "Cargo.lock"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                'name = "openadapt-desktop"\nversion = "0.5.0"',
+                'name = "openadapt-desktop"\nversion = "0.4.0"',
+            ),
+            encoding="utf-8",
+        )
+
+    with pytest.raises(ValueError, match="native versions differ"):
+        native_version(tmp_path)
+
+
+def test_canonical_validator_can_import_its_sibling_modules(tmp_path: Path) -> None:
+    lifecycle = tmp_path / "lifecycle"
+    scripts = lifecycle / "scripts"
+    scripts.mkdir(parents=True)
+    (lifecycle / "production-lifecycle-policy.json").write_text("{}\n", encoding="utf-8")
+    (lifecycle / "production-lifecycle-admissions.json").write_text(
+        '{"admissions": []}\n', encoding="utf-8"
+    )
+    (lifecycle / "repository-lifecycle.yml").write_text("lifecycle: {}\n", encoding="utf-8")
+    (scripts / "production_trust.py").write_text("ACTIVE = {}\n", encoding="utf-8")
+    (scripts / "validate_production_lifecycle.py").write_text(
+        "from production_trust import ACTIVE\n\ndef validate_files(_root):\n    return ACTIVE\n",
+        encoding="utf-8",
+    )
+
+    state = build_admission_state(lifecycle, central_source_commit="c" * 40)
+
+    assert state["active_admission"] is None
 
 
 def test_set_native_version_writes_utf8_lf_bytes_on_every_platform(tmp_path: Path) -> None:
@@ -1733,9 +1822,7 @@ def test_candidate_channel_accepts_the_legacy_selector_for_one_way_migration(
         tmp_path / "current" / VERIFIED_RELEASE_CHANNEL,
         index_path=index,
         repository=DESKTOP_REPOSITORY,
-        workflow_ref=(
-            f"{DESKTOP_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
-        ),
+        workflow_ref=(f"{DESKTOP_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"),
         workflow_commit="a" * 40,
         run_id=123456,
         run_attempt=2,
@@ -2634,9 +2721,7 @@ def test_production_channel_refuses_an_unadmitted_artifact(tmp_path: Path) -> No
         _production_admission_fixture(tmp_path)
     )
     state_value = json.loads(state.read_text(encoding="utf-8"))
-    state_value["active_admission"]["release"]["artifacts"][0]["sha256"] = (
-        "sha256:" + "f" * 64
-    )
+    state_value["active_admission"]["release"]["artifacts"][0]["sha256"] = "sha256:" + "f" * 64
     canonical = json.dumps(
         state_value["active_admission"],
         ensure_ascii=False,

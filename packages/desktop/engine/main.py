@@ -217,14 +217,19 @@ def main() -> None:
     # sidecar and the tray loopback socket) see the same recording/DB state.
     services = EngineServices(config, db=db, storage=storage, audit=audit)
 
-    # The tray's loopback socket server + discovery file (spec 3d, P0-1).
-    socket_server = DesktopSocketServer(config, services=services)
+    handler = IPCHandler(config=config, services=services)
+
+    # Both local wires use one dispatcher. The socket server keeps the Tauri
+    # event sink and adds its filtered tray broadcast sink.
+    socket_server = DesktopSocketServer(
+        config,
+        dispatcher=handler.dispatcher,
+        dispatch_lock=handler.dispatch_lock,
+    )
     try:
         socket_server.start()
     except OSError:
         logger.exception("Could not start desktop IPC socket server (tray inert)")
-
-    handler = IPCHandler(config=config, services=services)
 
     # Resume the outbound dispatch loop only when the operator explicitly enabled
     # it (off by default; toggled on the Runner screen).

@@ -83,7 +83,20 @@ def _load_canonical_validator(root: Path) -> ModuleType:
     if spec is None or spec.loader is None:
         raise ValueError("the canonical Production lifecycle validator cannot load")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    scripts_path = str(path.parent.resolve())
+    added_scripts_path = scripts_path not in sys.path
+    sibling_names = {item.stem for item in path.parent.glob("*.py") if item != path}
+    saved_siblings = {name: sys.modules.pop(name) for name in sibling_names if name in sys.modules}
+    if added_scripts_path:
+        sys.path.insert(0, scripts_path)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if added_scripts_path:
+            sys.path.remove(scripts_path)
+        for name in sibling_names:
+            sys.modules.pop(name, None)
+        sys.modules.update(saved_siblings)
     return module
 
 

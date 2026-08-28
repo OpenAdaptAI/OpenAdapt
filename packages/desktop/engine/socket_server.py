@@ -7,8 +7,8 @@ TCP server, sending newline-delimited JSON ``IPCMessage`` frames
 (desktop→tray events). This module is the missing SERVER (review 2.1 P0-1).
 
 Contract (spec 3d, matched to the tray's ``ipc.py`` EXACTLY):
-    * bind ``127.0.0.1:<ephemeral>``; write the discovery file on startup with a
-      fresh per-session token;
+    * bind ``127.0.0.1:<ephemeral>``; write the versioned discovery file on
+      startup with a fresh per-session token;
     * accept frames ``{"type": <str>, "data": {...}, "token": <str>}``;
     * reject any frame whose ``token`` != the session token (loopback-only is not
       enough -- any local process could connect);
@@ -38,30 +38,35 @@ from engine.dispatch import EngineDispatcher, EngineServices
 
 # Discovery file the tray reads (tray ipc.py: DEFAULT_DISCOVERY_PATH).
 DEFAULT_DISCOVERY_PATH = Path.home() / ".openadapt" / "desktop_ipc.json"
+IPC_PROTOCOL_VERSION = 1
 
 # Commands the tray may send (its IPCMessageType command members). A strict
 # subset of the frontend CMD catalog; all resolve to dispatcher commands.
-_TRAY_COMMANDS = frozenset({
-    "start_recording",
-    "stop_recording",
-    "get_status",
-    "open_workflow_library",
-    "open_teach",
-    "pause_sync",
-    "resume_sync",
-})
+_TRAY_COMMANDS = frozenset(
+    {
+        "start_recording",
+        "stop_recording",
+        "get_status",
+        "open_workflow_library",
+        "open_teach",
+        "pause_sync",
+        "resume_sync",
+    }
+)
 
 # Events the tray's IPCMessageType enum can decode. Anything else is dropped
 # before forwarding so the tray never hits a from_json ValueError.
-_TRAY_EVENTS = frozenset({
-    "recording_started",
-    "recording_stopped",
-    "recording_error",
-    "status_update",
-    "compile_progress",
-    "sync_state",
-    "break_count",
-})
+_TRAY_EVENTS = frozenset(
+    {
+        "recording_started",
+        "recording_stopped",
+        "recording_error",
+        "status_update",
+        "compile_progress",
+        "sync_state",
+        "break_count",
+    }
+)
 
 
 class DesktopSocketServer:
@@ -73,6 +78,8 @@ class DesktopSocketServer:
         discovery_path: Where to write ``{host, port, token}``.
         token: Per-session shared token (generated when omitted).
         dispatcher: Injected dispatcher (built from ``config`` otherwise).
+        dispatch_lock: Lock shared with the Tauri IPC handler when the
+            dispatcher is shared.
         services: Injected engine services for the built dispatcher.
     """
 
@@ -84,20 +91,26 @@ class DesktopSocketServer:
         discovery_path: Path | None = None,
         token: str | None = None,
         dispatcher: EngineDispatcher | None = None,
+        dispatch_lock: threading.RLock | None = None,
         services: EngineServices | None = None,
     ) -> None:
         self.config = config
         self.host = host
         self.discovery_path = discovery_path or DEFAULT_DISCOVERY_PATH
         self.token = token or secrets.token_urlsafe(24)
+        self._upstream_emit = dispatcher.emit if dispatcher is not None else None
         self.dispatcher = dispatcher or EngineDispatcher(
             config, services=services, emit=self._broadcast
         )
-        # Ensure our broadcast is wired even when a dispatcher was injected.
-        self.dispatcher.emit = self._broadcast
+        self._dispatch_lock = dispatch_lock or threading.RLock()
+        if dispatcher is not None:
+            # One dispatcher owns both local wires. Preserve its Tauri event
+            # sink and add the tray broadcaster as a filtered second sink.
+            self.dispatcher.emit = self._fanout
         self._server: socket.socket | None = None
         self._clients: list[socket.socket] = []
         self._clients_lock = threading.Lock()
+        self._send_lock = threading.Lock()
         self._accept_thread: threading.Thread | None = None
         self._running = False
         self.port: int | None = None
@@ -145,10 +158,17 @@ class DesktopSocketServer:
                 self.discovery_path.unlink()
         except OSError:
             pass
+        if self._upstream_emit is not None:
+            self.dispatcher.emit = self._upstream_emit
 
     def _write_discovery(self) -> None:
         self.discovery_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"host": self.host, "port": self.port, "token": self.token}
+        payload = {
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "host": self.host,
+            "port": self.port,
+            "token": self.token,
+        }
         tmp = self.discovery_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(payload))
         os.replace(tmp, self.discovery_path)
@@ -167,9 +187,7 @@ class DesktopSocketServer:
                 break
             with self._clients_lock:
                 self._clients.append(conn)
-            threading.Thread(
-                target=self._client_loop, args=(conn,), daemon=True
-            ).start()
+            threading.Thread(target=self._client_loop, args=(conn,), daemon=True).start()
 
     def _client_loop(self, conn: socket.socket) -> None:
         buffer = ""
@@ -212,7 +230,8 @@ class DesktopSocketServer:
             return
         params = frame.get("data") or {}
         try:
-            result = self.dispatcher.dispatch(cmd, params)
+            with self._dispatch_lock:
+                result = self.dispatcher.dispatch(cmd, params)
         except Exception as exc:
             logger.exception("Tray command {c} failed", c=cmd)
             self._send(conn, "recording_error", {"error": str(exc)})
@@ -220,23 +239,51 @@ class DesktopSocketServer:
         # get_status has no natural event emission -- echo it as status_update
         # so the tray (which only renders events) updates immediately.
         if cmd == "get_status" and result is not None:
-            self._send(conn, "status_update", result)
+            self._send(conn, "status_update", self._tray_event_data("status_update", result))
 
     # ------------------------------------------------------------- send/emit
+
+    def _fanout(self, event: str, data: dict) -> None:
+        """Send one dispatcher event to Tauri and, when supported, the tray."""
+        if self._upstream_emit is not None:
+            self._upstream_emit(event, data)
+        self._broadcast(event, data)
+
+    @staticmethod
+    def _tray_event_data(event: str, data: dict) -> dict:
+        """Add compatibility fields used by the current tray state handlers."""
+        payload = dict(data)
+        capture_id = payload.get("capture_id")
+        if capture_id is not None and not payload.get("name"):
+            payload["name"] = capture_id
+        if event == "status_update":
+            if payload.get("recording"):
+                payload["state"] = "RECORDING"
+            else:
+                payload["state"] = "IDLE"
+        elif event == "compile_progress":
+            payload["done"] = payload.get("state") in {
+                "compiled",
+                "failed",
+                "review_failed",
+            }
+        return payload
 
     def _broadcast(self, event: str, data: dict) -> None:
         """Emit an engine event to every connected tray client (filtered)."""
         if event not in _TRAY_EVENTS:
             return
+        tray_data = self._tray_event_data(event, data)
         with self._clients_lock:
             clients = list(self._clients)
         for conn in clients:
-            self._send(conn, event, data)
+            self._send(conn, event, tray_data)
 
     def _send(self, conn: socket.socket, event: str, data: dict) -> None:
         frame = json.dumps({"type": event, "data": data}) + "\n"
         try:
-            conn.sendall(frame.encode("utf-8"))
+            with self._send_lock:
+                conn.sendall(frame.encode("utf-8"))
         except OSError:
             with self._clients_lock:
                 if conn in self._clients:
