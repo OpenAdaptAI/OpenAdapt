@@ -74,6 +74,35 @@ the review, and `compile`, `validate-hosted`, and `push` all read that copy as
 unapproved. To move an approved derivative, copy the whole directory, hidden
 approval file included, next to its sibling ZIP.
 
+Where only the archive travels -- a CI runner that downloads it from object
+storage, for example -- carry the approval record beside it and rebuild the
+pair with `materialize-approved`:
+
+```bash
+openadapt-flow materialize-approved \
+  --archive recording.approved.zip \
+  --approval recording.approval.json \
+  --out recording/ \
+  --expect-archive-sha256 <digest the caller already trusts>
+```
+
+It extracts the archive into a new empty directory, places the record, and runs
+the same approval gate `push` runs. It approves nothing: the record must
+already exist and must match the extracted bytes. `--approval` takes either the
+derivative's `.openadapt-approval.json` or the
+[`openadapt.sanitization/v1`](../schemas/sanitization-ingest-v1.json) ingest
+envelope a deployment persisted for that artifact. The envelope carries every
+field that holds authority -- archive SHA-256 and size, reviewer, approval
+time, approval method -- while the two tree hashes are functions of the
+extracted bytes that the archive SHA-256 already binds, so they are recomputed
+rather than transported. An envelope recording an automatic approval must carry
+its policy key id and MAC, and the MAC is verified wherever
+`OPENADAPT_SANITIZATION_POLICY_KEY` is configured.
+
+The record is unsigned, exactly as it is on the reviewing machine. It is
+therefore only as trustworthy as the channel that delivered it, and that
+channel should be the one that already delivers the archive.
+
 ## Destination trust
 
 Execution lane and egress destination are independent:

@@ -4320,6 +4320,30 @@ def _cmd_approve_sanitized(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_materialize_approved(args: argparse.Namespace) -> int:
+    from openadapt_flow.sanitized_artifact import (
+        SanitizationError,
+        materialize_approved_derivative,
+    )
+
+    try:
+        approval = materialize_approved_derivative(
+            Path(args.archive),
+            approval=Path(args.approval),
+            destination=Path(args.out),
+            expected_archive_sha256=args.expect_archive_sha256,
+        )
+    except SanitizationError as e:
+        print(f"materialize failed: {e}")
+        return 1
+    print(
+        f"Materialized the approved derivative into {args.out}; "
+        f"reviewer={approval['reviewer']} "
+        f"sha256={approval['approved_derivative_sha256']}."
+    )
+    return 0
+
+
 def _cmd_report_break(args: argparse.Namespace) -> int:
     """Emit a PHI-free break diagnostic from a halted run's ``report.json``.
 
@@ -6523,6 +6547,42 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-open", action="store_true", help="Print the viewer URL without opening it"
     )
     p.set_defaults(func=_cmd_review_sanitized)
+
+    p = sub.add_parser(
+        "materialize-approved",
+        help="Rebuild an approved derivative from its archive and approval record",
+        description=(
+            "Approval binds the archive's own SHA-256, so the archive cannot "
+            "carry it and an archive unzipped elsewhere reads as unapproved. "
+            "This places the reviewer's existing approval record beside the "
+            "extracted bytes and then runs the unchanged approval gate. It "
+            "approves nothing."
+        ),
+    )
+    p.add_argument(
+        "--archive", required=True, help="Approved immutable archive (.approved.zip)"
+    )
+    p.add_argument(
+        "--approval",
+        required=True,
+        help=(
+            "Existing approval record: either the derivative's "
+            ".openadapt-approval.json or the openadapt.sanitization/v1 ingest "
+            "envelope a deployment persisted for it"
+        ),
+    )
+    p.add_argument(
+        "--out", required=True, help="New, empty derivative directory to materialize"
+    )
+    p.add_argument(
+        "--expect-archive-sha256",
+        default=None,
+        help=(
+            "Pin the archive to a digest the caller already trusts, checked "
+            "independently of the approval record"
+        ),
+    )
+    p.set_defaults(func=_cmd_materialize_approved)
 
     p = sub.add_parser(
         "approve-sanitized",

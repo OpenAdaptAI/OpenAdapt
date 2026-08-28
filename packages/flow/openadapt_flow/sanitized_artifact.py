@@ -31,7 +31,7 @@ import zipfile
 from datetime import datetime, timezone
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 from urllib.parse import parse_qs
 
@@ -1194,6 +1194,281 @@ def load_valid_approval(destination: Path) -> dict[str, Any]:
     return approval
 
 
+def _policy_signature_message(envelope: dict[str, Any], key_id: str) -> str:
+    """Canonicalize the policy-approval MAC input for one ingest envelope."""
+    return json.dumps(
+        [
+            "openadapt.sanitization-policy/v1",
+            envelope["artifact"]["kind"],
+            envelope["artifact"]["sha256"],
+            envelope["artifact"]["size_bytes"],
+            envelope["artifact"]["execution_semantics"],
+            envelope["artifact"]["runtime_semantics_validated"],
+            envelope["artifact"]["trusted_boundary_required_at_runtime"],
+            envelope["scrubber"]["name"],
+            envelope["scrubber"]["version"],
+            envelope["scrubber"]["policy"],
+            sorted(envelope["coverage"]["media_types"]),
+            envelope["approval"]["approved_at"],
+            envelope["approval"]["approved_by"],
+            key_id,
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _extract_approved_archive(archive: Path, destination: Path) -> None:
+    """Extract an approved archive without trusting any member name."""
+    root = Path(os.path.realpath(destination))
+    try:
+        handle = zipfile.ZipFile(archive)
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise SanitizationError(f"Approved archive is unreadable: {exc}") from exc
+    with handle as zf:
+        for info in zf.infolist():
+            name = info.filename
+            rel = PurePosixPath(name)
+            if (
+                info.is_dir()
+                or rel.is_absolute()
+                or "\\" in name
+                or not rel.parts
+                or any(part in {"", ".", ".."} for part in rel.parts)
+            ):
+                raise SanitizationError(
+                    f"Approved archive holds an unsafe path: {name!r}"
+                )
+            if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                raise SanitizationError(f"Approved archive holds a symlink: {name!r}")
+            if rel.name == APPROVAL_NAME:
+                raise SanitizationError(
+                    "Approved archive must not carry its own approval"
+                )
+            target = root.joinpath(*rel.parts)
+            if os.path.commonpath([str(root), str(target)]) != str(root):
+                raise SanitizationError(
+                    f"Approved archive holds an unsafe path: {name!r}"
+                )
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info) as src, open(target, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            target.chmod(0o600)
+
+
+def _approval_from_ingest_envelope(
+    envelope: dict[str, Any], manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Rebuild the reviewer's approval record from the persisted envelope.
+
+    A cloud deployment stores ``openadapt.sanitization/v1`` -- the public
+    envelope that ``build_ingest_manifest`` derives from an approval -- and not
+    the private approval file itself. Every field that carries authority
+    (archive SHA-256, archive size, reviewer, approval time, method) comes from
+    that stored envelope. The two tree hashes are functions of the extracted
+    bytes, which the archive SHA-256 already binds, so they are recomputed here
+    rather than transported.
+    """
+    if envelope.get("schema") != "openadapt.sanitization/v1":
+        raise SanitizationError("Unsupported approval record schema")
+    sections: dict[str, dict[str, Any]] = {}
+    for section in ("artifact", "approval", "scrubber", "coverage"):
+        value = envelope.get(section)
+        if not isinstance(value, dict):
+            raise SanitizationError(f"Ingest envelope has no {section} section")
+        sections[section] = value
+    artifact = sections["artifact"]
+    approval = sections["approval"]
+    scrubber = sections["scrubber"]
+    coverage = sections["coverage"]
+    if approval.get("status") != "approved":
+        raise SanitizationError("Ingest envelope does not record an approval")
+    method = approval.get("method")
+    if method not in {"human", "policy"}:
+        raise SanitizationError("Approval method must be human or policy")
+    reviewer = str(approval.get("approved_by", "")).strip()
+    if not reviewer:
+        raise SanitizationError("Reviewer identity must not be empty")
+    approved_at = approval.get("approved_at")
+    if not isinstance(approved_at, str) or not approved_at.strip():
+        raise SanitizationError("Approval time must not be empty")
+    archive_sha256 = artifact.get("sha256")
+    if not isinstance(archive_sha256, str) or not re.fullmatch(
+        r"[a-f0-9]{64}", archive_sha256
+    ):
+        raise SanitizationError("Ingest envelope has no artifact SHA-256")
+    if approval.get("artifact_sha256") != archive_sha256:
+        raise SanitizationError("Approval is not bound to the envelope's artifact")
+    size_bytes = artifact.get("size_bytes")
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
+        raise SanitizationError("Ingest envelope has no artifact size")
+
+    # Bind the envelope to this exact derivative, beyond the archive digest.
+    if artifact.get("kind") != manifest["kind"]:
+        raise SanitizationError("Ingest envelope describes a different artifact kind")
+    if scrubber.get("policy") != manifest["policy_version"]:
+        raise SanitizationError("Ingest envelope records a different policy version")
+    if artifact.get("execution_semantics") != manifest["execution_semantics"]:
+        raise SanitizationError("Ingest envelope records different execution semantics")
+    if bool(coverage.get("complete")) != bool(manifest["coverage_complete"]):
+        raise SanitizationError("Ingest envelope records different coverage")
+
+    if method == "policy":
+        _verify_policy_approval_signature(envelope)
+
+    verification = manifest.get("approval_verification")
+    if not (
+        isinstance(verification, dict)
+        and verification.get("method") == "full-stable-rescan"
+        and verification.get("file_count") == len(manifest["files"])
+        and verification.get("unresolved") == 0
+        and isinstance(verification.get("verified_at"), str)
+    ):
+        raise SanitizationError(
+            "Derivative carries no approval rescan; it was never approved"
+        )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "approved_at": approved_at,
+        "reviewer": reviewer,
+        "automatic": method == "policy",
+        "policy_version": manifest["policy_version"],
+        "manifest_sha256": _manifest_hash(manifest),
+        "derivative_tree_sha256": manifest["derivative_tree_sha256"],
+        "approved_derivative_sha256": archive_sha256,
+        "approved_archive_size_bytes": size_bytes,
+        "verification": {
+            "verified_at": verification["verified_at"],
+            "method": "full-stable-rescan",
+            "source_tree_verified": True,
+            "file_count": len(manifest["files"]),
+            "unresolved": 0,
+        },
+    }
+
+
+def _verify_policy_approval_signature(envelope: dict[str, Any]) -> None:
+    """Check the MAC that an automatic approval must carry.
+
+    The deployment that stored the envelope verified this MAC at ingest. The
+    key is not present on every consumer, so the structural requirement is
+    unconditional and the cryptographic check runs wherever the key is
+    configured.
+    """
+    approval = envelope["approval"]
+    key_id = approval.get("policy_key_id")
+    signature = approval.get("policy_signature")
+    if not isinstance(key_id, str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._:+-]{0,99}", key_id
+    ):
+        raise SanitizationError("A policy approval must carry a valid policy key id")
+    if not isinstance(signature, str) or not re.fullmatch(r"[a-f0-9]{64}", signature):
+        raise SanitizationError("A policy approval must carry its approval signature")
+    local_key_id = os.environ.get(POLICY_KEY_ID_ENV, "").strip()
+    encoded_key = os.environ.get(POLICY_KEY_ENV, "").strip()
+    if not encoded_key:
+        return
+    if local_key_id != key_id:
+        raise SanitizationError(
+            f"A policy approval names key {key_id!r}, which {POLICY_KEY_ID_ENV} "
+            "does not configure"
+        )
+    try:
+        key = base64.b64decode(encoded_key, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise SanitizationError(f"{POLICY_KEY_ENV} must be base64") from exc
+    expected = hmac.new(
+        key,
+        _policy_signature_message(envelope, key_id).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise SanitizationError("The policy approval signature does not verify")
+
+
+def materialize_approved_derivative(
+    archive: Path,
+    *,
+    approval: Path,
+    destination: Path,
+    expected_archive_sha256: Optional[str] = None,
+) -> dict[str, Any]:
+    """Rebuild an approved derivative from its archive and its approval record.
+
+    ``approve_derivative`` computes the approval over the archive's own bytes,
+    so the archive cannot contain it. Unzipping the archive somewhere else
+    therefore produces the reviewed bytes without the review, and ``compile``,
+    ``validate-hosted``, and ``push`` correctly read that copy as unapproved.
+    This carries the approval record beside the archive, restores the exact
+    on-disk shape the gate expects, and then runs the unchanged
+    ``load_valid_approval``.
+
+    Nothing here approves anything. ``approval`` must already exist, as either
+    the ``.openadapt-approval.json`` record or the
+    ``openadapt.sanitization/v1`` ingest envelope a deployment persists, and it
+    must match the extracted bytes. Pass ``expected_archive_sha256`` to pin the
+    archive against a digest the caller trusts, independently of the record.
+    """
+    archive = Path(archive)
+    record_path = Path(approval)
+    destination = Path(destination)
+    if not archive.is_file():
+        raise SanitizationError(f"Approved archive is missing: {archive}")
+    if not record_path.is_file():
+        raise SanitizationError(f"Approval record is missing: {record_path}")
+    if expected_archive_sha256 is not None:
+        expected = expected_archive_sha256.strip().lower()
+        if not re.fullmatch(r"[a-f0-9]{64}", expected):
+            raise SanitizationError(
+                "The expected sha256 must be 64 hexadecimal characters"
+            )
+        if _sha256_file(archive) != expected:
+            raise SanitizationError(
+                "The approved archive does not match the expected sha256"
+            )
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SanitizationError(f"Invalid approval: {exc}") from exc
+    if not isinstance(record, dict):
+        raise SanitizationError("An approval record must be a JSON object")
+    if destination.exists():
+        if not destination.is_dir():
+            raise SanitizationError(
+                f"Materialization destination is not a directory: {destination}"
+            )
+        if any(destination.iterdir()):
+            raise SanitizationError(
+                f"Materialization destination is not empty: {destination}"
+            )
+    target_archive = approved_archive_path(destination)
+    copied_archive = os.path.realpath(target_archive) != os.path.realpath(archive)
+    if copied_archive and target_archive.exists():
+        raise SanitizationError(
+            f"An archive already sits beside the destination: {target_archive}"
+        )
+    destination.mkdir(parents=True, exist_ok=True)
+    destination.chmod(0o700)
+    try:
+        _extract_approved_archive(archive, destination)
+        if copied_archive:
+            shutil.copyfile(archive, target_archive)
+            target_archive.chmod(0o600)
+        if "schema" in record:
+            manifest = load_and_verify_derivative(destination)
+            record = _approval_from_ingest_envelope(record, manifest)
+        approval_path(destination).write_text(
+            json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        approval_path(destination).chmod(0o600)
+        return load_valid_approval(destination)
+    except SanitizationError:
+        approval_path(destination).unlink(missing_ok=True)
+        if copied_archive:
+            target_archive.unlink(missing_ok=True)
+        raise
+
+
 def build_ingest_manifest(destination: Path) -> dict[str, Any]:
     """Build the public ``openadapt.sanitization/v1`` cloud ingest envelope."""
     destination = Path(destination)
@@ -1253,26 +1528,7 @@ def build_ingest_manifest(destination: Path) -> dict[str, Any]:
                 f"Automatic approval requires {POLICY_KEY_ENV} to decode to at least 32 bytes"
             )
         envelope["approval"]["policy_key_id"] = key_id
-        message = json.dumps(
-            [
-                "openadapt.sanitization-policy/v1",
-                envelope["artifact"]["kind"],
-                envelope["artifact"]["sha256"],
-                envelope["artifact"]["size_bytes"],
-                envelope["artifact"]["execution_semantics"],
-                envelope["artifact"]["runtime_semantics_validated"],
-                envelope["artifact"]["trusted_boundary_required_at_runtime"],
-                envelope["scrubber"]["name"],
-                envelope["scrubber"]["version"],
-                envelope["scrubber"]["policy"],
-                sorted(envelope["coverage"]["media_types"]),
-                envelope["approval"]["approved_at"],
-                envelope["approval"]["approved_by"],
-                key_id,
-            ],
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        message = _policy_signature_message(envelope, key_id)
         envelope["approval"]["policy_signature"] = hmac.new(
             key, message.encode("utf-8"), hashlib.sha256
         ).hexdigest()

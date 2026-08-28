@@ -42,6 +42,7 @@ from openadapt_flow.sanitized_artifact import (
     build_ingest_manifest,
     load_and_verify_derivative,
     load_valid_approval,
+    materialize_approved_derivative,
     render_review_html,
     sanitize_artifact,
 )
@@ -954,3 +955,290 @@ def test_emitted_manifest_approval_and_ingest_envelope_match_published_schemas(
         jsonschema.Draft202012Validator(json.loads((root / name).read_text())).validate(
             instance
         )
+
+
+def _approved_recording(tmp_path: Path) -> tuple[Path, dict, Path]:
+    """Approve a recording derivative and return it with its archive."""
+    source = _recording(tmp_path)
+    dest = tmp_path / "sanitized"
+    sanitize_artifact(source, dest, kind="recording")
+    approval = approve_derivative(dest, source=source, reviewer="alice")
+    return dest, approval, approved_archive_path(dest)
+
+
+def test_unzipping_an_approved_archive_alone_yields_an_unapproved_derivative(tmp_path):
+    """The archive cannot carry the approval computed over its own bytes."""
+    dest, _, archive = _approved_recording(tmp_path)
+    with zipfile.ZipFile(archive) as zf:
+        assert APPROVAL_NAME not in zf.namelist()
+
+    elsewhere = tmp_path / "elsewhere" / "recording"
+    elsewhere.mkdir(parents=True)
+    with zipfile.ZipFile(archive) as zf:
+        zf.extractall(elsewhere)
+    (elsewhere.parent / "recording.approved.zip").write_bytes(archive.read_bytes())
+
+    assert load_and_verify_derivative(elsewhere)["kind"] == "recording"
+    with pytest.raises(SanitizationError, match="not been approved"):
+        load_valid_approval(elsewhere)
+
+
+def test_materialize_approved_restores_the_unchanged_approval_gate(tmp_path):
+    dest, approval, archive = _approved_recording(tmp_path)
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(approval), encoding="utf-8")
+    out = tmp_path / "elsewhere" / "recording"
+
+    materialized = materialize_approved_derivative(
+        archive,
+        approval=record,
+        destination=out,
+        expected_archive_sha256=approval["approved_derivative_sha256"],
+    )
+
+    assert materialized == approval
+    assert load_valid_approval(out) == approval
+    assert (out / APPROVAL_NAME).is_file()
+    assert approved_archive_path(out).read_bytes() == archive.read_bytes()
+    assert {
+        str(path.relative_to(out))
+        for path in out.rglob("*")
+        if path.is_file() and path.name != APPROVAL_NAME
+    } == {
+        MANIFEST_NAME,
+        "meta.json",
+        "events.jsonl",
+        str(Path("frames") / "before.png"),
+    }
+
+
+def test_materialize_approved_accepts_the_persisted_ingest_envelope(tmp_path):
+    """A cloud deployment persists the envelope, not the approval file."""
+    dest, approval, archive = _approved_recording(tmp_path)
+    envelope = build_ingest_manifest(dest)
+    record = tmp_path / "envelope.json"
+    record.write_text(json.dumps(envelope), encoding="utf-8")
+    out = tmp_path / "elsewhere" / "recording"
+
+    materialized = materialize_approved_derivative(
+        archive, approval=record, destination=out
+    )
+
+    assert materialized["reviewer"] == approval["reviewer"] == "alice"
+    assert materialized["approved_at"] == approval["approved_at"]
+    assert materialized["automatic"] is False
+    assert (
+        materialized["approved_derivative_sha256"]
+        == approval["approved_derivative_sha256"]
+    )
+    assert load_valid_approval(out)["reviewer"] == "alice"
+
+
+def test_materialized_recording_gives_compile_its_source_provenance(tmp_path):
+    """The runner built a bundle with null provenance from a bare archive."""
+    source = tmp_path / "recording"
+    frames = source / "frames"
+    frames.mkdir(parents=True)
+    before = Image.new("RGB", (320, 200), "white")
+    ImageDraw.Draw(before).rectangle((90, 70, 230, 130), outline="black", width=4)
+    after = before.copy()
+    ImageDraw.Draw(after).rectangle((250, 20, 290, 50), fill="green")
+    before.save(frames / "0000_before.png", format="PNG")
+    after.save(frames / "0000_after.png", format="PNG")
+    (source / "events.jsonl").write_text(
+        json.dumps({"i": 0, "kind": "click", "x": 160, "y": 100, "t": 1.0}) + "\n"
+    )
+    (source / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": "materialized-recording",
+                "created_at": "2026-07-15T00:00:00+00:00",
+                "viewport": [320, 200],
+                "app_url": "http://example.test/",
+                "params": {},
+            }
+        )
+    )
+    dest = tmp_path / "sanitized"
+    sanitize_artifact(source, dest, kind="recording")
+    approval = approve_derivative(dest, source=source, reviewer="alice")
+
+    bare = tmp_path / "bare" / "recording"
+    bare.mkdir(parents=True)
+    with zipfile.ZipFile(approved_archive_path(dest)) as zf:
+        zf.extractall(bare)
+    bare_workflow = compile_recording(bare, tmp_path / "bare-bundle", name="bare")
+    assert bare_workflow.manifest is not None
+    assert bare_workflow.manifest.provenance.source_recording_sha256 is None
+
+    out = tmp_path / "elsewhere" / "recording"
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(build_ingest_manifest(dest)), encoding="utf-8")
+    materialize_approved_derivative(
+        approved_archive_path(dest), approval=record, destination=out
+    )
+    workflow = compile_recording(out, tmp_path / "bundle", name="materialized")
+
+    assert workflow.manifest is not None
+    assert (
+        workflow.manifest.provenance.source_recording_sha256
+        == approval["approved_derivative_sha256"]
+    )
+
+
+def test_materialize_approved_refuses_a_tampered_archive(tmp_path):
+    dest, approval, archive = _approved_recording(tmp_path)
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(approval), encoding="utf-8")
+    tampered = tmp_path / "tampered.approved.zip"
+    with zipfile.ZipFile(archive) as src, zipfile.ZipFile(tampered, "w") as dst:
+        for info in src.infolist():
+            payload = src.read(info.filename)
+            if info.filename == "events.jsonl":
+                payload = b'{"text":"substituted"}\n'
+            dst.writestr(info, payload)
+
+    with pytest.raises(SanitizationError):
+        materialize_approved_derivative(
+            tampered, approval=record, destination=tmp_path / "out"
+        )
+    assert not (tmp_path / "out" / APPROVAL_NAME).exists()
+
+
+def test_materialize_approved_refuses_an_unexpected_archive_digest(tmp_path):
+    dest, approval, archive = _approved_recording(tmp_path)
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(approval), encoding="utf-8")
+
+    with pytest.raises(SanitizationError, match="expected sha256"):
+        materialize_approved_derivative(
+            archive,
+            approval=record,
+            destination=tmp_path / "out",
+            expected_archive_sha256="0" * 64,
+        )
+    assert not (tmp_path / "out").exists() or not any((tmp_path / "out").iterdir())
+
+
+def test_materialize_approved_refuses_an_approval_for_another_artifact(tmp_path):
+    dest, approval, archive = _approved_recording(tmp_path)
+    other = dict(approval)
+    other["approved_derivative_sha256"] = "f" * 64
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(other), encoding="utf-8")
+
+    with pytest.raises(SanitizationError, match="archive"):
+        materialize_approved_derivative(
+            archive, approval=record, destination=tmp_path / "out"
+        )
+
+
+def test_materialize_approved_refuses_a_traversing_archive_member(tmp_path):
+    dest, approval, archive = _approved_recording(tmp_path)
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(approval), encoding="utf-8")
+    hostile = tmp_path / "hostile.approved.zip"
+    with zipfile.ZipFile(hostile, "w") as zf:
+        zf.writestr("../escaped.json", "{}")
+
+    with pytest.raises(SanitizationError, match="unsafe path"):
+        materialize_approved_derivative(
+            hostile, approval=record, destination=tmp_path / "out"
+        )
+    assert not (tmp_path / "escaped.json").exists()
+
+
+def test_materialize_approved_refuses_an_archive_carrying_its_own_approval(tmp_path):
+    dest, approval, archive = _approved_recording(tmp_path)
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(approval), encoding="utf-8")
+    hostile = tmp_path / "hostile.approved.zip"
+    with zipfile.ZipFile(archive) as src, zipfile.ZipFile(hostile, "w") as dst:
+        for info in src.infolist():
+            dst.writestr(info, src.read(info.filename))
+        dst.writestr(APPROVAL_NAME, json.dumps(approval))
+
+    with pytest.raises(SanitizationError, match="own approval"):
+        materialize_approved_derivative(
+            hostile, approval=record, destination=tmp_path / "out"
+        )
+
+
+def test_materialize_approved_refuses_a_non_empty_destination(tmp_path):
+    dest, approval, archive = _approved_recording(tmp_path)
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(approval), encoding="utf-8")
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "prior.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(SanitizationError, match="not empty"):
+        materialize_approved_derivative(archive, approval=record, destination=out)
+    assert (out / "prior.json").read_text() == "{}"
+
+
+def test_materialize_approved_refuses_a_policy_envelope_without_its_signature(tmp_path):
+    dest, approval, archive = _approved_recording(tmp_path)
+    envelope = build_ingest_manifest(dest)
+    envelope["approval"]["method"] = "policy"
+    record = tmp_path / "envelope.json"
+    record.write_text(json.dumps(envelope), encoding="utf-8")
+
+    with pytest.raises(SanitizationError, match="policy"):
+        materialize_approved_derivative(
+            archive, approval=record, destination=tmp_path / "out"
+        )
+
+
+def test_materialize_approved_verifies_a_policy_signature_when_the_key_is_present(
+    tmp_path, monkeypatch
+):
+    source = _recording(tmp_path)
+    dest = tmp_path / "sanitized"
+    sanitize_artifact(source, dest, kind="recording")
+    approve_derivative(dest, source=source, reviewer="policy:x", automatic=True)
+    key = base64.b64encode(b"k" * 32).decode("ascii")
+    monkeypatch.setenv("OPENADAPT_SANITIZATION_POLICY_KEY_ID", "policy-key-1")
+    monkeypatch.setenv("OPENADAPT_SANITIZATION_POLICY_KEY", key)
+    envelope = build_ingest_manifest(dest)
+    record = tmp_path / "envelope.json"
+    record.write_text(json.dumps(envelope), encoding="utf-8")
+
+    materialized = materialize_approved_derivative(
+        approved_archive_path(dest), approval=record, destination=tmp_path / "good"
+    )
+    assert materialized["automatic"] is True
+
+    envelope["approval"]["policy_signature"] = "a" * 64
+    record.write_text(json.dumps(envelope), encoding="utf-8")
+    with pytest.raises(SanitizationError, match="policy approval signature"):
+        materialize_approved_derivative(
+            approved_archive_path(dest), approval=record, destination=tmp_path / "bad"
+        )
+
+
+def test_materialize_approved_cli_round_trips(tmp_path, capsys):
+    from openadapt_flow.__main__ import main
+
+    dest, approval, archive = _approved_recording(tmp_path)
+    record = tmp_path / "approval.json"
+    record.write_text(json.dumps(approval), encoding="utf-8")
+    out = tmp_path / "elsewhere" / "recording"
+
+    code = main(
+        [
+            "materialize-approved",
+            "--archive",
+            str(archive),
+            "--approval",
+            str(record),
+            "--out",
+            str(out),
+            "--expect-archive-sha256",
+            approval["approved_derivative_sha256"],
+        ]
+    )
+
+    assert code == 0
+    assert "alice" in capsys.readouterr().out
+    assert load_valid_approval(out)["reviewer"] == "alice"
