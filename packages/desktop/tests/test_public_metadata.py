@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_public_metadata_identifies_component_role_and_admission_boundary() -> None:
-    readme = (ROOT / "README.md").read_text()
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    package = json.loads((ROOT / "package.json").read_text())
-    cargo = tomllib.loads((ROOT / "src-tauri" / "Cargo.toml").read_text())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    cargo = tomllib.loads((ROOT / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8"))
 
     assert "Role: installed authoring and operation companion" in readme
     assert "active Production default" in readme
@@ -37,10 +37,10 @@ def test_public_metadata_identifies_component_role_and_admission_boundary() -> N
 
 
 def test_target_authoring_uses_detected_availability_vocabulary_and_shared_form() -> None:
-    form = (ROOT / "src/ui/ExecutionTargetForm.tsx").read_text()
-    record = (ROOT / "src/screens/RecordReview.tsx").read_text()
-    watch = (ROOT / "src/screens/WatchRun.tsx").read_text()
-    readme = (ROOT / "README.md").read_text()
+    form = (ROOT / "src/ui/ExecutionTargetForm.tsx").read_text(encoding="utf-8")
+    record = (ROOT / "src/screens/RecordReview.tsx").read_text(encoding="utf-8")
+    watch = (ROOT / "src/screens/WatchRun.tsx").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     # Availability is DETECTED (engine/capabilities.py), never hardcoded:
     # "Available" appears only as the pill for the detected-available state.
@@ -64,7 +64,7 @@ def test_target_authoring_uses_detected_availability_vocabulary_and_shared_form(
 
 
 def test_rdp_transport_control_uses_native_radio_semantics() -> None:
-    form = (ROOT / "src/ui/ExecutionTargetForm.tsx").read_text()
+    form = (ROOT / "src/ui/ExecutionTargetForm.tsx").read_text(encoding="utf-8")
 
     assert 'type="radio"' in form
     assert "checked={rdpMode === mode}" in form
@@ -86,7 +86,7 @@ def test_record_target_reaches_immediate_execution_without_persistent_storage() 
 
 
 def test_record_lifecycle_uses_workflow_command_timeout() -> None:
-    sidecar = (ROOT / "src-tauri/src/sidecar.rs").read_text()
+    sidecar = (ROOT / "src-tauri/src/sidecar.rs").read_text(encoding="utf-8")
     workflow_match = sidecar.split("let timeout = match cmd {", 1)[1].split(
         "_ => COMMAND_TIMEOUT",
         1,
@@ -99,7 +99,7 @@ def test_record_lifecycle_uses_workflow_command_timeout() -> None:
 
 
 def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(readme.split())
     hard_coded_version_claim = re.compile(
         r"\b(?:Python|JavaScript|Tauri)\b.{0,120}\bversions?\b.{0,120}" r"`?v?\d+\.\d+\.\d+`?",
@@ -112,7 +112,7 @@ def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:
 
 
 def test_semantic_release_preserves_pre_one_versions() -> None:
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     release = pyproject["tool"]["semantic_release"]
 
     assert release["major_on_zero"] is False
@@ -125,7 +125,7 @@ def test_release_versions_are_synchronized() -> None:
 
 
 def test_semantic_release_refreshes_lock_and_builds_before_tagging() -> None:
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     build_command = pyproject["tool"]["semantic_release"]["build_command"]
 
     assert "python -m ensurepip --upgrade" in build_command
@@ -155,13 +155,13 @@ def test_release_lock_sync_updates_only_editable_root_version(tmp_path: Path) ->
     )
 
     assert sync_lock_version(tmp_path) == "0.3.0"
-    lock = (tmp_path / "uv.lock").read_text()
+    lock = (tmp_path / "uv.lock").read_text(encoding="utf-8")
     assert 'name = "openadapt-desktop"\nversion = "0.3.0"' in lock
     assert 'name = "dependency"\nversion = "1.2.3"' in lock
 
 
 def test_release_workflow_uses_matching_pinned_actions() -> None:
-    workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     uses = re.findall(r"^\s*uses:\s+\S+@([^\s#]+)", workflow, flags=re.MULTILINE)
 
     assert uses
@@ -174,7 +174,7 @@ def test_release_workflow_uses_matching_pinned_actions() -> None:
 
 
 def test_release_is_manual_and_gated_on_exact_test_and_build_heads() -> None:
-    workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
     semantic = workflow[workflow.index("\n  semantic-release:") :]
     wait_index = semantic.index("- name: Wait for exact-head Test and Build workflows")
@@ -196,7 +196,7 @@ def test_release_is_manual_and_gated_on_exact_test_and_build_heads() -> None:
 
 
 def test_release_recovery_ref_is_main_contained_and_exact_ci_green() -> None:
-    workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     recovery = workflow[workflow.index("\n  publish-existing-ref:") :]
     build_index = recovery.index("- name: Build and validate exact recovery artifacts")
     publish_index = recovery.index("- name: Publish to PyPI")
@@ -213,10 +213,10 @@ def test_release_recovery_ref_is_main_contained_and_exact_ci_green() -> None:
 
 
 def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
-    notes = (ROOT / "docs/RELEASE_CANDIDATE_INSTALLERS.md").read_text()
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    lock = (ROOT / "uv.lock").read_text()
-    native_release = (ROOT / ".github/workflows/native-release.yml").read_text()
+    notes = (ROOT / "docs/RELEASE_CANDIDATE_INSTALLERS.md").read_text(encoding="utf-8")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    native_release = (ROOT / ".github/workflows/native-release.yml").read_text(encoding="utf-8")
     build_dependencies = pyproject["project"]["optional-dependencies"]["build"]
     dependencies = pyproject["project"]["dependencies"]
     classifiers = pyproject["project"]["classifiers"]
@@ -247,7 +247,7 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
 
 
 def test_readme_local_links_exist() -> None:
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     links = re.findall(r"\[[^]]*\]\(([^)]+)\)", readme)
 
     for link in links:

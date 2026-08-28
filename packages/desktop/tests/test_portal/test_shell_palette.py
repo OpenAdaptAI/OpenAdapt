@@ -41,12 +41,12 @@ SHELL_TO_CANONICAL = {
 def _canonical_colors() -> dict[str, str]:
     return {
         name: value.upper()
-        for name, value in json.loads(CANONICAL.read_text())["color"].items()
+        for name, value in json.loads(CANONICAL.read_text(encoding="utf-8"))["color"].items()
     }
 
 
 def _shell_root() -> dict[str, str]:
-    css = (SHELL / "styles.css").read_text()
+    css = (SHELL / "styles.css").read_text(encoding="utf-8")
     block = css[css.index(":root {") : css.index("}", css.index(":root {"))]
     return {
         match.group(1): match.group(2).strip().upper()
@@ -66,10 +66,10 @@ def test_shell_token_matches_canonical(shell_token: str, canonical_token: str) -
 
 def test_shell_theme_colour_matches_the_ground() -> None:
     ground = _canonical_colors()["--surface"]
-    manifest = json.loads((SHELL / "manifest.webmanifest").read_text())
+    manifest = json.loads((SHELL / "manifest.webmanifest").read_text(encoding="utf-8"))
     assert manifest["background_color"].upper() == ground
     assert manifest["theme_color"].upper() == ground
-    head = (SHELL / "index.html").read_text()
+    head = (SHELL / "index.html").read_text(encoding="utf-8")
     assert re.search(rf'content="{ground}"', head, re.IGNORECASE), (
         "the shell's <meta name=theme-color> must be the canonical ground"
     )
@@ -83,6 +83,6 @@ def test_shell_carries_no_retired_warm_value() -> None:
         "#dcece5", "#dff1e8", "#f6ead7", "#f7e4e2", "#e0ebf5",
     }
     for name in ("styles.css", "index.html", "manifest.webmanifest", "app.js"):
-        text = (SHELL / name).read_text().lower()
+        text = (SHELL / name).read_text(encoding="utf-8").lower()
         found = sorted(value for value in retired if value in text)
         assert not found, f"{name} still carries retired warm-palette values: {found}"
