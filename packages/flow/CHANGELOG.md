@@ -1,7 +1,3262 @@
 # CHANGELOG
 
+> **Note on the v1.0.0 - v1.33.0 range.** Those entries were absent from this
+> file until 2026-08-28 and were reconstructed on that date. On 2026-07-14 this
+> repository moved from python-semantic-release 9.15.2 to 10.6.1. Version 10
+> changed the default changelog mode from `init` to `update`, and `update` mode
+> writes nothing unless the file carries the version-list insertion flag (the
+> HTML comment directly below this note). This file, written under version 9,
+> had no such flag, so every release from v1.0.0 onward bumped the version and
+> wrote no changelog entry, without an error. The reconstruction re-ran the same
+> generator over the same tagged commits; it invents nothing. It does differ
+> from the v0.x entries in one visible way: version 10's default template emits
+> the commit summary line only, so the reconstructed entries carry no commit
+> bodies. The v0.x entries below are the originals and are unmodified.
+
+<!-- version list -->
+
+## v1.34.0 (2026-08-28)
+
+### Bug Fixes
+
+- Type hosted runner release bindings
+  ([`035e88e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/035e88eada0147673d9836a557cf3b758dca296a))
+
+- **cli**: Preserve model tiers on resume
+  ([#404](https://github.com/OpenAdaptAI/openadapt-flow/pull/404),
+  [`ba127f3`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ba127f3a3637a794355a2fef2b381383e5d0be40))
+
+- **macos**: Match known Chrome AX title suffixes
+  ([#416](https://github.com/OpenAdaptAI/openadapt-flow/pull/416),
+  [`4505bda`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4505bdaefb773da150bf28f32b49b713b934d978))
+
+- **release**: Restore changelog generation and backfill the v1.x gap
+  ([`e5552d5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e5552d5e6b56c94295dab5b676f1abe570bc53aa))
+
+- **runtime**: Persist resume egress posture before execution
+  ([#408](https://github.com/OpenAdaptAI/openadapt-flow/pull/408),
+  [`ca07eca`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca07ecaa05e1707372fecb55b4d002e886198cc2))
+
+- **runtime**: Read each frame's viewport from the frame, not live from the backend
+  ([#406](https://github.com/OpenAdaptAI/openadapt-flow/pull/406),
+  [`b5d1d49`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b5d1d49c126aeff3e67609d019da74417521dcf4))
+
+- **runtime**: Retain resume egress boundaries
+  ([#404](https://github.com/OpenAdaptAI/openadapt-flow/pull/404),
+  [`ba127f3`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ba127f3a3637a794355a2fef2b381383e5d0be40))
+
+- **validate-hosted**: Name the derivative whose approval is missing
+  ([#417](https://github.com/OpenAdaptAI/openadapt-flow/pull/417),
+  [`4ab4155`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4ab4155fba931bd91d2955c1812c31d7b5a62147))
+
+- **visualize**: Fail closed on an out-of-vocabulary effect fact
+  ([#415](https://github.com/OpenAdaptAI/openadapt-flow/pull/415),
+  [`1185f87`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1185f87f4b53a2cbc380b9363886ce809945202f))
+
+- **visualize**: Leave the retained packs sealed; project the live export path
+  ([#415](https://github.com/OpenAdaptAI/openadapt-flow/pull/415),
+  [`1185f87`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1185f87f4b53a2cbc380b9363886ce809945202f))
+
+- **visualize**: Make the non-local projection a closed allow-list
+  ([#415](https://github.com/OpenAdaptAI/openadapt-flow/pull/415),
+  [`1185f87`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1185f87f4b53a2cbc380b9363886ce809945202f))
+
+- **visualize**: Project the public demo graphs before publishing them
+  ([#415](https://github.com/OpenAdaptAI/openadapt-flow/pull/415),
+  [`1185f87`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1185f87f4b53a2cbc380b9363886ce809945202f))
+
+### Chores
+
+- Ignore every .env variant, not one at a time
+  ([#407](https://github.com/OpenAdaptAI/openadapt-flow/pull/407),
+  [`e094dbc`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e094dbc094fb783c48a22eb8a931bd8531e63457))
+
+- **policy**: Sync generated source boundary
+  ([#414](https://github.com/OpenAdaptAI/openadapt-flow/pull/414),
+  [`5ee829d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5ee829db8bf38d2e579ffeb1f2343cff41f1d0e9))
+
+### Code Style
+
+- Blank line before the frame viewport helper (ruff format)
+  ([#406](https://github.com/OpenAdaptAI/openadapt-flow/pull/406),
+  [`b5d1d49`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b5d1d49c126aeff3e67609d019da74417521dcf4))
+
+- Format release publication verifier
+  ([`9f1b13d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9f1b13db9f924cba44786efb0320beb5ce8bb16b))
+
+### Continuous Integration
+
+- Refresh release contract artifacts
+  ([`1cba16a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1cba16ad0608e7582110f37df62bcb0bdf57fc98))
+
+- Require release App tag actor
+  ([`6047f8d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6047f8d5b69db6a4a8b4e94556cc194b68e97075))
+
+- Require release App tag publication
+  ([`9e9c33b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9e9c33b994309bf70d40ad18385660d66036b6d4))
+
+### Documentation
+
+- Align Flow claims and limits with current contracts
+  ([#409](https://github.com/OpenAdaptAI/openadapt-flow/pull/409),
+  [`7e18308`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7e183081c86c5da51f42f677ca40414c45c78383))
+
+- Clarify package state terminology ([#401](https://github.com/OpenAdaptAI/openadapt-flow/pull/401),
+  [`fa49a5d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/fa49a5de54a749ebf00621b0e4d38a2b439bb058))
+
+- Derive Flow product state from admissions
+  ([#401](https://github.com/OpenAdaptAI/openadapt-flow/pull/401),
+  [`fa49a5d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/fa49a5de54a749ebf00621b0e4d38a2b439bb058))
+
+- **paper**: Add the three-tree paper map so the lineage is unambiguous
+  ([#399](https://github.com/OpenAdaptAI/openadapt-flow/pull/399),
+  [`e17e2aa`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e17e2aa9ab367c11b2a64b2022f1cf45e62a729d))
+
+- **readme**: Launch-funnel pass — evidence table, comparison, FAQ, quick links
+  ([#410](https://github.com/OpenAdaptAI/openadapt-flow/pull/410),
+  [`977dd4c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/977dd4cb60e457236d1f31235978a40cb1139479))
+
+- **readme**: Restructure for scan-ability, relocate depth into docs/
+  ([#411](https://github.com/OpenAdaptAI/openadapt-flow/pull/411),
+  [`1043f48`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1043f48f2c21747be4553104e8f6fbe27aab908a))
+
+### Features
+
+- Add governed program visualization profiles
+  ([#415](https://github.com/OpenAdaptAI/openadapt-flow/pull/415),
+  [`1185f87`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1185f87f4b53a2cbc380b9363886ce809945202f))
+
+- Complete hosted runner target state
+  ([`035e88e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/035e88eada0147673d9836a557cf3b758dca296a))
+
+- **release-health**: Detect published versions that have no changelog entry
+  ([`0eb81cb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0eb81cb0b87687bf3de6d21f8a30b12837d67551))
+
+- **sanitize**: Materialize an approved derivative from its archive
+  ([#418](https://github.com/OpenAdaptAI/openadapt-flow/pull/418),
+  [`80b33d0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/80b33d0759a5b2dcc65fdc3ebe7039d096551da6))
+
+### Testing
+
+- Exercise the product release admission gate instead of stubbing it
+  ([`035e88e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/035e88eada0147673d9836a557cf3b758dca296a))
+
+- Fail a run that leaves tracked repository files dirty
+  ([#400](https://github.com/OpenAdaptAI/openadapt-flow/pull/400),
+  [`defb0e1`](https://github.com/OpenAdaptAI/openadapt-flow/commit/defb0e19167ffc8331c20035cafe71291691f83a))
+
+- Preserve boolean parameter digest
+  ([`035e88e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/035e88eada0147673d9836a557cf3b758dca296a))
+
+- **sanitize**: Pin the approval an approved archive cannot carry
+  ([#418](https://github.com/OpenAdaptAI/openadapt-flow/pull/418),
+  [`80b33d0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/80b33d0759a5b2dcc65fdc3ebe7039d096551da6))
+
+## v1.33.0 (2026-08-25)
+
+
+### Bug Fixes
+
+- Bind the campaign permit only when the authority is supplied
+  ([#385](https://github.com/OpenAdaptAI/openadapt-flow/pull/385),
+  [`7dd34db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7dd34db7a0ea2ac6264fcadd192d7b9701a0a7df))
+
+- Keep the dispatch binding digest grammar stable
+  ([#385](https://github.com/OpenAdaptAI/openadapt-flow/pull/385),
+  [`7dd34db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7dd34db7a0ea2ac6264fcadd192d7b9701a0a7df))
+
+- Keep the qualification-case CLI contract working without a permit file
+  ([#385](https://github.com/OpenAdaptAI/openadapt-flow/pull/385),
+  [`7dd34db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7dd34db7a0ea2ac6264fcadd192d7b9701a0a7df))
+
+- Let case authorizations stay valid before a permit is bound
+  ([#385](https://github.com/OpenAdaptAI/openadapt-flow/pull/385),
+  [`7dd34db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7dd34db7a0ea2ac6264fcadd192d7b9701a0a7df))
+
+- Migrate an empty legacy pending-delivery table without data loss
+  ([#384](https://github.com/OpenAdaptAI/openadapt-flow/pull/384),
+  [`d73e629`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d73e62962bca61b9bd5fe87ab3750ddc6d02277d))
+
+- Scope the runtime authority gate to governed deliveries
+  ([#385](https://github.com/OpenAdaptAI/openadapt-flow/pull/385),
+  [`7dd34db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7dd34db7a0ea2ac6264fcadd192d7b9701a0a7df))
+
+- **record**: Compose iframe events into page space and emit frame_path
+  ([#390](https://github.com/OpenAdaptAI/openadapt-flow/pull/390),
+  [`e37b427`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e37b427c68eb390f2602fe7c0e95faa2b9926c94))
+
+- **record**: Double-click as one step, refuse native select, document coverage
+  ([#391](https://github.com/OpenAdaptAI/openadapt-flow/pull/391),
+  [`9b1c8b5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9b1c8b5af962dc16cddaa15242d6355636f302c6))
+
+- **types**: Annotate the phash image as Image.Image
+  ([`b00b724`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b00b724c27b09118c94e2890be07f75bd9c7554e))
+
+### Chores
+
+- Refresh public artifact inventory ([#380](https://github.com/OpenAdaptAI/openadapt-flow/pull/380),
+  [`9806814`](https://github.com/OpenAdaptAI/openadapt-flow/commit/980681490bcfc459f9c0a2069d9da80214b5de7c))
+
+- Register the qualification gate campaign public artifacts
+  ([#386](https://github.com/OpenAdaptAI/openadapt-flow/pull/386),
+  [`583041f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/583041f3cc09d7b3a53640d359373c3556ee0ed8))
+
+- **types**: Drop pixel_identity_aligned from the mypy debt list
+  ([`920bde9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/920bde98ebe09be9d892aeb78cede0b9766c9c49))
+
+### Code Style
+
+- Ruff-format the campaign permit fixture test
+  ([#385](https://github.com/OpenAdaptAI/openadapt-flow/pull/385),
+  [`7dd34db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7dd34db7a0ea2ac6264fcadd192d7b9701a0a7df))
+
+- Ruff-format the legacy pending-table migration
+  ([#384](https://github.com/OpenAdaptAI/openadapt-flow/pull/384),
+  [`d73e629`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d73e62962bca61b9bd5fe87ab3750ddc6d02277d))
+
+- Wrap the campaign authority refusal matcher
+  ([#385](https://github.com/OpenAdaptAI/openadapt-flow/pull/385),
+  [`7dd34db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7dd34db7a0ea2ac6264fcadd192d7b9701a0a7df))
+
+### Continuous Integration
+
+- Correct the stale version comment on the pypi-publish pin
+  ([#377](https://github.com/OpenAdaptAI/openadapt-flow/pull/377),
+  [`92ad832`](https://github.com/OpenAdaptAI/openadapt-flow/commit/92ad83233b23cfbd56083665efa7cf16c45afb5d))
+
+- Deselect the platform-neutral qualification campaign on macOS
+  ([#397](https://github.com/OpenAdaptAI/openadapt-flow/pull/397),
+  [`d4b64ac`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d4b64aca51f1279bfc92ccaddbca438f878c0c1e))
+
+- Prevent stale-head releases ([#380](https://github.com/OpenAdaptAI/openadapt-flow/pull/380),
+  [`9806814`](https://github.com/OpenAdaptAI/openadapt-flow/commit/980681490bcfc459f9c0a2069d9da80214b5de7c))
+
+- Regenerate the public artifact inventory for the edited workflow
+  ([#377](https://github.com/OpenAdaptAI/openadapt-flow/pull/377),
+  [`92ad832`](https://github.com/OpenAdaptAI/openadapt-flow/commit/92ad83233b23cfbd56083665efa7cf16c45afb5d))
+
+### Documentation
+
+- Reconcile the OpenEMR 19/20 correction with older 20/20 summaries
+  ([#389](https://github.com/OpenAdaptAI/openadapt-flow/pull/389),
+  [`94e7036`](https://github.com/OpenAdaptAI/openadapt-flow/commit/94e70364aa04632e9e8031434ad801a74344ac15))
+
+- **paper**: State EffectBench's public scope, gated split, and gaming surface
+  ([#378](https://github.com/OpenAdaptAI/openadapt-flow/pull/378),
+  [`51bd075`](https://github.com/OpenAdaptAI/openadapt-flow/commit/51bd07597097d40af720c2e0c627d5d16d1935aa))
+
+### Features
+
+- Add scaffold-verifier, explain, outcome epilogues, and receipt share cards
+  ([#388](https://github.com/OpenAdaptAI/openadapt-flow/pull/388),
+  [`ecfcd8d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ecfcd8d0cec04d890ac2c2a5630f66fbeaebdc07))
+
+- Add the gate-standard local qualification campaign
+  ([#386](https://github.com/OpenAdaptAI/openadapt-flow/pull/386),
+  [`583041f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/583041f3cc09d7b3a53640d359373c3556ee0ed8))
+
+- Bind production delivery to signed permits and receipts
+  ([#383](https://github.com/OpenAdaptAI/openadapt-flow/pull/383),
+  [`63f5eff`](https://github.com/OpenAdaptAI/openadapt-flow/commit/63f5efffca770ef1cb2960f8a9745e8950f45ad9))
+
+- Make installer script the primary quickstart path
+  ([#387](https://github.com/OpenAdaptAI/openadapt-flow/pull/387),
+  [`abac2bb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abac2bb3bde8e3bac85c975f3ecf6ff1938499da))
+
+- Require signed runtime authority for Production and campaign actuation
+  ([#385](https://github.com/OpenAdaptAI/openadapt-flow/pull/385),
+  [`7dd34db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7dd34db7a0ea2ac6264fcadd192d7b9701a0a7df))
+
+- **record**: Declare the coordinate space on the capture path too
+  ([#396](https://github.com/OpenAdaptAI/openadapt-flow/pull/396),
+  [`faf2bd1`](https://github.com/OpenAdaptAI/openadapt-flow/commit/faf2bd16125e1dac7559d5a3c3f190b6edd8267a))
+
+### Testing
+
+- Fix a Python 3.10 permit parse and a Chromium CDP readiness race
+  ([#395](https://github.com/OpenAdaptAI/openadapt-flow/pull/395),
+  [`a3351fe`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a3351fe18b954ffc8c418cd4d7a388bbfec4d8fe))
+
+## v1.32.0 (2026-08-20)
+
+
+### Bug Fixes
+
+- Bind structured push to retained server version
+  ([#369](https://github.com/OpenAdaptAI/openadapt-flow/pull/369),
+  [`663550f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/663550fc11c58d262a79766b184b510af527b242))
+
+- Close paused push schema state ([#369](https://github.com/OpenAdaptAI/openadapt-flow/pull/369),
+  [`663550f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/663550fc11c58d262a79766b184b510af527b242))
+
+- Forbid server bindings on unsuccessful push
+  ([#369](https://github.com/OpenAdaptAI/openadapt-flow/pull/369),
+  [`663550f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/663550fc11c58d262a79766b184b510af527b242))
+
+- Keep admission identity independent
+  ([#376](https://github.com/OpenAdaptAI/openadapt-flow/pull/376),
+  [`c2c2993`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c2c2993574aeae763f517f068b5407ca2f366270))
+
+- Preserve resized capture coordinate spaces
+  ([#366](https://github.com/OpenAdaptAI/openadapt-flow/pull/366),
+  [`02e68bf`](https://github.com/OpenAdaptAI/openadapt-flow/commit/02e68bf9e658d4d2147243fc33e69b4f2dd70b21))
+
+- Prove an exact accepted ingest before push reports success
+  ([#369](https://github.com/OpenAdaptAI/openadapt-flow/pull/369),
+  [`663550f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/663550fc11c58d262a79766b184b510af527b242))
+
+- Reject contradictory push result states
+  ([#369](https://github.com/OpenAdaptAI/openadapt-flow/pull/369),
+  [`663550f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/663550fc11c58d262a79766b184b510af527b242))
+
+- Require Flow production release evidence
+  ([#366](https://github.com/OpenAdaptAI/openadapt-flow/pull/366),
+  [`02e68bf`](https://github.com/OpenAdaptAI/openadapt-flow/commit/02e68bf9e658d4d2147243fc33e69b4f2dd70b21))
+
+- Require passing evidence for supported claims
+  ([`e1a236c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e1a236c8c307e6613b1a310667a49bb7c2e82a53))
+
+- **browser**: Apply the same proof to a bare URL fragment
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Bind same-task secret mutations
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Bind secret redaction to the element, never to keystroke prefixes
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Close attach evidence gaps
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Close attached finalization gaps
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Close three round-4 blockers and redact URLs by structure
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Harden attached recording boundaries
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Harden attached recording finalization
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Latch attached recording races
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Make secret classification sticky across DOM replacement
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Never drop a value the field holds or a commit point recorded
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Prefer the definite withhold reason over the ambiguous one
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Recognise a keystroke prefix per declared field, not globally
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Replace secret value retention with capture-time withholding
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Retain masks through final capture
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Treat a page that consumes its own field as having held a value
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Withhold a later document's URL; the path is not structural
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **profiles**: Require independent evidence for the Regulated profile
+  ([#355](https://github.com/OpenAdaptAI/openadapt-flow/pull/355),
+  [`45c8d38`](https://github.com/OpenAdaptAI/openadapt-flow/commit/45c8d383345e3624f9f4a191ec883eeca8da5fc3))
+
+- **sealing**: Keep pre-field sealed v2 digests valid for the new effect fields
+  ([#362](https://github.com/OpenAdaptAI/openadapt-flow/pull/362),
+  [`d7f58d9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d7f58d9f35c8369f16a9b378f23952d425334ad7))
+
+### Build System
+
+- Bump ruff from 0.15.22 to 0.16.3 in the python-minor group across 1 directory
+  ([#353](https://github.com/OpenAdaptAI/openadapt-flow/pull/353),
+  [`833022b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/833022bfc9bf2d5599f135dac666f5e0fe039c88))
+
+- Bump ruff in the python-minor group across 1 directory
+  ([#353](https://github.com/OpenAdaptAI/openadapt-flow/pull/353),
+  [`833022b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/833022bfc9bf2d5599f135dac666f5e0fe039c88))
+
+- Refresh the lock after the rebase ([#366](https://github.com/OpenAdaptAI/openadapt-flow/pull/366),
+  [`02e68bf`](https://github.com/OpenAdaptAI/openadapt-flow/commit/02e68bf9e658d4d2147243fc33e69b4f2dd70b21))
+
+### Chores
+
+- Apply Ruff 0.16.3 formatting ([#353](https://github.com/OpenAdaptAI/openadapt-flow/pull/353),
+  [`833022b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/833022bfc9bf2d5599f135dac666f5e0fe039c88))
+
+- Regenerate the artifact inventory after the rebase
+  ([#366](https://github.com/OpenAdaptAI/openadapt-flow/pull/366),
+  [`02e68bf`](https://github.com/OpenAdaptAI/openadapt-flow/commit/02e68bf9e658d4d2147243fc33e69b4f2dd70b21))
+
+- **browser**: Re-pin the public artifact inventory after the claims update
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **claims**: Regenerate verification report and artifact inventory after rebase
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **deps**: Bump aiohttp to 3.14.3 and cryptography to 50.0.0 for security fixes
+  ([#361](https://github.com/OpenAdaptAI/openadapt-flow/pull/361),
+  [`687090e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/687090e840451e91196e099640f981b87aff297c))
+
+### Continuous Integration
+
+- Bound installer process cleanup ([#370](https://github.com/OpenAdaptAI/openadapt-flow/pull/370),
+  [`973e21c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/973e21c458de1bccce67ba23b24ce58ce2cbf7ab))
+
+- Bound qualification and browser setup
+  ([#370](https://github.com/OpenAdaptAI/openadapt-flow/pull/370),
+  [`973e21c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/973e21c458de1bccce67ba23b24ce58ce2cbf7ab))
+
+- Bound the paper build and stop false private-source alarms
+  ([#373](https://github.com/OpenAdaptAI/openadapt-flow/pull/373),
+  [`7860278`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7860278858ba391d794c506660858e859d12a630))
+
+- Bump the actions group across 1 directory with 2 updates
+  ([#363](https://github.com/OpenAdaptAI/openadapt-flow/pull/363),
+  [`16c9177`](https://github.com/OpenAdaptAI/openadapt-flow/commit/16c9177a1dab5046a8c8fd12dee12e3342632b27))
+
+- Enforce immutable dependency lock ([#353](https://github.com/OpenAdaptAI/openadapt-flow/pull/353),
+  [`833022b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/833022bfc9bf2d5599f135dac666f5e0fe039c88))
+
+- Make installer cleanup fail closed
+  ([#370](https://github.com/OpenAdaptAI/openadapt-flow/pull/370),
+  [`973e21c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/973e21c458de1bccce67ba23b24ce58ce2cbf7ab))
+
+- Prefer the canonical Ubuntu archive for the apt installs
+  ([#375](https://github.com/OpenAdaptAI/openadapt-flow/pull/375),
+  [`7633d45`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7633d45cb1eb0091aa8e068a0c2a4cfd421e0115))
+
+- Prefer the canonical Ubuntu archive for the paper TeX install
+  ([#374](https://github.com/OpenAdaptAI/openadapt-flow/pull/374),
+  [`068b777`](https://github.com/OpenAdaptAI/openadapt-flow/commit/068b777c08db5ce0bb3645b29178e7facc1ddd02))
+
+- Refresh public artifact inventory ([#363](https://github.com/OpenAdaptAI/openadapt-flow/pull/363),
+  [`16c9177`](https://github.com/OpenAdaptAI/openadapt-flow/commit/16c9177a1dab5046a8c8fd12dee12e3342632b27))
+
+- Reserve RDP evidence cleanup budget
+  ([#370](https://github.com/OpenAdaptAI/openadapt-flow/pull/370),
+  [`973e21c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/973e21c458de1bccce67ba23b24ce58ce2cbf7ab))
+
+- Retain installer trees until verified cleanup
+  ([#370](https://github.com/OpenAdaptAI/openadapt-flow/pull/370),
+  [`973e21c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/973e21c458de1bccce67ba23b24ce58ce2cbf7ab))
+
+- Terminate privileged installer descendants
+  ([#370](https://github.com/OpenAdaptAI/openadapt-flow/pull/370),
+  [`973e21c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/973e21c458de1bccce67ba23b24ce58ce2cbf7ab))
+
+- Terminate Windows installer process trees
+  ([#370](https://github.com/OpenAdaptAI/openadapt-flow/pull/370),
+  [`973e21c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/973e21c458de1bccce67ba23b24ce58ce2cbf7ab))
+
+### Documentation
+
+- Align generated verification timestamp
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- Keep generated verification report in sync
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Correct comments that still described the removed scrubber
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: Correct the commit-point comment
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: State the retention rule and every withheld identity
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **browser**: State the structured URL rule and what it still costs
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **paper**: Record the four B1 decisions -- authorship+ORCID, CC BY 4.0, COI statement, workshop
+  target ([#358](https://github.com/OpenAdaptAI/openadapt-flow/pull/358),
+  [`3e740f8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3e740f8d5ba303ab067fc63fbd6921fbcc7a3123))
+
+### Features
+
+- Add structured push result contract
+  ([#369](https://github.com/OpenAdaptAI/openadapt-flow/pull/369),
+  [`663550f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/663550fc11c58d262a79766b184b510af527b242))
+
+- Add the v2 qualification authority contract
+  ([#376](https://github.com/OpenAdaptAI/openadapt-flow/pull/376),
+  [`c2c2993`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c2c2993574aeae763f517f068b5407ca2f366270))
+
+- Enforce signed qualification admission before actuation
+  ([#376](https://github.com/OpenAdaptAI/openadapt-flow/pull/376),
+  [`c2c2993`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c2c2993574aeae763f517f068b5407ca2f366270))
+
+- Enforce signed workflow qualification admission
+  ([#376](https://github.com/OpenAdaptAI/openadapt-flow/pull/376),
+  [`c2c2993`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c2c2993574aeae763f517f068b5407ca2f366270))
+
+- Negotiate qualification authority v2
+  ([#376](https://github.com/OpenAdaptAI/openadapt-flow/pull/376),
+  [`c2c2993`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c2c2993574aeae763f517f068b5407ca2f366270))
+
+- **attest**: Opt-in post-run bridge to the openadapt-attest proof sidecar
+  ([#357](https://github.com/OpenAdaptAI/openadapt-flow/pull/357),
+  [`a2ceac3`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a2ceac3ca0ab14951f2b5124ff1cb74a059e3521))
+
+- **browser**: Attach recorder to existing sessions
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+- **effects**: Exact-new-set guard closes the over-write false-pass gap
+  ([#362](https://github.com/OpenAdaptAI/openadapt-flow/pull/362),
+  [`d7f58d9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d7f58d9f35c8369f16a9b378f23952d425334ad7))
+
+- **tutorial**: Print next steps after a verified run
+  ([#354](https://github.com/OpenAdaptAI/openadapt-flow/pull/354),
+  [`f792da6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f792da63291540fb6a10fef9965fddcc96ca2e36))
+
+### Testing
+
+- **browser**: Assert the refused DOM identity states its reason
+  ([#364](https://github.com/OpenAdaptAI/openadapt-flow/pull/364),
+  [`a5a0bbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5a0bbb3a788d92f61484956ea6b941095bdb991))
+
+## v1.31.0 (2026-08-09)
+
+
+### Bug Fixes
+
+- Authenticate decision renewal history
+  ([#339](https://github.com/OpenAdaptAI/openadapt-flow/pull/339),
+  [`3b6d33e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b6d33eb11f9ef26d6698828ee5ebd82b291b57b))
+
+- Bind decision task v2 to pause authority
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Bind identity-armed templates to landmark state
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bind portable decision receipts to exact answers
+  ([#341](https://github.com/OpenAdaptAI/openadapt-flow/pull/341),
+  [`079bbc8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/079bbc863dee82ddae6ccf6c293630f3f6cb78b7))
+
+- Bind RDP acceptance campaign to remote surface
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bind RDP application label ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bind RDP campaign qualification authority
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bind RDP campaign verifier tiers ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bind RDP client session identity ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bind RDP qualification environment
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bind RDP qualification target ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bind remote mask to fresh protected regions
+  ([#322](https://github.com/OpenAdaptAI/openadapt-flow/pull/322),
+  [`3b56041`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b560415144811fe3834a68fb864caffde620209))
+
+- Bind remote masks to resolution evidence
+  ([#322](https://github.com/OpenAdaptAI/openadapt-flow/pull/322),
+  [`3b56041`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b560415144811fe3834a68fb864caffde620209))
+
+- Bind remote review to the exact run
+  ([#348](https://github.com/OpenAdaptAI/openadapt-flow/pull/348),
+  [`cdbe958`](https://github.com/OpenAdaptAI/openadapt-flow/commit/cdbe95803aa795712917d2374abc957d6bfaca36))
+
+- Bound RDP campaign observation and coverage
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Close identity-armed remote actuation evidence
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Continue bounded scroll after OCR ambiguity
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Enforce decision service local trust
+  ([#350](https://github.com/OpenAdaptAI/openadapt-flow/pull/350),
+  [`8160dc4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8160dc4761f974f59635369733c27631a7516169))
+
+- Enforce qualified remote frame input gates
+  ([#322](https://github.com/OpenAdaptAI/openadapt-flow/pull/322),
+  [`3b56041`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b560415144811fe3834a68fb864caffde620209))
+
+- Expose RDP environment evidence ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Expose RDP environment markers ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Harden business decision authority
+  ([#339](https://github.com/OpenAdaptAI/openadapt-flow/pull/339),
+  [`3b6d33e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b6d33eb11f9ef26d6698828ee5ebd82b291b57b))
+
+- Harden Citrix acceptance evidence contract
+  ([#338](https://github.com/OpenAdaptAI/openadapt-flow/pull/338),
+  [`1c5c925`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c5c925a0de7b4216559da3f29b3270328c2918e))
+
+- Harden Citrix campaign recovery ([#338](https://github.com/OpenAdaptAI/openadapt-flow/pull/338),
+  [`1c5c925`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c5c925a0de7b4216559da3f29b3270328c2918e))
+
+- Harden RDP environment marker OCR ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Harden typed decision supervision ([#349](https://github.com/OpenAdaptAI/openadapt-flow/pull/349),
+  [`0146429`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0146429c962d34dd03da2f9b51f05690fde9b053))
+
+- Keep custom entity labels local ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Keep entity labels optional in decision v2
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Keep qualified bundles consistent through sanitization
+  ([#351](https://github.com/OpenAdaptAI/openadapt-flow/pull/351),
+  [`faf9945`](https://github.com/OpenAdaptAI/openadapt-flow/commit/faf9945537d4011baeb36ce5f063b6e1814903e6))
+
+- Keep qualified workflow rendering current
+  ([#351](https://github.com/OpenAdaptAI/openadapt-flow/pull/351),
+  [`faf9945`](https://github.com/OpenAdaptAI/openadapt-flow/commit/faf9945537d4011baeb36ce5f063b6e1814903e6))
+
+- Keep RDP fixture text delivery atomic
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Locate RDP fixture application marker
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Make Citrix acceptance fail-safe after dispatch
+  ([#338](https://github.com/OpenAdaptAI/openadapt-flow/pull/338),
+  [`1c5c925`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c5c925a0de7b4216559da3f29b3270328c2918e))
+
+- Match RDP environment marker tokens
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Preserve active RDP keyboard focus
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Preserve ambiguous identity landmark refusal
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Preserve drag destination authority
+  ([#339](https://github.com/OpenAdaptAI/openadapt-flow/pull/339),
+  [`3b6d33e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b6d33eb11f9ef26d6698828ee5ebd82b291b57b))
+
+- Preserve exact identity target under ambiguous context
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Preserve qualified machine contracts during scrubbing
+  ([#351](https://github.com/OpenAdaptAI/openadapt-flow/pull/351),
+  [`faf9945`](https://github.com/OpenAdaptAI/openadapt-flow/commit/faf9945537d4011baeb36ce5f063b6e1814903e6))
+
+- Preserve RDP pseudo-step refusals ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Preserve RDP qualification lease before input
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Preserve signed decision semantics
+  ([#339](https://github.com/OpenAdaptAI/openadapt-flow/pull/339),
+  [`3b6d33e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b6d33eb11f9ef26d6698828ee5ebd82b291b57b))
+
+- Preserve verified judgment evidence on save
+  ([#344](https://github.com/OpenAdaptAI/openadapt-flow/pull/344),
+  [`ca94cc2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca94cc29d3664d9f05ae3b6d9a3f5f3c4741db0a))
+
+- Qualify every RDP visual pointer action
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Qualify RDP campaign under standard profile
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Refresh remote scroll frame lease ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Require qualification for new decisions
+  ([#339](https://github.com/OpenAdaptAI/openadapt-flow/pull/339),
+  [`3b6d33e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b6d33eb11f9ef26d6698828ee5ebd82b291b57b))
+
+- Resolve moved RDP targets safely ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Scope identity actuation to remote surfaces
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Use deterministic RDP fixture reset handshake
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Use executable RDP environment identity
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Verify remote text across the live field
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Wait for RDP environment evidence ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- **cli**: Make judgment-case inspection input-free
+  ([#344](https://github.com/OpenAdaptAI/openadapt-flow/pull/344),
+  [`ca94cc2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca94cc29d3664d9f05ae3b6d9a3f5f3c4741db0a))
+
+- **qualification**: Refuse unresolved judgment evidence
+  ([#344](https://github.com/OpenAdaptAI/openadapt-flow/pull/344),
+  [`ca94cc2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca94cc29d3664d9f05ae3b6d9a3f5f3c4741db0a))
+
+- **qualification**: Type local judgment evidence reads
+  ([#344](https://github.com/OpenAdaptAI/openadapt-flow/pull/344),
+  [`ca94cc2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca94cc29d3664d9f05ae3b6d9a3f5f3c4741db0a))
+
+- **qualification**: Verify judgment evidence contracts
+  ([#344](https://github.com/OpenAdaptAI/openadapt-flow/pull/344),
+  [`ca94cc2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca94cc29d3664d9f05ae3b6d9a3f5f3c4741db0a))
+
+### Build System
+
+- Refresh public workflow inventory ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Require portable decision schemas ([#341](https://github.com/OpenAdaptAI/openadapt-flow/pull/341),
+  [`079bbc8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/079bbc863dee82ddae6ccf6c293630f3f6cb78b7))
+
+### Chores
+
+- Diagnose RDP environment marker refusal
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Diagnose RDP pointer delivery ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Refresh public artifact inventory ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Register RDP campaign public artifacts
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Report RDP environment preflight ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+### Code Style
+
+- Format qualified bundle fixes ([#351](https://github.com/OpenAdaptAI/openadapt-flow/pull/351),
+  [`faf9945`](https://github.com/OpenAdaptAI/openadapt-flow/commit/faf9945537d4011baeb36ce5f063b6e1814903e6))
+
+### Continuous Integration
+
+- Allow complete RDP acceptance campaign
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Expose bounded RDP fixture diagnostics
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+### Documentation
+
+- Align Flow 1.31 release evidence ([#340](https://github.com/OpenAdaptAI/openadapt-flow/pull/340),
+  [`c84f6ff`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c84f6ff408a1ab08527eff4c472ed73e3a0380f3))
+
+- Align v2 labels with reviewed vocabulary
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Clarify decision task v2 certification gate
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Define controlled remote entity wording
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Describe v2 qualified decision labels
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Document the current mobile decision path
+  ([#342](https://github.com/OpenAdaptAI/openadapt-flow/pull/342),
+  [`398f238`](https://github.com/OpenAdaptAI/openadapt-flow/commit/398f238550a577fa5905d9aea93c5e4a015ef1f6))
+
+- Use neutral entity language in shared guidance
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+### Features
+
+- Add Citrix acceptance preflight runner
+  ([#338](https://github.com/OpenAdaptAI/openadapt-flow/pull/338),
+  [`1c5c925`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c5c925a0de7b4216559da3f29b3270328c2918e))
+
+- Add non-actuating business decision service
+  ([#350](https://github.com/OpenAdaptAI/openadapt-flow/pull/350),
+  [`8160dc4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8160dc4761f974f59635369733c27631a7516169))
+
+- Add typed decision qualification CLI
+  ([#346](https://github.com/OpenAdaptAI/openadapt-flow/pull/346),
+  [`a93f535`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a93f5352bca4f2a2b49df1f0aa0fc3e3b66cc31c))
+
+- Add typed durable business decisions
+  ([#339](https://github.com/OpenAdaptAI/openadapt-flow/pull/339),
+  [`3b6d33e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b6d33eb11f9ef26d6698828ee5ebd82b291b57b))
+
+- Attest typed decision relay envelopes
+  ([#345](https://github.com/OpenAdaptAI/openadapt-flow/pull/345),
+  [`ba8ab0e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ba8ab0e36ad30c54025564d05be3664d79ccc12f))
+
+- Bind mobile business decisions during qualification
+  ([#348](https://github.com/OpenAdaptAI/openadapt-flow/pull/348),
+  [`cdbe958`](https://github.com/OpenAdaptAI/openadapt-flow/commit/cdbe95803aa795712917d2374abc957d6bfaca36))
+
+- Bind remote volatility comparison contract
+  ([#322](https://github.com/OpenAdaptAI/openadapt-flow/pull/322),
+  [`3b56041`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b560415144811fe3834a68fb864caffde620209))
+
+- Bridge typed business decisions to mobile
+  ([#341](https://github.com/OpenAdaptAI/openadapt-flow/pull/341),
+  [`079bbc8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/079bbc863dee82ddae6ccf6c293630f3f6cb78b7))
+
+- Capture reviewed judgment cases during qualification
+  ([#344](https://github.com/OpenAdaptAI/openadapt-flow/pull/344),
+  [`ca94cc2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca94cc29d3664d9f05ae3b6d9a3f5f3c4741db0a))
+
+- Connect typed decisions to Cloud relay
+  ([#347](https://github.com/OpenAdaptAI/openadapt-flow/pull/347),
+  [`3babe8d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3babe8d7a0d7553ed22fbf3888dbe773122a3b03))
+
+- Emit qualified entity decision tasks v2
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Enforce reviewed decision presentation egress
+  ([#341](https://github.com/OpenAdaptAI/openadapt-flow/pull/341),
+  [`079bbc8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/079bbc863dee82ddae6ccf6c293630f3f6cb78b7))
+
+- Expose canonical entity label options
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Guide label changes through recertification
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Qualify mobile business decision delivery
+  ([#348](https://github.com/OpenAdaptAI/openadapt-flow/pull/348),
+  [`cdbe958`](https://github.com/OpenAdaptAI/openadapt-flow/commit/cdbe95803aa795712917d2374abc957d6bfaca36))
+
+- Require current qualification for decision task v2
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Restrict decision entities to reviewed classes
+  ([#308](https://github.com/OpenAdaptAI/openadapt-flow/pull/308),
+  [`e010c9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e010c9f46cd5744a9c87f1ab818227f14cdf921c))
+
+- Route typed decisions across customer runs
+  ([#349](https://github.com/OpenAdaptAI/openadapt-flow/pull/349),
+  [`0146429`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0146429c962d34dd03da2f9b51f05690fde9b053))
+
+- Select the strongest qualified effect verifier
+  ([`ce35ebd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ce35ebd91eec536f2c52fb6b14591f0ab4dfe37e))
+
+- **qualification**: Add reviewed judgment cases
+  ([#344](https://github.com/OpenAdaptAI/openadapt-flow/pull/344),
+  [`ca94cc2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca94cc29d3664d9f05ae3b6d9a3f5f3c4741db0a))
+
+- **qualification**: Author typed business decisions
+  ([#343](https://github.com/OpenAdaptAI/openadapt-flow/pull/343),
+  [`fe91441`](https://github.com/OpenAdaptAI/openadapt-flow/commit/fe9144173af025d80d8608499d7c0a71a6c17b49))
+
+- **tutorial**: Add guided human recording and paced replay
+  ([#315](https://github.com/OpenAdaptAI/openadapt-flow/pull/315),
+  [`d1b1ced`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d1b1ceddda9914ba32f0daee3b364574fbae73b9))
+
+### Testing
+
+- Add RDP visual fault campaign cells
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Add real-RDP multi-window vision campaign
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Bound and checkpoint the RDP campaign
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Complete RDP multiapp display drift campaign
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Enforce remote scroll preflight order
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Exercise uncertain RDP save delivery
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Export bounded RDP failure diagnostics
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Keep tutorial checks behavioral ([#315](https://github.com/OpenAdaptAI/openadapt-flow/pull/315),
+  [`d1b1ced`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d1b1ceddda9914ba32f0daee3b364574fbae73b9))
+
+- Make uncertain RDP delivery evidence exact
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Retain bounded RDP failure frames ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Retain bounded RDP harness failure location
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- Strengthen RDP vision acceptance oracles
+  ([#327](https://github.com/OpenAdaptAI/openadapt-flow/pull/327),
+  [`ff1a80c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ff1a80ca7f820b54f265f50bcd21d3a1428edfb5))
+
+- **tutorial**: Preserve break-it CLI coverage
+  ([#315](https://github.com/OpenAdaptAI/openadapt-flow/pull/315),
+  [`d1b1ced`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d1b1ceddda9914ba32f0daee3b364574fbae73b9))
+
+## v1.30.0 (2026-08-05)
+
+
+### Bug Fixes
+
+- **ci**: Bound the identity-ladder harness so the fast lane cannot time out
+  ([#333](https://github.com/OpenAdaptAI/openadapt-flow/pull/333),
+  [`ddbbd64`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ddbbd643e87f213141bfea4604d89b0604b0f7ba))
+
+### Chores
+
+- Regenerate reviewed public artifact inventory for the ci.yml lane change
+  ([#333](https://github.com/OpenAdaptAI/openadapt-flow/pull/333),
+  [`ddbbd64`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ddbbd643e87f213141bfea4604d89b0604b0f7ba))
+
+### Documentation
+
+- Measured decomposition plan for runtime/replayer.py
+  ([#330](https://github.com/OpenAdaptAI/openadapt-flow/pull/330),
+  [`caa08b0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/caa08b00b7688b0a17130588eed1300e67b5a1b1))
+
+### Features
+
+- Emit synthetic managed delivery marker
+  ([#337](https://github.com/OpenAdaptAI/openadapt-flow/pull/337),
+  [`c150ad5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c150ad597214eaca27350f8d21f611caa71aade5))
+
+### Testing
+
+- Cover synthetic delivery marker observer boundaries
+  ([#337](https://github.com/OpenAdaptAI/openadapt-flow/pull/337),
+  [`c150ad5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c150ad597214eaca27350f8d21f611caa71aade5))
+
+## v1.29.0 (2026-08-02)
+
+
+### Documentation
+
+- Align entry commands and substrate maturity across repo READMEs
+  ([#329](https://github.com/OpenAdaptAI/openadapt-flow/pull/329),
+  [`f9f866b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f9f866b9f323ca032a104fe300c94aeebf8db355))
+
+### Features
+
+- **tutorial**: Add --break-it, the caught-fault demonstration
+  ([#331](https://github.com/OpenAdaptAI/openadapt-flow/pull/331),
+  [`902b987`](https://github.com/OpenAdaptAI/openadapt-flow/commit/902b9871ae0964744d6a9e0ae8a87973d654f838))
+
+## v1.28.0 (2026-08-02)
+
+
+### Bug Fixes
+
+- Deliver consequential remote clicks through the frame lease
+  ([`c9618cc`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c9618ccb22753395d2fbe2c1a2dfb2424610730a))
+
+- Simplify the RDP buyer presentation
+  ([`ccdd155`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ccdd155ab2de571e4da32a17238a2f359fd067ad))
+
+### Features
+
+- Carry managed Execute authority through BYOC
+  ([`e054caa`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e054caa4c888e90c0732fccfeb9151e36051661f))
+
+## v1.27.1 (2026-07-31)
+
+
+### Bug Fixes
+
+- Clarify the RDP proof presentation
+  ([#324](https://github.com/OpenAdaptAI/openadapt-flow/pull/324),
+  [`ca1b9c4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ca1b9c4884f3fc70af282274a9571fb9cad88d04))
+
+- **qualification**: Bind public evidence to case authority
+  ([`bd4c81e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd4c81e7e33353d275d6f4320663e6e187f73198))
+
+- **qualification**: Run sealed local cases through governed authority
+  ([`fafdf0e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/fafdf0e8bef766851563eb092015f4a266bb7f32))
+
+### Chores
+
+- Improve RDP demo layout and pacing
+  ([`c535bab`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c535bab13e544b0d7e24c8bb0d2d6c0dfded7e16))
+
+- **rdp**: Export evidence-bound hybrid timeline
+  ([`6f87e87`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6f87e877faf2749e732c01b31ac4e8673c3cddde))
+
+- **rdp**: Export proof-linked buyer demo
+  ([`6673dd9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6673dd97de169d8c500031c4ac4c64a95bb71656))
+
+- **rdp**: Publish exact appointment qualification proof
+  ([`6846b69`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6846b699027f2696c1604461d87cb0895d87a52e))
+
+### Code Style
+
+- Format qualification authority changes
+  ([`bd4c81e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd4c81e7e33353d275d6f4320663e6e187f73198))
+
+## v1.27.0 (2026-07-29)
+
+
+### Features
+
+- Add attended reconciliation action
+  ([#307](https://github.com/OpenAdaptAI/openadapt-flow/pull/307),
+  [`e8fb96a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e8fb96a646338d44e0e643ca28127b0083e89cd4))
+
+## v1.26.0 (2026-07-29)
+
+
+### Bug Fixes
+
+- Correct OpenEMR saved-row benchmark claims
+  ([#302](https://github.com/OpenAdaptAI/openadapt-flow/pull/302),
+  [`aee0941`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aee094193b232f472f991be6fa9b33c3c4b3f9be))
+
+- Preserve visual field verification scope
+  ([#291](https://github.com/OpenAdaptAI/openadapt-flow/pull/291),
+  [`45f2700`](https://github.com/OpenAdaptAI/openadapt-flow/commit/45f2700991e8a3885d86dce11e85a534083bda11))
+
+- Require saved-row context in OpenEMR oracle
+  ([#302](https://github.com/OpenAdaptAI/openadapt-flow/pull/302),
+  [`aee0941`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aee094193b232f472f991be6fa9b33c3c4b3f9be))
+
+- **benchmark**: Check the MockMed encounter type as its own field
+  ([#302](https://github.com/OpenAdaptAI/openadapt-flow/pull/302),
+  [`aee0941`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aee094193b232f472f991be6fa9b33c3c4b3f9be))
+
+- **benchmark**: Refuse ambiguous bare note rows
+  ([#302](https://github.com/OpenAdaptAI/openadapt-flow/pull/302),
+  [`aee0941`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aee094193b232f472f991be6fa9b33c3c4b3f9be))
+
+- **ci**: Keep unrelated release failures inside grace
+  ([#288](https://github.com/OpenAdaptAI/openadapt-flow/pull/288),
+  [`f133bbd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f133bbdbe19fab6b8f4c7a8aef315736de1ca04b))
+
+- **ci**: Make release-health alerts fail observable
+  ([#288](https://github.com/OpenAdaptAI/openadapt-flow/pull/288),
+  [`f133bbd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f133bbdbe19fab6b8f4c7a8aef315736de1ca04b))
+
+- **compiler**: Prove selection anchor to type checker
+  ([#291](https://github.com/OpenAdaptAI/openadapt-flow/pull/291),
+  [`45f2700`](https://github.com/OpenAdaptAI/openadapt-flow/commit/45f2700991e8a3885d86dce11e85a534083bda11))
+
+- **compiler**: Retain exact opaque field labels
+  ([`67ebec2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/67ebec2afa8253df738a34a75e6deb1228c94a78))
+
+- **console**: Adopt the shared receipt contract and close a free-text field
+  ([#290](https://github.com/OpenAdaptAI/openadapt-flow/pull/290),
+  [`156562a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/156562a032dd2fe3c5e775d0cb1d2553c81691d6))
+
+- **console**: Stop a rejected run from lingering as an answerable pause
+  ([#295](https://github.com/OpenAdaptAI/openadapt-flow/pull/295),
+  [`736ff8f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/736ff8f3be74d3715d854b3addf4e6680ae61a28))
+
+- **decisions**: Bind the delivery ceiling to the run's actual profile
+  ([#296](https://github.com/OpenAdaptAI/openadapt-flow/pull/296),
+  [`42114ca`](https://github.com/OpenAdaptAI/openadapt-flow/commit/42114ca6eac02fbb48efb773b08e6b1de82c4d63))
+
+- **decisions**: Do not report a memoized publish as an observation
+  ([#297](https://github.com/OpenAdaptAI/openadapt-flow/pull/297),
+  [`3aa71b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3aa71b63d39c575cdbb90620235e1e4ee1237a83))
+
+- **decisions**: Let the relay carry every answer, not only Continue
+  ([#296](https://github.com/OpenAdaptAI/openadapt-flow/pull/296),
+  [`42114ca`](https://github.com/OpenAdaptAI/openadapt-flow/commit/42114ca6eac02fbb48efb773b08e6b1de82c4d63))
+
+- **decisions**: One refused pause must not silence the rest of the queue
+  ([#297](https://github.com/OpenAdaptAI/openadapt-flow/pull/297),
+  [`3aa71b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3aa71b63d39c575cdbb90620235e1e4ee1237a83))
+
+- **decisions**: Preserve completed outcome across lost ack
+  ([#297](https://github.com/OpenAdaptAI/openadapt-flow/pull/297),
+  [`3aa71b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3aa71b63d39c575cdbb90620235e1e4ee1237a83))
+
+- **decisions**: Recover lost acknowledgements after restart
+  ([#297](https://github.com/OpenAdaptAI/openadapt-flow/pull/297),
+  [`3aa71b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3aa71b63d39c575cdbb90620235e1e4ee1237a83))
+
+- **decisions**: Stop the loop spinning on a decision it always refuses
+  ([#297](https://github.com/OpenAdaptAI/openadapt-flow/pull/297),
+  [`3aa71b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3aa71b63d39c575cdbb90620235e1e4ee1237a83))
+
+- **decisions**: Type the halt-context schema constant as its literal
+  ([#296](https://github.com/OpenAdaptAI/openadapt-flow/pull/296),
+  [`42114ca`](https://github.com/OpenAdaptAI/openadapt-flow/commit/42114ca6eac02fbb48efb773b08e6b1de82c4d63))
+
+- **docs**: Correct a false halt claim; pin HOW the free path reaches VERIFIED
+  ([#298](https://github.com/OpenAdaptAI/openadapt-flow/pull/298),
+  [`6755c61`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6755c6153385253df758064766609480efa198b3))
+
+- **docs**: Correct the halt outcome the tutorial's fault probe actually reports
+  ([#298](https://github.com/OpenAdaptAI/openadapt-flow/pull/298),
+  [`6755c61`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6755c6153385253df758064766609480efa198b3))
+
+- **paper**: Bind the corrected OpenEMR count
+  ([#302](https://github.com/OpenAdaptAI/openadapt-flow/pull/302),
+  [`aee0941`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aee094193b232f472f991be6fa9b33c3c4b3f9be))
+
+- **rdp**: Bind identity checks to actuation frame
+  ([#291](https://github.com/OpenAdaptAI/openadapt-flow/pull/291),
+  [`45f2700`](https://github.com/OpenAdaptAI/openadapt-flow/commit/45f2700991e8a3885d86dce11e85a534083bda11))
+
+- **rdp**: Preserve native typeahead delivery
+  ([#291](https://github.com/OpenAdaptAI/openadapt-flow/pull/291),
+  [`45f2700`](https://github.com/OpenAdaptAI/openadapt-flow/commit/45f2700991e8a3885d86dce11e85a534083bda11))
+
+- **rdp**: Revalidate focused selects from context
+  ([#299](https://github.com/OpenAdaptAI/openadapt-flow/pull/299),
+  [`3481b42`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3481b42d060369ea45d75478ec13f0fc1e77e251))
+
+- **remote**: Require direct target evidence for scroll readiness
+  ([#291](https://github.com/OpenAdaptAI/openadapt-flow/pull/291),
+  [`45f2700`](https://github.com/OpenAdaptAI/openadapt-flow/commit/45f2700991e8a3885d86dce11e85a534083bda11))
+
+### Chores
+
+- Gitignore .private/ ([#292](https://github.com/OpenAdaptAI/openadapt-flow/pull/292),
+  [`02a1b5d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/02a1b5d512a337ca6d6f373b0ff04a0c9073a60a))
+
+- Refresh public artifact inventory ([#302](https://github.com/OpenAdaptAI/openadapt-flow/pull/302),
+  [`aee0941`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aee094193b232f472f991be6fa9b33c3c4b3f9be))
+
+- Regenerate the reviewed public artifact inventory for console.js
+  ([#290](https://github.com/OpenAdaptAI/openadapt-flow/pull/290),
+  [`156562a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/156562a032dd2fe3c5e775d0cb1d2553c81691d6))
+
+- **release**: Derive the private-artifact rules from the policy manifest
+  ([#300](https://github.com/OpenAdaptAI/openadapt-flow/pull/300),
+  [`83b56d4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/83b56d4ec5a68bf649007b54efeba1300561be5f))
+
+- **release**: Re-review the public artifact inventory for console.js
+  ([#295](https://github.com/OpenAdaptAI/openadapt-flow/pull/295),
+  [`736ff8f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/736ff8f3be74d3715d854b3addf4e6680ae61a28))
+
+### Code Style
+
+- Format benchmark oracle changes ([#302](https://github.com/OpenAdaptAI/openadapt-flow/pull/302),
+  [`aee0941`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aee094193b232f472f991be6fa9b33c3c4b3f9be))
+
+### Continuous Integration
+
+- Bump the actions group with 2 updates
+  ([#286](https://github.com/OpenAdaptAI/openadapt-flow/pull/286),
+  [`cee096e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/cee096e0c00f93fe0d9f65c8998902039d17c69b))
+
+- Re-sign the public artifact inventory for release-health.yml
+  ([#288](https://github.com/OpenAdaptAI/openadapt-flow/pull/288),
+  [`f133bbd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f133bbdbe19fab6b8f4c7a8aef315736de1ca04b))
+
+### Documentation
+
+- **decisions**: Say why an unresolvable decision is the safe failure
+  ([#297](https://github.com/OpenAdaptAI/openadapt-flow/pull/297),
+  [`3aa71b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3aa71b63d39c575cdbb90620235e1e4ee1237a83))
+
+- **effect-kit**: Note that a refuted STEP is not a refuted RUN
+  ([#298](https://github.com/OpenAdaptAI/openadapt-flow/pull/298),
+  [`6755c61`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6755c6153385253df758064766609480efa198b3))
+
+- **exception-inbox**: Record the new delivery tier and the outbound relay
+  ([#296](https://github.com/OpenAdaptAI/openadapt-flow/pull/296),
+  [`42114ca`](https://github.com/OpenAdaptAI/openadapt-flow/commit/42114ca6eac02fbb48efb773b08e6b1de82c4d63))
+
+### Features
+
+- Bind governed authorization templates to hosted attestations
+  ([`263683a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/263683ac19ae60f3ced076980688291e048f8cfa))
+
+- Complete governed qualification and managed delivery authority
+  ([`bc4a49c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bc4a49c3632fedc6ec0dc41ad8bd9eeb5611564a))
+
+- **attended**: Let an operator reject a halt and end the run
+  ([#295](https://github.com/OpenAdaptAI/openadapt-flow/pull/295),
+  [`736ff8f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/736ff8f3be74d3715d854b3addf4e6680ae61a28))
+
+- **console**: Close the mobile attended-decision loop with an e2e acceptance test
+  ([#290](https://github.com/OpenAdaptAI/openadapt-flow/pull/290),
+  [`156562a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/156562a032dd2fe3c5e775d0cb1d2553c81691d6))
+
+- **console**: Tell the operator what broke, in the local projection only
+  ([#290](https://github.com/OpenAdaptAI/openadapt-flow/pull/290),
+  [`156562a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/156562a032dd2fe3c5e775d0cb1d2553c81691d6))
+
+- **decisions**: Deliver halts to a phone without customer TLS ingress
+  ([#296](https://github.com/OpenAdaptAI/openadapt-flow/pull/296),
+  [`42114ca`](https://github.com/OpenAdaptAI/openadapt-flow/commit/42114ca6eac02fbb48efb773b08e6b1de82c4d63))
+
+- **decisions**: Run the outbound decision lane, so a halt reaches a phone
+  ([#297](https://github.com/OpenAdaptAI/openadapt-flow/pull/297),
+  [`3aa71b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3aa71b63d39c575cdbb90620235e1e4ee1237a83))
+
+- **rdp**: Atomically verify native option selections
+  ([#291](https://github.com/OpenAdaptAI/openadapt-flow/pull/291),
+  [`45f2700`](https://github.com/OpenAdaptAI/openadapt-flow/commit/45f2700991e8a3885d86dce11e85a534083bda11))
+
+- **rdp**: Compile atomic native option selections
+  ([#291](https://github.com/OpenAdaptAI/openadapt-flow/pull/291),
+  [`45f2700`](https://github.com/OpenAdaptAI/openadapt-flow/commit/45f2700991e8a3885d86dce11e85a534083bda11))
+
+### Refactoring
+
+- **attended**: Read the run report without depending on the console
+  ([#295](https://github.com/OpenAdaptAI/openadapt-flow/pull/295),
+  [`736ff8f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/736ff8f3be74d3715d854b3addf4e6680ae61a28))
+
+### Testing
+
+- **attended**: Pin that a rejection survives an unreadable run report
+  ([#295](https://github.com/OpenAdaptAI/openadapt-flow/pull/295),
+  [`736ff8f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/736ff8f3be74d3715d854b3addf4e6680ae61a28))
+
+- **attended**: Pin that rejecting a run that already wrote cannot claim absence
+  ([#295](https://github.com/OpenAdaptAI/openadapt-flow/pull/295),
+  [`736ff8f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/736ff8f3be74d3715d854b3addf4e6680ae61a28))
+
+- **benchmark**: Isolate encounter type parser
+  ([#302](https://github.com/OpenAdaptAI/openadapt-flow/pull/302),
+  [`aee0941`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aee094193b232f472f991be6fa9b33c3c4b3f9be))
+
+- **console**: Pin the exact receipt contract a portal shell must render
+  ([#290](https://github.com/OpenAdaptAI/openadapt-flow/pull/290),
+  [`156562a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/156562a032dd2fe3c5e775d0cb1d2553c81691d6))
+
+- **decisions**: Pin that a phone's Reject ends the run it names
+  ([#297](https://github.com/OpenAdaptAI/openadapt-flow/pull/297),
+  [`3aa71b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3aa71b63d39c575cdbb90620235e1e4ee1237a83))
+
+- **e2e**: Pin HOW the free path reaches VERIFIED, not only that it does
+  ([#298](https://github.com/OpenAdaptAI/openadapt-flow/pull/298),
+  [`6755c61`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6755c6153385253df758064766609480efa198b3))
+
+- **halt-detail**: Stop a digest collision reading as a PHI leak
+  ([#296](https://github.com/OpenAdaptAI/openadapt-flow/pull/296),
+  [`42114ca`](https://github.com/OpenAdaptAI/openadapt-flow/commit/42114ca6eac02fbb48efb773b08e6b1de82c4d63))
+
+## v1.25.1 (2026-07-27)
+
+
+### Bug Fixes
+
+- **compiler**: Stop a parameter's demonstrated value becoming a pixel invariant
+  ([#285](https://github.com/OpenAdaptAI/openadapt-flow/pull/285),
+  [`c068554`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c068554edd280b4b7defe1233c564bfab6a312f5))
+
+- **receipt**: Close remaining verified-evidence gaps
+  ([#289](https://github.com/OpenAdaptAI/openadapt-flow/pull/289),
+  [`2be3327`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2be33278f41a5dc232133da515ae3bebbe8656bb))
+
+- **receipt**: Require complete evidence for VERIFIED receipts
+  ([#289](https://github.com/OpenAdaptAI/openadapt-flow/pull/289),
+  [`2be3327`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2be33278f41a5dc232133da515ae3bebbe8656bb))
+
+- **receipt**: Require complete verified evidence
+  ([#289](https://github.com/OpenAdaptAI/openadapt-flow/pull/289),
+  [`2be3327`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2be33278f41a5dc232133da515ae3bebbe8656bb))
+
+- **receipt**: Revalidate complete verified evidence
+  ([#289](https://github.com/OpenAdaptAI/openadapt-flow/pull/289),
+  [`2be3327`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2be33278f41a5dc232133da515ae3bebbe8656bb))
+
+### Documentation
+
+- Label every headline benchmark number with the engine it was measured on
+  ([#284](https://github.com/OpenAdaptAI/openadapt-flow/pull/284),
+  [`40b7960`](https://github.com/OpenAdaptAI/openadapt-flow/commit/40b7960b676c73f1c79212e77b5437453b51439b))
+
+- Re-pin the reviewed public artifact inventory hashes
+  ([#284](https://github.com/OpenAdaptAI/openadapt-flow/pull/284),
+  [`40b7960`](https://github.com/OpenAdaptAI/openadapt-flow/commit/40b7960b676c73f1c79212e77b5437453b51439b))
+
+- Separate benchmark measurement from artifact provenance
+  ([#284](https://github.com/OpenAdaptAI/openadapt-flow/pull/284),
+  [`40b7960`](https://github.com/OpenAdaptAI/openadapt-flow/commit/40b7960b676c73f1c79212e77b5437453b51439b))
+
+## v1.25.0 (2026-07-27)
+
+
+### Bug Fixes
+
+- Apply qualified risk overrides to runtime
+  ([#269](https://github.com/OpenAdaptAI/openadapt-flow/pull/269),
+  [`6874a08`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6874a08002fc63ece964734d74c84ac277cc55d2))
+
+- Bind attended authority to qualified safety paths
+  ([#275](https://github.com/OpenAdaptAI/openadapt-flow/pull/275),
+  [`1ee0200`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1ee02004e5040d994638ac3585388e98d2b16e70))
+
+- Bind qualification to policy and effect paths
+  ([#269](https://github.com/OpenAdaptAI/openadapt-flow/pull/269),
+  [`6874a08`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6874a08002fc63ece964734d74c84ac277cc55d2))
+
+- Bind qualified policy authority end to end
+  ([#269](https://github.com/OpenAdaptAI/openadapt-flow/pull/269),
+  [`6874a08`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6874a08002fc63ece964734d74c84ac277cc55d2))
+
+- Bind qualified risk and effect policy end to end
+  ([#269](https://github.com/OpenAdaptAI/openadapt-flow/pull/269),
+  [`6874a08`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6874a08002fc63ece964734d74c84ac277cc55d2))
+
+- Bind qualified risk authority ([#269](https://github.com/OpenAdaptAI/openadapt-flow/pull/269),
+  [`6874a08`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6874a08002fc63ece964734d74c84ac277cc55d2))
+
+- Bind typed risk in qualification lane
+  ([#269](https://github.com/OpenAdaptAI/openadapt-flow/pull/269),
+  [`6874a08`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6874a08002fc63ece964734d74c84ac277cc55d2))
+
+- Infer click risk from accessible labels
+  ([#278](https://github.com/OpenAdaptAI/openadapt-flow/pull/278),
+  [`befae86`](https://github.com/OpenAdaptAI/openadapt-flow/commit/befae865a9cda8fdfe18059e40e6cc034ed8331a))
+
+- Keep API effects out of GUI approvals
+  ([#269](https://github.com/OpenAdaptAI/openadapt-flow/pull/269),
+  [`6874a08`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6874a08002fc63ece964734d74c84ac277cc55d2))
+
+- **paper**: Align artifact constants with the corrected absence semantics
+  ([#280](https://github.com/OpenAdaptAI/openadapt-flow/pull/280),
+  [`11c115c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/11c115ca4641cd2fca5c6e1501ff129a8860fca3))
+
+- **risk**: Stop flagging text-field focus clicks as ambiguous
+  ([#278](https://github.com/OpenAdaptAI/openadapt-flow/pull/278),
+  [`befae86`](https://github.com/OpenAdaptAI/openadapt-flow/commit/befae865a9cda8fdfe18059e40e6cc034ed8331a))
+
+- **transaction**: Close reconciliation evidence gaps
+  ([#280](https://github.com/OpenAdaptAI/openadapt-flow/pull/280),
+  [`11c115c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/11c115ca4641cd2fca5c6e1501ff129a8860fca3))
+
+- **transaction**: Prove absence at delivery boundary
+  ([#280](https://github.com/OpenAdaptAI/openadapt-flow/pull/280),
+  [`11c115c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/11c115ca4641cd2fca5c6e1501ff129a8860fca3))
+
+- **transaction**: Require positive evidence of absence for HALTED_BEFORE_EFFECT
+  ([#280](https://github.com/OpenAdaptAI/openadapt-flow/pull/280),
+  [`11c115c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/11c115ca4641cd2fca5c6e1501ff129a8860fca3))
+
+### Chores
+
+- Refresh public artifact inventory ([#274](https://github.com/OpenAdaptAI/openadapt-flow/pull/274),
+  [`3011558`](https://github.com/OpenAdaptAI/openadapt-flow/commit/30115589a984345fa472af2264778bd43725cb1e))
+
+### Code Style
+
+- Format browser setup contract ([#273](https://github.com/OpenAdaptAI/openadapt-flow/pull/273),
+  [`d5ce14f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d5ce14fff52f4bf5a0897280c0141b6526d469ae))
+
+- Format identity signal tests ([#279](https://github.com/OpenAdaptAI/openadapt-flow/pull/279),
+  [`3f34200`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3f34200a438728480d3d1bcbcba4cc39160143ed))
+
+- Format qualification override ([#269](https://github.com/OpenAdaptAI/openadapt-flow/pull/269),
+  [`6874a08`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6874a08002fc63ece964734d74c84ac277cc55d2))
+
+### Continuous Integration
+
+- Detect unreleased work and silently skipped publishes
+  ([#283](https://github.com/OpenAdaptAI/openadapt-flow/pull/283),
+  [`cc835fc`](https://github.com/OpenAdaptAI/openadapt-flow/commit/cc835fc31f6b505d77774525b3a282bc1f20e354))
+
+- Move recurring qualification matrices to weekly gates
+  ([#274](https://github.com/OpenAdaptAI/openadapt-flow/pull/274),
+  [`3011558`](https://github.com/OpenAdaptAI/openadapt-flow/commit/30115589a984345fa472af2264778bd43725cb1e))
+
+- Register the release-health artifacts in the reviewed public inventory
+  ([#283](https://github.com/OpenAdaptAI/openadapt-flow/pull/283),
+  [`cc835fc`](https://github.com/OpenAdaptAI/openadapt-flow/commit/cc835fc31f6b505d77774525b3a282bc1f20e354))
+
+- Reserve recurring qualification matrices for weekly gates
+  ([#274](https://github.com/OpenAdaptAI/openadapt-flow/pull/274),
+  [`3011558`](https://github.com/OpenAdaptAI/openadapt-flow/commit/30115589a984345fa472af2264778bd43725cb1e))
+
+### Documentation
+
+- Bind the per-scenario coverage matrix to its artifact slip sets
+  ([#277](https://github.com/OpenAdaptAI/openadapt-flow/pull/277),
+  [`153bc3f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/153bc3f15b179fa5186d921e48bbba1233eeaf3a))
+
+- Make the paper submission-ready and discharge both adversarial reviews
+  ([#277](https://github.com/OpenAdaptAI/openadapt-flow/pull/277),
+  [`153bc3f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/153bc3f15b179fa5186d921e48bbba1233eeaf3a))
+
+- Remove a duplicated scoping sentence from related work
+  ([#277](https://github.com/OpenAdaptAI/openadapt-flow/pull/277),
+  [`153bc3f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/153bc3f15b179fa5186d921e48bbba1233eeaf3a))
+
+- **effectbench**: Frame reference counts as pinned fixture values, not a result
+  ([#276](https://github.com/OpenAdaptAI/openadapt-flow/pull/276),
+  [`ab64734`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ab64734a85d93c552ff956390f11403654f61799))
+
+### Features
+
+- Add signed attended decision portal
+  ([#272](https://github.com/OpenAdaptAI/openadapt-flow/pull/272),
+  [`90fc48f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/90fc48ff964882c2adaf63532b8fad60b34d4faa))
+
+- Bind PHI-free qualified identity signals
+  ([#279](https://github.com/OpenAdaptAI/openadapt-flow/pull/279),
+  [`3f34200`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3f34200a438728480d3d1bcbcba4cc39160143ed))
+
+- Bind remote attended decisions to AAL2
+  ([#275](https://github.com/OpenAdaptAI/openadapt-flow/pull/275),
+  [`1ee0200`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1ee02004e5040d994638ac3585388e98d2b16e70))
+
+- Make browser runtime an opt-in capability
+  ([#273](https://github.com/OpenAdaptAI/openadapt-flow/pull/273),
+  [`d5ce14f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d5ce14fff52f4bf5a0897280c0141b6526d469ae))
+
+- **tutorial**: Make the free path reach VERIFIED and emit a local receipt
+  ([#281](https://github.com/OpenAdaptAI/openadapt-flow/pull/281),
+  [`2752813`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2752813ccb12910732d8b4c174e717c4b120e04e))
+
+### Testing
+
+- Reconcile partially verified tutorial fault
+  ([#280](https://github.com/OpenAdaptAI/openadapt-flow/pull/280),
+  [`11c115c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/11c115ca4641cd2fca5c6e1501ff129a8860fca3))
+
+## v1.24.0 (2026-07-27)
+
+
+### Bug Fixes
+
+- Harden rich action admission ([#268](https://github.com/OpenAdaptAI/openadapt-flow/pull/268),
+  [`9dcda2d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9dcda2d9407d1deba0099de2c93e55c39c37dd89))
+
+- Invalidate certification when sealing bundles
+  ([`a1edd0a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a1edd0a5249536cc6ec4daed4ecbf6d44d0adf30))
+
+- Keep generated benchmark runs out of distributions
+  ([`39070de`](https://github.com/OpenAdaptAI/openadapt-flow/commit/39070de25832680a3745cfa6e1650f44a7e648b2))
+
+- Make browser actuation guards semantic
+  ([`130b9be`](https://github.com/OpenAdaptAI/openadapt-flow/commit/130b9becf58c1fb9ad3b269a2010506162d78ad7))
+
+- Narrow failure signal categories for mypy
+  ([#270](https://github.com/OpenAdaptAI/openadapt-flow/pull/270),
+  [`35be7ff`](https://github.com/OpenAdaptAI/openadapt-flow/commit/35be7ffea34df750df598fe3caddaa08ed4c4ee6))
+
+- Preserve full-frame identity OCR scope
+  ([#267](https://github.com/OpenAdaptAI/openadapt-flow/pull/267),
+  [`4090af4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4090af417d37e242876dc11b843acda20c428f9e))
+
+- Preserve sealed v2 bundle digests ([#268](https://github.com/OpenAdaptAI/openadapt-flow/pull/268),
+  [`9dcda2d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9dcda2d9407d1deba0099de2c93e55c39c37dd89))
+
+- Preserve standard external encryption boundary
+  ([`c25d45c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c25d45c60382234ddd9f4cb78c19994d05b7e2d4))
+
+- Require review for ambiguous rich actions
+  ([#268](https://github.com/OpenAdaptAI/openadapt-flow/pull/268),
+  [`9dcda2d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9dcda2d9407d1deba0099de2c93e55c39c37dd89))
+
+- Restore scheduled qualification gates
+  ([#267](https://github.com/OpenAdaptAI/openadapt-flow/pull/267),
+  [`4090af4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4090af417d37e242876dc11b843acda20c428f9e))
+
+- Retain compiled demo bundle evidence
+  ([`0779c45`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0779c45b8ab55ccb26553e943563d2d4dddaeb88))
+
+- **bench**: Register citrix_ica_hdx artifacts in inventory + ruff format
+  ([`22fbb3a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/22fbb3a0afe44abf0ac2c71244c1e2a2663992b6))
+
+- **bundle**: Preserve sealed v2 frame-path compatibility
+  ([#254](https://github.com/OpenAdaptAI/openadapt-flow/pull/254),
+  [`f9091aa`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f9091aab0f22b4a65401252b94d648a939da0575))
+
+- **bundle**: Version sealed canonicalization rules
+  ([#254](https://github.com/OpenAdaptAI/openadapt-flow/pull/254),
+  [`f9091aa`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f9091aab0f22b4a65401252b94d648a939da0575))
+
+- **demo**: Bind claims to exact presentation sources
+  ([`80c3d0c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/80c3d0ca3930ec67e6239b0e28fedc2ad1f72a8d))
+
+- **demo**: Keep validator independent of interop extra
+  ([`f8d0fa5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f8d0fa5c7674ea9ceec1930871f2543a7bc0b857))
+
+- **effects**: Harden verifier evidence boundaries
+  ([#264](https://github.com/OpenAdaptAI/openadapt-flow/pull/264),
+  [`a36660d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a36660d6ad7bce3229c0fc5f80121e285e8e67c2))
+
+- **effects**: Ship only working verifier surfaces
+  ([#264](https://github.com/OpenAdaptAI/openadapt-flow/pull/264),
+  [`a36660d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a36660d6ad7bce3229c0fc5f80121e285e8e67c2))
+
+- **playwright**: Bind frame-scoped identity and input
+  ([#252](https://github.com/OpenAdaptAI/openadapt-flow/pull/252),
+  [`4c4fea6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4c4fea69565d7662cedba49b6477763044179644))
+
+- **playwright**: Follow hit-tested frame chain
+  ([#249](https://github.com/OpenAdaptAI/openadapt-flow/pull/249),
+  [`e4dd9ea`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e4dd9ea96aadd34d4a05374f48564945289d7fe2))
+
+- **playwright**: Reprove ancestor frame chain
+  ([#249](https://github.com/OpenAdaptAI/openadapt-flow/pull/249),
+  [`e4dd9ea`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e4dd9ea96aadd34d4a05374f48564945289d7fe2))
+
+- **recorder**: Never leak a nested control's typed value into field_label
+  ([#262](https://github.com/OpenAdaptAI/openadapt-flow/pull/262),
+  [`4f5120b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4f5120bbefce89ff1c8442446ff781ff3df7e327))
+
+- **release**: Inventory public evidence videos
+  ([`7cc518e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7cc518ee0b83dd571c0902423134a5525635e6b2))
+
+- **release**: Require public artifacts tracked
+  ([`1001d03`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1001d03142189a3c09f4ba012297ebc68081558c))
+
+- **runtime**: Bind overlay targets to event instances
+  ([#251](https://github.com/OpenAdaptAI/openadapt-flow/pull/251),
+  [`b8734c6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b8734c6da63ed0ec0300b44b980e4f47f9bff87e))
+
+- **runtime**: Verify uncertain delivery without retry
+  ([#250](https://github.com/OpenAdaptAI/openadapt-flow/pull/250),
+  [`b1fbd3e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b1fbd3e1120ba559197ca22a05acb07e5282b755))
+
+### Chores
+
+- Refresh regulated deployment artifact inventory
+  ([`ad9969f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ad9969fe25eab3df7d7e5679424ea3fa4cc7d9be))
+
+- **demo**: Regenerate evidence on exact main
+  ([`cab2fb8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/cab2fb8eca4f488f5bb71810b012005ec0ea36ae))
+
+- **release**: Refresh public artifact inventory
+  ([#251](https://github.com/OpenAdaptAI/openadapt-flow/pull/251),
+  [`b8734c6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b8734c6da63ed0ec0300b44b980e4f47f9bff87e))
+
+- **release**: Refresh public artifact inventory hashes (ci.yml, deployment.example.yaml)
+  ([#264](https://github.com/OpenAdaptAI/openadapt-flow/pull/264),
+  [`a36660d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a36660d6ad7bce3229c0fc5f80121e285e8e67c2))
+
+- **release**: Refresh verifier artifact inventory
+  ([#264](https://github.com/OpenAdaptAI/openadapt-flow/pull/264),
+  [`a36660d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a36660d6ad7bce3229c0fc5f80121e285e8e67c2))
+
+### Code Style
+
+- Format failure signal path ([#270](https://github.com/OpenAdaptAI/openadapt-flow/pull/270),
+  [`35be7ff`](https://github.com/OpenAdaptAI/openadapt-flow/commit/35be7ffea34df750df598fe3caddaa08ed4c4ee6))
+
+- Ruff-format transaction module (restores lint gate)
+  ([#260](https://github.com/OpenAdaptAI/openadapt-flow/pull/260),
+  [`75e2050`](https://github.com/OpenAdaptAI/openadapt-flow/commit/75e20505283fa92bdbd348efb148cefcd7f57b9e))
+
+### Continuous Integration
+
+- Refresh wheel artifact inventory ([#264](https://github.com/OpenAdaptAI/openadapt-flow/pull/264),
+  [`a36660d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a36660d6ad7bce3229c0fc5f80121e285e8e67c2))
+
+- Remove retired verifier stub path ([#264](https://github.com/OpenAdaptAI/openadapt-flow/pull/264),
+  [`a36660d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a36660d6ad7bce3229c0fc5f80121e285e8e67c2))
+
+- Validate exact overlay emitter head
+  ([#251](https://github.com/OpenAdaptAI/openadapt-flow/pull/251),
+  [`b8734c6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b8734c6da63ed0ec0300b44b980e4f47f9bff87e))
+
+### Documentation
+
+- Drop em dashes from the new parameter-identification section
+  ([#262](https://github.com/OpenAdaptAI/openadapt-flow/pull/262),
+  [`4f5120b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4f5120bbefce89ff1c8442446ff781ff3df7e327))
+
+- Make public demo exporter invocation runnable
+  ([`022aa30`](https://github.com/OpenAdaptAI/openadapt-flow/commit/022aa3074eee66351dcacb10651919bd4ada3120))
+
+### Features
+
+- Add atomic bundle sealing command
+  ([`11e7410`](https://github.com/OpenAdaptAI/openadapt-flow/commit/11e7410d6eb1841c8a7d2b615a5ed7b57269ba0e))
+
+- Emit privacy-safe failures from customer runners
+  ([#270](https://github.com/OpenAdaptAI/openadapt-flow/pull/270),
+  [`35be7ff`](https://github.com/OpenAdaptAI/openadapt-flow/commit/35be7ffea34df750df598fe3caddaa08ed4c4ee6))
+
+- Emit private failure signals from BYOC
+  ([#270](https://github.com/OpenAdaptAI/openadapt-flow/pull/270),
+  [`35be7ff`](https://github.com/OpenAdaptAI/openadapt-flow/commit/35be7ffea34df750df598fe3caddaa08ed4c4ee6))
+
+- Govern rich input actions across substrates
+  ([#268](https://github.com/OpenAdaptAI/openadapt-flow/pull/268),
+  [`9dcda2d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9dcda2d9407d1deba0099de2c93e55c39c37dd89))
+
+- Govern right-click, drag, and shortcuts across substrates
+  ([#268](https://github.com/OpenAdaptAI/openadapt-flow/pull/268),
+  [`9dcda2d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9dcda2d9407d1deba0099de2c93e55c39c37dd89))
+
+- Seal durable state for encrypted production runs
+  ([`1cc42d6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1cc42d6ba2eba317a93b617a010c26e74cafdbfc))
+
+- **cli**: Explicit surface selection for production profiles + surface-bound workflows (Section 5)
+  ([#263](https://github.com/OpenAdaptAI/openadapt-flow/pull/263),
+  [`f7eca97`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f7eca972cd5bc04126ed344a34b1c2c149f8bc34))
+
+- **compiler**: Field-label parameter inference with one-shot operator confirm
+  ([#262](https://github.com/OpenAdaptAI/openadapt-flow/pull/262),
+  [`4f5120b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4f5120bbefce89ff1c8442446ff781ff3df7e327))
+
+- **demo**: Bind presentation clips to exact runtime frames
+  ([`018516d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/018516d6bd9f48c00134fbb57df6c0b9ed9ea8f6))
+
+- **demo**: Publish audited exact-bound MockMed v3 evidence
+  ([`810e5bb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/810e5bb29322321f36008e2869d51a96c07d0363))
+
+- **effects**: Verifier adapter platform (Section 4)
+  ([#264](https://github.com/OpenAdaptAI/openadapt-flow/pull/264),
+  [`a36660d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a36660d6ad7bce3229c0fc5f80121e285e8e67c2))
+
+- **playwright**: Guard structural actions across frames
+  ([#249](https://github.com/OpenAdaptAI/openadapt-flow/pull/249),
+  [`e4dd9ea`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e4dd9ea96aadd34d4a05374f48564945289d7fe2))
+
+- **repair**: Governed promotion lifecycle with campaigns, canary, and rollback (Section 9)
+  ([#265](https://github.com/OpenAdaptAI/openadapt-flow/pull/265),
+  [`e6fbeb7`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e6fbeb791d8c9aa0ee3520905fceab7d8221f028))
+
+- **runtime**: Bind browser overlay targets to exact observations
+  ([#251](https://github.com/OpenAdaptAI/openadapt-flow/pull/251),
+  [`b8734c6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b8734c6da63ed0ec0300b44b980e4f47f9bff87e))
+
+- **runtime**: Emit canonical control overlay events
+  ([#251](https://github.com/OpenAdaptAI/openadapt-flow/pull/251),
+  [`b8734c6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b8734c6da63ed0ec0300b44b980e4f47f9bff87e))
+
+- **runtime**: Emit exact-bound browser overlay events
+  ([#251](https://github.com/OpenAdaptAI/openadapt-flow/pull/251),
+  [`b8734c6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b8734c6da63ed0ec0300b44b980e4f47f9bff87e))
+
+- **runtime**: Explicit transaction outcome taxonomy + effect journal + idempotency (Section 3)
+  ([#259](https://github.com/OpenAdaptAI/openadapt-flow/pull/259),
+  [`1410cdd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1410cddd703fb0cfc8313f356a3b6124bd6b6fcb))
+
+### Testing
+
+- Align rich action safety expectations
+  ([#268](https://github.com/OpenAdaptAI/openadapt-flow/pull/268),
+  [`9dcda2d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9dcda2d9407d1deba0099de2c93e55c39c37dd89))
+
+- Preserve unverified connector outcome semantics
+  ([#270](https://github.com/OpenAdaptAI/openadapt-flow/pull/270),
+  [`35be7ff`](https://github.com/OpenAdaptAI/openadapt-flow/commit/35be7ffea34df750df598fe3caddaa08ed4c4ee6))
+
+## v1.23.0 (2026-07-25)
+
+
+### Bug Fixes
+
+- Arm browser target before identity read
+  ([`a31d4c1`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a31d4c1ae3fa353b141cfa07a8f1945dca8aaea3))
+
+- Bind browser identity to actuation
+  ([`a087dd4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a087dd46237720fcb376d11803850dfae336f78e))
+
+- Bind browser keyboard input to verified focus
+  ([`1397e05`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1397e05f66670b96cb46dcc9b1538b8c741f3afd))
+
+- Close qualified identity enforcement gaps
+  ([`b509510`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b50951093608564e9998cdb5599e6229f826b4c2))
+
+- Enforce execution profile outcome contracts
+  ([`fe7afe7`](https://github.com/OpenAdaptAI/openadapt-flow/commit/fe7afe7209f256f21f3d99fc1e451330616a6212))
+
+- Enforce precise outcomes across consumers
+  ([`b154814`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b15481484fdee868f1bee93003045a2e29d79368))
+
+- Expose identity extraction in qualification CLI
+  ([`e63d81c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e63d81ce1a6ba438911bc1e7d016af93eca0ec5f))
+
+- Inventory nested evidence manifests
+  ([`6b64e28`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6b64e2816d776673f6b7fd630a807fc9de6a3cae))
+
+- Keep unverified outcomes off break rail
+  ([`51cf035`](https://github.com/OpenAdaptAI/openadapt-flow/commit/51cf0353f76a261584689cc5ae92a25fc357a26e))
+
+- Lease visual type focus before input
+  ([`decc7b2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/decc7b2ca1577dd480b20d4ea511c5243cd2e46f))
+
+- Preserve legacy resume report compatibility
+  ([`2418e30`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2418e30e8909105238226fbb76980a703b29f867))
+
+- Strip live authority from public demo evidence
+  ([`c764a52`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c764a52064062d6260e58ee80b933472ad558555))
+
+- **ci**: Prime fresh AT-SPI qualification sessions
+  ([`9b295d5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9b295d508d7276d5e877364e542828ab61ac548c))
+
+- **identity**: Align API target paths exactly
+  ([`99640d1`](https://github.com/OpenAdaptAI/openadapt-flow/commit/99640d1f7cf3a96e271206af413cf30125a91466))
+
+- **identity**: Bind quorum evidence to exact targets
+  ([`538ee28`](https://github.com/OpenAdaptAI/openadapt-flow/commit/538ee2888fecc24a851d53c5b0fd9b3fbc9fbe3e))
+
+### Chores
+
+- Add verified MockMed public demo evidence
+  ([`eed6539`](https://github.com/OpenAdaptAI/openadapt-flow/commit/eed65397c3ee644364fb59aa0fcff60ba2fbefbc))
+
+- Refresh public artifact inventory
+  ([`0fde2a9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0fde2a9d08215df83634db9363c22630134a6c0c))
+
+- Regenerate exhaustive public demo evidence
+  ([`8c95a46`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8c95a46aebe90e00080740c0a27b33c3164cb5e1))
+
+### Features
+
+- Add named execution profiles
+  ([`1ac8c46`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1ac8c46c0567649db6b2fe7c8c360b90ce8deef1))
+
+- Enforce qualified identity signal quorums
+  ([`4a39feb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4a39feb5cbc6aaefd351f7ba20e85059ad0388e4))
+
+- Export real public demo evidence pack
+  ([`c416b7d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c416b7d404ab6480351ec1d1809bcc26bdee1b4a))
+
+- Transport precise execution outcomes
+  ([`5d4ee71`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5d4ee7181977f90d85639081e1badbd13ad8cd79))
+
+### Testing
+
+- Model guarded healing actuation
+  ([`fec4c18`](https://github.com/OpenAdaptAI/openadapt-flow/commit/fec4c18592fd48c0752eb0342668e08fa9f2f196))
+
+- **identity**: Model fresh loop actuation read
+  ([`6ef3fdb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6ef3fdb0f567ff394df88a853b2182b9f4ee45f6))
+
+## v1.22.0 (2026-07-25)
+
+
+### Bug Fixes
+
+- Preserve native Windows UIA boundaries
+  ([`320c1d4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/320c1d424e14b1994b681cb071797660dcfe2704))
+
+- Visualize durable target evidence
+  ([`e37019a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e37019a945e8c95fb419d51ee8009d656c26d83c))
+
+### Chores
+
+- Require capture 1.1 UIA contract
+  ([`ac35f56`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ac35f56565e754c5058e1f96c88d8bd249465193))
+
+### Documentation
+
+- Explain visual target evidence
+  ([`4dd592f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4dd592f3a1ae1d32f3c81545b92927e3863542ee))
+
+### Features
+
+- Add minimum effect tier setter
+  ([`d05771e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d05771e5b88a565dd09c82f69d11bd8610eac52a))
+
+- Compile captured Windows UIA evidence
+  ([`6aa8651`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6aa865159156c97697a8a2c199795114f9c5900e))
+
+## v1.21.0 (2026-07-25)
+
+
+### Bug Fixes
+
+- Bind qualification evidence to exact contract
+  ([#236](https://github.com/OpenAdaptAI/openadapt-flow/pull/236),
+  [`9f3ac04`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9f3ac0495f649f416a5814b23a97a81e781c601e))
+
+### Documentation
+
+- Specify canonical remote frame continuity
+  ([`915b103`](https://github.com/OpenAdaptAI/openadapt-flow/commit/915b103414d080269ad96381086739ea1eca42f4))
+
+### Features
+
+- Add two-phase remote actuation leases
+  ([`3fc1d84`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3fc1d84e6686ec96a4158d195f192535f8146a12))
+
+- Add versioned qualification project contract
+  ([#236](https://github.com/OpenAdaptAI/openadapt-flow/pull/236),
+  [`9f3ac04`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9f3ac0495f649f416a5814b23a97a81e781c601e))
+
+## v1.20.2 (2026-07-25)
+
+
+### Bug Fixes
+
+- Contain BYOC report writes ([#235](https://github.com/OpenAdaptAI/openadapt-flow/pull/235),
+  [`8e7796f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8e7796fcf0b9ac38f1beb2545a43462928803350))
+
+- Fail closed on malformed connector reports
+  ([#235](https://github.com/OpenAdaptAI/openadapt-flow/pull/235),
+  [`8e7796f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8e7796fcf0b9ac38f1beb2545a43462928803350))
+
+- Isolate capture adapter codec fixture
+  ([#234](https://github.com/OpenAdaptAI/openadapt-flow/pull/234),
+  [`3de5fc6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3de5fc67acf3024a621f812c5a6ed9be07fac335))
+
+### Documentation
+
+- Align connector enrollment with Cloud
+  ([#235](https://github.com/OpenAdaptAI/openadapt-flow/pull/235),
+  [`8e7796f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8e7796fcf0b9ac38f1beb2545a43462928803350))
+
+- Reconcile desktop and remote substrate evidence
+  ([#235](https://github.com/OpenAdaptAI/openadapt-flow/pull/235),
+  [`8e7796f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8e7796fcf0b9ac38f1beb2545a43462928803350))
+
+## v1.20.1 (2026-07-24)
+
+
+### Bug Fixes
+
+- Remove SciPy from core runtime ([#233](https://github.com/OpenAdaptAI/openadapt-flow/pull/233),
+  [`09a9004`](https://github.com/OpenAdaptAI/openadapt-flow/commit/09a9004f75b111d49dd56d5cd44efd4c4504a50d))
+
+### Continuous Integration
+
+- Move full matrix to qualification lane
+  ([#230](https://github.com/OpenAdaptAI/openadapt-flow/pull/230),
+  [`5857498`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5857498fa4714dfb09413eebb5ff518a8ff1ac34))
+
+- Parallelize profiled identity regressions
+  ([#231](https://github.com/OpenAdaptAI/openadapt-flow/pull/231),
+  [`0b17323`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0b173230d6ee2a1a8ec5c98f5bbfc2f7bc88e4eb))
+
+- Refresh public artifact inventory ([#231](https://github.com/OpenAdaptAI/openadapt-flow/pull/231),
+  [`0b17323`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0b173230d6ee2a1a8ec5c98f5bbfc2f7bc88e4eb))
+
+- Revert same-runner identity parallelization
+  ([#232](https://github.com/OpenAdaptAI/openadapt-flow/pull/232),
+  [`5c131aa`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5c131aa1c79f4d810273711a3b987ab18afb1c3c))
+
+### Testing
+
+- Pin exact parallel CI exclusions ([#231](https://github.com/OpenAdaptAI/openadapt-flow/pull/231),
+  [`0b17323`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0b173230d6ee2a1a8ec5c98f5bbfc2f7bc88e4eb))
+
+## v1.20.0 (2026-07-23)
+
+
+### Bug Fixes
+
+- Close Citrix target binding and readiness gaps
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- Enforce Citrix readiness across run and resume
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- Enforce public source artifact boundary
+  ([#225](https://github.com/OpenAdaptAI/openadapt-flow/pull/225),
+  [`7472d19`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7472d19d3ddba76932b756cfdd0001874ccd4d46))
+
+- Enforce the public source artifact boundary
+  ([#225](https://github.com/OpenAdaptAI/openadapt-flow/pull/225),
+  [`7472d19`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7472d19d3ddba76932b756cfdd0001874ccd4d46))
+
+- Honor landmark contradiction for LABELED anchors in template_global rung
+  ([#166](https://github.com/OpenAdaptAI/openadapt-flow/pull/166),
+  [`9c5f34e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9c5f34e4f1c3de1ab89829baca30a7051b904a55))
+
+- Keep interop types green in developer mode
+  ([#228](https://github.com/OpenAdaptAI/openadapt-flow/pull/228),
+  [`95d66d9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/95d66d9b25db83766866173a3b9ebf1addf43212))
+
+- Locality+uniqueness gate for pixel template resolution (ambiguity -> halt)
+  ([#165](https://github.com/OpenAdaptAI/openadapt-flow/pull/165),
+  [`e72cc05`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e72cc0524c8fad3f87e041e7a5d865d6dcb0be5a))
+
+- Locality+uniqueness gate for pixel template resolution (ambiguity -> safe halt)
+  ([#165](https://github.com/OpenAdaptAI/openadapt-flow/pull/165),
+  [`e72cc05`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e72cc0524c8fad3f87e041e7a5d865d6dcb0be5a))
+
+- Redact bundle errors with safe recovery guidance
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **ci**: Derive protocol members via get_protocol_members, not __protocol_attrs__
+  ([#204](https://github.com/OpenAdaptAI/openadapt-flow/pull/204),
+  [`1c21866`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c2186631e2490fbdb1010fe7a3759f2eae03308))
+
+- **ci**: Run EffectBench outside source checkout
+  ([#221](https://github.com/OpenAdaptAI/openadapt-flow/pull/221),
+  [`3b224b6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b224b6b6067849a6dd2819210fc32230667f739))
+
+- **ci**: Tomli fallback for Python 3.10 benchmark tests
+  ([#220](https://github.com/OpenAdaptAI/openadapt-flow/pull/220),
+  [`0212128`](https://github.com/OpenAdaptAI/openadapt-flow/commit/02121282ffe3f2c5ae0b33de6d0621c8a704e374))
+
+- **ci**: Unblock main — de-symlink workshop bib (sdist) + deterministic pixel font test
+  ([#189](https://github.com/OpenAdaptAI/openadapt-flow/pull/189),
+  [`ce94d97`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ce94d97c84b2542d5a4fb2b8db9a35070a76fbd7))
+
+- **citrix**: Refuse unsupported default Linux client
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **citrix**: Wire CLI and refuse RDP transport mismatch
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **demo_media**: Stop burning the status badge into run_openemr footage
+  ([#195](https://github.com/OpenAdaptAI/openadapt-flow/pull/195),
+  [`7eeaf83`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7eeaf83eb6295e0d14c1ac49c18e6f742756eac5))
+
+- **effect-e2e**: Quote discovered SQLite tables
+  ([#214](https://github.com/OpenAdaptAI/openadapt-flow/pull/214),
+  [`1c088fd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c088fdce3ab9e96d24617bff204fd2252f4d689))
+
+- **effect_e2e**: Open-world ground truth + independent delta primitive + closed-world disclosure
+  ([#214](https://github.com/OpenAdaptAI/openadapt-flow/pull/214),
+  [`1c088fd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c088fdce3ab9e96d24617bff204fd2252f4d689))
+
+- **effect_e2e**: Open-world ground truth + independent delta primitive + closed-world disclosure
+  (review #2 finding #3) ([#214](https://github.com/OpenAdaptAI/openadapt-flow/pull/214),
+  [`1c088fd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c088fdce3ab9e96d24617bff204fd2252f4d689))
+
+- **effectbench**: Bind provider provenance
+  ([#213](https://github.com/OpenAdaptAI/openadapt-flow/pull/213),
+  [`6a51113`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6a511136a68cc6e97d3d573b4975ac91015aa251))
+
+- **effectbench**: Keep divergence schemas in parity
+  ([#219](https://github.com/OpenAdaptAI/openadapt-flow/pull/219),
+  [`bd2a27c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd2a27caf300e58d2b19dcee3b1493c5ab6fa813))
+
+- **eligibility**: Bind answers to verified subjects
+  ([#147](https://github.com/OpenAdaptAI/openadapt-flow/pull/147),
+  [`abe9f36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abe9f36b889d2939e389a07348bf4a68e5d54996))
+
+- **eligibility**: Bind evidence to execution mode
+  ([#147](https://github.com/OpenAdaptAI/openadapt-flow/pull/147),
+  [`abe9f36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abe9f36b889d2939e389a07348bf4a68e5d54996))
+
+- **eligibility**: Bind verified results to requests
+  ([#147](https://github.com/OpenAdaptAI/openadapt-flow/pull/147),
+  [`abe9f36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abe9f36b889d2939e389a07348bf4a68e5d54996))
+
+- **eligibility**: Close activation safety contracts
+  ([#147](https://github.com/OpenAdaptAI/openadapt-flow/pull/147),
+  [`abe9f36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abe9f36b889d2939e389a07348bf4a68e5d54996))
+
+- **eligibility**: Harden governed payer waterfall
+  ([#147](https://github.com/OpenAdaptAI/openadapt-flow/pull/147),
+  [`abe9f36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abe9f36b889d2939e389a07348bf4a68e5d54996))
+
+- **eligibility**: Verify response provider
+  ([#147](https://github.com/OpenAdaptAI/openadapt-flow/pull/147),
+  [`abe9f36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abe9f36b889d2939e389a07348bf4a68e5d54996))
+
+- **hardening**: Stabilize adversarial search seed
+  ([#222](https://github.com/OpenAdaptAI/openadapt-flow/pull/222),
+  [`69189dc`](https://github.com/OpenAdaptAI/openadapt-flow/commit/69189dc0203c245bf8d92cb25cfb891a1e2739a2))
+
+- **lending**: Audit canonical table contents
+  ([#219](https://github.com/OpenAdaptAI/openadapt-flow/pull/219),
+  [`bd2a27c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd2a27caf300e58d2b19dcee3b1493c5ab6fa813))
+
+- **lending**: Make benchmark ground truth independent
+  ([#219](https://github.com/OpenAdaptAI/openadapt-flow/pull/219),
+  [`bd2a27c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd2a27caf300e58d2b19dcee3b1493c5ab6fa813))
+
+- **lending**: Publish bounded evidence aggregate
+  ([#219](https://github.com/OpenAdaptAI/openadapt-flow/pull/219),
+  [`bd2a27c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd2a27caf300e58d2b19dcee3b1493c5ab6fa813))
+
+- **mockmed**: Revert focus/caret CSS that broke deterministic e2e halts
+  ([#210](https://github.com/OpenAdaptAI/openadapt-flow/pull/210),
+  [`25e0f7c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/25e0f7ca2123de79efc4ed1aba1fb2edf8683c41))
+
+- **mockmed**: Stabilize textarea render metrics
+  ([#227](https://github.com/OpenAdaptAI/openadapt-flow/pull/227),
+  [`d756d8a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d756d8a5b1857f9e6658d56feb8d379a0d8969c9))
+
+- **openimis**: Bind eligibility evidence fail closed
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **openimis**: Make eligibility evidence fail closed
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **openimis**: Refresh adapted compose provenance hash
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **openimis**: Revoke inherited table grants
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **openimis**: Verify exact read-only eligibility outcome
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **paper**: De-symlink workshop references.bib so the sdist packages
+  ([#189](https://github.com/OpenAdaptAI/openadapt-flow/pull/189),
+  [`ce94d97`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ce94d97c84b2542d5a4fb2b8db9a35070a76fbd7))
+
+- **paper**: Give gh release the repo context (GH_REPO) in the publish job
+  ([#193](https://github.com/OpenAdaptAI/openadapt-flow/pull/193),
+  [`5aeb126`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5aeb126527df54c6d63aa12617cd6c2176ed6331))
+
+- **paper**: Use lmodern+fontenc so microtype expansion builds on CI TeX
+  ([#170](https://github.com/OpenAdaptAI/openadapt-flow/pull/170),
+  [`3b99960`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b99960bc095c7cd8b7d252e931cff61f1ac250b))
+
+- **rdp**: Anchor the note field distinctly
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+- **rdp**: Bind document idempotency to output path
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+- **rdp**: Encode punctuation as X11 keysyms
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+- **rdp**: Govern vision-ladder qualification evidence
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+- **rdp**: Make real-wire qualification deterministic
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+- **rdp**: Wait for selected record transition
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+- **release**: Carve corpus data from artifacts
+  ([#225](https://github.com/OpenAdaptAI/openadapt-flow/pull/225),
+  [`7472d19`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7472d19d3ddba76932b756cfdd0001874ccd4d46))
+
+- **release**: Remove private corpus data from public source
+  ([#225](https://github.com/OpenAdaptAI/openadapt-flow/pull/225),
+  [`7472d19`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7472d19d3ddba76932b756cfdd0001874ccd4d46))
+
+- **resolver**: Disambiguate OCR with retained evidence
+  ([#226](https://github.com/OpenAdaptAI/openadapt-flow/pull/226),
+  [`af143f2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/af143f224e72efdd89e3e1068c0f0d278a3d785f))
+
+- **resolver**: Preserve typed OCR refusals
+  ([#226](https://github.com/OpenAdaptAI/openadapt-flow/pull/226),
+  [`af143f2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/af143f224e72efdd89e3e1068c0f0d278a3d785f))
+
+- **resolver**: Refuse ambiguous OCR targets
+  ([#226](https://github.com/OpenAdaptAI/openadapt-flow/pull/226),
+  [`af143f2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/af143f224e72efdd89e3e1068c0f0d278a3d785f))
+
+- **runtime**: Bind interstitial actions safely
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **runtime**: Close interstitial admission gaps
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **runtime**: Close typed-input masked false success
+  ([#223](https://github.com/OpenAdaptAI/openadapt-flow/pull/223),
+  [`558c07d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/558c07d14d2c4b182212eb0bdc078a3500d88bd9))
+
+- **runtime**: Govern interstitial dismissals
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **runtime**: Keep readiness halts fail closed
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **runtime**: Make state readiness fail closed
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **runtime**: Require sealed dismissal anchors
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **runtime**: Sample postconditions at action boundary
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **runtime**: Verify typed values without masked false success
+  ([#223](https://github.com/OpenAdaptAI/openadapt-flow/pull/223),
+  [`558c07d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/558c07d14d2c4b182212eb0bdc078a3500d88bd9))
+
+- **test**: Make pixel scale-invariance test deterministic across fonts
+  ([#189](https://github.com/OpenAdaptAI/openadapt-flow/pull/189),
+  [`ce94d97`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ce94d97c84b2542d5a4fb2b8db9a35070a76fbd7))
+
+- **vision**: Compare peak center to expected center in locality gate
+  ([#165](https://github.com/OpenAdaptAI/openadapt-flow/pull/165),
+  [`e72cc05`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e72cc0524c8fad3f87e041e7a5d865d6dcb0be5a))
+
+### Build System
+
+- Bump ruff from 0.15.21 to 0.15.22 in the python-minor group
+  ([#175](https://github.com/OpenAdaptAI/openadapt-flow/pull/175),
+  [`8d383a0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8d383a04d821b02ccf3d5c7efcf1187facc7596d))
+
+- Update transformers requirement from <5.13,>=5.5 to >=5.5,<5.15
+  ([#176](https://github.com/OpenAdaptAI/openadapt-flow/pull/176),
+  [`743681b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/743681be66153436d86ee26c4b38ff37bab2d90a))
+
+- **openimis**: Exclude eligibility demo/test + showcase-openimis from sdist
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **openimis**: Preserve release policy union
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+### Chores
+
+- **ci**: Validate Citrix branch against main
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **showcase**: Reseal loop showcase bundle for additive interstitials field
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+### Code Style
+
+- Ruff format the canvas-ladder e2e wrapper
+  ([`194b65a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/194b65a19ea9e2a991337baa720cc38d8da16655))
+
+- Ruff format the Citrix backend + tests
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- Ruff-format compliance and hyphens in new runtime strings
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **effect-e2e**: Format identifier coverage test
+  ([#214](https://github.com/OpenAdaptAI/openadapt-flow/pull/214),
+  [`1c088fd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1c088fdce3ab9e96d24617bff204fd2252f4d689))
+
+- **lending**: Apply current Ruff formatting
+  ([#219](https://github.com/OpenAdaptAI/openadapt-flow/pull/219),
+  [`bd2a27c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd2a27caf300e58d2b19dcee3b1493c5ab6fa813))
+
+### Continuous Integration
+
+- Bump the actions group across 1 directory with 4 updates
+  ([#174](https://github.com/OpenAdaptAI/openadapt-flow/pull/174),
+  [`1d199ec`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1d199ecf4213ba47870599096cbc9c683acb1ee0))
+
+- Make Flow releases explicitly dispatched
+  ([#224](https://github.com/OpenAdaptAI/openadapt-flow/pull/224),
+  [`a1a924e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a1a924ef3184a1f4f48320a2e207769b9def0baf))
+
+- **paper**: Publish built PDF to stable paper-latest release + notify web
+  ([#192](https://github.com/OpenAdaptAI/openadapt-flow/pull/192),
+  [`5f6bca0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5f6bca034cf2a3b030737c4066b4bf8ba922a1cc))
+
+- **paper**: Reword comment so docs-consistency gate passes
+  ([#192](https://github.com/OpenAdaptAI/openadapt-flow/pull/192),
+  [`5f6bca0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5f6bca034cf2a3b030737c4066b4bf8ba922a1cc))
+
+- **rdp**: Pin qualification dependencies
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+- **rdp**: Qualify pull request changes
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+### Documentation
+
+- Rewrite workflow-program IR as an implemented spec + add publication options
+  ([#203](https://github.com/OpenAdaptAI/openadapt-flow/pull/203),
+  [`152e2de`](https://github.com/OpenAdaptAI/openadapt-flow/commit/152e2de9e5b712d51693ec9e44a64791d9f007fb))
+
+- **effectbench**: Normalize em dashes to hyphens in new provider prose
+  ([#213](https://github.com/OpenAdaptAI/openadapt-flow/pull/213),
+  [`6a51113`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6a511136a68cc6e97d3d573b4975ac91015aa251))
+
+- **lending**: Clean nested-bold in SWER.md ladder bullets
+  ([#219](https://github.com/OpenAdaptAI/openadapt-flow/pull/219),
+  [`bd2a27c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd2a27caf300e58d2b19dcee3b1493c5ab6fa813))
+
+- **paper**: Add ~8-page workshop condensation, gate-checked and built with the report
+  ([#170](https://github.com/OpenAdaptAI/openadapt-flow/pull/170),
+  [`3b99960`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b99960bc095c7cd8b7d252e931cff61f1ac250b))
+
+- **paper**: Adversarial peer review + clearly-correct honesty fixes
+  ([#200](https://github.com/OpenAdaptAI/openadapt-flow/pull/200),
+  [`76c8a86`](https://github.com/OpenAdaptAI/openadapt-flow/commit/76c8a869a8be55be626de07dae364140c22a2eb2))
+
+- **paper**: Align evidence release boundary
+  ([#217](https://github.com/OpenAdaptAI/openadapt-flow/pull/217),
+  [`2e94d71`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2e94d7125bf2db5bfa9d10cd8d421d7f3ec77ff0))
+
+- **paper**: Bound evidence and oracle independence
+  ([#217](https://github.com/OpenAdaptAI/openadapt-flow/pull/217),
+  [`2e94d71`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2e94d7125bf2db5bfa9d10cd8d421d7f3ec77ff0))
+
+- **paper**: Cite the real end-to-end silent-wrong-effect numbers as the headline
+  ([#211](https://github.com/OpenAdaptAI/openadapt-flow/pull/211),
+  [`47ff049`](https://github.com/OpenAdaptAI/openadapt-flow/commit/47ff049ba6f3d400afed2e563788e1f31b0ce9df))
+
+- **paper**: Correct stale README (byline set; workshop bib is a copy not a symlink)
+  ([#199](https://github.com/OpenAdaptAI/openadapt-flow/pull/199),
+  [`d634825`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d6348250d2fb84f7f2500329be705e55ba7df8a6))
+
+- **paper**: Honest disclosures for adversarial review #2 (closed-world, statistics, positioning,
+  ethics) ([#217](https://github.com/OpenAdaptAI/openadapt-flow/pull/217),
+  [`2e94d71`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2e94d7125bf2db5bfa9d10cd8d421d7f3ec77ff0))
+
+- **paper**: Present the lending three-arm ladder + rebind check_artifacts
+  ([#219](https://github.com/OpenAdaptAI/openadapt-flow/pull/219),
+  [`bd2a27c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd2a27caf300e58d2b19dcee3b1493c5ab6fa813))
+
+- **paper**: Second adversarial review — independent-harness, stats, second-domain, benchmark lens
+  ([#209](https://github.com/OpenAdaptAI/openadapt-flow/pull/209),
+  [`9a14fa2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9a14fa2658380a37e1e5560039c56f07e7f0c61a))
+
+- **paper**: Set author line (Richard Abrich, OpenAdapt / MLDSAI Inc.)
+  ([#180](https://github.com/OpenAdaptAI/openadapt-flow/pull/180),
+  [`a14960d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a14960d532e95111f6c075df71127e8bfb0fa5ea))
+
+- **paper**: Set author to Richard Abrich, OpenAdapt (MLDSAI Inc.)
+  ([#180](https://github.com/OpenAdaptAI/openadapt-flow/pull/180),
+  [`a14960d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a14960d532e95111f6c075df71127e8bfb0fa5ea))
+
+- **paper**: Sharpen thesis, add figures, foreground the safety instrument
+  ([#170](https://github.com/OpenAdaptAI/openadapt-flow/pull/170),
+  [`3b99960`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3b99960bc095c7cd8b7d252e931cff61f1ac250b))
+
+- **paper**: State released data boundary precisely
+  ([#217](https://github.com/OpenAdaptAI/openadapt-flow/pull/217),
+  [`2e94d71`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2e94d7125bf2db5bfa9d10cd8d421d7f3ec77ff0))
+
+- **paper**: Temper EffectBench scope claim (review #2 #3.6/#3.8)
+  ([#217](https://github.com/OpenAdaptAI/openadapt-flow/pull/217),
+  [`2e94d71`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2e94d7125bf2db5bfa9d10cd8d421d7f3ec77ff0))
+
+- **paper**: Use richard@openadapt.ai as contact email
+  ([#180](https://github.com/OpenAdaptAI/openadapt-flow/pull/180),
+  [`a14960d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a14960d532e95111f6c075df71127e8bfb0fa5ea))
+
+- **readme**: Document the for-each data-driven loop and visualize commands
+  ([#190](https://github.com/OpenAdaptAI/openadapt-flow/pull/190),
+  [`f059f6c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f059f6c930ce62f0bd99b3a2e4024e8c3065db96))
+
+- **readme**: Embed real visualize Mermaid + record->compile->replay loop
+  ([#201](https://github.com/OpenAdaptAI/openadapt-flow/pull/201),
+  [`3f7424f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3f7424f465406c4b75b33348fe60dcb5794eb114))
+
+- **readme**: Substrate-aware refresh of the engine README
+  ([#201](https://github.com/OpenAdaptAI/openadapt-flow/pull/201),
+  [`3f7424f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3f7424f465406c4b75b33348fe60dcb5794eb114))
+
+### Features
+
+- Compiled-program visualizer (shared graph spec + CLI render)
+  ([#184](https://github.com/OpenAdaptAI/openadapt-flow/pull/184),
+  [`144dd82`](https://github.com/OpenAdaptAI/openadapt-flow/commit/144dd82e0a70ea7590e83683516ade8837390748))
+
+- MacOS AX IdentityBackend + StructuralActionBackend (identity parity)
+  ([#171](https://github.com/OpenAdaptAI/openadapt-flow/pull/171),
+  [`7db7d14`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7db7d14bd7fc7633f31b9f99f3e11c318b295251))
+
+- Resolve pixel-verify identity gate from deployment runtime config
+  ([#179](https://github.com/OpenAdaptAI/openadapt-flow/pull/179),
+  [`f8bcf48`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f8bcf48fb2d500025521ddd7434522e7fd241a3a))
+
+- **backends**: Citrix Workspace pixel backend and no-DOM stand-in proof
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **backends**: Citrix-Workspace-window pixel backend + no-DOM stand-in proof
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **benchmark**: Add second (non-healthcare) domain: MockLoan lending effect-verification study
+  ([#208](https://github.com/OpenAdaptAI/openadapt-flow/pull/208),
+  [`78b27aa`](https://github.com/OpenAdaptAI/openadapt-flow/commit/78b27aad3ba430a7b9558a846e416219203a7e70))
+
+- **benchmark**: EffectBench foundation — episode schema + substrate-agnostic effect-oracle harness
+  ([#178](https://github.com/OpenAdaptAI/openadapt-flow/pull/178),
+  [`3e44571`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3e445717c3b9aab85dcb4f11dcbf30e8e29e0e31))
+
+- **benchmark**: EffectBench multi-baseline runner adapter — one arm interface, identical
+  task+oracle ([#186](https://github.com/OpenAdaptAI/openadapt-flow/pull/186),
+  [`7688922`](https://github.com/OpenAdaptAI/openadapt-flow/commit/7688922c29b74616587858a836a055ea6acceb1f))
+
+- **benchmark**: Independent end-to-end silent-wrong-effect harness (real SWER)
+  ([#206](https://github.com/OpenAdaptAI/openadapt-flow/pull/206),
+  [`e9a6583`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e9a65833a9c91c536bfad2fa1f9fa201e104e324))
+
+- **benchmark**: Index pinned system-of-record environments for the effect benchmark
+  ([#173](https://github.com/OpenAdaptAI/openadapt-flow/pull/173),
+  [`972ed38`](https://github.com/OpenAdaptAI/openadapt-flow/commit/972ed38f9213aee89ad0ad5244a5de5a35847ef1))
+
+- **benchmark**: Package EffectBench/SWER as a standalone, versioned benchmark
+  ([#205](https://github.com/OpenAdaptAI/openadapt-flow/pull/205),
+  [`282ddb6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/282ddb65ac6880c9ddd61ae1fc6698960056e7e8))
+
+- **benchmark**: Publish bounded paid-agent aggregates
+  ([#216](https://github.com/OpenAdaptAI/openadapt-flow/pull/216),
+  [`e740a7e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e740a7e4b68ed5c6461bdcd6fbd086e8ac75c8be))
+
+- **citrix**: Add CVAD 30-day trial-mode Azure lab provisioning helpers
+  ([#182](https://github.com/OpenAdaptAI/openadapt-flow/pull/182),
+  [`60a48cc`](https://github.com/OpenAdaptAI/openadapt-flow/commit/60a48cc66b54bc5c24e952a82e9a679a516a2121))
+
+- **citrix_daas**: Staged, guarded PREP kit for the DaaS-Standard-for-Azure 7-day trial (clock NOT
+  started) ([#187](https://github.com/OpenAdaptAI/openadapt-flow/pull/187),
+  [`a3737a5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a3737a56d35ba97a5e4d96439b2cf12d4b825af4))
+
+- **compiler**: Author data-driven LOOP from a single demonstration
+  ([#188](https://github.com/OpenAdaptAI/openadapt-flow/pull/188),
+  [`f9f8bac`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f9f8bac278276e4fa7adaaf83335a2b9aef8df82))
+
+- **connector**: Engine-side BYOC outbound-pull daemon (openadapt-flow connector)
+  ([#212](https://github.com/OpenAdaptAI/openadapt-flow/pull/212),
+  [`3d9635b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3d9635b787bdcb69846c28535d8f2a91677fcc40))
+
+- **effectbench**: Author the first task pack (~40 tasks, all 7 divergence categories)
+  ([#185](https://github.com/OpenAdaptAI/openadapt-flow/pull/185),
+  [`6f15983`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6f15983464c501de2233dafd7c99f3a5aedeefb5))
+
+- **effectbench**: Pluggable external system-of-record + oracle interface (reference oracle marked
+  reference-only) ([#213](https://github.com/OpenAdaptAI/openadapt-flow/pull/213),
+  [`6a51113`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6a511136a68cc6e97d3d573b4975ac91015aa251))
+
+- **effects**: Auto-derived, different-path on-screen read-back oracle (no-connector default)
+  ([#191](https://github.com/OpenAdaptAI/openadapt-flow/pull/191),
+  [`d20ead8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d20ead89448556df27250fdd1bbcb271aefc3fc0))
+
+- **eligibility**: API-first 270/271 eligibility waterfall (Stedi client, payer route map,
+  document-hash verified artifacts) ([#147](https://github.com/OpenAdaptAI/openadapt-flow/pull/147),
+  [`abe9f36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abe9f36b889d2939e389a07348bf4a68e5d54996))
+
+- **hardening**: Harder cases (latency/reflow/dense) + close 36 new silent-wrongs
+  ([#215](https://github.com/OpenAdaptAI/openadapt-flow/pull/215),
+  [`71e3532`](https://github.com/OpenAdaptAI/openadapt-flow/commit/71e35324c1a16ff62b3fef18dabb70880ed7cec6))
+
+- **identity**: Jitter-robust pixel identity VERIFY (config-gated, default off)
+  ([#172](https://github.com/OpenAdaptAI/openadapt-flow/pull/172),
+  [`625a8be`](https://github.com/OpenAdaptAI/openadapt-flow/commit/625a8be564d9d2d4f714903e7014d5839eb3fc95))
+
+- **lending**: Add collateral-write fault class + single-surface arm for honest cross-domain
+  comparability ([#219](https://github.com/OpenAdaptAI/openadapt-flow/pull/219),
+  [`bd2a27c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/bd2a27caf300e58d2b19dcee3b1493c5ab6fa813))
+
+- **openimis**: Effect-verified eligibility-check reference workflow + showcase
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **openimis**: Effect-verified insurance eligibility-check reference workflow + showcase
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **report**: Add per-step before/after evidence
+  ([#202](https://github.com/OpenAdaptAI/openadapt-flow/pull/202),
+  [`32b9624`](https://github.com/OpenAdaptAI/openadapt-flow/commit/32b9624ee0b36d6014b1df5b47c5fc632ca2c677))
+
+- **runtime**: State-dependency robustness (settle readiness + interstitials)
+  ([#218](https://github.com/OpenAdaptAI/openadapt-flow/pull/218),
+  [`d2f3347`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d2f3347347201ffe235500677fe7d94904ec2fa8))
+
+- **runtime**: User-configurable ("bring your own") grounding model with fail-closed PHI allowlist
+  ([#196](https://github.com/OpenAdaptAI/openadapt-flow/pull/196),
+  [`ec5a52a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ec5a52abc9b8281571a866dd4dc429f6545d0d62))
+
+- **validation**: Configurable hardening corpus + private-corpus release-boundary guard
+  ([#197](https://github.com/OpenAdaptAI/openadapt-flow/pull/197),
+  [`848f8d6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/848f8d6d110f681f194664dcfc13de42f14e55be))
+
+- **validation**: Vision hardening flywheel — adversarial perturbation sweep + silent-wrong ratchet
+  ([#194](https://github.com/OpenAdaptAI/openadapt-flow/pull/194),
+  [`3074699`](https://github.com/OpenAdaptAI/openadapt-flow/commit/30746999c92e1f440096f29a2d0b73ae446b550c))
+
+- **visualize**: Expand loop bodies in the program graph + compact loop showcase
+  ([#207](https://github.com/OpenAdaptAI/openadapt-flow/pull/207),
+  [`861477d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/861477d547e033899baea6810279a61e38c4a019))
+
+### Testing
+
+- Assert zero-model-call reference bar on Windows/RDP replays
+  ([#168](https://github.com/OpenAdaptAI/openadapt-flow/pull/168),
+  [`98c9a0c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/98c9a0c84a8f039b954ee77d55b21204a3811894))
+
+- Keep missing Citrix targets out of reports
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- Pin backend optional-capability matrix to the maturity map
+  ([#169](https://github.com/OpenAdaptAI/openadapt-flow/pull/169),
+  [`ce9ddbb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ce9ddbbc704e2bcdd1b2f25b286971bce51578bf))
+
+- **citrix**: Bind evidence to clean reviewed source
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **citrix**: Inspect protocol surface without actuation
+  ([#229](https://github.com/OpenAdaptAI/openadapt-flow/pull/229),
+  [`b7c863b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b7c863be37d99693184f5855800d079a4adea115))
+
+- **citrix**: Record three-by-three code-readiness evidence
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **citrix**: Refresh final provenance evidence
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **citrix**: Refresh provenance-bound evidence
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **citrix**: Refresh synthetic qualification evidence
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **citrix**: Require reproducible 3x3 evidence
+  ([#183](https://github.com/OpenAdaptAI/openadapt-flow/pull/183),
+  [`f6faac5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f6faac5b900b78cbda5980de0e983a9f987285ac))
+
+- **hardening**: Ratchet corpus down after locality+uniqueness gate
+  ([#165](https://github.com/OpenAdaptAI/openadapt-flow/pull/165),
+  [`e72cc05`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e72cc0524c8fad3f87e041e7a5d865d6dcb0be5a))
+
+- **openemr**: Expose exact fixture text readback
+  ([#223](https://github.com/OpenAdaptAI/openadapt-flow/pull/223),
+  [`558c07d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/558c07d14d2c4b182212eb0bdc078a3500d88bd9))
+
+- **openimis**: Stub the optional psycopg driver in all verifier-construction tests
+  ([#145](https://github.com/OpenAdaptAI/openadapt-flow/pull/145),
+  [`d952c36`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d952c363d1910f1699c1a4690002879b1990d743))
+
+- **rdp**: Prove compiled crop verifies healthy identity
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+- **rdp**: Retain per-step qualification diagnostics
+  ([`affedc5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/affedc5f1f0de533a0744deaa8e30a203c91c6b3))
+
+## v1.19.0 (2026-07-19)
+
+
+### Code Style
+
+- Ruff format record-window files ([#164](https://github.com/OpenAdaptAI/openadapt-flow/pull/164),
+  [`d85b371`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d85b371308e03ada05ef06942047287476ebb36e))
+
+### Features
+
+- **record**: Expose window-scoped capture on `record --window`
+  ([#164](https://github.com/OpenAdaptAI/openadapt-flow/pull/164),
+  [`d85b371`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d85b371308e03ada05ef06942047287476ebb36e))
+
+### Testing
+
+- Force supported platform in window-forwarding test
+  ([#164](https://github.com/OpenAdaptAI/openadapt-flow/pull/164),
+  [`d85b371`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d85b371308e03ada05ef06942047287476ebb36e))
+
+## v1.18.1 (2026-07-19)
+
+
+### Bug Fixes
+
+- **hosted**: Close run id path races
+  ([#163](https://github.com/OpenAdaptAI/openadapt-flow/pull/163),
+  [`40c4326`](https://github.com/OpenAdaptAI/openadapt-flow/commit/40c4326d8768d820287eb96c3bba3ede001294d4))
+
+- **hosted**: Harden versioned local run reporting
+  ([#160](https://github.com/OpenAdaptAI/openadapt-flow/pull/160),
+  [`9ccfd91`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9ccfd91cd0050b632f3e8a13e0916c626215b476))
+
+- **hosted**: Preserve binary run id bytes on Windows
+  ([#163](https://github.com/OpenAdaptAI/openadapt-flow/pull/163),
+  [`40c4326`](https://github.com/OpenAdaptAI/openadapt-flow/commit/40c4326d8768d820287eb96c3bba3ede001294d4))
+
+- **hosted**: Wait for exclusive run id writer
+  ([#163](https://github.com/OpenAdaptAI/openadapt-flow/pull/163),
+  [`40c4326`](https://github.com/OpenAdaptAI/openadapt-flow/commit/40c4326d8768d820287eb96c3bba3ede001294d4))
+
+### Documentation
+
+- Add explicit Beta lifecycle label to README
+  ([#161](https://github.com/OpenAdaptAI/openadapt-flow/pull/161),
+  [`6e2c8b3`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6e2c8b3de7e80ecb31bcef3cf7004a35abaed6b3))
+
+- Point lifecycle copy to qualification matrix
+  ([#162](https://github.com/OpenAdaptAI/openadapt-flow/pull/162),
+  [`5033b84`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5033b844d29479c44af05044b6d65fd1553c23e8))
+
+## v1.18.0 (2026-07-19)
+
+
+### Bug Fixes
+
+- **attended**: Rebind pause before checkpoint
+  ([#152](https://github.com/OpenAdaptAI/openadapt-flow/pull/152),
+  [`a93fdb5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a93fdb5f6a91fa3fe2b58223294729352c84ef54))
+
+- **attended**: Rebind program pause before commit
+  ([#152](https://github.com/OpenAdaptAI/openadapt-flow/pull/152),
+  [`a93fdb5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a93fdb5f6a91fa3fe2b58223294729352c84ef54))
+
+- **backends**: Harden Win32 window input ABI
+  ([#159](https://github.com/OpenAdaptAI/openadapt-flow/pull/159),
+  [`79f4dda`](https://github.com/OpenAdaptAI/openadapt-flow/commit/79f4ddad31bbf94b2936c9166644af7ea03453b6))
+
+- **console**: Own attended backends on one thread
+  ([#155](https://github.com/OpenAdaptAI/openadapt-flow/pull/155),
+  [`3257673`](https://github.com/OpenAdaptAI/openadapt-flow/commit/32576737ca97d331fd8ac16dffcdd03deb64876e))
+
+### Code Style
+
+- Format Win32 scan-code refusal ([#159](https://github.com/OpenAdaptAI/openadapt-flow/pull/159),
+  [`79f4dda`](https://github.com/OpenAdaptAI/openadapt-flow/commit/79f4ddad31bbf94b2936c9166644af7ea03453b6))
+
+### Documentation
+
+- **runner**: Design note — verified cloud contract, refusal matrix, required contract revisions
+  ([#157](https://github.com/OpenAdaptAI/openadapt-flow/pull/157),
+  [`8916ac9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8916ac98f160add56d53284fd27411873a8dea19))
+
+### Features
+
+- Add exact attended program receipts
+  ([#152](https://github.com/OpenAdaptAI/openadapt-flow/pull/152),
+  [`a93fdb5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a93fdb5f6a91fa3fe2b58223294729352c84ef54))
+
+- Report-run — PHI-free SUCCESS summary rail to /api/runs/ingest-report
+  ([#156](https://github.com/OpenAdaptAI/openadapt-flow/pull/156),
+  [`1db6420`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1db64205aaf0a0fe18c2753bae5cf106f4cf6943))
+
+- **attended**: Execute governed halt actions
+  ([#152](https://github.com/OpenAdaptAI/openadapt-flow/pull/152),
+  [`a93fdb5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a93fdb5f6a91fa3fe2b58223294729352c84ef54))
+
+- **backends**: Win32 WindowClient for remote-display window replay
+  ([#159](https://github.com/OpenAdaptAI/openadapt-flow/pull/159),
+  [`79f4dda`](https://github.com/OpenAdaptAI/openadapt-flow/commit/79f4ddad31bbf94b2936c9166644af7ea03453b6))
+
+- **compiler**: Emit identifier_crop — arm identity-on-pixels for remote-display workflows
+  ([#158](https://github.com/OpenAdaptAI/openadapt-flow/pull/158),
+  [`b3e54ac`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b3e54ac148bc2c1531a258c6ac10d7a9eb6b16d8))
+
+- **runner**: Governed-dispatch verification + lease-logic client library (Experimental)
+  ([#157](https://github.com/OpenAdaptAI/openadapt-flow/pull/157),
+  [`8916ac9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8916ac98f160add56d53284fd27411873a8dea19))
+
+- **runner**: Governed-dispatch verification + lease-logic client library (Experimental,
+  library-only) ([#157](https://github.com/OpenAdaptAI/openadapt-flow/pull/157),
+  [`8916ac9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8916ac98f160add56d53284fd27411873a8dea19))
+
+### Testing
+
+- **backends**: Pin Win32 Unicode and ABI contracts
+  ([#159](https://github.com/OpenAdaptAI/openadapt-flow/pull/159),
+  [`79f4dda`](https://github.com/OpenAdaptAI/openadapt-flow/commit/79f4ddad31bbf94b2936c9166644af7ea03453b6))
+
+- **runner**: Fixture-driven suite for the runner client library
+  ([#157](https://github.com/OpenAdaptAI/openadapt-flow/pull/157),
+  [`8916ac9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8916ac98f160add56d53284fd27411873a8dea19))
+
+## v1.17.2 (2026-07-19)
+
+
+### Bug Fixes
+
+- **capture**: Align malformed window marker error
+  ([#154](https://github.com/OpenAdaptAI/openadapt-flow/pull/154),
+  [`e626ce4`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e626ce4501af529710ad200735ba022bff33de61))
+
+## v1.17.1 (2026-07-19)
+
+
+### Bug Fixes
+
+- Preserve region stability across theme drift
+  ([#153](https://github.com/OpenAdaptAI/openadapt-flow/pull/153),
+  [`30512ec`](https://github.com/OpenAdaptAI/openadapt-flow/commit/30512ec1039790f29db7b2a1e3831f72fd91ed43))
+
+### Testing
+
+- Cover all observed theme over-halts
+  ([#153](https://github.com/OpenAdaptAI/openadapt-flow/pull/153),
+  [`30512ec`](https://github.com/OpenAdaptAI/openadapt-flow/commit/30512ec1039790f29db7b2a1e3831f72fd91ed43))
+
+## v1.17.0 (2026-07-19)
+
+
+### Features
+
+- **hosted**: Claim secure browser pairings
+  ([#151](https://github.com/OpenAdaptAI/openadapt-flow/pull/151),
+  [`0625898`](https://github.com/OpenAdaptAI/openadapt-flow/commit/062589882596800d6681bfd9e29e5091af518c11))
+
+## v1.16.1 (2026-07-19)
+
+
+### Bug Fixes
+
+- Preserve unchanged identity evidence in healing gate
+  ([#150](https://github.com/OpenAdaptAI/openadapt-flow/pull/150),
+  [`b179e1c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b179e1cacf6acbb5dccae6b9d246c906571314ce))
+
+- Refuse unreviewed healing identity additions
+  ([#150](https://github.com/OpenAdaptAI/openadapt-flow/pull/150),
+  [`b179e1c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b179e1cacf6acbb5dccae6b9d246c906571314ce))
+
+- **healing**: Preserve identity evidence across locator repair
+  ([#150](https://github.com/OpenAdaptAI/openadapt-flow/pull/150),
+  [`b179e1c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b179e1cacf6acbb5dccae6b9d246c906571314ce))
+
+## v1.16.0 (2026-07-19)
+
+
+### Bug Fixes
+
+- **linux**: Align AT-SPI fixture app identity
+  ([#148](https://github.com/OpenAdaptAI/openadapt-flow/pull/148),
+  [`891f390`](https://github.com/OpenAdaptAI/openadapt-flow/commit/891f390b2e4565458549bb763548831afb3b3b91))
+
+- **linux**: Name qualification accessibles explicitly
+  ([#148](https://github.com/OpenAdaptAI/openadapt-flow/pull/148),
+  [`891f390`](https://github.com/OpenAdaptAI/openadapt-flow/commit/891f390b2e4565458549bb763548831afb3b3b91))
+
+### Chores
+
+- **linux**: Lock native AT-SPI extra
+  ([#148](https://github.com/OpenAdaptAI/openadapt-flow/pull/148),
+  [`891f390`](https://github.com/OpenAdaptAI/openadapt-flow/commit/891f390b2e4565458549bb763548831afb3b3b91))
+
+- **linux**: Normalize qualification checks after hotfix rebase
+  ([#148](https://github.com/OpenAdaptAI/openadapt-flow/pull/148),
+  [`891f390`](https://github.com/OpenAdaptAI/openadapt-flow/commit/891f390b2e4565458549bb763548831afb3b3b91))
+
+### Documentation
+
+- Regenerate Linux verification report deterministically
+  ([#148](https://github.com/OpenAdaptAI/openadapt-flow/pull/148),
+  [`891f390`](https://github.com/OpenAdaptAI/openadapt-flow/commit/891f390b2e4565458549bb763548831afb3b3b91))
+
+### Features
+
+- **linux**: Add fail-closed AT-SPI backend
+  ([#148](https://github.com/OpenAdaptAI/openadapt-flow/pull/148),
+  [`891f390`](https://github.com/OpenAdaptAI/openadapt-flow/commit/891f390b2e4565458549bb763548831afb3b3b91))
+
+- **linux**: Add fail-closed native AT-SPI backend
+  ([#148](https://github.com/OpenAdaptAI/openadapt-flow/pull/148),
+  [`891f390`](https://github.com/OpenAdaptAI/openadapt-flow/commit/891f390b2e4565458549bb763548831afb3b3b91))
+
+### Testing
+
+- Qualify native Linux AT-SPI in isolated CI
+  ([#148](https://github.com/OpenAdaptAI/openadapt-flow/pull/148),
+  [`891f390`](https://github.com/OpenAdaptAI/openadapt-flow/commit/891f390b2e4565458549bb763548831afb3b3b91))
+
+## v1.15.0 (2026-07-18)
+
+
+### Bug Fixes
+
+- **adapters**: Fail closed on window capture drift
+  ([#146](https://github.com/OpenAdaptAI/openadapt-flow/pull/146),
+  [`1bd3f55`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1bd3f55b52abae96042ccf4bbcb9c55130f0b123))
+
+### Code Style
+
+- **console**: Satisfy pinned formatter
+  ([#149](https://github.com/OpenAdaptAI/openadapt-flow/pull/149),
+  [`540433b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/540433b663b9c7dcb90a1353515d8f586e5f0e85))
+
+### Features
+
+- **adapters**: Convert window-scoped capture sessions in their own pixel space
+  ([#146](https://github.com/OpenAdaptAI/openadapt-flow/pull/146),
+  [`1bd3f55`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1bd3f55b52abae96042ccf4bbcb9c55130f0b123))
+
+- **console**: Add read-only attended exception queue
+  ([#149](https://github.com/OpenAdaptAI/openadapt-flow/pull/149),
+  [`540433b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/540433b663b9c7dcb90a1353515d8f586e5f0e85))
+
+## v1.14.1 (2026-07-18)
+
+
+### Bug Fixes
+
+- Restore MIT-only releases and harden operator console
+  ([#144](https://github.com/OpenAdaptAI/openadapt-flow/pull/144),
+  [`1a02182`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1a02182b620cdb30542d31fe1d833bd01c6b5bf6))
+
+## v1.14.0 (2026-07-18)
+
+> **Yanked on PyPI.** This version shipped AGPL-licensed openIMIS
+> benchmark files in the package artifact and must not be installed.
+
+
+### Bug Fixes
+
+- **build**: Drop duplicate force-include of the console static UI
+  ([#133](https://github.com/OpenAdaptAI/openadapt-flow/pull/133),
+  [`5b21c2f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5b21c2f5bbdbfad99e18043c7ecb4ae92a32dd24))
+
+### Documentation
+
+- **console**: Operator-console screenshots from a live fixture session
+  ([#133](https://github.com/OpenAdaptAI/openadapt-flow/pull/133),
+  [`5b21c2f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5b21c2f5bbdbfad99e18043c7ecb4ae92a32dd24))
+
+### Features
+
+- **console**: Localhost operator console over bundles, runs, and skill lineage
+  ([#133](https://github.com/OpenAdaptAI/openadapt-flow/pull/133),
+  [`5b21c2f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5b21c2f5bbdbfad99e18043c7ecb4ae92a32dd24))
+
+## v1.13.0 (2026-07-18)
+
+> **Yanked on PyPI.** This version shipped AGPL-licensed openIMIS
+> benchmark files in the package artifact and must not be installed.
+
+
+### Documentation
+
+- Align product copy and report with scoped substrate evidence
+  ([#143](https://github.com/OpenAdaptAI/openadapt-flow/pull/143),
+  [`ede792f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ede792f5adf6d63c53afa46bb2d25e9caa725fae))
+
+- Align product copy with accepted substrate evidence
+  ([#143](https://github.com/OpenAdaptAI/openadapt-flow/pull/143),
+  [`ede792f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ede792f5adf6d63c53afa46bb2d25e9caa725fae))
+
+- Align technical report with scoped substrate evidence
+  ([#143](https://github.com/OpenAdaptAI/openadapt-flow/pull/143),
+  [`ede792f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ede792f5adf6d63c53afa46bb2d25e9caa725fae))
+
+- Stabilize generated verification timestamp
+  ([#143](https://github.com/OpenAdaptAI/openadapt-flow/pull/143),
+  [`ede792f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ede792f5adf6d63c53afa46bb2d25e9caa725fae))
+
+### Features
+
+- **benchmark**: OpenIMIS claims-intake reference environment (insurance vertical)
+  ([#141](https://github.com/OpenAdaptAI/openadapt-flow/pull/141),
+  [`06824f2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/06824f2bb39c2f4900d567a2f73bd27b154b583b))
+
+## v1.12.2 (2026-07-18)
+
+
+### Bug Fixes
+
+- Qualify real RDP session readiness
+  ([`b97af63`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b97af63dfb69059914c3e1cd7104997bb082e8a8))
+
+- Send RDP chords as physical scancodes
+  ([`82a658a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/82a658a6926ddac74b010b613535c023d0b5f079))
+
+### Code Style
+
+- Format RDP qualification files
+  ([`8f2290c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8f2290cdd13b9bc0fedbcb417b77091296c6f9cd))
+
+### Documentation
+
+- Distinguish RDP evidence hashes
+  ([`a5fe047`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a5fe047e521b86b6ca0e39966dfe6ac2d747d21a))
+
+### Testing
+
+- Bind counted RDP readiness timeout
+  ([`e2c7acf`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e2c7acf238d42ccf802461457a9f6503328c96e3))
+
+- Harden RDP desktop readiness proof
+  ([`309fa24`](https://github.com/OpenAdaptAI/openadapt-flow/commit/309fa24152ee8ef22ecf3020614fdff46be53ebe))
+
+- Record rejected real RDP qualification
+  ([`57249dc`](https://github.com/OpenAdaptAI/openadapt-flow/commit/57249dc2e4d2ea9beed4246ae6dcb1edab85c579))
+
+## v1.12.1 (2026-07-17)
+
+
+### Bug Fixes
+
+- Bound README claims and preserve plaintext PHI warnings
+  ([#140](https://github.com/OpenAdaptAI/openadapt-flow/pull/140),
+  [`5a8b3e6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5a8b3e6d3b4191eee3d8fd0e6b316663c83044fe))
+
+- Keep plaintext PHI warnings fail closed
+  ([#140](https://github.com/OpenAdaptAI/openadapt-flow/pull/140),
+  [`5a8b3e6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5a8b3e6d3b4191eee3d8fd0e6b316663c83044fe))
+
+### Documentation
+
+- Bound README substrate claims ([#140](https://github.com/OpenAdaptAI/openadapt-flow/pull/140),
+  [`5a8b3e6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5a8b3e6d3b4191eee3d8fd0e6b316663c83044fe))
+
+## v1.12.0 (2026-07-17)
+
+
+### Bug Fixes
+
+- **macos**: Bind native input to exact AX focus
+  ([#135](https://github.com/OpenAdaptAI/openadapt-flow/pull/135),
+  [`c52a6b3`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c52a6b3d458857e194eac48f9c3da3ec5ab4b0aa))
+
+### Chores
+
+- Adopt openadapt-capture 0.5.4 and run the adapter tests in CI
+  ([#139](https://github.com/OpenAdaptAI/openadapt-flow/pull/139),
+  [`4e424dd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4e424dddc20a33ff12d0cffddbcd098c20259ca8))
+
+- Regenerate verification report for updated capture-bridge evidence
+  ([#139](https://github.com/OpenAdaptAI/openadapt-flow/pull/139),
+  [`4e424dd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4e424dddc20a33ff12d0cffddbcd098c20259ca8))
+
+### Documentation
+
+- Frame machine-checked claims and Frappe matrix result as strengths
+  ([#137](https://github.com/OpenAdaptAI/openadapt-flow/pull/137),
+  [`a4ad4e8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a4ad4e81dc94736f07fac3918677e025e43ca86b))
+
+- Surface machine-checked claims + fix community funnel (--version, question routing)
+  ([#137](https://github.com/OpenAdaptAI/openadapt-flow/pull/137),
+  [`a4ad4e8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a4ad4e81dc94736f07fac3918677e025e43ca86b))
+
+- Vision-forward README opening — any repeated GUI task, once
+  ([#138](https://github.com/OpenAdaptAI/openadapt-flow/pull/138),
+  [`5d2c711`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5d2c711de1fe03aece605282bf70261f6cbed23f))
+
+### Features
+
+- **macos**: Add fail-closed native backend
+  ([#135](https://github.com/OpenAdaptAI/openadapt-flow/pull/135),
+  [`c52a6b3`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c52a6b3d458857e194eac48f9c3da3ec5ab4b0aa))
+
+### Testing
+
+- **macos**: Preserve counted evidence and fix cleanup audit
+  ([#135](https://github.com/OpenAdaptAI/openadapt-flow/pull/135),
+  [`c52a6b3`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c52a6b3d458857e194eac48f9c3da3ec5ab4b0aa))
+
+## v1.11.0 (2026-07-17)
+
+
+### Bug Fixes
+
+- **effects**: Harden kit after adversarial review — PHI-free tasks, resumable params, honest SQL
+  claims ([#134](https://github.com/OpenAdaptAI/openadapt-flow/pull/134),
+  [`e373fb9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e373fb900d14878bba2f1924054baf521cb6a6cf))
+
+### Features
+
+- **effects**: Effect-verifier kit — declarative verifiers, coverage gates, reconciliation tasks
+  ([#134](https://github.com/OpenAdaptAI/openadapt-flow/pull/134),
+  [`e373fb9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e373fb900d14878bba2f1924054baf521cb6a6cf))
+
+## v1.10.1 (2026-07-17)
+
+
+### Bug Fixes
+
+- **ci**: Repair cross-platform launch gates
+  ([#136](https://github.com/OpenAdaptAI/openadapt-flow/pull/136),
+  [`8e1fcdd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8e1fcdd01253ff22c5796a0717b561cf858a4fe2))
+
+### Continuous Integration
+
+- Allow exact-branch matrix validation
+  ([#136](https://github.com/OpenAdaptAI/openadapt-flow/pull/136),
+  [`8e1fcdd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8e1fcdd01253ff22c5796a0717b561cf858a4fe2))
+
+## v1.10.0 (2026-07-17)
+
+
+### Chores
+
+- **windows**: Record UIA qualification evidence
+  ([#132](https://github.com/OpenAdaptAI/openadapt-flow/pull/132),
+  [`defafba`](https://github.com/OpenAdaptAI/openadapt-flow/commit/defafbae758a75c8e149d9693f2cffe1f2264b8c))
+
+### Features
+
+- **windows**: Qualify governed typed UIA replay
+  ([#132](https://github.com/OpenAdaptAI/openadapt-flow/pull/132),
+  [`defafba`](https://github.com/OpenAdaptAI/openadapt-flow/commit/defafbae758a75c8e149d9693f2cffe1f2264b8c))
+
+## v1.9.1 (2026-07-17)
+
+
+### Bug Fixes
+
+- **runtime**: Preserve parameterized identity and scroll readiness
+  ([#131](https://github.com/OpenAdaptAI/openadapt-flow/pull/131),
+  [`077bae0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/077bae0e54529799eecf345504d39e3b1f56396c))
+
+### Code Style
+
+- Apply canonical Ruff formatting ([#131](https://github.com/OpenAdaptAI/openadapt-flow/pull/131),
+  [`077bae0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/077bae0e54529799eecf345504d39e3b1f56396c))
+
+## v1.9.0 (2026-07-16)
+
+
+### Bug Fixes
+
+- **on-prem**: Harden signed atomic release lifecycle
+  ([#122](https://github.com/OpenAdaptAI/openadapt-flow/pull/122),
+  [`07abc2c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/07abc2c11e9527ec576016e478832179d7a345fa))
+
+### Chores
+
+- Bound openadapt-types pin + add interop CI job
+  ([#121](https://github.com/OpenAdaptAI/openadapt-flow/pull/121),
+  [`36bd900`](https://github.com/OpenAdaptAI/openadapt-flow/commit/36bd9004ba796d7c27a0f9715c2f9713baab19d0))
+
+### Continuous Integration
+
+- Bound and validate openadapt-types interop
+  ([#121](https://github.com/OpenAdaptAI/openadapt-flow/pull/121),
+  [`36bd900`](https://github.com/OpenAdaptAI/openadapt-flow/commit/36bd9004ba796d7c27a0f9715c2f9713baab19d0))
+
+- Consolidate interop types validation
+  ([#121](https://github.com/OpenAdaptAI/openadapt-flow/pull/121),
+  [`36bd900`](https://github.com/OpenAdaptAI/openadapt-flow/commit/36bd9004ba796d7c27a0f9715c2f9713baab19d0))
+
+### Documentation
+
+- **on-prem**: Use current release in update examples
+  ([#122](https://github.com/OpenAdaptAI/openadapt-flow/pull/122),
+  [`07abc2c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/07abc2c11e9527ec576016e478832179d7a345fa))
+
+### Features
+
+- **on-prem**: Real atomic, rollback-able offline update path
+  ([#122](https://github.com/OpenAdaptAI/openadapt-flow/pull/122),
+  [`07abc2c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/07abc2c11e9527ec576016e478832179d7a345fa))
+
+## v1.8.1 (2026-07-16)
+
+
+### Bug Fixes
+
+- Expose governed run params file ([#130](https://github.com/OpenAdaptAI/openadapt-flow/pull/130),
+  [`ccc20c5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ccc20c5ddba48abb15ee7d04a10f423b5e28eebf))
+
+### Documentation
+
+- Align limits with governed authorization
+  ([#128](https://github.com/OpenAdaptAI/openadapt-flow/pull/128),
+  [`abf0233`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abf02336503356822cfd54890944546c01658104))
+
+- Bound structured identity uniqueness
+  ([#128](https://github.com/OpenAdaptAI/openadapt-flow/pull/128),
+  [`abf0233`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abf02336503356822cfd54890944546c01658104))
+
+- Clarify effect approval over-halt ([#128](https://github.com/OpenAdaptAI/openadapt-flow/pull/128),
+  [`abf0233`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abf02336503356822cfd54890944546c01658104))
+
+- Make LIMITS a durable buyer trust boundary
+  ([#128](https://github.com/OpenAdaptAI/openadapt-flow/pull/128),
+  [`abf0233`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abf02336503356822cfd54890944546c01658104))
+
+- Make limits a durable trust boundary
+  ([#128](https://github.com/OpenAdaptAI/openadapt-flow/pull/128),
+  [`abf0233`](https://github.com/OpenAdaptAI/openadapt-flow/commit/abf02336503356822cfd54890944546c01658104))
+
+## v1.8.0 (2026-07-16)
+
+
+### Bug Fixes
+
+- Close governed authorization bypasses
+  ([#129](https://github.com/OpenAdaptAI/openadapt-flow/pull/129),
+  [`9b6693c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9b6693cb4f2917ea8946bab9aa9dc2916789c07e))
+
+- Fail predicate-only asset mutations
+  ([#129](https://github.com/OpenAdaptAI/openadapt-flow/pull/129),
+  [`9b6693c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9b6693cb4f2917ea8946bab9aa9dc2916789c07e))
+
+- Preserve effects across transition halts
+  ([#129](https://github.com/OpenAdaptAI/openadapt-flow/pull/129),
+  [`9b6693c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9b6693cb4f2917ea8946bab9aa9dc2916789c07e))
+
+- Snapshot governed bundle assets ([#129](https://github.com/OpenAdaptAI/openadapt-flow/pull/129),
+  [`9b6693c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9b6693cb4f2917ea8946bab9aa9dc2916789c07e))
+
+### Documentation
+
+- Normalize authorization design ([#129](https://github.com/OpenAdaptAI/openadapt-flow/pull/129),
+  [`9b6693c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9b6693cb4f2917ea8946bab9aa9dc2916789c07e))
+
+### Features
+
+- Bind governed run authorization ([#129](https://github.com/OpenAdaptAI/openadapt-flow/pull/129),
+  [`9b6693c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/9b6693cb4f2917ea8946bab9aa9dc2916789c07e))
+
+## v1.7.3 (2026-07-16)
+
+
+### Bug Fixes
+
+- Preserve sanitized workflow integrity
+  ([`d11e3d2`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d11e3d20da2b9316690f0edc013c03dcc7484044))
+
+## v1.7.2 (2026-07-16)
+
+
+### Bug Fixes
+
+- Patch optional MLX transformer dependencies
+  ([`3e15cc1`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3e15cc1cffc6c497ad12b55637d9bcd66d159344))
+
+## v1.7.1 (2026-07-16)
+
+
+### Bug Fixes
+
+- Build releases without unsupported lock resolution
+  ([`c096d71`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c096d71d70e9d7579c9d9e53813dbb3100aed73a))
+
+- Restore supported Python release matrix
+  ([`2949267`](https://github.com/OpenAdaptAI/openadapt-flow/commit/29492670fb1b4d5fa4f2a54c05435d12401ec3c7))
+
+## v1.7.0 (2026-07-15)
+
+
+### Bug Fixes
+
+- Fail-closed bundle push — verify compiled bundle before PHI-gate bypass
+  ([`6d7e09f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6d7e09fac2588ac8194e9ecfe6b5078d77584751))
+
+- Fail-closed PHI boundary on recording upload + break-report free text
+  ([`d7baa16`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d7baa160107023981313ee29bcbd85cf73421d53))
+
+- Type sanitization approval envelope
+  ([`4aba2dc`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4aba2dc097e71b83ec373aa66f83ee71ca434c37))
+
+### Code Style
+
+- Satisfy launch formatting gate
+  ([`5f224f9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5f224f909d7cba4852216b35a5224ce5b49ebede))
+
+### Features
+
+- Add hosted login/push/break-emit CLI (cloud connectivity)
+  ([`260be45`](https://github.com/OpenAdaptAI/openadapt-flow/commit/260be453e237e649fa3782ec46b90c6893e11348))
+
+- Govern hosted artifact activation
+  ([`899d16c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/899d16c5ca44b5a5fbf3165ba3126d0e77fb080a))
+
+## v1.6.0 (2026-07-14)
+
+
+### Bug Fixes
+
+- Sync claims report + update obsolete desktop-record refusal test
+  ([#118](https://github.com/OpenAdaptAI/openadapt-flow/pull/118),
+  [`c6ffddf`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c6ffddfeb94093bd07ffb88268bddb21de4ee6a3))
+
+### Features
+
+- Desktop recording via record --backend windows|rdp (record->compile->replay on desktop)
+  ([#118](https://github.com/OpenAdaptAI/openadapt-flow/pull/118),
+  [`c6ffddf`](https://github.com/OpenAdaptAI/openadapt-flow/commit/c6ffddfeb94093bd07ffb88268bddb21de4ee6a3))
+
+## v1.5.1 (2026-07-14)
+
+
+### Bug Fixes
+
+- Update _resolve_step direct callers for the new workflow arg
+  ([#116](https://github.com/OpenAdaptAI/openadapt-flow/pull/116),
+  [`caeb823`](https://github.com/OpenAdaptAI/openadapt-flow/commit/caeb8234d3c3fc556e9b2c0a96464f204a976deb))
+
+### Chores
+
+- Wire sealed-templates+resume through the new seams; fix pre-existing OCR benchmark test
+  ([#116](https://github.com/OpenAdaptAI/openadapt-flow/pull/116),
+  [`caeb823`](https://github.com/OpenAdaptAI/openadapt-flow/commit/caeb8234d3c3fc556e9b2c0a96464f204a976deb))
+
+## v1.5.0 (2026-07-14)
+
+
+### Features
+
+- Auto-provision win_agent TLS cert on launch + fix pre-existing factory token test
+  ([#117](https://github.com/OpenAdaptAI/openadapt-flow/pull/117),
+  [`ab2115b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/ab2115b0db4346d0c659c2bb6a785e73a9a5da35))
+
+## v1.4.0 (2026-07-14)
+
+
+### Features
+
+- CLI backend selector (--backend web|windows|rdp) — unblock the desktop/Citrix path
+  ([#115](https://github.com/OpenAdaptAI/openadapt-flow/pull/115),
+  [`780f8c1`](https://github.com/OpenAdaptAI/openadapt-flow/commit/780f8c11a2a909e5671beffc26888c4de4ef6f01))
+
+## v1.3.0 (2026-07-14)
+
+
+### Bug Fixes
+
+- Unbreak non-PHI desktop callers under require_tls; drop pyautogui dep in TLS test
+  ([#112](https://github.com/OpenAdaptAI/openadapt-flow/pull/112),
+  [`3ffaddd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3ffaddd841bab73e17fadb028e96c1dac3d0f660))
+
+### Chores
+
+- Pin ruff==0.15.21 (stop CI-vs-local formatter drift)
+  ([#114](https://github.com/OpenAdaptAI/openadapt-flow/pull/114),
+  [`b1afd58`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b1afd58fe188101d31961e1e56eda3fb4683d53e))
+
+### Features
+
+- TLS + cert-pinning on the win_agent channel (PHI-in-transit encryption)
+  ([#112](https://github.com/OpenAdaptAI/openadapt-flow/pull/112),
+  [`3ffaddd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/3ffaddd841bab73e17fadb028e96c1dac3d0f660))
+
+## v1.2.0 (2026-07-14)
+
+
+### Code Style
+
+- Format run_gate with ruff >=0.6 (match CI formatter)
+  ([#109](https://github.com/OpenAdaptAI/openadapt-flow/pull/109),
+  [`74e4d9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/74e4d9f47408b7fcda785aaa8e9e757a715591c2))
+
+- Ruff format run_gate + tests (fix lint)
+  ([#109](https://github.com/OpenAdaptAI/openadapt-flow/pull/109),
+  [`74e4d9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/74e4d9f47408b7fcda785aaa8e9e757a715591c2))
+
+### Continuous Integration
+
+- Make E2E/wheel/CLI-smoke/docs/coverage merge-blocking + mypy-strict on safety path + CODEOWNERS
+  ([#111](https://github.com/OpenAdaptAI/openadapt-flow/pull/111),
+  [`96decd1`](https://github.com/OpenAdaptAI/openadapt-flow/commit/96decd18239a462d8fad53d503427251e98bb736))
+
+### Documentation
+
+- Remove agent-partition build notes, honest backend status, claims-consistency with LIMITS
+  ([#108](https://github.com/OpenAdaptAI/openadapt-flow/pull/108),
+  [`4e073cb`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4e073cb388b043bedcc9597fb200cad9896b3182))
+
+### Features
+
+- Claim->evidence validation harness (maturity claims backed by tests + reproducible report)
+  ([#110](https://github.com/OpenAdaptAI/openadapt-flow/pull/110),
+  [`4eb12ff`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4eb12ffcede76b2a2522cd63f6a381d4579ec5f0))
+
+- Fail-closed 'openadapt-flow run' for regulated execution (cert+identity+effect+crypto gates)
+  ([#109](https://github.com/OpenAdaptAI/openadapt-flow/pull/109),
+  [`74e4d9f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/74e4d9f47408b7fcda785aaa8e9e757a715591c2))
+
+- Seal template screenshot crops in the AEAD bundle (close at-rest image-PHI gap)
+  ([#113](https://github.com/OpenAdaptAI/openadapt-flow/pull/113),
+  [`fe606b8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/fe606b8a9ddc75067888dbe04a8828091b5b3580))
+
+## v1.1.0 (2026-07-14)
+
+
+### Documentation
+
+- **on-prem**: Reconcile at-rest note now that per-bundle AEAD shipped (#103)
+  ([#107](https://github.com/OpenAdaptAI/openadapt-flow/pull/107),
+  [`696a68f`](https://github.com/OpenAdaptAI/openadapt-flow/commit/696a68f20d6125c1ab27ba264b13590504ce7c26))
+
+### Features
+
+- Citrix/remote-display pixel-only e2e proof (UIA-off, on-screen verify, identity-gate + halt)
+  ([#106](https://github.com/OpenAdaptAI/openadapt-flow/pull/106),
+  [`b4b13ad`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b4b13adb5dd3a304e5c1bcd2a67d41da9a904d44))
+
+## v1.0.0 (2026-07-14)
+
+
+### Continuous Integration
+
+- Bump the actions group across 1 directory with 7 updates
+  ([#87](https://github.com/OpenAdaptAI/openadapt-flow/pull/87),
+  [`247af2c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/247af2c2ef3f5d9bd2a7f790cbdcf4c192ac3e3d))
+
+### Features
+
+- On-prem (air-gapped) clinic deployment package + docs
+  ([#105](https://github.com/OpenAdaptAI/openadapt-flow/pull/105),
+  [`aa47db6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/aa47db642bc306b71cefa5816fa91d3b67470c01))
 
 ## v0.26.0 (2026-07-14)
+
 
 ### Features
 
@@ -65,8 +3320,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.25.0 (2026-07-14)
+
 
 ### Bug Fixes
 
@@ -156,8 +3411,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.24.0 (2026-07-14)
+
 
 ### Features
 
@@ -192,8 +3447,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.23.0 (2026-07-14)
+
 
 ### Bug Fixes
 
@@ -246,8 +3501,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.22.0 (2026-07-14)
+
 
 ### Features
 
@@ -314,8 +3569,8 @@ Also apply ruff format to the opt-in e2e (CI format gate).
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.21.2 (2026-07-14)
+
 
 ### Bug Fixes
 
@@ -328,8 +3583,8 @@ Cross-PR regression on main: #91 (CLI) asserted the induce --held-out output say
   honest naming -- it is structural trace-shape coverage, not behavioral validation). Each PR passed
   alone; together they broke main. Update the test to the honest header.
 
-
 ## v0.21.1 (2026-07-14)
+
 
 ### Bug Fixes
 
@@ -383,8 +3638,8 @@ Effect.match/value/idempotency_key are now ValueExpr; the runtime validator coer
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.21.0 (2026-07-14)
+
 
 ### Bug Fixes
 
@@ -482,8 +3737,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.20.1 (2026-07-14)
+
 
 ### Bug Fixes
 
@@ -542,8 +3797,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.20.0 (2026-07-14)
+
 
 ### Features
 
@@ -578,8 +3833,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.19.1 (2026-07-14)
+
 
 ### Bug Fixes
 
@@ -723,8 +3978,8 @@ Mechanical `ruff format openadapt_flow tests` reflow only — no behavior change
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.19.0 (2026-07-13)
+
 
 ### Features
 
@@ -762,8 +4017,8 @@ The workflow.py excerpt lines overflowed the 548px code panel at 880px output wi
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.18.0 (2026-07-13)
+
 
 ### Features
 
@@ -793,8 +4048,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.17.0 (2026-07-13)
+
 
 ### Features
 
@@ -870,8 +4125,8 @@ Tests (tests/test_continuous_learning.py): a new dialog mid-stream is detected, 
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.16.0 (2026-07-13)
+
 
 ### Features
 
@@ -991,8 +4246,8 @@ Tests (tests/test_induction.py, 17 tests): a synthetic MockMed corpus of trace v
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.15.0 (2026-07-13)
+
 
 ### Features
 
@@ -1050,8 +4305,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.14.0 (2026-07-13)
+
 
 ### Features
 
@@ -1105,8 +4360,8 @@ The EXECUTE half of the capability ladder (the reviews' 'where a real API exists
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.13.0 (2026-07-13)
+
 
 ### Continuous Integration
 
@@ -1219,8 +4474,8 @@ Stacks on #71 (feat/workflow-program-ir-phase1); retarget base to main after #71
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.12.0 (2026-07-13)
+
 
 ### Features
 
@@ -1259,8 +4514,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.11.0 (2026-07-13)
+
 
 ### Features
 
@@ -1294,8 +4549,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.10.0 (2026-07-13)
+
 
 ### Features
 
@@ -1313,8 +4568,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.9.0 (2026-07-13)
+
 
 ### Features
 
@@ -1357,8 +4612,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.8.0 (2026-07-13)
+
 
 ### Features
 
@@ -1395,8 +4650,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.7.0 (2026-07-13)
+
 
 ### Features
 
@@ -1501,8 +4756,8 @@ Stacks on feat/effect-verifier (#63); retarget to main after #63 merges.
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.6.0 (2026-07-13)
+
 
 ### Features
 
@@ -1631,8 +4886,8 @@ Real runs are now protected by independent system-of-record verification, not ju
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.5.0 (2026-07-13)
+
 
 ### Continuous Integration
 
@@ -1731,8 +4986,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.4.0 (2026-07-13)
+
 
 ### Bug Fixes
 
@@ -2362,8 +5617,8 @@ Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
 Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
-
 ## v0.3.0 (2026-07-12)
+
 
 ### Bug Fixes
 
@@ -2704,8 +5959,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 
 Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
-
 ## v0.2.0 (2026-07-11)
+
 
 ### Bug Fixes
 
@@ -3890,8 +7145,8 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 
 Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
 
-
 ## v0.1.0 (2026-07-08)
+
 
 ### Bug Fixes
 

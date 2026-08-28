@@ -17,6 +17,7 @@
       "tag_pattern": "^v(\\d+\\.\\d+\\.\\d+)$",
       "release_workflows": ["release.yml"],
       "pypi_package": "openadapt-flow",
+      "changelog_file": "CHANGELOG.md",
       "tracks_main": true,
       "unreleased_grace_hours": 4,
       "tag_without_release_grace_hours": 1,

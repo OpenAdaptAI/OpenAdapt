@@ -333,7 +333,128 @@ def evaluate(state: dict[str, Any], report: Report) -> Report:
         # -- unpublished-release --------------------------------------------
         _check_pypi(report, lane, now, grace_pypi, pypi_remediation)
 
+        # -- changelog-coverage ---------------------------------------------
+        _check_changelog_coverage(report, lane, now, grace_tag)
+
     return report
+
+
+CHANGELOG_HEADING = re.compile(r"(?m)^## v?(\d+\.\d+\.\d+) \(")
+
+
+def _changelog_versions(path: Path) -> set[str] | None:
+    """Versions with an entry in ``path``. ``None`` when the file is unreadable.
+
+    Matches the same shape the release workflow greps for, so the detector and
+    the release gate cannot disagree about what counts as an entry.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return set(CHANGELOG_HEADING.findall(text))
+
+
+def _check_changelog_coverage(
+    report: Report,
+    lane: dict[str, Any],
+    now: datetime,
+    grace: timedelta,
+) -> None:
+    """Alert when a released version has no changelog entry.
+
+    Why this detector exists. On 2026-07-14 a grouped dependency bump moved
+    python-semantic-release 9.15.2 -> 10.6.1. Version 10 changed the default
+    changelog mode from "init" to "update", and "update" mode writes nothing
+    when the file has no insertion flag -- exit 0, no warning, no diff. v0.26.0
+    was released 22 minutes before that bump merged and is the last entry the
+    generator ever wrote. v1.0.0 through v1.33.0, six weeks and 34 published
+    versions, each bumped the version and wrote no entry.
+
+    Nothing caught it. The release workflow does gate on a changelog entry, but
+    that gate was added on 2026-08-26, after every one of those releases, so its
+    first evaluation was also the first report. A tag-versus-changelog
+    comparison would have alerted on 2026-07-14, on the very next scheduled run.
+
+    Deliberately state-based like its siblings: the alarm is "a version is
+    published and undocumented", not "a generator run did something unexpected".
+    That holds regardless of who or what writes the entries, which matters
+    because this repository has already moved from generator-written entries to
+    entries prepared in a reviewed pull request.
+    """
+    lane_id = lane["id"]
+    changelog_file = lane.get("changelog_file")
+    if not changelog_file:
+        return
+    documented = lane.get("changelog_versions")
+    if documented is None:
+        report.warn(
+            f"[{lane_id}] {changelog_file} could not be read; changelog coverage "
+            "was not checked."
+        )
+        return
+    documented = set(documented)
+
+    # Only versions whose tag is older than the publish grace window. A tag
+    # created moments ago may legitimately be mid-release.
+    missing = []
+    for entry in lane.get("tagged_versions") or []:
+        version = entry["version"]
+        if version in documented:
+            continue
+        created = parse_time(entry.get("date"))
+        if created is not None and now - created < grace:
+            report.hold_open()
+            report.note(
+                f"[{lane_id}] {version} has no {changelog_file} entry but its tag "
+                f"is only {humanize(now - created)} old; inside the "
+                f"{humanize(grace)} window."
+            )
+            continue
+        missing.append(entry)
+
+    if not missing:
+        report.note(f"[{lane_id}] every released version has a {changelog_file} entry.")
+        return
+
+    missing.sort(key=lambda entry: version_key(entry["version"]))
+    oldest = missing[0]["version"]
+    newest = missing[-1]["version"]
+    shown = missing if len(missing) <= 10 else missing[:5] + missing[-5:]
+
+    lines = [
+        f"**{len(missing)} published version(s) have no entry in "
+        f"`{changelog_file}`.** The tags and the packages are public; the "
+        "record of what changed in them is not.",
+        "",
+        f"Range: `{oldest}` through `{newest}`.",
+        "",
+        "| version | tag date |",
+        "| --- | --- |",
+    ]
+    for index, entry in enumerate(shown):
+        if len(missing) > 10 and index == 5:
+            lines.append(f"| … | {len(missing) - 10} more |")
+        lines.append(f"| `{entry['version']}` | {entry.get('date') or '—'} |")
+    lines += [
+        "",
+        "A silently empty changelog is the failure mode this detector exists "
+        "for: the generator that writes these entries can stop writing them "
+        "without failing. `python-semantic-release` 10 does exactly that when "
+        f"`{changelog_file}` has no `insertion_flag`, and it exits 0.",
+        "",
+        "Check the generator still writes, then prepare the missing entries:",
+        "",
+        "```sh",
+        "semantic-release changelog        # must modify the file",
+        "```",
+    ]
+    report.alert(
+        "changelog-coverage",
+        lane_id,
+        f"{len(missing)} published version(s) are undocumented",
+        "\n".join(lines),
+    )
 
 
 def _check_unreleased_work(
@@ -748,6 +869,13 @@ def collect_state(config: dict[str, Any], report: Report) -> dict[str, Any]:
     released_tags = {
         release["tag_name"] for release in releases if not release.get("draft", False)
     }
+    # Dates for free, from the releases already fetched. Enough for the
+    # changelog-coverage grace window without one API call per tag.
+    tag_dates: dict[str, str] = {
+        release["tag_name"]: release.get("published_at") or release.get("created_at")
+        for release in releases
+        if not release.get("draft", False)
+    }
     refs = github_paginate(f"/repos/{repository}/git/matching-refs/tags/")
     tag_names = sorted({ref["ref"].removeprefix("refs/tags/") for ref in refs})
 
@@ -769,7 +897,10 @@ def collect_state(config: dict[str, Any], report: Report) -> dict[str, Any]:
         for _key, name, _version in matched:
             if name in released_tags:
                 continue
-            orphans.append(_describe_orphan_tag(repository, name, runs))
+            orphan = _describe_orphan_tag(repository, name, runs)
+            if orphan.get("date"):
+                tag_dates.setdefault(name, orphan["date"])
+            orphans.append(orphan)
 
         lane_state: dict[str, Any] = {
             "id": lane_config["id"],
@@ -792,6 +923,25 @@ def collect_state(config: dict[str, Any], report: Report) -> dict[str, Any]:
             "runs": runs[:10],
             "main_ci_state": ci_state,
         }
+
+        changelog_file = lane_config.get("changelog_file")
+        if changelog_file:
+            lane_state["changelog_file"] = changelog_file
+            versions = _changelog_versions(ROOT / changelog_file)
+            lane_state["changelog_versions"] = (
+                None if versions is None else sorted(versions)
+            )
+            # Tag dates come from one call per lane, not one per tag: a
+            # six-week gap is 34 tags and the detector must not spend 34
+            # requests to notice it. The newest tag's date is already fetched
+            # below; the rest fall back to the ref's own creation date, which
+            # `_describe_orphan_tag` does not cover for already-released tags.
+            # An absent date only means the grace window cannot suppress that
+            # row, which is the safe direction.
+            lane_state["tagged_versions"] = [
+                {"version": version, "tag": name, "date": tag_dates.get(name)}
+                for _key, name, version in matched
+            ]
 
         if matched:
             _key, latest_name, latest_version = matched[-1]
@@ -1138,7 +1288,114 @@ def self_test() -> int:
         "unpublished-release" in _detectors(unpublished),
     )
 
+    # The real 2026-07-14 regression, replayed. python-semantic-release 10
+    # stopped writing entries silently; v1.0.0 shipped 22 minutes later with
+    # none, and nothing said so for six weeks. Evaluated the next morning, this
+    # detector alerts.
+    changelog_gap = _state(
+        lane={
+            "changelog_file": "CHANGELOG.md",
+            "changelog_versions": ["0.25.0", "0.26.0"],
+            "tagged_versions": [
+                {
+                    "version": "0.26.0",
+                    "tag": "v0.26.0",
+                    "date": "2026-07-14T17:25:25+00:00",
+                },
+                {
+                    "version": "1.0.0",
+                    "tag": "v1.0.0",
+                    "date": "2026-07-14T17:47:20+00:00",
+                },
+            ],
+        }
+    )
+    changelog_gap["now"] = "2026-07-15T09:00:00+00:00"
+    check(
+        "a released version with no changelog entry -> alert",
+        "changelog-coverage" in _detectors(changelog_gap),
+    )
+
     print("B. It stays QUIET on every transient this repository actually produces")
+
+    # Every tag documented: the state this repository is in after the backfill.
+    changelog_complete = _state(
+        lane={
+            "changelog_file": "CHANGELOG.md",
+            "changelog_versions": ["0.26.0", "1.0.0"],
+            "tagged_versions": [
+                {
+                    "version": "0.26.0",
+                    "tag": "v0.26.0",
+                    "date": "2026-07-14T17:25:25+00:00",
+                },
+                {
+                    "version": "1.0.0",
+                    "tag": "v1.0.0",
+                    "date": "2026-07-14T17:47:20+00:00",
+                },
+            ],
+        }
+    )
+    changelog_complete["now"] = "2026-07-15T09:00:00+00:00"
+    check(
+        "every released version documented -> quiet",
+        "changelog-coverage" not in _detectors(changelog_complete),
+    )
+
+    # A tag minted moments ago is mid-release, not undocumented.
+    changelog_fresh = _state(
+        lane={
+            "changelog_file": "CHANGELOG.md",
+            "changelog_versions": ["0.26.0"],
+            "tagged_versions": [
+                {
+                    "version": "1.0.0",
+                    "tag": "v1.0.0",
+                    "date": "2026-07-14T17:47:20+00:00",
+                },
+            ],
+        }
+    )
+    changelog_fresh["now"] = "2026-07-14T17:52:00+00:00"
+    check(
+        "a tag inside the publish grace window -> quiet",
+        "changelog-coverage" not in _detectors(changelog_fresh),
+    )
+
+    # A lane that declares no changelog file is not held to one.
+    check(
+        "lane with no changelog_file -> quiet",
+        "changelog-coverage" not in _detectors(_state()),
+    )
+
+    # An unreadable changelog warns; it must not alert as though every version
+    # were undocumented.
+    changelog_unreadable = _state(
+        lane={
+            "changelog_file": "CHANGELOG.md",
+            "changelog_versions": None,
+            "tagged_versions": [
+                {
+                    "version": "1.0.0",
+                    "tag": "v1.0.0",
+                    "date": "2026-07-14T00:00:00+00:00",
+                },
+            ],
+        }
+    )
+    check(
+        "unreadable changelog -> warn, not alert",
+        "changelog-coverage" not in _detectors(changelog_unreadable),
+    )
+
+    # The detector and the release gate must agree on what an entry looks like.
+    check(
+        "heading shape matches the release workflow's grep",
+        _changelog_versions.__doc__ is not None
+        and CHANGELOG_HEADING.findall("## v1.34.0 (2026-08-27)\n") == ["1.34.0"]
+        and CHANGELOG_HEADING.findall("## Unreleased\n") == [],
+    )
 
     # ~90s window: semantic-release pushes the release commit, then the
     # launcher's reconcile job pushes a second one.

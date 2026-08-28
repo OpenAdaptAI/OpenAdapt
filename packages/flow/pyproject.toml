@@ -323,6 +323,26 @@ commit_message = "chore: release {version}"
 # instead of asking uv to resolve the project under an unsupported interpreter.
 build_command = "python -m ensurepip --upgrade && python -m pip install --disable-pip-version-check uv==0.11.29 && python scripts/check_release_consistency.py --sync && git add uv.lock && uv build --wheel --sdist && python scripts/check_release_consistency.py --require-dist"
 
+[tool.semantic_release.changelog]
+# Pinned deliberately rather than left to the generator's defaults.
+#
+# On 2026-07-14 the pinned python-semantic-release action moved 9.15.2 -> 10.6.1
+# in one grouped dependency bump. Version 10 changed the default changelog mode
+# from "init" to "update". In "update" mode the generator inserts each new
+# version immediately after `insertion_flag` and writes NOTHING when that flag
+# is absent from the file -- it exits 0 and emits no warning. This changelog had
+# been written entirely by version 9, so it carried no flag. Every release from
+# v1.0.0 (22 minutes after that bump merged) through v1.33.0 bumped the version
+# and produced no changelog entry, and no check noticed for six weeks.
+#
+# Both values are stated explicitly so the next major bump of the generator
+# cannot change them silently. `mode = "update"` is also the mode that must stay:
+# "init" regenerates the whole file, and version 10's default template emits the
+# commit summary line only, which would discard the commit bodies in the v0.x
+# entries below.
+mode = "update"
+insertion_flag = "<!-- version list -->"
+
 [tool.semantic_release.branches.main]
 match = "main"
 
