@@ -9,7 +9,6 @@ The tray is a lightweight status mirror + launcher. It owns no business logic:
 * the desktop app is the source of truth for all state — the tray renders it.
 """
 
-import subprocess
 import sys
 import threading
 import webbrowser
@@ -17,6 +16,7 @@ import webbrowser
 import pystray
 
 from openadapt_tray.config import ConfigLoadError, TrayConfig
+from openadapt_tray.desktop import DesktopLaunchError, launch_native_desktop
 from openadapt_tray.hosted import (
     CountResult,
     HostedPoller,
@@ -39,9 +39,6 @@ from openadapt_tray.state import (
     SyncState,
     TrayState,
 )
-
-# How the tray launches the desktop app when the socket is unreachable.
-DESKTOP_APP_COMMAND = "openadapt-desktop"
 
 
 class TrayApplication:
@@ -243,7 +240,8 @@ class TrayApplication:
             return True
 
         # Desktop not running — launch it, then poll for the discovery file.
-        self._launch_desktop_app()
+        if not self._launch_desktop_app():
+            return False
         for _ in range(20):  # ~10s
             if self.ipc.refresh_from_discovery() and self.ipc.connect():
                 return True
@@ -251,21 +249,21 @@ class TrayApplication:
 
         return False
 
-    def _launch_desktop_app(self) -> None:
-        """Spawn the desktop app process (best-effort)."""
+    def _launch_desktop_app(self) -> bool:
+        """Launch the installed native desktop application."""
         try:
-            subprocess.Popen(
-                [DESKTOP_APP_COMMAND],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except FileNotFoundError:
+            launch_native_desktop()
+        except DesktopLaunchError as e:
             self.notifications.show(
                 "Desktop app not found",
                 "Install the OpenAdapt desktop app to record and manage workflows.",
             )
+            print(f"Failed to launch desktop app: {e}")
+            return False
         except Exception as e:
             print(f"Failed to launch desktop app: {e}")
+            return False
+        return True
 
     # --- recording actions (delegated to the desktop over IPC) --------------
 
@@ -484,7 +482,7 @@ class TrayApplication:
         data = message.data or {}
         self.state.transition(
             TrayState.RECORDING,
-            current_capture=data.get("name"),
+            current_capture=data.get("capture_id") or data.get("name"),
         )
 
     def _on_ipc_recording_stopped(self, message) -> None:
@@ -502,8 +500,8 @@ class TrayApplication:
     def _on_ipc_status_update(self, message) -> None:
         """Handle a full status update from the desktop (source of truth).
 
-        The payload may carry ``state``, ``deployment_lane``, ``sync_state``,
-        ``break_count`` and ``offline``.
+        Protocol v1 carries the canonical ``recording`` boolean and optional
+        ``capture_id``. Hosted status fields remain orthogonal.
         """
         data = message.data or {}
 
@@ -518,25 +516,49 @@ class TrayApplication:
         if "break_count" in data:
             self._apply_break_count(data.get("break_count"))
 
+        recording = data.get("recording")
+        if type(recording) is bool:
+            self.state.transition(
+                TrayState.RECORDING if recording else TrayState.IDLE,
+                current_capture=(data.get("capture_id") if recording else None),
+            )
+            return
+
+        # Compatibility with the pre-v1 status projection. Protocol v1 uses
+        # the canonical ``recording`` boolean above.
         state_name = data.get("state")
-        if state_name:
+        if isinstance(state_name, str):
             try:
-                self.state.transition(TrayState[state_name])
+                self.state.transition(TrayState[state_name.upper()])
             except KeyError:
                 pass
 
     def _on_ipc_compile_progress(self, message) -> None:
         """Handle a compile-progress event (recording → workflow)."""
         data = message.data or {}
-        # Any progress signal means we are compiling; a terminal signal returns
-        # to idle.
-        if data.get("done"):
+        state = str(data.get("state") or "").lower()
+        capture_id = data.get("capture_id") or data.get("name")
+        if state == "compiled":
             self.state.transition(TrayState.IDLE)
-        else:
+        elif state in {"failed", "review_failed"}:
+            default_error = (
+                "The action review could not open."
+                if state == "review_failed"
+                else "The recording could not be compiled."
+            )
+            self.state.transition(
+                TrayState.ERROR,
+                current_capture=capture_id,
+                error_message=str(data.get("error") or default_error),
+            )
+        elif state == "compiling":
             self.state.transition(
                 TrayState.COMPILING,
-                current_capture=data.get("name"),
+                current_capture=capture_id,
             )
+        elif data.get("done") is True:
+            # Compatibility with an older terminal projection.
+            self.state.transition(TrayState.IDLE)
 
     def _on_ipc_sync_state(self, message) -> None:
         """Handle a sync-state event from the desktop."""

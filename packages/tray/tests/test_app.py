@@ -3,6 +3,8 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from openadapt_tray.config import ConfigLoadError, TrayConfig
 from openadapt_tray.platform.base import DialogUnavailableError
 from openadapt_tray.state import SyncState, TrayState
@@ -443,6 +445,28 @@ class TestOpenActionsReportDeadEnds:
 
         app.notifications.show.assert_called_once()
 
+    def test_desktop_launch_uses_native_application_helper(self):
+        app = _make_test_app()
+
+        with patch("openadapt_tray.app.launch_native_desktop") as launch:
+            assert app._launch_desktop_app() is True
+
+        launch.assert_called_once_with()
+
+    def test_missing_native_desktop_is_reported(self):
+        from openadapt_tray.desktop import DesktopLaunchError
+
+        app = _make_test_app()
+        app.notifications = MagicMock()
+
+        with patch(
+            "openadapt_tray.app.launch_native_desktop",
+            side_effect=DesktopLaunchError("not installed"),
+        ):
+            assert app._launch_desktop_app() is False
+
+        app.notifications.show.assert_called_once()
+
     def test_browser_failure_is_not_reported_as_opened(self):
         app = _make_test_app()
         app.notifications = MagicMock()
@@ -520,3 +544,70 @@ class TestUnreadableIPCBreakCounts:
         app._on_ipc_status_update(message)
 
         assert app.state.current.break_count == 4
+
+
+class TestCanonicalDesktopState:
+    """The tray consumes Desktop protocol v1 without compatibility fields."""
+
+    def test_status_uses_recording_boolean_and_capture_id(self):
+        app = _make_test_app()
+
+        app._on_ipc_status_update(
+            MagicMock(
+                data={
+                    "recording": True,
+                    "paused": False,
+                    "capture_id": "capture-1",
+                }
+            )
+        )
+
+        assert app.state.current.state == TrayState.RECORDING
+        assert app.state.current.current_capture == "capture-1"
+
+    def test_status_false_clears_stale_recording_state(self):
+        app = _make_test_app()
+        app.state.transition(TrayState.RECORDING, current_capture="old")
+
+        app._on_ipc_status_update(
+            MagicMock(data={"recording": False, "capture_id": None})
+        )
+
+        assert app.state.current.state == TrayState.IDLE
+        assert app.state.current.current_capture is None
+
+    def test_recording_event_uses_capture_id(self):
+        app = _make_test_app()
+
+        app._on_ipc_recording_started(MagicMock(data={"capture_id": "capture-2"}))
+
+        assert app.state.current.current_capture == "capture-2"
+
+    def test_compiled_is_a_successful_terminal_state(self):
+        app = _make_test_app()
+        app.state.transition(TrayState.COMPILING, current_capture="capture-3")
+
+        app._on_ipc_compile_progress(
+            MagicMock(data={"state": "compiled", "capture_id": "capture-3"})
+        )
+
+        assert app.state.current.state == TrayState.IDLE
+        assert app.state.current.error_message is None
+
+    @pytest.mark.parametrize("terminal", ["failed", "review_failed"])
+    def test_compile_failure_terminal_states_stay_visible(self, terminal):
+        app = _make_test_app()
+
+        app._on_ipc_compile_progress(
+            MagicMock(
+                data={
+                    "state": terminal,
+                    "capture_id": "capture-4",
+                    "error": "retained failure",
+                }
+            )
+        )
+
+        assert app.state.current.state == TrayState.ERROR
+        assert app.state.current.current_capture == "capture-4"
+        assert app.state.current.error_message == "retained failure"

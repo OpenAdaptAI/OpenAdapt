@@ -23,6 +23,7 @@ from typing import Any, Optional
 
 # Discovery file the desktop app writes on startup (see §3d of the spec).
 DEFAULT_DISCOVERY_PATH = Path.home() / ".openadapt" / "desktop_ipc.json"
+SUPPORTED_PROTOCOL_VERSION = 1
 
 
 class IPCMessageType(Enum):
@@ -85,14 +86,13 @@ class IPCMessage:
 class DesktopEndpoint:
     """Discovered desktop-app IPC endpoint."""
 
+    protocol_version: int
     host: str
     port: int
     token: str | None = None
 
     @classmethod
-    def load(
-        cls, path: Path | None = None
-    ) -> Optional["DesktopEndpoint"]:
+    def load(cls, path: Path | None = None) -> Optional["DesktopEndpoint"]:
         """Load the desktop IPC endpoint from the discovery file.
 
         Args:
@@ -108,10 +108,21 @@ class DesktopEndpoint:
             if not path.exists():
                 return None
             data = json.loads(path.read_text())
+            protocol_version = data.get("protocol_version")
+            if (
+                type(protocol_version) is not int
+                or protocol_version != SUPPORTED_PROTOCOL_VERSION
+            ):
+                print(
+                    "Could not use desktop IPC discovery file: "
+                    f"protocol_version must be {SUPPORTED_PROTOCOL_VERSION}"
+                )
+                return None
             port = data.get("port")
             if port is None:
                 return None
             return cls(
+                protocol_version=protocol_version,
                 host=data.get("host", "127.0.0.1"),
                 port=int(port),
                 token=data.get("token"),
@@ -150,9 +161,7 @@ class IPCClient:
         self._handlers: dict[IPCMessageType, Callable[[IPCMessage], None]] = {}
 
     @classmethod
-    def from_discovery(
-        cls, path: Path | None = None
-    ) -> Optional["IPCClient"]:
+    def from_discovery(cls, path: Path | None = None) -> Optional["IPCClient"]:
         """Build a client from the desktop discovery file, if present.
 
         Args:
@@ -220,6 +229,13 @@ class IPCClient:
                 daemon=True,
             )
             self._listener_thread.start()
+
+            # The desktop is authoritative. Request a complete status snapshot
+            # before the tray accepts any user action based on its default
+            # in-memory state.
+            if not self.send_get_status():
+                self.close()
+                return False
 
             return True
         except OSError as e:

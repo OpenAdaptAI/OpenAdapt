@@ -1,9 +1,11 @@
 """Tests for the desktop IPC client + discovery."""
 
 import json
+from unittest.mock import patch
 
 from openadapt_tray.ipc import (
     DEFAULT_DISCOVERY_PATH,
+    SUPPORTED_PROTOCOL_VERSION,
     DesktopEndpoint,
     IPCClient,
     IPCMessage,
@@ -90,11 +92,17 @@ class TestDesktopEndpointDiscovery:
         f = tmp_path / "desktop_ipc.json"
         f.write_text(
             json.dumps(
-                {"host": "127.0.0.1", "port": 51234, "token": "sess-abc"}
+                {
+                    "protocol_version": SUPPORTED_PROTOCOL_VERSION,
+                    "host": "127.0.0.1",
+                    "port": 51234,
+                    "token": "sess-abc",
+                }
             )
         )
         ep = DesktopEndpoint.load(f)
         assert ep is not None
+        assert ep.protocol_version == SUPPORTED_PROTOCOL_VERSION
         assert ep.host == "127.0.0.1"
         assert ep.port == 51234
         assert ep.token == "sess-abc"
@@ -108,7 +116,27 @@ class TestDesktopEndpointDiscovery:
     def test_load_without_port_returns_none(self, tmp_path):
         """A discovery file missing the port is unusable."""
         f = tmp_path / "desktop_ipc.json"
-        f.write_text(json.dumps({"host": "127.0.0.1"}))
+        f.write_text(json.dumps({"protocol_version": SUPPORTED_PROTOCOL_VERSION}))
+        assert DesktopEndpoint.load(f) is None
+
+    def test_load_without_protocol_version_returns_none(self, tmp_path):
+        """An unversioned endpoint cannot define the command contract."""
+        f = tmp_path / "desktop_ipc.json"
+        f.write_text(json.dumps({"port": 51234, "token": "sess-abc"}))
+        assert DesktopEndpoint.load(f) is None
+
+    def test_load_with_unknown_protocol_version_returns_none(self, tmp_path):
+        """A future Desktop protocol must not be guessed by an older tray."""
+        f = tmp_path / "desktop_ipc.json"
+        f.write_text(
+            json.dumps(
+                {
+                    "protocol_version": SUPPORTED_PROTOCOL_VERSION + 1,
+                    "port": 51234,
+                    "token": "sess-abc",
+                }
+            )
+        )
         assert DesktopEndpoint.load(f) is None
 
     def test_default_discovery_path(self):
@@ -127,7 +155,15 @@ class TestIPCClientDiscovery:
     def test_from_discovery_configures_client(self, tmp_path):
         """from_discovery wires host/port/token onto the client."""
         f = tmp_path / "desktop_ipc.json"
-        f.write_text(json.dumps({"port": 40000, "token": "tok"}))
+        f.write_text(
+            json.dumps(
+                {
+                    "protocol_version": SUPPORTED_PROTOCOL_VERSION,
+                    "port": 40000,
+                    "token": "tok",
+                }
+            )
+        )
         client = IPCClient.from_discovery(f)
         assert client is not None
         assert client.port == 40000
@@ -136,7 +172,15 @@ class TestIPCClientDiscovery:
     def test_refresh_from_discovery(self, tmp_path):
         """refresh_from_discovery updates an existing client in place."""
         f = tmp_path / "desktop_ipc.json"
-        f.write_text(json.dumps({"port": 12345, "token": "t1"}))
+        f.write_text(
+            json.dumps(
+                {
+                    "protocol_version": SUPPORTED_PROTOCOL_VERSION,
+                    "port": 12345,
+                    "token": "t1",
+                }
+            )
+        )
         client = IPCClient()
         assert client.refresh_from_discovery(f) is True
         assert client.port == 12345
@@ -176,4 +220,37 @@ class TestIPCClientDiscovery:
             "open_teach",
             "pause_sync",
             "resume_sync",
+        ]
+
+    def test_connect_requests_status_as_the_first_authenticated_command(self):
+        """A new connection starts from Desktop state, not Tray defaults."""
+        sent = []
+
+        class FakeSock:
+            def settimeout(self, _timeout):
+                pass
+
+            def connect(self, _endpoint):
+                pass
+
+            def recv(self, _size):
+                return b""
+
+            def sendall(self, data):
+                sent.append(json.loads(data.decode().strip()))
+
+            def close(self):
+                pass
+
+        client = IPCClient(token="session-token")
+        with patch("openadapt_tray.ipc.socket.socket", return_value=FakeSock()):
+            assert client.connect() is True
+            client.close()
+
+        assert sent == [
+            {
+                "type": "get_status",
+                "data": None,
+                "token": "session-token",
+            }
         ]
