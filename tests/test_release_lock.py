@@ -101,6 +101,12 @@ def test_release_workflow_pins_actions_and_separates_permissions():
         "cancel-in-progress": False,
     }
     jobs = document["jobs"]
+    assert jobs["stage-flow-admission"]["permissions"] == {"contents": "read"}
+    assert jobs["verify-flow-admission"]["permissions"] == {
+        "contents": "read",
+        "attestations": "read",
+        "id-token": "write",
+    }
     assert jobs["create-release-tag"]["permissions"] == {"contents": "read"}
     assert jobs["build-and-attest"]["permissions"] == {
         "contents": "read",
@@ -246,6 +252,51 @@ def test_release_workflow_checks_the_platform_selection_before_any_release_write
     assert "scripts/release_platform_versions.py" in guard["run"]
     assert "scripts/validate_platform_manifest.py" in guard["run"]
     assert build["steps"].index(guard) < build["steps"].index(artifact_build)
+
+
+def test_release_workflow_requires_the_exact_flow_admission_before_tag_or_publish():
+    workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
+    document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    workflow = workflow_path.read_text(encoding="utf-8")
+    jobs = document["jobs"]
+
+    stage = jobs["stage-flow-admission"]
+    candidate = next(step for step in stage["steps"] if step.get("id") == "candidate")
+    transfer = next(
+        step
+        for step in stage["steps"]
+        if step["name"] == "Transfer the exact Flow admission candidate"
+    )
+    assert "scripts/prepare_flow_admission_candidate.py" in candidate["run"]
+    assert "--manifest platform-manifest.json" in candidate["run"]
+    assert candidate["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert transfer["with"]["name"] == "flow-admission-candidate"
+    assert transfer["with"]["retention-days"] == 1
+
+    verify = jobs["verify-flow-admission"]
+    central = "c05ff5c0633e0a1f63d9af74eeb69c31dac3e9ba"
+    assert verify["uses"] == (
+        "OpenAdaptAI/.github/.github/workflows/"
+        f"verify-production-release-admission.yml@{central}"
+    )
+    assert verify["with"]["central_verifier_sha"] == central
+    assert verify["with"]["expected_target"] == "flow"
+    assert verify["with"]["expected_repository"] == "OpenAdaptAI/openadapt-flow"
+    assert verify["with"]["expected_repository_id"] == "1291376938"
+    assert verify["with"]["candidate_artifact_name"] == (transfer["with"]["name"])
+
+    create = jobs["create-release-tag"]
+    build = jobs["build-and-attest"]
+    assert create["needs"] == "verify-flow-admission"
+    assert "needs.verify-flow-admission.result == 'success'" in create["if"]
+    assert build["needs"] == "verify-flow-admission"
+    assert "needs.verify-flow-admission.result == 'success'" in build["if"]
+    assert workflow.index("verify-flow-admission:") < workflow.index(
+        "Create and push only the annotated release tag"
+    )
+    report = jobs["report-release-failure"]
+    assert "needs.stage-flow-admission.result == 'failure'" in report["if"]
+    assert "needs.verify-flow-admission.result == 'failure'" in report["if"]
 
 
 def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
