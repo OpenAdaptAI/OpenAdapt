@@ -1,84 +1,20 @@
 # openadapt-types
 
-> [!IMPORTANT]
-> **Status: Experimental. Interoperability schemas, not the product.** This
-> package publishes shared schemas for computer-use agents as an optional
-> component, with no production support promise.
->
-> The OpenAdapt product is the demonstration compiler,
-> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
-> via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
-> (first run: `pip install 'openadapt[browser]'` then `openadapt quickstart`;
-> on Windows `cmd.exe` use `pip install "openadapt[browser]"`): it compiles a
-> demonstrated GUI workflow into a
-> deterministic, locally executable program. Healthy runs make no model calls,
-> and it halts instead of guessing when verification fails. Lifecycle labels for
-> every repository are in the
-> [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
+Pydantic schemas for describing a screen and an action on it. Recorders emit
+them, the compiler stores and replays them, the grounding package resolves
+their targets, and the privacy package scrubs them. One definition, so nothing
+in the stack has to translate.
 
-Canonical Pydantic schemas for computer-use agents.
-
-```
+```bash
 pip install openadapt-types
 ```
 
-These are the shared `Action` and UI-state types used across the OpenAdapt
-stack: recorders emit them, the compiler stores and replays them, the grounding
-package resolves their targets, and the privacy package scrubs them. Defining the
-schema once keeps every substrate (web, Windows, macOS, Linux, RDP, Citrix/VDI)
-on the same contract.
+Optional, and not the product. If you want to record and replay a workflow, you
+want [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) instead;
+this is the contract underneath it, published separately for anyone building
+their own computer-use agent. The API is not stable across minor versions yet.
 
-## The OpenAdapt stack
-
-OpenAdapt is a governed demonstration compiler: record a workflow once, compile
-the recording into a deterministic program, and replay that program with zero
-model calls on the healthy path. When the live screen does not match what was
-demonstrated it halts instead of guessing, using identity gates and independent
-effect verification. Every substrate is first-class.
-
-Substrate maturity, stated the same way across the OpenAdapt repositories:
-
-| Substrate | Maturity |
-| --- | --- |
-| Browser (web) | Beta; available in production today through the managed browser product |
-| Native desktop (Windows, macOS, Linux) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
-| Remote display (RDP) | Available for customer-controlled execution; qualification evidence is task- and environment-specific |
-| Citrix / VDI | Available for customer-controlled execution; real-environment ICA/HDX qualification is deployment-specific |
-
-The packages in the stack:
-
-| Package | Role |
-| --- | --- |
-| [`openadapt`](https://github.com/OpenAdaptAI/OpenAdapt) | Launcher and installer (`pip install openadapt`) |
-| [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) | Records, compiles, verifies, and replays workflows |
-| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | Cross-platform local desktop recording |
-| **`openadapt-types`** | Canonical action and UI-state schema (this package) |
-| [`openadapt-grounding`](https://github.com/OpenAdaptAI/openadapt-grounding) | Local OCR text-anchoring plus optional model grounding |
-| [`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy) | PHI/PII detection and redaction |
-
-Documentation for the whole stack lives at
-[docs.openadapt.ai](https://docs.openadapt.ai).
-
-## What's in the box
-
-| Schema | Purpose |
-|--------|---------|
-| `ComputerState` | Screen state: screenshot + UI element graph + window context |
-| `UINode` | Single UI element with role, bbox, hierarchy, platform anchors |
-| `Action` | Agent action with typed action space + flexible targeting |
-| `ActionTarget` | Where to act: `node_id` > `description` > `(x, y)` coordinates |
-| `ActionResult` | Execution outcome with error taxonomy + state delta |
-| `Episode` / `Step` | Complete task trajectory (observation → action → result) |
-| `FailureRecord` | Classified failure for dataset pipelines |
-| `ControlOverlayFrameV1` / `ControlOverlayTimelineV1` | PHI-safe execution overlay state bound to exact evidence media |
-| `ControlOverlayFrameV2` / `ControlOverlayTimelineV2` | Exact, privacy-safe target geometry for sibling overlays and media composition |
-| `ExecuteRequestV1` / `ExecuteStatusV1` | Async qualified-execution request and lifecycle contracts |
-| `ExecuteEvidenceReceiptV1` | Outcome receipt with contract proof and evidence identifiers |
-| `EffectStrengthV1` | Named effect-proof strength for consequential execution |
-| `BusinessDecisionTaskV1` / `BusinessDecisionAnswerV1` | Signed, finite business choices for authenticated mobile or local operator routes |
-| `BusinessDecisionAnswerReceiptV1` | Runner answer receipt that cannot claim a verified business effect |
-
-## Quick start
+## Describe a screen, then act on it
 
 ```python
 from openadapt_types import (
@@ -86,7 +22,6 @@ from openadapt_types import (
     ComputerState, UINode, BoundingBox,
 )
 
-# Describe what's on screen
 state = ComputerState(
     viewport=(1920, 1080),
     nodes=[
@@ -96,40 +31,67 @@ state = ComputerState(
     ],
 )
 
-# Agent decides what to do
+print(state.to_text_tree())
+# [n0] window: My App
+#   [n1] button: Submit
+
 action = Action(
     type=ActionType.CLICK,
     target=ActionTarget(node_id="n1"),
     reasoning="Click Submit to proceed",
 )
-
-# Render element tree for LLM prompts
-print(state.to_text_tree())
-# [n0] window: My App
-#   [n1] button: Submit
 ```
 
-## Action targeting
+`to_text_tree()` exists so you can drop the element tree straight into a prompt.
 
-`ActionTarget` supports three grounding strategies (in priority order):
+## Targeting
+
+`ActionTarget` takes three kinds of answer to "which thing", and the runtime
+prefers them in this order:
 
 ```python
-# 1. Element-based (preferred, most robust)
-ActionTarget(node_id="n1")
-
-# 2. Description-based (resolved by grounding module)
-ActionTarget(description="the blue submit button")
-
-# 3. Coordinate-based (fallback)
-ActionTarget(x=550, y=420)
+ActionTarget(node_id="n1")                          # an element the recorder saw
+ActionTarget(description="the blue submit button")  # resolved by the grounder
+ActionTarget(x=550, y=420)                          # coordinates, last resort
 ActionTarget(x=0.29, y=0.39, is_normalized=True)
 ```
 
-Agents SHOULD produce `node_id` or `description`. The runtime resolves to coordinates.
+An agent should produce a `node_id` or a `description` and let the runtime work
+out the pixels. Coordinates are the thing that breaks when a window moves.
 
-## Compatibility with existing schemas
+## The rest of the types
 
-Converters for three existing OpenAdapt schema formats:
+| Type | What it holds |
+|---|---|
+| `ComputerState` | Screenshot, UI element graph, window context |
+| `UINode` | One element: role, bbox, hierarchy, platform anchors |
+| `Action` | A typed action plus its target |
+| `ActionResult` | The outcome, with an error taxonomy and a state delta |
+| `Episode` / `Step` | A whole trajectory: observation, action, result |
+| `FailureRecord` | A classified failure, for dataset pipelines |
+
+Plus the versioned wire contracts: `ControlOverlayFrameV1`/`V2` and
+`ControlOverlayTimelineV1`/`V2` for PHI-safe execution overlays,
+`ExecuteRequestV1` / `ExecuteStatusV1` / `ExecuteEvidenceReceiptV1` for
+asynchronous qualified execution, `EffectStrengthV1`, and the
+`BusinessDecision*V1` family for signed, finite human choices. What those
+contracts may and may not carry is in
+[docs/CONTRACTS.md](docs/CONTRACTS.md).
+
+## JSON Schema for everything else
+
+```python
+import json
+from openadapt_types import ComputerState
+
+print(json.dumps(ComputerState.model_json_schema(), indent=2))
+```
+
+The same schemas ship as JSON under `openadapt_types/schemas/` for TypeScript,
+Rust, and anything else that isn't Python. Nineteen files, including
+`execute-v1-openapi.json`, the public OpenAdapt Execute contract.
+
+## Converting from the older formats
 
 ```python
 from openadapt_types._compat import (
@@ -141,98 +103,15 @@ from openadapt_types._compat import (
     from_omnimcp_action_decision, # omnimcp ActionDecision
 )
 
-# Convert existing data
 state = from_benchmark_observation(obs.__dict__)
-action = from_benchmark_action(act.__dict__)
 ```
 
-## JSON Schema
+## OpenAdapt Execute
 
-Export for language-agnostic tooling:
-
-```python
-import json
-from openadapt_types import ComputerState, Action, Episode
-
-# Get JSON Schema
-schema = ComputerState.model_json_schema()
-print(json.dumps(schema, indent=2))
-```
-
-The same API exports the versioned cross-surface overlay contracts:
-
-```python
-from openadapt_types import (
-    ControlOverlayFrameV1,
-    ControlOverlayFrameV2,
-    ControlOverlayTimelineV1,
-    ControlOverlayTimelineV2,
-)
-
-frame_schema = ControlOverlayFrameV1.model_json_schema()
-timeline_schema = ControlOverlayTimelineV1.model_json_schema()
-tracking_frame_schema = ControlOverlayFrameV2.model_json_schema()
-tracking_timeline_schema = ControlOverlayTimelineV2.model_json_schema()
-```
-
-The same schemas ship under `openadapt_types/schemas/` for TypeScript, Rust,
-and other consumers. Version 1 remains the control-state contract. Version 2
-adds an optional normalized top-level viewport rectangle, the exact source
-viewport and DPR, and an exact observation or decoded-media-frame binding
-without changing V1.
-
-Overlay schemas reject unknown fields and contain only closed presentation
-labels and canonical statuses. Screenshot payloads, action-target selectors,
-accessible names, text and values, typed input, identities, URLs, logs, report
-bodies, and user-authored workflow names remain outside this public contract.
-V2 may carry only normalized target geometry from a browser top-level CSS
-viewport. Native and RDP device-pixel geometry is not part of this V2 schema.
-
-Target geometry never carries locators, accessible names, values, URLs, or
-screenshots. A private live observation uses a run/export-scoped HMAC reference
-instead of a linkable raw frame hash. Published media uses the exact media
-SHA-256 and decoded frame index. A renderer draws tracking only when that
-binding matches; it omits the rectangle rather than replaying selectors,
-interpolating movement, or inferring a missing target from adjacent events.
-The runtime does not guess a future viewer transform. Desktop, Cloud, and media
-renderers map the normalized rectangle through their actual content box.
-If multiple runtime states land in one decoded media frame, the producer must
-coalesce them deterministically; it must not invent extra media frames or
-approximate their timing.
-
-`openadapt_types/schemas/execute-v1-openapi.json` is the public OpenAdapt
-Execute v1 contract. It defines asynchronous execution submission, lifecycle
-status, terminal evidence receipts, and signed decision and terminal webhooks.
-It keeps `waiting_for_reconciliation` as a lifecycle state and
-`reconciliation_required` as a terminal outcome.
-
-The separate `business-decision-*-v1.json` files define a finite human branch
-that the workflow declared before execution. They do not reuse the operational
-halt actions. They carry only opaque bindings, option IDs, digests, counts, and
-closed status values. The separate presentation artifact classifies each
-question and option label as `local_only` or `reviewed_remote_safe`. Remote
-delivery requires a positive egress-review digest for every field. The signed
-delivery policy binds the exact presentation and review digest. Screenshots,
-free-form notes, and live record values stay on the customer runner. An
-accepted answer only selects a compiled branch. The next action must still pass
-its live-state, identity, policy, and effect contracts.
-
-## OpenAdapt Execute v1
-
-OpenAdapt Execute is the public asynchronous contract for a qualified
-workflow. A partner sends an authorized request, receives an execution ID, and
-then reads a terminal receipt or receives a signed webhook. The contract does
-not expose a runner, customer data, evidence bytes, application recipes, or
-Cloud control-plane internals.
-
-The generated OpenAPI document is packaged at
-`openadapt_types/schemas/execute-v1-openapi.json`. The package also includes a
-small Python client. The reference Python and TypeScript clients are in
-[`examples/execute`](examples/execute/). Use `https://app.openadapt.ai/api` as
-the OpenAdapt Cloud base URL. It uses a partner-provisioned bearer token and
-the client appends the stable `/v1` paths.
-The client requires an HTTPS base URL and rejects redirects before it can send
-the bearer token to another endpoint.
+A partner sends an authorized request, gets an execution ID back, and then
+either reads a terminal receipt or waits for a signed webhook. The contract
+exposes no runner, no customer data, no evidence bytes, and no control-plane
+internals.
 
 ```python
 from openadapt_types import ExecuteClient
@@ -243,23 +122,24 @@ client = ExecuteClient(
 )
 ```
 
-The client does not poll forever. A workflow can wait for a human decision or
-reconciliation. Use the terminal receipt or signed webhook as the completion
-signal.
+The client requires HTTPS and refuses to follow a redirect before it would send
+the bearer token somewhere else. It also doesn't poll forever, deliberately: a
+workflow can sit waiting for a human decision or a reconciliation, so treat the
+terminal receipt or the signed webhook as the completion signal, not a timeout.
 
-## Design principles
+Reference Python and TypeScript clients: [`examples/execute`](examples/execute/).
 
-- **Pydantic v2**: runtime validation, JSON Schema export, fast serialization
-- **Pixels and structure**: always capture both visual and semantic UI state
-- **Node graph**: full element tree, not just the focused element
-- **Platform-agnostic**: same schema for web, Windows, macOS, Linux, RDP, Citrix/VDI
-- **Extension-friendly**: `raw`, `attributes`, `metadata` fields everywhere
-- **Backward compatible**: `_compat` converters for gradual migration
+## Design
 
-## Dependencies
+Pydantic v2, so you get runtime validation, JSON Schema export, and fast
+serialization. Pixels and structure are both captured, always, because either
+one alone loses information the other has. The node graph is the full element
+tree rather than the focused element. The same schema covers web, Windows,
+macOS, Linux, RDP, and Citrix/VDI. `raw`, `attributes`, and `metadata` fields
+exist everywhere so you can carry your own data through without forking.
 
-Just `pydantic>=2.0`. No ML libraries, no heavy deps.
+The only dependency is `pydantic>=2.0`. No ML libraries.
 
 ## License
 
-MIT
+[MIT](LICENSE)
