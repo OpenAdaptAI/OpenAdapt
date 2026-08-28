@@ -57,7 +57,7 @@ and [`../manifest.json`](../manifest.json).
 - **Name (reverse-DNS, official registry):** `io.github.OpenAdaptAI/openadapt-agent`
 - **Display name:** OpenAdapt Agent (openadapt-flow bridge)
 - **PyPI package:** `openadapt-agent`
-- **Version:** `2.0.2`
+- **Version:** `2.0.2` (staged in this repository; `2.0.1` is the newest version published to PyPI)
 - **Description:** Local bridge for governed openadapt-flow workflows and attended actions.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
@@ -142,7 +142,10 @@ No secret is ever committed; these live only in repo Settings -> Secrets.
 
 ### 3.1 Decide the release version
 
-The MCPB distribution release is `2.0.2`. Future releases must keep the package,
+The version staged in this repository is `2.0.2`. It is not released yet: the
+newest version on PyPI is `2.0.1`, the newest tag is `v2.0.1`, and there is no
+`v2.0.2` tag and no GitHub Release. The commands below build the `2.0.2`
+artifacts so a release can publish them. Future releases must keep the package,
 module, registry, and MCPB metadata versions synchronized.
 
 Set every future version in **four files that a CI test pins together**:
