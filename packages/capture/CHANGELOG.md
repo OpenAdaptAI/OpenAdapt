@@ -2,6 +2,132 @@
 
 <!-- version list -->
 
+## v1.2.3 (2026-08-28)
+
+_This release is published under the MIT License._
+
+### Features
+
+- **capture**: Seal native action geometry at capture time
+  ([#94](https://github.com/OpenAdaptAI/openadapt-capture/pull/94),
+  [`08727ab`](https://github.com/OpenAdaptAI/openadapt-capture/commit/08727ab0e471d4a6de3c460099b1a8a97758cf6f))
+- Add authenticated recorder control channel
+  ([#79](https://github.com/OpenAdaptAI/openadapt-capture/pull/79),
+  [`6109678`](https://github.com/OpenAdaptAI/openadapt-capture/commit/61096788a623a4a302a69a363215dad81fb9008b))
+- Bind each action to its exact retained screen frame
+  ([#84](https://github.com/OpenAdaptAI/openadapt-capture/pull/84),
+  [`fb4c36b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/fb4c36bdcaaea7ab001e2fd8472c23bc00c92c0e))
+- Capture native structural observations
+  ([#96](https://github.com/OpenAdaptAI/openadapt-capture/pull/96),
+  [`7a96690`](https://github.com/OpenAdaptAI/openadapt-capture/commit/7a96690bf8684be3f61fb7c14d783813003e221e))
+- Qualify resilient native capture
+  ([#78](https://github.com/OpenAdaptAI/openadapt-capture/pull/78),
+  [`b04e829`](https://github.com/OpenAdaptAI/openadapt-capture/commit/b04e8292aad9b2df36bcd9c63fe9ea0c04d5b760))
+- Ship the two demo captures as loadable fixtures
+  ([#101](https://github.com/OpenAdaptAI/openadapt-capture/pull/101),
+  [`ad1aaf1`](https://github.com/OpenAdaptAI/openadapt-capture/commit/ad1aaf1467b5e17a0bb1cf404976a3f1c0fb0e2a))
+
+### Bug Fixes
+
+- **ci**: Allowlist the published extension key by exact value
+  ([#112](https://github.com/OpenAdaptAI/openadapt-capture/pull/112),
+  [`69a123f`](https://github.com/OpenAdaptAI/openadapt-capture/commit/69a123fccfa6dcbf848e486301832cc826ab679a))
+- **db**: Retry transient SQLite writer locks
+  ([#106](https://github.com/OpenAdaptAI/openadapt-capture/pull/106),
+  [`d560e45`](https://github.com/OpenAdaptAI/openadapt-capture/commit/d560e45b1ef7e26be0044536891999f411bbfd18))
+- **fixtures**: Bind synthetic provenance to the fixture byte determinants
+  ([#107](https://github.com/OpenAdaptAI/openadapt-capture/pull/107),
+  [`d00afdd`](https://github.com/OpenAdaptAI/openadapt-capture/commit/d00afdd1eb275d9a73c9baeafa8b492da5bfd67d))
+- **recorder**: Preserve the capture clock epoch
+  ([`97d7ca4`](https://github.com/OpenAdaptAI/openadapt-capture/commit/97d7ca404a8f1ef06d71c80283225569c1856178))
+- **release**: Let the changelog document the pending release candidate
+  ([#110](https://github.com/OpenAdaptAI/openadapt-capture/pull/110),
+  [`854f015`](https://github.com/OpenAdaptAI/openadapt-capture/commit/854f015fd994b0aa1992948791c18c2e6c571029))
+- Refuse capture before recorder readiness
+  ([#62](https://github.com/OpenAdaptAI/openadapt-capture/pull/62),
+  [`3e6b933`](https://github.com/OpenAdaptAI/openadapt-capture/commit/3e6b933f2ccdff72d27bf79aea0c56eb8662f341))
+- Replace public recordings with synthetic fixtures
+  ([#103](https://github.com/OpenAdaptAI/openadapt-capture/pull/103),
+  [`cca59d9`](https://github.com/OpenAdaptAI/openadapt-capture/commit/cca59d9a66ab452be800a3b10ecf6f51316c3900))
+- Retain an initial frame before recorder readiness
+  ([#100](https://github.com/OpenAdaptAI/openadapt-capture/pull/100),
+  [`4cce32b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/4cce32b6ba5f432ad2f7d3cbcf77f3a9dc990215))
+
+### Documentation
+
+- Align entry commands and substrate maturity across repo READMEs
+  ([#66](https://github.com/OpenAdaptAI/openadapt-capture/pull/66),
+  [`431fd37`](https://github.com/OpenAdaptAI/openadapt-capture/commit/431fd376f1d4968fbee0bfa1b044c32f71f71e8d))
+- Correct stale recorder facts and mark the extension a prototype
+  ([#76](https://github.com/OpenAdaptAI/openadapt-capture/pull/76),
+  [`0799088`](https://github.com/OpenAdaptAI/openadapt-capture/commit/07990886b1e206bcc807ba95f822ef859e9b7325))
+- Derive Capture product state from admissions
+  ([`e20e65b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/e20e65be0e8affffc4646900d77c70ebf26da9f3))
+
+### Testing
+
+- **fixtures**: Run the byte check on every matching builder
+  ([#109](https://github.com/OpenAdaptAI/openadapt-capture/pull/109),
+  [`86e6419`](https://github.com/OpenAdaptAI/openadapt-capture/commit/86e64194edc0134a2c4be412c985b5c5b4774e31))
+- **recorder**: Isolate observer failure from ffmpeg
+  ([#98](https://github.com/OpenAdaptAI/openadapt-capture/pull/98),
+  [`7346e20`](https://github.com/OpenAdaptAI/openadapt-capture/commit/7346e201d6d00db1c1a410f9d5e88cfa9d7c7252))
+- **terminal**: Accept platform-specific safe rejection
+  ([#97](https://github.com/OpenAdaptAI/openadapt-capture/pull/97),
+  [`a376ebe`](https://github.com/OpenAdaptAI/openadapt-capture/commit/a376ebecd5d31ec0cba62ebd7483bcb760cea72d))
+- Pin the writer shutdown-drain contract
+  ([#85](https://github.com/OpenAdaptAI/openadapt-capture/pull/85),
+  [`f114669`](https://github.com/OpenAdaptAI/openadapt-capture/commit/f11466908d49c7ca274a8dd4358c54030caad539))
+
+### Continuous Integration
+
+- **windows**: Fail when ffmpeg install is absent
+  ([#99](https://github.com/OpenAdaptAI/openadapt-capture/pull/99),
+  [`682f77d`](https://github.com/OpenAdaptAI/openadapt-capture/commit/682f77d168bdff60d55285a1682a7c0ebf726847))
+- Bound the apt install and prefer the canonical Ubuntu archive
+  ([#81](https://github.com/OpenAdaptAI/openadapt-capture/pull/81),
+  [`90557ef`](https://github.com/OpenAdaptAI/openadapt-capture/commit/90557efa9fe8e1e4a8091b81c9621f1ee929b25b))
+- Require release App tag publication
+  ([#92](https://github.com/OpenAdaptAI/openadapt-capture/pull/92),
+  [`681683e`](https://github.com/OpenAdaptAI/openadapt-capture/commit/681683e73be13ce75ee3e8c720cd8ce7fbd7c76a))
+- Require three counted live qualification trials per OS
+  ([#86](https://github.com/OpenAdaptAI/openadapt-capture/pull/86),
+  [`d1f6615`](https://github.com/OpenAdaptAI/openadapt-capture/commit/d1f66151b72fe95967b6f8d2696ab93cf5b49721))
+- Run pull-request checks on every base branch
+  ([#80](https://github.com/OpenAdaptAI/openadapt-capture/pull/80),
+  [`7c83ba2`](https://github.com/OpenAdaptAI/openadapt-capture/commit/7c83ba2802fc93725d6079a69e06e0e0f986f322))
+
+### Chores
+
+- **ci**: Update CodeQL actions atomically to 4.37.8
+  ([#104](https://github.com/OpenAdaptAI/openadapt-capture/pull/104),
+  [`9f76fc1`](https://github.com/OpenAdaptAI/openadapt-capture/commit/9f76fc134cc5a804ab8790762ec2a40156ef35e6))
+- **deps**: Bump actions/download-artifact from 4.3.0 to 8.0.1
+  ([#89](https://github.com/OpenAdaptAI/openadapt-capture/pull/89),
+  [`25aa082`](https://github.com/OpenAdaptAI/openadapt-capture/commit/25aa082839d030a7da5d16f20776cc8fe5480b7a))
+- **deps**: Bump actions/upload-artifact from 4.6.2 to 7.0.1
+  ([#87](https://github.com/OpenAdaptAI/openadapt-capture/pull/87),
+  [`f294824`](https://github.com/OpenAdaptAI/openadapt-capture/commit/f2948249403b285bc3d247dd51525b135fc7d8d1))
+- **deps**: Bump pypa/gh-action-pypi-publish from 1.14.1 to 1.14.2
+  ([#67](https://github.com/OpenAdaptAI/openadapt-capture/pull/67),
+  [`23e210a`](https://github.com/OpenAdaptAI/openadapt-capture/commit/23e210add80aed456f871c4e74a5a2c121653bce))
+- **deps**: Update CodeQL actions together
+  ([#75](https://github.com/OpenAdaptAI/openadapt-capture/pull/75),
+  [`bcf1294`](https://github.com/OpenAdaptAI/openadapt-capture/commit/bcf12942d61d66b64d94e645e9124273a5cc5963))
+- **policy**: Sync generated source boundary
+  ([#105](https://github.com/OpenAdaptAI/openadapt-capture/pull/105),
+  [`33ed381`](https://github.com/OpenAdaptAI/openadapt-capture/commit/33ed3816b16a963c4603f7b61c1e4dbdd6e4ab8d))
+- **release**: Enforce source policy on archives
+  ([#63](https://github.com/OpenAdaptAI/openadapt-capture/pull/63),
+  [`843e03e`](https://github.com/OpenAdaptAI/openadapt-capture/commit/843e03e72ad9f01fbe20cd886eca0210edf384ff))
+- Ignore every .env variant, not one at a time
+  ([#93](https://github.com/OpenAdaptAI/openadapt-capture/pull/93),
+  [`5ed28e6`](https://github.com/OpenAdaptAI/openadapt-capture/commit/5ed28e6c63e70cdedf32c760f0272841adb1063b))
+- Refuse invented capture input and geometry
+  ([`a9d0877`](https://github.com/OpenAdaptAI/openadapt-capture/commit/a9d087728e6f789426a8fcc63ef6db2ae66e8216))
+
+**Detailed Changes**: [v1.2.2...v1.2.3](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.2.2...v1.2.3)
+
 
 ## v1.2.2 (2026-07-28)
 
