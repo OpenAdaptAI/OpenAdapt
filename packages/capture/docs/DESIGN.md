@@ -235,9 +235,10 @@ commit. Every job runs on a GitHub-hosted runner. It must:
 - build and validate one wheel and sdist;
 - install and uninstall that exact wheel in a clean environment on Linux,
   macOS, and Windows;
-- start the real recorder against the real display of a hosted macOS runner,
-  prove a real first frame, prove the capture database, prove bounded memory,
-  and prove a clean shutdown, in three counted trials with no skip;
+- start the real recorder against the real display of a hosted macOS and a
+  hosted Windows runner, prove a real first frame, prove the capture database,
+  prove bounded memory, and prove a clean shutdown, in three counted trials per
+  operating system with no skip;
 - record the exact display topology each trial ran against; and
 - retain machine-readable test and topology evidence.
 
@@ -253,14 +254,7 @@ commit. Missing, stale, skipped, partial, or failed evidence blocks publication.
 `live-qualification.yml` runs the interactive lanes that need a physical
 desktop. It runs weekly and on demand, and it is not a release gate.
 
-It also carries the same live recorder lane on hosted Windows. That lane
-reproduces a `video_writer` startup failure that `test.yml` does not hit on
-the same commit, so it does not gate a release while that defect is open.
-`test.yml` runs the same four tests on `windows-latest` and is required on
-the exact commit, so Windows live recorder coverage stays in the required
-evidence.
-
-The self-hosted lanes prove, and the release gate therefore does not prove:
+Those lanes prove, and the release gate therefore does not prove:
 
 - that global input injected through the operating system reaches the native
   listeners and is written into the capture;

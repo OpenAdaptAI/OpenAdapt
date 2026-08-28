@@ -7,6 +7,7 @@ and multiprocessing helpers. Only import paths are changed.
 import sys
 import threading
 import time
+import traceback
 from functools import wraps
 from typing import Any, Callable
 
@@ -158,17 +159,53 @@ def get_double_click_distance_pixels() -> int:
 class WrapStdout:
     """Wrapper for multiprocessing process targets.
 
-    Ensures that stdout/stderr are properly redirected in child processes.
-    Copied from legacy OpenAdapt utils.py.
+    Ensures that stdout/stderr are properly redirected in child processes, and
+    reports why a child died to the process that started it.
+
+    A child that raises leaves the parent nothing but an exit code. Its
+    traceback goes to the child's own stderr, which a test runner, a service
+    manager, or a spawn-based launcher may discard, reorder, or interleave past
+    recognition. Sending the formatted traceback back over ``error_sink`` puts
+    the cause in the parent's hands, so the parent can name it in the error it
+    raises instead of quoting a number.
     """
 
-    def __init__(self, fn: Callable) -> None:
-        """Initialize with the function to wrap."""
+    def __init__(
+        self,
+        fn: Callable,
+        task_name: str | None = None,
+        error_sink: Any | None = None,
+    ) -> None:
+        """Initialize with the function to wrap.
+
+        Args:
+            fn: The process target to run.
+            task_name: Name the parent knows this child by.
+            error_sink: A ``multiprocessing.SimpleQueue`` the parent reads. It
+                is written synchronously, before the child exits, so a
+                traceback is never lost to a background flush.
+        """
         self.fn = fn
+        self.task_name = task_name
+        self.error_sink = error_sink
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """Call the wrapped function."""
-        return self.fn(*args, **kwargs)
+        """Call the wrapped function, reporting any failure to the parent."""
+        try:
+            return self.fn(*args, **kwargs)
+        except BaseException:
+            self._report(traceback.format_exc())
+            raise
+
+    def _report(self, detail: str) -> None:
+        if self.error_sink is None:
+            return
+        try:
+            self.error_sink.put((self.task_name, detail))
+        except BaseException:
+            # The sink is a diagnostic. Losing it must never replace the real
+            # failure with a reporting failure.
+            pass
 
 
 def trace(logger: Any) -> Callable:

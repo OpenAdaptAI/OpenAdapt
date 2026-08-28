@@ -32,16 +32,10 @@
 #     boundary;
 #   - that exact wheel installs, imports, exposes its CLI, and uninstalls on
 #     clean Linux, macOS, and Windows machines;
-#   - the real recorder starts against a real display on hosted macOS,
-#     produces a real first frame, creates its capture database, holds
-#     memory bounded, and shuts down cleanly, in three counted trials.
-#
-# The same lane on hosted Windows is in live-qualification.yml, not here.
-# It reproduces a video_writer startup failure that test.yml's
-# windows-latest leg does not hit, and test.yml is already required on the
-# same exact commit, so Windows live recorder coverage stays in the required
-# evidence while that defect is open. The comment above that lane has the
-# run ids and the failure signature.
+#   - the real recorder starts against a real display on hosted macOS and
+#     Windows, produces a real first frame, creates its capture database,
+#     holds memory bounded, and shuts down cleanly, three counted trials per
+#     operating system.
 #
 # scripts/check_release_ci.py additionally requires a successful test.yml run
 # on the same exact commit, which is where the complete headless suite and the
@@ -176,7 +170,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     steps:
@@ -267,10 +261,10 @@ jobs:
       # Injected input does not reach the native low-level hooks in a hosted
       # runner session, measured on all three hosted operating systems on
       # 2026-08-28. live-qualification.yml runs them on a qualified host.
-      # A failing trial can leave a recorder child process holding this step's
-      # output pipe open, and the step then sits until the job timeout rather
-      # than reporting the failure. Three trials take under three minutes on a
-      # healthy runner, so bound the step itself.
+      # Three trials take under three minutes on a healthy runner, so the step
+      # carries its own bound well under the job's. A step that stops making
+      # progress reports a failure in twelve minutes instead of holding the
+      # runner for the job's full thirty-five.
       - name: Run three counted live recorder trials
         timeout-minutes: 12
         shell: bash

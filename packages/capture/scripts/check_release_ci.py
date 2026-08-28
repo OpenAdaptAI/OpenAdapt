@@ -26,6 +26,7 @@ EXPECTED_QUALIFICATION_JOBS = frozenset(
         "Clean candidate wheel (macos-latest)",
         "Clean candidate wheel (windows-latest)",
         "Hosted live recorder qualification (macos-latest)",
+        "Hosted live recorder qualification (windows-latest)",
     }
 )
 ACTIVE_STATES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})

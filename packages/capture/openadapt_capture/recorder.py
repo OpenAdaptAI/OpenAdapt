@@ -524,6 +524,8 @@ NUM_MEMORY_STATS_TO_LOG = 3
 STARTUP_WAIT_POLL_SECONDS = 0.1
 STARTUP_READY_TIMEOUT_SECONDS = 30.0
 PRE_READY_TASK_JOIN_TIMEOUT_SECONDS = 2.0
+PROCESS_REAP_TIMEOUT_SECONDS = 2.0
+QUEUE_FEEDER_JOIN_TIMEOUT_SECONDS = 5.0
 TERMINAL_FRAME_SEAL_TIMEOUT_SECONDS = 10.0
 
 stop_sequence_detected = False
@@ -544,11 +546,100 @@ def _run_task_fail_loud(
         terminate_processing.set()
 
 
+def _drain_process_errors(
+    process_errors: Any | None,
+    collected: dict[str, str],
+) -> dict[str, str]:
+    """Collect the tracebacks that child processes reported before they died.
+
+    ``WrapStdout`` writes each traceback synchronously, so a process the parent
+    has already seen exit has finished reporting. Reading is therefore never a
+    race, and the first report from a task is the one that killed it.
+    """
+    if process_errors is None:
+        return collected
+    while True:
+        try:
+            if process_errors.empty():
+                break
+            task_name, detail = process_errors.get()
+        except (EOFError, OSError, ValueError):
+            break
+        collected.setdefault(task_name or "unnamed child process", detail)
+    return collected
+
+
+def _describe_child_failure(task_name: str, detail: str | None) -> str:
+    """Render one child process failure with its own traceback, when reported."""
+    if not detail:
+        return (
+            f"{task_name} reported no traceback; it was stopped rather than "
+            "raised, or it died before it could report"
+        )
+    return f"{task_name} raised:\n{detail.rstrip()}"
+
+
+def _force_reap_processes(task_by_name: dict[str, Any]) -> list[str]:
+    """Stop every child process this recording started, and wait for each.
+
+    A child that outlives the recording keeps the parent's inherited standard
+    output open and keeps the parent's own interpreter from exiting, because
+    multiprocessing joins live children at exit with no timeout. A recording
+    that has already failed must not also hang the program that ran it.
+
+    Returns the names of any processes still alive after being killed.
+    """
+    survivors: list[str] = []
+    for task_name, task in task_by_name.items():
+        if not isinstance(task, multiprocessing.process.BaseProcess):
+            continue
+        if task.exitcode is not None or not task.is_alive():
+            continue
+        logger.warning(f"reaping {task_name!r}, which outlived the recording")
+        task.terminate()
+        task.join(timeout=PROCESS_REAP_TIMEOUT_SECONDS)
+        if task.is_alive():
+            task.kill()
+            task.join(timeout=PROCESS_REAP_TIMEOUT_SECONDS)
+        if task.is_alive():
+            survivors.append(task_name)
+    if survivors:
+        logger.error(f"child processes survived being killed: {sorted(survivors)}")
+    return survivors
+
+
+def _release_queues(queues: list[Any]) -> None:
+    """Release the recording's cross-process queues so the parent can exit.
+
+    Every queue keeps a background thread that feeds bytes into a pipe. When
+    the process at the far end dies, that pipe fills, the feeder thread blocks
+    on it forever, and the interpreter waits for that thread at exit. Closing
+    each queue and giving its feeder a bounded wait keeps the parent's exit
+    bounded too; a feeder that does not finish is abandoned rather than waited
+    on, since the recording is over and its buffered bytes have no reader.
+    """
+    for pending in queues:
+        try:
+            pending.close()
+        except (OSError, ValueError):
+            continue
+        joiner = threading.Thread(target=pending.join_thread, daemon=True)
+        joiner.start()
+        joiner.join(timeout=QUEUE_FEEDER_JOIN_TIMEOUT_SECONDS)
+        if joiner.is_alive():
+            logger.warning("abandoning a queue feeder that did not drain in time")
+            try:
+                pending.cancel_join_thread()
+            except (OSError, ValueError):
+                pass
+
+
 def _wait_for_tasks_started(
     task_by_name: dict[str, Any],
     task_started_events: dict[str, Any],
     terminate_processing: Any,
     task_errors: queue.Queue | None = None,
+    process_errors: Any | None = None,
     *,
     timeout: float = STARTUP_READY_TIMEOUT_SECONDS,
 ) -> bool:
@@ -591,6 +682,9 @@ def _wait_for_tasks_started(
         ]
         if stopped_before_ready:
             logger.error(f"Recording tasks exited before readiness: {stopped_before_ready}")
+            reported = _drain_process_errors(process_errors, {})
+            for task_name in stopped_before_ready:
+                logger.error(_describe_child_failure(task_name, reported.get(task_name)))
             terminate_processing.set()
             return False
 
@@ -639,18 +733,34 @@ def _join_tasks(
     return lingering
 
 
-def _raise_for_failed_processes(task_by_name: dict[str, Any]) -> None:
-    """Surface required child-process failures through the recording boundary."""
+def _raise_for_failed_processes(
+    task_by_name: dict[str, Any],
+    process_errors: Any | None = None,
+) -> None:
+    """Surface required child-process failures through the recording boundary.
+
+    An exit code alone says a child died, not why. Each child's own traceback
+    goes into the error message, so the reason crosses the recording boundary
+    with the error rather than being left in whatever the child's stderr
+    reached. It is the message and not an exception note because
+    ``BaseException.add_note`` arrived in Python 3.11 and this package supports
+    3.10, where a note is discarded without a word.
+    """
     failures = {
         name: task.exitcode
         for name, task in task_by_name.items()
         if isinstance(task, multiprocessing.process.BaseProcess) and task.exitcode not in (None, 0)
     }
     if failures:
+        reported = _drain_process_errors(process_errors, {})
         detail = ", ".join(
             f"{name} (exit code {exitcode})" for name, exitcode in sorted(failures.items())
         )
-        raise RuntimeError(f"Recording child process failed: {detail}")
+        message = "\n".join(
+            [f"Recording child process failed: {detail}"]
+            + [_describe_child_failure(name, reported.get(name)) for name in sorted(failures)]
+        )
+        raise RuntimeError(message)
 
 
 def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
@@ -2453,6 +2563,7 @@ def record(
     window_owner: str | None = None,
     window_title: str | None = None,
     structural_observer: StructuralObserver | None = None,
+    child_registry: dict[str, Any] | None = None,
 ) -> int | None:
     """Record native screenshots, action events, and window events.
 
@@ -2471,6 +2582,9 @@ def record(
         structural_observer: Optional injected accessibility observer. When
             omitted, the platform factory follows
             ``RECORD_STRUCTURAL_OBSERVATIONS``.
+        child_registry: Optional dict the caller owns, filled with every task
+            this recording starts. It lets the caller reap surviving child
+            processes even when this function raises.
     """
     if config.RECORD_BROWSER_EVENTS:
         # Fail before encoder checks, display access, database creation, or any
@@ -2611,475 +2725,508 @@ def record(
     perf_q = sq.SynchronizedQueue()
     if terminate_processing is None:
         terminate_processing = multiprocessing.Event()
-    task_by_name = {}
-    task_started_events = {}
-    task_errors: queue.Queue = queue.Queue()
-    _screen_timing = _ScreenTimingStats()  # running stats, no unbounded list
-
-    # In window-scoped mode the screen reader emits the target window's
-    # bounds timeline itself; the active-window poller would record a
-    # DIFFERENT window (whichever is focused), so it stays off.
-    if config.RECORD_WINDOW_DATA and window_scope is None:
-        window_event_reader = threading.Thread(
-            target=_run_task_fail_loud,
-            daemon=True,
-            args=(
-                "window_event_reader",
-                read_window_events,
-                (
-                    event_q,
-                    terminate_processing,
-                    recording,
-                    task_started_events.setdefault("window_event_reader", threading.Event()),
-                ),
-                terminate_processing,
-                task_errors,
-            ),
-        )
-        window_event_reader.start()
-        task_by_name["window_event_reader"] = window_event_reader
-
-    screen_event_reader = threading.Thread(
-        target=_run_task_fail_loud,
-        daemon=True,
-        args=(
-            "screen_event_reader",
-            read_screen_events,
-            (
-                event_q,
-                terminate_processing,
-                recording,
-                task_started_events.setdefault("screen_event_reader", threading.Event()),
-                _screen_timing,
-                window_scope,
-                desktop_scope,
-                input_finished,
-                input_frame_boundary,
-                terminal_frame_finished,
-                terminal_frame_cancelled,
-            ),
-            terminate_processing,
-            task_errors,
-        ),
-    )
-    screen_event_reader.start()
-    task_by_name["screen_event_reader"] = screen_event_reader
-
-    input_reader_args = (
-        event_q,
-        terminate_processing,
-        recording,
-        task_started_events.setdefault("input_event_reader", threading.Event()),
-        window_scope or desktop_scope,
-        structural_observer,
-        input_finished,
-        input_frame_boundary,
-        terminal_frame_finished,
-        terminal_frame_cancelled,
-    )
-    input_event_reader = threading.Thread(
-        target=_run_task_fail_loud,
-        daemon=True,
-        args=(
-            "input_event_reader",
-            read_input_events,
-            input_reader_args,
-            terminate_processing,
-            task_errors,
-        ),
-    )
-    input_event_reader.start()
-    task_by_name["input_event_reader"] = input_event_reader
-
-    if num_action_events is None:
-        num_action_events = multiprocessing.Value("i", 0)
-    if num_screen_events is None:
-        num_screen_events = multiprocessing.Value("i", 0)
-    if num_window_events is None:
-        num_window_events = multiprocessing.Value("i", 0)
-    if num_browser_events is None:
-        num_browser_events = multiprocessing.Value("i", 0)
-    if num_video_events is None:
-        num_video_events = multiprocessing.Value("i", 0)
-
-    event_processor_args = (
-        event_q,
+    writer_queues = [
         screen_write_q,
         action_write_q,
         window_write_q,
         browser_write_q,
         video_write_q,
         perf_q,
-        recording,
-        terminate_processing,
-        task_started_events.setdefault("event_processor", threading.Event()),
-        num_screen_events,
-        num_action_events,
-        num_window_events,
-        num_browser_events,
-        num_video_events,
-        producers_finished,
-        processing_aborted,
-    )
-    event_processor = threading.Thread(
-        target=_run_task_fail_loud,
-        daemon=True,
-        args=(
-            "event_processor",
-            process_events,
-            event_processor_args,
-            terminate_processing,
-            task_errors,
-        ),
-    )
-    event_processor.start()
-    task_by_name["event_processor"] = event_processor
+    ]
+    # The caller keeps this dict so it can reap anything this recording leaves
+    # behind, even when record() itself raises.
+    task_by_name = {} if child_registry is None else child_registry
+    task_started_events = {}
+    task_errors: queue.Queue = queue.Queue()
+    # Writes are synchronous, so a child's traceback reaches this queue before
+    # the child exits, and reading it is never a race against the child.
+    process_errors = multiprocessing.SimpleQueue()
+    _screen_timing = _ScreenTimingStats()  # running stats, no unbounded list
 
-    screen_event_writer = multiprocessing.Process(
-        target=utils.WrapStdout(
-            partial(write_events, ready_after_first_event=True)
-        ),
-        args=(
-            "screen",
-            partial(write_screen_event, record_images=bool(config.RECORD_IMAGES)),
-            screen_write_q,
-            num_screen_events,
-            perf_q,
-            recording,
-            db_path,
-            terminate_writers,
-            task_started_events.setdefault("screen_event_writer", multiprocessing.Event()),
-        ),
-    )
-    screen_event_writer.start()
-    task_by_name["screen_event_writer"] = screen_event_writer
+    # Nothing this recording starts may outlive it. A surviving child keeps
+    # the standard output it inherited open, and multiprocessing joins live
+    # children at interpreter exit with no timeout, so one leaked writer
+    # hangs the program that ran the recording instead of letting it report
+    # the failure. The same applies to each queue's feeder thread once the
+    # process at the far end is gone.
+    try:
 
-    action_event_writer = multiprocessing.Process(
-        target=utils.WrapStdout(write_events),
-        args=(
-            "action",
-            write_action_event,
-            action_write_q,
-            num_action_events,
-            perf_q,
-            recording,
-            db_path,
-            terminate_writers,
-            task_started_events.setdefault("action_event_writer", multiprocessing.Event()),
-        ),
-    )
-    action_event_writer.start()
-    task_by_name["action_event_writer"] = action_event_writer
-
-    if config.RECORD_WINDOW_DATA or window_scope is not None:
-        window_event_writer = multiprocessing.Process(
-            target=utils.WrapStdout(
-                partial(write_events, ready_after_first_event=True)
-            ),
-            args=(
-                "window",
-                write_window_event,
-                window_write_q,
-                num_window_events,
-                perf_q,
-                recording,
-                db_path,
-                terminate_writers,
-                task_started_events.setdefault("window_event_writer", multiprocessing.Event()),
-            ),
-        )
-        window_event_writer.start()
-        task_by_name["window_event_writer"] = window_event_writer
-
-    if config.RECORD_VIDEO:
-        video_writer = multiprocessing.Process(
-            target=utils.WrapStdout(
-                partial(write_events, ready_after_first_event=True)
-            ),
-            args=(
-                "screen/video",
-                write_video_event,
-                video_write_q,
-                num_video_events,
-                perf_q,
-                recording,
-                db_path,
-                terminate_writers,
-                task_started_events.setdefault("video_writer", multiprocessing.Event()),
-                partial(
-                    video_pre_callback,
-                    video_dir=capture_dir,
-                    # Window-scoped frames are the window's pixels, not the
-                    # monitor's: size the stream from the initial frame.
-                    frame_size=(
-                        initial_window_frame.size if initial_window_frame is not None else None
+        # In window-scoped mode the screen reader emits the target window's
+        # bounds timeline itself; the active-window poller would record a
+        # DIFFERENT window (whichever is focused), so it stays off.
+        if config.RECORD_WINDOW_DATA and window_scope is None:
+            window_event_reader = threading.Thread(
+                target=_run_task_fail_loud,
+                daemon=True,
+                args=(
+                    "window_event_reader",
+                    read_window_events,
+                    (
+                        event_q,
+                        terminate_processing,
+                        recording,
+                        task_started_events.setdefault("window_event_reader", threading.Event()),
                     ),
-                    provision=video_provision,
-                    timeout_seconds=config.VIDEO_FFMPEG_TIMEOUT_SECONDS,
+                    terminate_processing,
+                    task_errors,
                 ),
-                video_post_callback,
-            ),
-        )
-        video_writer.start()
-        task_by_name["video_writer"] = video_writer
+            )
+            window_event_reader.start()
+            task_by_name["window_event_reader"] = window_event_reader
 
-    if config.RECORD_AUDIO:
-        audio_recorder = multiprocessing.Process(
-            target=utils.WrapStdout(record_audio),
+        screen_event_reader = threading.Thread(
+            target=_run_task_fail_loud,
+            daemon=True,
             args=(
-                recording,
-                db_path,
+                "screen_event_reader",
+                read_screen_events,
+                (
+                    event_q,
+                    terminate_processing,
+                    recording,
+                    task_started_events.setdefault("screen_event_reader", threading.Event()),
+                    _screen_timing,
+                    window_scope,
+                    desktop_scope,
+                    input_finished,
+                    input_frame_boundary,
+                    terminal_frame_finished,
+                    terminal_frame_cancelled,
+                ),
                 terminate_processing,
-                task_started_events.setdefault("audio_event_writer", multiprocessing.Event()),
+                task_errors,
             ),
         )
-        audio_recorder.start()
-        task_by_name["audio_recorder"] = audio_recorder
+        screen_event_reader.start()
+        task_by_name["screen_event_reader"] = screen_event_reader
 
-    terminate_perf_event = multiprocessing.Event()
-    perf_stats_writer = multiprocessing.Process(
-        target=utils.WrapStdout(performance_stats_writer),
-        args=(
+        input_reader_args = (
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("input_event_reader", threading.Event()),
+            window_scope or desktop_scope,
+            structural_observer,
+            input_finished,
+            input_frame_boundary,
+            terminal_frame_finished,
+            terminal_frame_cancelled,
+        )
+        input_event_reader = threading.Thread(
+            target=_run_task_fail_loud,
+            daemon=True,
+            args=(
+                "input_event_reader",
+                read_input_events,
+                input_reader_args,
+                terminate_processing,
+                task_errors,
+            ),
+        )
+        input_event_reader.start()
+        task_by_name["input_event_reader"] = input_event_reader
+
+        if num_action_events is None:
+            num_action_events = multiprocessing.Value("i", 0)
+        if num_screen_events is None:
+            num_screen_events = multiprocessing.Value("i", 0)
+        if num_window_events is None:
+            num_window_events = multiprocessing.Value("i", 0)
+        if num_browser_events is None:
+            num_browser_events = multiprocessing.Value("i", 0)
+        if num_video_events is None:
+            num_video_events = multiprocessing.Value("i", 0)
+
+        event_processor_args = (
+            event_q,
+            screen_write_q,
+            action_write_q,
+            window_write_q,
+            browser_write_q,
+            video_write_q,
             perf_q,
             recording,
-            db_path,
-            terminate_perf_event,
-            task_started_events.setdefault("perf_stats_writer", multiprocessing.Event()),
-        ),
-    )
-    perf_stats_writer.start()
-    task_by_name["perf_stats_writer"] = perf_stats_writer
-
-    if config.PLOT_PERFORMANCE:
-        record_pid = os.getpid()
-        mem_writer = multiprocessing.Process(
-            target=utils.WrapStdout(memory_writer),
+            terminate_processing,
+            task_started_events.setdefault("event_processor", threading.Event()),
+            num_screen_events,
+            num_action_events,
+            num_window_events,
+            num_browser_events,
+            num_video_events,
+            producers_finished,
+            processing_aborted,
+        )
+        event_processor = threading.Thread(
+            target=_run_task_fail_loud,
+            daemon=True,
             args=(
+                "event_processor",
+                process_events,
+                event_processor_args,
+                terminate_processing,
+                task_errors,
+            ),
+        )
+        event_processor.start()
+        task_by_name["event_processor"] = event_processor
+
+        screen_event_writer = multiprocessing.Process(
+            target=utils.WrapStdout(
+                partial(write_events, ready_after_first_event=True),
+                "screen_event_writer",
+                process_errors,
+            ),
+            args=(
+                "screen",
+                partial(write_screen_event, record_images=bool(config.RECORD_IMAGES)),
+                screen_write_q,
+                num_screen_events,
+                perf_q,
+                recording,
+                db_path,
+                terminate_writers,
+                task_started_events.setdefault("screen_event_writer", multiprocessing.Event()),
+            ),
+        )
+        screen_event_writer.start()
+        task_by_name["screen_event_writer"] = screen_event_writer
+
+        action_event_writer = multiprocessing.Process(
+            target=utils.WrapStdout(write_events, "action_event_writer", process_errors),
+            args=(
+                "action",
+                write_action_event,
+                action_write_q,
+                num_action_events,
+                perf_q,
+                recording,
+                db_path,
+                terminate_writers,
+                task_started_events.setdefault("action_event_writer", multiprocessing.Event()),
+            ),
+        )
+        action_event_writer.start()
+        task_by_name["action_event_writer"] = action_event_writer
+
+        if config.RECORD_WINDOW_DATA or window_scope is not None:
+            window_event_writer = multiprocessing.Process(
+                target=utils.WrapStdout(
+                    partial(write_events, ready_after_first_event=True),
+                    "window_event_writer",
+                    process_errors,
+                ),
+                args=(
+                    "window",
+                    write_window_event,
+                    window_write_q,
+                    num_window_events,
+                    perf_q,
+                    recording,
+                    db_path,
+                    terminate_writers,
+                    task_started_events.setdefault("window_event_writer", multiprocessing.Event()),
+                ),
+            )
+            window_event_writer.start()
+            task_by_name["window_event_writer"] = window_event_writer
+
+        if config.RECORD_VIDEO:
+            video_writer = multiprocessing.Process(
+                target=utils.WrapStdout(
+                    partial(write_events, ready_after_first_event=True),
+                    "video_writer",
+                    process_errors,
+                ),
+                args=(
+                    "screen/video",
+                    write_video_event,
+                    video_write_q,
+                    num_video_events,
+                    perf_q,
+                    recording,
+                    db_path,
+                    terminate_writers,
+                    task_started_events.setdefault("video_writer", multiprocessing.Event()),
+                    partial(
+                        video_pre_callback,
+                        video_dir=capture_dir,
+                        # Window-scoped frames are the window's pixels, not the
+                        # monitor's: size the stream from the initial frame.
+                        frame_size=(
+                            initial_window_frame.size if initial_window_frame is not None else None
+                        ),
+                        provision=video_provision,
+                        timeout_seconds=config.VIDEO_FFMPEG_TIMEOUT_SECONDS,
+                    ),
+                    video_post_callback,
+                ),
+            )
+            video_writer.start()
+            task_by_name["video_writer"] = video_writer
+
+        if config.RECORD_AUDIO:
+            audio_recorder = multiprocessing.Process(
+                target=utils.WrapStdout(record_audio, "audio_recorder", process_errors),
+                args=(
+                    recording,
+                    db_path,
+                    terminate_processing,
+                    task_started_events.setdefault("audio_event_writer", multiprocessing.Event()),
+                ),
+            )
+            audio_recorder.start()
+            task_by_name["audio_recorder"] = audio_recorder
+
+        terminate_perf_event = multiprocessing.Event()
+        perf_stats_writer = multiprocessing.Process(
+            target=utils.WrapStdout(
+                performance_stats_writer, "perf_stats_writer", process_errors
+            ),
+            args=(
+                perf_q,
                 recording,
                 db_path,
                 terminate_perf_event,
-                record_pid,
-                task_started_events.setdefault("mem_writer", multiprocessing.Event()),
+                task_started_events.setdefault("perf_stats_writer", multiprocessing.Event()),
             ),
         )
-        mem_writer.start()
-        task_by_name["mem_writer"] = mem_writer
+        perf_stats_writer.start()
+        task_by_name["perf_stats_writer"] = perf_stats_writer
 
-    if log_memory:
-        performance_snapshots = []
-        _tracker = tracker.SummaryTracker()
-        tracemalloc.start()
-        collect_stats(performance_snapshots)
+        if config.PLOT_PERFORMANCE:
+            record_pid = os.getpid()
+            mem_writer = multiprocessing.Process(
+                target=utils.WrapStdout(memory_writer, "mem_writer", process_errors),
+                args=(
+                    recording,
+                    db_path,
+                    terminate_perf_event,
+                    record_pid,
+                    task_started_events.setdefault("mem_writer", multiprocessing.Event()),
+                ),
+            )
+            mem_writer.start()
+            task_by_name["mem_writer"] = mem_writer
 
-    # TODO: discard events until everything is ready
+        if log_memory:
+            performance_snapshots = []
+            _tracker = tracker.SummaryTracker()
+            tracemalloc.start()
+            collect_stats(performance_snapshots)
 
-    global stop_sequence_detected
-    stop_sequence_detected = False
-    startup_ready = _wait_for_tasks_started(
-        task_by_name,
-        task_started_events,
-        terminate_processing,
-        task_errors,
-    )
-    if startup_ready:
-        for _ in range(5):
-            logger.info("*" * 40)
-        logger.info("All readers and writers have started. Waiting for input events...")
+        # TODO: discard events until everything is ready
+
+        global stop_sequence_detected
+        stop_sequence_detected = False
+        startup_ready = _wait_for_tasks_started(
+            task_by_name,
+            task_started_events,
+            terminate_processing,
+            task_errors,
+            process_errors,
+        )
+        if startup_ready:
+            for _ in range(5):
+                logger.info("*" * 40)
+            logger.info("All readers and writers have started. Waiting for input events...")
+
+            if status_pipe:
+                status_pipe.send({"type": "record.started"})
+
+            try:
+                while not (stop_sequence_detected or terminate_processing.is_set()):
+                    terminate_processing.wait(1)
+            except KeyboardInterrupt:
+                terminate_processing.set()
+        else:
+            logger.info("Tearing down recording after incomplete startup")
+            terminal_frame_cancelled.set()
+            input_frame_boundary.fail(
+                WindowCaptureError(
+                    "recording startup ended before the native frame boundary was ready"
+                )
+            )
+        terminate_processing.set()
 
         if status_pipe:
-            status_pipe.send({"type": "record.started"})
+            status_pipe.send({"type": "record.stopping"})
 
-        try:
-            while not (stop_sequence_detected or terminate_processing.is_set()):
-                terminate_processing.wait(1)
-        except KeyboardInterrupt:
-            terminate_processing.set()
-    else:
-        logger.info("Tearing down recording after incomplete startup")
-        terminal_frame_cancelled.set()
-        input_frame_boundary.fail(
-            WindowCaptureError(
-                "recording startup ended before the native frame boundary was ready"
-            )
+        if log_memory:
+            collect_stats(performance_snapshots)
+            log_memory_usage(_tracker, performance_snapshots)
+
+        pre_ready_timeout = None if startup_ready else PRE_READY_TASK_JOIN_TIMEOUT_SECONDS
+        lingering_tasks = _join_tasks(
+            task_by_name,
+            [
+                "window_event_reader",
+                "input_event_reader",
+                "screen_event_reader",
+                "audio_recorder",
+            ],
+            timeout=pre_ready_timeout,
         )
-    terminate_processing.set()
 
-    if status_pipe:
-        status_pipe.send({"type": "record.stopping"})
-
-    if log_memory:
-        collect_stats(performance_snapshots)
-        log_memory_usage(_tracker, performance_snapshots)
-
-    pre_ready_timeout = None if startup_ready else PRE_READY_TASK_JOIN_TIMEOUT_SECONDS
-    lingering_tasks = _join_tasks(
-        task_by_name,
-        [
+        journal_producers = {
             "window_event_reader",
             "input_event_reader",
             "screen_event_reader",
-            "audio_recorder",
-        ],
-        timeout=pre_ready_timeout,
-    )
-
-    journal_producers = {
-        "window_event_reader",
-        "input_event_reader",
-        "screen_event_reader",
-    }
-    lingering_producers = sorted(journal_producers.intersection(lingering_tasks))
-    producer_shutdown_error = None
-    if lingering_producers:
-        producer_shutdown_error = RuntimeError(
-            "recording startup failed with live journal producers: "
-            + ", ".join(lingering_producers)
+        }
+        lingering_producers = sorted(journal_producers.intersection(lingering_tasks))
+        producer_shutdown_error = None
+        if lingering_producers:
+            producer_shutdown_error = RuntimeError(
+                "recording startup failed with live journal producers: "
+                + ", ".join(lingering_producers)
+            )
+            processing_aborted.set()
+        else:
+            # The processor can now drain every completed reservation. No producer
+            # can append a later event after it observes an empty journal.
+            producers_finished.set()
+        _join_tasks(
+            task_by_name,
+            ["event_processor"],
+            timeout=pre_ready_timeout,
         )
-        processing_aborted.set()
-    else:
-        # The processor can now drain every completed reservation. No producer
-        # can append a later event after it observes an empty journal.
-        producers_finished.set()
-    _join_tasks(
-        task_by_name,
-        ["event_processor"],
-        timeout=pre_ready_timeout,
-    )
 
-    # No writer can stop while the event processor can still enqueue work.
-    # Signal writer completion only after all producers have exited.
-    terminate_writers.set()
-    _join_tasks(
-        task_by_name,
-        [
-            "screen_event_writer",
-            "action_event_writer",
-            "window_event_writer",
-            "video_writer",
-        ],
-        timeout=pre_ready_timeout,
-    )
+        # No writer can stop while the event processor can still enqueue work.
+        # Signal writer completion only after all producers have exited.
+        terminate_writers.set()
+        _join_tasks(
+            task_by_name,
+            [
+                "screen_event_writer",
+                "action_event_writer",
+                "window_event_writer",
+                "video_writer",
+            ],
+            timeout=pre_ready_timeout,
+        )
 
-    terminate_perf_event.set()
-    _join_tasks(
-        task_by_name,
-        [
-            "perf_stats_writer",
-            "mem_writer",
-        ],
-        timeout=pre_ready_timeout,
-    )
+        terminate_perf_event.set()
+        _join_tasks(
+            task_by_name,
+            [
+                "perf_stats_writer",
+                "mem_writer",
+            ],
+            timeout=pre_ready_timeout,
+        )
 
-    if not task_errors.empty():
-        task_name, task_error = task_errors.get_nowait()
-        add_exception_note(task_error, f"recording task {task_name!r} failed")
+        if not task_errors.empty():
+            task_name, task_error = task_errors.get_nowait()
+            add_exception_note(task_error, f"recording task {task_name!r} failed")
+            if producer_shutdown_error is not None:
+                add_exception_note(task_error, str(producer_shutdown_error))
+            raise task_error
         if producer_shutdown_error is not None:
-            add_exception_note(task_error, str(producer_shutdown_error))
-        raise task_error
-    if producer_shutdown_error is not None:
-        raise producer_shutdown_error
-    _raise_for_failed_processes(task_by_name)
-    if window_scope is not None:
-        window_scope.assert_current()
-    elif desktop_scope is not None:
-        # Close the interval between the last captured frame and operator stop.
-        # A topology change in that interval still invalidates the session.
-        desktop_scope.assert_current(force=True)
+            raise producer_shutdown_error
+        _raise_for_failed_processes(task_by_name, process_errors)
+        if window_scope is not None:
+            window_scope.assert_current()
+        elif desktop_scope is not None:
+            # Close the interval between the last captured frame and operator stop.
+            # A topology change in that interval still invalidates the session.
+            desktop_scope.assert_current(force=True)
 
-    if config.PLOT_PERFORMANCE and startup_ready:
-        from openadapt_capture import plotting
+        if config.PLOT_PERFORMANCE and startup_ready:
+            from openadapt_capture import plotting
+
+            session = get_session_for_path(db_path)
+            plotting.plot_performance(
+                session,
+                recording,
+                save_dir=capture_dir,
+            )
+
+        logger.info(f"Saved {recording_timestamp=}")
 
         session = get_session_for_path(db_path)
-        plotting.plot_performance(
-            session,
-            recording,
-            save_dir=capture_dir,
-        )
+        crud.post_process_events(session, recording)
 
-    logger.info(f"Saved {recording_timestamp=}")
-
-    session = get_session_for_path(db_path)
-    crud.post_process_events(session, recording)
-
-    # --- Profiling summary ---
-    _profile_duration = time.perf_counter() - _profile_start
-    _profile_data = {
-        "duration_seconds": round(_profile_duration, 2),
-        "main_thread": _profile_is_main_thread,
-        "platform": sys.platform,
-        "python_version": sys.version,
-        "threads_started": list(task_by_name.keys()),
-        "thread_count": threading.active_count(),
-        "event_counts": {
-            "action": num_action_events.value,
-            "screen": num_screen_events.value,
-            "window": num_window_events.value,
-            "browser": num_browser_events.value,
-            "video": num_video_events.value,
-        },
-        "screen_timing": {},
-        "config": {
-            "RECORD_VIDEO": config.RECORD_VIDEO,
-            "RECORD_AUDIO": config.RECORD_AUDIO,
-            "RECORD_IMAGES": config.RECORD_IMAGES,
-            "RECORD_WINDOW_DATA": config.RECORD_WINDOW_DATA,
-            "RECORD_WINDOW_OWNER": window_owner or config.RECORD_WINDOW_OWNER,
-            "RECORD_WINDOW_TITLE": window_title or config.RECORD_WINDOW_TITLE,
-            "RECORD_BROWSER_EVENTS": config.RECORD_BROWSER_EVENTS,
-            "RECORD_FULL_VIDEO": config.RECORD_FULL_VIDEO,
-            "PLOT_PERFORMANCE": config.PLOT_PERFORMANCE,
-            "SCREEN_CAPTURE_FPS": config.SCREEN_CAPTURE_FPS,
-        },
-        "capture_dir": capture_dir,
-    }
-    # Compute screen timing stats
-    if _screen_timing:
-        _profile_data["screen_timing"] = _screen_timing.to_dict()
-
-    _profile_path = os.path.join(capture_dir, "profiling.json")
-    try:
-        import json as _json
-
-        with open(_profile_path, "w") as _f:
-            _json.dump(_profile_data, _f, indent=2)
-        logger.info(f"Profiling saved to {_profile_path}")
-
-        # Print compact summary
-        print("\n=== Recording Profile ===")
-        print(f"Duration: {_profile_duration:.1f}s")
-        print(f"Main thread: {_profile_is_main_thread}")
-        print(f"Threads started: {len(task_by_name)}")
-        for k, v in _profile_data["event_counts"].items():
-            rate = v / _profile_duration if _profile_duration > 0 else 0
-            print(f"  {k}: {v} events ({rate:.1f}/s)")
+        # --- Profiling summary ---
+        _profile_duration = time.perf_counter() - _profile_start
+        _profile_data = {
+            "duration_seconds": round(_profile_duration, 2),
+            "main_thread": _profile_is_main_thread,
+            "platform": sys.platform,
+            "python_version": sys.version,
+            "threads_started": list(task_by_name.keys()),
+            "thread_count": threading.active_count(),
+            "event_counts": {
+                "action": num_action_events.value,
+                "screen": num_screen_events.value,
+                "window": num_window_events.value,
+                "browser": num_browser_events.value,
+                "video": num_video_events.value,
+            },
+            "screen_timing": {},
+            "config": {
+                "RECORD_VIDEO": config.RECORD_VIDEO,
+                "RECORD_AUDIO": config.RECORD_AUDIO,
+                "RECORD_IMAGES": config.RECORD_IMAGES,
+                "RECORD_WINDOW_DATA": config.RECORD_WINDOW_DATA,
+                "RECORD_WINDOW_OWNER": window_owner or config.RECORD_WINDOW_OWNER,
+                "RECORD_WINDOW_TITLE": window_title or config.RECORD_WINDOW_TITLE,
+                "RECORD_BROWSER_EVENTS": config.RECORD_BROWSER_EVENTS,
+                "RECORD_FULL_VIDEO": config.RECORD_FULL_VIDEO,
+                "PLOT_PERFORMANCE": config.PLOT_PERFORMANCE,
+                "SCREEN_CAPTURE_FPS": config.SCREEN_CAPTURE_FPS,
+            },
+            "capture_dir": capture_dir,
+        }
+        # Compute screen timing stats
         if _screen_timing:
-            st = _profile_data["screen_timing"]
+            _profile_data["screen_timing"] = _screen_timing.to_dict()
+
+        _profile_path = os.path.join(capture_dir, "profiling.json")
+        try:
+            import json as _json
+
+            with open(_profile_path, "w") as _f:
+                _json.dump(_profile_data, _f, indent=2)
+            logger.info(f"Profiling saved to {_profile_path}")
+
+            # Print compact summary
+            print("\n=== Recording Profile ===")
+            print(f"Duration: {_profile_duration:.1f}s")
+            print(f"Main thread: {_profile_is_main_thread}")
+            print(f"Threads started: {len(task_by_name)}")
+            for k, v in _profile_data["event_counts"].items():
+                rate = v / _profile_duration if _profile_duration > 0 else 0
+                print(f"  {k}: {v} events ({rate:.1f}/s)")
+            if _screen_timing:
+                st = _profile_data["screen_timing"]
+                print(
+                    f"  screenshot: avg={st['screenshot_avg_ms']}ms "
+                    f"max={st['screenshot_max_ms']}ms "
+                    f"min={st['screenshot_min_ms']}ms"
+                )
             print(
-                f"  screenshot: avg={st['screenshot_avg_ms']}ms "
-                f"max={st['screenshot_max_ms']}ms "
-                f"min={st['screenshot_min_ms']}ms"
+                f"Config: WINDOW_DATA={config.RECORD_WINDOW_DATA} "
+                f"VIDEO={config.RECORD_VIDEO} "
+                f"PLOT_PERF={config.PLOT_PERFORMANCE} "
+                f"FPS={config.SCREEN_CAPTURE_FPS}"
             )
-        print(
-            f"Config: WINDOW_DATA={config.RECORD_WINDOW_DATA} "
-            f"VIDEO={config.RECORD_VIDEO} "
-            f"PLOT_PERF={config.PLOT_PERFORMANCE} "
-            f"FPS={config.SCREEN_CAPTURE_FPS}"
-        )
-        print("=========================\n")
+            print("=========================\n")
 
-        # Auto-send profiling via wormhole if requested
-        if send_profile:
-            _send_profiling_via_wormhole(_profile_path)
-    except Exception as exc:
-        logger.warning(f"Profiling save/send failed: {exc}")
+            # Auto-send profiling via wormhole if requested
+            if send_profile:
+                _send_profiling_via_wormhole(_profile_path)
+        except Exception as exc:
+            logger.warning(f"Profiling save/send failed: {exc}")
 
-    if terminate_recording is not None:
-        terminate_recording.set()
+        if terminate_recording is not None:
+            terminate_recording.set()
 
-    # TODO: consolidate terminate_recording and status_pipe
-    if status_pipe:
-        status_pipe.send({"type": "record.stopped"})
-    return event_q.last_source_ordinal if window_scope is not None else None
+        # TODO: consolidate terminate_recording and status_pipe
+        if status_pipe:
+            status_pipe.send({"type": "record.stopped"})
+        return event_q.last_source_ordinal if window_scope is not None else None
+    finally:
+        _force_reap_processes(task_by_name)
+        _release_queues(writer_queues)
 
 
 class Recorder:
@@ -3199,6 +3346,9 @@ class Recorder:
         self._status_thread: threading.Thread | None = None
         self._capture = None  # lazy CaptureSession
         self._last_source_ordinal: int | None = None
+        # Every task record() starts, so teardown can reap a survivor even when
+        # record() raised before its own teardown ran.
+        self._child_registry: dict[str, Any] = {}
         self._worker_error: BaseException | None = None
         self._worker_error_lock = threading.Lock()
         self._structural_observer = structural_observer
@@ -3556,6 +3706,7 @@ class Recorder:
                     num_video_events=self._num_video_events,
                     send_profile=self._send_profile,
                     structural_observer=self._structural_observer,
+                    child_registry=self._child_registry,
                 )
             if last_source_ordinal is not None:
                 self._last_source_ordinal = last_source_ordinal
@@ -3651,6 +3802,12 @@ class Recorder:
         self._terminate_processing.set()
         if self._record_thread is not None:
             self._record_thread.join()
+        # record() reaps its own children, but it can raise before it gets
+        # there. Leaving one alive keeps this process from exiting at all,
+        # because multiprocessing joins live children at exit without a
+        # timeout, so a failed recording would hang its caller instead of
+        # reporting the failure.
+        _force_reap_processes(self._child_registry)
         self._stopped_event.set()  # ensure status thread exits
         if self._status_thread is not None:
             self._status_thread.join(timeout=5)
@@ -3674,6 +3831,7 @@ class Recorder:
         self._terminate_processing.set()
         if self._record_thread is not None:
             self._record_thread.join()
+        _force_reap_processes(self._child_registry)
         try:
             self.check_health()
         finally:

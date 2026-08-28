@@ -6,8 +6,8 @@ Only import paths are changed; function signatures and logic are identical.
 
 import json
 import sqlite3
-from time import sleep
-from typing import Any, TypeVar
+from time import monotonic, sleep
+from typing import Any, Callable, TypeVar
 
 import sqlalchemy as sa
 from loguru import logger
@@ -26,6 +26,7 @@ from openadapt_capture.db.models import (
 
 # Type variable for generic model queries
 BaseModelType = TypeVar("BaseModelType")
+T = TypeVar("T")
 
 BATCH_SIZE = 1
 
@@ -69,36 +70,68 @@ def _is_sqlite_lock_error(error: sa.exc.OperationalError) -> bool:
     )
 
 
+def _write_with_lock_retry(
+    session: SaSession,
+    write: Callable[[], T],
+    statement_label: str,
+) -> T:
+    """Run one write transaction, recovering from bounded SQLite contention.
+
+    ``write`` must perform every statement of the transaction and must be safe
+    to run again from the start: a rollback discards its partial work before
+    each retry.
+
+    Every recorder writer process writes the one per-capture database file, so
+    each of them competes for the single SQLite write lock. A connection whose
+    bounded wait expires reports "database is locked", which is contention, not
+    corruption. Each log line carries how long that attempt waited, because the
+    wait is the only measure of how close a capture is to losing this race.
+    """
+    for attempt in range(len(SQLITE_LOCK_RETRY_DELAYS_SECONDS) + 1):
+        started_at = monotonic()
+        try:
+            result = write()
+            session.commit()
+            return result
+        except sa.exc.OperationalError as exc:
+            if not _is_sqlite_lock_error(exc):
+                raise
+            waited = monotonic() - started_at
+
+            # A failed execute or commit can leave the Session transaction
+            # unusable. Roll it back before either retrying or failing loud.
+            session.rollback()
+            if attempt == len(SQLITE_LOCK_RETRY_DELAYS_SECONDS):
+                logger.error(
+                    f"SQLite writer lock during {statement_label} did not clear: "
+                    f"attempt {attempt + 1} waited {waited:.2f}s and every retry "
+                    "is spent"
+                )
+                raise
+
+            delay = SQLITE_LOCK_RETRY_DELAYS_SECONDS[attempt]
+            logger.warning(
+                f"SQLite writer lock during {statement_label} after waiting "
+                f"{waited:.2f}s; retrying in "
+                f"{delay:.2f}s ({attempt + 1}/"
+                f"{len(SQLITE_LOCK_RETRY_DELAYS_SECONDS)})"
+            )
+            sleep(delay)
+
+    raise AssertionError("unreachable SQLite write retry state")
+
+
 def _execute_insert_with_lock_retry(
     session: SaSession,
     table: sa.Table,
     to_insert: list[dict[str, Any]],
 ) -> sa.engine.Result:
     """Commit one insert, with bounded recovery from SQLite writer contention."""
-    for attempt in range(len(SQLITE_LOCK_RETRY_DELAYS_SECONDS) + 1):
-        try:
-            result = session.execute(sa.insert(table), to_insert)
-            session.commit()
-            return result
-        except sa.exc.OperationalError as exc:
-            if not _is_sqlite_lock_error(exc):
-                raise
-
-            # A failed execute or commit can leave the Session transaction
-            # unusable. Roll it back before either retrying or failing loud.
-            session.rollback()
-            if attempt == len(SQLITE_LOCK_RETRY_DELAYS_SECONDS):
-                raise
-
-            delay = SQLITE_LOCK_RETRY_DELAYS_SECONDS[attempt]
-            logger.warning(
-                "SQLite writer lock during insert; retrying in "
-                f"{delay:.2f}s ({attempt + 1}/"
-                f"{len(SQLITE_LOCK_RETRY_DELAYS_SECONDS)})"
-            )
-            sleep(delay)
-
-    raise AssertionError("unreachable SQLite insert retry state")
+    return _write_with_lock_retry(
+        session,
+        lambda: session.execute(sa.insert(table), to_insert),
+        "insert",
+    )
 
 
 def _insert(
@@ -334,22 +367,36 @@ def update_video_start_time(
         recording (Recording): The recording object to update.
         video_start_time (float): The new video start time to set.
     """
-    # Find the recording by its timestamp
-    recording = session.query(Recording).filter(Recording.id == recording.id).first()
+    recording_id = recording.id
 
-    if not recording:
-        logger.error(f"No recording found with id {recording.id}.")
+    # This is the first thing the video writer process does, and it runs while
+    # the screen, action, performance and memory writer processes are already
+    # committing to the same database file. It therefore has to wait for the
+    # one SQLite write lock like every other writer, and it fails the whole
+    # recording if that wait is not bounded and retried.
+    #
+    # Read nothing first: a read that finds no row is answered below by the
+    # affected row count, and a session that has already read holds a
+    # transaction the retry would have to unwind.
+    session.rollback()
+
+    def _write() -> int:
+        result = session.execute(
+            sa.update(Recording)
+            .where(Recording.id == recording_id)
+            .values(video_start_time=video_start_time)
+        )
+        return result.rowcount
+
+    updated_rows = _write_with_lock_retry(
+        session,
+        _write,
+        "video start time update",
+    )
+
+    if not updated_rows:
+        logger.error(f"No recording found with id {recording_id}.")
         return
-
-    # Update the video start time
-    recording.video_start_time = video_start_time
-
-    # the function is called from a different process which uses a different
-    # session from the one used to create the recording object, so we need to
-    # add the recording object to the session
-    session.add(recording)
-    # Commit the changes to the database
-    session.commit()
 
     logger.info(
         f"Updated video start time for recording {recording.timestamp} to"
