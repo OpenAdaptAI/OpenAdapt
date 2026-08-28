@@ -1,13 +1,10 @@
 {
   "spec_version": 1,
   "bundle": {
-    "name": "openemr-showcase",
+    "name": "Compiled program",
     "schema_version": 2,
-    "created_at": "2026-07-14T00:51:06.482608+00:00",
-    "viewport": [
-      1280,
-      800
-    ],
+    "created_at": null,
+    "viewport": null,
     "is_program": false,
     "contains_phi": false,
     "phi_scrubbed": false,
@@ -22,11 +19,11 @@
     "halt_point_count": 1,
     "params": [
       {
-        "name": "note",
+        "name": "input_1",
         "type": "string",
         "required": true,
         "secret": false,
-        "example": "Reviewed hypertension follow-up; BP within target range today.",
+        "example": null,
         "choices": []
       }
     ],
@@ -36,7 +33,7 @@
       "certification_status": null,
       "policy_name": null,
       "expires_at": null,
-      "content_digest": "42f4cf477578ce0c7e6170a32f5580b50d45c37ae584d85ae66f41ab66f5dcf2",
+      "content_digest": null,
       "source_recording_sha256": null
     }
   },
@@ -45,9 +42,11 @@
       "id": "step_000",
       "index": 0,
       "kind": "action",
-      "title": "click 'ername'",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -69,19 +68,19 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_000.png"
+            "detail": ""
           },
           {
             "name": "ocr",
             "label": "OCR text match",
             "present": true,
-            "detail": "ername"
+            "detail": ""
           },
           {
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -89,7 +88,7 @@
       "identity": {
         "applicable": true,
         "armed": false,
-        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "reason": null,
         "phi_free": false,
         "has_structured": false,
         "has_identifier_crop": false
@@ -114,9 +113,11 @@
       "id": "step_001",
       "index": 1,
       "kind": "action",
-      "title": "type 'admin'",
+      "title": "Enter an approved value",
       "action": "type",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -148,9 +149,11 @@
       "id": "step_002",
       "index": 2,
       "kind": "action",
-      "title": "click 'Password'",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -172,19 +175,19 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_002.png"
+            "detail": ""
           },
           {
             "name": "ocr",
             "label": "OCR text match",
             "present": true,
-            "detail": "Password"
+            "detail": ""
           },
           {
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -192,7 +195,7 @@
       "identity": {
         "applicable": true,
         "armed": false,
-        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "reason": null,
         "phi_free": false,
         "has_structured": false,
         "has_identifier_crop": false
@@ -217,9 +220,11 @@
       "id": "step_003",
       "index": 3,
       "kind": "action",
-      "title": "type 'pass'",
+      "title": "Enter an approved value",
       "action": "type",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -250,9 +255,11 @@
       "id": "step_004",
       "index": 4,
       "kind": "action",
-      "title": "click 'Login'",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -274,19 +281,19 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_004.png"
+            "detail": ""
           },
           {
             "name": "ocr",
             "label": "OCR text match",
             "present": true,
-            "detail": "Login"
+            "detail": ""
           },
           {
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -294,7 +301,7 @@
       "identity": {
         "applicable": true,
         "armed": false,
-        "reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+        "reason": null,
         "phi_free": false,
         "has_structured": false,
         "has_identifier_crop": false
@@ -319,9 +326,11 @@
       "id": "step_005",
       "index": 5,
       "kind": "action",
-      "title": "click 'Searchbyanydemogre'",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -343,19 +352,19 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_005.png"
+            "detail": ""
           },
           {
             "name": "ocr",
             "label": "OCR text match",
             "present": true,
-            "detail": "Searchbyanydemogre"
+            "detail": ""
           },
           {
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -388,9 +397,11 @@
       "id": "step_006",
       "index": 6,
       "kind": "action",
-      "title": "type 'Phil'",
+      "title": "Enter an approved value",
       "action": "type",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -422,12 +433,14 @@
       "id": "step_007",
       "index": 7,
       "kind": "action",
-      "title": "press Enter",
+      "title": "Send an approved key",
       "action": "key",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
-      "key": "Enter",
+      "key": null,
       "resolution": null,
       "identity": {
         "applicable": false,
@@ -456,9 +469,11 @@
       "id": "step_008",
       "index": 8,
       "kind": "action",
-      "title": "click 'ford,Phil'",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -480,19 +495,19 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_008.png"
+            "detail": ""
           },
           {
             "name": "ocr",
             "label": "OCR text match",
             "present": true,
-            "detail": "ford,Phil"
+            "detail": ""
           },
           {
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -526,9 +541,11 @@
       "id": "step_009",
       "index": 9,
       "kind": "action",
-      "title": "scroll by (0, 400)",
+      "title": "Move through the current view",
       "action": "scroll",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -557,9 +574,11 @@
       "id": "step_010",
       "index": 10,
       "kind": "action",
-      "title": "scroll by (0, 400)",
+      "title": "Move through the current view",
       "action": "scroll",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -588,9 +607,11 @@
       "id": "step_011",
       "index": 11,
       "kind": "action",
-      "title": "scroll by (0, 400)",
+      "title": "Move through the current view",
       "action": "scroll",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -619,9 +640,11 @@
       "id": "step_012",
       "index": 12,
       "kind": "action",
-      "title": "scroll by (0, 400)",
+      "title": "Move through the current view",
       "action": "scroll",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -650,9 +673,11 @@
       "id": "step_013",
       "index": 13,
       "kind": "action",
-      "title": "click at (815, 369)",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -674,7 +699,7 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_013.png"
+            "detail": ""
           },
           {
             "name": "ocr",
@@ -686,7 +711,7 @@
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -694,7 +719,7 @@
       "identity": {
         "applicable": true,
         "armed": false,
-        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "reason": null,
         "phi_free": false,
         "has_structured": false,
         "has_identifier_crop": false
@@ -720,9 +745,11 @@
       "id": "step_014",
       "index": 14,
       "kind": "action",
-      "title": "click '+Add <B'",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "irreversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -744,19 +771,19 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_014.png"
+            "detail": ""
           },
           {
             "name": "ocr",
             "label": "OCR text match",
             "present": true,
-            "detail": "+Add <B"
+            "detail": ""
           },
           {
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -791,9 +818,11 @@
       "id": "step_015",
       "index": 15,
       "kind": "action",
-      "title": "click at (639, 357)",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -815,7 +844,7 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_015.png"
+            "detail": ""
           },
           {
             "name": "ocr",
@@ -827,7 +856,7 @@
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -835,7 +864,7 @@
       "identity": {
         "applicable": true,
         "armed": false,
-        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "reason": null,
         "phi_free": false,
         "has_structured": false,
         "has_identifier_crop": false
@@ -860,10 +889,12 @@
       "id": "step_016",
       "index": 16,
       "kind": "action",
-      "title": "type <note>",
+      "title": "Enter an approved input",
       "action": "type",
       "risk": "reversible",
-      "param": "note",
+      "risk_explanation": null,
+      "risk_review_required": false,
+      "param": null,
       "secret": false,
       "key": null,
       "resolution": null,
@@ -891,9 +922,11 @@
       "id": "step_017",
       "index": 17,
       "kind": "action",
-      "title": "click 'Save as new messag'",
+      "title": "Select an interface target",
       "action": "click",
       "risk": "irreversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,
@@ -915,19 +948,19 @@
             "name": "template",
             "label": "Image template match",
             "present": true,
-            "detail": "templates/step_017.png"
+            "detail": ""
           },
           {
             "name": "ocr",
             "label": "OCR text match",
             "present": true,
-            "detail": "Save as new messag"
+            "detail": ""
           },
           {
             "name": "landmarks",
             "label": "Nearby-landmark geometry",
             "present": true,
-            "detail": "2 landmark(s)"
+            "detail": ""
           }
         ],
         "top_rung": "template"
@@ -935,7 +968,7 @@
       "identity": {
         "applicable": true,
         "armed": false,
-        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "reason": null,
         "phi_free": false,
         "has_structured": false,
         "has_identifier_crop": false
@@ -953,7 +986,7 @@
       "outcome": null,
       "reason": "",
       "halts": [
-        "irreversible write WITHOUT an armed identity gate"
+        "declared stop rule 1"
       ],
       "badges": [
         "irreversible",
@@ -964,9 +997,11 @@
       "id": "__end__",
       "index": 18,
       "kind": "terminal",
-      "title": "Success",
+      "title": "End of declared steps",
       "action": null,
       "risk": null,
+      "risk_explanation": null,
+      "risk_review_required": false,
       "param": null,
       "secret": false,
       "key": null,

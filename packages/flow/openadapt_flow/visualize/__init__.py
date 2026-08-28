@@ -15,6 +15,10 @@ See :mod:`openadapt_flow.visualize.spec` for the spec model,
 from __future__ import annotations
 
 from openadapt_flow.visualize.builder import build_program_graph
+from openadapt_flow.visualize.projection import (
+    PresentationProfile,
+    project_program_graph,
+)
 from openadapt_flow.visualize.render import render_html, render_mermaid
 from openadapt_flow.visualize.spec import (
     SPEC_VERSION,
@@ -43,10 +47,12 @@ __all__ = [
     "NodeKind",
     "ParamInfo",
     "ProgramGraphSpec",
+    "PresentationProfile",
     "ProvenanceInfo",
     "ResolutionInfo",
     "ResolutionRung",
     "build_program_graph",
+    "project_program_graph",
     "render_html",
     "render_mermaid",
 ]

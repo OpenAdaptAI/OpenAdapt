@@ -24,7 +24,10 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from openadapt_flow.visualize.spec import ProgramGraphSpec
+from openadapt_flow.visualize.spec import (
+    PROJECTED_BUNDLE_NAME,
+    ProgramGraphSpec,
+)
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -37,7 +40,12 @@ def render_html(spec: ProgramGraphSpec, *, title: str | None = None) -> str:
     """Render ``spec`` to a self-contained HTML document string."""
     css = _asset("program_graph.css")
     js = _asset("program_graph.js")
-    page_title = title or f"Compiled program — {spec.bundle.name}"
+    # A projected graph is already named "Compiled program"; do not title the
+    # page "Compiled program — Compiled program".
+    name = spec.bundle.name
+    page_title = title or (
+        name if name == PROJECTED_BUNDLE_NAME else f"Compiled program — {name}"
+    )
     # Embed the spec as JSON in a <script type="application/json"> block. Escape
     # ``</`` so the payload can never terminate the script element early.
     spec_json = spec.model_dump_json()
@@ -49,7 +57,7 @@ def render_html(spec: ProgramGraphSpec, *, title: str | None = None) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(page_title)}</title>
 <style>
-body {{ margin: 0; padding: 24px; max-width: 900px; margin-inline: auto;
+body {{ margin: 0; padding: 24px; max-width: 1240px; margin-inline: auto;
        background: Canvas; color: CanvasText; }}
 {css}
 </style>

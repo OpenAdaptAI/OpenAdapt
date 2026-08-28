@@ -660,6 +660,10 @@
       "sha256": "ffd73bb4ab46ea0e285bfd9a30c31df05fc927539552232487c81b9cf361c0de"
     },
     {
+      "path": "docs/program-workbench.png",
+      "sha256": "28c5aaec29c056de51844c77d5d5a3cb6d92d91833f7f7c697e55f4891a8d866"
+    },
+    {
       "path": "docs/showcase-encounter-loop/body/manifest.json",
       "sha256": "ffd2198573999681f81d669423c376ab52c0975bb0f1ddffb96e6620e9d9b3a5"
     },
@@ -881,11 +885,11 @@
     },
     {
       "path": "docs/showcase-openemr/program-graph.html",
-      "sha256": "58ae2e2bfa549a0986b50a34c6c4e29b5eac9ace9248712fa0d5c4ba05a587e6"
+      "sha256": "472eb493cd43aa35d3032687ea5027496f7c37d30c6603c78af9647d20743bd0"
     },
     {
       "path": "docs/showcase-openemr/program-graph.json",
-      "sha256": "949271190e203f4b8f36e5eb77ccdef811dbdc284249ebffcd272c0300759d8a"
+      "sha256": "38bbecff45f48b4d00a4fb95e4cc8186fefc83478962666f90fe82495f749871"
     },
     {
       "path": "docs/showcase-openemr/program-graph.png",
@@ -1885,11 +1889,11 @@
     },
     {
       "path": "openadapt_flow/visualize/static/program_graph.css",
-      "sha256": "84dbcf33a7dbe148929aed34f10a92ea0c416fa2b759cf78459c2c915e52a80f"
+      "sha256": "2678cda69a8305a3646979a1cbf80d229aa36f8ae3c630e933cbf83281a7ddfd"
     },
     {
       "path": "openadapt_flow/visualize/static/program_graph.js",
-      "sha256": "e2dd3feb88e440c95c83315edfe7e178b809092f2e6e4c319135ea7ffd41d975"
+      "sha256": "0c16f8593def3ffee71c7c8ceb56dae384c3259f4e63a87501cff5e494b518ed"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/bundle/manifest.json",

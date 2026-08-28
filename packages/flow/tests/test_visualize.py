@@ -31,8 +31,11 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.effects import Effect, EffectKind
 from openadapt_flow.visualize import (
     SPEC_VERSION,
+    GraphNode,
+    PresentationProfile,
     ProgramGraphSpec,
     build_program_graph,
+    project_program_graph,
     render_html,
     render_mermaid,
 )
@@ -193,6 +196,41 @@ def test_spec_is_json_serializable_and_roundtrips() -> None:
     assert len(again.nodes) == len(spec.nodes)
 
 
+def test_remote_safe_projection_keeps_topology_and_drops_recorded_values() -> None:
+    source = build_program_graph(_mixed_workflow())
+    projected = project_program_graph(source, PresentationProfile.REMOTE_SAFE)
+
+    assert [(edge.source, edge.target, edge.kind) for edge in projected.edges] == [
+        (edge.source, edge.target, edge.kind) for edge in source.edges
+    ]
+    assert [node.id for node in projected.nodes] == [node.id for node in source.nodes]
+    assert projected.bundle.name == "Compiled program"
+    assert projected.bundle.params[0].name == "input_1"
+    assert projected.bundle.params[0].example is None
+    assert projected.bundle.provenance.content_digest is None
+
+    payload = projected.model_dump_json().lower()
+    for private_value in (
+        "unit-mixed",
+        "patient row",
+        "#row-1",
+        "click save",
+        "row text too generic",
+        '"p1"',
+        '"hello"',
+    ):
+        assert private_value not in payload
+
+
+def test_operator_projection_is_an_independent_complete_copy() -> None:
+    source = build_program_graph(_mixed_workflow())
+    projected = project_program_graph(source, PresentationProfile.OPERATOR_LOCAL)
+    assert projected == source
+    assert projected is not source
+    projected.nodes[0].title = "changed"
+    assert source.nodes[0].title != "changed"
+
+
 def test_render_html_is_self_contained() -> None:
     spec = build_program_graph(_mixed_workflow())
     doc = render_html(spec)
@@ -204,6 +242,9 @@ def test_render_html_is_self_contained() -> None:
     assert "OpenAdaptProgramGraph.render" in doc
     assert "program-graph-spec" in doc
     assert "click Save" in doc
+    assert "Compiled topology" in doc
+    assert "Program evidence lanes" in doc
+    assert "End of declared steps" in doc
 
 
 def test_render_mermaid_is_valid_flowchart() -> None:
@@ -341,8 +382,257 @@ def test_cli_visualize_writes_outputs(tmp_path) -> None:
     assert out_html.exists() and out_html.read_text().startswith("<!doctype html>")
 
     out_json = tmp_path / "graph.json"
-    rc = main(["visualize", str(_SHOWCASE), "--format", "json", "--out", str(out_json)])
+    rc = main(
+        [
+            "visualize",
+            str(_SHOWCASE),
+            "--format",
+            "json",
+            "--profile",
+            "remote-safe",
+            "--out",
+            str(out_json),
+        ]
+    )
     assert rc == 0
     data = json.loads(out_json.read_text())
     assert data["spec_version"] == SPEC_VERSION
-    assert data["bundle"]["name"] == "openemr-showcase"
+    assert data["bundle"]["name"] == "Compiled program"
+    assert "admin" not in out_json.read_text().lower()
+
+
+# --------------------------------------------------------------------------
+# The non-local boundary is a closed ALLOW-LIST.
+#
+# A deny-list projection ships every newly added spec field to public surfaces
+# by default. These tests pin the inverse: a field leaves only when it is
+# explicitly enumerated, and an unclassified field is refused outright.
+# --------------------------------------------------------------------------
+
+_PUBLIC_PROFILES = (
+    PresentationProfile.REMOTE_SAFE,
+    PresentationProfile.PUBLIC_SYNTHETIC,
+    PresentationProfile.SANITIZED_DERIVATIVE,
+)
+
+
+def _risk_explanation_workflow(explanation: str) -> Workflow:
+    """A one-step workflow whose risk provenance carries operator free text."""
+    return Workflow(
+        name="risk-provenance",
+        steps=[
+            Step(
+                id="s0",
+                intent="click Save",
+                action=ActionKind.CLICK,
+                anchor=_anchor(),
+                risk="irreversible",
+                risk_explanation=explanation,
+            )
+        ],
+    )
+
+
+def test_operator_risk_explanation_never_crosses_the_local_boundary() -> None:
+    """``risk_explanation`` is operator free text (ir.py: up to 512 chars) and
+    can name a customer and a record id. It must not reach a public surface."""
+    explanation = "irreversible - posts to Acme's live billing API for patient 4417"
+    source = build_program_graph(_risk_explanation_workflow(explanation))
+    # The operator-local view still carries it; it is provenance, not a leak.
+    local = project_program_graph(source, PresentationProfile.OPERATOR_LOCAL)
+    assert local.nodes[0].risk_explanation == explanation
+
+    for profile in _PUBLIC_PROFILES:
+        projected = project_program_graph(source, profile)
+        assert projected.nodes[0].risk_explanation is None, profile
+        # The spec is embedded verbatim in the HTML export, so the string must
+        # be absent from the rendered artifact too, not merely unrendered.
+        assert explanation not in projected.model_dump_json(), profile
+        assert "Acme" not in render_html(projected), profile
+        assert "4417" not in render_html(projected), profile
+
+
+def test_projection_carries_only_allow_listed_node_fields() -> None:
+    """Every field a projected node actually sets is on the node allow-list."""
+    from openadapt_flow.visualize.projection import _NODE_LOCAL, _NODE_PUBLIC
+
+    source = build_program_graph(_mixed_workflow())
+    for profile in _PUBLIC_PROFILES:
+        projected = project_program_graph(source, profile)
+        for node in projected.nodes:
+            defaults = GraphNode(id=node.id, index=node.index, title="")
+            set_fields = {
+                name
+                for name in GraphNode.model_fields
+                if getattr(node, name) != getattr(defaults, name)
+            }
+            assert set_fields <= _NODE_PUBLIC, (profile, node.id, set_fields)
+            # Nothing on the local list is ever populated.
+            for name in _NODE_LOCAL:
+                assert getattr(node, name) == getattr(defaults, name), (profile, name)
+
+
+def test_field_boundary_classifies_every_crossing_model_field() -> None:
+    """The live guard: adding a field to spec.py without classifying it fails
+    here (and at import) instead of silently reaching a public surface."""
+    from openadapt_flow.visualize.projection import assert_field_boundary_is_closed
+
+    assert_field_boundary_is_closed()
+
+
+def test_an_unclassified_new_field_is_refused() -> None:
+    """Proof the guard has teeth: a GraphNode grown a new field is refused
+    until an author puts it on the public or the local list."""
+    import pytest
+    from pydantic import create_model
+
+    from openadapt_flow.visualize.projection import (
+        _NODE_LOCAL,
+        _NODE_PUBLIC,
+        ProjectionBoundaryError,
+        check_model_partition,
+    )
+
+    grown = create_model(
+        "GraphNodeWithNewField",
+        __base__=GraphNode,
+        operator_note=(str, ""),
+    )
+    with pytest.raises(ProjectionBoundaryError) as excinfo:
+        check_model_partition(grown, _NODE_PUBLIC, _NODE_LOCAL)
+    assert "operator_note" in str(excinfo.value)
+
+    # risk_explanation specifically is classified local, not public.
+    assert "risk_explanation" in _NODE_LOCAL
+    assert "risk_explanation" not in _NODE_PUBLIC
+
+
+def test_projected_rung_labels_match_the_builder() -> None:
+    """The projection derives each rung label from the closed rung id rather
+    than carrying it across, so the two label tables must not drift."""
+    from openadapt_flow.visualize.builder import _RUNG_LABELS as BUILT
+    from openadapt_flow.visualize.projection import _RUNG_LABELS as PROJECTED
+
+    assert dict(BUILT) == PROJECTED
+
+
+def test_projection_drops_values_outside_a_closed_vocabulary() -> None:
+    """Closed vocabularies are enforced at the boundary, so widening one
+    upstream cannot by itself widen what leaves."""
+    source = build_program_graph(_mixed_workflow())
+    node = source.nodes[0]
+    node.action = "exfiltrate patient 4417"
+    node.risk = "free text risk"
+    node.postconditions = ["text_present", "smuggled free text"]
+    node.badges = ["irreversible", "3 authorized roles", "smuggled free text"]
+
+    projected = project_program_graph(source, PresentationProfile.REMOTE_SAFE)
+    out = projected.nodes[0]
+    assert out.action is None
+    assert out.risk is None
+    assert out.postconditions == ["text_present"]
+    assert out.badges == ["irreversible", "3 authorized roles"]
+    assert "4417" not in projected.model_dump_json()
+
+
+def test_projection_refuses_an_out_of_vocabulary_effect_fact() -> None:
+    """A required governance field has no safe silent fallback: emitting the
+    unenumerated value risks leaking free text, and substituting the default
+    would understate risk. It fails closed instead."""
+    import pytest
+
+    from openadapt_flow.visualize.projection import ProjectionBoundaryError
+
+    source = build_program_graph(_mixed_workflow())
+    effect = next(n for n in source.nodes if n.effects).effects[0]
+    effect.risk = "irreversible"
+    projected = project_program_graph(source, PresentationProfile.REMOTE_SAFE)
+    assert (
+        next(n for n in projected.nodes if n.effects).effects[0].risk == "irreversible"
+    )
+
+    effect.risk = "sort-of reversible, ask Acme"
+    with pytest.raises(ProjectionBoundaryError) as excinfo:
+        project_program_graph(source, PresentationProfile.REMOTE_SAFE)
+    assert "EffectInfo.risk" in str(excinfo.value)
+    # The rejected value is never echoed: an exception message travels into
+    # logs, and that value is the very thing suspected of carrying local data.
+    assert "Acme" not in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------
+# A PUBLIC program graph must carry a PROJECTED spec.
+#
+# render_html embeds the whole spec as JSON, so an unprojected graph ships
+# recorded titles, DOM selectors, and template paths inside the published file
+# even though the rendered page never displays them.
+#
+# Deliberately NOT asserted over public-demo/evidence-packs/mockmed-triage-v1,
+# -v2 and -v3. Those are immutable retained packs in a format the exporter will
+# never produce again, pinned byte-for-byte by LEGACY_RETAINED_PACKS in
+# scripts/export_public_demo_evidence.py. Editing them to satisfy a test would
+# trip the anti-tamper control that exists to stop exactly that, so the remedy
+# for a retained pack is withdrawal, never rewriting.
+# --------------------------------------------------------------------------
+
+_SHOWCASE_GRAPH_DIR = _REPO / "docs" / "showcase-openemr"
+
+
+def _embedded_spec(html_path: Path) -> dict:
+    """The spec render_html embeds in the page, as a dict."""
+    import re
+
+    match = re.search(
+        r'id="program-graph-spec">(.*?)</script>', html_path.read_text(), re.S
+    )
+    assert match is not None, f"{html_path} has no embedded spec"
+    return json.loads(match.group(1).replace("<\\/", "</"))
+
+
+def _assert_spec_is_projected(spec: dict, where: object) -> None:
+    """Fail if any local diagnostic content survived into ``spec``."""
+    from openadapt_flow.visualize.projection import _NODE_LOCAL
+    from openadapt_flow.visualize.spec import PROJECTED_BUNDLE_NAME
+
+    assert spec["bundle"]["name"] == PROJECTED_BUNDLE_NAME, where
+    assert spec["bundle"].get("created_at") is None, where
+    assert spec["bundle"]["provenance"].get("content_digest") is None, where
+    for node in spec["nodes"]:
+        for rung in (node.get("resolution") or {}).get("rungs", []):
+            # detail carries the selector, template path, or OCR text.
+            assert not rung.get("detail"), (where, node["id"], rung["name"])
+        for field in _NODE_LOCAL:
+            assert not node.get(field), (where, node["id"], field)
+    for edge in spec["edges"]:
+        assert edge.get("guard") is None, where
+
+
+def test_committed_showcase_graph_carries_a_projected_spec() -> None:
+    """The committed showcase graph is a public artifact in both formats."""
+    json_path = _SHOWCASE_GRAPH_DIR / "program-graph.json"
+    html_path = _SHOWCASE_GRAPH_DIR / "program-graph.html"
+    assert json_path.exists() and html_path.exists()
+    _assert_spec_is_projected(json.loads(json_path.read_text()), json_path)
+    _assert_spec_is_projected(_embedded_spec(html_path), html_path)
+
+
+def test_newly_exported_pack_graph_is_projected(tmp_path: Path) -> None:
+    """The evidence exporter must cross the boundary, not publish the local
+    graph. Exercises the real write path rather than grepping the source."""
+    from scripts.export_public_demo_evidence import write_compiled_graph
+
+    workflow = _mixed_workflow()
+    write_compiled_graph(tmp_path, workflow)
+
+    written_json = json.loads((tmp_path / "program-graph.json").read_text())
+    _assert_spec_is_projected(written_json, "exported program-graph.json")
+    _assert_spec_is_projected(
+        _embedded_spec(tmp_path / "program-graph.html"), "exported program-graph.html"
+    )
+
+    # The recorded content of the source workflow must not appear anywhere in
+    # either published byte stream.
+    for name in ("program-graph.json", "program-graph.html"):
+        blob = (tmp_path / name).read_text()
+        for secret in ("unit-mixed", "patient row", "#row-1", "click Save"):
+            assert secret not in blob, (name, secret)

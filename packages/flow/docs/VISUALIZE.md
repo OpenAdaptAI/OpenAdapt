@@ -1,13 +1,22 @@
 # Compiled-program visualizer
 
-See what a demonstration compiled **into**. A compiled bundle is not a video —
-it is a governed program: an ordered set of steps, each carrying how its target
-is re-resolved, whether an identity gate protects the click, what real
-system-of-record effect must hold, what the screen must look like afterward, its
-risk class, and where the run will **halt** rather than guess. The visualizer
-renders that structure.
+See what a demonstration compiled into. A compiled bundle is a governed
+program. Each step states how the runtime resolves its target, whether an
+identity gate applies, what screen and effect checks apply, and where the run
+must halt.
 
-![Program graph of the OpenEMR showcase bundle](showcase-openemr/program-graph.png)
+![Public-safe Program Workbench with the exact loop edges and selected-step inspector](program-workbench.png)
+
+The HTML view has three linked views:
+
+- **Program map** renders the exact emitted edge targets. It keeps loop-back,
+  branch, exception, and sequence edges distinct.
+- **Evidence lanes** compares the declared resolution, identity, actuation,
+  screen, effect, and stop contracts for each step.
+- **Stop rules** isolates the steps that can refuse an action.
+
+The view does not show a live verdict without an exact run trace. A declared
+check is a compile-time requirement. It is not evidence that the check passed.
 
 ## One spec, three surfaces
 
@@ -15,9 +24,9 @@ The engine is the single source of truth. `openadapt_flow.visualize`
 **emits a serializable _program-graph spec_** from a compiled bundle; every
 surface renders that spec and none of them re-parse the bundle IR:
 
-- **CLI** (`openadapt-flow visualize`) — self-contained HTML / Mermaid / JSON.
-- **Cloud** (`app.openadapt.ai`) — an interactive React view over the same spec.
-- **Desktop** (Tauri app) — a view that vendors the same renderer.
+- **CLI** (`openadapt-flow visualize`) writes self-contained HTML, Mermaid, or JSON.
+- **Cloud** (`app.openadapt.ai`) uses an interactive React view over the same spec.
+- **Desktop** uses a local React view over the qualification graph projection.
 
 The spec is versioned and has a committed JSON Schema
 (`schemas/program-graph-v1.json`) so non-Python surfaces validate the same
@@ -60,81 +69,72 @@ openadapt-flow visualize path/to/bundle -o program.html
 # Mermaid flowchart source for Markdown / docs / a PR description
 openadapt-flow visualize path/to/bundle --format mermaid
 
-# the shared JSON graph spec (what the cloud + desktop surfaces render)
+# the shared JSON graph spec (what Cloud and Desktop render)
 openadapt-flow visualize path/to/bundle --format json -o program-graph.json
+
+# a closed projection for a remote viewer or approved derivative
+openadapt-flow visualize path/to/bundle --profile remote-safe -o program.html
 ```
 
-## Rendering choice & tradeoffs
+The default `operator-local` profile includes local diagnostic detail.
 
-- **Engine emits the spec; surfaces render it** — rather than each surface
+`remote-safe`, `public-synthetic`, and `sanitized-derivative` work the other way
+round. Each rebuilds the graph from a closed list of the fields allowed to
+leave, rather than copying the graph and deleting the sensitive parts. Recorded
+text, parameter values, selectors, URLs, free-text predicates, risk
+explanations, and local provenance all stay behind, because none of them is on
+that list. Fields whose vocabulary is finite, such as the action or the
+resolution rung, are also checked against a closed set of values.
+
+This matters most for the field nobody has written yet. Add one to the spec and
+it doesn't travel: the module won't load until someone marks it either safe to
+leave or local. The projection still doesn't sanitize the source bundle, and it
+doesn't prove the source is safe to send.
+
+## Rendering choice and tradeoffs
+
+- **The engine emits the spec and each surface renders it.** Each surface avoids
   re-parsing the bundle IR. This keeps one projection of the compiled semantics
-  and a single wire contract, and lets the cloud/desktop surfaces render without
-  a Python engine on hand.
-- **Custom lightweight layout, not a graph library.** The compiled program is a
-  vertical sequence with room for branches, and the value is in the **per-node
-  annotations** (resolution ladder, identity gate, effect check, halt points) —
-  far clearer as node _cards_ than as edges-and-boxes. A full graph lib
-  (d3/cytoscape/reactflow) is heavy overkill and would break the
-  self-contained/CSP-safe requirement. Mermaid is offered as a portable
-  secondary format; JSON for tooling.
+  and a single wire contract. Cloud and Desktop do not need to invent the graph
+  from display order.
+- **A small deterministic layout handles the offline view.** It follows the
+  actual edge targets and draws back edges explicitly. It keeps the file
+  self-contained and avoids a runtime dependency. Cloud uses a React renderer
+  over the same graph contract. Mermaid remains a portable export format.
 - **Self-contained HTML.** The CLI inlines the shared CSS + a dependency-free
   vanilla-JS renderer (`openadapt_flow/visualize/static/program_graph.{css,js}`)
   and embeds the spec as JSON, so the page opens offline and renders under a
-  strict CSP. The desktop (Tauri, CSP `'self'`) vendors those same two files.
+  strict CSP.
 
-## What `visualize` shows: the bundled MockMed sample
+## What `visualize` shows
 
-This is the actual Mermaid that `visualize` emits for the bundled MockMed
-triage sample, produced by
-`openadapt-flow visualize docs/showcase/bundle --format mermaid` (nothing
-below is hand-drawn):
+This Mermaid output comes from the bounded loop fixture. The command uses the
+public-safe projection, so it keeps the structure and removes recorded values.
 
 ```mermaid
 flowchart TD
-  n0("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
-  n1("type 'nurse.demo'")
-  n2("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
-  n3("type 'mockmed-demo-pass'")
-  n4("click 'Sign In'<br/><small>visual template + 2 OCR landmarks</small>")
-  n5("click 'Open'<br/><small>visual template + 2 OCR landmarks</small>")
-  n6("click 'New Encounter'<br/><small>visual template + 2 OCR landmarks</small>")
-  n7("click 'Triage'<br/><small>visual template + 2 OCR landmarks</small>")
-  n8("click recorded visual target<br/><small>visual template + 2 OCR landmarks</small>")
-  n9("type <note>")
-  n10("click 'Save Encounter'<br/><small>visual template + 2 OCR landmarks</small>")
-  n11{{"Success"}}
-  n0 --> n1
+  n0{"Repeat the bounded steps"}
+  n1("Enter an approved input")
+  n2("Enter an approved input")
+  n3("Send an approved key<br/><small>effect · irreversible</small>")
+  n4{{"End of declared steps"}}
+  n0 -->|declared loop| n1
   n1 --> n2
   n2 --> n3
-  n3 --> n4
-  n4 --> n5
-  n5 --> n6
-  n6 --> n7
-  n7 --> n8
-  n8 --> n9
-  n9 --> n10
-  n10 --> n11
+  n3 --> n0
+  n0 --> n4
   classDef irreversible stroke:#b4530a,stroke-width:2px;
   classDef halt stroke:#b21f2d,stroke-width:2px;
+  class n3 irreversible;
+  class n3 halt;
 ```
 
-How to read the target labels:
+How to read this map:
 
-- **`recorded visual target` is not coordinate replay.** It means the control
-  had no readable label, so the bundle retained its visual crop and nearby text
-  instead. The demonstration's point is only the relative offset inside the
-  target after that evidence re-finds it.
-- **`visual template + 2 OCR landmarks` names the retained evidence.** Replay
-  resolves it on a fresh frame; global movement is accepted only when the
-  landmarks do not contradict it, and ambiguous OCR refuses instead of picking
-  a match.
-- **DOM/accessibility is stronger when available.** Browser and native bundles
-  show that structural rung instead; RDP and Citrix intentionally use the
-  visual floor.
-- **The HTML view carries the full contract.** `--format html` expands every
-  resolution rung, identity gate, effect check, postcondition, and halt point.
-
-*Text summary (for renderers without Mermaid): the compiled MockMed triage
-bundle signs in, opens the patient, starts an encounter, enters the `<note>`
-parameter, and saves it. Each click is re-found from retained evidence rather
-than replayed at a literal screen coordinate.*
+- `n0` owns the bounded loop. The `declared loop` edge enters its body.
+- The edge from `n3` to `n0` returns for the next item. The edge from `n0` to
+  `n4` exits when the worklist is complete.
+- `End of declared steps` is a program terminal. It does not claim that a live
+  run achieved `VERIFIED`.
+- The HTML view adds the resolution, identity, screen, effect, and stop
+  controls for each selected node.

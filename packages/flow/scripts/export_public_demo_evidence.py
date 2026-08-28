@@ -114,7 +114,12 @@ from openadapt_flow.runtime.authorization import (
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.transaction import IdempotencyLedger
 from openadapt_flow.verification import VerificationTier
-from openadapt_flow.visualize import build_program_graph, render_html
+from openadapt_flow.visualize import (
+    PresentationProfile,
+    build_program_graph,
+    project_program_graph,
+    render_html,
+)
 
 SCHEMA_VERSION = "openadapt.public-demo-evidence/v1"
 OUTCOME_SCHEMA_VERSION = "openadapt.public-demo-outcome/v1"
@@ -335,6 +340,30 @@ def _canonical_json(value: Any) -> bytes:
         separators=(",", ":"),
         ensure_ascii=False,
     ).encode("utf-8")
+
+
+def write_compiled_graph(compiled_dir: Path, workflow: "Workflow") -> Path:
+    """Write the pack's program graph, PROJECTED for a public audience.
+
+    The evidence pack is published to anyone, so the graph crosses the audience
+    boundary here and BOTH artifacts carry the projected spec. ``render_html``
+    embeds the whole spec as JSON, so rendering an unprojected graph would ship
+    recorded titles, DOM selectors, and template paths inside the published HTML
+    even though the page never displays them.
+
+    Split out of the exporter so the projection is testable without running a
+    full demo against a live system of record.
+    """
+
+    graph = project_program_graph(
+        build_program_graph(workflow),
+        PresentationProfile.PUBLIC_SYNTHETIC,
+    )
+    _write_json(compiled_dir / "program-graph.json", graph.model_dump(mode="json"))
+    html_path = compiled_dir / "program-graph.html"
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(render_html(graph), encoding="utf-8")
+    return html_path
 
 
 def _write_json(path: Path, value: Any) -> Path:
@@ -2577,15 +2606,7 @@ def export_pack(
         )
 
         compiled_dir = artifacts / "compiled"
-        graph = build_program_graph(workflow)
-        _write_json(
-            compiled_dir / "program-graph.json",
-            graph.model_dump(mode="json"),
-        )
-        (compiled_dir / "program-graph.html").write_text(
-            render_html(graph),
-            encoding="utf-8",
-        )
+        write_compiled_graph(compiled_dir, workflow)
         crop_bindings = _copy_binding(
             root=temp_root,
             workflow=workflow,

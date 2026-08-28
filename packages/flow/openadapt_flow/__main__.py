@@ -2655,13 +2655,18 @@ def _cmd_explain(args: argparse.Namespace) -> int:
 def _cmd_visualize(args: argparse.Namespace) -> int:
     from openadapt_flow.ir import Workflow
     from openadapt_flow.visualize import (
+        PresentationProfile,
         build_program_graph,
+        project_program_graph,
         render_html,
         render_mermaid,
     )
 
     workflow = Workflow.load(Path(args.bundle))
-    spec = build_program_graph(workflow)
+    spec = project_program_graph(
+        build_program_graph(workflow),
+        PresentationProfile(args.profile),
+    )
     fmt = args.format
     if fmt == "json":
         output = spec.model_dump_json(indent=2)
@@ -5733,6 +5738,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--out",
         default=None,
         help="Write to this file instead of stdout (parent dirs are created)",
+    )
+    p.add_argument(
+        "--profile",
+        choices=(
+            "operator-local",
+            "remote-safe",
+            "public-synthetic",
+            "sanitized-derivative",
+        ),
+        default="operator-local",
+        help=(
+            "Data boundary for the rendered view. Non-local profiles remove "
+            "recorded text, values, selectors, URLs, free-text predicates, "
+            "and local provenance. Projection is not source sanitization."
+        ),
     )
     p.set_defaults(func=_cmd_visualize)
 

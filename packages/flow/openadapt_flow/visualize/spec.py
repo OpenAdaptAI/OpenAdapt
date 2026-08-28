@@ -34,6 +34,12 @@ from pydantic import BaseModel, Field
 #: additive optional fields do not bump it (a v1 reader ignores unknown fields).
 SPEC_VERSION = 1
 
+#: The bundle name every non-local projection carries. The recorded name is
+#: local data, so a projected graph is named only by what it is. Declared here,
+#: on the shared wire contract, so the projection that sets it and the renderer
+#: that titles a page from it agree without either importing the other.
+PROJECTED_BUNDLE_NAME = "Compiled program"
+
 
 class NodeKind(str, Enum):
     """Kind of graph node -- mirrors :class:`openadapt_flow.ir.StateKind` so a
