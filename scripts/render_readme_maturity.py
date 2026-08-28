@@ -47,6 +47,9 @@ EXPECTED_CANONICAL_FILES = {
     "evidence_manifest_schema": (
         "schemas/production-lifecycle-evidence-manifest.schema.json"
     ),
+    "evidence_registry": "evidence-registry.json",
+    "evidence_registry_schema": "schemas/evidence-registry.schema.json",
+    "evidence_registry_validator": "scripts/validate_evidence_registry.py",
     "evidence_summary_schema": (
         "schemas/production-lifecycle-evidence-summary.schema.json"
     ),
@@ -307,6 +310,14 @@ def _run_canonical_validator(inputs: Mapping[str, bytes]) -> dict[str, str]:
         if spec is None or spec.loader is None:
             raise MaturityError("canonical lifecycle validator cannot be loaded")
         module = importlib.util.module_from_spec(spec)
+        # The validator imports its sibling scripts by bare module name, so the
+        # materialized script directory has to be importable. It is prepended
+        # for the duration of the call and removed again, together with every
+        # module the validator imported from it, so nothing leaks into the
+        # importing process.
+        script_directory = str(validator_path.parent)
+        sys.path.insert(0, script_directory)
+        before = set(sys.modules)
         try:
             spec.loader.exec_module(module)
             active = module.validate_files(root)
@@ -314,6 +325,15 @@ def _run_canonical_validator(inputs: Mapping[str, bytes]) -> dict[str, str]:
             raise MaturityError(
                 f"canonical lifecycle validator refused: {exc}"
             ) from exc
+        finally:
+            for name in set(sys.modules) - before:
+                origin = getattr(sys.modules[name], "__file__", None)
+                if origin is not None and origin.startswith(script_directory):
+                    del sys.modules[name]
+            try:
+                sys.path.remove(script_directory)
+            except ValueError:
+                pass
     if not isinstance(active, dict) or not all(
         isinstance(key, str) and isinstance(value, str) for key, value in active.items()
     ):
