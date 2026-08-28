@@ -2,6 +2,9 @@
 
 Thank you for your interest in contributing to OpenAdapt!
 
+Participation in this project is governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Product boundary
 
 `OpenAdaptAI/OpenAdapt` is the launcher/meta-package and compatibility
