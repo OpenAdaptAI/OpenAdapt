@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+RELEASE_BOT_ID = 321543906
 SCRIPT = ROOT / "scripts" / "verify_github_release.py"
 SPEC = importlib.util.spec_from_file_location("verify_github_release", SCRIPT)
 assert SPEC and SPEC.loader
@@ -31,30 +32,44 @@ def release_candidate(tmp_path: Path) -> tuple[Path, Path, dict]:
         (downloaded / path.name).write_bytes(path.read_bytes())
 
     metadata = {
+        "id": 9001,
+        "target_commitish": "8" * 40,
         "tag_name": "v1.16.0",
         "draft": False,
         "prerelease": False,
         "immutable": True,
         "published_at": "2026-08-27T12:00:00Z",
-        "author": {"login": "openadapt-release[bot]"},
+        "author": {"login": "openadapt-release[bot]", "id": RELEASE_BOT_ID},
         "assets": [
             {
+                "id": 1001 + index,
                 "name": path.name,
                 "size": path.stat().st_size,
                 "digest": f"sha256:{_sha256(path)}",
-                "uploader": {"login": "openadapt-release[bot]"},
+                "uploader": {
+                    "login": "openadapt-release[bot]",
+                    "id": RELEASE_BOT_ID,
+                },
             }
-            for path in (wheel, sdist)
+            for index, path in enumerate((wheel, sdist))
         ],
     }
     return expected, downloaded, metadata
 
 
 def _verify(expected: Path, downloaded: Path, metadata: dict) -> None:
+    asset_ids = {
+        path.name: 1001 if path.name.endswith(".whl") else 1002
+        for path in expected.iterdir()
+    }
     MODULE.verify_release(
         metadata,
         expected_tag="v1.16.0",
         expected_author="openadapt-release[bot]",
+        expected_author_id=RELEASE_BOT_ID,
+        expected_release_id=9001,
+        expected_asset_ids=asset_ids,
+        expected_target_commitish="8" * 40,
         expected_dir=expected,
         downloaded_dir=downloaded,
     )
@@ -74,6 +89,13 @@ def test_exact_draft_is_accepted_before_one_way_publication(release_candidate):
         metadata,
         expected_tag="v1.16.0",
         expected_author="openadapt-release[bot]",
+        expected_author_id=RELEASE_BOT_ID,
+        expected_release_id=9001,
+        expected_asset_ids={
+            path.name: 1001 if path.name.endswith(".whl") else 1002
+            for path in expected.iterdir()
+        },
+        expected_target_commitish="8" * 40,
         expected_dir=expected,
         downloaded_dir=downloaded,
         expected_state="draft",
@@ -87,7 +109,7 @@ def test_exact_draft_is_accepted_before_one_way_publication(release_candidate):
         ("draft", True, "is not published"),
         ("prerelease", True, "is a prerelease"),
         ("immutable", False, "is mutable"),
-        ("author", {"login": "abrichr"}, "release author mismatch"),
+        ("author", {"login": "abrichr", "id": 774615}, "release author mismatch"),
     ],
 )
 def test_release_identity_or_state_mismatch_fails_closed(
@@ -117,6 +139,13 @@ def test_exact_partial_release_can_add_only_the_missing_asset(release_candidate)
         metadata,
         expected_tag="v1.16.0",
         expected_author="openadapt-release[bot]",
+        expected_author_id=RELEASE_BOT_ID,
+        expected_release_id=9001,
+        expected_asset_ids={
+            path.name: 1001 if path.name.endswith(".whl") else 1002
+            for path in expected.iterdir()
+        },
+        expected_target_commitish="8" * 40,
         expected_dir=expected,
         downloaded_dir=downloaded,
         allow_missing=True,
@@ -128,6 +157,23 @@ def test_exact_partial_release_can_add_only_the_missing_asset(release_candidate)
     source = expected / missing_asset["name"]
     (downloaded / missing_asset["name"]).write_bytes(source.read_bytes())
     _verify(expected, downloaded, metadata)
+
+
+def test_release_and_asset_id_mismatch_fails_closed(release_candidate):
+    expected, downloaded, metadata = release_candidate
+    metadata["id"] = 9999
+    with pytest.raises(ValueError, match="release ID mismatch"):
+        _verify(expected, downloaded, metadata)
+
+    metadata["id"] = 9001
+    metadata["assets"][0]["id"] = 9999
+    with pytest.raises(ValueError, match="asset ID mismatch"):
+        _verify(expected, downloaded, metadata)
+
+    metadata["assets"][0]["id"] = 1001
+    metadata["target_commitish"] = "7" * 40
+    with pytest.raises(ValueError, match="release target mismatch"):
+        _verify(expected, downloaded, metadata)
 
 
 def test_unexpected_release_asset_fails_closed(release_candidate):
@@ -150,8 +196,20 @@ def test_release_asset_digest_mismatch_fails_closed(release_candidate):
 
 def test_release_asset_uploader_mismatch_fails_closed(release_candidate):
     expected, downloaded, metadata = release_candidate
-    metadata["assets"][0]["uploader"] = {"login": "abrichr"}
+    metadata["assets"][0]["uploader"] = {"login": "abrichr", "id": 774615}
 
+    with pytest.raises(ValueError, match="asset uploader mismatch"):
+        _verify(expected, downloaded, metadata)
+
+
+def test_release_bot_numeric_identity_mismatch_fails_closed(release_candidate):
+    expected, downloaded, metadata = release_candidate
+    metadata["author"]["id"] = 1
+    with pytest.raises(ValueError, match="release author mismatch"):
+        _verify(expected, downloaded, metadata)
+
+    metadata["author"]["id"] = RELEASE_BOT_ID
+    metadata["assets"][0]["uploader"]["id"] = 1
     with pytest.raises(ValueError, match="asset uploader mismatch"):
         _verify(expected, downloaded, metadata)
 

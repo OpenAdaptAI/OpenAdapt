@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import runpy
 import tarfile
 import zipfile
@@ -114,6 +115,20 @@ def _release_tree(
     artifact_requires_python: str = ">=3.10,<3.13",
     lifecycle_classifier: str | None = None,
 ) -> tuple[Path, Path]:
+    license_body = b"MIT test license\n"
+    (tmp_path / "LICENSE").write_bytes(license_body)
+    (tmp_path / "source-policy.public.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "enforcement": {
+                    "built_artifacts": {"path_prefixes": ["private/release-corpus"]},
+                    "content_signature_parts": [["PRIVATE-", "RELEASE-SIGNATURE"]],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     (tmp_path / "pyproject.toml").write_text(
         "[project]\n"
         'name = "openadapt"\n'
@@ -134,6 +149,7 @@ def _release_tree(
                 lifecycle_classifier,
             ),
         )
+        archive.writestr("openadapt-2.0.0.dist-info/licenses/LICENSE", license_body)
 
     sdist = dist / "openadapt-2.0.0.tar.gz"
     raw = _metadata(
@@ -145,6 +161,9 @@ def _release_tree(
     info.size = len(raw)
     with tarfile.open(sdist, mode="w:gz") as archive:
         archive.addfile(info, io.BytesIO(raw))
+        license_info = tarfile.TarInfo("openadapt-2.0.0/LICENSE")
+        license_info.size = len(license_body)
+        archive.addfile(license_info, io.BytesIO(license_body))
     return dist, wheel
 
 
@@ -209,6 +228,31 @@ def test_release_artifacts_reject_static_lifecycle_metadata(tmp_path: Path):
     )
 
     with pytest.raises(ValueError, match="static lifecycle classifier"):
+        verify_release_artifacts(dist, root=tmp_path)
+
+
+def test_release_artifacts_require_policy_and_exact_license(tmp_path: Path):
+    policy_root = tmp_path / "policy"
+    policy_root.mkdir()
+    dist, _ = _release_tree(policy_root)
+    (policy_root / "source-policy.public.json").unlink()
+    with pytest.raises(ValueError, match="rendered source policy"):
+        verify_release_artifacts(dist, root=policy_root)
+
+    license_root = tmp_path / "license"
+    license_root.mkdir()
+    dist, _ = _release_tree(license_root)
+    (license_root / "LICENSE").write_text("changed", encoding="utf-8")
+    with pytest.raises(ValueError, match="exact required LICENSE"):
+        verify_release_artifacts(dist, root=license_root)
+
+
+def test_release_artifacts_enforce_built_archive_policy(tmp_path: Path):
+    dist, wheel = _release_tree(tmp_path)
+    with zipfile.ZipFile(wheel, mode="a") as archive:
+        archive.writestr("private/release-corpus/sample.json", b"{}")
+
+    with pytest.raises(ValueError, match="denied built artifact path"):
         verify_release_artifacts(dist, root=tmp_path)
 
 

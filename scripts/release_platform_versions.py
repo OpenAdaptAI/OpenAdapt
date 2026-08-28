@@ -58,6 +58,19 @@ def release_component_versions(
     if set(selected_versions) != set(COMPONENT_PACKAGES):
         raise ValueError("release selection must pin the exact public package set")
 
+    compatibility = _object(
+        document.get("compatibility_status"), "platform compatibility status"
+    )
+    if set(compatibility) != {"status", "basis", "failures"}:
+        raise ValueError("platform compatibility status keys are invalid")
+    if (
+        compatibility["status"] != "dependency-compatible"
+        or not isinstance(compatibility["basis"], str)
+        or not compatibility["basis"]
+        or compatibility["failures"] != []
+    ):
+        raise ValueError("the exact public package set is dependency-incompatible")
+
     versions: dict[str, str] = {}
     for role, package in COMPONENT_PACKAGES.items():
         component = _object(components.get(role), f"{role} component")
@@ -69,8 +82,32 @@ def release_component_versions(
         if selected_versions.get(role) != version:
             raise ValueError(f"{role} release selection does not match its component")
         versions[role] = version
-    if versions["launcher"] != launcher_version:
-        raise ValueError("launcher release selection does not match the candidate")
+
+    package_roles = {package: role for role, package in COMPONENT_PACKAGES.items()}
+    runtime_units = _object(document.get("runtime_units"), "platform runtime units")
+    for unit_name, raw_unit in runtime_units.items():
+        unit = _object(raw_unit, f"{unit_name} runtime unit")
+        for closure_name in ("selected", "resolved"):
+            closure = unit.get(closure_name)
+            if closure is None:
+                continue
+            selected = _object(closure, f"{unit_name} {closure_name} closure")
+            for package, version in selected.items():
+                role = package_roles.get(package)
+                if role is None or role == "launcher":
+                    continue
+                if version != versions[role]:
+                    raise ValueError(
+                        f"{unit_name} resolves {package}=={version}, not the "
+                        f"selected default {versions[role]}"
+                    )
+    published_launcher = tuple(int(part) for part in versions["launcher"].split("."))
+    candidate_launcher = tuple(int(part) for part in launcher_version.split("."))
+    if candidate_launcher < published_launcher:
+        raise ValueError("launcher candidate is older than the published selection")
+    # The committed manifest can only bind published files. The release admission
+    # binds this candidate launcher and its local artifacts before publication.
+    versions["launcher"] = launcher_version
     return versions
 
 

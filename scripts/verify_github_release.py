@@ -58,11 +58,26 @@ def verify_release(
     *,
     expected_tag: str,
     expected_author: str,
+    expected_author_id: int,
+    expected_release_id: int,
+    expected_asset_ids: dict[str, int],
+    expected_target_commitish: str,
     expected_dir: Path,
     downloaded_dir: Path | None = None,
     allow_missing: bool = False,
     expected_state: str = "published",
 ) -> list[str]:
+    if document.get("id") != expected_release_id:
+        raise ValueError(
+            f"release ID mismatch: expected {expected_release_id}, "
+            f"found {document.get('id')!r}"
+        )
+    if document.get("target_commitish") != expected_target_commitish:
+        raise ValueError(
+            "release target mismatch: "
+            f"expected {expected_target_commitish!r}, "
+            f"found {document.get('target_commitish')!r}"
+        )
     if document.get("tag_name") != expected_tag:
         raise ValueError(
             f"release tag mismatch: expected {expected_tag!r}, "
@@ -88,13 +103,19 @@ def verify_release(
 
     author = document.get("author")
     actual_author = author.get("login") if isinstance(author, dict) else None
-    if actual_author != expected_author:
+    actual_author_id = author.get("id") if isinstance(author, dict) else None
+    if actual_author != expected_author or actual_author_id != expected_author_id:
         raise ValueError(
-            f"release author mismatch: expected {expected_author!r}, "
-            f"found {actual_author!r}"
+            f"release author mismatch: expected {expected_author!r} "
+            f"({expected_author_id}), found {actual_author!r} ({actual_author_id})"
         )
 
     expected = _artifact_files(expected_dir)
+    if set(expected_asset_ids) != set(expected) or any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 1
+        for value in expected_asset_ids.values()
+    ):
+        raise ValueError("expected release asset IDs are invalid")
     raw_assets = document.get("assets")
     if not isinstance(raw_assets, list):
         raise ValueError("release assets are missing or invalid")
@@ -127,12 +148,19 @@ def verify_release(
         digest = _sha256(path)
         expected_digests[name] = digest
         asset = assets[name]
+        if asset.get("id") != expected_asset_ids[name]:
+            raise ValueError(f"release asset ID mismatch: {name}")
         uploader = asset.get("uploader")
         actual_uploader = uploader.get("login") if isinstance(uploader, dict) else None
-        if actual_uploader != expected_author:
+        actual_uploader_id = uploader.get("id") if isinstance(uploader, dict) else None
+        if (
+            actual_uploader != expected_author
+            or actual_uploader_id != expected_author_id
+        ):
             raise ValueError(
-                f"release asset uploader mismatch: expected {expected_author!r}, "
-                f"found {actual_uploader!r}: {name}"
+                f"release asset uploader mismatch: expected {expected_author!r} "
+                f"({expected_author_id}), found {actual_uploader!r} "
+                f"({actual_uploader_id}): {name}"
             )
         if asset.get("size") != path.stat().st_size:
             raise ValueError(f"release asset size mismatch: {name}")
@@ -159,6 +187,10 @@ def main() -> int:
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--author", required=True)
+    parser.add_argument("--author-id", type=int, required=True)
+    parser.add_argument("--release-id", type=int, required=True)
+    parser.add_argument("--asset-ids", type=Path, required=True)
+    parser.add_argument("--target-commitish", required=True)
     parser.add_argument("--expected-dir", type=Path, required=True)
     parser.add_argument("--downloaded-dir", type=Path)
     parser.add_argument("--allow-missing", action="store_true")
@@ -170,10 +202,17 @@ def main() -> int:
         document = json.loads(args.metadata.read_text(encoding="utf-8"))
         if not isinstance(document, dict):
             raise ValueError("release metadata must be a JSON object")
+        expected_asset_ids = json.loads(args.asset_ids.read_text(encoding="utf-8"))
+        if not isinstance(expected_asset_ids, dict):
+            raise ValueError("expected release asset IDs must be a JSON object")
         missing = verify_release(
             document,
             expected_tag=args.tag,
             expected_author=args.author,
+            expected_author_id=args.author_id,
+            expected_release_id=args.release_id,
+            expected_asset_ids=expected_asset_ids,
+            expected_target_commitish=args.target_commitish,
             expected_dir=args.expected_dir,
             downloaded_dir=args.downloaded_dir,
             allow_missing=args.allow_missing,

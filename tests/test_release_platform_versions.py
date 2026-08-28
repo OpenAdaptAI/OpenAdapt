@@ -32,6 +32,39 @@ def _manifest() -> dict:
             for role, component in document["components"].items()
         },
     }
+    document["compatibility_status"] = {
+        "status": "dependency-compatible",
+        "basis": "published-metadata-and-desktop-lock",
+        "failures": [],
+    }
+    document["runtime_units"] = {
+        "launcher_environment": {
+            "selected": {
+                "openadapt": "2.0.0",
+                "openadapt-flow": "1.0.2",
+            }
+        },
+        "customer_runner": {
+            "selected": {
+                "openadapt-flow": "1.0.2",
+                "openadapt-types": "1.0.5",
+            }
+        },
+        "desktop_sidecar": {
+            "resolved": {
+                "openadapt-flow": "1.0.2",
+                "openadapt-capture": "1.0.3",
+                "openadapt-privacy": "1.0.4",
+                "openadapt-types": "1.0.5",
+            }
+        },
+        "agent_bridge": {
+            "selected": {
+                "openadapt-agent": "1.0.7",
+                "openadapt-flow": "1.0.2",
+            }
+        },
+    }
     return document
 
 
@@ -82,6 +115,30 @@ def test_release_refuses_a_nonstable_launcher_version() -> None:
         MODULE.release_component_versions(_manifest(), "2.0.0rc1")
 
 
-def test_release_refuses_a_launcher_candidate_outside_the_exact_selection() -> None:
-    with pytest.raises(ValueError, match="does not match the candidate"):
-        MODULE.release_component_versions(_manifest(), "2.0.1")
+def test_release_derives_the_candidate_over_the_exact_published_selection() -> None:
+    document = _manifest()
+    document["components"]["launcher"]["version"] = "1.16.0"
+    document["release_selection"]["component_versions"]["launcher"] = "1.16.0"
+    versions = MODULE.release_component_versions(document, "2.0.1")
+    assert versions["launcher"] == "2.0.1"
+
+    with pytest.raises(ValueError, match="older than"):
+        MODULE.release_component_versions(_manifest(), "1.16.0")
+
+
+def test_release_refuses_an_incompatible_public_package_set() -> None:
+    document = _manifest()
+    document["compatibility_status"] = {
+        "status": "dependency-incompatible",
+        "basis": "published-metadata-and-desktop-lock",
+        "failures": [{"source_role": "desktop", "target_role": "flow"}],
+    }
+    with pytest.raises(ValueError, match="dependency-incompatible"):
+        MODULE.release_component_versions(document, "2.0.0")
+
+
+def test_release_refuses_a_runtime_unit_with_a_different_default() -> None:
+    document = _manifest()
+    document["runtime_units"]["desktop_sidecar"]["resolved"]["openadapt-flow"] = "1.0.1"
+    with pytest.raises(ValueError, match="not the selected default"):
+        MODULE.release_component_versions(document, "2.0.0")

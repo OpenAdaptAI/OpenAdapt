@@ -1018,7 +1018,6 @@ authors = [
 ]
 keywords = ["gui", "system-tray", "menu-bar", "openadapt"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
