@@ -12,16 +12,12 @@ backend owns a structured layer (a browser DOM, a native UIA/AX tree) the
 resolution ladder's TOP rung re-finds the recorded target as an ELEMENT and
 acts on it deterministically (`StructuralActionBackend`, see Resolution ladder).
 Structure is preferred where present; the visual ladder is the fallback floor
-for pixel-only substrates (RDP/Citrix/canvas). Backend evidence varies and is
-stated honestly: the **shipped, end-to-end-exercised** backend is
-Playwright-driven (headless-capable, CI-friendly, permission-free) and is the
-only path proven against a real third-party app. Beyond it, a `WindowsBackend`
-(UI Automation over the WindowsAgentArena server) is **proven structurally on a
-local Windows-on-ARM VM** (record → compile → replay, DB-judged), and a FreeRDP
-`RDPBackend` plus a Citrix/remote-display pixel-only backend exist as
-**spikes, not validated integrations** — their live behavior is unmeasured to
-the degree disclosed in `docs/backends/RDP.md` and `docs/desktop/CITRIX_PIXEL.md`.
-They are adapters onto the one protocol, not rewrites.
+for pixel-only substrates (RDP/Citrix/canvas). Playwright, Windows UIA, macOS
+AX, Linux AT-SPI, RDP, and Citrix/pixel-window adapters implement the same
+backend contract. Their evidence is bound to exact fixtures, counted tasks,
+environments, or deployment qualifications in `docs/PRODUCT_STATUS.md` and
+`docs/VERIFICATION.md`. A backend name alone does not show that an application
+or environment is qualified.
 
 ## Core contracts (additive-only; do not change without updating this doc)
 
@@ -371,8 +367,10 @@ referral → New Encounter → click "Triage" → click Note field → type note
 `Recorder` so frames/events are captured (before frame, act, wait settle,
 after frame).
 
-`PlaywrightBackend(page)` implements `Backend` (chromium, fixed viewport
-1280x800, deviceScaleFactor=1). `Recorder(backend, out_dir)` wraps a backend
+`PlaywrightBackend(page)` implements `Backend` for Chromium. The MockMed
+fixture starts at 1280x800 with `deviceScaleFactor=1`. An attached recording can
+start a new exact geometry epoch after a stable viewport or device-scale
+change. `Recorder(backend, out_dir)` wraps a backend
 with the same action methods plus `type_text(text, param=None)` and
 `finish() -> recording dir`.
 

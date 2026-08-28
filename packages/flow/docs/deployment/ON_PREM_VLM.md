@@ -4,10 +4,11 @@ A single GPU appliance serves the identity-veto, grounding, and state-verificati
 VLM tiers to a fleet of **GPU-less** automation runners over the LAN. The runtime
 stays GPU-free and **patient data never leaves the building**.
 
-> Status: appliance + fail-safe clients. Runtime wiring into the identity ladder
-> and the resolution ladder's grounder slot lands separately (after the
-> identity-ladder PR #33 merges). This document is the contract those integrations
-> target.
+> Current integration: deployment replay, resume, and attended execution use
+> all three appliance tiers. When an operator configures the appliance and
+> enables model grounding, the runtime adds the remote grounder, veto-only
+> identity tier, and drift-oracle state verifier. The default run stays local
+> and model-free.
 
 ## Topology
 
@@ -159,20 +160,22 @@ state    = RemoteStateVerifier(client)     # yes / no / uncertain
 
 ## Integration
 
-Wired into the `replay` CLI. An appliance is **opt-in** — set three env vars on
-the runner and the grounding rung and identity veto tier come online; leave them
-unset (the default) and the run stays fully local and model-free.
+Flow uses the shared deployment constructor for replay, resume, and attended
+execution. An appliance is **opt-in**: set three env vars on the runner and
+enable model grounding. Leave the URL unset or keep model grounding disabled,
+and the run stays fully local and model-free.
 
 ```bash
 export OPENADAPT_FLOW_VLM_URL="https://gpu-box.lan:8077"   # unset => dormant
 export OPENADAPT_FLOW_VLM_TOKEN="$(cat /etc/openadapt/vlm_token)"
 export OPENADAPT_FLOW_VLM_TIMEOUT=2.0                       # optional, seconds
-openadapt-flow replay bundle
+openadapt-flow replay bundle --allow-model-grounding
 ```
 
 `appliance_from_env()` (`runtime/remote_vlm.py`) reads these and returns a
-`RemoteAppliance` (or `None`); the CLI passes its handles into
-`Replayer(grounder=..., identity_vlm=...)`.
+`RemoteAppliance` (or `None`). The shared deployment constructor adds its
+grounder as the model fallback and passes its identity and state-verifier
+handles into the `Replayer`.
 
 - **Grounder slot:** `RemoteGrounder` satisfies the `Grounder` protocol
   (`runtime/grounder.py`) and drops into the resolution ladder's grounder slot
@@ -184,10 +187,11 @@ openadapt-flow replay bundle
   `VERIFY → "same"` (fail-to-veto), and `MISMATCH`/`ABSTAIN` (the latter the
   default on any uncertainty or appliance outage) → `"different"` (halt). The
   tier can only veto; a down appliance means more halts, never a wrong click.
-- **Drift-oracle postcondition** (`RemoteStateVerifier`): *not yet wired.* It
-  needs a postcondition-failure hook in the replayer (call the verifier only
-  when a deterministic postcondition false-fails under render drift; `"uncertain"`
-  keeps it a halt). Tracked as a follow-up.
+- **Drift-oracle postcondition** (`RemoteStateVerifier`): after deterministic
+  checks and one settle retry fail, the replayer asks the verifier only about
+  render-drift-sensitive `text_present` and `region_stable` conditions. Only a
+  confident `yes` rescues the condition. A `no`, `uncertain`, error, or appliance
+  outage keeps the failure. Every call and rescue is recorded in the run result.
 
 ## PHI data-flow boundary
 

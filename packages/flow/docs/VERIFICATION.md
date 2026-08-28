@@ -20,7 +20,7 @@
 
 ### `web-supported` — supported — bound to required CI pass evidence
 
-> Web (browser) workflows are supported today: record a GUI workflow once, then replay it deterministically and locally.
+> The Playwright browser path records a GUI workflow and replays it deterministically and locally. Required CI exercises the recorder, compiler, and replay contract.
 
 - Surfaces: README.md, website, docs
 - Strongest evidence strength: **supported** (tier is `supported`)
@@ -50,9 +50,9 @@
 
 **Caveats (honest limits):**
 
-- "Supported" is scoped to the reference headless-browser backend in this registry. Desktop and remote-display workflows use the separately scoped acceptance and code-qualified claims below.
+- `supported` names the registry's required-CI evidence tier. It is not a product state or a general application claim. Production requires active release admissions for all seven product targets. A Production run also needs an active workflow admission for the exact sealed bundle.
 - The full record->compile->replay browser suite runs in the required e2e-browser PR gate and repeats in the weekly compatibility matrix.
-- Existing-session attachment is Chromium-only and loopback-only. It requires a dedicated browser process started with remote debugging. It does not claim support for the Capture Chrome extension prototype or direct extension replay.
+- Existing-session attachment is Chromium-only and loopback-only. It requires a dedicated browser process with remote debugging. The Playwright-native browser path owns this claim. Capture extension code is outside its evidence scope.
 
 ### `deterministic-zero-model-replay` — supported — bound to required CI pass evidence
 

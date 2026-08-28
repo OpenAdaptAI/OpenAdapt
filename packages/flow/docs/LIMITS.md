@@ -314,12 +314,12 @@ halt does not prove earlier actions were harmless.
 
 ## Interaction and environment limits
 
-The recorded-surface evidence is strongest when the target remains inside one
-captured browser surface and the demonstration exposes observable outcomes.
+Qualification is strongest when the demonstration retains exact observations
+and exposes independently verifiable outcomes.
 
 | Condition | Current boundary |
 | --- | --- |
-| Zoom, DPI, font, layout, or viewport changes | Structural evidence can survive some reflow and visual rungs can survive some movement, but support is workflow-specific. Large rescale or reflow can halt. |
+| Zoom, DPI, font, layout, viewport, or monitor changes | Browser attach recording accepts a stable viewport or device-scale change between actions, starts a new exact geometry epoch, and refuses an action that overlaps the transition. Native offline conversion can normalize a stable source-window move, resize, monitor change, or scale change into one fixed output viewport when every timeline row carries valid mapping metadata. It refuses a malformed timeline or a changed output viewport. RDP and Citrix live backends can rebaseline geometry between actions and refuse a change during the exact-frame lease. Other rescale or reflow behavior remains workflow-specific. |
 | Native select menus, file choosers, permission prompts, and secure desktops | OS or browser chrome may not appear in the captured surface and may be unrecordable or undrivable. Prefer an application-level or keyboard/API path. |
 | New tabs and windows | Opening a tab can be observed structurally where the backend supports it; interaction inside additional windows and multi-window coordination are not a general supported path. |
 | Drag and drop or gesture-heavy controls | Not a general supported primitive. Use a structured/API alternative or validate a purpose-built workflow. |
