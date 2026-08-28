@@ -161,7 +161,16 @@ def validate_documents(changelog: str, pyproject: str) -> list[Release]:
 
 
 def validate_git_tags(releases: list[Release], repository: Path) -> None:
-    """Require every stable Git tag to have exactly one changelog section."""
+    """Require every stable Git tag to have exactly one changelog section.
+
+    The newest documented release may be untagged, and only that one. It is the
+    reviewed release candidate that ``validate_documents`` already pinned to
+    ``project.version``: the release workflow requires that section to exist on
+    protected main *before* it creates the tag, so demanding a tag for it makes
+    preparing a release impossible. Every older section must still name a real
+    tag, and every tag must still be documented, so a published release can
+    neither lose its notes nor be invented after the fact.
+    """
     try:
         result = subprocess.run(
             ["git", "tag", "--list", "v*"],
@@ -188,7 +197,8 @@ def validate_git_tags(releases: list[Release], repository: Path) -> None:
             "stable Git tag(s) are absent from CHANGELOG.md: "
             + ", ".join(f"v{version}" for version in missing)
         )
-    untagged = sorted(documented - tags, key=_version_key)
+    pending = releases[0].version
+    untagged = sorted(documented - tags - {pending}, key=_version_key)
     if untagged:
         raise ChangelogContractError(
             "CHANGELOG.md contains untagged stable release(s): "

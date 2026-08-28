@@ -89,14 +89,45 @@ def test_changelog_refuses_a_missing_adjacent_tag_comparison() -> None:
         validate_documents(changelog, pyproject)
 
 
-def test_git_tag_contract_refuses_an_incomplete_tag_inventory(monkeypatch) -> None:
-    changelog, pyproject = _documents()
-    releases = validate_documents(changelog, pyproject)
-    incomplete_tags = "\n".join(f"v{release.version}" for release in releases[1:])
+def _with_tags(monkeypatch, versions) -> None:
+    listing = "\n".join(f"v{version}" for version in versions)
     monkeypatch.setattr(
         "scripts.check_changelog.subprocess.run",
-        lambda *args, **kwargs: SimpleNamespace(stdout=incomplete_tags),
+        lambda *args, **kwargs: SimpleNamespace(stdout=listing),
     )
+
+
+def test_git_tag_contract_refuses_an_incomplete_tag_inventory(monkeypatch) -> None:
+    """An older documented release must always name a real tag."""
+    changelog, pyproject = _documents()
+    releases = validate_documents(changelog, pyproject)
+    # Keep the newest tagged, so only the older gap can explain the refusal.
+    kept = [releases[0].version] + [release.version for release in releases[2:]]
+    _with_tags(monkeypatch, kept)
+
+    with pytest.raises(ChangelogContractError, match="untagged stable release"):
+        validate_git_tags(releases, REPOSITORY)
+
+
+def test_git_tag_contract_allows_only_the_pending_release_candidate(monkeypatch) -> None:
+    """The reviewed candidate is documented before its tag exists, by design.
+
+    release.yml requires the ``## vX.Y.Z`` section on protected main before it
+    creates the tag, so this state must validate. Exactly one version may be
+    untagged, and only the newest.
+    """
+    changelog, pyproject = _documents()
+    releases = validate_documents(changelog, pyproject)
+    _with_tags(monkeypatch, [release.version for release in releases[1:]])
+
+    validate_git_tags(releases, REPOSITORY)
+
+
+def test_git_tag_contract_refuses_two_untagged_releases(monkeypatch) -> None:
+    """The allowance covers one candidate, so it cannot hide a skipped publish."""
+    changelog, pyproject = _documents()
+    releases = validate_documents(changelog, pyproject)
+    _with_tags(monkeypatch, [release.version for release in releases[2:]])
 
     with pytest.raises(ChangelogContractError, match="untagged stable release"):
         validate_git_tags(releases, REPOSITORY)
