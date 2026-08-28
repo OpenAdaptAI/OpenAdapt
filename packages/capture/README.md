@@ -318,9 +318,11 @@ count, and privacy-safe monitor rectangles as
 combined-frame coordinate space. This includes a secondary monitor whose
 native coordinates have a negative origin.
 
-The release qualification requires at least two real monitors on each
-interactive operating-system runner. It checks the topology and then runs the
-native screen and input tests. Downstream converters must not apply the legacy
+The multiple-monitor path is qualified by `live-qualification.yml`, which needs
+a host with two real monitors. A GitHub-hosted runner reports one monitor, so
+the release gate records the single-monitor topology its trials ran against and
+does not prove the multiple-monitor contract. Downstream converters must not
+apply the legacy
 display-ratio scale when
 `coordinate_space == "virtual_desktop_pixels"`.
 

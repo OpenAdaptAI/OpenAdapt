@@ -93,7 +93,7 @@ def test_tag_publication_requires_exact_tag_oidc_and_digest_verification() -> No
 
 
 def test_native_observers_are_part_of_each_interactive_qualification() -> None:
-    workflow = (ROOT / ".github/workflows/production-qualification.yml").read_text(
+    workflow = (ROOT / ".github/workflows/live-qualification.yml").read_text(
         encoding="utf-8"
     )
     linux = workflow[
@@ -112,3 +112,46 @@ def test_native_observers_are_part_of_each_interactive_qualification() -> None:
     for job in (linux, macos, windows):
         assert 'tests/test_structural_observation.py"' in job
         assert 'OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"' in job
+
+
+def test_the_release_gate_runs_only_on_github_hosted_runners() -> None:
+    """The release gate must never wait on a runner nobody has registered.
+
+    Three self-hosted lanes stood in this workflow from 2026-08-20 to
+    2026-08-28. No runner carrying their label existed, so every dispatch
+    cancelled them and the gate never passed once. They live in
+    live-qualification.yml now.
+    """
+    workflow = (ROOT / ".github/workflows/production-qualification.yml").read_text(
+        encoding="utf-8"
+    )
+    targets = re.findall(r"^\s*runs-on: (.+)$", workflow, flags=re.M)
+    assert targets
+    assert not [target for target in targets if "self-hosted" in target]
+
+
+def test_the_release_gate_job_set_matches_the_qualification_workflow() -> None:
+    """check_release_ci.py and the workflow must name the same jobs.
+
+    A disagreement here is a deadlock: the gate waits for a job that the
+    workflow never produces.
+    """
+    from scripts.check_release_ci import EXPECTED_QUALIFICATION_JOBS
+
+    workflow = (ROOT / ".github/workflows/production-qualification.yml").read_text(
+        encoding="utf-8"
+    )
+    blocks = re.split(r"^  (?=\S)", workflow[workflow.index("\njobs:\n") :], flags=re.M)
+    produced: set[str] = set()
+    for block in blocks:
+        found = re.search(r"^    name: (.+)$", block, flags=re.M)
+        if found is None:
+            continue
+        name = found.group(1).strip()
+        operating_systems = re.search(r"^        os: \[(.+)\]$", block, flags=re.M)
+        if operating_systems is None:
+            produced.add(name)
+            continue
+        for value in operating_systems.group(1).split(","):
+            produced.add(name.replace("${{ matrix.os }}", value.strip()))
+    assert produced == set(EXPECTED_QUALIFICATION_JOBS)

@@ -13,15 +13,20 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
 
+# The exact job set production-qualification.yml produces. Every job runs on a
+# GitHub-hosted runner. The three self-hosted interactive lanes that used to be
+# in this set moved to live-qualification.yml on 2026-08-28: no runner carrying
+# their label was ever registered, so they were cancelled in every dispatch and
+# this gate could never pass. The header of production-qualification.yml names
+# what the release gate no longer proves as a result.
 EXPECTED_QUALIFICATION_JOBS = frozenset(
     {
         "Build candidate distributions",
         "Clean candidate wheel (ubuntu-latest)",
         "Clean candidate wheel (macos-latest)",
         "Clean candidate wheel (windows-latest)",
-        "Interactive qualification (Linux X64)",
-        "Interactive qualification (macOS ARM64)",
-        "Interactive qualification (Windows X64)",
+        "Hosted live recorder qualification (macos-latest)",
+        "Hosted live recorder qualification (windows-latest)",
     }
 )
 ACTIVE_STATES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})

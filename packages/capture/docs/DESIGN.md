@@ -230,21 +230,49 @@ old local captures.
 ## Release qualification
 
 The production release workflow is manual and binds evidence to one exact
-commit. It must:
+commit. Every job runs on a GitHub-hosted runner. It must:
 
 - build and validate one wheel and sdist;
 - install and uninstall that exact wheel in a clean environment on Linux,
   macOS, and Windows;
-- run interactive native qualification on labeled Linux, macOS, and Windows
-  hosts with real display and input permissions;
-- require at least two real monitors on each interactive host;
-- run the complete slow native capture tests with no skip;
-- verify live window movement and resize where the operating system supports
-  window-scoped capture; and
+- start the real recorder against the real display of a hosted macOS and a
+  hosted Windows runner, prove a real first frame, prove the capture database,
+  prove bounded memory, and prove a clean shutdown, in three counted trials per
+  operating system with no skip;
+- record the exact display topology each trial ran against; and
 - retain machine-readable test and topology evidence.
+
+`scripts/check_release_ci.py` also requires a successful `test.yml` run on the
+same exact commit, which is where the complete headless suite and the
+byte-for-byte synthetic fixture determinism check run.
 
 The release workflow accepts only a successful, complete job set for its exact
 commit. Missing, stale, skipped, partial, or failed evidence blocks publication.
+
+## Live qualification
+
+`live-qualification.yml` runs the interactive lanes that need a physical
+desktop. It runs weekly and on demand, and it is not a release gate.
+
+Those lanes prove, and the release gate therefore does not prove:
+
+- that global input injected through the operating system reaches the native
+  listeners and is written into the capture;
+- the combined multiple-monitor virtual desktop and its coordinate
+  translation, including a secondary monitor with a negative origin;
+- live window movement and resize under window-scoped capture; and
+- live native structural observation through AX, UIA, and AT-SPI.
+
+No GitHub-hosted runner can prove these. Measured on 2026-08-28, every hosted
+runner reports exactly one monitor, and Xvfb with two screens and `+xinerama`,
+and a RandR `--setmonitor` split, both still report one monitor to MSS.
+Injected input reaches no native hook on any of the three hosted operating
+systems. Each lane needs a host with two monitors, a logged-in desktop
+session, and real input and screen permissions.
+
+The lanes stay skipped until a runner carrying the labels each lane names is
+registered and the repository variable
+`CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS` is set to `1`.
 
 ## Known boundaries
 
