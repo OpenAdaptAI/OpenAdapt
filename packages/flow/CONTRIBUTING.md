@@ -98,6 +98,37 @@ same tag run. Don't create a recovery tag.
   Product state comes only from active release admissions. Do not add a static
   lifecycle label for a product target.
 
+## Licensing of your contributions
+
+This repository is MIT-licensed, and your contribution goes in under the MIT
+License. Two things cover it.
+
+**Developer Certificate of Origin (required now).** Sign off every commit:
+
+```bash
+git commit -s -m "fix: ..."
+```
+
+That adds a `Signed-off-by:` line certifying you wrote the change, or that you
+have the right to submit it under the project license. The full text is at
+[developercertificate.org](https://developercertificate.org/).
+
+**Contributor License Agreement (published, not yet enforced).** The canonical
+text is [`CLA.md`](CLA.md) for individuals and [`CCLA.md`](CCLA.md) for
+companies whose employees contribute on company time. It gives MLDSAI Inc. an
+explicit copyright and patent license, which the MIT License alone doesn't
+provide, and it keeps the option of relicensing the combined work later.
+
+You don't agree to the CLA by opening a pull request. Nothing is implied. You
+agree when you sign, either through the automated CLA check once that check is
+turned on for this repository, or by email. Until the check is on, the DCO
+sign-off and the MIT License are what govern your contribution.
+
+OpenAdapt is open-core. MLDSAI Inc. sells proprietary products built on this
+code, including a hosted control plane, and your contribution may end up in
+them. The MIT License already permits that. The CLA says it out loud so nobody
+is surprised.
+
 ## Licensing and vendored files
 
 `openadapt-flow` package artifacts are MIT-licensed. Do not copy, adapt, vendor,
