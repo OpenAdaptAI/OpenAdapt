@@ -385,10 +385,15 @@ def test_lock_sync_rejects_source_version_drift(tmp_path: Path) -> None:
 def test_release_workflow_uses_pinned_actions() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
     uses = re.findall(r"^\s*uses:\s+\S+@([^\s#]+)", workflow, flags=re.MULTILINE)
+    # A bare 40-character pin says nothing about which version it is. Every
+    # pinned action in the release path carries its version in a comment.
+    annotated = re.findall(
+        r"^\s*uses:\s+\S+@[0-9a-f]{40}\s+# v\S+$", workflow, flags=re.MULTILINE
+    )
 
     assert uses
     assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in uses)
-    assert "# v10.6.1" in workflow
+    assert len(annotated) == len(uses)
 
 
 def test_all_workflows_use_pinned_actions() -> None:
@@ -412,7 +417,9 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
 
     triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
     release = workflow[
-        workflow.index("\n  create-release-tag:") : workflow.index("\n  validate-tag:")
+        workflow.index("\n  create-release-tag:") : workflow.index(
+            "\n  backfill-github-release:"
+        )
     ]
     current_main_index = release.index(
         "- name: Require the reviewed release candidate on current main"
@@ -452,7 +459,12 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
     assert "python scripts/check_release_consistency.py --require-dist" in release
     assert "git tag --annotate" in release
     assert 'git push origin "refs/tags/${release_tag}"' in release
-    assert "python-semantic-release/python-semantic-release" not in workflow
+    assert "!inputs.backfill_github_release" in release
+    # python-semantic-release cannot run on a tag checkout: it resolves the
+    # active branch against its release groups before any subcommand, and a
+    # detached HEAD matches none. Its publish command also only uploads assets
+    # to a release that already exists, so it can never create one.
+    assert "python-semantic-release/" not in workflow
     assert "ADMIN_TOKEN" not in workflow
     gate = (ROOT / "scripts/check_release_ci.py").read_text()
     assert "require_production_qualification" in gate
@@ -467,6 +479,9 @@ def test_tag_publication_requires_exact_tag_oidc_and_digest_verification() -> No
     publish = workflow[workflow.index("\n  publish-tag:") :]
     build_index = publish.index("- name: Build and verify publication artifacts")
     pypi_index = publish.index("- name: Publish to PyPI with trusted publishing")
+    release_index = publish.index(
+        "- name: Create the GitHub Release through the release App"
+    )
     verify_index = publish.index(
         "- name: Verify both publication surfaces and artifact digests"
     )
@@ -486,14 +501,68 @@ def test_tag_publication_requires_exact_tag_oidc_and_digest_verification() -> No
     assert "python scripts/validate_claims.py --check --structure-only" in publish
     assert "python scripts/check_release_consistency.py --require-dist" in publish
     assert "pypa/gh-action-pypi-publish@" in publish
-    assert "python-semantic-release/publish-action@" in publish
     assert "scripts/verify_release_publication.py" in publish
     assert "--allow-missing" in publish
     assert "--wait-seconds 180" in publish
-    assert build_index < pypi_index < verify_index
+    assert build_index < pypi_index < release_index < verify_index
+
+    # The release object is created with the App token, and it carries exactly
+    # the two artifacts the digest verification accepts. The PyPI publish step
+    # leaves `*.publish.attestation` files in dist/, so a `dist/*` upload would
+    # attach four assets and fail that verification.
+    assert "GH_TOKEN: ${{ steps.release-app.outputs.token }}" in publish
+    assert "gh release create" in publish
+    assert "--verify-tag" in publish
+    assert '"dist/openadapt_flow-${RELEASE_VERSION}-py3-none-any.whl"' in publish
+    assert '"dist/openadapt_flow-${RELEASE_VERSION}.tar.gz"' in publish
+    assert "dist/*" not in publish
     gate = (ROOT / "scripts/check_release_ci.py").read_text()
     assert "require_production_qualification" in gate
     assert "quickstart-lifecycle.yml" in gate
+
+
+def test_backfill_completes_only_the_github_surface_of_a_published_tag() -> None:
+    """A publication that reached PyPI and stopped has one recovery path.
+
+    The tag cannot be pushed twice, so the tag event cannot be replayed. This
+    job creates the missing release object through the release App, mirrors the
+    files PyPI already serves, and never uploads to PyPI.
+    """
+    workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
+    backfill = workflow[
+        workflow.index("\n  backfill-github-release:") : workflow.index(
+            "\n  validate-tag:"
+        )
+    ]
+
+    assert "      backfill_github_release:" in triggers
+    assert "needs: validate-dispatch" in backfill
+    assert "inputs.backfill_github_release" in backfill
+    assert "environment: release-identity" in backfill
+    assert "actions/create-github-app-token@" in backfill
+    assert "permission-contents: write" in backfill
+    assert "ref: refs/tags/v${{ inputs.version }}" in backfill
+    assert "persist-credentials: false" in backfill
+    assert "git cat-file -t" in backfill
+    assert "git merge-base --is-ancestor" in backfill
+    assert "the backfill path accepts the newest release tag only" in backfill
+    assert "python scripts/check_release_ci.py" in backfill
+    assert "python scripts/validate_claims.py --check --structure-only" in backfill
+    assert "python scripts/check_release_consistency.py --require-dist" in backfill
+    assert "https://pypi.org/pypi/openadapt-flow/{version}/json" in backfill
+    assert 'PyPI declares {expected}"' in backfill
+    assert "gh release create" in backfill
+    assert "scripts/verify_release_publication.py" in backfill
+    assert "--wait-seconds 180" in backfill
+
+    # Nothing in this path may reach PyPI, rebuild the artifacts, or move a ref.
+    assert "pypa/gh-action-pypi-publish@" not in backfill
+    assert "id-token: write" not in backfill
+    assert "uv build" not in backfill
+    assert "git tag" not in backfill
+    assert "git push" not in backfill
+    assert "--allow-missing" not in backfill
 
 
 def _metadata_bytes(*, version: str = "1.0", license_name: str = "MIT") -> bytes:

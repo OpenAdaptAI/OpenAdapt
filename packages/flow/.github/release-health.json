@@ -23,6 +23,7 @@
       "tag_without_release_grace_hours": 1,
       "pypi_lag_grace_minutes": 30,
       "unreleased_remediation": "prepare and merge the reviewed version, lock, and changelog update; then run: gh workflow run release.yml --repo OpenAdaptAI/openadapt-flow --ref main -f version=<reviewed-version>",
+      "tag_without_release_remediation": "gh workflow run release.yml --repo OpenAdaptAI/openadapt-flow --ref main -f version=<tagged-version> -f backfill_github_release=true",
       "pypi_remediation": "rerun the exact tag-push release.yml run for {tag}; do not create another tag or ref"
     }
   ]

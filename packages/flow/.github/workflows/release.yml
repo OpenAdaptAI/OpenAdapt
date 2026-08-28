@@ -12,6 +12,10 @@ on:
         description: "Reviewed version already present on protected main (for example 1.34.0)"
         type: string
         required: true
+      backfill_github_release:
+        description: "Recovery: create the missing GitHub Release for a version that is already tagged and already on PyPI, instead of tagging a new one"
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 
@@ -48,7 +52,7 @@ jobs:
 
   create-release-tag:
     needs: validate-dispatch
-    if: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.result == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.result == 'success' && !inputs.backfill_github_release }}
     runs-on: ubuntu-latest
     environment: release-identity
     permissions:
@@ -175,6 +179,203 @@ jobs:
           git config user.email "openadapt-release[bot]@users.noreply.github.com"
           git tag --annotate "${release_tag}" "${GITHUB_SHA}" --message "${release_tag}"
           git push origin "refs/tags/${release_tag}"
+
+  # Recovery path for a publication that reached PyPI and stopped before the
+  # GitHub Release. The tag cannot be pushed twice, so the tag event cannot be
+  # replayed; this job completes the second surface for the newest release tag
+  # and never touches PyPI. It republishes nothing: it attaches the exact files
+  # PyPI already holds, verified against the digests PyPI declares for them.
+  backfill-github-release:
+    needs: validate-dispatch
+    if: ${{ github.event_name == 'workflow_dispatch' && needs.validate-dispatch.result == 'success' && inputs.backfill_github_release }}
+    runs-on: ubuntu-latest
+    environment: release-identity
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Create the exact release App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Checkout the published tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/v${{ inputs.version }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Verify the newest release tag and its reviewed version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_tag="v${RELEASE_VERSION}"
+          if [ "$(git cat-file -t "refs/tags/${release_tag}")" != "tag" ]; then
+            echo "${release_tag} is not an annotated tag."
+            exit 1
+          fi
+          tagged_commit="$(git rev-parse "refs/tags/${release_tag}^{}")"
+          if [ "$(git rev-parse HEAD)" != "${tagged_commit}" ]; then
+            echo "The checkout does not match ${release_tag}."
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${tagged_commit}" refs/remotes/origin/main; then
+            echo "${release_tag} is not contained in protected main."
+            exit 1
+          fi
+          project_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [ "${project_version}" != "${RELEASE_VERSION}" ]; then
+            echo "${release_tag} carries version ${project_version}; the input is ${RELEASE_VERSION}."
+            exit 1
+          fi
+          python scripts/check_release_consistency.py
+          if ! grep -Eq "^## ${release_tag} \(" CHANGELOG.md; then
+            echo "CHANGELOG.md has no entry for ${release_tag}."
+            exit 1
+          fi
+          RELEASE_VERSION="${RELEASE_VERSION}" python - <<'PY'
+          import os
+          import re
+          import subprocess
+
+          requested = tuple(int(part) for part in os.environ["RELEASE_VERSION"].split("."))
+          tags = subprocess.check_output(
+              ["git", "tag", "--list", "v*"], text=True
+          ).splitlines()
+          existing = [
+              tuple(int(part) for part in match.groups())
+              for tag in tags
+              if (match := re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag))
+          ]
+          if existing and requested != max(existing):
+              raise SystemExit(
+                  "the backfill path accepts the newest release tag only"
+              )
+          PY
+
+      - name: Require exact-tag release qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_release_ci.py \
+            --repository "${GITHUB_REPOSITORY}" \
+            --sha "$(git rev-parse HEAD)"
+
+      # The validator needs only PyYAML + stdlib (no package install, no
+      # browser), matching the gate in validate-claims.yml. Installing the
+      # whole package here would let a heavy dependency break the release.
+      - name: Install PyYAML
+        run: pip install "pyyaml>=6"
+
+      - name: Verify the claims registry
+        run: python scripts/validate_claims.py --check --structure-only
+
+      # Rebuilding here would produce different bytes from the artifacts PyPI
+      # already serves, and the release must mirror those exact files.
+      - name: Fetch the exact published artifacts from PyPI
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir dist
+          RELEASE_VERSION="${RELEASE_VERSION}" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import urllib.request
+
+          version = os.environ["RELEASE_VERSION"]
+          url = f"https://pypi.org/pypi/openadapt-flow/{version}/json"
+          with urllib.request.urlopen(url, timeout=30) as response:
+              document = json.load(response)
+          artifacts = document["urls"]
+          if len(artifacts) != 2:
+              raise SystemExit(
+                  f"PyPI holds {len(artifacts)} files for {version}; "
+                  "expected exactly one wheel and one sdist"
+              )
+          for artifact in artifacts:
+              name = artifact["filename"]
+              expected = artifact["digests"]["sha256"]
+              with urllib.request.urlopen(artifact["url"], timeout=300) as response:
+                  payload = response.read()
+              actual = hashlib.sha256(payload).hexdigest()
+              if actual != expected:
+                  raise SystemExit(
+                      f"{name} arrived with digest {actual}; PyPI declares {expected}"
+                  )
+              with open(os.path.join("dist", name), "wb") as handle:
+                  handle.write(payload)
+              print(f"{name} {actual}")
+          PY
+          python scripts/check_release_consistency.py --require-dist
+
+      - name: Create the GitHub Release through the release App
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_tag="v${RELEASE_VERSION}"
+          if gh release view "${release_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "${release_tag} already has a GitHub Release. Nothing to backfill."
+            exit 1
+          fi
+          notes="${RUNNER_TEMP}/release-notes.md"
+          awk -v heading="## ${release_tag} (" '
+            index($0, heading) == 1 {
+              inside = 1
+              print
+              print ""
+              print "_This release is published under the MIT License._"
+              next
+            }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > "${notes}"
+          if [ ! -s "${notes}" ]; then
+            echo "CHANGELOG.md has no ${release_tag} entry to publish."
+            exit 1
+          fi
+          gh release create "${release_tag}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${release_tag}" \
+            --notes-file "${notes}" \
+            --verify-tag \
+            "dist/openadapt_flow-${RELEASE_VERSION}-py3-none-any.whl" \
+            "dist/openadapt_flow-${RELEASE_VERSION}.tar.gz"
+
+      - name: Verify both publication surfaces and artifact digests
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+        run: |
+          python scripts/verify_release_publication.py \
+            --dist dist \
+            --package openadapt-flow \
+            --version "${{ inputs.version }}" \
+            --tag "v${{ inputs.version }}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --wait-seconds 180 \
+            --poll-seconds 10
 
   validate-tag:
     if: ${{ github.event_name == 'push' }}
@@ -323,12 +524,50 @@ jobs:
         if: ${{ steps.publication.outputs.publish_pypi == 'true' }}
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
-      - name: Publish the GitHub Release through the release App
+      # The release object is created directly with the App token. Two facts
+      # about python-semantic-release make its publish action unusable here.
+      # First, `semantic-release publish` only uploads assets to a release that
+      # already exists; it never creates one. Second, every subcommand resolves
+      # the checked-out branch against `[tool.semantic_release.branches.*]`
+      # before it runs, and a tag checkout is a detached HEAD, which matches no
+      # release group and exits non-zero.
+      #
+      # Exactly the wheel and the sdist are attached. The PyPI publish step
+      # above leaves `*.publish.attestation` files beside them in dist/, and
+      # the digest verification below compares the release assets against the
+      # wheel and the sdist alone.
+      - name: Create the GitHub Release through the release App
         if: ${{ steps.publication.outputs.create_github_release == 'true' }}
-        uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
-        with:
-          github_token: ${{ steps.release-app.outputs.token }}
-          tag: ${{ needs.validate-tag.outputs.tag }}
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          RELEASE_VERSION: ${{ needs.validate-tag.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="${RUNNER_TEMP}/release-notes.md"
+          awk -v heading="## ${RELEASE_TAG} (" '
+            index($0, heading) == 1 {
+              inside = 1
+              print
+              print ""
+              print "_This release is published under the MIT License._"
+              next
+            }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > "${notes}"
+          if [ ! -s "${notes}" ]; then
+            echo "CHANGELOG.md has no ${RELEASE_TAG} entry to publish."
+            exit 1
+          fi
+          gh release create "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${RELEASE_TAG}" \
+            --notes-file "${notes}" \
+            --verify-tag \
+            "dist/openadapt_flow-${RELEASE_VERSION}-py3-none-any.whl" \
+            "dist/openadapt_flow-${RELEASE_VERSION}.tar.gz"
 
       - name: Verify both publication surfaces and artifact digests
         env:
