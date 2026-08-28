@@ -11,6 +11,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+mcpb-dist/
 downloads/
 eggs/
 .eggs/

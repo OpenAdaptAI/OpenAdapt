@@ -14,6 +14,11 @@ import json
 import re
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 CI
+    import tomli as tomllib
+
 from openadapt_agent import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +29,7 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 README = REPO_ROOT / "README.md"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+UV_LOCK = REPO_ROOT / "uv.lock"
 
 # `uses: owner/repo@<revision>` with the trailing ` # vX.Y.Z` comment stripped.
 USES_REVISION = re.compile(r"(?m)^\s*(?:-\s+)?uses:\s+(\S+)@([^\s#]+)")
@@ -69,6 +75,29 @@ def test_version_is_consistent_everywhere() -> None:
     assert doc["packages"][0]["version"] == __version__
     assert _mcpb_manifest()["version"] == __version__
     assert _pyproject_version() == __version__
+
+
+def test_mcpb_lock_has_one_flow_and_one_opencv_provider() -> None:
+    """The one-click MCPB must not install two distributions that own cv2."""
+    packages = tomllib.loads(UV_LOCK.read_text(encoding="utf-8"))["package"]
+    names = {package["name"] for package in packages}
+    flow_packages = [package for package in packages if package["name"] == "openadapt-flow"]
+
+    assert len(flow_packages) == 1
+    assert isinstance(flow_packages[0]["version"], str)
+    assert names & {"opencv-python", "opencv-python-headless"} in (
+        {"opencv-python"},
+        {"opencv-python-headless"},
+    )
+
+
+def test_release_archives_pin_supported_core_metadata() -> None:
+    """Hatchling must not silently adopt metadata newer than Twine accepts."""
+    project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    targets = project["tool"]["hatch"]["build"]["targets"]
+
+    assert targets["wheel"]["core-metadata-version"] == "2.4"
+    assert targets["sdist"]["core-metadata-version"] == "2.4"
 
 
 def test_pypi_readme_proves_mcp_namespace_ownership() -> None:

@@ -7,6 +7,11 @@ import sys
 import zipfile
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 release check
+    import tomli as tomllib
+
 _ROOT_FILES = {
     ".mcpbignore",
     "LICENSE",
@@ -44,6 +49,34 @@ def check(path: Path) -> None:
     if manifest.get("name") != "openadapt-agent":
         raise ValueError(f"{path}: unexpected MCPB identity")
 
+    if "uv.lock" not in members:
+        raise ValueError(f"{path}: uv.lock is missing")
+    try:
+        lock = tomllib.loads(members["uv.lock"].decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise ValueError(f"{path}: uv.lock is not valid UTF-8 TOML") from exc
+    packages = lock.get("package")
+    if not isinstance(packages, list):
+        raise ValueError(f"{path}: uv.lock has no package inventory")
+    package_names = {
+        package.get("name")
+        for package in packages
+        if isinstance(package, dict) and isinstance(package.get("name"), str)
+    }
+    flow_packages = [
+        package
+        for package in packages
+        if isinstance(package, dict) and package.get("name") == "openadapt-flow"
+    ]
+    if len(flow_packages) != 1 or not isinstance(flow_packages[0].get("version"), str):
+        raise ValueError(f"{path}: uv.lock must contain one exact openadapt-flow release")
+    opencv_providers = package_names & {"opencv-python", "opencv-python-headless"}
+    if len(opencv_providers) != 1:
+        raise ValueError(
+            f"{path}: uv.lock must contain one OpenCV provider, found "
+            f"{sorted(opencv_providers)}"
+        )
+
     problems: list[str] = []
     for name in members:
         lowered = f"/{name.lower()}"
@@ -58,7 +91,11 @@ def check(path: Path) -> None:
 
     if problems:
         raise ValueError(f"{path}: " + "; ".join(problems))
-    print(f"PASS {path}: {len(members)} code/config files, no workflow or evidence payload")
+    print(
+        f"PASS {path}: {len(members)} code/config files, "
+        f"Flow {flow_packages[0]['version']}, one OpenCV provider, "
+        "no workflow or evidence payload"
+    )
 
 
 def main(argv: list[str]) -> int:

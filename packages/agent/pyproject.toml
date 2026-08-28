@@ -67,6 +67,13 @@ Documentation = "https://github.com/OpenAdaptAI/openadapt-agent#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/openadapt_agent"]
+# Keep release metadata compatible with the current PyPI validation toolchain.
+# Hatchling 1.32 changed its default to Core Metadata 2.5 before Twine's
+# packaging dependency accepted that version.
+core-metadata-version = "2.4"
+
+[tool.hatch.build.targets.sdist]
+core-metadata-version = "2.4"
 
 [tool.ruff]
 line-length = 100
