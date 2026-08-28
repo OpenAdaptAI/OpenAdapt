@@ -88,7 +88,7 @@ print(json.dumps(ComputerState.model_json_schema(), indent=2))
 ```
 
 The same schemas ship as JSON under `openadapt_types/schemas/` for TypeScript,
-Rust, and anything else that isn't Python. Nineteen files, including
+Rust, and anything else that isn't Python. Seventeen files, including
 `execute-v1-openapi.json`, the public OpenAdapt Execute contract.
 
 ## Converting from the older formats
