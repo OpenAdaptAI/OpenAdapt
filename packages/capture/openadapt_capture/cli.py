@@ -1,6 +1,7 @@
 """Command-line interface for openadapt-capture.
 
 Usage:
+    capture install-ffmpeg
     capture record ./my_capture
     capture visualize ./my_capture
     capture info ./my_capture
@@ -431,6 +432,97 @@ def _save_transcript(
         print(f"[{mins}:{secs:05.2f}] {seg['text']}")
 
 
+def install_ffmpeg(
+    dry_run: bool = False,
+    force: bool = False,
+    probe: bool = True,
+) -> None:
+    """Install the pinned FFmpeg build that Capture records video with.
+
+    Capture ships no FFmpeg bytes. This command is the opt-in: it downloads one
+    exact archive, refuses it unless its SHA-256 matches the digest compiled
+    into this package, and only then makes anything executable. The build is
+    LGPL-2.1-or-later; FFmpeg's own licence text is installed beside it, and
+    the receipt records the matching upstream source archive.
+
+    An FFmpeg you already configured keeps priority. This one is used only when
+    OPENADAPT_FFMPEG_PATH, Recorder(ffmpeg_path=...), Desktop's ffmpeg.json,
+    and PATH all come up empty.
+
+    Args:
+        dry_run: Print the exact artifact, digest and destination, then stop.
+        force: Reinstall even when this build is already present.
+        probe: Run a real encode-and-decode check afterwards (default: True).
+    """
+    from openadapt_capture import ffmpeg_runtime
+
+    try:
+        planned = ffmpeg_runtime.plan()
+    except ffmpeg_runtime.UnsupportedPlatformError as exc:
+        print(str(exc))
+        raise SystemExit(1) from exc
+
+    print(f"Artifact:  {planned['url']}")
+    print(f"SHA-256:   {planned['archive_sha256']}")
+    print(f"Licence:   {planned['license']}")
+    print(f"Source:    {planned['source_url']}")
+    print(f"Install:   {planned['install_dir']}")
+    print()
+
+    if dry_run:
+        print("Dry run. Nothing was downloaded.")
+        return
+
+    try:
+        installed = ffmpeg_runtime.install(force=force)
+    except ffmpeg_runtime.FFmpegProvisionError as exc:
+        print(str(exc))
+        raise SystemExit(1) from exc
+
+    print(f"Installed {installed.build_id}")
+    print(f"  ffmpeg   {installed.ffmpeg}")
+    print(f"  ffprobe  {installed.ffprobe}")
+    print(f"  licence  {installed.license_path}")
+    print(f"  receipt  {ffmpeg_runtime.receipt_path()}")
+
+    if not probe:
+        return
+
+    from openadapt_capture.video import (
+        FFmpegUnavailableError,
+        require_video_encoder,
+        resolve_ffmpeg,
+    )
+
+    try:
+        provision = require_video_encoder()
+    except FFmpegUnavailableError as exc:
+        print()
+        print(f"The installed runtime did not pass the encode-and-decode check: {exc}")
+        raise SystemExit(1) from exc
+
+    print()
+    print(f"Verified encoder {provision.codec} into {provision.muxer}.")
+    resolved = resolve_ffmpeg()
+    if resolved.executable != installed.ffmpeg:
+        print(
+            f"Note: recording will use the FFmpeg from {resolved.source} "
+            f"({resolved.executable}), which keeps priority over this install. "
+            "Set OPENADAPT_FFMPEG_PATH to prefer the installed one."
+        )
+
+
+def uninstall_ffmpeg() -> None:
+    """Remove the FFmpeg runtime that `capture install-ffmpeg` installed."""
+    from openadapt_capture import ffmpeg_runtime
+
+    root = ffmpeg_runtime.runtime_root()
+    if ffmpeg_runtime.uninstall():
+        print(f"Removed {root}")
+    else:
+        print(f"Nothing to remove at {root}")
+
+
 def share(action: str, path_or_code: str, output_dir: str = ".") -> None:
     """Share recordings via Magic Wormhole.
 
@@ -465,6 +557,8 @@ def main() -> None:
         "info": info,
         "transcribe": transcribe,
         "share": share,
+        "install-ffmpeg": install_ffmpeg,
+        "uninstall-ffmpeg": uninstall_ffmpeg,
     })
 
 

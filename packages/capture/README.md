@@ -46,8 +46,9 @@ capture record ./my-capture --description "Describe the workflow"
 capture info ./my-capture
 ```
 
-`capture status`, `capture stop`, and the `status_recording` / `stop_recording`
-Python contract below are on `main` and ship in 1.2.3. They are not in the
+`capture status`, `capture stop`, `capture install-ffmpeg`, and the
+`status_recording` / `stop_recording` Python contract below are on `main` and
+ship in 1.2.3. They are not in the
 published 1.2.2 wheel, so install from source until 1.2.3 reaches PyPI:
 
 ```bash
@@ -107,19 +108,45 @@ an authenticated session capability that lives in an owner-only runtime file
 On macOS it also removes extended ACL entries and verifies they are absent. The
 capability never reaches command arguments, logs, or the capture directory.
 
-## You have to supply FFmpeg
+## FFmpeg
 
-Video is the default evidence format, and Capture never downloads, bundles, or
-links FFmpeg or PyAV. Point it at an executable with `OPENADAPT_FFMPEG_PATH`,
-`Recorder(ffmpeg_path=...)`, Desktop's `ffmpeg.json` provision manifest, or by
-putting `ffmpeg` and `ffprobe` on `PATH`. Recording runs a real
-encode-and-decode probe first and refuses before the input listeners start if
-the executable, the codec, or the PNG verification path is missing.
+Recording video needs an FFmpeg executable, and `capture install-ffmpeg` gets
+you one. Video is the default evidence format, so most people need it.
 
-A minimal managed runtime has to supply raw-video input through a pipe, the
-chosen video encoder, MP4 demuxing and muxing, PNG decoding and encoding, the
-`image2pipe` muxer, and the `select` video filter. Desktop provisions and
-probes that exact closure.
+```bash
+capture install-ffmpeg
+```
+
+That downloads a single pinned build for your platform, checks its SHA-256
+against a digest compiled into this package, and installs it under your user
+data directory. Nothing is made executable until every digest matches. Run it
+with `--dry-run` to print the exact URL, digest, and destination without
+fetching anything, and `capture uninstall-ffmpeg` to remove it again. Builds
+are pinned for macOS on Apple silicon and Intel, Linux x86-64, and Windows
+x86-64. On anything else, supply your own executable.
+
+The wheel and the source distribution carry no FFmpeg bytes, and Capture
+downloads nothing unless you run that command. Licensing is the reason. This
+package is MIT and FFmpeg is not, so shipping FFmpeg inside it would relicense
+the package. The pinned build is LGPL-2.1-or-later, configured with
+`--disable-gpl`, `--disable-nonfree`, and `--disable-version3`. FFmpeg's own
+`LICENSE.md` covers the GPL components it leaves out: "None of these parts are
+used by default." The install puts that licence text beside the binaries, and
+writes a receipt naming the archive, its digest, and the matching upstream
+source tarball.
+
+An FFmpeg you already configured keeps priority. Capture resolves, in order,
+`Recorder(ffmpeg_path=...)` or `OPENADAPT_FFMPEG_PATH`, then
+`OPENADAPT_DESKTOP_FFMPEG_PATH`, then Desktop's `ffmpeg.json` provision
+manifest, then `PATH`, and the installed runtime last. Point
+`OPENADAPT_FFMPEG_PATH` at the installed one to move it to the front.
+
+Recording runs a real encode-and-decode probe first, and refuses before the
+input listeners start if the executable, the codec, or the PNG verification
+path is missing. A minimal runtime has to supply raw-video input through a
+pipe, the chosen video encoder, MP4 demuxing and muxing, PNG decoding and
+encoding, the `image2pipe` muxer, and the `select` video filter. The pinned
+build and Desktop's runtime both cover that closure.
 
 Frames stream from memory straight to FFmpeg. A missing integer PTS slot reuses
 the preceding frame, so the encode is deterministic no matter what the

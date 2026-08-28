@@ -37,6 +37,101 @@ REQUIRED_OBSERVER_PATHS = {
 }
 
 
+# The MIT package boundary forbids shipping FFmpeg bytes, whatever the file is
+# called. `openadapt_capture/ffmpeg_runtime.py` fetches a pinned LGPL build at
+# the operator's request instead, so the source name is expected and only the
+# bytes are forbidden.
+FORBIDDEN_BINARY_NAME_TOKENS = (
+    "ffmpeg",
+    "ffprobe",
+    "avcodec",
+    "avformat",
+    "avutil",
+    "swscale",
+    "swresample",
+    "x264",
+    "x265",
+)
+# Bytes that begin a native executable or shared library on the platforms this
+# package targets.
+EXECUTABLE_MAGIC = (
+    b"\x7fELF",  # ELF
+    b"\xfe\xed\xfa\xce",  # Mach-O 32-bit big-endian
+    b"\xfe\xed\xfa\xcf",  # Mach-O 64-bit big-endian
+    b"\xce\xfa\xed\xfe",  # Mach-O 32-bit little-endian
+    b"\xcf\xfa\xed\xfe",  # Mach-O 64-bit little-endian
+    b"\xca\xfe\xba\xbe",  # Mach-O universal
+    b"MZ",  # PE / COFF
+)
+# A nested container would hide a binary from a per-member scan.
+NESTED_ARCHIVE_MAGIC = (
+    b"PK\x03\x04",  # zip
+    b"\xfd7zXZ\x00",  # xz
+    b"\x1f\x8b",  # gzip
+    b"BZh",  # bzip2
+    b"\x28\xb5\x2f\xfd",  # zstd
+    b"!<arch>",  # ar
+)
+# Strings that only an FFmpeg build, or a library copied out of one, carries.
+FORBIDDEN_BINARY_CONTENT = (
+    b"ffmpeg version",
+    b"ffprobe version",
+    b"libavcodec",
+    b"libavformat",
+    b"--enable-gpl",
+    b"--disable-gpl",
+    b"Lavc",
+)
+
+
+def _is_text(content: bytes) -> bool:
+    """Whether a member is text, and so cannot be a smuggled media binary.
+
+    Source, documentation and package metadata legitimately name FFmpeg: the
+    package documents the FFmpeg it fetches, and README text reaches METADATA.
+    A native binary is not valid UTF-8 and carries NUL bytes, so this
+    distinguishes the two without a filename allowlist to keep in step.
+    """
+    if b"\x00" in content:
+        return False
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def _verify_no_media_binaries(path: Path, files: dict[str, bytes]) -> None:
+    """Refuse an archive that carries FFmpeg bytes under any name.
+
+    Executable and container magic are checked for every member, so a renamed
+    binary and a nested archive are both caught. The name and build-string
+    checks then apply to every member that is not text, which is what the
+    licensing boundary actually forbids.
+    """
+    for name, content in files.items():
+        assert not content.startswith(EXECUTABLE_MAGIC), (
+            f"{path}: a native executable violates the external-process "
+            f"boundary: {name}"
+        )
+        assert not content.startswith(NESTED_ARCHIVE_MAGIC), (
+            f"{path}: a nested archive could hide a media binary from this "
+            f"gate: {name}"
+        )
+        if _is_text(content):
+            continue
+        leaf = Path(name).name.lower()
+        assert not any(token in leaf for token in FORBIDDEN_BINARY_NAME_TOKENS), (
+            f"{path}: bundled video binary violates the external-process "
+            f"boundary: {name}"
+        )
+        for token in FORBIDDEN_BINARY_CONTENT:
+            assert token not in content, (
+                f"{path}: FFmpeg build bytes ({token!r}) are in the release "
+                f"archive: {name}"
+            )
+
+
 def _archive_files(path: Path) -> dict[str, bytes]:
     if path.suffix == ".whl":
         with zipfile.ZipFile(path) as archive:
@@ -123,19 +218,7 @@ def verify_distribution(path: Path) -> None:
         f"{path}: PyAV must not be in the package dependency closure"
     )
 
-    forbidden_binary_names = (
-        "ffmpeg",
-        "ffprobe",
-        "avcodec",
-        "avformat",
-        "x264",
-        "x265",
-    )
-    for name in files:
-        leaf = Path(name).name.lower()
-        assert not any(token in leaf for token in forbidden_binary_names), (
-            f"{path}: bundled video binary violates the external-process boundary: {name}"
-        )
+    _verify_no_media_binaries(path, files)
 
     python_sources = "\n".join(
         content.decode("utf-8")

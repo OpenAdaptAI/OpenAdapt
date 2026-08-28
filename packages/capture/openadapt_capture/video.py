@@ -1,9 +1,13 @@
 """Video capture through a separately provisioned FFmpeg executable.
 
-Capture itself never downloads or bundles FFmpeg. In-memory RGB frames stream
-directly into the encoder process and become compact video while recording.
-The finished output is verified and atomically promoted; an encoder failure is
-reported and never leaves a false-success public MP4.
+Capture bundles no FFmpeg and downloads none on its own. An operator who wants
+one can run ``capture install-ffmpeg``, which fetches a single pinned LGPL
+build and verifies its SHA-256; see ``openadapt_capture.ffmpeg_runtime``.
+
+In-memory RGB frames stream directly into the encoder process and become
+compact video while recording. The finished output is verified and atomically
+promoted; an encoder failure is reported and never leaves a false-success
+public MP4.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ from typing import TYPE_CHECKING, BinaryIO, Sequence
 from loguru import logger
 from PIL import Image
 
-from openadapt_capture import utils
+from openadapt_capture import ffmpeg_runtime, utils
 from openadapt_capture.config import config
 
 if TYPE_CHECKING:
@@ -437,6 +441,11 @@ def resolve_ffmpeg(
     2. ``OPENADAPT_FFMPEG_PATH`` / ``OPENADAPT_DESKTOP_FFMPEG_PATH``.
     3. Desktop user-data ``ffmpeg.json`` manifest.
     4. System ``PATH``.
+    5. A runtime the operator installed with ``capture install-ffmpeg``.
+
+    The managed runtime is last, so installing it never displaces an FFmpeg the
+    operator already chose. To prefer it over one of the four, name it in
+    ``OPENADAPT_FFMPEG_PATH``.
 
     ``ffprobe`` is resolved from an explicit path, the Desktop manifest, beside
     FFmpeg, or from ``PATH``. Encoding does not require it; exact frame lookup
@@ -500,11 +509,22 @@ def resolve_ffmpeg(
             source="PATH",
         )
 
+    managed = ffmpeg_runtime.find_installed_runtime()
+    if managed is not None:
+        managed_ffmpeg, managed_ffprobe = managed
+        return FFmpegProvision(
+            managed_ffmpeg,
+            ffprobe=_resolve_ffprobe(managed_ffmpeg, ffprobe_path) or managed_ffprobe,
+            source="capture install-ffmpeg",
+        )
+
     raise FFmpegUnavailableError(
-        "Video capture requires a separately provisioned FFmpeg executable. "
-        "Set OPENADAPT_FFMPEG_PATH, pass Recorder(ffmpeg_path=...), provision "
-        "Desktop's ffmpeg.json user-data manifest, or put ffmpeg on PATH. "
-        "OpenAdapt Capture does not download or bundle FFmpeg."
+        "Video capture needs an FFmpeg executable, and none is installed.\n"
+        "    Run: capture install-ffmpeg\n"
+        "That downloads one pinned LGPL build, checks its SHA-256, and "
+        "installs it for this user only. Capture bundles no FFmpeg and never "
+        "downloads one on its own. If you already have an FFmpeg you want to "
+        "use, set OPENADAPT_FFMPEG_PATH to it instead."
     )
 
 
@@ -1344,10 +1364,12 @@ def move_moov_atom(
 def _require_ffprobe(provision: FFmpegProvision) -> str:
     if provision.ffprobe is None:
         raise FFmpegUnavailableError(
-            "Exact frame lookup and video metadata require a separately "
-            "provisioned ffprobe executable. Put ffprobe beside FFmpeg, set "
-            "OPENADAPT_FFPROBE_PATH, pass ffprobe_path=..., or declare it in "
-            "Desktop's ffmpeg.json manifest."
+            "Exact frame lookup and video metadata need an ffprobe executable, "
+            "and none is installed.\n"
+            "    Run: capture install-ffmpeg\n"
+            "That installs a matching ffprobe beside FFmpeg. To use an ffprobe "
+            "you already have, put it beside FFmpeg, set OPENADAPT_FFPROBE_PATH, "
+            "or pass ffprobe_path=...."
         )
     return provision.ffprobe
 

@@ -176,11 +176,16 @@ describe controls inside an RDP or Citrix pixel stream.
 
 ## Video and frame timing
 
-Capture does not import, link, download, or bundle FFmpeg. It invokes an
-explicitly configured, Desktop-provisioned, or user-provisioned executable
-through a process boundary. Preflight verifies the required raw-video input,
-selected encoder, MP4 muxing, PNG encode/decode, `image2pipe`, and `select`
-filter before recording starts.
+Capture does not import, link, or bundle FFmpeg, and it downloads nothing on
+its own. It invokes an explicitly configured, Desktop-provisioned,
+user-provisioned, or `capture install-ffmpeg` executable through a process
+boundary. `capture install-ffmpeg` is the operator's opt-in: it fetches one
+pinned LGPL-2.1-or-later archive, refuses it unless its SHA-256 matches a
+digest compiled into the package, and verifies every extracted member before
+anything is made executable. Its runtime resolves last, behind all four earlier
+mechanisms. Preflight verifies the required raw-video input, selected encoder,
+MP4 muxing, PNG encode/decode, `image2pipe`, and `select` filter before
+recording starts.
 
 The writer emits a deterministic constant-rate stream. It reuses the preceding
 RGB frame for a missing integer PTS slot. A compact MP4 metadata box binds
