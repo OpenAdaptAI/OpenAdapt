@@ -3,25 +3,38 @@
 Source for the OpenAdapt technical paper and its workshop condensation. This is
 a submission draft, not a submitted paper.
 
-## Which paper is this? (the three-tree map)
+## Which paper is this?
 
-Three paper trees exist in the organization, and they are different papers:
+Six papers build out of two source trees, and every one of them lands in a
+file named `main.pdf`. Name the profile and the output path, never just
+"the paper".
 
-1. **This tree** — "Compile Once, Govern Every Repair" — the SYSTEMS paper
-   about the engine: compilation, deterministic replay, governed repair.
-2. **`openadapt-attest-bench` `paper/`** (private) — the MEASUREMENT paper
-   lineage ("Silent Wrong Actions..." extended version and its build
-   profiles): false-accept audits and certificates for execution-based
-   checkers. Canonical source for that lineage; tables generate from the
-   committed measurement artifacts.
-3. **`openadapt-internal` `docs/workshop-draft-verify-agents-2026-08-25/`**
-   (private) — the frozen source of the Aug 29, 2026 workshop submission
-   ("Measuring the Checkers"), a condensation of tree 2. After the
-   deadline it points to tree 2.
+**This tree, `openadapt-flow/paper/`, holds two of them:**
 
-The two papers cite each other (the measurement paper uses this paper's
-system as its instrument) and must not be merged: different claims,
-different audiences.
+| Paper | Source | Built to |
+|---|---|---|
+| "Compile Once, Govern Every Repair" — the SYSTEMS paper about the engine: compilation, deterministic replay, governed repair. | `paper/main.tex` | `paper/build/main.pdf` |
+| "A Green Screen Is Not a Saved Record" — a workshop condensation of the above. **Superseded; do not submit it.** Last touched 2026-07-27, and it is not anonymous. "Measuring the Checkers" took the venue it was aimed at. | `paper/workshop/main.tex` | `paper/workshop/build/main.pdf` |
+
+**`openadapt-attest-bench` `paper/` (private) holds the other four**, the
+MEASUREMENT lineage: "Measuring the Checkers" in a workshop and an arXiv
+profile, "Admissible by Construction", and the extended "Silent Wrong
+Actions in Computer-Use Agents". That tree is canonical for all four; its
+`paper/README.md` opens with the map. The live workshop submission is its
+`paper/workshop/main.tex`, not anything here and not its `paper/main.tex`.
+
+**`openadapt-internal` `docs/workshop-draft-verify-agents-2026-08-25/`
+(private) is a superseded frozen copy**, not a source. Its files carry a
+`SUPERSEDED-` prefix. Do not build or upload from it.
+
+The systems paper and the measurement papers must not be merged: different
+claims, different audiences. The measurement lineage uses this engine as its
+instrument and cites it. This tree does not cite the measurement lineage back;
+`references.bib` holds none of it. Say "cites" in one direction only until
+that changes.
+
+`PAPERS.md` in the workspace root carries the portfolio view: who reads each
+paper, where it is published, and whether it may go out yet.
 
 Everything mechanically checkable is done: `python paper/check_artifacts.py`
 passes, `make -C paper` builds both PDFs with zero LaTeX warnings, and
