@@ -594,6 +594,34 @@ def main() -> None:
                 f"paper overstates public raw-artifact availability: {claim!r}"
             )
 
+    # OpenEMR and MockMed success counts in the abstract. The abstract is the
+    # half most often quoted on its own, so bind it to the same source rows the
+    # results table uses.
+    require_contains(
+        main_tex,
+        (
+            f"compiled replay completed {openemr['compiled']['success_count']} "
+            f"of {openemr['compiled']['n']} OpenEMR runs and every measured "
+            "MockMed run"
+        ),
+        "abstract OpenEMR compiled success",
+    )
+
+    # Breadth corpus outcomes in the abstract. The abstract used to list the
+    # corpus as an experiment without stating what it found.
+    require_contains(
+        main_tex,
+        (
+            f"on the {reliability['summary']['n_apps']}-application corpus, all "
+            f"{reliability['summary']['n_compiled']} recordings compiled, but "
+            f"only {outcomes['success']} replays reached a verified success, "
+            f"{outcomes['safe_halt']} halted safely, and "
+            f"{outcomes['wrong_action']} reported success while the external "
+            "oracle disagreed"
+        ),
+        "abstract breadth corpus outcomes",
+    )
+
     # End-to-end silent-wrong-effect headline (54 -> 9 -> 0). Bind the abstract,
     # introduction, and results prose to the effect_e2e artifact so the headline
     # can never drift from the measured JSON. This is the real, non-circular

@@ -45,9 +45,14 @@ base64-encoded PNG. All `/v1/*` endpoints require the bearer token.
 
 **The server never authorizes an action.** `identity/compare` reuses the
 validated veto-only same/different prompt + parser from the identity probe
-(PR #28, `validation/vlm_identity_probe.py`) — Qwen3-VL-4B, 0% false-accept on
-the collapse surface: any non-confident/unparseable answer is reported as
-`different` (a veto). `ground` only *proposes* a point (the deterministic
+(PR #28, `validation/vlm_identity_probe.py`) — Qwen3-VL-4B, 8.3% false-accept
+across all 12 collapse pairs and 0% across the 7 pairs where OCR itself
+collapses (`benchmark/vlm_identity/vlm_identity.json`,
+`collapse_pairs.false_accept_rate_all` and
+`false_accept_rate_ocr_collapsed`): any non-confident/unparseable answer is
+reported as `different` (a veto). The VLM is a veto, never a grant, so its
+false-accepts abstain rather than authorize; the deterministic tiers still
+dispose. `ground` only *proposes* a point (the deterministic
 identity band still disposes before any click). `verify_state` reports the
 drift-oracle postcondition (semantic "did the intended state happen?") used
 when the deterministic postcondition false-fails under render drift. Its

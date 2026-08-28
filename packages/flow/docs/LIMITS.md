@@ -142,10 +142,13 @@ and validated but ships **disabled by default** (`PIXEL_VERIFY_ENABLED = False`)
 On the self-contained jitter battery (`benchmark/pixel_identity_aligned`:
 rendered MRNs plus the committed real-browser crops, re-rendered under sub-pixel
 jitter, JPEG q≤10, 105–150% DPI, and theme inversion) the sub-pixel-aligned
-whole-crop distance separates same-record matching renders (worst window ≈0.052)
-from every different record — glyph-collapse siblings and wrong MRNs alike
-(≈0.070) — with the verify gate (0.040) inside that gap, giving **zero
-false-accept across the different-record trials with margin**. That evidence is
+whole-crop distance separates same-record matching renders (worst window
+0.0615, p95 0.0547) from every different record — glyph-collapse siblings and
+wrong MRNs alike (closest 0.0705) — with the verify gate (0.040) below both,
+giving **zero false-accept across the different-record trials**. The margin
+between the worst same-record window and the closest different record is
+**0.0090**, which is narrow; the numbers are `distance_stats` in
+[`benchmark/pixel_identity_aligned/evidence.json`](../benchmark/pixel_identity_aligned/evidence.json). That evidence is
 **synthetic**; a pixel false-accept is a silent wrong record, the worst possible
 outcome, and no real RDP/Citrix/HDX identifier corpus has been captured yet
 (so the shipped pixel-verify default remains off). The exact bar to flip the default on: reproduce

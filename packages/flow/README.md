@@ -6,10 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Record yourself doing a task in a browser or a desktop app. openadapt-flow
-compiles the recording into a script that runs on your machine with zero model
-calls, and before it reports success it reads the system of record directly, on
-a path the app never touches. Screen says saved, database holds nothing, the
-run stops.
+compiles the recording into a script that runs on your machine and makes zero
+model calls on a healthy run. Before it reports success it reads the system of
+record directly, on a path the app never touches, against the effects you
+declared in the contract. Screen says saved, database holds nothing, the run
+stops.
 
 It's for work you do the same way every week and have to be able to prove
 afterwards: claims entry, referrals, eligibility checks, invoice posting. If
@@ -191,8 +192,18 @@ build:
 The OpenEMR run is the interesting one because the app is not ours: it's the
 official public demo, with fake patients, that other people mutate and that
 resets daily. That also makes it impossible to reproduce in CI, and the sample
-is small. Method, caveats, the pinned Frappe lending environment, and
-EffectBench (the standalone Silent Wrong-Effect Rate benchmark) are all in
+is small.
+
+Both of those are one rehearsed task. The number to look at before you trust
+this on a workflow we have never seen is the breadth one, and it is worse: on
+29 public web applications recorded and replayed once each
+([method](benchmark/reliability/RELIABILITY.md)), all 29 compiled, 17 replays
+verified, 10 halted safely, and 2 reported success while the independent oracle
+disagreed. One observation per app is failure discovery, not a rate you can
+plan against.
+
+Method, caveats, the pinned Frappe lending environment, and EffectBench (the
+standalone Silent Wrong-Effect Rate benchmark) are all in
 [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 RPA replays deterministically too, so the interesting comparison is at the

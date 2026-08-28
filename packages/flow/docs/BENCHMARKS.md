@@ -40,6 +40,28 @@ authoring, maintenance, and infrastructure. Full
 numbers, methodology, and caveats:
 [`../benchmark/BENCHMARK.md`](../benchmark/BENCHMARK.md).
 
+## 29-application public-web corpus (the breadth number)
+
+The two comparisons above are one task each, chosen and rehearsed. The corpus
+is the opposite: 29 public, no-authentication web applications, recorded once,
+compiled, and replayed once against an unchanged UI with `grounder=None` and
+zero model calls. All 29 recordings compiled. **17 replays reached a verified
+success (58.6%), 10 halted safely, and 2 reported success while the external
+oracle disagreed.** Nine of the ten halts were conservative identity refusals
+and one was a failed postcondition. The two wrong actions were vacuous
+successes after an external page blocked the demonstrated interaction, so
+neither was a confirmed bad write, but the runtime reported success and the
+independent oracle did not, which is the definition we hold ourselves to.
+
+One observation per target is failure discovery, not a reliability rate. The
+corpus covers public browser applications only: no authenticated enterprise
+apps, no native desktop, no RDP or Citrix, no UI drift, no repeatability over
+time. We picked the targets and we built the mechanism, so it is not
+independent validation. Full method, failure taxonomy, and caveats:
+[`../benchmark/reliability/RELIABILITY.md`](../benchmark/reliability/RELIABILITY.md);
+machine-readable aggregate:
+[`../benchmark/reliability/summary.json`](../benchmark/reliability/summary.json).
+
 ## Frappe lending reference environment
 
 The stack also ships a pinned, containerized lending reference environment,
