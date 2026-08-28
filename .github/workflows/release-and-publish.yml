@@ -30,8 +30,85 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  stage-flow-admission:
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      admission_reference_json: ${{ steps.candidate.outputs.admission_reference_json }}
+      artifact_inventory_json: ${{ steps.candidate.outputs.artifact_inventory_json }}
+      flow_source_commit: ${{ steps.candidate.outputs.flow_source_commit }}
+      flow_version: ${{ steps.candidate.outputs.flow_version }}
+      flow_tag: ${{ steps.candidate.outputs.flow_tag }}
+      central_registry_source_commit: ${{ steps.candidate.outputs.central_registry_source_commit }}
+
+    steps:
+      - name: Checkout the exact launcher candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Stage the exact selected Flow release and its current admission
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          project_version="$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as stream:
+              print(tomllib.load(stream)["project"]["version"])
+          PY
+          )"
+          python scripts/prepare_flow_admission_candidate.py \
+            --manifest platform-manifest.json \
+            --launcher-version "$project_version" \
+            --artifact-root flow-admission-candidate \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Transfer the exact Flow admission candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flow-admission-candidate
+          path: flow-admission-candidate/
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-flow-admission:
+    needs: stage-flow-admission
+    permissions:
+      contents: read
+      attestations: read
+      id-token: write
+    uses: OpenAdaptAI/.github/.github/workflows/verify-production-release-admission.yml@c05ff5c0633e0a1f63d9af74eeb69c31dac3e9ba
+    with:
+      admission_reference_json: ${{ needs.stage-flow-admission.outputs.admission_reference_json }}
+      artifact_inventory_json: ${{ needs.stage-flow-admission.outputs.artifact_inventory_json }}
+      candidate_artifact_name: flow-admission-candidate
+      expected_target: flow
+      expected_repository: OpenAdaptAI/openadapt-flow
+      expected_repository_id: "1291376938"
+      expected_source_commit: ${{ needs.stage-flow-admission.outputs.flow_source_commit }}
+      expected_version: ${{ needs.stage-flow-admission.outputs.flow_version }}
+      expected_tag: ${{ needs.stage-flow-admission.outputs.flow_tag }}
+      central_verifier_sha: c05ff5c0633e0a1f63d9af74eeb69c31dac3e9ba
+
   create-release-tag:
-    if: github.event_name == 'workflow_dispatch'
+    needs: verify-flow-admission
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      needs.verify-flow-admission.result == 'success'
     runs-on: ubuntu-latest
     environment: release-identity
     permissions:
@@ -169,7 +246,11 @@ jobs:
           git push origin "refs/tags/$RELEASE_TAG"
 
   build-and-attest:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: verify-flow-admission
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.verify-flow-admission.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -769,6 +850,8 @@ jobs:
 
   report-release-failure:
     needs:
+      - stage-flow-admission
+      - verify-flow-admission
       - create-release-tag
       - build-and-attest
       - preflight-github
@@ -777,7 +860,9 @@ jobs:
       - verify-publication
     if: >-
       ${{ always() &&
-          (needs.create-release-tag.result == 'failure' ||
+          (needs.stage-flow-admission.result == 'failure' ||
+           needs.verify-flow-admission.result == 'failure' ||
+           needs.create-release-tag.result == 'failure' ||
            needs.build-and-attest.result == 'failure' ||
            needs.preflight-github.result == 'failure' ||
            needs.publish-pypi.result == 'failure' ||
@@ -792,6 +877,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CREATE_TAG_RESULT: ${{ needs.create-release-tag.result }}
+          FLOW_STAGE_RESULT: ${{ needs.stage-flow-admission.result }}
+          FLOW_ADMISSION_RESULT: ${{ needs.verify-flow-admission.result }}
           BUILD_RESULT: ${{ needs.build-and-attest.result }}
           GITHUB_PREFLIGHT_RESULT: ${{ needs.preflight-github.result }}
           PYPI_RESULT: ${{ needs.publish-pypi.result }}
@@ -802,7 +889,7 @@ jobs:
           TITLE="Release workflow failed"
           BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, preflight-github=${GITHUB_PREFLIGHT_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
+          flow-stage=${FLOW_STAGE_RESULT}, flow-admission=${FLOW_ADMISSION_RESULT}, create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, preflight-github=${GITHUB_PREFLIGHT_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
 
           If the annotated tag exists, rerun only the failed jobs in this run with gh run rerun ${{ github.run_id }} --failed. Do not start a new full run or create a recovery tag."
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
