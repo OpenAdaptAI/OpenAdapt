@@ -2,7 +2,8 @@
 
 The contribution guide for this repository is
 [CONTRIBUTING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CONTRIBUTING.md)
-in the repository root, and that is the only copy.
+in the repository root. That is the maintained copy. The guide under
+`legacy/` applies to the frozen v0.46.0 tree and not to current work.
 
 Read it there for the product boundary between this launcher and the
 [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) engine, the
