@@ -444,11 +444,17 @@ def test_the_total_wait_never_runs_past_the_declared_budget(tmp_path, monkeypatc
     """
     # Scale the busy timeout, the attempt ceiling and the budget together, so
     # the loop behaves exactly as it does in production and the test still
-    # finishes in about two seconds. The production attempt cost is measured by
+    # finishes in about four seconds. The production attempt cost is measured by
     # test_one_locked_attempt_costs_less_than_the_declared_ceiling.
-    monkeypatch.setattr(db, "SQLITE_BUSY_TIMEOUT_SECONDS", 0.05)
-    monkeypatch.setattr(crud, "SQLITE_LOCK_ATTEMPT_CEILING_SECONDS", 0.2)
-    monkeypatch.setattr(crud, "SQLITE_WRITE_LOCK_BUDGET_SECONDS", 2.0)
+    #
+    # Keep the ceiling several times the busy timeout, as production does. An
+    # attempt costs its busy timeout plus a fixed overhead that does not shrink
+    # with it, so a ceiling too close to the timeout is spent on that overhead:
+    # at 0.05/0.2/2.0 this measured 2.22s against its 2.2s worst case on hosted
+    # macOS, which says the scaling was wrong, not the helper.
+    monkeypatch.setattr(db, "SQLITE_BUSY_TIMEOUT_SECONDS", 0.25)
+    monkeypatch.setattr(crud, "SQLITE_LOCK_ATTEMPT_CEILING_SECONDS", 1.0)
+    monkeypatch.setattr(crud, "SQLITE_WRITE_LOCK_BUDGET_SECONDS", 5.0)
     engine, db_path, recording = _capture_database_with_a_recording(tmp_path, "budget")
     session = db.get_session_for_path(str(db_path))
     competitor = _hold_the_write_lock(db_path, recording.id)
@@ -465,8 +471,8 @@ def test_the_total_wait_never_runs_past_the_declared_budget(tmp_path, monkeypatc
 
     # The helper starts its last attempt strictly before BUDGET - CEILING, so
     # the total is over the budget only by however long that one attempt ran.
-    # A loaded runner does make it run long: this measured 2.05s against a 2.0s
-    # budget on hosted macOS. Bound it by what always holds.
+    # A loaded runner does make it run long, so bound the total by what always
+    # holds rather than by the budget alone.
     worst_case = (
         crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS
         + crud.SQLITE_LOCK_ATTEMPT_CEILING_SECONDS
@@ -657,3 +663,33 @@ def test_concurrent_writers_all_survive_a_busy_write_lock(tmp_path, monkeypatch)
         assert not writer.is_alive(), "a writer hung under contention"
     for name, event in started_events.items():
         assert event.is_set(), f"{name} never announced readiness"
+
+
+def test_a_corrupt_capture_database_leaves_no_open_handle(tmp_path):
+    """Failing to open a capture must not keep its file open.
+
+    ``get_engine`` asks each new connection for its journal mode so it can
+    match the synchronous setting to it. A file that cannot answer -- a corrupt
+    capture -- must still fail on the caller's own statement, because an
+    exception raised inside a connect handler leaves the new connection outside
+    the pool that would have closed it. ``engine.dispose()`` then cannot reach
+    it and the file stays open.
+
+    On Windows an open handle makes the capture directory undeletable, which is
+    where this surfaced: tests/test_highlevel.py's corrupt-database test passed
+    and then failed its own temporary-directory cleanup with WinError 32.
+    """
+    psutil = pytest.importorskip("psutil")
+    db_path = tmp_path / "recording.db"
+    db_path.write_text("this is not a sqlite database")
+
+    process = psutil.Process()
+    before = {handle.path for handle in process.open_files()}
+    with pytest.raises(sa.exc.DatabaseError):
+        db.get_session_for_path(str(db_path))
+    still_open = [
+        path
+        for path in {handle.path for handle in process.open_files()} - before
+        if "recording.db" in path
+    ]
+    assert not still_open, f"the corrupt capture stayed open: {still_open}"

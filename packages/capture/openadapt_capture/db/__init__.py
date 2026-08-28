@@ -108,13 +108,26 @@ def get_engine(db_url: str, echo: bool = False) -> sa.engine:
         power loss can cost the last commits, and a capture interrupted by a
         power loss is incomplete anyway. A rollback-journal database keeps the
         default FULL, so an existing capture's durability is unchanged.
+
+        Never raise from here. This is a tuning step, not a correctness one, and
+        a file that cannot answer it -- a corrupt capture, most of all -- has to
+        fail on the caller's own statement instead. An exception raised inside a
+        connect handler leaves the new connection outside the pool that would
+        have closed it, so ``engine.dispose()`` cannot reach it and the file
+        stays open. On Windows that open handle makes the capture directory
+        undeletable, which is how it shows up.
         """
-        cursor = dbapi_connection.cursor()
+        try:
+            cursor = dbapi_connection.cursor()
+        except sqlite3.Error:
+            return
         try:
             cursor.execute("PRAGMA journal_mode")
             row = cursor.fetchone()
             if row and str(row[0]).lower() == "wal":
                 cursor.execute("PRAGMA synchronous=NORMAL")
+        except sqlite3.Error:
+            return
         finally:
             cursor.close()
 
