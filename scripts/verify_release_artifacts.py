@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
+import stat
 import tarfile
 import zipfile
 from email import policy
@@ -13,6 +15,8 @@ from email.parser import BytesParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+POLICY_SCHEMA_VERSION = 1
+MAX_MEMBER_BYTES = 16 * 1024 * 1024
 
 
 def _quoted_table_value(text: str, table: str, key: str) -> str:
@@ -83,6 +87,155 @@ def _lifecycle(metadata: Message) -> list[str]:
 
 def _specifier_terms(value: str) -> set[str]:
     return {term.strip() for term in value.split(",") if term.strip()}
+
+
+def _release_policy(root: Path) -> tuple[tuple[str, ...], tuple[bytes, ...]]:
+    policy_path = root / "source-policy.public.json"
+    try:
+        document = json.loads(policy_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read the rendered source policy: {exc}") from exc
+    if (
+        not isinstance(document, dict)
+        or document.get("schema_version") != POLICY_SCHEMA_VERSION
+    ):
+        raise ValueError("rendered source policy schema is invalid")
+    enforcement = document.get("enforcement")
+    built = (
+        enforcement.get("built_artifacts") if isinstance(enforcement, dict) else None
+    )
+    prefixes = built.get("path_prefixes") if isinstance(built, dict) else None
+    if (
+        not isinstance(prefixes, list)
+        or not prefixes
+        or not all(isinstance(item, str) and item for item in prefixes)
+    ):
+        raise ValueError("built_artifacts.path_prefixes policy is invalid")
+    signature_parts = (
+        enforcement.get("content_signature_parts")
+        if isinstance(enforcement, dict)
+        else None
+    )
+    if not isinstance(signature_parts, list) or not signature_parts:
+        raise ValueError("content_signature_parts policy is invalid")
+    signatures: list[bytes] = []
+    for parts in signature_parts:
+        if (
+            not isinstance(parts, list)
+            or not parts
+            or not all(isinstance(part, str) for part in parts)
+        ):
+            raise ValueError("content_signature_parts policy is invalid")
+        signature = "".join(parts).encode()
+        if not signature:
+            raise ValueError("content signature is empty")
+        signatures.append(signature)
+    return tuple(item.strip("/").lower() for item in prefixes), tuple(signatures)
+
+
+def _safe_member_path(name: str, *, root_prefix: str | None = None) -> str:
+    if not name or "\0" in name or name.startswith("/") or "\\" in name:
+        raise ValueError(f"release archive member path is invalid: {name!r}")
+    parts = name.rstrip("/").split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ValueError(f"release archive member path is invalid: {name!r}")
+    if root_prefix is not None:
+        if not parts or parts[0] != root_prefix:
+            raise ValueError(f"sdist member escapes its exact root: {name!r}")
+        parts = parts[1:]
+    return "/".join(parts)
+
+
+def _check_member(
+    relative_path: str,
+    body: bytes,
+    *,
+    denied_prefixes: tuple[str, ...],
+    signatures: tuple[bytes, ...],
+) -> None:
+    lower = relative_path.lower()
+    if any(
+        lower == prefix or lower.startswith(prefix + "/") for prefix in denied_prefixes
+    ):
+        raise ValueError(
+            f"release archive contains denied built artifact path: {relative_path}"
+        )
+    if any(signature in body for signature in signatures):
+        raise ValueError(
+            f"release archive contains a private content signature: {relative_path}"
+        )
+
+
+def _verify_archive_boundary(wheel: Path, sdist: Path, root: Path) -> None:
+    denied_prefixes, signatures = _release_policy(root)
+    license_files = [root / "LICENSE"]
+    license_files.extend(
+        sorted(
+            path
+            for path in root.iterdir()
+            if path.is_file()
+            and (path.name.startswith("NOTICE") or "THIRD_PARTY_NOTICES" in path.name)
+        )
+    )
+    if not license_files[0].is_file() or license_files[0].is_symlink():
+        raise ValueError("release source LICENSE is missing or invalid")
+    required_notices = {path.name: path.read_bytes() for path in license_files}
+
+    wheel_notices: dict[str, bytes] = {}
+    with zipfile.ZipFile(wheel) as archive:
+        names: set[str] = set()
+        for member in archive.infolist():
+            relative = _safe_member_path(member.filename)
+            if relative in names:
+                raise ValueError(f"wheel member is duplicated: {relative}")
+            names.add(relative)
+            mode = member.external_attr >> 16
+            if member.is_dir():
+                continue
+            if stat.S_ISLNK(mode) or member.file_size > MAX_MEMBER_BYTES:
+                raise ValueError(f"wheel member is invalid: {relative}")
+            body = archive.read(member)
+            _check_member(
+                relative,
+                body,
+                denied_prefixes=denied_prefixes,
+                signatures=signatures,
+            )
+            marker = ".dist-info/licenses/"
+            if marker in relative:
+                wheel_notices[relative.rsplit("/", 1)[-1]] = body
+
+    sdist_notices: dict[str, bytes] = {}
+    expected_root = sdist.name.removesuffix(".tar.gz")
+    with tarfile.open(sdist, mode="r:gz") as archive:
+        names: set[str] = set()
+        for member in archive.getmembers():
+            relative = _safe_member_path(member.name, root_prefix=expected_root)
+            if relative in names:
+                raise ValueError(f"sdist member is duplicated: {relative}")
+            names.add(relative)
+            if member.isdir():
+                continue
+            if not member.isfile() or member.size > MAX_MEMBER_BYTES:
+                raise ValueError(f"sdist member is invalid: {relative}")
+            stream = archive.extractfile(member)
+            if stream is None:
+                raise ValueError(f"cannot read sdist member: {relative}")
+            body = stream.read()
+            _check_member(
+                relative,
+                body,
+                denied_prefixes=denied_prefixes,
+                signatures=signatures,
+            )
+            if "/" not in relative and relative in required_notices:
+                sdist_notices[relative] = body
+
+    for name, expected_body in required_notices.items():
+        if wheel_notices.get(name) != expected_body:
+            raise ValueError(f"wheel does not contain the exact required {name}")
+        if sdist_notices.get(name) != expected_body:
+            raise ValueError(f"sdist does not contain the exact required {name}")
 
 
 def verify_release_artifacts(
@@ -162,6 +315,8 @@ def verify_release_artifacts(
         wheel_metadata[field] != sdist_metadata[field] for field in comparable_fields
     ):
         raise ValueError("wheel and source distribution metadata disagree")
+
+    _verify_archive_boundary(wheels[0], sdist, root)
 
     return wheels[0], sdist
 

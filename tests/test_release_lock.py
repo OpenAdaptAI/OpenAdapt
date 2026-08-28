@@ -97,11 +97,31 @@ def test_release_workflow_pins_actions_and_separates_permissions():
 
     assert document["permissions"] == {"contents": "read"}
     assert document["concurrency"] == {
-        "group": "release-publication",
+        "group": (
+            "release-${{ github.event_name == 'workflow_dispatch' && "
+            "inputs.operation == 'create' && format('tag-creation-v{0}', "
+            "inputs.version) || format('publication-{0}', "
+            "github.event_name == 'push' && github.ref_name || "
+            "format('v{0}', inputs.version)) }}"
+        ),
         "cancel-in-progress": False,
     }
     jobs = document["jobs"]
+    assert jobs["prepare-release-candidate"]["permissions"] == {
+        "contents": "read",
+        "id-token": "write",
+        "attestations": "write",
+    }
+    for job_name in (
+        "verify-release-candidate-admission",
+        "verify-tagged-release-admission",
+    ):
+        assert jobs[job_name]["permissions"] == {
+            "contents": "read",
+            "attestations": "read",
+        }
     assert jobs["create-release-tag"]["permissions"] == {"contents": "read"}
+    assert jobs["verify-publication-authority"]["permissions"] == {"contents": "read"}
     assert jobs["build-and-attest"]["permissions"] == {
         "contents": "read",
         "id-token": "write",
@@ -134,6 +154,10 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
 
     jobs = document["jobs"]
     create = jobs["create-release-tag"]
+    assert create["needs"] == [
+        "prepare-release-candidate",
+        "verify-release-candidate-admission",
+    ]
     assert create["environment"] == "release-identity"
     assert "github.event_name == 'workflow_dispatch'" in create["if"]
     app = next(step for step in create["steps"] if step.get("id") == "release-app")
@@ -143,7 +167,9 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
         "private-key": "${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}",
         "owner": "${{ github.repository_owner }}",
         "repositories": "${{ github.event.repository.name }}",
+        "permission-administration": "read",
         "permission-contents": "write",
+        "permission-metadata": "read",
     }
     identity = next(
         step
@@ -152,13 +178,27 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
     )
     assert identity["env"] == {
         "ACTUAL_APP_SLUG": "${{ steps.release-app.outputs.app-slug }}",
+        "ACTUAL_INSTALLATION_ID": "${{ steps.release-app.outputs.installation-id }}",
+        "CONFIGURED_APP_ID": "${{ vars.OPENADAPT_RELEASE_APP_ID }}",
         "EXPECTED_APP_SLUG": "openadapt-release",
+        "EXPECTED_APP_ID": "4730708",
+        "EXPECTED_INSTALLATION_ID": "156835568",
+        "EXPECTED_DISPATCHER_ID": "774615",
     }
     assert 'ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG' in identity["run"]
+    assert 'CONFIGURED_APP_ID" != "$EXPECTED_APP_ID' in identity["run"]
+    assert 'ACTUAL_INSTALLATION_ID" != "$EXPECTED_INSTALLATION_ID' in identity["run"]
+    assert 'GITHUB_ACTOR_ID" != "$EXPECTED_DISPATCHER_ID' in identity["run"]
+    checkout = next(
+        step
+        for step in create["steps"]
+        if step["name"] == "Checkout the exact dispatched main commit"
+    )
+    assert checkout["with"]["persist-credentials"] is False
     assert create["steps"].index(identity) < next(
         index
         for index, step in enumerate(create["steps"])
-        if step["name"] == "Create and push only the annotated release tag"
+        if step["name"] == "Create and re-read only the admitted annotated release tag"
     )
 
     candidate = next(step for step in create["steps"] if step.get("id") == "candidate")
@@ -171,20 +211,103 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
     tag = next(
         step
         for step in create["steps"]
-        if step["name"] == "Create and push only the annotated release tag"
+        if step["name"] == "Create and re-read only the admitted annotated release tag"
     )
     refresh_index = tag["run"].index(
         "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
     )
     compare_index = tag["run"].index('current_main" != "$GITHUB_SHA')
-    create_index = tag["run"].index('git tag -a "$RELEASE_TAG" "$GITHUB_SHA"')
-    push_index = tag["run"].index('git push origin "refs/tags/$RELEASE_TAG"')
-    assert refresh_index < compare_index < create_index < push_index
-    assert 'git tag -a "$RELEASE_TAG" "$GITHUB_SHA"' in tag["run"]
-    assert 'git push origin "refs/tags/$RELEASE_TAG"' in tag["run"]
+    binding_index = tag["run"].index("release_admission_contract.py tag-binding")
+    object_index = tag["run"].index("/git/tags")
+    ref_index = tag["run"].index("/git/refs")
+    reread_index = tag["run"].rindex("verify-tag-ref")
+    assert refresh_index < compare_index < binding_index < object_index < ref_index
+    assert ref_index < reread_index
+    assert "> /tmp/release-tag-binding.json" in tag["run"]
+    assert 'binding_path = Path("/tmp/release-tag-binding.json")' in tag["run"]
+    assert "binding_bytes = binding_path.read_bytes()" in tag["run"]
+    assert '"message": binding_bytes.decode("utf-8")' in tag["run"]
+    assert "binding_bytes != canonical" in tag["run"]
+    assert (
+        'binding="$(python scripts/release_admission_contract.py tag-binding'
+        not in tag["run"]
+    )
+    assert "git tag" not in tag["run"]
+    assert "git push" not in tag["run"]
+    controls = next(
+        step
+        for step in create["steps"]
+        if step["name"] == "Require the exact App repository and release controls"
+    )["run"]
+    assert "/installation/repositories?per_page=100" in controls
+    assert "verify-tag-rulesets" in controls
+    assert "immutable-releases" in controls
 
 
-def test_release_workflow_rechecks_main_immediately_before_the_app_tag_push():
+def test_release_workflow_requires_the_central_admission_before_each_write():
+    workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
+    document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    jobs = document["jobs"]
+    callers = [
+        jobs["verify-release-candidate-admission"],
+        jobs["verify-tagged-release-admission"],
+    ]
+    refs = {caller["uses"].rsplit("@", 1)[-1] for caller in callers}
+    assert len(refs) == 1
+    assert re.fullmatch(r"[0-9a-f]{40}", refs.pop())
+    for caller in callers:
+        assert caller["uses"].startswith(
+            "OpenAdaptAI/.github/.github/workflows/"
+            "verify-production-release-admission.yml@"
+        )
+        assert set(caller["with"]) == {
+            "admission_reference_json",
+            "artifact_inventory_json",
+            "candidate_artifact_name",
+            "expected_target",
+            "expected_repository",
+            "expected_repository_id",
+            "expected_source_commit",
+            "expected_version",
+            "expected_tag",
+        }
+        assert caller["with"]["expected_target"] == "openadapt"
+        assert caller["with"]["expected_repository"] == "OpenAdaptAI/OpenAdapt"
+        assert caller["with"]["expected_repository_id"] == "627024850"
+
+    assert jobs["create-release-tag"]["needs"] == [
+        "prepare-release-candidate",
+        "verify-release-candidate-admission",
+    ]
+    assert "verify-tagged-release-admission" in jobs["publish-pypi"]["needs"]
+    assert "verify-tagged-release-admission" in jobs["publish-github"]["needs"]
+    assert "verify-publication-authority" in jobs["publish-pypi"]["needs"]
+    authority = jobs["verify-publication-authority"]
+    assert authority["environment"] == "release-identity"
+    authority_run = next(
+        step["run"]
+        for step in authority["steps"]
+        if step["name"] == "Require the exact release authority before any publication"
+    )
+    assert "EXPECTED_APP_ID" in authority_run
+    assert "EXPECTED_INSTALLATION_ID" in authority_run
+    assert "verify-tag-rulesets" in authority_run
+    assert "immutable-releases" in authority_run
+    assert "releases/$EXPECTED_RELEASE_ID" in authority_run
+    assert "releases/assets/$asset_id" in authority_run
+    assert "scripts/verify_github_release.py" in authority_run
+    staging = next(
+        step
+        for step in authority["steps"]
+        if step["name"] == "Materialize the admitted App-authored publication staging"
+    )
+    assert "verify-publication-staging" in staging["run"]
+    assert authority["steps"].index(staging) < authority["steps"].index(
+        next(step for step in authority["steps"] if step.get("id") == "release-app")
+    )
+
+
+def test_release_workflow_rechecks_main_immediately_before_the_app_tag_api_write():
     workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
     document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
     create = document["jobs"]["create-release-tag"]
@@ -193,7 +316,7 @@ def test_release_workflow_rechecks_main_immediately_before_the_app_tag_push():
     tag = next(
         step
         for step in create["steps"]
-        if step["name"] == "Create and push only the annotated release tag"
+        if step["name"] == "Create and re-read only the admitted annotated release tag"
     )
 
     # The candidate check alone is not sufficient. main can advance before the
@@ -203,7 +326,7 @@ def test_release_workflow_rechecks_main_immediately_before_the_app_tag_push():
     assert 'current_main="$(git rev-parse refs/remotes/origin/main)"' in tag["run"]
     assert 'current_main" != "$GITHUB_SHA' in tag["run"]
     assert tag["run"].rindex('current_main" != "$GITHUB_SHA') < tag["run"].index(
-        'git push origin "refs/tags/$RELEASE_TAG"'
+        "/git/tags"
     )
 
 
@@ -219,10 +342,15 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
         for step in build["steps"]
         if step["name"] == "Require the release App tag and exact candidate state"
     )
-    assert guard["env"]["EXPECTED_ACTOR"] == "openadapt-release[bot]"
+    assert guard["env"]["EXPECTED_BOT_ID"] == "321543906"
+    assert guard["env"]["EXPECTED_DISPATCHER_ID"] == "774615"
     assert 'GITHUB_REF_TYPE" != "tag' in guard["run"]
-    assert 'GITHUB_ACTOR" != "$EXPECTED_ACTOR' in guard["run"]
-    assert 'GITHUB_REF_NAME" != "$expected_tag' in guard["run"]
+    assert 'GITHUB_ACTOR_ID" != "$EXPECTED_BOT_ID' in guard["run"]
+    assert 'GITHUB_ACTOR_ID" != "$EXPECTED_DISPATCHER_ID' in guard["run"]
+    assert 'GITHUB_REF_TYPE" != "tag' in guard["run"]
+    assert 'GITHUB_REF" != "refs/tags/$RELEASE_TAG' in guard["run"]
+    assert 'current_main" != "$GITHUB_SHA' not in guard["run"]
+    assert 'RELEASE_TAG" != "$expected_tag' in guard["run"]
     assert "git merge-base --is-ancestor HEAD refs/remotes/origin/main" in guard["run"]
 
     pypi = jobs["publish-pypi"]
@@ -270,7 +398,11 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     )
     assert identity["env"] == {
         "ACTUAL_APP_SLUG": "${{ steps.release-app.outputs.app-slug }}",
+        "ACTUAL_INSTALLATION_ID": "${{ steps.release-app.outputs.installation-id }}",
+        "CONFIGURED_APP_ID": "${{ vars.OPENADAPT_RELEASE_APP_ID }}",
         "EXPECTED_APP_SLUG": "openadapt-release",
+        "EXPECTED_APP_ID": "4730708",
+        "EXPECTED_INSTALLATION_ID": "156835568",
     }
     assert 'ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG' in identity["run"]
     publish = next(
@@ -280,31 +412,40 @@ def test_release_workflow_publishes_from_the_exact_app_tag_with_oidc():
     )
     assert publish_steps.index(identity) < publish_steps.index(publish)
     assert publish["env"]["GH_TOKEN"] == "${{ steps.release-app.outputs.token }}"
-    assert publish["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
-    assert publish["env"]["EXPECTED_AUTHOR"] == "openadapt-release[bot]"
-    assert '"$GH_CLI" release create' in publish["run"]
-    assert "--verify-tag" in publish["run"]
-    assert "--draft" in publish["run"]
-    assert "dist/*.whl dist/*.tar.gz" in publish["run"]
-    assert '"$GH_CLI" release edit "$RELEASE_TAG"' in publish["run"]
-    assert "--draft=false" in publish["run"]
-    assert "--latest" not in publish["run"]
-    assert (
-        '"$GH_CLI" release upload "$RELEASE_TAG" "dist/$missing_asset"'
-        in publish["run"]
+    assert publish["env"]["RELEASE_TAG"] == (
+        "v${{ needs.build-and-attest.outputs.version }}"
     )
-    assert "--allow-missing" in publish["run"]
-    assert "--missing-output /tmp/missing-release-assets.txt" in publish["run"]
+    assert publish["env"]["EXPECTED_AUTHOR"] == "openadapt-release[bot]"
+    assert publish["env"]["EXPECTED_AUTHOR_ID"] == "321543906"
+    assert "verify-publication-staging" in publish["run"]
+    assert "releases/$EXPECTED_DRAFT_RELEASE_ID" in publish["run"]
+    assert "releases/assets/$asset_id" in publish["run"]
+    assert "releases/tags/$RELEASE_TAG" in publish["run"]
+    assert "verify-tag-rulesets" in publish["run"]
+    assert '--release-id "$EXPECTED_DRAFT_RELEASE_ID"' in publish["run"]
+    assert "--asset-ids /tmp/release-asset-ids.json" in publish["run"]
+    assert '--target-commitish "$EXPECTED_SOURCE_COMMIT"' in publish["run"]
+    assert '{"draft":false,"make_latest":"%s"}' in publish["run"]
+    assert "/tmp/set-latest.json" not in publish["run"]
+    assert "latest_update_status" not in publish["run"]
+    assert publish["run"].index('make_latest="$(python') < publish["run"].index(
+        'if [ "$release_state" = "draft" ]'
+    )
+    assert "release create" not in publish["run"]
+    assert "release upload" not in publish["run"]
+    assert "release edit" not in publish["run"]
+    assert "--allow-missing" not in publish["run"]
+    assert "--missing-output" not in publish["run"]
     assert "--clobber" not in publish["run"]
     assert "scripts/verify_github_release.py" in publish["run"]
-    assert "--downloaded-dir /tmp/github-release-assets" in publish["run"]
-    assert 'release_status" = "404"' in publish["run"]
+    assert "--downloaded-dir /tmp/staged-github-release-assets" in publish["run"]
     assert 'release_status" != "200"' in publish["run"]
-    assert 'tag_commit" != "$GITHUB_SHA' in publish["run"]
+    assert 'tag_commit" != "$EXPECTED_SOURCE_COMMIT' in publish["run"]
     assert "immutable-releases" in publish["run"]
-    assert 'document.get("enabled") is not True' in publish["run"]
+    assert "verify-immutable-releases" in publish["run"]
     assert '"$GH_CLI" release verify "$RELEASE_TAG"' in publish["run"]
     assert '"$GH_CLI" release verify-asset "$RELEASE_TAG" "$artifact"' in publish["run"]
+    assert '--author-id "$EXPECTED_AUTHOR_ID"' in publish["run"]
     assert "semantic-release" not in publish["run"]
 
     cli = next(step for step in publish_steps if step.get("id") == "release-cli")
@@ -357,16 +498,20 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
         for step in github_steps
         if step["name"] == "Publish the GitHub Release and exact artifacts"
     )
-    assert pypi_download["with"]["name"] == transfer["with"]["name"]
-    assert github_download["with"]["name"] == transfer["with"]["name"]
+    expected_artifact = "${{ needs.build-and-attest.outputs.artifact-name }}"
+    assert pypi_download["with"]["name"] == expected_artifact
+    assert github_download["with"]["name"] == expected_artifact
+    assert transfer["with"]["name"] == "${{ steps.inventory.outputs.artifact-name }}"
     assert pypi_publish["with"] == {"skip-existing": True}
-    assert github_publish["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
+    assert github_publish["env"]["RELEASE_TAG"] == (
+        "v${{ needs.build-and-attest.outputs.version }}"
+    )
 
     pypi_checkout = next(
         step for step in pypi_steps if step["name"] == "Checkout the exact release tag"
     )
     assert pypi_checkout["with"] == {
-        "ref": "${{ github.ref }}",
+        "ref": "refs/tags/v${{ needs.build-and-attest.outputs.version }}",
         "persist-credentials": False,
     }
 
@@ -375,7 +520,11 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
         for step in github_steps
         if step["name"] == "Checkout the exact release tag"
     )
-    assert checkout["with"] == {"ref": "${{ github.ref }}", "fetch-depth": 0}
+    assert checkout["with"] == {
+        "ref": "refs/tags/v${{ needs.build-and-attest.outputs.version }}",
+        "fetch-depth": 0,
+        "persist-credentials": False,
+    }
 
     verification = jobs["verify-publication"]
     verification_text = "\n".join(
@@ -403,5 +552,6 @@ def test_release_failure_requires_failed_job_rerun_in_the_same_run():
     )
 
     assert "gh run rerun ${{ github.run_id }} --failed" in run
-    assert "Do not start a new full run" in run
-    assert "or create a recovery tag" in run
+    assert "use the reviewed recover operation" in run
+    assert "Never create a recovery tag" in run
+    assert "export TITLE" in run
