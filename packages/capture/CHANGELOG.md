@@ -2,7 +2,7 @@
 
 <!-- version list -->
 
-## v1.2.3 (2026-08-28)
+## v1.3.0 (2026-08-28)
 
 _This release is published under the MIT License._
 
@@ -11,7 +11,9 @@ _This release is published under the MIT License._
 - **capture**: Seal native action geometry at capture time
   ([#94](https://github.com/OpenAdaptAI/openadapt-capture/pull/94),
   [`08727ab`](https://github.com/OpenAdaptAI/openadapt-capture/commit/08727ab0e471d4a6de3c460099b1a8a97758cf6f))
-- Add authenticated recorder control channel
+- Add authenticated recorder control channel, which provides the documented
+  `capture status` and `capture stop` commands. Both were documented but
+  absent from the 1.2.2 wheel, and they ship here for the first time
   ([#79](https://github.com/OpenAdaptAI/openadapt-capture/pull/79),
   [`6109678`](https://github.com/OpenAdaptAI/openadapt-capture/commit/61096788a623a4a302a69a363215dad81fb9008b))
 - Bind each action to its exact retained screen frame
@@ -40,6 +42,9 @@ _This release is published under the MIT License._
   [`d00afdd`](https://github.com/OpenAdaptAI/openadapt-capture/commit/d00afdd1eb275d9a73c9baeafa8b492da5bfd67d))
 - **recorder**: Preserve the capture clock epoch
   ([`97d7ca4`](https://github.com/OpenAdaptAI/openadapt-capture/commit/97d7ca404a8f1ef06d71c80283225569c1856178))
+- **recorder**: Survive SQLite writer contention in the video writer
+  ([#116](https://github.com/OpenAdaptAI/openadapt-capture/pull/116),
+  [`1695be7`](https://github.com/OpenAdaptAI/openadapt-capture/commit/1695be789988c36370aba752685b8ccf61330120))
 - **release**: Let the changelog document the pending release candidate
   ([#110](https://github.com/OpenAdaptAI/openadapt-capture/pull/110),
   [`854f015`](https://github.com/OpenAdaptAI/openadapt-capture/commit/854f015fd994b0aa1992948791c18c2e6c571029))
@@ -63,6 +68,9 @@ _This release is published under the MIT License._
   [`0799088`](https://github.com/OpenAdaptAI/openadapt-capture/commit/07990886b1e206bcc807ba95f822ef859e9b7325))
 - Derive Capture product state from admissions
   ([`e20e65b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/e20e65be0e8affffc4646900d77c70ebf26da9f3))
+- Rewrite the README and move the deep contracts into docs/
+  ([#111](https://github.com/OpenAdaptAI/openadapt-capture/pull/111),
+  [`e5c1261`](https://github.com/OpenAdaptAI/openadapt-capture/commit/e5c1261dc23f6d8b40646f78ac9064489f99bf06))
 
 ### Testing
 
@@ -87,6 +95,12 @@ _This release is published under the MIT License._
 - Bound the apt install and prefer the canonical Ubuntu archive
   ([#81](https://github.com/OpenAdaptAI/openadapt-capture/pull/81),
   [`90557ef`](https://github.com/OpenAdaptAI/openadapt-capture/commit/90557efa9fe8e1e4a8091b81c9621f1ee929b25b))
+- Bound the trial step and drop the flaking Windows lane from the gate
+  ([#115](https://github.com/OpenAdaptAI/openadapt-capture/pull/115),
+  [`1c5e732`](https://github.com/OpenAdaptAI/openadapt-capture/commit/1c5e7322f15c482b3c83d9fa96807b257bc06162))
+- Qualify releases on hosted runners, schedule the live lanes
+  ([#114](https://github.com/OpenAdaptAI/openadapt-capture/pull/114),
+  [`ecdd9c0`](https://github.com/OpenAdaptAI/openadapt-capture/commit/ecdd9c026e21eaaf0babcbefa766a40010abc15d))
 - Require release App tag publication
   ([#92](https://github.com/OpenAdaptAI/openadapt-capture/pull/92),
   [`681683e`](https://github.com/OpenAdaptAI/openadapt-capture/commit/681683e73be13ce75ee3e8c720cd8ce7fbd7c76a))
@@ -120,14 +134,16 @@ _This release is published under the MIT License._
 - **release**: Enforce source policy on archives
   ([#63](https://github.com/OpenAdaptAI/openadapt-capture/pull/63),
   [`843e03e`](https://github.com/OpenAdaptAI/openadapt-capture/commit/843e03e72ad9f01fbe20cd886eca0210edf384ff))
+- **release**: Prepare 1.2.3
+  ([#113](https://github.com/OpenAdaptAI/openadapt-capture/pull/113),
+  [`0a15199`](https://github.com/OpenAdaptAI/openadapt-capture/commit/0a1519951de7ebb1719919b099c37509f44385cd))
 - Ignore every .env variant, not one at a time
   ([#93](https://github.com/OpenAdaptAI/openadapt-capture/pull/93),
   [`5ed28e6`](https://github.com/OpenAdaptAI/openadapt-capture/commit/5ed28e6c63e70cdedf32c760f0272841adb1063b))
 - Refuse invented capture input and geometry
   ([`a9d0877`](https://github.com/OpenAdaptAI/openadapt-capture/commit/a9d087728e6f789426a8fcc63ef6db2ae66e8216))
 
-**Detailed Changes**: [v1.2.2...v1.2.3](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.2.2...v1.2.3)
-
+**Detailed Changes**: [v1.2.2...v1.3.0](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.2.2...v1.3.0)
 
 ## v1.2.2 (2026-07-28)
 
