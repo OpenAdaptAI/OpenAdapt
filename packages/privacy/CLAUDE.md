@@ -85,7 +85,7 @@ scrubbed = scrub_dict(action, scrubber)
 | EMAIL_ADDRESS | john@example.com | <EMAIL_ADDRESS> |
 | PHONE_NUMBER | 555-123-4567 | <PHONE_NUMBER> |
 | US_SSN | 923-45-6789 | <US_SSN> |
-| CREDIT_CARD | 4532-1234-5678-9012 | <CREDIT_CARD> |
+| CREDIT_CARD | 4111111111111111 | <CREDIT_CARD> |
 | DATE_TIME | 01/15/1985 | <DATE_TIME> |
 | LOCATION | Toronto, ON | <LOCATION> |
 

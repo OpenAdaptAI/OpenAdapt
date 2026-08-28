@@ -50,6 +50,7 @@ def scrub_dict(
     scrubber: ScrubbingProvider,
     list_keys: list[str] | None = None,
     scrub_all: bool = False,
+    separated_keys: list[str] | None = None,
 ) -> dict[str, Any]:
     """Scrub PII/PHI from a nested dictionary.
 
@@ -61,6 +62,10 @@ def scrub_dict(
         list_keys: List of keys whose values should be scrubbed.
             Defaults to config.SCRUB_KEYS_HTML.
         scrub_all: If True, scrub all string values regardless of key.
+        separated_keys: Keys that may hold character-separated action text
+            (a key sequence joined by ACTION_TEXT_SEP). Defaults to
+            config.SCRUB_KEYS_SEPARATED. Pass an empty list to scrub every
+            value as prose.
 
     Returns:
         Scrubbed dictionary with PII/PHI removed.
@@ -75,13 +80,19 @@ def scrub_dict(
         >>> scrubbed = scrub_dict(event, scrubber)
     """
     helper = DictScrubber(scrubber)
-    return helper.scrub_dict(input_dict, list_keys=list_keys, scrub_all=scrub_all)
+    return helper.scrub_dict(
+        input_dict,
+        list_keys=list_keys,
+        scrub_all=scrub_all,
+        separated_keys=separated_keys,
+    )
 
 
 def scrub_list_dicts(
     input_list: list[dict[str, Any]],
     scrubber: ScrubbingProvider,
     list_keys: list[str] | None = None,
+    separated_keys: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Scrub PII/PHI from a list of dictionaries.
 
@@ -91,6 +102,7 @@ def scrub_list_dicts(
         input_list: List of dictionaries to be scrubbed.
         scrubber: The ScrubbingProvider to use for text scrubbing.
         list_keys: List of keys whose values should be scrubbed.
+        separated_keys: Keys that may hold character-separated action text.
 
     Returns:
         List of scrubbed dictionaries.
@@ -105,4 +117,8 @@ def scrub_list_dicts(
         >>> scrubbed = scrub_list_dicts(events, scrubber)
     """
     helper = DictScrubber(scrubber)
-    return helper.scrub_list_dicts(input_list, list_keys=list_keys)
+    return helper.scrub_list_dicts(
+        input_list,
+        list_keys=list_keys,
+        separated_keys=separated_keys,
+    )

@@ -38,15 +38,16 @@ Scrubbing is one control inside a reviewed egress process. It is not a
 guarantee that an artifact is free of protected data, and the evidence behind
 it is synthetic, not clinical.
 
-`tests/test_phi_recall.py` is the regression gate: 24 synthetic identifiers
+`tests/test_phi_recall.py` is the regression gate: 26 synthetic identifiers
 across names, contact details, financial identifiers, dates of birth,
 addresses, network identifiers, medical record numbers, member IDs, and
-provider licenses. It requires 24 out of 24, and it also checks that ordinary
-operational UI text comes back untouched.
+provider licenses. It requires 26 out of 26, it pins the entity type each one
+must produce, and it also checks that ordinary operational UI text comes back
+untouched.
 
 Detection is contextual, so the same value scrubs differently depending on what
-surrounds it. Every output below was produced by running 1.0.3 on 2026-08-28,
-not written by hand. Some of it will surprise you:
+surrounds it. Every output below was produced by running this code on
+2026-08-28, not written by hand. Some of it will surprise you:
 
 ```python
 >>> from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
@@ -59,14 +60,20 @@ not written by hand. Some of it will surprise you:
 '<ORGANIZATION>: <US_SSN>'
 
 >>> s.scrub_text("Card 4111111111111111 on file")
-'<DATE_TIME> on file'
+'Card <CREDIT_CARD> on file'
+
+>>> s.scrub_text("Card: 4532-1234-5678-9012")
+'Card: <DATE_TIME>'
 ```
 
-The last one is the important one. A card number gets redacted, but as
-`DATE_TIME`, not as `CREDIT_CARD`, and the label "Card" goes with it. The
-redaction holds; the entity type you get back is not the one you would predict.
-Do not build a policy that keys off the placeholder name without measuring it
-against your own data first.
+The last two are the interesting pair. Both card numbers get redacted, but only
+the first is labelled `CREDIT_CARD`, because only the first passes a Luhn
+check. An identifier that no recognizer can validate falls to whatever the
+spaCy model makes of it, which for a run of digits is usually `DATE_TIME`.
+
+So: the redaction holds either way, and a validated identifier now carries its
+own type. An unvalidated one does not. Measure the placeholder names against
+your own data before you route on them.
 
 For production egress: scrub a copy, verify every output file, and bind the
 human or policy approval to the verified artifact. A model that ran without
@@ -115,10 +122,23 @@ Only the keys in `PrivacyConfig.SCRUB_KEYS_HTML` are scrubbed, and non-string
 values pass through, which is why the coordinates survive. Pass `scrub_all=True`
 to scrub every string regardless of key.
 
-One caveat in 1.0.3: the `text` key is treated as character-separated action
-text, joined by `ACTION_TEXT_SEP` (`-`). Scrubbing a plain sentence under that
-key returns it hyphenated, one character at a time. Use `value` or `title` for
-ordinary prose until that's fixed.
+The keys in `PrivacyConfig.SCRUB_KEYS_SEPARATED` (`text` and `canonical_text`)
+can also hold recorded keystrokes: one typed character per `ACTION_TEXT_SEP`,
+as in `j-o-h-n-@-e-x-a-m-p-l-e-.-c-o-m`. Those are reassembled before analysis,
+scrubbed, and separated again, because the PII is invisible in the split form.
+Whether that happens is decided by the value, not the key, so prose under
+`text` is scrubbed as prose:
+
+```python
+scrub_dict({"text": "Email: john@example.com"}, scrubber)
+# {'text': '<PERSON>: <EMAIL_ADDRESS>'}
+
+scrub_dict({"text": "-".join("john@example.com")}, scrubber)
+# {'text': '<-E-M-A-I-L-_-A-D-D-R-E-S-S->'}
+```
+
+Pass `separated_keys=[]` to turn keystroke handling off for a call, or
+`separated_keys=["keys"]` to move it to your own field name.
 
 ## Scrubbing screenshots
 
@@ -183,9 +203,9 @@ PrivacyConfig(
 ```
 
 The full field list is `SCRUB_CHAR`, `SCRUB_LANGUAGE`, `SCRUB_FILL_COLOR`,
-`SCRUB_KEYS_HTML`, `ACTION_TEXT_NAME_PREFIX`, `ACTION_TEXT_NAME_SUFFIX`,
-`ACTION_TEXT_SEP`, `SCRUB_CONFIG_TRF`, `SCRUB_PRESIDIO_IGNORE_ENTITIES`, and
-`SPACY_MODEL_NAME`.
+`SCRUB_KEYS_HTML`, `SCRUB_KEYS_SEPARATED`, `ACTION_TEXT_NAME_PREFIX`,
+`ACTION_TEXT_NAME_SUFFIX`, `ACTION_TEXT_SEP`, `SCRUB_CONFIG_TRF`,
+`SCRUB_PRESIDIO_IGNORE_ENTITIES`, and `SPACY_MODEL_NAME`.
 
 The analyzer's supported entity set comes from Presidio: `CREDIT_CARD`,
 `CRYPTO`, `DATE_TIME`, `EMAIL_ADDRESS`, `IBAN_CODE`, `IP_ADDRESS`, `LOCATION`,

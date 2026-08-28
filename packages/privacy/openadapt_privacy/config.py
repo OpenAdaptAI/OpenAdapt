@@ -67,6 +67,10 @@ class PrivacyConfig:
         SCRUB_LANGUAGE: Language code for NLP analysis (default: "en").
         SCRUB_FILL_COLOR: BGR color value for image redaction (default: blue 0x0000FF).
         SCRUB_KEYS_HTML: List of dict keys that should be scrubbed.
+        SCRUB_KEYS_SEPARATED: Dict keys whose values may hold character-separated
+            action text rather than prose. A value under one of these keys is
+            reassembled before analysis only when it is actually in separated
+            form; prose under the same key is scrubbed as prose.
         ACTION_TEXT_NAME_PREFIX: Prefix for action text names (e.g., "<").
         ACTION_TEXT_NAME_SUFFIX: Suffix for action text names (e.g., ">").
         ACTION_TEXT_SEP: Separator for action text sequences (e.g., "-").
@@ -100,6 +104,16 @@ class PrivacyConfig:
             "children",
             "value",
             "tooltip",
+        ]
+    )
+
+    # Keys whose values may hold a key sequence joined by ACTION_TEXT_SEP.
+    # Membership here only permits separated handling; the value's own shape
+    # decides whether it is applied.
+    SCRUB_KEYS_SEPARATED: list[str] = field(
+        default_factory=lambda: [
+            "text",
+            "canonical_text",
         ]
     )
 

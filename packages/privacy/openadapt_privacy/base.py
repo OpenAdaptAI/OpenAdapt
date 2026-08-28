@@ -191,6 +191,7 @@ class TextScrubbingMixin:
         list_keys: list[str] | None = None,
         scrub_all: bool = False,
         force_scrub_children: bool = False,
+        separated_keys: list[str] | None = None,
     ) -> dict[str, Any]:
         """Scrub PII/PHI from a nested dictionary.
 
@@ -204,18 +205,29 @@ class TextScrubbingMixin:
             scrub_all: If True, scrub all string values regardless of key.
             force_scrub_children: If True, use aggressive scrubbing for
                 child values after PII is detected in parent.
+            separated_keys: Keys that may hold character-separated action text.
+                Defaults to config.SCRUB_KEYS_SEPARATED. Pass an empty list to
+                scrub every value as prose.
 
         Returns:
             Scrubbed dictionary with PII/PHI removed.
         """
+        policy = effective_config()
         if list_keys is None:
-            list_keys = effective_config().SCRUB_KEYS_HTML
+            list_keys = policy.SCRUB_KEYS_HTML
+        if separated_keys is None:
+            separated_keys = policy.SCRUB_KEYS_SEPARATED
 
         scrubbed_dict: dict[str, Any] = {}
         for key, value in input_dict.items():
             if self._should_scrub_text(key, value, list_keys, scrub_all):
-                scrubbed_text = self._scrub_text_item(value, key, force_scrub_children)
-                if key in ("text", "canonical_text") and self._is_scrubbed(value, scrubbed_text):
+                scrubbed_text = self._scrub_text_item(
+                    value,
+                    key,
+                    force_scrub_children,
+                    separated_keys=separated_keys,
+                )
+                if key in separated_keys and self._is_scrubbed(value, scrubbed_text):
                     force_scrub_children = True
                 scrubbed_dict[key] = scrubbed_text
             elif isinstance(value, list):
@@ -228,6 +240,7 @@ class TextScrubbingMixin:
                             list_keys,
                             scrub_all=list_scrub_all,
                             force_scrub_children=force_scrub_children,
+                            separated_keys=separated_keys,
                         )
                         if self._should_scrub_list_item(
                             item,
@@ -246,6 +259,7 @@ class TextScrubbingMixin:
                     value,
                     list_keys,
                     scrub_all=scrub_all or (isinstance(key, str) and key == "state"),
+                    separated_keys=separated_keys,
                 )
             else:
                 scrubbed_dict[key] = value
@@ -256,17 +270,22 @@ class TextScrubbingMixin:
         self,
         input_list: list[dict[str, Any]],
         list_keys: list[str] | None = None,
+        separated_keys: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Scrub PII/PHI from a list of dictionaries.
 
         Args:
             input_list: List of dictionaries to be scrubbed.
             list_keys: List of keys whose values should be scrubbed.
+            separated_keys: Keys that may hold character-separated action text.
 
         Returns:
             List of scrubbed dictionaries.
         """
-        return [self.scrub_dict(input_dict, list_keys) for input_dict in input_list]
+        return [
+            self.scrub_dict(input_dict, list_keys, separated_keys=separated_keys)
+            for input_dict in input_list
+        ]
 
     def _should_scrub_text(
         self,
@@ -305,6 +324,7 @@ class TextScrubbingMixin:
         value: str,
         key: str,
         force_scrub_children: bool = False,
+        separated_keys: list[str] | None = None,
     ) -> str:
         """Scrub a single text value.
 
@@ -312,11 +332,16 @@ class TextScrubbingMixin:
             value: Text value to scrub.
             key: Dictionary key associated with the value.
             force_scrub_children: If True, use aggressive scrubbing.
+            separated_keys: Keys that may hold character-separated action text.
 
         Returns:
             Scrubbed text.
         """
-        if key in ("text", "canonical_text"):
+        if separated_keys is None:
+            separated_keys = effective_config().SCRUB_KEYS_SEPARATED
+        if key in separated_keys:
+            # A permission, not an instruction: the provider applies separated
+            # handling only to a value that is genuinely a key sequence.
             return self.scrub_text(value, is_separated=True)
         if force_scrub_children:
             return self.scrub_text_all(value)
@@ -351,6 +376,7 @@ class TextScrubbingMixin:
         list_keys: list[str],
         force_scrub_children: bool = False,
         scrub_all: bool = False,
+        separated_keys: list[str] | None = None,
     ) -> Any:
         """Scrub a single list item.
 
@@ -360,6 +386,7 @@ class TextScrubbingMixin:
             list_keys: List of keys that should be scrubbed.
             force_scrub_children: If True, use aggressive scrubbing.
             scrub_all: If True, scrub every string at every list depth.
+            separated_keys: Keys that may hold character-separated action text.
 
         Returns:
             Scrubbed item.
@@ -370,6 +397,7 @@ class TextScrubbingMixin:
                 list_keys,
                 scrub_all=scrub_all,
                 force_scrub_children=force_scrub_children,
+                separated_keys=separated_keys,
             )
         if isinstance(item, list):
             return [
@@ -380,6 +408,7 @@ class TextScrubbingMixin:
                         list_keys,
                         scrub_all=scrub_all,
                         force_scrub_children=force_scrub_children,
+                        separated_keys=separated_keys,
                     )
                     if self._should_scrub_list_item(
                         nested_item,
@@ -391,7 +420,7 @@ class TextScrubbingMixin:
                 )
                 for nested_item in item
             ]
-        return self._scrub_text_item(item, key)
+        return self._scrub_text_item(item, key, separated_keys=separated_keys)
 
 
 class ScrubbingProviderFactory:
