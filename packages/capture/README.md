@@ -48,8 +48,8 @@ capture info ./my-capture
 
 `capture status`, `capture stop`, `capture install-ffmpeg`, and the
 `status_recording` / `stop_recording` Python contract below are on `main` and
-ship in 1.2.3. They are not in the
-published 1.2.2 wheel, so install from source until 1.2.3 reaches PyPI:
+ship in 1.3.0. They are not in the published 1.2.2 wheel, so install from
+source until 1.3.0 reaches PyPI:
 
 ```bash
 pip install "openadapt-capture @ git+https://github.com/OpenAdaptAI/openadapt-capture"
