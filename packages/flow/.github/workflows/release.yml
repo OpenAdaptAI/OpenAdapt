@@ -142,6 +142,12 @@ jobs:
             --wait-seconds 2700 \
             --poll-seconds 10
 
+      # The validator needs only PyYAML + stdlib (no package install, no
+      # browser), matching the gate in validate-claims.yml. Installing the
+      # whole package here would let a heavy dependency break the release.
+      - name: Install PyYAML
+        run: pip install "pyyaml>=6"
+
       - name: Verify the claims registry
         run: python scripts/validate_claims.py --check --structure-only
 
@@ -281,6 +287,12 @@ jobs:
           python scripts/check_release_ci.py \
             --repository "${GITHUB_REPOSITORY}" \
             --sha "${GITHUB_SHA}"
+
+      # The validator needs only PyYAML + stdlib (no package install, no
+      # browser), matching the gate in validate-claims.yml. Installing the
+      # whole package here would let a heavy dependency break the release.
+      - name: Install PyYAML
+        run: pip install "pyyaml>=6"
 
       - name: Verify the claims registry
         run: python scripts/validate_claims.py --check --structure-only
