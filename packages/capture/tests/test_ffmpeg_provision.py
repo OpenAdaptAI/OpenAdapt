@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import pathlib
 import re
 import zipfile
@@ -188,11 +189,19 @@ def test_install_writes_verified_files_and_a_receipt(synthetic) -> None:
 
     ffmpeg = Path(installed.ffmpeg)
     assert ffmpeg.read_bytes() == members["bin/ffmpeg"]
-    assert ffmpeg.stat().st_mode & 0o100, "ffmpeg is not executable"
-    assert Path(installed.ffprobe).stat().st_mode & 0o100
     licence = Path(installed.license_path)
     assert licence.read_bytes() == members["LICENSES/FFmpeg-LGPL-2.1-or-later.txt"]
-    assert not licence.stat().st_mode & 0o111, "the licence text must not be executable"
+
+    if os.name == "posix":
+        assert ffmpeg.stat().st_mode & 0o100, "ffmpeg is not executable"
+        assert Path(installed.ffprobe).stat().st_mode & 0o100
+        assert not licence.stat().st_mode & 0o111, "the licence text must not be executable"
+    else:
+        # Windows has no execute bit: st_mode carries 0o666 or 0o444 and chmod
+        # only toggles read-only. Runnability is proven instead by the
+        # install-and-encode lane in .github/workflows/ffmpeg-pin.yml.
+        assert os.access(ffmpeg, os.R_OK)
+        assert os.access(Path(installed.ffprobe), os.R_OK)
 
     # Only pinned members are installed. Unpinned provenance is left behind.
     assert not (ffmpeg.parent.parent / "PROVENANCE").exists()
