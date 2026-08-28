@@ -24,6 +24,7 @@ from PIL import Image
 
 from openadapt_capture import control
 from openadapt_capture import recorder as recorder_module
+from openadapt_capture.capture import CaptureSession
 from openadapt_capture.config import RecordingConfig, config_override
 from openadapt_capture.control import (
     CaptureControlError,
@@ -33,7 +34,12 @@ from openadapt_capture.control import (
     status_recording,
     stop_recording,
 )
-from openadapt_capture.db import create_db, crud
+from openadapt_capture.db import (
+    SQLITE_CAPTURE_JOURNAL_MODE,
+    create_db,
+    crud,
+    finalize_capture_database,
+)
 from openadapt_capture.terminal import verify_capture_artifacts
 
 
@@ -65,9 +71,12 @@ def _create_minimal_recording(
     capture_dir: Path,
     *,
     browser_messages: list[object] | None = None,
+    journal_mode: str | None = None,
 ) -> None:
     capture_dir.mkdir(parents=True, exist_ok=True)
-    engine, session_factory = create_db(str(capture_dir / "recording.db"))
+    engine, session_factory = create_db(
+        str(capture_dir / "recording.db"), journal_mode=journal_mode
+    )
     session = session_factory()
     try:
         recording = crud.insert_recording(
@@ -920,3 +929,68 @@ def test_browser_events_increment_the_persisted_count() -> None:
 
     assert counters[3].value == 1
     assert queues[3].qsize() == 1
+
+
+def test_a_write_logged_capture_verifies_and_seals(tmp_path: Path) -> None:
+    """A capture recorded with a write log must still seal and revalidate.
+
+    A live capture keeps a write-ahead log, which removes the writer-lock
+    contention that killed recorder children. That log lives in sidecar files
+    beside the database, and ``build_artifact_manifest`` inventories every
+    regular file under the capture directory. A capture that sealed while its
+    sidecars existed would fail its own validation later, because the
+    shared-memory file is created and removed by whoever opens the database
+    next. ``finalize_capture_database`` folds the log back in first.
+
+    The live recorder lanes cover this on a real desktop. This covers it
+    without a display, listeners, or injected input.
+    """
+    capture_dir = tmp_path / "capture"
+    _create_minimal_recording(capture_dir, journal_mode=SQLITE_CAPTURE_JOURNAL_MODE)
+    db_path = capture_dir / "recording.db"
+
+    output = io.BytesIO()
+    Image.new("RGB", (2, 2), "black").save(output, format="PNG")
+    png = output.getvalue()
+    engine, session_factory = create_db(str(db_path))
+    session = session_factory()
+    try:
+        recording = session.query(crud.Recording).one()
+        crud.insert_screenshot(
+            session,
+            recording,
+            recording.timestamp + 1,
+            {
+                "source_ordinal": 1,
+                "png_data": png,
+                "png_sha256": hashlib.sha256(png).hexdigest(),
+            },
+        )
+        assert (db_path.parent / f"{db_path.name}-wal").exists(), (
+            "the capture kept no write log to fold back"
+        )
+    finally:
+        session.close()
+        engine.dispose()
+
+    finalize_capture_database(str(db_path))
+    assert not (db_path.parent / f"{db_path.name}-wal").exists()
+    assert not (db_path.parent / f"{db_path.name}-shm").exists()
+
+    recorder = recorder_module.Recorder(
+        str(capture_dir),
+        capture_video=False,
+        capture_images=True,
+    )
+    recorder._num_screen_events.value = 1
+    recorder._last_source_ordinal = 1
+    recorder._verify_completed_capture()
+    recorder._stage_completed_control_state()
+    recorder._seal_completed_capture()
+
+    # _seal_completed_capture validates the seal it just wrote, so reaching
+    # here already proves the sealed inventory matches the directory. Re-read
+    # it the way a later consumer does, and prove no sidecar came back.
+    CaptureSession.validate_sealed(str(capture_dir))
+    assert not (db_path.parent / f"{db_path.name}-wal").exists()
+    assert not (db_path.parent / f"{db_path.name}-shm").exists()

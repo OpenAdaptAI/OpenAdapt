@@ -51,6 +51,12 @@ _This release is published under the MIT License._
 - **recorder**: Survive SQLite writer contention in the video writer
   ([#116](https://github.com/OpenAdaptAI/openadapt-capture/pull/116),
   [`1695be7`](https://github.com/OpenAdaptAI/openadapt-capture/commit/1695be789988c36370aba752685b8ccf61330120))
+- **db**: Bound the SQLite write-lock wait by time rather than by a count of
+  attempts, and give a live capture a write-ahead log so the lock is free far
+  more often. A recorder writer used to starve for about twenty-two seconds and
+  then exhaust its three retries, which killed the writer process or cost it
+  the startup readiness deadline
+  ([#122](https://github.com/OpenAdaptAI/openadapt-capture/pull/122))
 - **release**: Let the changelog document the pending release candidate
   ([#110](https://github.com/OpenAdaptAI/openadapt-capture/pull/110),
   [`854f015`](https://github.com/OpenAdaptAI/openadapt-capture/commit/854f015fd994b0aa1992948791c18c2e6c571029))

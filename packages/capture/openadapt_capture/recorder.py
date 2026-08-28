@@ -46,7 +46,14 @@ from tqdm import tqdm
 
 from openadapt_capture import platform, utils, video, window
 from openadapt_capture.config import config
-from openadapt_capture.db import create_db, crud, get_session_for_path
+from openadapt_capture.db import (
+    SQLITE_CAPTURE_JOURNAL_MODE,
+    close_capture_session,
+    create_db,
+    crud,
+    finalize_capture_database,
+    get_session_for_path,
+)
 from openadapt_capture.db.models import ActionEvent, Recording
 from openadapt_capture.desktop_capture import DesktopCaptureScope
 from openadapt_capture.extensions import synchronized_queue as sq
@@ -523,6 +530,19 @@ PROC_WRITE_BY_EVENT_TYPE = {
 NUM_MEMORY_STATS_TO_LOG = 3
 STARTUP_WAIT_POLL_SECONDS = 0.1
 STARTUP_READY_TIMEOUT_SECONDS = 30.0
+
+# A writer announces readiness only after its first database write returns, so
+# the database's wait for the write lock is spent inside the deadline above.
+# Check the two against each other here rather than trusting a comment beside
+# either one: whichever a later change moves, the package refuses to import
+# with a budget that cannot fit.
+if crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS >= STARTUP_READY_TIMEOUT_SECONDS:
+    raise RuntimeError(
+        "The SQLite write-lock budget "
+        f"({crud.SQLITE_WRITE_LOCK_BUDGET_SECONDS:.1f}s) must leave a writer "
+        "time to announce readiness within "
+        f"{STARTUP_READY_TIMEOUT_SECONDS:.1f}s."
+    )
 PRE_READY_TASK_JOIN_TIMEOUT_SECONDS = 2.0
 PROCESS_REAP_TIMEOUT_SECONDS = 2.0
 QUEUE_FEEDER_JOIN_TIMEOUT_SECONDS = 5.0
@@ -2181,7 +2201,8 @@ def create_recording(
         capture_config["capture_desktop"] = desktop_capture_info
     if capture_config:
         recording_data["config"] = capture_config
-    engine, Session = create_db(db_path)
+    # Several writer processes share this file: give it a write log.
+    engine, Session = create_db(db_path, journal_mode=SQLITE_CAPTURE_JOURNAL_MODE)
     session = Session()
     recording = crud.insert_recording(session, recording_data)
     logger.info(f"{recording=}")
@@ -3134,16 +3155,23 @@ def record(
             from openadapt_capture import plotting
 
             session = get_session_for_path(db_path)
-            plotting.plot_performance(
-                session,
-                recording,
-                save_dir=capture_dir,
-            )
+            try:
+                plotting.plot_performance(
+                    session,
+                    recording,
+                    save_dir=capture_dir,
+                )
+            finally:
+                close_capture_session(session)
 
         logger.info(f"Saved {recording_timestamp=}")
 
         session = get_session_for_path(db_path)
-        crud.post_process_events(session, recording)
+        try:
+            crud.post_process_events(session, recording)
+        finally:
+            # Release the file before the capture is finalized and sealed.
+            close_capture_session(session)
 
         # --- Profiling summary ---
         _profile_duration = time.perf_counter() - _profile_start
@@ -3712,6 +3740,11 @@ class Recorder:
                 self._last_source_ordinal = last_source_ordinal
             self.check_health()
             if self._ready_event.is_set():
+                # Every writer has exited by here, so fold the write log back
+                # into the database before anything reads or inventories it.
+                finalize_capture_database(
+                    os.path.join(self.capture_dir, "recording.db")
+                )
                 self._verify_completed_capture()
                 finalized_at = self._stage_completed_control_state()
                 self._seal_completed_capture()

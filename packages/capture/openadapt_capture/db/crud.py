@@ -30,11 +30,39 @@ T = TypeVar("T")
 
 BATCH_SIZE = 1
 
-# A SQLite connection already waits up to five seconds for a writer lock. Two
-# more bounded attempts cover a short competing transaction without hiding a
-# lock that persists. The worst-case database wait remains below the recorder's
-# 30-second shutdown contract.
-SQLITE_LOCK_RETRY_DELAYS_SECONDS = (0.05, 0.2)
+# The whole share of a startup-readiness deadline that ONE write transaction
+# may spend waiting for the single SQLite write lock.
+#
+# Express the wait as time, never as a number of attempts. An attempt count
+# gives no bound at all, because the cost of an attempt is whatever SQLite's
+# busy handler decides: measured on a hosted Windows runner, one attempt with
+# a five-second busy timeout took about seven seconds, so three attempts spent
+# about twenty-two seconds and then gave up. Twenty-two seconds is both too
+# long to fit a thirty-second readiness deadline and, at three samples of a
+# busy lock, far too few chances to win the race.
+#
+# The same budget spent on short attempts samples the lock some tens of times
+# instead of three. recorder.py checks this budget against its own readiness
+# deadline when it is imported.
+SQLITE_WRITE_LOCK_BUDGET_SECONDS = 20.0
+
+# The most one attempt is allowed to cost.
+#
+# Every statement of the transaction may wait the connection's busy timeout,
+# and SQLite's busy handler overshoots that timeout under contention. The
+# helper below refuses to BEGIN an attempt unless this much of the budget
+# remains, which is what makes the budget an upper bound on the total wait
+# rather than an estimate of it.
+#
+# tests/test_db_lock_retry.py measures a real attempt against a real held lock
+# and fails if it costs more than this.
+SQLITE_LOCK_ATTEMPT_CEILING_SECONDS = 2.0
+
+# Back off between attempts so the writers do not resample the lock in step,
+# and so a writer that has just lost gives the winner room to commit. The delay
+# grows to a cap; the budget, not the delay, decides when to stop.
+SQLITE_LOCK_FIRST_RETRY_SECONDS = 0.05
+SQLITE_LOCK_MAX_RETRY_SECONDS = 0.5
 _SQLITE_LOCK_PRIMARY_CODES = {
     getattr(sqlite3, "SQLITE_BUSY", 5),
     getattr(sqlite3, "SQLITE_LOCKED", 6),
@@ -84,10 +112,19 @@ def _write_with_lock_retry(
     Every recorder writer process writes the one per-capture database file, so
     each of them competes for the single SQLite write lock. A connection whose
     bounded wait expires reports "database is locked", which is contention, not
-    corruption. Each log line carries how long that attempt waited, because the
-    wait is the only measure of how close a capture is to losing this race.
+    corruption.
+
+    The retry runs against a clock, not a counter. It re-enters the race for as
+    long as ``SQLITE_WRITE_LOCK_BUDGET_SECONDS`` allows, and it stops as soon
+    as too little of that budget remains to finish another attempt. The total
+    wait is therefore never more than the budget, whatever one attempt costs on
+    the machine underneath.
     """
-    for attempt in range(len(SQLITE_LOCK_RETRY_DELAYS_SECONDS) + 1):
+    deadline = monotonic() + SQLITE_WRITE_LOCK_BUDGET_SECONDS
+    backoff = SQLITE_LOCK_FIRST_RETRY_SECONDS
+    attempt = 0
+    while True:
+        attempt += 1
         started_at = monotonic()
         try:
             result = write()
@@ -101,24 +138,27 @@ def _write_with_lock_retry(
             # A failed execute or commit can leave the Session transaction
             # unusable. Roll it back before either retrying or failing loud.
             session.rollback()
-            if attempt == len(SQLITE_LOCK_RETRY_DELAYS_SECONDS):
+
+            # Begin another attempt only if the budget can pay for one. This
+            # test, not the count of attempts, is what bounds the total wait.
+            remaining = deadline - monotonic()
+            if remaining <= SQLITE_LOCK_ATTEMPT_CEILING_SECONDS:
                 logger.error(
-                    f"SQLite writer lock during {statement_label} did not clear: "
-                    f"attempt {attempt + 1} waited {waited:.2f}s and every retry "
-                    "is spent"
+                    f"SQLite writer lock during {statement_label} did not clear "
+                    f"within {SQLITE_WRITE_LOCK_BUDGET_SECONDS:.1f}s: attempt "
+                    f"{attempt} waited {waited:.2f}s and the budget is spent"
                 )
                 raise
 
-            delay = SQLITE_LOCK_RETRY_DELAYS_SECONDS[attempt]
+            # Never sleep away the room the next attempt needs.
+            delay = min(backoff, remaining - SQLITE_LOCK_ATTEMPT_CEILING_SECONDS)
             logger.warning(
                 f"SQLite writer lock during {statement_label} after waiting "
-                f"{waited:.2f}s; retrying in "
-                f"{delay:.2f}s ({attempt + 1}/"
-                f"{len(SQLITE_LOCK_RETRY_DELAYS_SECONDS)})"
+                f"{waited:.2f}s; retrying in {delay:.2f}s "
+                f"(attempt {attempt}, {remaining:.1f}s of budget left)"
             )
             sleep(delay)
-
-    raise AssertionError("unreachable SQLite write retry state")
+            backoff = min(backoff * 2, SQLITE_LOCK_MAX_RETRY_SECONDS)
 
 
 def _execute_insert_with_lock_retry(
