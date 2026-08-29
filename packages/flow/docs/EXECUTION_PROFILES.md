@@ -6,7 +6,7 @@ identity, effect, authorization, durability, and evidence machinery:
 | Profile | Contract | Successful report |
 | --- | --- | --- |
 | `demo` | Permits uncertified tutorials and screen evidence. Integrity checks and runtime refusals still apply. | `COMPLETED_UNVERIFIED`; never production-eligible |
-| `standard` | Requires certification, a sealed manifest, durable and settled-state execution, identity coverage for consequential actions, and effect evidence at the configured minimum tier for every consequential effect. Application-level encryption is optional when the qualified deployment supplies an encrypted storage boundary; an encrypted bundle always produces encrypted checkpoints. | `VERIFIED` only when the complete runtime contract passes |
+| `standard` | Requires certification, a sealed manifest, durable and settled-state execution, identity coverage for consequential actions, and an independent system-of-record read for every consequential effect. Application-level encryption is optional when the qualified deployment supplies an encrypted storage boundary; an encrypted bundle always produces encrypted checkpoints. | `VERIFIED` only when an independent system-of-record read confirms every consequential effect; pixel-only Citrix cannot be `VERIFIED` |
 | `regulated` | Standard plus encrypted bundle contents, strictly sealed evidence assets, and encrypted durable checkpoints in the customer-controlled environment. Model egress remains off unless explicitly authorized and PHI allowlisted. | `VERIFIED` only when the complete runtime contract passes |
 
 Select the profile in deployment configuration:
@@ -34,9 +34,13 @@ properties are mandatory for this execution.
 Low-level flags can strengthen a profile. They cannot weaken a selected
 Standard or Regulated contract. In particular:
 
-- Standard and Regulated require effect evidence at the configured minimum
-  tier; an operator approval cannot turn an immediate-screen-only or
-  unverified write into `VERIFIED`.
+- Standard and Regulated require an independent system-of-record read
+  (REST, FHIR, SQL, file, or a separately authenticated session) before
+  `VERIFIED`. An operator approval, a green banner, or an on-screen
+  different-path read-back cannot turn a pixel-only Citrix write into
+  `VERIFIED`; the production transaction is halt or
+  `RECONCILIATION_REQUIRED`. The Standard gate can still admit
+  persisted-state read-back so the run executes with halt-on-doubt.
 - Regulated refuses `--allow-unencrypted` and requires
   `OPENADAPT_BUNDLE_KEY`; the same key seals its durable checkpoints. Standard
   accepts a qualified external encrypted-storage boundary, but if its bundle is
@@ -147,7 +151,11 @@ Mapping from the coarse outcome: `VERIFIED` and `ROLLED_BACK` map through
 refusal or identity refusal), `HALTED_BEFORE_EFFECT` (verifier-established
 absence), or `RECONCILIATION_REQUIRED` (any uncertain/conflicting delivery or
 persistence, which always dominates); a coarse `FAILED` maps to `CANCELED` (when
-the run was canceled) or `FAILED_PLATFORM`.
+the run was canceled) or `FAILED_PLATFORM`. A coarse `COMPLETED_UNVERIFIED` on
+Demo stays `COMPLETED_UNVERIFIED`. On Standard or Regulated, a completed
+consequential write without an independent system-of-record confirmation
+maps to `RECONCILIATION_REQUIRED` instead: a pixel-only Citrix run cannot
+be `VERIFIED`.
 
 **Absence requires positive evidence.** `HALTED_BEFORE_EFFECT`,
 `REJECTED_POLICY`, `CANCELED`, and `FAILED_PLATFORM` all assert that no business

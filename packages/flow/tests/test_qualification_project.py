@@ -144,6 +144,7 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_anchor_contract_sha256,
     visual_resolution_evaluator_contract_sha256,
 )
+from openadapt_flow.verification import VERIFIED_EFFECT_TIER
 
 _RUNNER_PRIVATE_KEY = Ed25519PrivateKey.generate()
 _RUNNER_PRIVATE_BYTES = _RUNNER_PRIVATE_KEY.private_bytes(
@@ -692,7 +693,16 @@ def _record_passing_campaign(workflow: Workflow, evidence_root: Path) -> None:
                                 EffectVerificationEvidence(
                                     effect_contract_hash=effect.contract_hash(),
                                     substrate="fixture-system-of-record",
-                                    verification_tier=int(effect_tiers[index]),
+                                    # A VERIFIED campaign cannot record weaker
+                                    # than independent SoR evidence.
+                                    verification_tier=int(
+                                        VerificationTier(
+                                            min(
+                                                int(effect_tiers[index]),
+                                                int(VERIFIED_EFFECT_TIER),
+                                            )
+                                        )
+                                    ),
                                     initial_verdict="confirmed",
                                     final_verdict="confirmed",
                                     observed_effect="present",

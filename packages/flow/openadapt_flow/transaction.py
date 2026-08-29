@@ -318,9 +318,12 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     Reads only ``report.execution_outcome`` (already stamped) plus typed step
     evidence.  Precedence is deliberate: a settled success/rollback first, then
     any unresolved uncertainty (never claim "no effect", never blind-retry),
-    then a completed-but-unverified Demo, then -- only once every
-    consequential step is POSITIVELY proven effect-free -- the reason the run
-    stopped (policy rejection, cancellation, governed halt, platform fault).
+    then a completed-but-unverified Demo, then a Standard/Regulated completion
+    whose consequential writes lack independent system-of-record confirmation
+    (``RECONCILIATION_REQUIRED`` -- pixel-only Citrix cannot be ``VERIFIED``),
+    then -- only once every consequential step is POSITIVELY proven
+    effect-free -- the reason the run stopped (policy rejection, cancellation,
+    governed halt, platform fault).
     """
 
     if report.managed_result_loss is not None:
@@ -349,6 +352,16 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
         )
 
     if coarse == "COMPLETED_UNVERIFIED":
+        # Demo completions stay never-billable. A production profile that
+        # finished a consequential write without an independent
+        # system-of-record confirmation cannot claim a clean bill of
+        # health: the screen may have painted success while the record is
+        # wrong or missing. Fail toward reconciliation.
+        if report.execution_profile in {
+            "standard",
+            "regulated",
+        } and _lacks_effect_absence_proof(report):
+            return TransactionOutcome.RECONCILIATION_REQUIRED
         return TransactionOutcome.COMPLETED_UNVERIFIED
 
     # Every remaining outcome ASSERTS that no business effect occurred, and a

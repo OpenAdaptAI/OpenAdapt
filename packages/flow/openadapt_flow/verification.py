@@ -58,6 +58,25 @@ class VerificationTier(IntEnum):
     def satisfies(self, minimum: "VerificationTier") -> bool:
         return int(self) <= int(minimum)
 
+    def is_independent_system_of_record(self) -> bool:
+        """True when the read does not share the actuation pixel surface.
+
+        Tiers 1 and 2 are REST/FHIR/SQL/file/session reads. Tiers 3 and 4
+        are on-screen read-back (different-path or same-surface). A
+        pixel-only Citrix run with no system-of-record read cannot be
+        ``VERIFIED``.
+        """
+
+        return int(self) <= int(VerificationTier.INDEPENDENT_SESSION)
+
+
+#: Production ``VERIFIED`` requires this floor or stronger (lower int).
+#: The Standard *gate* still admits persisted-state read-back so a
+#: pixel-only run can execute with halt-on-doubt; the outcome classifier
+#: refuses ``VERIFIED`` unless an independent system-of-record read
+#: confirmed every consequential effect.
+VERIFIED_EFFECT_TIER = VerificationTier.INDEPENDENT_SESSION
+
 
 def verifier_effect_tier(
     verifier: object,

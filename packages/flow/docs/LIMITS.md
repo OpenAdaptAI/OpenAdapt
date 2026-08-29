@@ -262,6 +262,16 @@ transactional guarantee. The ultimate safety net is never the read-back: it is
 the **identity gate** (right record) plus **halt-on-ambiguity** (never guess a
 target), with read-back as additive assurance on top.
 
+**Without an independent system-of-record read, the run cannot be
+`VERIFIED`.** A pixel-only Citrix or RDP session with no REST, FHIR, SQL,
+file, or separately authenticated session read is that case. The on-screen
+oracle can still halt when the region is unreadable or wrong. If a
+consequential write may already have been delivered, the production
+`transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.
+Halt-on-doubt is unchanged. This is not live Citrix Production evidence; a
+live ICA/HDX session is a deployment-specific qualification. Wire the
+independent read before paying a sprint for a `VERIFIED` outcome.
+
 ### 4. Model assistance can convert a halt into a false pass
 
 Model use is off by default. When configured, a grounding model can propose a

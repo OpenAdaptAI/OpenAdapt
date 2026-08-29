@@ -31,7 +31,7 @@ from openadapt_flow.runtime.authorization import (
     runtime_param_text,
     runtime_params_for_gui,
 )
-from openadapt_flow.verification import VerificationTier
+from openadapt_flow.verification import VERIFIED_EFFECT_TIER, VerificationTier
 
 if TYPE_CHECKING:
     from openadapt_flow.ir import ExecutionOutcomeEnvelope, RunReport, Workflow
@@ -1370,9 +1370,12 @@ def classify_execution_outcome(
 
     Demo success is always visibly non-production.  Standard and Regulated
     success becomes ``VERIFIED`` only when every executed consequential action
-    has a confirmed effect at or above the workflow's required evidence tier.
-    Therefore an approved-unverified or immediate-screen-only result can never
-    be reported as ``VERIFIED`` under either production profile.
+    has a confirmed effect at or above both the workflow's required evidence
+    tier and :data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`.
+    Therefore an approved-unverified, immediate-screen, or persisted-state
+    (on-screen different-path) result can never be reported as ``VERIFIED``
+    under either production profile. A pixel-only Citrix run with no
+    independent system-of-record read cannot be ``VERIFIED``.
     """
 
     resolved = resolve_execution_profile(profile)
@@ -1990,6 +1993,12 @@ def classify_execution_outcome(
                 VerificationTier(requirement.minimum_tier)
                 if requirement is not None
                 else minimum
+            )
+            # The Standard gate still admits persisted-state so a pixel-only
+            # Citrix run can execute with halt-on-doubt. VERIFIED itself
+            # requires an independent system-of-record read (tier 1 or 2).
+            required_tier = VerificationTier(
+                min(int(required_tier), int(VERIFIED_EFFECT_TIER))
             )
             try:
                 effect_hash = effect.resolved_contract_hash(
