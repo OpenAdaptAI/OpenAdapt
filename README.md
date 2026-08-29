@@ -88,12 +88,30 @@ openadapt flow compile rec --out bundle --name my-workflow
 openadapt flow replay bundle --url https://your-app.example --run-dir run
 ```
 
-These commands record one browser surface and run a permissive local rehearsal;
-they do not certify the bundle. One bundle uses one execution surface and does
-not switch between browser, native, RDP, or Citrix backends. For work that
-crosses applications, qualify each boundary and handoff separately. The
-[`openadapt-flow` README](https://github.com/OpenAdaptAI/openadapt-flow#record-and-rehearse-your-workflow)
-describes the current boundary and the governed run path.
+These commands record one browser surface and run a permissive local rehearsal.
+They do not certify the bundle. One bundle uses one execution surface and does
+not switch between browser, native, RDP, or Citrix backends.
+
+If the task crosses a browser and a native app, or otherwise changes backend,
+record one bundle per surface. `openadapt flow compose` sequences the compiled
+bundles:
+
+```bash
+openadapt flow compose \
+  --child intake=./intake-bundle \
+  --child posting=./posting-bundle \
+  --handoff intake.patient_id=posting.patient_id \
+  --out composed
+openadapt flow certify composed --policy clinical-write
+openadapt flow run composed --config deploy.yaml
+```
+
+Child A has to end `VERIFIED` (or a halt class you named with `--allow-halt`)
+before child B starts. Handoffs copy parameter values that A's confirmed
+effect contract already bound. Missing evidence stops the run. Compose will
+not retarget one recording onto a second backend. The
+[`openadapt-flow` README](https://github.com/OpenAdaptAI/openadapt-flow#workflows-that-use-more-than-one-application)
+has the full boundary.
 
 Native and remote workflows never start or download Chromium. Install only the
 capability you need:
