@@ -7,7 +7,11 @@
 
 OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.
 
-Flow still runs the program. Policy, identity, verification, pauses, repair, and audit stay in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). A healthy call goes through Flow's governed `run`. HALTED, refused, timeout, and error come back as those outcomes. Don't summarize any of them as success.
+This package is the default runtime interface for a calling agent. The CLI remains. Headless does not mean the UI is gone.
+
+Three roles: the calling agent operates; a named human is authority; compliance samples seals. Computer-use agents are the user of OpenAdapt. They are not the executor inside OpenAdapt.
+
+Flow still runs the program. Policy, identity, verification, pauses, repair, and audit stay in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). A healthy call goes through Flow's governed `run`. HALTED, refused, timeout, and error come back as those outcomes. Don't summarize any of them as success. Never summarize halt as success.
 
 ## Install
 

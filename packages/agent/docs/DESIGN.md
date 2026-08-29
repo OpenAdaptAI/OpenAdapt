@@ -7,13 +7,31 @@ older admission or assign a fallback lifecycle label.
 
 OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.
 
+`openadapt-agent` is the default runtime interface for a calling agent. It
+is not a second workflow engine, and it is not "OpenAdapt the agent." Flow
+owns compilation, policy, identity, verification, durable execution, repair,
+and audit. The CLI remains. Headless does not mean the UI is gone.
+
+## Roles
+
+| Role | Who | What they do |
+|---|---|---|
+| Operator | Calling agent (Claude Code, MCP client, orchestrator) | Discover, bind parameters, invoke, read outcomes |
+| Authority | Named human | Demonstrate once, certify policy, resolve identity / effect / judgment halts |
+| Auditor | Compliance | Sample seals, revoke admission |
+
+Computer-use agents are the user of OpenAdapt. They are not the executor
+inside OpenAdapt. Never summarize halt as success.
+
+Halt packets and typed agent-continue (missing parameter / retryable
+transport only) are not in this package yet. Identity, effect, expired
+policy, novel UI, and admission still require a human. Do not let a
+planner resolve those classes.
+
 `openadapt-agent` exposes two complementary interfaces:
 
 1. MCP tools over local stdio.
 2. Portable Agent Skills.
-
-It is not a second workflow engine. Flow owns compilation, policy,
-identity, verification, durable execution, repair, and audit.
 
 ## Architecture
 

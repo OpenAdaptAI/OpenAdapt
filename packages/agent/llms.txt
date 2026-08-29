@@ -2,6 +2,8 @@
 
 > OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.
 
+Default runtime interface for a calling agent. Computer-use agents are the user of OpenAdapt. They are not the executor inside it. Never summarize halt as success. Roles: operator (calling agent), authority (named human), auditor (samples seals).
+
 ## What it provides
 
 - `openadapt-agent serve --allow-run`: generate and serve the public synthetic tutorial at serve time. `openadapt-agent serve --tutorial` is the same path without run tools. `openadapt-agent serve --bundles <dir> [--allow-run]`: serve a private compiled bundle. `list_workflows`, `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item` are always available as PHI-safe read-only projections. `run_workflow_<opaque-id>` tools require `--allow-run`. The synthetic tutorial registers `run_local_quickstart`. If a run returns HALTED, tell the user the record did not change. Never summarize halt, refused, timeout, or error as success.
