@@ -7,8 +7,9 @@
 [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
 Show OpenAdapt a task once. It compiles your demonstration into a program that
-runs the task again without a model in the loop, and it checks the result
-against the system of record before it calls the run a success.
+runs the task again without a generative-model API in the control loop. Before
+a governed run reports `VERIFIED`, it checks every declared effect at the
+required evidence tier.
 
 This is the installer and the `openadapt` command. The compiler and the runtime
 live in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), and
@@ -79,13 +80,20 @@ application boundary, its action risks, its identities, its effect verifiers,
 its fault cases, and its deployment policy. Start with the
 [five-minute walkthrough](https://docs.openadapt.ai/get-started/).
 
-## Record your own workflow
+## Record and rehearse one workflow
 
 ```bash
 openadapt flow record --backend web --url https://your-app.example --out rec
 openadapt flow compile rec --out bundle --name my-workflow
 openadapt flow replay bundle --url https://your-app.example --run-dir run
 ```
+
+These commands record one browser surface and run a permissive local rehearsal;
+they do not certify the bundle. One bundle uses one execution surface and does
+not switch between browser, native, RDP, or Citrix backends. For work that
+crosses applications, qualify each boundary and handoff separately. The
+[`openadapt-flow` README](https://github.com/OpenAdaptAI/openadapt-flow#record-and-rehearse-your-workflow)
+describes the current boundary and the governed run path.
 
 Native and remote workflows never start or download Chromium. Install only the
 capability you need:
@@ -181,8 +189,8 @@ paywalled.
 
 | Evidence | Result |
 |---|---|
-| Public OpenEMR reference workflow | 19/20 effect-verified runs at 39.2s median with 0 model calls; run 20 was a safe halt under the corrected saved-row oracle |
-| Heart-care RVU audit, customer deployment | About $75,000/year in recovered billables, and several hours of monthly audit work |
+| Public OpenEMR field test | 19/20 attempts passed the saved-row OCR check at 39.2s median; the compiled arm recorded 0 model API calls, and run 20 halted safely |
+| Founding-team heart-care RVU audit | About $75,000/year in estimated recovered billables, and several hours of monthly audit work |
 
 Both belong to their named task and environment. Qualifying a new workflow is
 what decides what can be claimed about it. Method and comparison:
