@@ -21,6 +21,14 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   authoring time rather than emitting a bad bundle. This turns a replay of
   one recorded path into governed execution over a queue:
   `openadapt-flow for-each bundle --records worklist.csv --out queue-bundle`.
+- **Compose separately recorded bundles.** `compose` takes named compiled
+  child bundles and a handoff contract and writes a parent artifact that
+  `certify` and `run` execute. Each child keeps the surface it was recorded
+  on. The parent runs children in `--child` order, or an explicit `--after`
+  DAG, and starts a child only after every predecessor ends `VERIFIED` (or an
+  `--allow-halt` class you named). Handoffs copy effect-bound parameter
+  values from the predecessor's confirmed effect receipt. Missing evidence
+  HALTs. The launcher form is `openadapt flow compose`.
 - **See what a demonstration compiled into.** `visualize` renders a
   program-graph view of a bundle before it runs: the ordered steps, the
   resolution ladder each step will try, where an identity gate is armed,

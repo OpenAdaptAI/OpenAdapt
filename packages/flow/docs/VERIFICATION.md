@@ -12,7 +12,7 @@
 
 ## What is bound to required CI vs. being validated
 
-- **Bound to required CI pass evidence (11):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `typed-business-decisions-supported`, `reviewed-judgment-cases-supported`, `qualified-remote-decision-v2-supported`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`
+- **Bound to required CI pass evidence (12):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `typed-business-decisions-supported`, `reviewed-judgment-cases-supported`, `qualified-remote-decision-v2-supported`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`, `compose-recorded-bundles`
 - **Being validated — opt-in / infra-gated or field (8):** `effect-verifier-kit`, `windows-desktop-validating`, `macos-native-validating`, `linux-native-validating`, `rdp-validating`, `desktop-recording-validating`, `citrix-pixel-validating`, `openemr-field-benchmark`
 - **Roadmap / research (1):** `win32-window-replay-roadmap`
 
@@ -405,3 +405,21 @@
 
 - The historical result uses OCR evidence from a visible saved message row. It does not use an out-of-band OpenEMR system-of-record read.
 - FIELD TEST, NOT CI-reproducible: the head-to-head ran against a SHARED public demo that other users mutate and that resets daily; the sample is small (10 agent runs). Only the verifier + task-prompt units run in CI. `reproducibility: field` forbids ever labeling this `supported`.
+
+### `compose-recorded-bundles` — supported — bound to required CI pass evidence
+
+> openadapt-flow compose sequences named, already-compiled child bundles under a handoff contract. Each child stays bound to its recorded surface. The parent starts a child only after a predecessor ends VERIFIED (or an explicit allowed halt class). Handoffs copy effect-bound parameter values from confirmed effect receipts; missing evidence HALTs. certify and run execute the parent artifact.
+
+- Surfaces: README.md, docs
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_compose_authoring.py` | test | ci (required PR gate (test)) | supported | Authoring copies two child bundles, records the handoff contract, and refuses a source that is not effect-bound, an unknown target parameter, a single child, a cyclic after-graph, and a backwards handoff. |
+| `tests/test_compose_runtime.py` | test | ci (required PR gate (test)) | supported | A two-child fixture runs intake through MockMed with independent effect verification, then a local FakeBackend child that receives the verified patient_id. Missing handoff evidence and an unverified predecessor HALT before the next child starts. |
+| `tests/test_cli_compose.py` | test | ci (required PR gate (test)) | supported | The compose parser dispatches, the CLI writes a composition artifact, and replay refuses to run one. |
+
+**Caveats (honest limits):**
+
+- The parent sequences admitted child runs. It does not enlarge the workflow-program graph and does not introduce a process contract. It does not switch backends inside one recording.
+- Evidence is unit tests plus a local mock second child. This claim does not cover Production admission or a live Citrix session.

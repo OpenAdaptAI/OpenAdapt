@@ -14,6 +14,10 @@ imported lazily inside each handler so ``--help`` always works):
   bundle's linear body in a LOOP that runs once per record of a worklist
   (CSV/JSON), binding each record's columns to the workflow's parameters.
   Emits a program:true bundle; fails loudly on a column/parameter mismatch.
+- ``compose`` — author a parent sequencer from named, already-compiled child
+  bundles plus a handoff contract. Each child keeps its recorded surface.
+  ``certify`` / ``run`` execute the parent. The launcher form is
+  ``openadapt flow compose``.
 - ``replay`` — replay a bundle; serves the bundled MockMed demo app when no
   ``--url`` is given (with optional ``--drift`` to demonstrate healing).
   ``--worklist`` drives a program's loop over a CLI-supplied relation; effect
@@ -1599,6 +1603,12 @@ def _cmd_for_each(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_compose(args: argparse.Namespace) -> int:
+    from openadapt_flow.cli_compose import cmd_compose
+
+    return cmd_compose(args)
+
+
 def _default_run_dir() -> Path:
     """Timestamped default run directory under ``runs/``."""
     from datetime import datetime, timezone
@@ -1609,9 +1619,11 @@ def _default_run_dir() -> Path:
 
 def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.cli_compose import refuse_replay_composition
     from openadapt_flow.ir import Workflow
 
     bundle = Path(args.bundle)
+    refuse_replay_composition(bundle)
     run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
     workflow = Workflow.load(bundle)
     qualification_case = getattr(args, "_qualification_case_execution", None)
@@ -1813,6 +1825,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     backend / effect / actuation / durable runtime as ``replay``), with
     ``--drift`` (a MockMed-only teaching aid) forced off.
     """
+    from openadapt_flow.composition import is_composition_artifact
     from openadapt_flow.execution_profiles import (
         execution_profile_contract,
         resolve_execution_profile,
@@ -1838,6 +1851,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.runtime.authorization import runtime_inputs_digest
 
     bundle = Path(args.bundle)
+    if is_composition_artifact(bundle):
+        from openadapt_flow.cli_compose import cmd_run_composition
+
+        return cmd_run_composition(args, run_child=_cmd_run)
     # Load the bundle first (decrypting if encrypted -- the key comes from
     # --config/env via OPENADAPT_BUNDLE_KEY); a missing/wrong key fails LOUDLY.
     try:
@@ -2693,10 +2710,16 @@ def _cmd_visualize(args: argparse.Namespace) -> int:
 
 
 def _cmd_certify(args: argparse.Namespace) -> int:
+    from openadapt_flow.composition import is_composition_artifact
     from openadapt_flow.ir import Workflow
     from openadapt_flow.policy import evaluate_policy, load_policy
 
-    workflow = Workflow.load(Path(args.bundle))
+    bundle = Path(args.bundle)
+    if is_composition_artifact(bundle):
+        from openadapt_flow.cli_compose import cmd_certify_composition
+
+        return cmd_certify_composition(args)
+    workflow = Workflow.load(bundle)
     # Policy source: explicit --policy, else the deployment config's policy
     # section (so one deployment.yaml certifies AND runs the bundle).
     policy_source = args.policy
@@ -5307,6 +5330,51 @@ def build_parser() -> argparse.ArgumentParser:
         help="Name for the looped workflow (default: '<body>-for-each')",
     )
     p.set_defaults(func=_cmd_for_each)
+
+    p = sub.add_parser(
+        "compose",
+        help=(
+            "Author a parent sequencer from named compiled child bundles and "
+            "a handoff contract. Each child stays bound to its recorded "
+            "surface. certify/run the output directory."
+        ),
+    )
+    p.add_argument(
+        "--child",
+        action="append",
+        metavar="NAME=PATH",
+        required=True,
+        help="Named compiled child bundle (repeat; at least two)",
+    )
+    p.add_argument(
+        "--handoff",
+        action="append",
+        metavar="FROM.source=TO.target",
+        help=(
+            "Verified fact copied from a predecessor effect-bound parameter "
+            "into a successor parameter. Repeatable. Missing evidence HALTs."
+        ),
+    )
+    p.add_argument(
+        "--after",
+        action="append",
+        metavar="NAME=PRED[,PRED]",
+        help=(
+            "Explicit DAG predecessors for NAME. Omit to run children in --child order."
+        ),
+    )
+    p.add_argument(
+        "--allow-halt",
+        action="append",
+        metavar="NAME=OUTCOME",
+        help=(
+            "Let NAME start when a predecessor ended OUTCOME instead of "
+            "VERIFIED (HALTED, FAILED, ...). VERIFIED is always allowed."
+        ),
+    )
+    p.add_argument("--out", required=True, help="Output composition directory")
+    p.add_argument("--name", default=None, help="Composition name")
+    p.set_defaults(func=_cmd_compose)
 
     p = sub.add_parser(
         "replay",

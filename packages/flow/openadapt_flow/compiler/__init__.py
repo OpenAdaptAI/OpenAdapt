@@ -21,6 +21,7 @@ from openadapt_flow.compiler.binding_admission import (
 )
 from openadapt_flow.compiler.codegen import render_workflow_py
 from openadapt_flow.compiler.compile import compile_recording, lint_param_leakage
+from openadapt_flow.compiler.compose_authoring import author_composition
 from openadapt_flow.compiler.effect_mining import (
     StepEffectMining,
     mine_step_effects,
@@ -77,6 +78,7 @@ __all__ = [
     "resolve_column_map",
     "body_param_names",
     "LoopAuthoringError",
+    "author_composition",
     "InductionResult",
     "HeldOutValidation",
     "Proposer",

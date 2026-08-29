@@ -30,11 +30,20 @@ For the current evidence behind each capability claim, see
 | Citrix / VDI pixel-window automation | **Required CI plus counted no-DOM stand-in** | The dedicated exact-Workspace-window backend, readiness gate, governed run, and durable resume passed 3 healthy effect-confirmed no-DOM trials plus 3 drift safe-halts. | The retained record explicitly has `ica_hdx_accepted=false`; live ICA/HDX acceptance stays bound to the exact deployment instead of being inferred from a stand-in or RDP. |
 | Managed browser execution | **Separate product target and workflow admissions** | The hosted lane admits attested browser bundles; production mode requires a configured real runner and refuses silent mock fallback. | It does not extend the supported claim to Windows, RDP, Citrix, PHI-bearing shared-cloud execution, an SLA, or a regulated certification. |
 | On-premises / customer-managed deployment | **Release and clean-machine evidence; site acceptance required** | Deployment configuration, local run gates, egress checks, and audit primitives are supplied. | OpenAdapt does not configure the customer's firewall, KMS, storage, identity provider, backups, retention, incident response, or legal compliance program. |
+| Compose separately recorded bundles | **Required CI** | `openadapt-flow compose` writes a parent sequencer from named compiled children plus a handoff contract. Unit tests cover authoring validation, fail-closed missing-handoff HALT, and a two-child fixture whose second child is a local mock backend. | It does not merge two recordings into one backend, retarget a bundle onto a surface it was not recorded on, or introduce a process contract. Live Citrix, Production admission, and cross-application field campaigns are not claimed here. |
 
 These evidence entries do not assign a product lifecycle state or accept risk.
 An actively admitted release can still produce an unsafe workflow if the
 demonstration, inferred checks, policy, or deployment configuration is
 inadequate.
+
+## Composing separately recorded bundles
+
+`compose` sequences already-compiled children through the governed `run`
+path. A child starts only after every predecessor ends `VERIFIED`, or a halt
+class named with `--allow-halt`. A handoff copies an effect-bound parameter
+from a confirmed receipt. Missing evidence HALTs. Subflows and worklists
+stay inside each child, on that child's surface.
 
 ## What "deterministic" means
 

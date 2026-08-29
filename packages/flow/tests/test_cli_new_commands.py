@@ -301,6 +301,18 @@ def test_resume_without_url_exits(tmp_path: Path) -> None:
     "argv,func_name",
     [
         (["induce", "r1", "r2", "--out", "o"], "_cmd_induce"),
+        (
+            [
+                "compose",
+                "--child",
+                "a=./a",
+                "--child",
+                "b=./b",
+                "--out",
+                "o",
+            ],
+            "_cmd_compose",
+        ),
         (["replay", "b", "--worklist", "w.csv"], "_cmd_replay"),
         (["run", "b", "--config", "d.yaml"], "_cmd_run"),
         (["resume", "run_dir"], "_cmd_resume"),

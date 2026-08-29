@@ -39,6 +39,12 @@ unqualified `replay bundle` selects the bound surface rather than the browser.
 Bundles compiled before surface binding carry no `surface` and behave exactly
 as before.
 
+A composition does not merge surfaces. `openadapt-flow compose` copies each
+child bundle into a parent artifact; `run` executes those children one at a
+time against the surface sealed into that child. There is no backend switch
+inside a recording, and no parent-level `--backend` that retargets every
+child.
+
 ## Execution boundary and evidence, per surface
 
 Every substrate runs on the same small `Backend` protocol and the same governed

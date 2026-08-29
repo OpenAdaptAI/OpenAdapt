@@ -951,3 +951,42 @@ claims:
         public demo that other users mutate and that resets daily; the sample
         is small (10 agent runs). Only the verifier + task-prompt units run in
         CI. `reproducibility: field` forbids ever labeling this `supported`.
+
+  # -------------------------------- compose separately recorded bundles
+  - id: compose-recorded-bundles
+    claim: >-
+      openadapt-flow compose sequences named, already-compiled child bundles
+      under a handoff contract. Each child stays bound to its recorded
+      surface. The parent starts a child only after a predecessor ends
+      VERIFIED (or an explicit allowed halt class). Handoffs copy
+      effect-bound parameter values from confirmed effect receipts; missing
+      evidence HALTs. certify and run execute the parent artifact.
+    surfaces: [README.md, docs]
+    tier: supported
+    evidence:
+      - path: tests/test_compose_authoring.py
+        proves: >-
+          Authoring copies two child bundles, records the handoff contract,
+          and refuses a source that is not effect-bound, an unknown target
+          parameter, a single child, a cyclic after-graph, and a backwards
+          handoff.
+      - path: tests/test_compose_runtime.py
+        node: test_two_child_fixture_second_is_local_backend
+        proves: >-
+          A two-child fixture runs intake through MockMed with independent
+          effect verification, then a local FakeBackend child that receives
+          the verified patient_id. Missing handoff evidence and an
+          unverified predecessor HALT before the next child starts.
+      - path: tests/test_cli_compose.py
+        proves: >-
+          The compose parser dispatches, the CLI writes a composition
+          artifact, and replay refuses to run one.
+    caveats:
+      - >-
+        The parent sequences admitted child runs. It does not enlarge the
+        workflow-program graph and does not introduce a process contract.
+        It does not switch backends inside one recording.
+      - >-
+        Evidence is unit tests plus a local mock second child. This claim
+        does not cover Production admission or a live Citrix session.
+

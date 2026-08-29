@@ -179,11 +179,29 @@ mode stays on one origin. macOS and Linux bind one exact app and window, while a
 governed Windows run binds its application identity.
 
 If a task crosses a browser and a native app, or otherwise changes backend,
-record and qualify one bundle per surface and orchestrate those bundles outside
-Flow. Qualify each handoff and the end-to-end result verifier before deployment.
-The CLI doesn't compose separately recorded bundles today. Program authors can
-bind individual steps to different HTTP systems, but that is API actuation
-rather than recorded GUI backend switching.
+record one bundle per surface. `openadapt-flow compose` sequences the compiled
+bundles:
+
+```bash
+openadapt-flow compose \
+  --child intake=./intake-bundle \
+  --child posting=./posting-bundle \
+  --handoff intake.patient_id=posting.patient_id \
+  --out composed
+openadapt-flow certify composed --policy clinical-write
+openadapt-flow run composed --config deploy.yaml
+```
+
+Child A must end `VERIFIED` (or a halt class you named with `--allow-halt`)
+before child B starts. Handoffs copy parameter values that A's confirmed
+effect contract already bound. The parent will not guess a window title or a
+URL. Missing evidence stops the run. Qualify each handoff and the end-to-end
+result verifier before deployment.
+
+Compose will not retarget one recording onto a second backend. Program authors
+can bind individual steps to different HTTP systems, but that is API actuation
+rather than recorded GUI backend switching. If you installed the OpenAdapt
+launcher, `openadapt flow compose` is the same command.
 
 ## How a step finds its target
 
@@ -269,7 +287,7 @@ agents at [openadapt.ai/compare](https://openadapt.ai/compare).
 
 ## What runs where
 
-Record, compile, lint, certify, replay, and run are local. By default, a healthy
+Record, compile, compose, lint, certify, replay, and run are local. By default, a healthy
 replay makes no generative-model API call. Grounding, identity, and state
 verification integrations can make calls when enabled. This is not the same as
 no network: the app you're driving, a remote backend, and any effect verifier
@@ -321,8 +339,9 @@ generated [docs/VERIFICATION.md](docs/VERIFICATION.md). For security review,
 [docs/ENTERPRISE_ARCHITECTURE.md](docs/ENTERPRISE_ARCHITECTURE.md).
 
 There is more here than this page covers: workflow programs with states, loops
-and guarded transitions; data-driven `for-each` over a worklist; multi-trace
-induction that quarantines an underdetermined intent instead of guessing;
+and guarded transitions; data-driven `for-each` over a worklist; composing
+separately recorded bundles; multi-trace induction that quarantines an
+underdetermined intent instead of guessing;
 pluggable SQL, REST, FHIR and document-hash effect oracles; durable
 checkpoint and resume; Agent Skill and MCP emission. Those are in
 [docs/CAPABILITIES.md](docs/CAPABILITIES.md), and the whole documentation set

@@ -758,3 +758,11 @@ These are additive to the document and the tests. They do not change the IR.
   Do", "Your Wish is My Command"): resolving demonstration ambiguity by asking
   concrete questions.
 </content>
+
+## Composition of separately recorded bundles
+
+Subflows reuse a subgraph inside one workflow, on one surface. Two recordings
+need `openadapt-flow compose`, which sequences already-compiled child bundles
+without enlarging this IR: no new `StateKind`, no process contract. Handoffs
+are effect-bound parameter facts. See `openadapt_flow/composition.py`.
+
