@@ -3371,6 +3371,146 @@ class EffectJournalEntry(BaseModel):
     collateral_reconciliation_actions: int = Field(default=0, ge=0)
 
 
+MANAGED_RESULT_LOSS_DOMAIN: Final[bytes] = b"OpenAdapt managed result loss v1\0"
+MANAGED_RESULT_LOSS_IDEMPOTENCY_DOMAIN: Final[bytes] = (
+    b"OpenAdapt managed result loss idempotency v1\0"
+)
+
+
+def managed_result_loss_idempotency_sha256(idempotency_key: str) -> str:
+    """Bind a retained hosted idempotency key without exposing the key."""
+
+    if not isinstance(idempotency_key, str) or not idempotency_key:
+        raise ValueError("managed result loss idempotency key is invalid")
+    return hashlib.sha256(
+        MANAGED_RESULT_LOSS_IDEMPOTENCY_DOMAIN + idempotency_key.encode("utf-8")
+    ).hexdigest()
+
+
+class ManagedResultLossEvidence(BaseModel):
+    """Sealed PHI-free evidence that a managed child result was lost.
+
+    This record does not describe the business effect. It binds the outer
+    runner's exact retained dispatch and unresolved permit state, and it makes
+    every prohibited inference explicit. The signed terminal proof can then
+    require reconciliation without claiming that delivery did not occur.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.managed-result-loss/v1"] = (
+        "openadapt.managed-result-loss/v1"
+    )
+    report_provenance: Literal["outer_runner_recovery"] = "outer_runner_recovery"
+    loss_code: Literal[
+        "runner_exception",
+        "report_missing",
+        "report_invalid",
+        "recovered_after_restart",
+    ]
+    child_started_at: str = Field(
+        pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    )
+    child_start_evidence_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    run_store_identity_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    observed_at: str = Field(
+        pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    )
+    run_id: str = Field(
+        pattern=(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-"
+            r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        )
+    )
+    flow_run_id_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    dispatch_id: str = Field(
+        pattern=(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-"
+            r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        )
+    )
+    dispatch_session_id: str = Field(
+        pattern=(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-"
+            r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        )
+    )
+    managed_dispatch_binding_sha256: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    idempotency_key_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    authenticated_runner_id_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    authenticated_session_id_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    execution_authority_id: str = Field(
+        pattern=(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-"
+            r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        )
+    )
+    execution_authority_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    execution_authority_signer_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    delivery_result_loss_closure_artifact_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    pending_permit_artifact_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[a-f0-9]{64}$",
+    )
+    run_request_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    pending_action_request_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[a-f0-9]{64}$",
+    )
+    delivery_state: Literal["CLOSED_UNRESOLVED_RESULT_LOSS"] = (
+        "CLOSED_UNRESOLVED_RESULT_LOSS"
+    )
+    child_started: Literal[True] = True
+    child_report_retained: Literal[False] = False
+    effect_absence_claimed: Literal[False] = False
+    not_received_claimed: Literal[False] = False
+    blind_retry_authorized: Literal[False] = False
+    actuation_replay_authorized: Literal[False] = False
+    evidence_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    def _digest_payload(self) -> dict[str, Any]:
+        payload = self.model_dump(mode="json")
+        payload.pop("evidence_sha256", None)
+        return payload
+
+    def computed_sha256(self) -> str:
+        encoded = json.dumps(
+            self._digest_payload(),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return hashlib.sha256(MANAGED_RESULT_LOSS_DOMAIN + encoded).hexdigest()
+
+    @model_validator(mode="after")
+    def _closed_result_loss(self) -> "ManagedResultLossEvidence":
+        if hashlib.sha256(self.run_id.encode("utf-8")).hexdigest() != (
+            self.flow_run_id_sha256
+        ):
+            raise ValueError("managed result loss run identity digest is invalid")
+        if self.evidence_sha256 != self.computed_sha256():
+            raise ValueError("managed result loss evidence digest is invalid")
+        if (self.pending_permit_artifact_sha256 is None) != (
+            self.pending_action_request_sha256 is None
+        ):
+            raise ValueError("managed result loss pending binding is incomplete")
+        child_started = datetime.fromisoformat(self.child_started_at[:-1] + "+00:00")
+        observed = datetime.fromisoformat(self.observed_at[:-1] + "+00:00")
+        if child_started > observed:
+            raise ValueError("managed result loss chronology is invalid")
+        return self
+
+    @classmethod
+    def create(cls, **values: Any) -> "ManagedResultLossEvidence":
+        candidate = cls.model_construct(**values, evidence_sha256="0" * 64)
+        return cls.model_validate(
+            {
+                **candidate._digest_payload(),
+                "evidence_sha256": candidate.computed_sha256(),
+            }
+        )
+
+
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
@@ -3464,6 +3604,14 @@ class RunReport(BaseModel):
             "Per consequential-step transaction ledger (intended effect, "
             "attempt state, observed effect, verifier freshness, collateral "
             "delta). PHI-free; the substrate the reconciliation model reads."
+        ),
+    )
+    managed_result_loss: Optional[ManagedResultLossEvidence] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "Sealed outer-runner evidence that the managed child result was "
+            "lost after execution started. It authorizes reconciliation only."
         ),
     )
     idempotency_key: Optional[str] = Field(
@@ -3721,6 +3869,24 @@ class RunReport(BaseModel):
             )
 
         envelope = self.outcome_envelope
+        if self.managed_result_loss is not None:
+            if (
+                self.execution_outcome != "HALTED"
+                or self.production_eligible
+                or self.execution_completed is not False
+                or self.success
+                or self.transaction_outcome != "RECONCILIATION_REQUIRED"
+                or self.transaction_billable is not False
+                or self.transaction_platform_fault is not False
+                or len(self.results) != 1
+                or self.results[0].step_id != "<managed-result-loss>"
+                or self.results[0].ok
+                or self.results[0].delivery_attempted is not None
+                or self.results[0].effect_contract_hashes
+                or self.results[0].effect_evidence
+                or self.results[0].effect_verified is not None
+            ):
+                raise ValueError("managed result loss report contract is invalid")
         if envelope is None:
             return self
         if self.execution_outcome != envelope.outcome:

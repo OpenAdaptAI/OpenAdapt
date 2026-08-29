@@ -52,6 +52,7 @@ from openadapt_flow.private_file import (
     PrivateFileAclError,
     windows_descriptor_has_private_acl,
 )
+from openadapt_flow.runner.flow_release_receipt import HostedFlowReleaseIdentity
 
 _HEX64_RE = re.compile(r"^[a-f0-9]{64}$")
 _UUID_RE = re.compile(
@@ -240,6 +241,7 @@ class RunnerConfig:
     backends: tuple[str, ...] = ("web",)
     business_decisions: Optional[BusinessDecisionServiceConfig] = None
     local_runtime_release: tuple[LocalRuntimeRelease, ...] = ()
+    local_flow_release: Optional[HostedFlowReleaseIdentity] = None
     product_release_admission: Optional[AdmissionTrustFiles] = None
     workflow_admission: Optional[WorkflowAdmissionTrustFiles] = None
     params_ref_root: Optional[Path] = None
@@ -426,6 +428,18 @@ def load_runner_config(
             + ", ".join(unknown_release_targets)
         )
 
+    local_flow_release_tbl = data.get("local_flow_release")
+    local_flow_release = None
+    if local_flow_release_tbl is not None:
+        try:
+            local_flow_release = HostedFlowReleaseIdentity.model_validate(
+                local_flow_release_tbl
+            )
+        except ValueError as exc:
+            raise RunnerConfigError(
+                "[local_flow_release] has an invalid exact shape"
+            ) from exc
+
     def admission_trust_files(table_name: str) -> Optional[AdmissionTrustFiles]:
         table = data.get(table_name)
         if table is None:
@@ -498,6 +512,7 @@ def load_runner_config(
         backends=tuple(str(b).strip() for b in backends_raw),
         business_decisions=business_decisions,
         local_runtime_release=tuple(local_runtime_release),
+        local_flow_release=local_flow_release,
         product_release_admission=product_release_admission,
         workflow_admission=workflow_admission,
         params_ref_root=params_ref_root,

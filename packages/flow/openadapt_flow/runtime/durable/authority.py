@@ -48,6 +48,7 @@ from openadapt_flow.terminal_verification_v2 import (
     ProductionDeliveryPermitArtifact,
     ProductionDeliveryPermitChain,
     ProductionDeliveryReceiptArtifact,
+    ProductionPendingDeliveryPermit,
 )
 
 AUTHORITY_DB_ENV = "OPENADAPT_DURABLE_AUTHORITY_DB"
@@ -2418,11 +2419,18 @@ class DurableAuthority:
         self._emit_synthetic_delivery_marker(marker_payload)
         return entry
 
-    def production_delivery_permit_chain(self) -> ProductionDeliveryPermitChain:
-        """Rebuild the exact acknowledged chain from protected retained bytes."""
+    def production_delivery_permit_chain(
+        self,
+        *,
+        allow_empty: bool = False,
+        allow_pending: bool = False,
+        receipt_absence_observed_at: str | None = None,
+    ) -> ProductionDeliveryPermitChain:
+        """Rebuild the exact retained chain without resolving uncertain delivery."""
 
         with self._transaction() as connection:
-            if self._pending_remote_delivery(connection) is not None:
+            pending = self._pending_remote_delivery(connection)
+            if pending is not None and not allow_pending:
                 raise DurableAuthorityBusy(
                     "production delivery remains uncertain without a receipt"
                 )
@@ -2432,7 +2440,13 @@ class DurableAuthority:
                 "ORDER BY runtime_delivery_sequence",
                 (self.path_key,),
             ).fetchall()
-        if not rows:
+        if pending is not None and receipt_absence_observed_at is None:
+            raise DurableAuthorityBusy(
+                "pending production delivery requires an exact absence observation"
+            )
+        if not rows and pending is None:
+            if allow_empty:
+                return ProductionDeliveryPermitChain.build(())
             raise DurableAuthorityBusy(
                 "the production delivery permit chain is unavailable"
             )
@@ -2446,7 +2460,18 @@ class DurableAuthority:
             for row in rows
         )
         try:
-            return ProductionDeliveryPermitChain.build(entries)
+            pending_entry = (
+                ProductionPendingDeliveryPermit.build(
+                    pending.permit_artifact,
+                    receipt_absence_observed_at=receipt_absence_observed_at,
+                )
+                if pending is not None and receipt_absence_observed_at is not None
+                else None
+            )
+            return ProductionDeliveryPermitChain.build(
+                entries,
+                pending=pending_entry,
+            )
         except ValueError as exc:
             raise DurableAuthorityBusy(
                 "the retained production delivery permit chain is invalid"

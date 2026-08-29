@@ -5780,12 +5780,32 @@
       "sha256": "b03b1f9bb0d3b4631c84db1c7e1dd7f26f1cd04e9b4d4d18f6cab2776eed7eb6"
     },
     {
+      "path": "tests/fixtures/flow_v1_34_0_terminal_verified.json",
+      "sha256": "395573c928cee8c5bc61a0658cc2ada41698266e6fcf54af00d899f21502cc1a"
+    },
+    {
+      "path": "tests/fixtures/remote-safe-synthetic-flow-release-verification.json",
+      "sha256": "bf170018cd1d3519f40ebd2788e158dd34a789c7bfe1e85e30e3a445e5e40af8"
+    },
+    {
       "path": "tests/fixtures/runtime-validation-canonical-vector.json",
       "sha256": "a238b23846705f081603c7fe8a66ee16a88281ad21acfd0d047052716a49b912"
     },
     {
+      "path": "tests/fixtures/terminal_verification_v2_delivery_consumer_vector.json",
+      "sha256": "f2e32472ad562b5b67d95d3d9cafaf08b4a2adb9fb5ff3cda2813307beb61c96"
+    },
+    {
       "path": "tests/fixtures/terminal_verification_v2_delivery_vector.json",
       "sha256": "20a1ae7f1878315c100c58894ec14bbc6af4848a6c206c467ca82cff025325f0"
+    },
+    {
+      "path": "tests/fixtures/terminal_verification_v2_terminal_consumer_vectors.json",
+      "sha256": "8b84b80705de47e511fcadf1b2d6d15a95615dbbabb247f2eb1ab1d542fc903a"
+    },
+    {
+      "path": "tests/fixtures/terminal_verification_v2_terminal_vectors.json",
+      "sha256": "0934335fca3324af3d1ae40f8c1cfa7b4e49c25b5c5975ab5e41961689b16278"
     },
     {
       "path": "tests/fixtures/theme-region-stable-overhalt-v1.16.1.json",

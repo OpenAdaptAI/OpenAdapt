@@ -207,6 +207,7 @@ def report_events(
     authorization_id: str,
     consequential_steps: int,
     effect_covered_consequential_steps: int,
+    terminal_outcome: str | None = None,
     start_seq: int = 1,
 ) -> list[dict[str, Any]]:
     """The ordered evidence stream for a completed local run.
@@ -241,10 +242,27 @@ def report_events(
         for result in report.results
         if result.identity is not None and result.identity.status == "verified"
     )
+    if terminal_outcome is None:
+        status = summary_status(report)
+    elif terminal_outcome == "VERIFIED":
+        status = "confirmed"
+    elif terminal_outcome == "HALTED_BEFORE_EFFECT":
+        status = "halted-needs-attention"
+    elif terminal_outcome in {
+        "RECONCILIATION_REQUIRED",
+        "FAILED_PLATFORM",
+        "CANCELED",
+        "REJECTED_POLICY",
+        "COMPLETED_UNVERIFIED",
+        "ROLLED_BACK",
+    }:
+        status = "failed"
+    else:
+        raise ValueError("terminal outcome cannot classify the evidence summary")
     body = _summary_body(
         bundle_digest=bundle_digest,
         authorization_id=authorization_id,
-        status=summary_status(report),
+        status=status,
         steps_total=len(report.results),
         consequential_steps=consequential_steps,
         effect_covered_consequential_steps=effect_covered_consequential_steps,

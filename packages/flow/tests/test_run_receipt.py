@@ -241,6 +241,8 @@ def _terminal_payload_from_report() -> tuple[
         execution_authority_signer_sha256=(chain.entries[0].authority_signer_sha256),
         permit_chain=chain,
         permit_count=1,
+        acknowledged_permit_count=1,
+        pending_permit_count=0,
         final_authority_sequence=0,
         final_runtime_delivery_sequence=9,
         workflow_contract_sha256=prepared.execution_outcome.workflow_contract_sha256,
@@ -270,6 +272,7 @@ def _terminal_expected(
             "authenticated_runner_id_sha256",
             "authenticated_session_id_sha256",
             "acknowledged_one_use_claim_ids",
+            "pending_permit_artifact_sha256",
         }
     }
     values["permit_chain_sha256"] = payload.permit_chain.permit_chain_sha256
@@ -282,6 +285,7 @@ def _terminal_expected(
     values["acknowledged_one_use_claim_ids"] = tuple(
         entry.one_use_claim_id for entry in payload.permit_chain.entries
     )
+    values["pending_permit_artifact_sha256"] = None
     return ProductionTerminalVerificationExpected.model_validate(values)
 
 

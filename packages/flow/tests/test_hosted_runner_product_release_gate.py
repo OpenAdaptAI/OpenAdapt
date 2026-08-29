@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 from base64 import b64encode, urlsafe_b64encode
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,8 +31,12 @@ from openadapt_flow.runner.config import (
     LocalRuntimeRelease,
     RunnerConfig,
 )
+from openadapt_flow.runner.flow_release_receipt import (
+    FlowReleaseVerificationReceiptArtifactBytes,
+)
 from openadapt_flow.runner.hosted_adapter import (
     AdmissionArtifactBytes,
+    HostedDispatchV2,
     HostedRunnerAdapter,
 )
 from openadapt_flow.runner.product_release import (
@@ -366,6 +371,42 @@ def _gate_fixture(tmp_path: Path, *, payload_raw=None, sequence: int = SEQUENCE)
     return adapter, dispatch, config, artifact
 
 
+def _v2_gate_fixture(
+    tmp_path: Path,
+    *,
+    flow_release_id: str = "1.35.0",
+    flow_artifact_sha256: str | None = None,
+):
+    receipt_raw = Path(
+        "tests/fixtures/remote-safe-synthetic-flow-release-verification.json"
+    ).read_bytes()
+    receipt_artifact = FlowReleaseVerificationReceiptArtifactBytes(
+        artifact_bytes_base64=b64encode(receipt_raw).decode("ascii"),
+        artifact_sha256="sha256:" + hashlib.sha256(receipt_raw).hexdigest(),
+    )
+    receipt = receipt_artifact.decode(now=_now())
+    raw = _release_payload()
+    targets = [dict(item) for item in raw["targets"]]  # type: ignore[arg-type]
+    flow_index = TARGETS.index("flow")
+    targets[flow_index]["release_id"] = flow_release_id
+    targets[flow_index]["release_artifact_sha256"] = (
+        flow_artifact_sha256 or receipt.release_sha256.removeprefix("sha256:")
+    )
+    raw["targets"] = tuple(targets)
+    adapter, legacy_dispatch, config, artifact = _gate_fixture(
+        tmp_path, payload_raw=raw
+    )
+    config = replace(
+        config,
+        local_flow_release=receipt_artifact.identity(now=_now()),
+    )
+    dispatch = HostedDispatchV2.model_construct(
+        product_release_admission=legacy_dispatch.product_release_admission,
+        flow_release_verification_receipt=receipt_artifact,
+    )
+    return adapter, dispatch, config, artifact, receipt
+
+
 def test_adapter_gate_accepts_an_exactly_admitted_local_runtime(tmp_path) -> None:
     adapter, dispatch, config, artifact = _gate_fixture(tmp_path)
     payload = adapter._verify_product_release(dispatch, config)
@@ -375,6 +416,49 @@ def test_adapter_gate_accepts_an_exactly_admitted_local_runtime(tmp_path) -> Non
         "sequence": SEQUENCE,
         "artifact_sha256": dispatch.product_release_admission.artifact_sha256,
     }
+
+
+def test_adapter_v2_gate_requires_matching_signed_product_and_flow_receipt(
+    tmp_path,
+) -> None:
+    adapter, dispatch, config, artifact, receipt = _v2_gate_fixture(tmp_path)
+
+    payload = adapter._verify_product_release(dispatch, config)
+
+    admitted = {item.target: item for item in payload.targets}["flow"]
+    assert admitted.release_id == receipt.version
+    assert "sha256:" + admitted.release_artifact_sha256 == receipt.release_sha256
+    assert artifact.payload == payload
+
+
+@pytest.mark.parametrize(
+    ("release_id", "artifact_sha256"),
+    [
+        ("1.35.1", None),
+        ("1.35.0", "0" * 64),
+    ],
+)
+def test_adapter_v2_gate_refuses_product_and_receipt_identity_drift(
+    tmp_path, release_id, artifact_sha256
+) -> None:
+    adapter, dispatch, config, _artifact, _receipt = _v2_gate_fixture(
+        tmp_path,
+        flow_release_id=release_id,
+        flow_artifact_sha256=artifact_sha256,
+    )
+
+    with pytest.raises(ValueError, match="name different releases"):
+        adapter._verify_product_release(dispatch, config)
+
+
+def test_adapter_v2_gate_refuses_missing_local_flow_identity(tmp_path) -> None:
+    adapter, dispatch, config, _artifact, _receipt = _v2_gate_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="no verified Flow release identity"):
+        adapter._verify_product_release(
+            dispatch,
+            replace(config, local_flow_release=None),
+        )
 
 
 def test_adapter_gate_refuses_when_no_trust_is_configured(tmp_path) -> None:

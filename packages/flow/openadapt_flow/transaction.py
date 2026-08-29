@@ -323,6 +323,14 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     stopped (policy rejection, cancellation, governed halt, platform fault).
     """
 
+    if report.managed_result_loss is not None:
+        # The outer hosted runner fenced the exact delivery chain but lost the
+        # managed child's terminal result. A delivery acknowledgment can win
+        # before that fence, so this is neither effect absence nor a platform
+        # failure. The signed loss record exists only to force reconciliation
+        # and prohibit retry.
+        return TransactionOutcome.RECONCILIATION_REQUIRED
+
     coarse = report.execution_outcome
     if coarse == "VERIFIED":
         return TransactionOutcome.VERIFIED
