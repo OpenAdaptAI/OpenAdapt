@@ -70,6 +70,22 @@ _EFFECT_STRENGTH_RANK = {
     EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD: 4,
 }
 
+# Seal oracle ladder. 0 visual, 1 second-session UI, 2 SoR, 3 counterparty.
+# Production Seals require 2 or 3. Tier 3 has no EffectStrengthV1 member yet.
+OracleTierV1: TypeAlias = Literal[0, 1, 2, 3]
+
+
+def oracle_tier_from_effect_strength(
+    strength: EffectStrengthV1 | None,
+) -> OracleTierV1:
+    """Map Execute effect strength onto the Seal oracle ladder."""
+
+    if strength is EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD:
+        return 2
+    if strength is EffectStrengthV1.INDEPENDENT_SESSION:
+        return 1
+    return 0
+
 
 class ExecuteLifecycleStateV1(str, Enum):
     QUEUED = "queued"
@@ -154,12 +170,23 @@ class ExecuteEvidenceContractV1(_StrictContract):
 
 
 class ExecuteEvidenceReceiptV1(_StrictContract):
-    """A portable receipt that identifies evidence without carrying it."""
+    """A portable receipt that identifies evidence without carrying it.
+
+    This object is the Seal. It is not a second format. The fields below bind
+    program version, admission, environment, runner, independent effect, and a
+    per-receipt nonce so a consumer does not have to keep the original request.
+    """
 
     schema_version: Literal[EXECUTE_EVIDENCE_RECEIPT_SCHEMA] = EXECUTE_EVIDENCE_RECEIPT_SCHEMA
     receipt_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
     execution_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
     workflow_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    workflow_version: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
+    qualification_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
+    environment_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
+    runner_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
+    nonce: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
+    oracle_tier: OracleTierV1
     outcome: ExecuteTerminalOutcomeV1
     contracts: ExecuteEvidenceContractV1
     delivery_uncertain: StrictBool
@@ -198,6 +225,11 @@ class ExecuteEvidenceReceiptV1(_StrictContract):
         if self.outcome is ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED:
             if not self.delivery_uncertain:
                 raise ValueError("reconciliation_required requires an uncertain effect or delivery")
+        derived = oracle_tier_from_effect_strength(self.contracts.observed_effect_strength)
+        if self.oracle_tier != derived:
+            raise ValueError("oracle_tier must match observed_effect_strength")
+        if verified and self.oracle_tier < 2:
+            raise ValueError("a verified outcome requires oracle tier 2 or 3")
         return self
 
 

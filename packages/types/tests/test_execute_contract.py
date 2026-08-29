@@ -20,6 +20,7 @@ from openadapt_types import (
     ExecuteTerminalOutcomeV1,
     ExecuteWebhookEventTypeV1,
     execute_openapi_document,
+    oracle_tier_from_effect_strength,
     sign_execute_webhook_hmac,
 )
 from openadapt_types.execute_client import _RejectRedirectHandler
@@ -45,6 +46,12 @@ def _receipt(**updates: object) -> ExecuteEvidenceReceiptV1:
         "receipt_id": "receipt_12345678",
         "execution_id": "execution_12345678",
         "workflow_digest": "sha256:" + "a" * 64,
+        "workflow_version": "workflow_20260729",
+        "qualification_id": "qualification_12345678",
+        "environment_id": "environment_12345678",
+        "runner_id": "runner:hosted",
+        "nonce": "nonce:execution_12345678",
+        "oracle_tier": 2,
         "outcome": ExecuteTerminalOutcomeV1.VERIFIED,
         "contracts": _contract(),
         "delivery_uncertain": False,
@@ -129,8 +136,41 @@ def test_reconciliation_requires_uncertainty_not_a_success_shaped_receipt() -> N
         outcome=ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED,
         delivery_uncertain=True,
         contracts=_contract(effect_passed=False, observed_effect_strength=None),
+        oracle_tier=0,
     )
     assert receipt.outcome is ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+    assert receipt.oracle_tier == 0
+
+
+def test_receipt_is_the_seal_and_verified_requires_sor_oracle() -> None:
+    receipt = _receipt()
+    assert receipt.workflow_version == "workflow_20260729"
+    assert receipt.qualification_id == "qualification_12345678"
+    assert receipt.environment_id == "environment_12345678"
+    assert receipt.runner_id == "runner:hosted"
+    assert receipt.nonce == "nonce:execution_12345678"
+    assert receipt.oracle_tier == 2
+    assert oracle_tier_from_effect_strength(
+        EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD
+    ) == 2
+    assert oracle_tier_from_effect_strength(
+        EffectStrengthV1.INDEPENDENT_SESSION
+    ) == 1
+    assert oracle_tier_from_effect_strength(
+        EffectStrengthV1.IMMEDIATE_SCREEN_CONFIRMATION
+    ) == 0
+
+    with pytest.raises(ValidationError, match="oracle_tier must match"):
+        _receipt(oracle_tier=1)
+
+    with pytest.raises(ValidationError, match="oracle tier 2 or 3"):
+        _receipt(
+            contracts=_contract(
+                minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+                observed_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+            ),
+            oracle_tier=1,
+        )
 
 
 def test_webhook_signature_binds_the_closed_state_payload() -> None:

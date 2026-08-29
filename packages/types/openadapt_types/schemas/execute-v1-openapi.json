@@ -510,7 +510,7 @@
       },
       "ExecuteEvidenceReceiptV1": {
         "additionalProperties": false,
-        "description": "A portable receipt that identifies evidence without carrying it.",
+        "description": "A portable receipt that identifies evidence without carrying it.\n\nThis object is the Seal. It is not a second format. The fields below bind\nprogram version, admission, environment, runner, independent effect, and a\nper-receipt nonce so a consumer does not have to keep the original request.",
         "properties": {
           "compensation_effect_verified": {
             "default": false,
@@ -523,6 +523,11 @@
           "delivery_uncertain": {
             "title": "Delivery Uncertain",
             "type": "boolean"
+          },
+          "environment_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Environment Id",
+            "type": "string"
           },
           "evidence_digest": {
             "pattern": "^sha256:[0-9a-f]{64}$",
@@ -539,12 +544,37 @@
             "title": "Issued At",
             "type": "string"
           },
+          "nonce": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Nonce",
+            "type": "string"
+          },
+          "oracle_tier": {
+            "enum": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "title": "Oracle Tier",
+            "type": "integer"
+          },
           "outcome": {
             "$ref": "#/components/schemas/ExecuteTerminalOutcomeV1"
+          },
+          "qualification_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Qualification Id",
+            "type": "string"
           },
           "receipt_id": {
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
             "title": "Receipt Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Runner Id",
             "type": "string"
           },
           "schema_version": {
@@ -557,12 +587,23 @@
             "pattern": "^sha256:[0-9a-f]{64}$",
             "title": "Workflow Digest",
             "type": "string"
+          },
+          "workflow_version": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Workflow Version",
+            "type": "string"
           }
         },
         "required": [
           "receipt_id",
           "execution_id",
           "workflow_digest",
+          "workflow_version",
+          "qualification_id",
+          "environment_id",
+          "runner_id",
+          "nonce",
+          "oracle_tier",
           "outcome",
           "contracts",
           "delivery_uncertain",
