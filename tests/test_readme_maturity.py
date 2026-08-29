@@ -173,16 +173,14 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         block = MODULE.render_block(projection, {}, now=NOW)
 
         self.assertIn(MODULE.LIVE_RECORD_URL, block)
-        self.assertIn("Production status", block)
-        self.assertIn("No current signed admission", block)
-        self.assertIn("active signed admissions for all seven product targets", block)
-        self.assertIn("expiring, revocable workflow admission", block)
-        self.assertIn("exact compiled workflow version", block)
-        self.assertIn("at least three trials", block)
-        self.assertIn("each task and condition", block)
-        self.assertIn("closed result schema", block)
-        self.assertIn("silent incorrect", block)
-        self.assertIn("success and over-halt", block)
+        self.assertIn("Production is per qualified workflow", block)
+        self.assertIn("exact compiled version", block)
+        self.assertIn("expiring, revocable", block)
+        self.assertNotIn("Production status", block)
+        self.assertNotIn("No current signed admission", block)
+        self.assertNotIn("seven product targets", block)
+        self.assertNotIn("at least three trials", block)
+        self.assertNotIn("silent incorrect", block)
         self.assertNotIn("Beta", block)
         self.assertNotIn("not Production", block)
 
@@ -196,10 +194,9 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         )
 
         self.assertNotIn(flow["admission_id"], block)
-        self.assertIn("Production status", block)
-        self.assertIn("No current signed admission", block)
-        self.assertIn("active signed admissions for all seven product targets", block)
-        self.assertIn("expiring, revocable workflow admission", block)
+        self.assertIn("Production is per qualified workflow", block)
+        self.assertNotIn("Production status", block)
+        self.assertNotIn("No current signed admission", block)
 
     def test_active_launcher_renders_only_a_durable_registry_record(self) -> None:
         launcher = _admission(target="openadapt", sequence=1)

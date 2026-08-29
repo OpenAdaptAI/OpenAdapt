@@ -210,18 +210,10 @@ self-service API. Partner contract and qualification process:
 [the Execute guide](https://docs.openadapt.ai/commercial/oem-brief/).
 
 <!-- BEGIN PRODUCTION LIFECYCLE -->
-> **Built for qualified production workflows.**
-> **Production status:** No current signed admission exists for this target.
-> A Production run requires
-> active signed admissions for all seven product targets and an active signed,
-> expiring, revocable workflow admission for the exact compiled workflow version.
-> The workflow admission binds the organization and workflow identity; bundle
-> version and digest; admitted runtime release; application and environment; input,
-> action, identity, effect, and policy contracts; evidence authority; and its issue,
-> expiry, and revocation state. Qualification requires at least three trials for
-> each task and condition. A closed result schema must report silent incorrect
-> success and over-halt. Any bound change requires a new qualification.
-> [Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
+Production is per qualified workflow.
+A workflow is Production only with an active signed, expiring, revocable
+admission for that exact compiled version, application, and environment.
+[Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 <!-- END PRODUCTION LIFECYCLE -->
 
 ## Where the code is
