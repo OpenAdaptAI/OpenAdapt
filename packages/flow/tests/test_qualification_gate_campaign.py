@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -68,6 +70,115 @@ def _run_main(output: Path, work_root: Path) -> int:
     finally:
         sys.argv = sys_argv_backup
     return int(code)
+
+
+def test_compact_result_handles_fail_closed_harness_failure() -> None:
+    result = {
+        "schema_version": "openadapt.qualification-gate-results.v1",
+        "accepted_subset": False,
+        "stopped_early": True,
+        "harness_failure": {
+            "exception_type": "RuntimeError",
+            "message": "the external durable authority is unavailable",
+        },
+    }
+
+    assert mod.compact_result(result) == {
+        "accepted_subset": False,
+        "harness_failure": result["harness_failure"],
+    }
+
+
+def test_harness_failure_returns_fail_closed_result_without_summary_key_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = tmp_path / "failure.json"
+    work_root = tmp_path / "failure-work"
+
+    def fail_before_campaign(_recording_dir: Path) -> None:
+        raise RuntimeError("the external durable authority is unavailable")
+
+    monkeypatch.setattr(mod, "_record_demo", fail_before_campaign)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(RUNNER), "--output", str(output), "--work-root", str(work_root)],
+    )
+    code = mod.main()
+
+    result = json.loads(output.read_text(encoding="utf-8"))
+    captured = capsys.readouterr()
+    assert code == 1
+    assert result["accepted_subset"] is False
+    assert result["stopped_early"] is True
+    assert result["harness_failure"] == {
+        "exception_type": "RuntimeError",
+        "message": "the external durable authority is unavailable",
+    }
+    assert '"accepted_subset": false' in captured.out
+    assert '"harness_failure"' in captured.out
+    assert "campaign FAILED before completion" in captured.err
+    assert "KeyError" not in captured.err
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="requires POSIX file permissions under an unprivileged user",
+)
+def test_cli_durable_authority_failure_preserves_the_original_failure(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "failure.json"
+    work_root = tmp_path / "failure-work"
+    unavailable_home = tmp_path / "unavailable-home"
+    authority_dir = unavailable_home / ".openadapt" / "durable-authority"
+    authority_dir.mkdir(parents=True)
+    authority_db = authority_dir / "authority.sqlite3"
+    authority_db.touch(mode=0o600)
+    authority_db.chmod(0)
+    env = os.environ.copy()
+    env.pop("OPENADAPT_DURABLE_AUTHORITY_DB", None)
+    env["HOME"] = str(unavailable_home)
+    env["PYTHONPATH"] = str(REPO)
+    try:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RUNNER),
+                "--output",
+                str(output),
+                "--work-root",
+                str(work_root),
+            ],
+            cwd=REPO,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+    finally:
+        authority_db.chmod(0o600)
+
+    result = json.loads(output.read_text(encoding="utf-8"))
+    assert completed.returncode == 1
+    assert result == {
+        "accepted_subset": False,
+        "campaign_contract": "benchmark/qualification_gate/campaign.json",
+        "campaign_id": "qualification-gate-campaign-v1",
+        "harness_failure": {
+            "exception_type": "DurableAuthorityBusy",
+            "message": "the external durable authority is unavailable",
+        },
+        "schema_version": "openadapt.qualification-gate-results.v1",
+        "stopped_early": True,
+    }
+    assert "the external durable authority is unavailable" in completed.stderr
+    assert '"accepted_subset": false' in completed.stdout
+    assert '"harness_failure"' in completed.stdout
+    assert "KeyError" not in completed.stderr
 
 
 CONTRACT_IDS = [

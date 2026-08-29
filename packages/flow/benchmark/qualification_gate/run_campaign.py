@@ -121,6 +121,23 @@ REQUIRED_METRICS = (
     "replay_dispatches",
 )
 
+COMPACT_RESULT_KEYS = (
+    "accepted_subset",
+    "full_campaign_complete",
+    "run_count",
+    "verified_outcomes",
+    "safe_halts",
+    "reconciliation_required_outcomes",
+    "silent_incorrect_successes",
+    "over_halts",
+    "wrong_record_writes",
+    "duplicate_effects",
+    "model_calls",
+    "blind_retries",
+    "replay_dispatches",
+    "harness_failure",
+)
+
 # Uncertain-delivery fault conditions required by the production gate.
 UNCERTAIN_CONDITIONS = (
     "uncertain_delivery_write_lost",
@@ -969,6 +986,12 @@ def write_results(out: Path, result: dict[str, Any]) -> None:
     os.replace(temporary, out)
 
 
+def compact_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Return the available operator summary for success or failure results."""
+
+    return {key: result[key] for key in COMPACT_RESULT_KEYS if key in result}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1039,24 +1062,7 @@ def main() -> int:
         }
         print(f"campaign FAILED before completion: {exc}", file=sys.stderr)
     write_results(args.output, result)
-    compact = {
-        key: result[key]
-        for key in (
-            "accepted_subset",
-            "full_campaign_complete",
-            "run_count",
-            "verified_outcomes",
-            "safe_halts",
-            "reconciliation_required_outcomes",
-            "silent_incorrect_successes",
-            "over_halts",
-            "wrong_record_writes",
-            "duplicate_effects",
-            "model_calls",
-            "blind_retries",
-            "replay_dispatches",
-        )
-    }
+    compact = compact_result(result)
     print(json.dumps(compact, indent=2, sort_keys=True))
     print(f"campaign wall time: {time.monotonic() - started:.1f}s")
     return 0 if result["accepted_subset"] else 1
