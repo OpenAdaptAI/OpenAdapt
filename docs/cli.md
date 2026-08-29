@@ -10,12 +10,18 @@ installed `openadapt-flow` engine.
 ## First run
 
 ```bash
+python -m pip install --upgrade openadapt
 openadapt quickstart [--headed] [--break-it] [--out NEW_DIRECTORY]
+openadapt-agent serve --allow-run
 ```
 
-`quickstart` runs the bundled synthetic workflow from recording through an
-independently verified Standard-profile result. It refuses to overwrite an
-existing output directory.
+`quickstart` runs the bundled synthetic MockMed workflow from recording through
+an independently verified Standard-profile result. It refuses to overwrite an
+existing output directory. `--break-it` reruns the same certified bundle
+against a lying backend; the independent oracle must HALT and leave the store
+unchanged. `openadapt-agent serve --allow-run` then generates the public
+MockMed bundle at serve time and hosts it over MCP. A client POSTs authorized
+work and gets a receipt. Frames stay on this machine.
 
 ## Flow lifecycle
 

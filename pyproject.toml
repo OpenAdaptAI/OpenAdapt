@@ -35,6 +35,9 @@ classifiers = [
 dependencies = [
     "click>=8.0.0",
     "openadapt-flow[browser,hosted]>=1.29.0,<2.0.0",
+    # Day-1 partner kit: `pip install openadapt` must expose
+    # `openadapt-agent serve --allow-run` without a second package.
+    "openadapt-agent>=2.0.1,<3",
 ]
 
 [project.optional-dependencies]
@@ -92,6 +95,11 @@ privacy = [
 flow = [
     "openadapt-flow>=1.29.0,<2.0.0",
 ]
+# `openadapt-agent` also ships in the base install. Keep the extra so
+# `pip install openadapt[agent]` still resolves.
+agent = [
+    "openadapt-agent>=2.0.1,<3",
+]
 # Bundles
 core = [
     "openadapt[capture,ml,evals,viewer]",
@@ -100,7 +108,7 @@ all = [
     # Cross-platform clients are always safe to resolve. Native bindings remain
     # conditional so `openadapt[all]` never pulls PyObjC onto Linux/Windows or
     # PyGObject onto macOS/Windows.
-    "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp]",
+    "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
     "openadapt[macos]; sys_platform == 'darwin'",
     "openadapt[linux]; sys_platform == 'linux'",
 ]
