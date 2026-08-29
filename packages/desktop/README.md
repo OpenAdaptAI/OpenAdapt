@@ -100,7 +100,7 @@ Frozen Python engine sidecar (capture, review, auth, sync, FlowBridge,
         | isolated subprocess mode in the same signed executable
         v
 openadapt-flow
-  record -> compile -> lint/certify -> replay -> halt/repair/teach
+  record -> compile -> qualify propose/accept -> lint/certify -> replay -> halt/repair/teach
 ```
 
 The engine owns consent, OS permissions, recording and review, hosted
@@ -122,7 +122,7 @@ exact runtime.
 |---|---|
 | `record`, `list`, `info` | Capture a session and inspect its metadata |
 | `scrub`, `review`, `approve`, `dismiss` | Drive the local review state machine; a dismissal keeps the raw data local |
-| `compile`, `replay`, `run` | Call the bundled pinned Flow runtime on a capture or a bundle |
+| `compile`, `qualify`, `replay`, `run` | Call the bundled Flow runtime on a capture or a bundle. `qualify --recording` fills application, environment, identity, and effect pins from the demo; missing pins HALT. |
 | `login`, `credential`, `rotate`, `push`, `report-break` | Authenticate to the control plane, check or renew the stored credential, push a bundle, report a halted run |
 | `backends`, `upload` | Inspect the legacy customer-owned storage adapters. Hosted uses governed `push`; customer-owned upload is paused behind a fail-closed gate. |
 | `storage`, `health`, `cleanup` | Inspect and maintain local storage |

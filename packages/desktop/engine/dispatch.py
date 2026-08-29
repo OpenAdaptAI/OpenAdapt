@@ -257,6 +257,7 @@ class EngineDispatcher:
             # qualification cockpit (canonical Flow graph/policy/manifests)
             "get_qualification": self.get_qualification,
             "initialize_qualification": self.initialize_qualification,
+            "propose_qualification_from_demo": self.propose_qualification_from_demo,
             "set_qualification_risk": self.set_qualification_risk,
             "arm_qualification_identity": self.arm_qualification_identity,
             "set_qualification_identity": self.set_qualification_identity,
@@ -2109,6 +2110,42 @@ class EngineDispatcher:
                 bundle_key=self._qualification_bundle_key(workflow_id),
             )
             return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def propose_qualification_from_demo(self, **params: Any) -> dict:
+        """Fill pins from the recording that produced this bundle."""
+
+        from engine.qualification import propose_qualification_from_demo
+
+        workflow_id = str(params.get("workflow_id") or "")
+        recording_dir = params.get("recording_dir")
+        try:
+            if not recording_dir:
+                row = self.services.db.get_bundle(workflow_id)
+                capture_id = row.get("capture_id") if row else None
+                capture = (
+                    self.services.db.get_capture(str(capture_id))
+                    if capture_id
+                    else None
+                )
+                recording_dir = capture and (
+                    capture.get("capture_path") or capture.get("capture_dir")
+                )
+            if not recording_dir:
+                raise ValueError(
+                    "recording_dir is required when this bundle has no "
+                    "retained capture"
+                )
+            return propose_qualification_from_demo(
+                self._qualification_bundle_dir(workflow_id),
+                workflow_id=workflow_id,
+                recording_dir=Path(str(recording_dir)),
+                policy_pack=str(params.get("policy_pack") or "community"),
+                accept=bool(params.get("accept", True)),
+                admit_local=bool(params.get("admit_local", False)),
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
 

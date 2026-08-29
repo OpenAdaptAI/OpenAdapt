@@ -64,6 +64,7 @@ Core commands:
   resume       Resume from the last verified checkpoint
   lint         Inspect bundle coverage
   certify      Enforce a bundle safety policy
+  qualify      Draft and confirm qualification pins from a demo
   console      Open the local operator console
 
 Run a command with --help for its complete options."""

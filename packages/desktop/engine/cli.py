@@ -19,6 +19,7 @@ Usage:
     openadapt-desktop config
     openadapt-desktop capabilities [--json]
     openadapt-desktop doctor
+    openadapt-desktop qualify BUNDLE --recording REC [--accept] [--admit-local]
 """
 
 from __future__ import annotations
@@ -369,6 +370,37 @@ def cmd_compile(args: argparse.Namespace, engine: types.SimpleNamespace) -> None
     if not result.ok:
         sys.exit(result.returncode or 1)
     print(f"  Bundle: {out}")
+
+
+def cmd_qualify(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Fill production-shaped pins from a recording. Missing pins HALT."""
+
+    from engine.flow_bridge import FlowBridge, FlowNotAvailableError
+
+    bundle = Path(args.bundle)
+    recording = Path(args.recording)
+    try:
+        if args.accept:
+            result = FlowBridge().qualify_from_demo(
+                bundle,
+                recording,
+                policy_pack=args.policy_pack,
+                admit_local=args.admit_local,
+            )
+        else:
+            result = FlowBridge().qualify_propose(
+                bundle,
+                recording,
+                policy_pack=args.policy_pack,
+            )
+    except FlowNotAvailableError as exc:
+        print(str(exc))
+        sys.exit(1)
+    text = (result.stdout or result.stderr or "").strip()
+    if text:
+        print(text)
+    if not result.ok:
+        sys.exit(result.returncode or 1)
 
 
 def cmd_replay(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
@@ -797,6 +829,7 @@ _COMMANDS = {
     "rotate": cmd_rotate,
     "push": cmd_push,
     "compile": cmd_compile,
+    "qualify": cmd_qualify,
     "replay": cmd_replay,
     "run": cmd_run,
     "report-break": cmd_report_break,
@@ -876,6 +909,28 @@ def main(argv: list[str] | None = None) -> None:
     p = subparsers.add_parser("compile", help="Compile a recording into a flow bundle")
     p.add_argument("recording", help="Recording directory")
     p.add_argument("--out", default=None, help="Output bundle directory")
+
+    p = subparsers.add_parser(
+        "qualify",
+        help="Fill qualification pins from the recording that produced a bundle",
+    )
+    p.add_argument("bundle", help="Compiled workflow bundle directory")
+    p.add_argument("--recording", required=True, help="Recording directory")
+    p.add_argument(
+        "--policy-pack",
+        choices=("community", "cloud", "regulated"),
+        default="community",
+    )
+    p.add_argument(
+        "--accept",
+        action="store_true",
+        help="Confirm every proposed pin. Refusing is the default HALT path.",
+    )
+    p.add_argument(
+        "--admit-local",
+        action="store_true",
+        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+    )
 
     # replay
     p = subparsers.add_parser("replay", help="Replay a flow bundle locally")

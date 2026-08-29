@@ -718,6 +718,51 @@ class FlowBridge:
         ]
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
+    def qualify_propose(
+        self,
+        bundle_dir: Path,
+        recording_dir: Path | None = None,
+        *,
+        policy_pack: str = "community",
+        out: Path | None = None,
+        timeout: float | None = None,
+    ) -> FlowResult:
+        """Draft qualification pins from a compiled demo. Missing pins HALT."""
+
+        args = ["qualify", "propose", str(bundle_dir), "--policy-pack", policy_pack]
+        if recording_dir is not None:
+            args += ["--recording", str(recording_dir)]
+        if out is not None:
+            args += ["--out", str(out)]
+        return self._run(args, out_dir=bundle_dir, timeout=timeout)
+
+    def qualify_from_demo(
+        self,
+        bundle_dir: Path,
+        recording_dir: Path,
+        *,
+        policy_pack: str = "community",
+        admit_local: bool = False,
+        out: Path | None = None,
+        timeout: float | None = None,
+    ) -> FlowResult:
+        """Propose pins from the recording and accept them in one Flow call."""
+
+        args = [
+            "qualify",
+            "from-demo",
+            str(bundle_dir),
+            "--recording",
+            str(recording_dir),
+            "--policy-pack",
+            policy_pack,
+        ]
+        if admit_local:
+            args.append("--admit-local")
+        if out is not None:
+            args += ["--out", str(out)]
+        return self._run(args, out_dir=bundle_dir, timeout=timeout)
+
     def replay(
         self,
         bundle_dir: Path,
@@ -833,9 +878,7 @@ class FlowBridge:
         try:
             result = self._run([command, "--help"], timeout=15)
             if command == "push":
-                self._push_json_support = result.ok and "--json" in (
-                    result.stdout or ""
-                )
+                self._push_json_support = result.ok and "--json" in (result.stdout or "")
             return result.ok
         except Exception:
             if command == "push":

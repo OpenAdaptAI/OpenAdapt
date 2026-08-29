@@ -165,6 +165,35 @@ describe("Qualification effect requirements", () => {
     );
   });
 
+  it("fills pins from the recording that produced the bundle", async () => {
+    const draft = projectWithTiers({ review: 3, submit: 2 });
+    draft.draft_environment = true;
+    mockedEngineInvoke
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce({
+        ...draft,
+        draft_environment: false,
+        migration_required: false,
+      });
+
+    render(<Qualification workflowId="wf-1" onBack={() => {}} />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Fill pins from this recording",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(mockedEngineInvoke).toHaveBeenCalledWith(
+        CMD.PROPOSE_QUALIFICATION_FROM_DEMO,
+        expect.objectContaining({
+          workflow_id: "wf-1",
+          accept: true,
+        }),
+      ),
+    );
+  });
+
   it("saves the selected action's tier without carrying the prior action's value", async () => {
     mockedEngineInvoke
       .mockResolvedValueOnce(projectWithTiers({ review: 3, submit: 2 }))

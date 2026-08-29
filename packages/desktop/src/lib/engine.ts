@@ -39,6 +39,7 @@ export const CMD = {
   TEACH_FIX: "teach_fix",
   GET_QUALIFICATION: "get_qualification",
   INITIALIZE_QUALIFICATION: "initialize_qualification",
+  PROPOSE_QUALIFICATION_FROM_DEMO: "propose_qualification_from_demo",
   SET_QUALIFICATION_RISK: "set_qualification_risk",
   ARM_QUALIFICATION_IDENTITY: "arm_qualification_identity",
   SET_QUALIFICATION_IDENTITY: "set_qualification_identity",

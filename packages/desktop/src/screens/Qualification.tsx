@@ -399,6 +399,33 @@ export function Qualification({
     }
   }
 
+  async function qualifyThisRecording() {
+    setBusy("propose");
+    setError("");
+    try {
+      const response = await engineInvoke<QualificationResponse>(
+        CMD.PROPOSE_QUALIFICATION_FROM_DEMO,
+        {
+          workflow_id: workflowId,
+          policy_pack: "community",
+          accept: true,
+        },
+      );
+      if (!response.ok) {
+        setError(
+          response.error ||
+            "A pin is missing. Flow HALTed instead of guessing.",
+        );
+        return;
+      }
+      setProject(response);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function setRisk(stepId: string, risk: QualificationRisk) {
     setBusy(stepId);
     setError("");
@@ -759,9 +786,22 @@ export function Qualification({
             <Card id="qualification-environment-section">
               <CardHead
                 eyebrow="Environment boundary"
-                title="Start the qualification project"
-                sub="Bind this compiled workflow to the application and operator-defined environment contract it will be qualified in. Desktop hashes the trimmed identifier locally; it does not claim to measure the machine automatically."
+                title="Qualify this recording"
+                sub="Demo once, get a checked program. Flow fills application, environment, identity, and effect pins from the recording. You confirm them here. If a pin isn't there, Flow HALTs."
               />
+              <Button
+                variant="primary"
+                disabled={busy === "propose"}
+                onClick={() => void qualifyThisRecording()}
+              >
+                {busy === "propose"
+                  ? "Filling pins from the recording…"
+                  : "Fill pins from this recording"}
+              </Button>
+              <p className="page-sub">
+                Or type the pins by hand if you already know the application
+                version and environment identifier.
+              </p>
               <div className="grid grid-2">
                 <div className="field">
                   <label htmlFor="qualification-target">Execution surface</label>

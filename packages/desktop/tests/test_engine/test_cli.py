@@ -121,6 +121,27 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "openadapt-flow (loop engine)" in captured.out
 
+    def test_qualify_propose_calls_flow(
+        self, cli_config: EngineConfig, tmp_path: Path, capsys
+    ) -> None:
+        from engine.flow_bridge import FlowResult
+
+        rec = tmp_path / "rec"
+        bundle = tmp_path / "bundle"
+        rec.mkdir()
+        bundle.mkdir()
+        result = FlowResult(
+            ok=True, returncode=0, stdout='{"status":"draft"}', stderr=""
+        )
+        with patch("engine.cli.EngineConfig", return_value=cli_config), patch(
+            "engine.flow_bridge.FlowBridge"
+        ) as bridge_cls:
+            bridge_cls.return_value.qualify_propose.return_value = result
+            main(["qualify", str(bundle), "--recording", str(rec)])
+        captured = capsys.readouterr()
+        assert '"status":"draft"' in captured.out
+        bridge_cls.return_value.qualify_propose.assert_called_once()
+
     def test_login_success(self, cli_config: EngineConfig, capsys) -> None:
         """login should dispatch to engine.auth.login and report the org."""
         cred = {"kind": "ingest_token", "token": "t", "refresh_token": None,

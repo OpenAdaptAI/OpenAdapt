@@ -1029,6 +1029,81 @@ def initialize_qualification(
     )
 
 
+def propose_qualification_from_demo(
+    bundle_dir: Path,
+    *,
+    workflow_id: str,
+    recording_dir: Path,
+    policy_pack: str = "community",
+    accept: bool = True,
+    admit_local: bool = False,
+    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    bundle_key: str | None = None,
+) -> dict:
+    """Fill production-shaped pins from the recording. Missing pins HALT.
+
+    Uses Flow's ``qualify propose`` / ``accept`` APIs when the installed
+    runtime has them. Older Flow builds get a clear update error instead of
+    a guessed environment.
+    """
+
+    try:
+        from openadapt_flow.qualification_proposal import (
+            QualificationProposalError,
+            accept_proposal,
+            admit_local_dev,
+            propose_qualification,
+            save_accepted_bundle,
+        )
+    except ImportError as exc:
+        raise QualificationError(
+            "This Desktop build needs OpenAdapt Flow with "
+            "`qualify propose`. Update Flow, then qualify this recording."
+        ) from exc
+
+    workflow = _load(bundle_dir, key=bundle_key)
+    try:
+        proposal = propose_qualification(
+            workflow,
+            recording_dir=recording_dir,
+            policy_pack=policy_pack,
+        )
+    except (ValueError, TypeError) as exc:
+        raise QualificationError(str(exc)) from exc
+    payload = proposal.model_dump(mode="json")
+    if proposal.status == "halted" or not accept:
+        return {
+            "ok": proposal.status != "halted",
+            "workflow_id": workflow_id,
+            "proposal": payload,
+            "error": proposal.halt_reason or "",
+        }
+    try:
+        accepted = accept_proposal(workflow, proposal, replace=True)
+        local = None
+        if admit_local:
+            local = admit_local_dev(
+                workflow, accepted, bundle_dir=bundle_dir
+            )
+        save_accepted_bundle(
+            workflow,
+            bundle_dir,
+            proposal=accepted,
+            local_admission=local,
+        )
+    except QualificationProposalError as exc:
+        raise QualificationError(str(exc)) from exc
+    inspected = inspect_bundle(
+        bundle_dir,
+        workflow_id=workflow_id,
+        policy_source=policy_source,
+        bundle_key=bundle_key,
+    )
+    inspected["proposal"] = accepted.model_dump(mode="json")
+    inspected["ok"] = True
+    return inspected
+
+
 def set_action_risk(
     bundle_dir: Path,
     *,
