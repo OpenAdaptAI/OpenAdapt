@@ -194,14 +194,6 @@ official public demo, with fake patients, that other people mutate and that
 resets daily. That also makes it impossible to reproduce in CI, and the sample
 is small.
 
-Both of those are one rehearsed task. The number to look at before you trust
-this on a workflow we have never seen is the breadth one, and it is worse: on
-29 public web applications recorded and replayed once each
-([method](benchmark/reliability/RELIABILITY.md)), all 29 compiled, 17 replays
-verified, 10 halted safely, and 2 reported success while the independent oracle
-disagreed. One observation per app is failure discovery, not a rate you can
-plan against.
-
 Method, caveats, the pinned Frappe lending environment, and EffectBench (the
 standalone Silent Wrong-Effect Rate benchmark) are all in
 [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
