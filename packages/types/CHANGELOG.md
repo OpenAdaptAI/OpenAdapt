@@ -1,6 +1,72 @@
 # CHANGELOG
 
 
+## v0.11.0 (2026-08-29)
+
+### Chores
+
+- Ignore every .env variant, not one at a time
+  ([#28](https://github.com/OpenAdaptAI/openadapt-types/pull/28),
+  [`fa0ec1f`](https://github.com/OpenAdaptAI/openadapt-types/commit/fa0ec1f640fe7ed15351c0914cca29673eaa4ae8))
+
+.gitignore did not cover .env.bak or .env.local. A .env.bak containing populated API keys sat in a
+  local stash in another repo since 2026-07-13, untracked and one `git add -A` from being committed.
+
+Use a glob and negate the committed .env.example template.
+
+- **policy**: Sync generated source boundary
+  ([#29](https://github.com/OpenAdaptAI/openadapt-types/pull/29),
+  [`2b5f521`](https://github.com/OpenAdaptAI/openadapt-types/commit/2b5f521b31a11b178fb18a516c37f09d50057229))
+
+### Documentation
+
+- Rewrite the README around the schema you actually import
+  ([#30](https://github.com/OpenAdaptAI/openadapt-types/pull/30),
+  [`eef6eaa`](https://github.com/OpenAdaptAI/openadapt-types/commit/eef6eaacdc8e5a02790e6d39ac5ba7b1eec4d4ea))
+
+Same structural rewrite as openadapt-flow. The old file spent its first 30 lines on a status
+  admonition and a stack table copied verbatim into five other repositories, then buried the code
+  sample that shows what this package is.
+
+- Open with what the schemas are for and who else in the stack reads them, then the install line,
+  then the code. - Move the overlay and business-decision wire-contract rules, about 45 lines of
+  exact 'may not carry' language, into docs/CONTRACTS.md. Nothing deleted. - Turn the Design
+  principles bullets into prose. Every bullet was a bolded phrase followed by a restatement of
+  itself. - Verified against openadapt-types 0.10.1 from PyPI: to_text_tree() output, ActionTarget
+  field names, the _compat converters, ExecuteClient, and the count of shipped JSON schema files.
+
+265 lines to 154.
+
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+
+- State the real number of shipped schema files
+  ([#31](https://github.com/OpenAdaptAI/openadapt-types/pull/31),
+  [`d06c42d`](https://github.com/OpenAdaptAI/openadapt-types/commit/d06c42d319d868264d6e3a65f04dd51dae807d7a))
+
+The README said nineteen JSON files ship under openadapt_types/schemas/. Seventeen do. Nobody could
+  have caught that by reading the diff, which is the problem worth fixing rather than the digit.
+
+So the claim now has a test behind it, along with two neighbours in the same class: every relative
+  link in the README resolves to a real path, and every schema filename it names in backticks is one
+  the package ships.
+
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+
+### Features
+
+- **execute**: Bind Seal fields on the evidence receipt
+  ([#32](https://github.com/OpenAdaptAI/openadapt-types/pull/32),
+  [`179c01f`](https://github.com/OpenAdaptAI/openadapt-types/commit/179c01fea8bff9d0c616ae6e50db2d69e21e25bb))
+
+ExecuteEvidenceReceiptV1 is the Seal. It binds program version, admission, environment, runner,
+  independent-effect tier, outcome, and a per-receipt nonce, plus the bundle hash it already had.
+
+verified and rolled_back_verified require oracle_tier 2 or 3. oracle_tier must match
+  observed_effect_strength, so a caller cannot claim SoR after a screenshot check.
+
+Merged by an agent session, not the founder.
+
+
 ## v0.10.1 (2026-08-19)
 
 ### Bug Fixes
