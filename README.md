@@ -16,8 +16,10 @@ live in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), and
 this repository doesn't reimplement them.
 
 [Documentation](https://docs.openadapt.ai) ·
+[Get started](https://docs.openadapt.ai/get-started/) ·
 [Desktop downloads](https://openadapt.ai/download) ·
 [Website](https://openadapt.ai) ·
+[15s proof](https://x.com/OpenAdaptAI/status/2093535221324935360) ·
 [Discord](https://discord.gg/yF527cQbDG)
 
 ## Run it
