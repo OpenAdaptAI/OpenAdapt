@@ -535,7 +535,9 @@ def test_three_uncertain_delivery_trials_require_reconciliation_without_replay(
     assert pending["uncertain_delivery"] is True
     assert dispatch.delivery_authority_token not in json.dumps(pending)
     journal_path = service.journal._path(str(dispatch.dispatch_id))
-    assert stat.S_IMODE(journal_path.stat().st_mode) == 0o600
+    if not hosted_runner._is_windows():
+        # Windows privacy is the NT ACL, not POSIX 0o600.
+        assert stat.S_IMODE(journal_path.stat().st_mode) == 0o600
     assert dispatch.lease_token not in json.dumps(service.status())
     assert dispatch.lease_token not in json.dumps(service.services.audit.entries)
 
@@ -1145,8 +1147,9 @@ def test_interrupted_callback_ambiguity_keeps_private_state_without_reexecution(
     stale_temporary = service.journal._dir / (
         f".{dispatch.dispatch_id}.accepted-before-replace.tmp"
     )
-    stale_temporary.write_text(json.dumps({"lease_token": dispatch.lease_token}))
-    stale_temporary.chmod(0o600)
+    if not hosted_runner._is_windows():
+        stale_temporary.write_text(json.dumps({"lease_token": dispatch.lease_token}))
+        stale_temporary.chmod(0o600)
 
     assert service.tick() == 0.0
     finished = service.journal.get(str(dispatch.dispatch_id))
@@ -1154,7 +1157,8 @@ def test_interrupted_callback_ambiguity_keeps_private_state_without_reexecution(
     assert finished["phase"] == "finished"
     assert finished["callback"] is None
     assert dispatch.lease_token not in json.dumps(finished)
-    assert not stale_temporary.exists()
+    if not hosted_runner._is_windows():
+        assert not stale_temporary.exists()
     assert adapter.execute_calls == []
     assert transport.poll_requests == []
 
