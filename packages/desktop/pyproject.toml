@@ -46,7 +46,7 @@ dependencies = [
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "PyYAML>=6.0,<7",
-    "httpx>=0.27",
+    "httpx>=0.28.1",
     "keyring>=24",
     # PEP 440 comparison is required before Desktop enables a Flow capability.
     # Hand-parsing would accept pre-release builds such as 1.26.0rc1 as 1.26.0.
@@ -61,7 +61,7 @@ dependencies = [
     # Pure-Python, dependency-free, BSD-licensed QR encoder. The mobile
     # decision portal renders its one-use pairing link locally; nothing about
     # a pairing ever leaves this machine to be encoded elsewhere.
-    "segno>=1.6",
+    "segno>=1.6.6",
     "tqdm",
 ]
 
@@ -71,7 +71,7 @@ full = [
     "openadapt-desktop[enterprise]",
 ]
 build = [
-    "pyinstaller>=6.16,<7",
+    "pyinstaller>=6.22.2,<7",
     # The native installer freezes this exact canonical runtime into the
     # engine sidecar.  Keep it exact: Desktop and Flow can release
     # independently, while each installer remains reproducible and rollbackable.
@@ -103,7 +103,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "ruff",
-    "python-semantic-release>=9.15.2",
+    "python-semantic-release>=10.6.1,<11",
 ]
 
 [project.scripts]
@@ -117,6 +117,13 @@ Issues = "https://github.com/OpenAdaptAI/openadapt-desktop/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["engine"]
+
+# python-semantic-release 10.6.2 still accepts click 8.1.8, which pip-audit
+# reports as PYSEC-2026-2132 (fix: 8.3.3). The GitHub Action is SHA-pinned at
+# v10.6.1 and does not use this lock; the constraint keeps the local extra
+# from regressing the audited tree.
+[tool.uv]
+constraint-dependencies = ["click>=8.3.3"]
 
 [tool.ruff]
 line-length = 100

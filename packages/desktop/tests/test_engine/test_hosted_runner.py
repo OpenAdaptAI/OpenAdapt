@@ -25,6 +25,17 @@ from engine.hosted_runner import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _stub_windows_journal_acl(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exact-main Windows tests install ``dev`` without Flow.
+
+    Production still calls Flow's ACL helper. These contract tests supply
+    their own refuse_* stubs when they exercise that helper.
+    """
+
+    monkeypatch.setattr(hosted_runner, "_require_private_windows_acl", lambda _descriptor: None)
+
+
 class WireModel:
     """Small Pydantic-shaped strict-model fake supplied by Flow in production."""
 

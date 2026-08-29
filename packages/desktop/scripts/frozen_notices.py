@@ -162,7 +162,7 @@ def capture_floor_is_satisfied(candidate: str, floor: str) -> bool:
 # Exception. Pin the reviewed upstream notice bytes so an upgrade requires an
 # explicit release-boundary review instead of silently inheriting new terms.
 PYINSTALLER_DISTRIBUTION = "pyinstaller"
-PYINSTALLER_VERSION = "6.21.0"
+PYINSTALLER_VERSION = "6.22.2"
 PYINSTALLER_NOTICE_SHA256 = "dcf75fdb959db1e3b41c0f8505069d2ece781b5ec6b3d0a4d30975cfc6580245"
 PYINSTALLER_NOTICE_MEMBER = f"{NOTICE_BUNDLE_MEMBER}/build-components/pyinstaller/COPYING.txt"
 PYINSTALLER_EXCEPTION_MARKERS = (

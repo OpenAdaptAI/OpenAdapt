@@ -293,7 +293,9 @@ def test_frozen_notice_inventory_binds_concrete_archive_bytes(
                     "source_distribution": verify.PYINSTALLER_DISTRIBUTION,
                     "source_version": verify.PYINSTALLER_VERSION,
                     "license_scope": ("GPL-2.0-or-later WITH PyInstaller-Bootloader-exception"),
-                    "source_member": ("pyinstaller-6.21.0.dist-info/licenses/COPYING.txt"),
+                    "source_member": (
+                        f"pyinstaller-{verify.PYINSTALLER_VERSION}.dist-info/licenses/COPYING.txt"
+                    ),
                     "bundled_member": verify.PYINSTALLER_NOTICE_MEMBER,
                     "sha256": hashlib.sha256(bootloader_notice).hexdigest(),
                     "bytes": len(bootloader_notice),
@@ -439,7 +441,7 @@ def test_frozen_flow_pin_must_request_the_console_and_browser_extras(tmp_path: P
         (root / "pyproject.toml").write_text(
             "[project]\nname = 'x'\n\n"
             "[project.optional-dependencies]\n"
-            f"build = ['pyinstaller>=6.16,<7', '{pin}']\n",
+            f"build = ['pyinstaller>=6.22.2,<7', '{pin}']\n",
             encoding="utf-8",
         )
         return root

@@ -195,6 +195,44 @@ def test_release_is_manual_and_gated_on_exact_test_and_build_heads() -> None:
     assert "Refusing stale release dispatch" in semantic
 
 
+def test_dev_semantic_release_floor_matches_the_pinned_v10_action() -> None:
+    """A merge must not silently install python-semantic-release 9 against the v10 action."""
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    dev = pyproject["project"]["optional-dependencies"]["dev"]
+
+    assert "python-semantic-release>=10.6.1,<11" in dev
+    assert re.search(
+        r'^name = "python-semantic-release"\nversion = "10\.\d+\.\d+"',
+        lock,
+        flags=re.MULTILINE,
+    )
+    assert "# v10.6.1" in workflow
+    assert "python-semantic-release>=9" not in "\n".join(dev)
+    assert "  push:" not in workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
+    uv = pyproject["tool"]["uv"]
+    assert "click>=8.3.3" in uv["constraint-dependencies"]
+
+
+def test_pyinstaller_build_floor_matches_the_reviewed_bootloader_pin() -> None:
+    """The frozen sidecar must freeze the reviewed PyInstaller, not the old 6.16 floor."""
+
+    from scripts.frozen_notices import PYINSTALLER_NOTICE_SHA256, PYINSTALLER_VERSION
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    build = pyproject["project"]["optional-dependencies"]["build"]
+
+    assert "pyinstaller>=6.22.2,<7" in build
+    assert PYINSTALLER_VERSION == "6.22.2"
+    assert f'name = "pyinstaller"\nversion = "{PYINSTALLER_VERSION}"' in lock
+    assert PYINSTALLER_NOTICE_SHA256 == (
+        "dcf75fdb959db1e3b41c0f8505069d2ece781b5ec6b3d0a4d30975cfc6580245"
+    )
+
+
 def test_release_recovery_ref_is_main_contained_and_exact_ci_green() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     recovery = workflow[workflow.index("\n  publish-existing-ref:") :]
