@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from scripts import install_playwright_browser
+from scripts.classify_ci_scope import code_changed
 
 ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / ".github/workflows/ci.yml"
@@ -208,6 +209,64 @@ def test_required_linux_atspi_qualification_is_bounded() -> None:
     )
     assert "--output runs/linux-atspi/results.json" in linux_job
     assert "if-no-files-found: error" in linux_job
+
+
+def test_docs_only_classifier_skips_markdown_and_fails_closed() -> None:
+    assert code_changed(["README.md", "docs/LIMITS.md"]) is False
+    assert code_changed(["paper/workshop/main.tex"]) is False
+    assert code_changed(["LICENSE", "NOTICE.txt"]) is False
+    assert code_changed([".github/ISSUE_TEMPLATE/bug.md"]) is False
+    assert code_changed(["openadapt_flow/policy.py"]) is True
+    assert code_changed([".github/workflows/ci.yml"]) is True
+    assert code_changed(["README.md", "openadapt_flow/ir.py"]) is True
+    assert code_changed([]) is True
+
+
+def test_expensive_required_jobs_no_op_on_docs_only() -> None:
+    """Documentation-only PRs must still report the required CheckRun names.
+
+    GitHub leaves a missing required check pending, so the jobs stay in the
+    workflow and succeed without installing the suite. docs-consistency is
+    the one required job that still does work on a docs-only change.
+    """
+    workflow = CI.read_text(encoding="utf-8")
+    gated = (
+        "lint",
+        "python-compatibility",
+        "mypy-strict-safety",
+        "effectbench-standalone",
+        "interop-types",
+        "phi-guard",
+        "test",
+        "e2e-browser",
+        "linux-atspi-x11",
+        "windows-mock",
+        "wheel",
+    )
+    job_starts = {
+        match.group(1): match.start()
+        for match in re.finditer(r"^  ([a-z0-9-]+):", workflow, re.MULTILINE)
+    }
+    ordered = sorted(job_starts.items(), key=lambda item: item[1])
+    for name in gated:
+        start = job_starts[name]
+        later = [pos for other, pos in ordered if pos > start]
+        end = later[0] if later else len(workflow)
+        job = workflow[start:end]
+        assert "needs: [scope]" in job, name
+        assert "Skip expensive work on documentation-only changes" in job, name
+        assert "needs.scope.outputs.code_changed == 'true'" in job, name
+
+    docs_start = workflow.index("\n  docs-consistency:")
+    docs_end = workflow.index("\n  effectbench-standalone:")
+    docs_job = workflow[docs_start:docs_end]
+    assert "needs: [scope]" not in docs_job
+    assert "code_changed" not in docs_job
+    assert "python scripts/check_consistency.py" in docs_job
+
+    scope = workflow[workflow.index("\n  scope:") : workflow.index("\n  lint:")]
+    assert "scripts/classify_ci_scope.py" in scope
+    assert "fetch-depth: 0" in scope
 
 
 def test_full_matrix_can_be_dispatched_on_an_exact_branch() -> None:
