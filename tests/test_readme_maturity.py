@@ -173,8 +173,8 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         block = MODULE.render_block(projection, {}, now=NOW)
 
         self.assertIn(MODULE.LIVE_RECORD_URL, block)
-        self.assertIn("Current OpenAdapt admission state", block)
-        self.assertIn("Not actively admitted", block)
+        self.assertIn("Production status", block)
+        self.assertIn("No current signed admission", block)
         self.assertIn("active signed admissions for all seven product targets", block)
         self.assertIn("expiring, revocable workflow admission", block)
         self.assertIn("exact compiled workflow version", block)
@@ -196,8 +196,8 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         )
 
         self.assertNotIn(flow["admission_id"], block)
-        self.assertIn("Current OpenAdapt admission state", block)
-        self.assertIn("Not actively admitted", block)
+        self.assertIn("Production status", block)
+        self.assertIn("No current signed admission", block)
         self.assertIn("active signed admissions for all seven product targets", block)
         self.assertIn("expiring, revocable workflow admission", block)
 
@@ -214,8 +214,7 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         self.assertIn(launcher["issued_at"], block)
         self.assertIn(launcher["expires_at"], block)
         self.assertIn("historical record", block)
-        self.assertIn("Not actively admitted", block)
-        self.assertIn("admissions are missing", block)
+        self.assertIn("missing these required target admissions", block)
         self.assertIn("`flow`", block)
         self.assertNotIn("OpenAdapt is Production", block)
 
@@ -231,7 +230,7 @@ class ReadmeMaturityContractTests(unittest.TestCase):
 
         self.assertIn("OpenAdapt target admission record", block)
         self.assertIn("does not establish combined-product Production", block)
-        self.assertIn("product is **Not actively admitted**", block)
+        self.assertIn("missing these required target admissions", block)
         for target in MODULE.EXPECTED_TARGETS - {"openadapt"}:
             self.assertIn(f"`{target}`", block)
 

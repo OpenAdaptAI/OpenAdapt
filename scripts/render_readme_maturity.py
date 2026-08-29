@@ -460,8 +460,8 @@ def _qualification_block() -> str:
         [
             BEGIN,
             "> **Built for qualified production workflows.**",
-            "> Current OpenAdapt admission state: **Not actively admitted.** The exact signed",
-            "> ledger has no active admission for this target. The path to Production requires",
+            "> **Production status:** No current signed admission exists for this target.",
+            "> A Production run requires",
             "> active signed admissions for all seven product targets and an active signed,",
             "> expiring, revocable workflow admission for the exact compiled workflow version.",
             "> The workflow admission binds the organization and workflow identity; bundle",
@@ -508,8 +508,7 @@ def render_block(
         missing = ", ".join(f"`{target}`" for target in missing_targets)
         combined_state = [
             "> This target record does not establish combined-product Production. The combined",
-            "> product is **Not actively admitted** in this snapshot because required target",
-            f"> admissions are missing: {missing}.",
+            f"> product is missing these required target admissions in this snapshot: {missing}.",
         ]
     else:
         combined_state = [

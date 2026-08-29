@@ -211,8 +211,8 @@ self-service API. Partner contract and qualification process:
 
 <!-- BEGIN PRODUCTION LIFECYCLE -->
 > **Built for qualified production workflows.**
-> Current OpenAdapt admission state: **Not actively admitted.** The exact signed
-> ledger has no active admission for this target. The path to Production requires
+> **Production status:** No current signed admission exists for this target.
+> A Production run requires
 > active signed admissions for all seven product targets and an active signed,
 > expiring, revocable workflow admission for the exact compiled workflow version.
 > The workflow admission binds the organization and workflow identity; bundle
