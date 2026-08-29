@@ -18,11 +18,11 @@
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
-    "@vitejs/plugin-react": "^6.0.5",
+    "@vitejs/plugin-react": "^6.1.0",
     "jsdom": "^30.0.1",
     "typescript": "^5.5.4",
-    "vite": "^8.2.1",
-    "vitest": "^4.1.10"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
