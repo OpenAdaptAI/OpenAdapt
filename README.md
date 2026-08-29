@@ -6,14 +6,23 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-Show OpenAdapt a task once. It compiles your demonstration into a program that
-runs the task again without a generative-model API in the control loop. Before
-a governed run reports `VERIFIED`, it checks every declared effect at the
-required evidence tier.
+**Verified last-mile execution for agents.** Give agents verified hands for
+the GUI your APIs can't reach.
+
+A named human authors a demonstration. OpenAdapt compiles it into a program
+that runs again without a generative-model API in the control loop. A calling
+agent invokes that program. Before a governed run reports `VERIFIED`, it
+checks every declared effect at the required evidence tier. Never summarize
+halt as success.
+
+Computer-use agents are the user of OpenAdapt. They are not the executor
+inside it. The person who demonstrated the task is authority, not the daily
+operator.
 
 This is the installer and the `openadapt` command. The compiler and the runtime
 live in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), and
-this repository doesn't reimplement them.
+this repository doesn't reimplement them. `openadapt-agent` is the default
+runtime interface for the calling agent. The CLI remains.
 
 [Documentation](https://docs.openadapt.ai) ·
 [Start locally](https://openadapt.ai/start) ·
@@ -100,7 +109,7 @@ openadapt flow visualize openadapt-quickstart/bundle --out graph.html
 openadapt flow lint openadapt-quickstart/bundle
 ```
 
-## Record and rehearse one workflow
+## Author a workflow
 
 ```bash
 openadapt flow record --backend web --url https://your-app.example --out rec
