@@ -24,13 +24,18 @@ this repository doesn't reimplement them.
 
 ## Run it
 
+A solutions engineer gets `VERIFIED` on synthetic MockMed, then hands an agent
+the run tool:
+
 ```bash
 python -m pip install --upgrade openadapt
 openadapt quickstart
+openadapt-agent serve --allow-run
 ```
 
 Python 3.10 through 3.12. No account, no API key, no extra. Chromium downloads
-itself the first time a browser action runs.
+itself the first time a browser action runs. `openadapt-agent` is in the base
+install.
 
 `quickstart` records and compiles a task in MockMed, a synthetic
 practice-management fixture, certifies it against the shipped clinical-write
@@ -68,7 +73,12 @@ openadapt quickstart --break-it
 Same certified bundle. This time the backend rejects the write after the app
 has already painted its success banner, so every on-screen check passes and the
 run halts anyway, because the independent read of the record store disagrees.
-That halt is the whole product in one command.
+The store is unchanged. That halt is the whole product in one command.
+
+`openadapt-agent serve --allow-run` then generates the public MockMed bundle
+at serve time and keeps the app up. A client calls `run_local_quickstart`.
+You'll get a receipt. You never see frames. Local unsigned success isn't a
+Seal; treat unsigned production success as failure.
 
 Inspect what compiled, and what it failed to cover:
 

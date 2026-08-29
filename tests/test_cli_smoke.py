@@ -92,6 +92,8 @@ def test_quickstart_runs_one_local_lifecycle_without_overwriting(monkeypatch):
     assert calls[0][0] == "tutorial"
     assert calls[0][1] == "--out"
     assert calls[0][3:] == ["--name", "local-quickstart"]
+    assert "openadapt-agent serve --allow-run" in result.output
+    assert "Frames stay here" in result.output
 
 
 def test_quickstart_forwards_the_headed_tutorial_option(monkeypatch):
@@ -136,6 +138,8 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     assert calls[0][-1] == "--break-it"
     assert "run-broken" in result.output
     assert "HALTED" in result.output
+    assert "store unchanged" in result.output
+    assert "openadapt-agent serve --allow-run" in result.output
 
 
 def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):
@@ -239,8 +243,9 @@ def test_doctor_lists_quickstart_dependencies_as_core_not_extras():
     core_section = out[core_idx:optional_idx]
     optional_section = out[optional_idx:]
 
-    # Flow and the browser tutorial driver are core.
+    # Flow, the agent bridge, and the browser tutorial driver are core.
     assert "openadapt_flow" in core_section
+    assert "openadapt_agent" in core_section
     assert "playwright" in core_section
     assert "playwright" not in optional_section
     # The excluded-by-default extras must appear only in the optional
@@ -270,7 +275,9 @@ def test_launcher_flow_and_substrate_extras_metadata():
         metadata["dependencies"].count("openadapt-flow[browser,hosted]>=1.29.0,<2.0.0")
         == 1
     )
+    assert metadata["dependencies"].count("openadapt-agent>=2.0.1,<3") == 1
     assert extras["flow"] == ["openadapt-flow>=1.29.0,<2.0.0"]
+    assert extras["agent"] == ["openadapt-agent>=2.0.1,<3"]
     assert extras["browser"] == ["openadapt-flow[browser]>=1.29.0,<2.0.0"]
     assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
     assert extras["capture"] == [
@@ -286,7 +293,7 @@ def test_launcher_flow_and_substrate_extras_metadata():
     ]
     assert extras["rdp"] == ["openadapt-flow[rdp]>=1.29.0,<2.0.0"]
     assert extras["all"] == [
-        "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp]",
+        "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
         "openadapt[macos]; sys_platform == 'darwin'",
         "openadapt[linux]; sys_platform == 'linux'",
     ]
@@ -465,6 +472,7 @@ def test_top_level_help_leads_with_flow():
     # Quick Start headline and Commands listing both lead with flow.
     assert "openadapt flow demo-record" in result.output
     assert "openadapt quickstart" in result.output
+    assert "openadapt-agent serve --allow-run" in result.output
     assert "effect-verified first run" in result.output
     assert "Standalone local human GUI capture" in result.output
     assert "Research: evaluate" in result.output

@@ -63,6 +63,7 @@ def main():
     Quick Start:
         python -m pip install --upgrade openadapt
         openadapt quickstart
+        openadapt-agent serve --allow-run
 
     \b
     Manual Demo Lifecycle:
@@ -74,6 +75,7 @@ def main():
 
     The manual demo is runnable but not certified for consequential work.
     Use `openadapt quickstart` for the effect-verified first run.
+    `openadapt-agent serve --allow-run` then exposes run_* tools over MCP.
     """
     pass
 
@@ -253,6 +255,7 @@ def quickstart(
             "the screen claimed success and the system of record disagreed."
         )
         click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
+        click.echo("The independent oracle kept the store unchanged.")
     click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
     if not break_it:
         click.echo(
@@ -263,6 +266,9 @@ def quickstart(
         "See a fail-safe halt: openadapt flow replay "
         f"{root / 'bundle'} --drift modal --run-dir {root}-halt"
     )
+    click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
+    click.echo("  openadapt-agent serve --allow-run")
+    click.echo("A client POSTs authorized work and gets a receipt. Frames stay here.")
     click.echo(
         "Connect this computer when you want Cloud history and collaboration: "
         "https://app.openadapt.ai/dashboard/settings/ingest"
@@ -974,6 +980,7 @@ def version():
 
     packages = [
         "openadapt",
+        "openadapt-agent",
         "openadapt-capture",
         "openadapt-ml",
         "openadapt-evals",
@@ -1058,6 +1065,7 @@ def doctor(backend: str | None):
     click.echo("\nCore packages (installed with `pip install openadapt`):")
     core = [
         "openadapt_flow",
+        "openadapt_agent",
         "playwright",
     ]
     for pkg in core:
