@@ -18,6 +18,10 @@ imported lazily inside each handler so ``--help`` always works):
   bundles plus a handoff contract. Each child keeps its recorded surface.
   ``certify`` / ``run`` execute the parent. The launcher form is
   ``openadapt flow compose``.
+- ``process`` — author a ProcessContract parent over independently admitted
+  capabilities (each child a ``QualificationAdmissionEnvelope``). Not compose.
+  ``certify`` / ``run`` execute the parent; ``replay`` refuses it. The
+  launcher form is ``openadapt flow process``.
 - ``replay`` — replay a bundle; serves the bundled MockMed demo app when no
   ``--url`` is given (with optional ``--drift`` to demonstrate healing).
   ``--worklist`` drives a program's loop over a CLI-supplied relation; effect
@@ -1609,6 +1613,12 @@ def _cmd_compose(args: argparse.Namespace) -> int:
     return cmd_compose(args)
 
 
+def _cmd_process(args: argparse.Namespace) -> int:
+    from openadapt_flow.cli_process import cmd_process
+
+    return cmd_process(args)
+
+
 def _default_run_dir() -> Path:
     """Timestamped default run directory under ``runs/``."""
     from datetime import datetime, timezone
@@ -1620,10 +1630,12 @@ def _default_run_dir() -> Path:
 def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow.backends.factory import _normalize_kind, build_backend
     from openadapt_flow.cli_compose import refuse_replay_composition
+    from openadapt_flow.cli_process import refuse_replay_process
     from openadapt_flow.ir import Workflow
 
     bundle = Path(args.bundle)
     refuse_replay_composition(bundle)
+    refuse_replay_process(bundle)
     run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
     workflow = Workflow.load(bundle)
     qualification_case = getattr(args, "_qualification_case_execution", None)
@@ -1855,6 +1867,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         from openadapt_flow.cli_compose import cmd_run_composition
 
         return cmd_run_composition(args, run_child=_cmd_run)
+    from openadapt_flow.admitted_composition import is_process_contract_artifact
+
+    if is_process_contract_artifact(bundle):
+        from openadapt_flow.cli_process import cmd_run_process
+
+        return cmd_run_process(args, run_child=_cmd_run)
     # Load the bundle first (decrypting if encrypted -- the key comes from
     # --config/env via OPENADAPT_BUNDLE_KEY); a missing/wrong key fails LOUDLY.
     try:
@@ -2670,6 +2688,7 @@ def _cmd_explain(args: argparse.Namespace) -> int:
 
 
 def _cmd_visualize(args: argparse.Namespace) -> int:
+    from openadapt_flow.admitted_composition import is_process_contract_artifact
     from openadapt_flow.composition import CompositionError, is_composition_artifact
     from openadapt_flow.ir import Workflow
     from openadapt_flow.visualize import (
@@ -2682,6 +2701,8 @@ def _cmd_visualize(args: argparse.Namespace) -> int:
     )
 
     path = Path(args.bundle)
+    if is_process_contract_artifact(path):
+        return _cmd_visualize_process(args)
     if is_composition_artifact(path):
         try:
             spec = build_composition_graph(path)
@@ -2722,6 +2743,38 @@ def _cmd_visualize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_visualize_process(args: argparse.Namespace) -> int:
+    from openadapt_flow.visualize.admitted_composition import (
+        build_process_graph,
+        dumps_process_graph,
+        render_process_html,
+        render_process_mermaid,
+    )
+
+    spec = build_process_graph(Path(args.bundle))
+    fmt = args.format
+    if fmt == "json":
+        output = dumps_process_graph(spec)
+    elif fmt == "mermaid":
+        output = render_process_mermaid(spec)
+    else:
+        output = render_process_html(spec)
+    if args.out:
+        out_path = Path(args.out)
+        if out_path.parent != Path(""):
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(output, encoding="utf-8")
+        admitted = sum(1 for node in spec.nodes if node.kind == "admitted_capability")
+        handoffs = sum(1 for edge in spec.edges if edge.kind == "handoff")
+        print(
+            f"Wrote {fmt} visualization of {spec.name} "
+            f"({admitted} admitted capabilities, {handoffs} handoff(s)) to {out_path}"
+        )
+    else:
+        print(output)
+    return 0
+
+
 def _cmd_certify(args: argparse.Namespace) -> int:
     from openadapt_flow.composition import is_composition_artifact
     from openadapt_flow.ir import Workflow
@@ -2732,6 +2785,12 @@ def _cmd_certify(args: argparse.Namespace) -> int:
         from openadapt_flow.cli_compose import cmd_certify_composition
 
         return cmd_certify_composition(args)
+    from openadapt_flow.admitted_composition import is_process_contract_artifact
+
+    if is_process_contract_artifact(bundle):
+        from openadapt_flow.cli_process import cmd_certify_process
+
+        return cmd_certify_process(args)
     workflow = Workflow.load(bundle)
     # Policy source: explicit --policy, else the deployment config's policy
     # section (so one deployment.yaml certifies AND runs the bundle).
@@ -5390,6 +5449,66 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_compose)
 
     p = sub.add_parser(
+        "process",
+        help=(
+            "Author a ProcessContract parent from independently admitted "
+            "capabilities. Each --child needs a --admission envelope. "
+            "certify/run the output directory; replay refuses it."
+        ),
+    )
+    p.add_argument(
+        "--child",
+        action="append",
+        metavar="NAME=BUNDLE",
+        required=True,
+        help="Named admitted child bundle pointer (repeat; at least two)",
+    )
+    p.add_argument(
+        "--admission",
+        action="append",
+        metavar="NAME=ENVELOPE",
+        help=(
+            "QualificationAdmissionEnvelope for NAME. A compiled recording "
+            "without an envelope is not an admitted capability."
+        ),
+    )
+    p.add_argument(
+        "--handoff",
+        action="append",
+        metavar="FROM.source=TO.target",
+        help=(
+            "Verified fact copied from a predecessor effect-bound parameter "
+            "into a successor parameter. Repeatable. Missing evidence HALTs."
+        ),
+    )
+    p.add_argument(
+        "--after",
+        action="append",
+        metavar="NAME=PRED[,PRED]",
+        help=(
+            "Explicit DAG predecessors for NAME. Omit to run children in --child order."
+        ),
+    )
+    p.add_argument(
+        "--allow-halt",
+        action="append",
+        metavar="NAME=OUTCOME",
+        help=(
+            "Let the parent absorb NAME ending OUTCOME instead of VERIFIED "
+            "and continue to successors without minting facts from NAME."
+        ),
+    )
+    p.add_argument(
+        "--input",
+        action="append",
+        metavar="NAME",
+        help="Parent-level parameter name (values arrive at run time)",
+    )
+    p.add_argument("--out", required=True, help="Output process-contract directory")
+    p.add_argument("--name", default=None, help="Process contract name")
+    p.set_defaults(func=_cmd_process)
+
+    p = sub.add_parser(
         "replay",
         help=(
             "Replay a bundle (serves the bundled MockMed demo app when "
@@ -5579,6 +5698,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="Refuse unless the bundle's compiler version equals this",
     )
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
+    p.add_argument(
+        "--qualification-trust",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Qualification signer trust registry for a process-contract parent. "
+            "Also OPENADAPT_QUALIFICATION_TRUST or qualification-trust.json "
+            "beside process-contract.json"
+        ),
+    )
+    p.add_argument(
+        "--execute-url",
+        default=None,
+        metavar="URL",
+        help=(
+            "HTTPS Execute v1 base URL for process children "
+            "(OPENADAPT_EXECUTE_URL). Local process run uses governed run "
+            "unless this and a bearer token are set"
+        ),
+    )
+    p.add_argument(
+        "--execute-token",
+        default=None,
+        metavar="TOKEN",
+        help=argparse.SUPPRESS,
+    )
+    p.add_argument(
+        "--execute-environment-id",
+        default=None,
+        metavar="ID",
+        help=(
+            "Execute environment_id for process children "
+            "(OPENADAPT_EXECUTE_ENVIRONMENT_ID)"
+        ),
+    )
     p.add_argument(
         "--qualification-authority-file",
         default=None,

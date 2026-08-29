@@ -664,6 +664,14 @@
       "sha256": "28c5aaec29c056de51844c77d5d5a3cb6d92d91833f7f7c697e55f4891a8d866"
     },
     {
+      "path": "docs/showcase-compose/program-graph.html",
+      "sha256": "ddc707a152f9cc2c635d39ae6b81096019103201fc41ab12be8a83c63cd6114f"
+    },
+    {
+      "path": "docs/showcase-compose/program-graph.png",
+      "sha256": "cee5e750a4e0ecabe091f5432c59c6aa4151364626d73aee8faa196261449d16"
+    },
+    {
       "path": "docs/showcase-encounter-loop/body/manifest.json",
       "sha256": "ffd2198573999681f81d669423c376ab52c0975bb0f1ddffb96e6620e9d9b3a5"
     },
@@ -1374,6 +1382,14 @@
     {
       "path": "docs/showcase-openimis/stills/verdict_refuted_card.png",
       "sha256": "6383bab553e3ef240895d083fd043a24d624795c19b6bf46edf03e879f01801d"
+    },
+    {
+      "path": "docs/showcase-process/program-graph.html",
+      "sha256": "11b309bea7bfd8d253a67f4659e69f0f447c0c2dfd3c66b30d7c48d1e3c89f56"
+    },
+    {
+      "path": "docs/showcase-process/program-graph.png",
+      "sha256": "8350f30f9940018d3b0fbe988145ca224dbfe8ad48f844fa2cd633d1bbf6bcca"
     },
     {
       "path": "docs/showcase/baseline-run/report.json",
@@ -5734,6 +5750,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v3/manifest.json",
       "sha256": "a4c531de62d875355a359dce4655fe80963ab1be421c99c1be317d82cdccd49d"
+    },
+    {
+      "path": "schemas/process-contract-graph-v0.json",
+      "sha256": "c41ed9c8c53eaea968f136888ab1b599710dabeb26c75a4ba55a0deb87940608"
     },
     {
       "path": "schemas/program-graph-v1.json",

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Process contract: claim-post</title>
+<style>
+body { margin: 0; padding: 24px; max-width: 960px; margin-inline: auto;
+       font-family: ui-sans-serif, system-ui, sans-serif; background: Canvas;
+       color: CanvasText; }
+h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+.sub { color: #4b5563; margin-top: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+.node { border: 1px solid #3b6ea5; border-radius: 10px; padding: 12px 16px;
+        min-width: 160px; background: #e8f0fe; }
+.node.terminal { background: #f3f4f6; border-color: #6b7280; }
+.node h2 { margin: 0 0 8px; font-size: 1rem; }
+.node ul { margin: 0; padding-left: 1.1rem; }
+pre { overflow: auto; background: #111827; color: #f9fafb; padding: 12px;
+      border-radius: 8px; }
+</style>
+</head>
+<body>
+<h1>claim-post</h1>
+<p class="sub">Process contract of independently admitted capabilities. Terminal: End of declared steps.</p>
+<div class="row">
+<article class="node admitted"><h2>intake</h2><ul><li>admission 11111111</li><li>digest 2d47ebef</li><li>surface web</li></ul></article><article class="node admitted"><h2>posting</h2><ul><li>admission 77777777</li><li>digest d5541c0b</li><li>surface linux</li></ul></article><article class="node terminal"><h2>End of declared steps</h2></article>
+</div>
+<h2>Handoffs</h2>
+<ul><li>intake.patient_id → posting</li></ul>
+<h2>Mermaid</h2>
+<pre>flowchart TD
+  intake[&quot;intake&lt;br/&gt;adm 11111111&lt;br/&gt;digest 2d47ebef&lt;br/&gt;web&quot;]
+  posting[&quot;posting&lt;br/&gt;adm 77777777&lt;br/&gt;digest d5541c0b&lt;br/&gt;linux&quot;]
+  end_declared_steps[&quot;End of declared steps&quot;]
+  intake --&gt; posting
+  posting --&gt; end_declared_steps
+  intake -.-&gt;|patient_id| posting
+  classDef admitted fill:#e8f0fe,stroke:#3b6ea5,color:#111;
+  classDef terminal fill:#f3f4f6,stroke:#6b7280,color:#111;
+  class intake,posting admitted;
+  class end_declared_steps terminal;</pre>
+<script type="application/json" id="process-contract-spec">{
+  "spec_version": "openadapt.process-contract-graph/v0",
+  "name": "claim-post",
+  "terminal_title": "End of declared steps",
+  "nodes": [
+    {
+      "id": "intake",
+      "kind": "admitted_capability",
+      "title": "intake",
+      "admission_id": "11111111-1111-4111-8111-111111111111",
+      "admission_id_short": "11111111",
+      "digest": "2d47ebefef62af1839dc20f3dce325b3521f908c51e4ac0875f32ad53e1a6745",
+      "digest_short": "2d47ebef",
+      "surface": "web"
+    },
+    {
+      "id": "posting",
+      "kind": "admitted_capability",
+      "title": "posting",
+      "admission_id": "77777777-7777-4777-8777-777777777777",
+      "admission_id_short": "77777777",
+      "digest": "d5541c0b1dd28c424634322fb34432365b584282b723d20fbae56c82a8163777",
+      "digest_short": "d5541c0b",
+      "surface": "linux"
+    },
+    {
+      "id": "end_declared_steps",
+      "kind": "terminal",
+      "title": "End of declared steps",
+      "admission_id": null,
+      "admission_id_short": null,
+      "digest": null,
+      "digest_short": null,
+      "surface": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "intake",
+      "target": "posting",
+      "kind": "order",
+      "label": ""
+    },
+    {
+      "source": "posting",
+      "target": "end_declared_steps",
+      "kind": "order",
+      "label": ""
+    },
+    {
+      "source": "intake",
+      "target": "posting",
+      "kind": "handoff",
+      "label": "patient_id"
+    }
+  ]
+}</script>
+</body>
+</html>

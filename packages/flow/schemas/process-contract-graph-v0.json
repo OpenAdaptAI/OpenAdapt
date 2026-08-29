@@ -1,0 +1,166 @@
+{
+  "$defs": {
+    "ProcessEdge": {
+      "additionalProperties": false,
+      "description": "DAG / list-order edge, or a handoff of an effect-bound param.",
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "order",
+            "handoff"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "kind"
+      ],
+      "title": "ProcessEdge",
+      "type": "object"
+    },
+    "ProcessNode": {
+      "additionalProperties": false,
+      "description": "One admitted child, or the parent terminal.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "admitted_capability",
+            "terminal"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "admission_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Admission Id"
+        },
+        "admission_id_short": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Admission Id Short"
+        },
+        "digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Digest"
+        },
+        "digest_short": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Digest Short"
+        },
+        "surface": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Surface"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "title"
+      ],
+      "title": "ProcessNode",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Parent-only graph. Not program-graph-v1.",
+  "properties": {
+    "spec_version": {
+      "const": "openadapt.process-contract-graph/v0",
+      "default": "openadapt.process-contract-graph/v0",
+      "title": "Spec Version",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "terminal_title": {
+      "const": "End of declared steps",
+      "default": "End of declared steps",
+      "title": "Terminal Title",
+      "type": "string"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/ProcessNode"
+      },
+      "title": "Nodes",
+      "type": "array"
+    },
+    "edges": {
+      "items": {
+        "$ref": "#/$defs/ProcessEdge"
+      },
+      "title": "Edges",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "ProcessContractSpec",
+  "type": "object"
+}

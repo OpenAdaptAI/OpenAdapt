@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compiled program — intake-then-posting</title>
+<style>
+body { margin: 0; padding: 24px; max-width: 1240px; margin-inline: auto;
+       background: Canvas; color: CanvasText; }
+/* Shared, dependency-free styles for the compiled-program visualizer.
+ *
+ * ONE renderer, THREE surfaces: this file (and program_graph.js) render the
+ * shared ProgramGraphSpec. The flow CLI inlines both into a self-contained
+ * HTML page; the desktop (Tauri) view vendors both verbatim; the cloud view
+ * reimplements the same layout in React over the same spec. Theme-aware via
+ * prefers-color-scheme AND an explicit [data-theme] override on :root. */
+
+.opg-root {
+  --opg-bg: #ffffff;
+  --opg-fg: #1a1d24;
+  --opg-muted: #5b6472;
+  --opg-card: #f6f8fa;
+  --opg-border: #d6dae0;
+  --opg-line: #b7bec8;
+  --opg-accent: #2563eb;
+  --opg-irrev: #b4530a;
+  --opg-irrev-bg: #fdf1e6;
+  --opg-ok: #197a3d;
+  --opg-ok-bg: #e8f6ec;
+  --opg-warn: #9a6a00;
+  --opg-warn-bg: #fbf3d9;
+  --opg-halt: #b21f2d;
+  --opg-halt-bg: #fbe9eb;
+  --opg-chip: #e7ebf0;
+  color: var(--opg-fg);
+  background: var(--opg-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  line-height: 1.45;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .opg-root {
+    --opg-bg: #0f1319;
+    --opg-fg: #e6e9ee;
+    --opg-muted: #9aa4b2;
+    --opg-card: #171c24;
+    --opg-border: #2a323d;
+    --opg-line: #3a4550;
+    --opg-accent: #6ea8fe;
+    --opg-irrev: #ffb27a;
+    --opg-irrev-bg: #2c1c0f;
+    --opg-ok: #7ee2a8;
+    --opg-ok-bg: #10241a;
+    --opg-warn: #f2cd6b;
+    --opg-warn-bg: #2a2410;
+    --opg-halt: #ff9aa4;
+    --opg-halt-bg: #2c1315;
+    --opg-chip: #232b35;
+  }
+}
+:root[data-theme="dark"] .opg-root {
+  --opg-bg: #0f1319;
+  --opg-fg: #e6e9ee;
+  --opg-muted: #9aa4b2;
+  --opg-card: #171c24;
+  --opg-border: #2a323d;
+  --opg-line: #3a4550;
+  --opg-accent: #6ea8fe;
+  --opg-irrev: #ffb27a;
+  --opg-irrev-bg: #2c1c0f;
+  --opg-ok: #7ee2a8;
+  --opg-ok-bg: #10241a;
+  --opg-warn: #f2cd6b;
+  --opg-warn-bg: #2a2410;
+  --opg-halt: #ff9aa4;
+  --opg-halt-bg: #2c1315;
+  --opg-chip: #232b35;
+}
+:root[data-theme="light"] .opg-root {
+  --opg-bg: #ffffff;
+  --opg-fg: #1a1d24;
+  --opg-muted: #5b6472;
+  --opg-card: #f6f8fa;
+  --opg-border: #d6dae0;
+  --opg-line: #b7bec8;
+  --opg-accent: #2563eb;
+  --opg-chip: #e7ebf0;
+}
+
+.opg-root * { box-sizing: border-box; }
+
+.opg-header { margin-bottom: 18px; }
+.opg-title { font-size: 20px; font-weight: 650; margin: 0 0 2px; }
+.opg-subtitle { color: var(--opg-muted); font-size: 13px; margin: 0 0 12px; }
+
+.opg-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.opg-stat {
+  background: var(--opg-card);
+  border: 1px solid var(--opg-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-width: 78px;
+}
+.opg-stat .n { font-size: 17px; font-weight: 650; }
+.opg-stat .l { font-size: 11px; color: var(--opg-muted); text-transform: uppercase; letter-spacing: .03em; }
+.opg-stat.warn { border-color: var(--opg-warn); background: var(--opg-warn-bg); }
+.opg-stat.halt { border-color: var(--opg-halt); background: var(--opg-halt-bg); }
+
+.opg-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.opg-data-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--opg-line);
+  background: var(--opg-card);
+  color: var(--opg-muted);
+  font-size: 12px;
+}
+
+.opg-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 4px;
+  border: 1px solid var(--opg-border);
+  border-radius: 8px;
+  background: var(--opg-card);
+}
+.opg-tabs button {
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--opg-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.opg-tabs button:hover { color: var(--opg-fg); }
+.opg-tabs button:focus-visible { outline: 2px solid var(--opg-accent); outline-offset: 2px; }
+.opg-tabs button[aria-selected="true"] {
+  background: var(--opg-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+  color: var(--opg-fg);
+  font-weight: 650;
+}
+.opg-panel { min-height: 420px; }
+
+.opg-workbench {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--opg-border);
+  border-radius: 12px;
+  background: #0b1220;
+  color: #e2e8f0;
+  grid-template-columns: minmax(0, 1fr) 290px;
+}
+.opg-map-shell { min-width: 0; }
+.opg-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid #1e293b;
+  background: rgba(19, 28, 44, .84);
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.opg-map-head span:last-child { color: #64748b; font-size: 8px; }
+.opg-map-viewport {
+  max-height: 650px;
+  overflow: auto;
+  background:
+    linear-gradient(rgba(148, 163, 184, .026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, .026) 1px, transparent 1px),
+    radial-gradient(circle at 50% 0, rgba(52, 211, 153, .06), transparent 38%),
+    #0b1220;
+  background-size: 28px 28px, 28px 28px, auto, auto;
+  scrollbar-color: #334155 transparent;
+}
+.opg-map { position: relative; min-width: 100%; }
+.opg-map-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.opg-map-edges path { fill: none; stroke: #475569; stroke-width: 1.3; }
+.opg-map-edges marker path { fill: #64748b; stroke: none; }
+.opg-map-edges g[data-kind="branch"] path { stroke: #60a5fa; }
+.opg-map-edges g[data-kind="exception"] path { stroke: #fbbf24; stroke-dasharray: 4 4; }
+.opg-map-edges g[data-kind="loop_body"] path { stroke: #a78bfa; stroke-dasharray: 4 3; }
+.opg-map-edges text {
+  fill: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+}
+.opg-map-node {
+  position: absolute;
+  display: grid;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: rgba(19, 28, 44, .96);
+  color: #e2e8f0;
+  cursor: pointer;
+  font: inherit;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  text-align: left;
+  transition: transform 160ms ease-out, border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.opg-map-node:hover { border-color: #64748b; transform: translateY(-1px); }
+.opg-map-node:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.opg-map-node[data-selected] {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, .14), 0 10px 28px rgba(0, 0, 0, .3);
+}
+.opg-map-node[data-tone="success"] { border-color: rgba(52, 211, 153, .58); }
+.opg-map-node[data-tone="halt"] { border-color: rgba(251, 191, 36, .58); }
+.opg-map-node[data-tone="branch"] { border-color: rgba(167, 139, 250, .58); }
+.opg-map-node[data-tone="governed"] { border-left: 3px solid #34d399; }
+.opg-map-index {
+  display: grid;
+  min-width: 27px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8px;
+}
+.opg-map-text { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.opg-map-text small {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 7px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.opg-map-text strong {
+  overflow: hidden;
+  color: #f1f5f9;
+  font-size: 11px;
+  font-weight: 560;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opg-map-signals { display: flex; gap: 3px; }
+.opg-map-signals .opg-chip {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  place-items: center;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 7px;
+}
+.opg-inspector {
+  min-width: 0;
+  padding: 18px;
+  border-left: 1px solid #1e293b;
+  background: rgba(19, 28, 44, .78);
+  color: #e2e8f0;
+}
+.opg-inspector-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 13px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.opg-inspector .opg-node { border-color: #334155; background: rgba(11, 18, 32, .44); color: #e2e8f0; }
+.opg-inspector .opg-detail .k,
+.opg-inspector .opg-node-action,
+.opg-inspector .opg-reason { color: #94a3b8; }
+.opg-inspector .opg-detail .v { color: #e2e8f0; overflow-wrap: anywhere; }
+.opg-inspector .opg-rung { border-color: #334155; color: #94a3b8; }
+.opg-inspector .opg-rung.present { border-color: #34d399; color: #e2e8f0; }
+.opg-inspector .opg-rung.top { background: #0b7a5a; color: #fff; }
+.opg-map-note {
+  margin: 0;
+  padding: 10px 14px;
+  border-top: 1px solid #1e293b;
+  background: rgba(19, 28, 44, .6);
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+}
+
+.opg-evidence {
+  overflow: hidden;
+  border: 1px solid var(--opg-border);
+  border-radius: 12px;
+  background: #0b1220;
+  color: #e2e8f0;
+}
+.opg-evidence-scroll { overflow-x: auto; scrollbar-color: #334155 transparent; }
+.opg-evidence-table { width: 100%; min-width: 920px; border-collapse: collapse; }
+.opg-evidence-table th,
+.opg-evidence-table td {
+  padding: 10px 11px;
+  border-right: 1px solid #1e293b;
+  border-bottom: 1px solid #1e293b;
+  color: #94a3b8;
+  font-size: 10px;
+  text-align: left;
+}
+.opg-evidence-table thead th {
+  background: rgba(19, 28, 44, .55);
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.opg-evidence-table tbody th { min-width: 220px; color: #e2e8f0; font-weight: 520; }
+.opg-evidence-index { display: inline-flex; min-width: 32px; margin-right: 7px; color: #64748b; font-size: 8px; }
+.opg-evidence-table td[data-state="declared"] { color: #34d399; }
+.opg-evidence-table td[data-state="attention"] { color: #fbbf24; }
+.opg-evidence-table td[data-state="none"] { color: #475569; }
+.opg-stop-flow { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--opg-border); border-radius: 10px; }
+
+@media (max-width: 880px) {
+  .opg-workbench { grid-template-columns: 1fr; }
+  .opg-inspector { border-top: 1px solid #1e293b; border-left: 0; }
+}
+
+@media (max-width: 560px) {
+  .opg-tabs { overflow-x: auto; }
+  .opg-tabs button { flex: 1 0 auto; }
+  .opg-map-head { align-items: flex-start; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opg-map-node { transition: none; }
+}
+
+.opg-flow { display: flex; flex-direction: column; align-items: stretch; }
+
+.opg-node {
+  border: 1px solid var(--opg-border);
+  border-radius: 10px;
+  background: var(--opg-card);
+  padding: 10px 12px;
+  position: relative;
+}
+.opg-node.irreversible { border-left: 4px solid var(--opg-irrev); }
+.opg-node.terminal {
+  align-self: center;
+  min-width: 180px;
+  text-align: center;
+  border-style: dashed;
+}
+.opg-node.terminal.ok { border-color: var(--opg-ok); color: var(--opg-ok); }
+.opg-node.terminal.halt { border-color: var(--opg-halt); color: var(--opg-halt); }
+
+.opg-node-head { display: flex; align-items: baseline; gap: 8px; }
+.opg-idx {
+  flex: none;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--opg-accent);
+  color: #fff;
+  font-size: 12px; font-weight: 650;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.opg-node-title { font-weight: 600; font-size: 14px; }
+.opg-node-action { color: var(--opg-muted); font-size: 12px; font-weight: 500; }
+
+.opg-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.opg-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--opg-chip);
+  color: var(--opg-fg);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.opg-chip.irreversible { background: var(--opg-irrev-bg); color: var(--opg-irrev); border-color: var(--opg-irrev); }
+.opg-chip.identity { background: var(--opg-ok-bg); color: var(--opg-ok); border-color: var(--opg-ok); }
+.opg-chip.no-identity { background: var(--opg-warn-bg); color: var(--opg-warn); border-color: var(--opg-warn); }
+.opg-chip.effect { background: var(--opg-ok-bg); color: var(--opg-ok); border-color: var(--opg-ok); }
+.opg-chip.api { background: var(--opg-ok-bg); color: var(--opg-ok); }
+.opg-chip.secret { background: var(--opg-warn-bg); color: var(--opg-warn); }
+
+.opg-detail { margin-top: 8px; font-size: 12.5px; }
+.opg-detail .row { display: flex; gap: 6px; margin: 3px 0; }
+.opg-detail .k { color: var(--opg-muted); flex: none; min-width: 78px; }
+.opg-detail .v { color: var(--opg-fg); }
+
+.opg-ladder { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.opg-rung {
+  font-size: 11px; padding: 1px 7px; border-radius: 5px;
+  border: 1px solid var(--opg-border); color: var(--opg-muted);
+  opacity: .5;
+}
+.opg-rung.present { opacity: 1; color: var(--opg-fg); border-color: var(--opg-accent); font-weight: 600; }
+.opg-rung.top { background: var(--opg-accent); color: #fff; border-color: var(--opg-accent); }
+
+.opg-halts { margin-top: 8px; }
+.opg-halt-item {
+  font-size: 12px;
+  background: var(--opg-halt-bg);
+  color: var(--opg-halt);
+  border: 1px solid var(--opg-halt);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-top: 4px;
+}
+.opg-halt-item::before { content: "\26D4  "; }
+
+.opg-reason { color: var(--opg-muted); font-size: 12px; font-style: italic; margin-top: 4px; }
+
+.opg-connector { display: flex; flex-direction: column; align-items: center; height: 30px; }
+.opg-connector .line { width: 2px; flex: 1; background: var(--opg-line); }
+.opg-connector .lbl {
+  font-size: 11px; color: var(--opg-muted);
+  background: var(--opg-bg); padding: 0 6px; margin: 2px 0;
+}
+.opg-connector.branch .line { background: var(--opg-accent); }
+
+.opg-legend {
+  margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--opg-border);
+  display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--opg-muted);
+}
+.opg-legend .item { display: flex; align-items: center; gap: 5px; }
+.opg-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--opg-border); }
+
+</style>
+</head>
+<body>
+<div id="program-graph"></div>
+<script type="application/json" id="program-graph-spec">{"spec_version":2,"bundle":{"name":"intake-then-posting","schema_version":1,"created_at":null,"viewport":null,"is_program":false,"is_composition":true,"composition_schema":"openadapt.composition/v1","contains_phi":false,"phi_scrubbed":false,"encrypted":false,"step_count":2,"action_count":0,"irreversible_count":0,"identity_armed_count":0,"identity_unarmed_count":0,"effect_count":0,"api_binding_count":0,"halt_point_count":0,"child_count":2,"params":[],"provenance":{"compiler_version":"","certified":false,"certification_status":null,"policy_name":null,"expires_at":null,"content_digest":null,"source_recording_sha256":null}},"nodes":[{"id":"intake","index":0,"kind":"child_bundle","title":"intake","action":null,"risk":null,"risk_explanation":null,"risk_review_required":false,"param":null,"secret":false,"key":null,"resolution":null,"identity":null,"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["child bundle","web"],"surface":"web"},{"id":"posting","index":1,"kind":"child_bundle","title":"posting","action":null,"risk":null,"risk_explanation":null,"risk_review_required":false,"param":null,"secret":false,"key":null,"resolution":null,"identity":null,"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["child bundle","linux"],"surface":"linux"},{"id":"__end__","index":2,"kind":"terminal","title":"End of declared steps","action":null,"risk":null,"risk_explanation":null,"risk_review_required":false,"param":null,"secret":false,"key":null,"resolution":null,"identity":null,"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":"success","reason":"","halts":[],"badges":[],"surface":null}],"edges":[{"source":"intake","target":"posting","kind":"sequence","label":"","guard":null},{"source":"posting","target":"__end__","kind":"sequence","label":"","guard":null},{"source":"intake","target":"posting","kind":"handoff","label":"patient_id","guard":null}]}</script>
+<script>
+/* Shared, dependency-free renderer for the compiled-program visualizer.
+ *
+ * ONE renderer, THREE surfaces (see program_graph.css header). Exposes a single
+ * pure function:
+ *
+ *     OpenAdaptProgramGraph.render(spec, container)
+ *
+ * `spec` is the ProgramGraphSpec emitted by the engine
+ * (openadapt_flow.visualize.build_program_graph); `container` is a DOM element.
+ * No external libraries, no network, no framework — safe under a strict CSP
+ * (the flow CLI inlines this; the Tauri desktop view vendors it verbatim).
+ * Cloud reimplements the same layout in React over the same spec shape. */
+(function (global) {
+  "use strict";
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text; // textContent => no HTML injection
+    return e;
+  }
+
+  function stat(container, n, label, cls) {
+    var s = el("div", "opg-stat" + (cls ? " " + cls : ""));
+    s.appendChild(el("div", "n", String(n)));
+    s.appendChild(el("div", "l", label));
+    container.appendChild(s);
+  }
+
+  function chip(text, cls) {
+    return el("span", "opg-chip" + (cls ? " " + cls : ""), text);
+  }
+
+  function detailRow(parent, key, valueNode) {
+    var row = el("div", "row");
+    row.appendChild(el("span", "k", key));
+    if (typeof valueNode === "string") valueNode = el("span", "v", valueNode);
+    else valueNode.classList.add("v");
+    row.appendChild(valueNode);
+    parent.appendChild(row);
+  }
+
+  function renderHeader(spec, root) {
+    var b = spec.bundle;
+    var head = el("div", "opg-header");
+    head.appendChild(el("div", "opg-title", b.name));
+    var sub = b.is_composition
+      ? "Composition · " +
+        (b.composition_schema || "openadapt.composition/v1") +
+        " · one backend per child"
+      : "Compiled program · schema v" +
+        b.schema_version +
+        " · " +
+        (b.is_program ? "program graph" : "linear program") +
+        (b.created_at ? " · compiled " + b.created_at.slice(0, 10) : "");
+    head.appendChild(el("div", "opg-subtitle", sub));
+
+    var stats = el("div", "opg-stats");
+    if (b.is_composition) stat(stats, b.child_count || 0, "children");
+    else stat(stats, b.action_count, "steps");
+    stat(stats, b.identity_armed_count, "identity gates");
+    if (b.identity_unarmed_count)
+      stat(stats, b.identity_unarmed_count, "no gate", "warn");
+    if (b.irreversible_count)
+      stat(stats, b.irreversible_count, "irreversible", "warn");
+    if (b.effect_count) stat(stats, b.effect_count, "effect checks");
+    if (b.api_binding_count) stat(stats, b.api_binding_count, "API writes");
+    if (b.halt_point_count) stat(stats, b.halt_point_count, "halt points", "halt");
+    head.appendChild(stats);
+
+    // governance + provenance chips
+    var meta = el("div", "opg-meta");
+    meta.appendChild(
+      chip(
+        b.contains_phi ? "source flag: PHI present" : "source flag: PHI not declared",
+        b.contains_phi ? "no-identity" : "identity"
+      )
+    );
+    if (b.encrypted) meta.appendChild(chip("encrypted at rest", "identity"));
+    if (b.phi_scrubbed) meta.appendChild(chip("PHI-scrubbed", "identity"));
+    var prov = b.provenance || {};
+    if (prov.compiler_version)
+      meta.appendChild(chip("compiler " + prov.compiler_version));
+    if (prov.certified)
+      meta.appendChild(
+        chip("certified: " + (prov.policy_name || "policy"), "identity")
+      );
+    else if (prov.certification_status)
+      meta.appendChild(chip(prov.certification_status, "warn"));
+    head.appendChild(meta);
+    head.appendChild(
+      el(
+        "p",
+        "opg-data-note",
+        "The PHI source flag is bundle metadata. It does not prove that an artifact is safe to send or publish."
+      )
+    );
+
+    // parameters
+    if (b.params && b.params.length) {
+      var pwrap = el("div", "opg-meta");
+      pwrap.appendChild(el("span", "opg-node-action", "Parameters:"));
+      b.params.forEach(function (p) {
+        var label = p.name + " : " + p.type + (p.required ? "" : " (optional)");
+        pwrap.appendChild(chip(label, p.secret ? "secret" : ""));
+      });
+      head.appendChild(pwrap);
+    }
+    root.appendChild(head);
+  }
+
+  function renderLadder(res) {
+    var wrap = el("div", "opg-ladder");
+    res.rungs.forEach(function (r) {
+      var cls = "opg-rung";
+      if (r.present) cls += " present";
+      if (r.name === res.top_rung) cls += " top";
+      var c = el("span", cls, r.label);
+      if (r.present && r.detail) c.title = r.detail;
+      wrap.appendChild(c);
+    });
+    return wrap;
+  }
+
+  function renderActionNode(node) {
+    var card = el(
+      "div",
+      "opg-node" + (node.risk === "irreversible" ? " irreversible" : "")
+    );
+    var head = el("div", "opg-node-head");
+    head.appendChild(el("span", "opg-idx", String(node.index + 1)));
+    head.appendChild(el("span", "opg-node-title", node.title));
+    if (node.action)
+      head.appendChild(el("span", "opg-node-action", " " + node.action));
+    card.appendChild(head);
+
+    if (node.badges && node.badges.length) {
+      var chips = el("div", "opg-chips");
+      node.badges.forEach(function (bd) {
+        var cls = "";
+        if (bd === "irreversible") cls = "irreversible";
+        else if (bd === "identity gate") cls = "identity";
+        else if (bd === "no identity gate") cls = "no-identity";
+        else if (bd === "effect check") cls = "effect";
+        else if (bd === "API") cls = "api";
+        else if (bd === "secret") cls = "secret";
+        chips.appendChild(chip(bd, cls));
+      });
+      card.appendChild(chips);
+    }
+
+    var detail = el("div", "opg-detail");
+    if (node.resolution)
+      detailRow(detail, "resolve by", renderLadder(node.resolution));
+    if (node.identity && node.identity.applicable) {
+      if (node.identity.armed) {
+        var idv =
+          "armed" +
+          (node.identity.phi_free ? " · PHI-free template" : "") +
+          (node.identity.has_structured ? " · structured" : "") +
+          (node.identity.has_identifier_crop ? " · pixel crop" : "");
+        detailRow(detail, "identity", idv);
+      } else {
+        detailRow(
+          detail,
+          "identity",
+          "UNARMED — " + (node.identity.reason || "no identity band")
+        );
+      }
+    }
+    if (node.effects && node.effects.length) {
+      node.effects.forEach(function (ef) {
+        detailRow(detail, "effect", ef.summary);
+      });
+    }
+    if (node.postconditions && node.postconditions.length)
+      detailRow(detail, "verify", node.postconditions.join(", "));
+    if (node.wait_until) detailRow(detail, "wait until", node.wait_until);
+    if (node.guard)
+      detailRow(
+        detail,
+        "guard",
+        node.guard + " → " + (node.guard_on_unmet || "halt")
+      );
+    if (node.param) detailRow(detail, "input", "parameter " + node.param);
+    if (detail.childNodes.length) card.appendChild(detail);
+
+    if (node.halts && node.halts.length) {
+      var halts = el("div", "opg-halts");
+      node.halts.forEach(function (h) {
+        halts.appendChild(el("div", "opg-halt-item", h));
+      });
+      card.appendChild(halts);
+    }
+    return card;
+  }
+
+  function renderTerminalNode(node) {
+    var cls = "opg-node terminal";
+    if (node.outcome === "success") cls += " ok";
+    else if (node.outcome === "halt" || node.outcome === "escalate") cls += " halt";
+    var card = el("div", cls);
+    card.appendChild(
+      el(
+        "div",
+        "opg-node-title",
+        node.outcome === "success" ? "End of declared steps" : node.title
+      )
+    );
+    if (node.reason) card.appendChild(el("div", "opg-reason", node.reason));
+    return card;
+  }
+
+  function renderControlNode(node) {
+    var card = el("div", "opg-node");
+    var head = el("div", "opg-node-head");
+    head.appendChild(el("span", "opg-idx", String(node.index + 1)));
+    head.appendChild(el("span", "opg-node-title", node.title));
+    var kindLabel =
+      node.kind === "child_bundle"
+        ? node.surface
+          ? "child bundle · " + node.surface
+          : "child bundle"
+        : node.kind;
+    head.appendChild(el("span", "opg-node-action", kindLabel));
+    card.appendChild(head);
+    if (node.badges && node.badges.length) {
+      var chips = el("div", "opg-chips");
+      node.badges.forEach(function (bd) {
+        chips.appendChild(chip(bd));
+      });
+      card.appendChild(chips);
+    }
+    return card;
+  }
+
+  function svgEl(tag, attrs) {
+    // Keep the self-contained renderer free of literal external-looking URLs.
+    // This is the DOM namespace identifier, split so offline-reference checks
+    // cannot confuse it with a network dependency.
+    var node = document.createElementNS("http:" + "//www.w3.org/2000/svg", tag);
+    Object.keys(attrs || {}).forEach(function (name) {
+      node.setAttribute(name, String(attrs[name]));
+    });
+    return node;
+  }
+
+  function layoutGraph(spec) {
+    var nodes = spec.nodes || [];
+    var edges = spec.edges || [];
+    var index = {};
+    var incoming = {};
+    var outgoing = {};
+    var rank = {};
+    nodes.forEach(function (node, i) {
+      index[node.id] = i;
+      incoming[node.id] = 0;
+      outgoing[node.id] = [];
+      rank[node.id] = 0;
+    });
+    edges.forEach(function (edge) {
+      if (index[edge.source] == null || index[edge.target] == null) return;
+      if (edge.kind === "loop_body" || index[edge.target] <= index[edge.source]) return;
+      incoming[edge.target] += 1;
+      outgoing[edge.source].push(edge);
+    });
+    var queue = nodes
+      .filter(function (node) { return incoming[node.id] === 0; })
+      .sort(function (a, b) { return a.index - b.index; });
+    var visited = {};
+    while (queue.length) {
+      var current = queue.shift();
+      visited[current.id] = true;
+      outgoing[current.id].forEach(function (edge) {
+        rank[edge.target] = Math.max(rank[edge.target], rank[current.id] + 1);
+        incoming[edge.target] -= 1;
+        if (incoming[edge.target] === 0) {
+          queue.push(nodes[index[edge.target]]);
+          queue.sort(function (a, b) { return a.index - b.index; });
+        }
+      });
+    }
+    nodes.forEach(function (node) {
+      if (!visited[node.id]) rank[node.id] = Math.max(rank[node.id], node.index);
+    });
+
+    var layers = {};
+    nodes.forEach(function (node) {
+      var r = rank[node.id];
+      (layers[r] = layers[r] || []).push(node);
+      layers[r].sort(function (a, b) { return a.index - b.index; });
+    });
+    var nodeW = 220;
+    var nodeH = 76;
+    var xGap = 54;
+    var yGap = 54;
+    var margin = 40;
+    var rankKeys = Object.keys(layers).map(Number).sort(function (a, b) { return a - b; });
+    var maxLayer = Math.max.apply(Math, rankKeys.map(function (r) { return layers[r].length; }).concat([1]));
+    var width = Math.max(720, margin * 2 + maxLayer * nodeW + (maxLayer - 1) * xGap);
+    var maxRank = Math.max.apply(Math, rankKeys.concat([0]));
+    var height = margin * 2 + (maxRank + 1) * nodeH + maxRank * yGap;
+    var points = {};
+    rankKeys.forEach(function (r) {
+      var layer = layers[r];
+      var layerW = layer.length * nodeW + Math.max(0, layer.length - 1) * xGap;
+      var startX = (width - layerW) / 2;
+      layer.forEach(function (node, position) {
+        points[node.id] = {
+          x: startX + position * (nodeW + xGap),
+          y: margin + r * (nodeH + yGap),
+          width: nodeW,
+          height: nodeH,
+          rank: r,
+        };
+      });
+    });
+    return { width: width, height: height, points: points };
+  }
+
+  function compactTitle(node) {
+    if (node.kind === "terminal" && node.outcome === "success")
+      return "End of declared steps";
+    return node.title;
+  }
+
+  function nodeTone(node) {
+    if (node.kind === "terminal")
+      return node.outcome === "success" ? "success" : "halt";
+    if (node.kind === "child_bundle") return "governed";
+    if (node.risk === "irreversible") return "halt";
+    if (node.kind === "branch" || node.kind === "loop") return "branch";
+    if ((node.identity && node.identity.armed) || (node.effects || []).length)
+      return "governed";
+    return "default";
+  }
+
+  function compactNode(node, select) {
+    var button = el("button", "opg-map-node");
+    button.type = "button";
+    button.setAttribute("data-tone", nodeTone(node));
+    var idx = node.kind === "terminal" ? "END" : String(node.index + 1).padStart(2, "0");
+    button.appendChild(el("span", "opg-map-index", idx));
+    var text = el("span", "opg-map-text");
+    text.appendChild(el("small", "", node.kind.replaceAll("_", " ")));
+    text.appendChild(el("strong", "", compactTitle(node)));
+    button.appendChild(text);
+    var signals = el("span", "opg-map-signals");
+    if (node.identity && node.identity.armed) signals.appendChild(chip("I", "identity"));
+    if ((node.effects || []).length) signals.appendChild(chip("E", "effect"));
+    if ((node.halts || []).length) signals.appendChild(chip("H", "no-identity"));
+    button.appendChild(signals);
+    button.addEventListener("click", function () { select(node, button); });
+    return button;
+  }
+
+  function renderInspector(node, inspector) {
+    inspector.innerHTML = "";
+    var label = el("div", "opg-inspector-label", "Selected step");
+    label.appendChild(
+      el("code", "", node.kind === "terminal" ? "END" : String(node.index + 1).padStart(2, "0"))
+    );
+    inspector.appendChild(label);
+    if (node.kind === "action") inspector.appendChild(renderActionNode(node));
+    else if (node.kind === "terminal") inspector.appendChild(renderTerminalNode(node));
+    else inspector.appendChild(renderControlNode(node));
+  }
+
+  function renderMap(spec) {
+    var workbench = el("div", "opg-workbench");
+    var shell = el("div", "opg-map-shell");
+    var shellHead = el("div", "opg-map-head");
+    shellHead.appendChild(el("span", "", "Compiled topology"));
+    shellHead.appendChild(
+      el("span", "", spec.nodes.length + " nodes · " + spec.edges.length + " exact edges")
+    );
+    shell.appendChild(shellHead);
+    var viewport = el("div", "opg-map-viewport");
+    var map = el("div", "opg-map");
+    var layout = layoutGraph(spec);
+    map.style.width = layout.width + "px";
+    map.style.height = layout.height + "px";
+    var svg = svgEl("svg", {
+      class: "opg-map-edges",
+      viewBox: "0 0 " + layout.width + " " + layout.height,
+      width: layout.width,
+      height: layout.height,
+      "aria-label": "Exact compiled program edges",
+      role: "img",
+    });
+    var defs = svgEl("defs");
+    var marker = svgEl("marker", {
+      id: "opg-arrow",
+      markerWidth: 8,
+      markerHeight: 8,
+      refX: 7,
+      refY: 4,
+      orient: "auto",
+      markerUnits: "strokeWidth",
+    });
+    marker.appendChild(svgEl("path", { d: "M 0 0 L 8 4 L 0 8 z" }));
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+    (spec.edges || []).forEach(function (edge, edgeIndex) {
+      var source = layout.points[edge.source];
+      var target = layout.points[edge.target];
+      if (!source || !target) return;
+      var back = edge.kind === "loop_body" || target.rank <= source.rank;
+      var sx = source.x + source.width / 2;
+      var sy = back ? source.y + source.height / 2 : source.y + source.height;
+      var tx = target.x + target.width / 2;
+      var ty = back ? target.y + target.height / 2 : target.y;
+      var path;
+      var labelX;
+      var labelY;
+      if (back) {
+        var sideX = layout.width - 18 - (edgeIndex % 3) * 12;
+        path = "M " + sx + " " + sy + " C " + sideX + " " + sy + ", " + sideX + " " + ty + ", " + tx + " " + ty;
+        labelX = sideX - 8;
+        labelY = (sy + ty) / 2;
+      } else {
+        var midY = (sy + ty) / 2;
+        path = "M " + sx + " " + sy + " C " + sx + " " + midY + ", " + tx + " " + midY + ", " + tx + " " + ty;
+        labelX = (sx + tx) / 2;
+        labelY = midY - 7;
+      }
+      var group = svgEl("g", { "data-kind": edge.kind });
+      group.appendChild(svgEl("path", { d: path, "marker-end": "url(#opg-arrow)" }));
+      if (edge.label) {
+        var text = svgEl("text", { x: labelX, y: labelY });
+        text.textContent = edge.label;
+        group.appendChild(text);
+      }
+      svg.appendChild(group);
+    });
+    map.appendChild(svg);
+    var inspector = el("aside", "opg-inspector");
+    var selectedButton = null;
+    function select(node, button) {
+      if (selectedButton) selectedButton.removeAttribute("data-selected");
+      selectedButton = button;
+      button.setAttribute("data-selected", "true");
+      renderInspector(node, inspector);
+    }
+    (spec.nodes || []).forEach(function (node) {
+      var point = layout.points[node.id];
+      if (!point) return;
+      var button = compactNode(node, select);
+      button.style.left = point.x + "px";
+      button.style.top = point.y + "px";
+      button.style.width = point.width + "px";
+      button.style.height = point.height + "px";
+      map.appendChild(button);
+      if (!selectedButton) select(node, button);
+    });
+    viewport.appendChild(map);
+    shell.appendChild(viewport);
+    shell.appendChild(
+      el(
+        "p",
+        "opg-map-note",
+        "The layout follows the emitted edge targets. Back edges remain explicit. Select a node to inspect its gates."
+      )
+    );
+    workbench.appendChild(shell);
+    workbench.appendChild(inspector);
+    return workbench;
+  }
+
+  function evidenceValue(value, state) {
+    var cell = el("td", "", value);
+    cell.setAttribute("data-state", state);
+    return cell;
+  }
+
+  function renderEvidence(spec) {
+    var frame = el("div", "opg-evidence");
+    var head = el("div", "opg-map-head");
+    head.appendChild(el("span", "", "Program evidence lanes"));
+    head.appendChild(el("span", "", "Declared controls, not live verdicts"));
+    frame.appendChild(head);
+    var scroll = el("div", "opg-evidence-scroll");
+    var table = el("table", "opg-evidence-table");
+    var thead = el("thead");
+    var headerRow = el("tr");
+    ["Step", "Resolve", "Identity", "Actuation", "Screen", "Independent effect", "Stop rules"].forEach(function (label) {
+      headerRow.appendChild(el("th", "", label));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    var tbody = el("tbody");
+    (spec.nodes || []).forEach(function (node) {
+      var row = el("tr");
+      var title = el("th");
+      title.scope = "row";
+      title.appendChild(el("code", "opg-evidence-index", node.kind === "terminal" ? "END" : String(node.index + 1).padStart(2, "0")));
+      title.appendChild(document.createTextNode(compactTitle(node)));
+      row.appendChild(title);
+      var resolutionCount = node.resolution ? node.resolution.rungs.filter(function (rung) { return rung.present; }).length : 0;
+      row.appendChild(evidenceValue(resolutionCount ? resolutionCount + " types" : "None", resolutionCount ? "declared" : "none"));
+      var identity = node.identity && node.identity.armed ? "Armed" : node.identity && node.identity.applicable ? "Not armed" : "None";
+      row.appendChild(evidenceValue(identity, identity === "Armed" ? "declared" : identity === "Not armed" ? "attention" : "none"));
+      var actuation =
+        node.kind === "action"
+          ? "Declared"
+          : node.kind === "child_bundle"
+            ? "Child program"
+            : "None";
+      row.appendChild(
+        evidenceValue(
+          actuation,
+          actuation === "None" ? "none" : "declared"
+        )
+      );
+      row.appendChild(evidenceValue((node.postconditions || []).length ? node.postconditions.length + " checks" : "None", (node.postconditions || []).length ? "declared" : "none"));
+      row.appendChild(evidenceValue((node.effects || []).length ? node.effects.length + " checks" : "None", (node.effects || []).length ? "declared" : "none"));
+      row.appendChild(evidenceValue((node.halts || []).length ? String(node.halts.length) : "None", (node.halts || []).length ? "attention" : "none"));
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    frame.appendChild(scroll);
+    frame.appendChild(
+      el(
+        "p",
+        "opg-map-note",
+        "A declared lane is a compile-time requirement. A live run must bind an exact trace before this view can show a confirmed, refuted, or indeterminate verdict."
+      )
+    );
+    return frame;
+  }
+
+  function renderStops(spec) {
+    var flow = el("div", "opg-stop-flow");
+    (spec.nodes || []).forEach(function (node) {
+      if (!(node.halts || []).length && !(node.kind === "terminal" && node.outcome !== "success")) return;
+      var card = node.kind === "action" ? renderActionNode(node) : node.kind === "terminal" ? renderTerminalNode(node) : renderControlNode(node);
+      flow.appendChild(card);
+    });
+    if (!flow.childNodes.length) flow.appendChild(el("p", "opg-map-note", "This program has no distinguished halt path in the current projection."));
+    return flow;
+  }
+
+  function renderTabs(spec, root) {
+    var controls = el("div", "opg-tabs");
+    controls.setAttribute("role", "tablist");
+    controls.setAttribute("aria-label", "Program workbench views");
+    var panel = el("div", "opg-panel");
+    var views = [
+      ["program", "Program map", function () { return renderMap(spec); }],
+      ["evidence", "Evidence lanes", function () { return renderEvidence(spec); }],
+      ["stops", "Stop rules", function () { return renderStops(spec); }],
+    ];
+    var buttons = [];
+    function show(view) {
+      buttons.forEach(function (button) {
+        button.setAttribute("aria-selected", button.getAttribute("data-view") === view ? "true" : "false");
+      });
+      panel.innerHTML = "";
+      var match = views.find(function (item) { return item[0] === view; });
+      panel.appendChild(match[2]());
+    }
+    views.forEach(function (item) {
+      var button = el("button", "", item[1]);
+      button.type = "button";
+      button.setAttribute("role", "tab");
+      button.setAttribute("data-view", item[0]);
+      button.addEventListener("click", function () { show(item[0]); });
+      buttons.push(button);
+      controls.appendChild(button);
+    });
+    root.appendChild(controls);
+    root.appendChild(panel);
+    show("program");
+  }
+
+  function renderLegend(root) {
+    var items = [
+      ["identity", "identity gate armed"],
+      ["no-identity", "no identity gate"],
+      ["irreversible", "irreversible write"],
+      ["halt", "fail-safe halt point"],
+    ];
+    var leg = el("div", "opg-legend");
+    items.forEach(function (it) {
+      var wrap = el("div", "item");
+      var sw = el("span", "opg-swatch opg-chip " + it[0]);
+      sw.textContent = "";
+      wrap.appendChild(sw);
+      wrap.appendChild(document.createTextNode(it[1]));
+      leg.appendChild(wrap);
+    });
+    root.appendChild(leg);
+  }
+
+  function render(spec, container) {
+    container.innerHTML = "";
+    var root = el("div", "opg-root");
+    renderHeader(spec, root);
+
+    renderTabs(spec, root);
+    renderLegend(root);
+    container.appendChild(root);
+    return root;
+  }
+
+  var api = { render: render };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  global.OpenAdaptProgramGraph = api;
+})(typeof window !== "undefined" ? window : this);
+
+</script>
+<script>
+(function () {
+  var raw = document.getElementById("program-graph-spec").textContent;
+  var spec = JSON.parse(raw);
+  OpenAdaptProgramGraph.render(spec, document.getElementById("program-graph"));
+})();
+</script>
+</body>
+</html>
