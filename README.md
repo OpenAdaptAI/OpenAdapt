@@ -16,7 +16,8 @@ live in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), and
 this repository doesn't reimplement them.
 
 [Documentation](https://docs.openadapt.ai) ·
-[Get started](https://docs.openadapt.ai/get-started/) ·
+[Start locally](https://openadapt.ai/start) ·
+[Walkthrough](https://docs.openadapt.ai/get-started/) ·
 [Desktop downloads](https://openadapt.ai/download) ·
 [Website](https://openadapt.ai) ·
 [15s proof](https://x.com/OpenAdaptAI/status/2093535221324935360) ·
@@ -75,6 +76,18 @@ has already painted its success banner, so every on-screen check passes and the
 run halts anyway, because the independent read of the record store disagrees.
 The store is unchanged. That halt is the whole product in one command.
 
+The bundled workflow is a tutorial. Qualifying a real one means declaring its
+application boundary, its action risks, its identities, its effect verifiers,
+its fault cases, and its deployment policy. Start with the
+[five-minute walkthrough](https://docs.openadapt.ai/get-started/).
+
+Tutorial `VERIFIED` is a local receipt on synthetic MockMed. It is not a
+production Seal. `--break-it` is the aha: the banner can lie, and the
+independent read stops the run. When you qualify a real job, that same
+independent check is what a Seal attests. Public synthetic verify:
+[openadapt.ai/seals](https://openadapt.ai/seals). The Seal contract:
+[docs/commercial/seal.md](https://docs.openadapt.ai/commercial/seal/).
+
 `openadapt-agent serve --allow-run` then generates the public MockMed bundle
 at serve time and keeps the app up. A client calls `run_local_quickstart`.
 You'll get a receipt. You never see frames. Local unsigned success isn't a
@@ -86,11 +99,6 @@ Inspect what compiled, and what it failed to cover:
 openadapt flow visualize openadapt-quickstart/bundle --out graph.html
 openadapt flow lint openadapt-quickstart/bundle
 ```
-
-The bundled workflow is a tutorial. Qualifying a real one means declaring its
-application boundary, its action risks, its identities, its effect verifiers,
-its fault cases, and its deployment policy. Start with the
-[five-minute walkthrough](https://docs.openadapt.ai/get-started/).
 
 ## Record and rehearse one workflow
 
