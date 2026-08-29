@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.12.0 (2026-08-29)
+
+### Features
+
+- Add a Tier-2 oracle adapter and refuse visual VERIFIED
+  ([#33](https://github.com/OpenAdaptAI/openadapt-types/pull/33),
+  [`a542c07`](https://github.com/OpenAdaptAI/openadapt-types/commit/a542c075deccc8977837fde0e3ed03ffee5205f6))
+
+A partner implements channel plus read (API, DB, file, ack, or a second session). Production Execute
+  receipts require oracle tier 2 or 3. Visual and OCR (tier 0) cannot mint VERIFIED.
+
+Stacked on #32 so both gates stay fail-closed: observed strength cannot be visual, and oracle_tier
+  must match it.
+
+Merged by an agent session, not the founder.
+
+
 ## v0.11.0 (2026-08-29)
 
 ### Chores
