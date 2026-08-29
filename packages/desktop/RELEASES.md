@@ -4,29 +4,16 @@ This repository publishes unadmitted candidates from two lanes. Production is
 an admission-driven channel with a separate manual derivation step. This
 document defines the outputs, ordering, and release-selection rules.
 
-## Active release hold: the current Flow pin is not releasable
+## Current Flow runtime
 
-`main` pins `openadapt-flow[browser,console]==1.31.0`. That pin is an interim
-source pin so the tree builds and tests against the newest published Flow. It
-is **not** a releasable pin: the immutable 1.31.0 wheel on PyPI predates the
-`openadapt.push-result/v1` contract that Desktop's governed `push` requires, so
-a release built on it can only fail closed on every hosted handoff.
+`main` pins the published `openadapt-flow[browser,console]==1.34.0` release.
+That release contains the reviewed `openadapt.push-result/v1` contract and the
+governed hosted-runner adapter that Desktop calls for leased work. The lockfile
+binds the exact wheel and source archive hashes.
 
-Do not tag `desktop-v*`, dispatch the engine release workflow, or publish any
-installer while this pin is in force. The hold clears only when all of the
-following are true, in order:
-
-1. The next `openadapt-flow` semantic release ships the reviewed push-result
-   contract and is published to PyPI.
-2. The exact managed Cloud runtime candidate is reviewed, deployed, and
-   acknowledged.
-3. Desktop updates `pyproject.toml`, `uv.lock`, the frozen-sidecar inventory,
-   and its qualification evidence from that accepted release.
-4. This section is deleted in the same pull request that lands the new pin.
-
-This is a distribution hold, not a claim of Production acceptance. A normal
-release never creates a Production admission. No release note, manifest, or
-installer can state or imply Production acceptance before central activation.
+This dependency state doesn't create a Production admission. A normal release
+doesn't create one either. No release note, manifest, or installer can state or
+imply Production acceptance before central activation.
 
 ## The two lanes
 

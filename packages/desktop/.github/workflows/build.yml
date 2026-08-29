@@ -139,6 +139,14 @@ jobs:
       - name: Smoke-test sidecar executable
         run: uv run python scripts/verify_build_artifact.py sidecar
 
+      - name: Install Linux Chromium runtime libraries
+        if: runner.os == 'Linux'
+        run: uv run python -m playwright install-deps chromium
+
+      - name: Alias lowercase X11 names for Flow 1.34.0
+        if: runner.os == 'Linux'
+        run: sudo python scripts/alias_lowercase_x11_sonames.py
+
       - name: Prove frozen browser record, compile, and replay
         run: uv run python scripts/smoke_test_frozen_flow.py
 

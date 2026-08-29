@@ -202,8 +202,8 @@ class EngineConfig(BaseSettings):
     runner_enabled: bool = Field(
         default=False,
         description=(
-            "Enable the opt-in outbound runner loop (long-poll /api/runners/* "
-            "for governed dispatches). Off by default."
+            "Enable the outbound hosted runner for admitted dispatches. "
+            "Off by default."
         ),
     )
 

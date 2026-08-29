@@ -40,6 +40,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from datetime import datetime
 from urllib.parse import urlsplit
 
 from loguru import logger
@@ -58,10 +60,10 @@ _ROTATION_STAGE_VERSION = 1
 # ``host`` account holds the RAW bearer token (what the tray reads).
 _CRED_SUFFIX = "|cred"
 
-# Suffix for the runner-lane credential (spec 2.1): the per-runner
-# id + bearer token minted by POST /api/runners/register. Kept separate from the
-# user session credential -- deleting one never clobbers the other, and the raw
-# ``host`` account keeps holding the session token the tray reads.
+# Suffix for the hosted-runner registration. It holds the runner identity,
+# session, exact local release binding, expiry, and bearer token returned by
+# POST /api/runners/register. It stays separate from the user session
+# credential, so replacing either credential cannot overwrite the other.
 _RUNNER_SUFFIX = "|runner"
 
 # Default hosted control-plane base URL. Overridable per-call and via config.
@@ -688,8 +690,108 @@ def store_runner_credential(host: str, runner_id: str, runner_token: str) -> Non
         )
 
 
+_RUNNER_REGISTRATION_KEYS = frozenset(
+    {
+        "schema_version",
+        "runner_id",
+        "tenant_id",
+        "runner_session_id",
+        "runner_token",
+        "token_expires_at",
+        "local_runtime_release",
+    }
+)
+_LOCAL_RUNTIME_TARGETS = frozenset({"flow", "desktop", "capture"})
+_LOCAL_RUNTIME_RELEASE_KEYS = frozenset(
+    {
+        "target",
+        "admission_id",
+        "admission_sha256",
+        "release_version",
+        "release_artifact_sha256",
+    }
+)
+_SHA256_HEX = re.compile(r"^[a-f0-9]{64}$")
+_UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+)
+_RUNNER_TOKEN = re.compile(r"^oar_[a-f0-9]{64}$")
+_UTC_SECONDS = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+)
+_SAFE_RELEASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,199}$")
+
+
+def _valid_runner_registration(value: object) -> bool:
+    """Return whether a keychain value is one complete runner registration."""
+
+    if not isinstance(value, dict) or set(value) != _RUNNER_REGISTRATION_KEYS:
+        return False
+    if value.get("schema_version") != "openadapt.hosted-runner-registration-result/v1":
+        return False
+    if any(
+        not isinstance(value.get(key), str)
+        or _UUID.fullmatch(str(value[key])) is None
+        for key in ("runner_id", "tenant_id", "runner_session_id")
+    ):
+        return False
+    expiry = value.get("token_expires_at")
+    if not isinstance(expiry, str) or _UTC_SECONDS.fullmatch(expiry) is None:
+        return False
+    try:
+        datetime.fromisoformat(expiry[:-1] + "+00:00")
+    except ValueError:
+        return False
+    token = value.get("runner_token")
+    if not isinstance(token, str) or _RUNNER_TOKEN.fullmatch(token) is None:
+        return False
+    release = value.get("local_runtime_release")
+    if not isinstance(release, dict) or set(release) != _LOCAL_RUNTIME_TARGETS:
+        return False
+    for target, binding in release.items():
+        release_version = (
+            binding.get("release_version") if isinstance(binding, dict) else None
+        )
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != _LOCAL_RUNTIME_RELEASE_KEYS
+            or binding.get("target") != target
+            or any(not isinstance(item, str) or not item for item in binding.values())
+            or _UUID.fullmatch(str(binding.get("admission_id") or "")) is None
+            or not _SHA256_HEX.fullmatch(str(binding.get("admission_sha256") or ""))
+            or not isinstance(release_version, str)
+            or _SAFE_RELEASE_ID.fullmatch(release_version) is None
+            or not _SHA256_HEX.fullmatch(
+                str(binding.get("release_artifact_sha256") or "")
+            )
+        ):
+            return False
+    return True
+
+
+def store_runner_registration_secure(host: str, registration: dict) -> bool:
+    """Atomically replace the exact hosted-runner keychain registration.
+
+    A failed write or read-back restores the prior entry. The bearer token is
+    never written to a file or included in a log message.
+    """
+
+    if not _valid_runner_registration(registration):
+        return False
+    kr = _keyring()
+    account = host + _RUNNER_SUFFIX
+    readable, previous = _strict_get(kr, account)
+    if not readable:
+        return False
+    payload = json.dumps(registration, sort_keys=True, separators=(",", ":"))
+    if _apply_exact(kr, account, payload):
+        return True
+    _apply_exact(kr, account, previous)
+    return False
+
+
 def load_runner_credential(host: str) -> dict | None:
-    """Load the runner credential for ``host`` (``{runner_id, runner_token}``), or None."""
+    """Load a complete registration or a legacy runner credential."""
     raw = _kr_get(_keyring(), host + _RUNNER_SUFFIX)
     if not raw:
         return None
@@ -699,6 +801,11 @@ def load_runner_credential(host: str) -> dict | None:
         logger.warning("stored runner credential for {host} is corrupt; ignoring", host=host)
         return None
     if not isinstance(data, dict) or not data.get("runner_token"):
+        return None
+    if "schema_version" in data and not _valid_runner_registration(data):
+        logger.warning(
+            "stored runner registration for {host} is incomplete; ignoring", host=host
+        )
         return None
     return data
 

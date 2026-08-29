@@ -174,6 +174,36 @@ it("requires the precise outcome contract before displaying verified", () => {
   expect(rolledBack.phase).toBe("rolled_back");
 });
 
+it("keeps governed hosted-run failures out of the completed state", () => {
+  const running = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "runner-state",
+    status: { enabled: true, state: "running", last_runs: [] },
+  });
+  const halted = reduceControlOverlay(running, {
+    kind: "runner-state",
+    status: {
+      enabled: true,
+      state: "polling",
+      last_runs: [{ run_id: "run-halted", outcome: "HALTED_BEFORE_EFFECT" }],
+    },
+  });
+  const runningAgain = reduceControlOverlay(halted, {
+    kind: "runner-state",
+    status: { enabled: true, state: "running", last_runs: [] },
+  });
+  const reconcile = reduceControlOverlay(runningAgain, {
+    kind: "runner-state",
+    status: {
+      enabled: true,
+      state: "polling",
+      last_runs: [{ run_id: "run-uncertain", outcome: "RECONCILIATION_REQUIRED" }],
+    },
+  });
+
+  expect(halted.phase).toBe("halted");
+  expect(reconcile.phase).toBe("failed");
+});
+
 it("exports a deterministic presentation frame without the local workflow label", () => {
   const local = {
     ...EMPTY_OVERLAY_STATE,

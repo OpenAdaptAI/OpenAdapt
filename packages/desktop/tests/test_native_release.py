@@ -214,6 +214,27 @@ def test_qualification_pins_and_runs_the_exact_tray_protocol_peer() -> None:
     assert contract["run"] == "uv run pytest tests/test_tray_integration.py -v"
 
 
+def test_linux_sidecar_installs_browser_libraries_before_the_frozen_smoke() -> None:
+    workflow = _workflow("build.yml")
+    steps = workflow["jobs"]["python-sidecar"]["steps"]
+    libraries = next(
+        step for step in steps if step.get("name") == "Install Linux Chromium runtime libraries"
+    )
+    assert libraries["if"] == "runner.os == 'Linux'"
+    assert libraries["run"] == "uv run python -m playwright install-deps chromium"
+    aliases = next(
+        step for step in steps if step.get("name") == "Alias lowercase X11 names for Flow 1.34.0"
+    )
+    assert aliases["if"] == "runner.os == 'Linux'"
+    assert aliases["run"] == "sudo python scripts/alias_lowercase_x11_sonames.py"
+    smoke_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Prove frozen browser record, compile, and replay"
+    )
+    assert steps.index(libraries) < steps.index(aliases) < smoke_index
+
+
 def test_engine_and_native_release_form_one_attested_acceptance_chain() -> None:
     engine = _workflow("release.yml")
     native = _workflow("native-release.yml")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import NAMESPACE_URL, uuid5
+
 import pytest
 
 from engine.auth import store
@@ -17,6 +19,35 @@ def _cred(host: str = "https://app.openadapt.ai", token: str = "oai_ingest_abc")
         "org_id": "org_1",
         "host": host,
         "expires_at": None,
+    }
+
+
+_NEW_RUNNER_TOKEN = "oar_" + "d" * 64
+_PRIOR_RUNNER_TOKEN = "oar_" + "e" * 64
+
+
+def _runner_registration(token: str = _NEW_RUNNER_TOKEN) -> dict:
+    return {
+        "schema_version": "openadapt.hosted-runner-registration-result/v1",
+        "runner_id": "11111111-1111-4111-8111-111111111111",
+        "tenant_id": "22222222-2222-4222-8222-222222222222",
+        "runner_session_id": "33333333-3333-4333-8333-333333333333",
+        "runner_token": token,
+        "token_expires_at": "2030-01-01T00:00:00Z",
+        "local_runtime_release": {
+            target: {
+                "target": target,
+                "admission_id": str(uuid5(NAMESPACE_URL, f"admission:{target}")),
+                "admission_sha256": character * 64,
+                "release_version": "1.0.0",
+                "release_artifact_sha256": character * 64,
+            }
+            for target, character in (
+                ("flow", "a"),
+                ("desktop", "b"),
+                ("capture", "c"),
+            )
+        },
     }
 
 
@@ -99,6 +130,89 @@ class TestCredentialStore:
         fake_keyring.set_password = _fail_new_companion
         assert store.store_credential_secure(_cred(token="oai_ingest_new")) is False
         assert store.load_credential("https://app.openadapt.ai") == old
+
+    def test_runner_registration_replaces_one_exact_keychain_entry(
+        self, fake_keyring
+    ) -> None:
+        host = "https://app.openadapt.ai"
+
+        assert store.store_runner_registration_secure(
+            host, _runner_registration()
+        ) is True
+
+        assert store.load_runner_credential(host) == _runner_registration()
+        assert fake_keyring.get_password(store.SERVICE_NAME, host) is None
+
+    def test_runner_registration_restores_prior_entry_when_write_fails(
+        self, fake_keyring
+    ) -> None:
+        host = "https://app.openadapt.ai"
+        prior = _runner_registration(_PRIOR_RUNNER_TOKEN)
+        assert store.store_runner_registration_secure(host, prior) is True
+        original = fake_keyring.set_password
+
+        def fail_replacement(service, account, value):
+            if account.endswith(store._RUNNER_SUFFIX) and _NEW_RUNNER_TOKEN in value:
+                raise RuntimeError("locked")
+            return original(service, account, value)
+
+        fake_keyring.set_password = fail_replacement
+
+        assert store.store_runner_registration_secure(
+            host, _runner_registration()
+        ) is False
+        assert store.load_runner_credential(host) == prior
+
+    def test_runner_registration_rejects_partial_release_binding(
+        self, fake_keyring
+    ) -> None:
+        registration = _runner_registration()
+        del registration["local_runtime_release"]["capture"]
+
+        assert store.store_runner_registration_secure(
+            "https://app.openadapt.ai", registration
+        ) is False
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("runner_token", "oar_not-canonical"),
+            ("tenant_id", "tenant-not-a-uuid"),
+            ("token_expires_at", "2030-01-01T00:00:00+00:00"),
+        ],
+    )
+    def test_runner_registration_rejects_noncanonical_identity_fields(
+        self,
+        fake_keyring,
+        field: str,
+        value: str,
+    ) -> None:
+        registration = _runner_registration()
+        registration[field] = value
+
+        assert store.store_runner_registration_secure(
+            "https://app.openadapt.ai", registration
+        ) is False
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("admission_id", "admission-flow"),
+            ("release_version", "release version with spaces"),
+        ],
+    )
+    def test_runner_registration_rejects_noncanonical_release_fields(
+        self,
+        fake_keyring,
+        field: str,
+        value: str,
+    ) -> None:
+        registration = _runner_registration()
+        registration["local_runtime_release"]["flow"][field] = value
+
+        assert store.store_runner_registration_secure(
+            "https://app.openadapt.ai", registration
+        ) is False
 
 
 class TestAuthHeader:

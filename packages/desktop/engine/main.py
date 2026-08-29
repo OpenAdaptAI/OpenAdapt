@@ -231,12 +231,11 @@ def main() -> None:
     except OSError:
         logger.exception("Could not start desktop IPC socket server (tray inert)")
 
-    # Resume the outbound dispatch loop only when the operator explicitly enabled
+    # Resume the hosted runner only when the operator explicitly enabled
     # it (off by default; toggled on the Runner screen).
     if config.runner_enabled:
         try:
-            handler.dispatcher.runner_status()  # builds the shared service
-            services.runner.start()
+            handler.dispatcher.runner_enable()
         except Exception:
             logger.exception("Runner loop failed to start (lane stays off)")
 

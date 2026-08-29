@@ -304,7 +304,7 @@ class EngineDispatcher:
             # tray-only UI navigation (relayed to the desktop frontend)
             "open_workflow_library": self.open_workflow_library,
             "open_teach": self.open_teach,
-            # Outbound runner lane (/api/runners/* long-poll).
+            # hosted runner (strict register / poll / callback transport)
             "runner_status": self.runner_status,
             "runner_enable": self.runner_enable,
             "runner_disable": self.runner_disable,
@@ -3506,9 +3506,9 @@ class EngineDispatcher:
     # ------------------------------------------------------- runner lane
 
     def _runner_service(self) -> Any:
-        """Lazily build the shared outbound runner-loop service."""
+        """Lazily build the shared hosted-runner service."""
         if self.services.runner is None:
-            from engine.runner_loop import RunnerService
+            from engine.hosted_runner import RunnerService
 
             self.services.runner = RunnerService(self.config, self.services, emit=self.emit)
         return self.services.runner
@@ -3520,7 +3520,7 @@ class EngineDispatcher:
     def runner_enable(self, **params: Any) -> dict:
         """Enable the runner lane, start its loop, and persist the flag."""
         status = self._runner_service().enable()
-        self._persist_config_key("runner_enabled", True)
+        self._persist_config_key("runner_enabled", bool(status.get("enabled")))
         return status
 
     def runner_disable(self, **params: Any) -> dict:

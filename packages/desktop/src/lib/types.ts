@@ -727,14 +727,16 @@ export interface PresentationExportResult {
   placement_policy: "step-stable-collision-aware-bottom-corner";
 }
 
-// Runner lane (EXPERIMENTAL — outbound dispatch loop, spec §2).
+// Hosted runner state and terminal outcomes.
 
 export type RunnerState =
   | "disabled"
+  | "stopping"
   | "offline"
   | "polling"
   | "running"
   | "reauth_required"
+  | "incompatible"
   | "error";
 
 export interface RunnerRun {

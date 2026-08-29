@@ -37,6 +37,7 @@ FULL_ARTIFACT_PREFIXES = (
 )
 
 FULL_ARTIFACT_SCRIPTS = {
+    "scripts/alias_lowercase_x11_sonames.py",
     "scripts/build_frozen_engine.py",
     "scripts/check_release_consistency.py",
     "scripts/classify_build_changes.py",

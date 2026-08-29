@@ -348,7 +348,7 @@ the dispatcher, and again in the shell before the plugin is called.
 ### Packaging: done
 
 The frozen sidecar now carries the console. `pyproject.toml` pins
-`openadapt-flow[browser,console]==1.31.0`, `scripts/build_frozen_engine.py`
+`openadapt-flow[browser,console]==1.34.0`, `scripts/build_frozen_engine.py`
 collects uvicorn's run-time string imports and `openadapt_flow.console`, and
 the executable is built unbuffered so the console's one-time capability banner
 survives the pipe the portal reads it from. `scripts/smoke_test_frozen_flow.py`
@@ -387,7 +387,7 @@ sensitive when it derives log redactions. A file like that is not eligible to
 sit on disk for the hours a portal session can last.
 
 Re-staging it per run would also be theatre. In the pinned
-`openadapt-flow==1.31.0`, `_attended_service_from_args` resolves `--config`
+`openadapt-flow==1.34.0`, `_attended_service_from_args` resolves `--config`
 eagerly through `load_deployment` **before** it yields, and
 `AttendedActionService` is built from the parsed `DeploymentConfig` object and
 never sees the path again. Rewriting the file later changes nothing about what

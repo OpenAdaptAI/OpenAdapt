@@ -1,7 +1,4 @@
-// Runner — EXPERIMENTAL outbound dispatch lane (spec §2, P0 desktop lane).
-// Shows the enabled toggle, connection state, and recent dispatched runs.
-// The loop is outbound-only HTTPS long-poll; enabling it is the operator's
-// standing consent for cloud-dispatched governed runs on this machine.
+// Hosted runner status, operator control, and recent terminal outcomes.
 import { useEffect, useState } from "react";
 import { CMD, EVT, engineInvoke, engineTry, onEngineEvent } from "../lib/engine";
 import type { RunnerRun, RunnerStatus } from "../lib/types";
@@ -24,6 +21,7 @@ function stateTone(state: RunnerStatus["state"]): "ok" | "warn" | "off" | "run" 
     case "running":
       return "run";
     case "reauth_required":
+    case "incompatible":
     case "error":
       return "warn";
     default:
@@ -34,24 +32,32 @@ function stateTone(state: RunnerStatus["state"]): "ok" | "warn" | "off" | "run" 
 function stateLabel(state: RunnerStatus["state"]): string {
   switch (state) {
     case "polling":
-      return "online — polling for dispatches";
+      return "Online. Waiting for work.";
     case "running":
-      return "running a dispatched workflow";
+      return "Running an admitted workflow";
+    case "stopping":
+      return "Stopping after the current run";
     case "reauth_required":
-      return "sign-in required";
+      return "Sign-in required";
+    case "incompatible":
+      return "Update required";
     case "error":
-      return "error";
+      return "Error";
     case "offline":
-      return "offline — reconnecting";
+      return "Offline. Reconnecting.";
     default:
-      return "disabled";
+      return "Disabled";
   }
 }
 
 function outcomeTone(outcome?: string | null): "ok" | "warn" | "neutral" {
-  if (outcome === "confirmed") return "ok";
-  if (outcome === "halted-needs-attention" || outcome === "uncertain") return "warn";
-  if (outcome === "refused" || outcome === "failed") return "warn";
+  if (outcome === "VERIFIED") return "ok";
+  if (
+    outcome === "HALTED_BEFORE_EFFECT" ||
+    outcome === "RECONCILIATION_REQUIRED"
+  )
+    return "warn";
+  if (outcome === "FAILED_PLATFORM" || outcome === "REJECTED_POLICY") return "warn";
   return "neutral";
 }
 
@@ -91,18 +97,17 @@ export function Runner() {
         </div>
       </div>
 
-      <Callout tone="warn" title="Experimental">
-        The runner lane lets app.openadapt.ai dispatch governed runs to this
-        machine over outbound HTTPS only. Every dispatch is revalidated locally
-        against the sealed bundle digest before anything executes, and only
-        PHI-free evidence (digests, counts, step ids) leaves this machine.
+      <Callout tone="info" title="Hosted execution">
+        OpenAdapt Cloud sends admitted workflows to this computer over outbound
+        HTTPS. Flow checks the exact product and workflow admissions here before
+        it runs. Only approved, PHI-free evidence returns to Cloud.
       </Callout>
 
       <Card>
         <CardHead
           eyebrow="Connection"
           title="This machine as a runner"
-          sub="Outbound long-poll to the control plane; no inbound ports."
+          sub="Connects through outbound HTTPS. It doesn't open an inbound port."
         />
         <div className="row">
           <StatusDot tone={stateTone(status.state)} />
@@ -111,7 +116,7 @@ export function Runner() {
             <span className="page-sub mono">{status.runner_id}</span>
           )}
           <span className="spacer" />
-          <Button onClick={toggle} disabled={busy}>
+          <Button onClick={toggle} disabled={busy || status.state === "stopping"}>
             {status.enabled ? "Disable runner" : "Enable runner"}
           </Button>
         </div>
@@ -121,16 +126,24 @@ export function Runner() {
             from Settings, then re-enable the runner.
           </Callout>
         )}
-        {status.last_error && status.state !== "reauth_required" && (
-          <p className="page-sub">{status.last_error}</p>
+        {status.state === "incompatible" && (
+          <Callout tone="warn" title="Update required">
+            Install an admitted Desktop release that includes the current Flow
+            hosted runner. The runner will resume after Desktop restarts.
+          </Callout>
         )}
+        {status.last_error &&
+          status.state !== "reauth_required" &&
+          status.state !== "incompatible" && (
+            <p className="page-sub">{status.last_error}</p>
+          )}
       </Card>
 
       <Card>
         <CardHead
           eyebrow="History"
           title="Last runs"
-          sub="Dispatched runs executed (or refused) on this machine."
+          sub="Hosted runs handled by this computer."
         />
         {status.last_runs.length === 0 ? (
           <EmptyState

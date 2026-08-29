@@ -86,7 +86,7 @@ export const CMD = {
   APPROVE_REVIEW: "approve_review",
   DISMISS_REVIEW: "dismiss_review",
   GET_PENDING_REVIEWS: "get_pending_reviews",
-  // runner lane (EXPERIMENTAL — outbound /api/runners/* long-poll)
+  // hosted runner (strict register / poll / callback transport)
   RUNNER_STATUS: "runner_status",
   RUNNER_ENABLE: "runner_enable",
   RUNNER_DISABLE: "runner_disable",

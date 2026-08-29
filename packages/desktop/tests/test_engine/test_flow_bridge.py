@@ -15,6 +15,7 @@ from engine.flow_bridge import (
     BrowserRuntimeError,
     FlowBridge,
     FlowNotAvailableError,
+    HostedRunnerAdapterUnavailableError,
     _safe_command_for_log,
     flow_available,
 )
@@ -53,6 +54,15 @@ def _runner(recorder, returncode=0, stdout="", stderr=""):
 
 
 class TestFlowBridgeInvocation:
+    def test_hosted_adapter_absence_fails_closed(self, monkeypatch) -> None:
+        def missing(_name: str):
+            raise ModuleNotFoundError("adapter is not installed")
+
+        monkeypatch.setattr("engine.flow_bridge.import_module", missing)
+
+        with pytest.raises(HostedRunnerAdapterUnavailableError, match="newer bundled"):
+            FlowBridge.hosted_runner_contract()
+
     def test_compile_builds_args(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
         calls: list = []

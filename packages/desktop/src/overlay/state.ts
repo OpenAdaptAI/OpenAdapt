@@ -240,7 +240,10 @@ export function reduceControlOverlay(
         phase:
           input.status.last_runs[0]?.outcome === "VERIFIED"
             ? "verified"
-            : input.status.last_runs[0]?.outcome === "HALTED" ||
+            : input.status.last_runs[0]?.outcome === "RECONCILIATION_REQUIRED"
+              ? "failed"
+              : input.status.last_runs[0]?.outcome === "HALTED" ||
+                  input.status.last_runs[0]?.outcome === "HALTED_BEFORE_EFFECT" ||
                 input.status.last_runs[0]?.outcome === "halted-needs-attention"
               ? "halted"
               : input.status.state === "error"

@@ -124,7 +124,7 @@ the server omitted a key.
 3. A **missing `safety` object** in a response is treated exactly like an empty
    one and hardened to all safe defaults.
 4. Network and cache failures **never raise** out of `resolve_effective_policy`
-   / `load_cached_policy` — they degrade (mirroring the keychain gate in
+   / `load_cached_policy`. They degrade, like the keychain gate in
    `engine.auth.store`). Only `fetch_effective_policy` raises, so its caller can
    choose to fall back.
 5. **A run whose engine cannot evaluate safety policy must refuse.** When
@@ -132,61 +132,61 @@ the server omitted a key.
    view; the safest values still gate the run, and a consumer that requires a
    confirmed policy (e.g. a consequential run) should treat that as a hard stop
    rather than proceeding on defaults silently. `binding_safety` implements
-   exactly that hard stop, and the outbound runner lane enforces it.
+   that hard stop for local execution. Hosted execution uses the signed policy
+   contract in its exact workflow admission.
 
 ---
 
-## Binding the policy to a run (the half that makes the control real)
+## Binding policy to a hosted run
 
-Resolving a policy is not enforcing one. `engine/runner_loop.py` binds the
-resolved `safety` block to every dispatched governed run, **after** the
-authorization/digest revalidation and **before** any GUI action:
+Desktop doesn't rewrite the deployment config for a hosted run. The Cloud lease
+contains the signed admission for one exact product release and one exact
+workflow version. Flow verifies both admissions locally before it resolves
+parameters or starts the workflow.
 
 ```
-poll → lease → stage bundle → validate_dispatch → bind_effective_policy → execute
-                                                   │
-                                                   ├─ resolve (network → cache)
-                                                   ├─ binding_safety(policy)      ── refuses
-                                                   └─ apply_safety_policy(config) ── refuses
+register -> poll -> Flow hosted adapter -> per-edge permit/ack -> terminal callback
 ```
 
-`RunnerService.bind_effective_policy()` resolves the policy fresh for each run
-(the "refresh immediately before a run" rule above), validates it, projects it
-onto the operator's `~/.openadapt/deployment.json`, and hands Flow a
-**policy-bound** config staged privately (0600, removed when the run ends).
-Flow is never given the operator's file directly.
+Desktop passes the strict lease, local `runner.toml`, run directory, and managed
+delivery authority to Flow. Flow owns admission checks, parameter resolution,
+one-use delivery, execution, and terminal verification. Desktop keeps the
+outbound HTTPS transport and the local status view.
+
+`runner.toml` is an operator-authored trust manifest, so Desktop doesn't edit
+it. Its protected `[runner].host` must contain the same canonical HTTPS origin
+as Desktop's hosted control-plane setting before the runner can register.
+
+The current bridge fails closed until the approved hosted terminal projection
+is present. It reports apparent success as `RECONCILIATION_REQUIRED` instead of
+publishing `VERIFIED` from an incomplete projection.
 
 ### What each safety key does to a run
 
-Projection is **strengthen-only**: it can tighten a run, never relax one.
+The local policy projection remains strengthen-only for local execution. It can
+tighten a run, but it can't relax one.
 
 | Safety key | Effect on the run |
 |---|---|
 | `pixel_verify.consequential_policy` | `required` → `runtime.pixel_verify_enabled = true`. `disabled` is the platform *baseline*, not a prohibition, so a locally-armed check stays armed. |
 | `model_calls.allowed_in_healthy_run` | `false` → `runtime.allow_model_grounding = false` (fully local). `true` is a permission, not an instruction to enable. |
-| `effect_verification.required_for_consequential`, `unverified_write.allow`, `identity_gate.strictness`, `halt_on_ambiguous` | Any at its strict value requires a **production execution profile** (effect contracts, identity coverage, settled frames, no blanket unverified-write approval). `demo` is escalated to `standard`; an **absent** profile is left absent, because Flow resolves an omitted profile to `regulated` — stricter than anything we would write. |
+| `effect_verification.required_for_consequential`, `unverified_write.allow`, `identity_gate.strictness`, `halt_on_ambiguous` | Any at its strict value requires a **production execution profile** (effect contracts, identity coverage, settled frames, no blanket unverified-write approval). `demo` is escalated to `standard`. An **absent** profile stays absent because Flow resolves it to `regulated`, which is stricter than anything Desktop would write. |
 | `egress.artifact_policy` | Validated, **not** projected onto the run: artifact egress is governed by the upload path (`engine/upload_manager.py`, `engine/hosted.py`), not the replay runtime. |
 
 The `grounding_model` projection is deliberately **not** bound to runs here: it
 is an egress *capability*, and auto-enabling a capability from a cached policy is
 the opposite of failing closed.
 
-### Refusal conditions (ack outcome `refused`, flow never invoked)
+### When a hosted run stops
 
-1. `source == "fail-closed-default"` — no authoritative policy was ever
-   obtained. The safest values are populated, but they are the engine's guess at
-   the org's posture, not the org's posture: an org that *strengthened* a key
-   (e.g. required pixel-identity verification) would be silently run without it.
-2. The `safety` block is absent, is not an object, or is missing a key.
-3. Any value falls outside `SAFETY_VALUE_DOMAINS` (the exact domains in the
-   cloud registry). `harden_safety` deliberately preserves whatever the server
-   said; binding is where an unknown posture stops a run.
-4. There is no readable deployment config to bind the policy to, or it declares
-   an execution profile that cannot be ranked (so the engine cannot prove it is
-   not weakening it).
+Flow refuses before actuation if an admission is missing, expired, revoked, or
+doesn't match the exact release, workflow, bundle, environment, or policy
+contract. It also refuses when it can't resolve an admitted parameter safely.
+After a possible input delivery, uncertainty produces
+`RECONCILIATION_REQUIRED`. Desktop never asks Flow to replay that work.
 
-Refusal reasons stay PHI-free: they name keys, classes, and domains — never
-config contents, paths, or exception text.
+Refusal evidence stays PHI-free. It names bounded contract fields and stable
+codes, not parameter values, screenshots, local paths, or exception text.
 
 ---
 
@@ -202,7 +202,8 @@ config contents, paths, or exception text.
 | `engine/policy.py :: SAFETY_VALUE_DOMAINS` | Exact allowed values per safety key (mirrors the cloud registry) |
 | `engine/policy.py :: binding_safety(policy)` | The pre-run gate: refuses a non-authoritative/malformed policy (`PolicyEnforcementError`) |
 | `engine/policy.py :: apply_safety_policy(deployment, safety)` | Strengthen-only projection onto a Flow deployment config |
-| `engine/runner_loop.py :: RunnerService.bind_effective_policy()` | Resolves + binds the policy before every dispatched run; refuses on any failure |
+| `engine/hosted_runner.py :: RunnerService` | Registers, polls, delegates the exact lease to Flow, and sends Flow's terminal callback |
+| `openadapt_flow.runner.hosted_adapter :: HostedRunnerAdapter` | Verifies admissions, resolves admitted parameters, owns one-use execution, and builds terminal evidence |
 | `engine/dispatch.py :: get_effective_policy` | Dispatcher command; never raises; returns the fail-closed default on error |
 | `engine/dispatch.py :: refresh_policy` | Dispatcher command; forces a network fetch, then falls back like `get_effective_policy` |
 

@@ -543,6 +543,8 @@ jobs:
           python scripts/sync_frozen_dependencies.py
           uv run python scripts/build_frozen_engine.py
           uv run python scripts/verify_build_artifact.py sidecar
+          uv run python -m playwright install-deps chromium
+          sudo python scripts/alias_lowercase_x11_sonames.py
           uv run python scripts/smoke_test_frozen_flow.py
           mkdir -p src-tauri/binaries
           cp dist/openadapt-engine \

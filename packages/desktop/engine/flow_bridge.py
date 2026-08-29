@@ -1,4 +1,4 @@
-"""flow_bridge -- thin wrapper around the ``openadapt-flow`` CLI.
+"""flow_bridge -- thin wrapper around the ``openadapt-flow`` runtime.
 
 The desktop engine does NOT reimplement the loop; it shells out to the
 ``openadapt-flow`` package for ``record / compile / replay / run / teach``
@@ -13,6 +13,10 @@ Halt signaling reconciliation (spec section 8, item 3): ``replay``/``run`` exit
 
 Bundle-dir-vs-zip reconciliation (item 4) lives in :mod:`engine.hosted`, which
 zips a bundle/recording directory before upload.
+
+Hosted dispatches use Flow's strict Python adapter. They never use an inferred
+CLI flag or a Desktop implementation of Flow's admission, parameter, delivery,
+or terminal-verification contracts.
 """
 
 from __future__ import annotations
@@ -26,8 +30,10 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from importlib import import_module
 from importlib.util import find_spec
 from pathlib import Path
+from types import ModuleType
 from typing import Callable, Literal, cast
 
 from loguru import logger
@@ -306,6 +312,10 @@ class FlowNotAvailableError(RuntimeError):
     """Raised when the ``openadapt-flow`` CLI cannot be located."""
 
 
+class HostedRunnerAdapterUnavailableError(RuntimeError):
+    """Raised when the bundled Flow runtime lacks the strict hosted adapter."""
+
+
 class BrowserRuntimeError(RuntimeError):
     """Raised when the pinned browser runtime cannot be made available."""
 
@@ -468,6 +478,50 @@ class FlowBridge:
         self._popen = popen
         self._run_auth_support: bool | None = None
         self._push_json_support: bool | None = None
+
+    @staticmethod
+    def hosted_runner_contract() -> ModuleType:
+        """Load Flow's exact hosted-runner contract or fail before networking.
+
+        Desktop deliberately has no compatibility implementation. A bundled
+        Flow version that predates the adapter cannot execute hosted work.
+        """
+
+        try:
+            module = import_module("openadapt_flow.runner.hosted_adapter")
+        except (ImportError, ModuleNotFoundError) as exc:
+            raise HostedRunnerAdapterUnavailableError(
+                "This Desktop build needs a newer bundled OpenAdapt Flow runtime "
+                "before it can run hosted work."
+            ) from exc
+        required = {
+            "CallbackRequest",
+            "CallbackResponse",
+            "DeliveryAuthority",
+            "HostedDispatch",
+            "HostedDispatchRefusal",
+            "HostedRecoveryBinding",
+            "HostedRunResult",
+            "HostedRunnerAdapter",
+            "HostedRunnerTransport",
+            "PollRequest",
+            "RegisterRequest",
+            "RegisterResponse",
+            "RUNNER_RENEWAL_HEADER",
+            "registration_renewal_headers",
+        }
+        missing = sorted(name for name in required if not hasattr(module, name))
+        if missing:
+            raise HostedRunnerAdapterUnavailableError(
+                "The bundled OpenAdapt Flow hosted-runner contract is incomplete."
+            )
+        return module
+
+    def hosted_runner_adapter(self, ledger_path: Path):
+        """Build the strict Flow adapter over its durable one-use ledger."""
+
+        contract = self.hosted_runner_contract()
+        return contract.HostedRunnerAdapter(ledger_path=Path(ledger_path))
 
     # --- low-level ---
 
