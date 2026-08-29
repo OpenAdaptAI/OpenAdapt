@@ -1572,6 +1572,9 @@ def compile_recording(
     param_overrides: Optional[dict[str, str]] = None,
     secret_param_steps: Optional[Iterable[str]] = None,
     mine_effects: bool = False,
+    admit_api_bindings: bool = False,
+    admission_fixture_url: Optional[str] = None,
+    skill_library_root: Optional[Path | str] = None,
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
     target_surface: Optional[ExecutionTargetKind] = None,
@@ -1655,6 +1658,22 @@ def compile_recording(
             or nothing (with an honest "no verifiable effect derivable" log).
             Default False keeps the bundle byte-identical to before; even when
             True a bundle is unchanged wherever mining derives nothing.
+        admit_api_bindings: Opt-in compile-time REST ``ApiBinding``
+            certification (``compiler.binding_admission``). For each
+            consequential write whose Effect was mined from an observed
+            system-of-record delta, propose a REST binding and copy it onto
+            the step only if the same Effect CONFIRMs on the held-out
+            fixture at ``admission_fixture_url``. A refused proposal leaves
+            the step on the GUI ladder. FHIR / MCP / tool bindings are not
+            synthesized. Default False keeps the bundle byte-identical.
+        admission_fixture_url: Base URL of the held-out REST fixture
+            (MockMed ``fault_server`` in tests). Required when
+            ``admit_api_bindings`` is True; without it the compiler logs
+            and leaves every step on the GUI ladder.
+        skill_library_root: Optional
+            :class:`~openadapt_flow.learning.library.SkillLibrary` root.
+            When a binding is admitted, the lifted program is stored with
+            provenance naming the certified REST admission.
         annotate: Opt-in COMPILE-TIME model annotation
             (``compiler.annotate``). When True, a :class:`StepAnnotator` proposes
             richer step LABELS, RISK refinements, and typed PARAMETER inferences
@@ -2471,6 +2490,45 @@ def compile_recording(
                 upgraded,
             )
 
+    if admit_api_bindings:
+        from openadapt_flow.compiler.binding_admission import (
+            AdmissionFixture,
+            certify_steps_on_fixture,
+        )
+        from openadapt_flow.learning.library import SkillLibrary
+
+        if not admission_fixture_url:
+            logger.info(
+                "admit_api_bindings requested but admission_fixture_url is "
+                "empty -- leaving every step on the GUI ladder"
+            )
+        else:
+            library = (
+                SkillLibrary(skill_library_root)
+                if skill_library_root is not None
+                else None
+            )
+            decisions = certify_steps_on_fixture(
+                steps,
+                [event for _step, _sb, _sa, event in pending],
+                fixture=AdmissionFixture(
+                    base_url=admission_fixture_url,
+                    params=dict(params),
+                ),
+                exclude_texts=exclude_texts,
+                params=dict(params),
+                library=library,
+                skill_id=name,
+                workflow_name=name,
+            )
+            admitted = sum(1 for d in decisions if d.admitted)
+            logger.info(
+                "binding-admission: admitted %d/%d REST binding(s); "
+                "the rest stay on the GUI ladder",
+                admitted,
+                len(decisions),
+            )
+
     workflow = Workflow(
         name=name,
         recording_id=meta.get("id"),
@@ -2508,6 +2566,8 @@ def compile_recording(
             else None
         ),
         "mine_effects": mine_effects,
+        "admit_api_bindings": admit_api_bindings,
+        "admission_fixture_url": admission_fixture_url,
         "name": name,
         "param_overrides": dict(sorted((param_overrides or {}).items())),
         "risk_overrides": dict(sorted((risk_overrides or {}).items())),

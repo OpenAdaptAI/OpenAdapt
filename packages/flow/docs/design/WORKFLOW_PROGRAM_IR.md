@@ -241,6 +241,16 @@ bundle with no binding, or a binding with no actuator configured, actuates throu
 the GUI ladder exactly as before. The API tier is an optimization whose safe
 fallback is the GUI, never a gate that can block a runnable step.
 
+Compile-time certification (opt-in, `compiler.binding_admission`) proposes a
+REST `ApiBinding` for a consequential write whose `Effect` was mined from an
+observed system-of-record delta. The proposal is copied onto the step only
+when the same `Effect` CONFIRMs after that call runs against a held-out
+fixture (MockMed's in-process REST store is the built-in one). A refused
+proposal leaves the step on the GUI ladder. An admitted binding still HALTs
+on indeterminate delivery at run time and never GUI-retries a write that may
+have landed. FHIR, MCP, and generic tool actuators are out of this path;
+REST only.
+
 ---
 
 ## 5. The state machine
@@ -555,6 +565,9 @@ first viable wins:
 
 1. `api`: call the app's API or DB write via `Step.api_binding`; the effect is
    probed against the system of record. This closes the transactional gap.
+   A compiled REST `api` leaf is present only when compile-time admission
+   confirmed the Effect on a held-out fixture; otherwise the step stays on
+   `dom_uia` / `vision_rdp`.
 2. `dom_uia`: DOM (Playwright), Windows UIA, or macOS AX structural selection via
    the anchor's `StructuralLocator`, with a structured identity check and a
    structured effect check.
