@@ -2,11 +2,13 @@ name: Release and PyPI Publish
 
 # A release starts from a version, changelog, and lockfile that reached the
 # exact protected main branch through review. The release App can create only
-# the annotated tag. It cannot push a version commit or any other main commit.
+# the annotated tag and its matching GitHub Release. It cannot push a version
+# commit or any other main commit.
 #
-# A protected v* tag starts the build, attestation, PyPI Trusted Publishing,
-# GitHub Release, and publication-verification jobs. Rerun that exact tag run
-# after a partial publication failure. Do not create a recovery tag.
+# An annotated v* tag created by the release App starts the build, attestation,
+# PyPI Trusted Publishing, GitHub Release, and publication-verification jobs.
+# Rerun that exact tag run after a partial publication failure. Do not create a
+# recovery tag.
 
 on:
   workflow_dispatch:
@@ -22,18 +24,95 @@ on:
 permissions:
   contents: read
 
-# A tag run is the recovery unit. Do not cancel it when another release starts.
+# Serialize release mutations. A newer candidate must not race an older recovery.
 concurrency:
-  group: release-${{ github.event_name }}-${{ github.ref }}
+  group: release-publication
   cancel-in-progress: false
 
 jobs:
+  stage-flow-admission:
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      admission_reference_json: ${{ steps.candidate.outputs.admission_reference_json }}
+      artifact_inventory_json: ${{ steps.candidate.outputs.artifact_inventory_json }}
+      flow_source_commit: ${{ steps.candidate.outputs.flow_source_commit }}
+      flow_version: ${{ steps.candidate.outputs.flow_version }}
+      flow_tag: ${{ steps.candidate.outputs.flow_tag }}
+      central_registry_source_commit: ${{ steps.candidate.outputs.central_registry_source_commit }}
+
+    steps:
+      - name: Checkout the exact launcher candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Stage the exact selected Flow release and its current admission
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          project_version="$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as stream:
+              print(tomllib.load(stream)["project"]["version"])
+          PY
+          )"
+          python scripts/prepare_flow_admission_candidate.py \
+            --manifest platform-manifest.json \
+            --launcher-version "$project_version" \
+            --artifact-root flow-admission-candidate \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Transfer the exact Flow admission candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flow-admission-candidate
+          path: flow-admission-candidate/
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-flow-admission:
+    needs: stage-flow-admission
+    permissions:
+      contents: read
+      attestations: read
+      id-token: write
+    uses: OpenAdaptAI/.github/.github/workflows/verify-production-release-admission.yml@c05ff5c0633e0a1f63d9af74eeb69c31dac3e9ba
+    with:
+      admission_reference_json: ${{ needs.stage-flow-admission.outputs.admission_reference_json }}
+      artifact_inventory_json: ${{ needs.stage-flow-admission.outputs.artifact_inventory_json }}
+      candidate_artifact_name: flow-admission-candidate
+      expected_target: flow
+      expected_repository: OpenAdaptAI/openadapt-flow
+      expected_repository_id: "1291376938"
+      expected_source_commit: ${{ needs.stage-flow-admission.outputs.flow_source_commit }}
+      expected_version: ${{ needs.stage-flow-admission.outputs.flow_version }}
+      expected_tag: ${{ needs.stage-flow-admission.outputs.flow_tag }}
+      central_verifier_sha: c05ff5c0633e0a1f63d9af74eeb69c31dac3e9ba
+
   create-release-tag:
-    if: github.event_name == 'workflow_dispatch'
+    needs: verify-flow-admission
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      needs.verify-flow-admission.result == 'success'
     runs-on: ubuntu-latest
     environment: release-identity
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Create a repository-scoped release App token
@@ -44,7 +123,20 @@ jobs:
           private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-administration: read
           permission-contents: write
+          permission-metadata: read
+
+      - name: Require the exact release App identity for tag creation
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "Tag creation requires the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
 
       - name: Checkout the exact dispatched main commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -61,6 +153,7 @@ jobs:
       - name: Require an exact reviewed release candidate
         id: candidate
         env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
           REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -113,6 +206,19 @@ jobs:
               )
           PY
           python scripts/verify_release_lock.py
+          python scripts/release_platform_versions.py \
+            --manifest platform-manifest.json \
+            --launcher-version "$project_version" \
+            > /tmp/release-component-versions.txt
+          python scripts/validate_platform_manifest.py \
+            --manifest platform-manifest.json \
+            --report docs/platform-compatibility-report.md \
+            --offline \
+            --require-compatible
+          python scripts/check_source_boundary.py
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$tag"
 
           git fetch --force --tags origin
           if git show-ref --verify --quiet "refs/tags/$tag"; then
@@ -128,11 +234,23 @@ jobs:
           set -euo pipefail
           git config user.name "openadapt-release[bot]"
           git config user.email "openadapt-release[bot]@users.noreply.github.com"
+
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main="$(git rev-parse refs/remotes/origin/main)"
+          if [ "$current_main" != "$GITHUB_SHA" ]; then
+            echo "main advanced before the tag push. main=$current_main candidate=$GITHUB_SHA." >&2
+            exit 1
+          fi
+
           git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "OpenAdapt ${RELEASE_TAG#v}"
           git push origin "refs/tags/$RELEASE_TAG"
 
   build-and-attest:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: verify-flow-admission
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.verify-flow-admission.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -204,6 +322,15 @@ jobs:
               )
           PY
           python scripts/verify_release_lock.py
+          python scripts/release_platform_versions.py \
+            --manifest platform-manifest.json \
+            --launcher-version "$project_version" \
+            > /tmp/release-component-versions.txt
+          python scripts/validate_platform_manifest.py \
+            --manifest platform-manifest.json \
+            --report docs/platform-compatibility-report.md \
+            --offline \
+            --require-compatible
 
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -218,6 +345,7 @@ jobs:
         run: |
           uv build --wheel --sdist
           python scripts/verify_release_artifacts.py
+          python scripts/check_source_boundary.py --dist dist
 
       - name: Attest release artifacts
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -234,10 +362,58 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
+
+  preflight-github:
+    needs: build-and-attest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: release-identity
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout the exact release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Create a repository-scoped release App token for the preflight
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: read
+          permission-contents: read
+          permission-metadata: read
+
+      - name: Require the GitHub publication identity and hosting controls
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "GitHub publication requires the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG"
 
   publish-pypi:
-    needs: build-and-attest
+    needs: [build-and-attest, preflight-github]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi
@@ -246,23 +422,57 @@ jobs:
       id-token: write
 
     steps:
+      - name: Checkout the exact release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
       - name: Download attested release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-dists-${{ github.ref_name }}
           path: dist/
 
+      - name: Refuse conflicting immutable PyPI files
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          test "$RELEASE_TAG" = "v${version}"
+          python scripts/verify_pypi_release.py \
+            --directory dist \
+            --version "$version" \
+            --allow-matching-subset \
+            --wait-seconds 300 \
+            --poll-seconds 10
+
       - name: Publish to PyPI with Trusted Publishing
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           skip-existing: true
 
+      - name: Verify immutable PyPI publication bytes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          test "$RELEASE_TAG" = "v${version}"
+          python scripts/verify_pypi_release.py \
+            --directory dist \
+            --version "$version" \
+            --wait-seconds 300 \
+            --poll-seconds 10
+
   publish-github:
-    needs: [build-and-attest, publish-pypi]
+    needs: [build-and-attest, preflight-github, publish-pypi]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment: release-identity
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout the exact release tag
@@ -282,10 +492,51 @@ jobs:
           name: release-dists-${{ github.ref_name }}
           path: dist/
 
+      - name: Create a repository-scoped release App token for GitHub publication
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: read
+          permission-contents: write
+          permission-metadata: read
+
+      - name: Require the exact release App identity for GitHub publication
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "GitHub publication requires the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+
+      - name: Install the pinned GitHub release verification CLI
+        id: release-cli
+        run: |
+          set -euo pipefail
+          archive=/tmp/gh_2.98.0_linux_amd64.tar.gz
+          curl --fail --location --silent --show-error \
+            https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz \
+            --output "$archive"
+          echo "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de  $archive" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory /tmp
+          cli=/tmp/gh_2.98.0_linux_amd64/bin/gh
+          test -x "$cli"
+          "$cli" version
+          echo "path=$cli" >> "$GITHUB_OUTPUT"
+
       - name: Publish the GitHub Release and exact artifacts
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          GH_CLI: ${{ steps.release-cli.outputs.path }}
           RELEASE_TAG: ${{ github.ref_name }}
+          EXPECTED_AUTHOR: openadapt-release[bot]
         run: |
           set -euo pipefail
           python - "$RELEASE_TAG" > /tmp/release-notes.md <<'PY'
@@ -306,23 +557,156 @@ jobs:
           print(match.group("body").strip())
           PY
 
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" \
+          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          tag_commit="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
+          if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+            echo "The remote release tag does not resolve to the event commit." >&2
+            exit 1
+          fi
+
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG"
+
+          release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
+          release_status="$(curl --silent --show-error \
+            --output /tmp/github-release.json \
+            --write-out '%{http_code}' \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "$release_url")"
+
+          if [ "$release_status" = "404" ]; then
+            "$GH_CLI" release create "$RELEASE_TAG" \
+              dist/*.whl dist/*.tar.gz \
               --repo "$GITHUB_REPOSITORY" \
-              --title "$RELEASE_TAG" \
-              --notes-file /tmp/release-notes.md \
-              --latest
-          else
-            gh release create "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
+              --draft \
               --verify-tag \
               --title "$RELEASE_TAG" \
-              --notes-file /tmp/release-notes.md \
-              --latest
+              --notes-file /tmp/release-notes.md
+            release_status="$(curl --silent --show-error \
+              --output /tmp/github-release.json \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              "$release_url")"
           fi
-          gh release upload "$RELEASE_TAG" dist/*.whl dist/*.tar.gz \
+          if [ "$release_status" != "200" ]; then
+            echo "GitHub returned HTTP $release_status for the exact release." >&2
+            exit 1
+          fi
+
+          release_state="$(python -c \
+            'import json; print("draft" if json.load(open("/tmp/github-release.json"))["draft"] else "published")')"
+          if [ "$release_state" = "draft" ]; then
+            python scripts/verify_github_release.py \
+              --metadata /tmp/github-release.json \
+              --tag "$RELEASE_TAG" \
+              --author "$EXPECTED_AUTHOR" \
+              --expected-dir dist \
+              --state draft \
+              --allow-missing \
+              --missing-output /tmp/missing-release-assets.txt
+
+            mkdir /tmp/existing-github-release-assets
+            asset_count="$(python -c \
+              'import json; print(len(json.load(open("/tmp/github-release.json"))["assets"]))')"
+            if [ "$asset_count" -gt 0 ]; then
+              "$GH_CLI" release download "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --dir /tmp/existing-github-release-assets
+            fi
+            python scripts/verify_github_release.py \
+              --metadata /tmp/github-release.json \
+              --tag "$RELEASE_TAG" \
+              --author "$EXPECTED_AUTHOR" \
+              --expected-dir dist \
+              --downloaded-dir /tmp/existing-github-release-assets \
+              --state draft \
+              --allow-missing \
+              --missing-output /tmp/missing-release-assets.txt
+
+            while IFS= read -r missing_asset; do
+              "$GH_CLI" release upload "$RELEASE_TAG" "dist/$missing_asset" \
+                --repo "$GITHUB_REPOSITORY"
+            done < /tmp/missing-release-assets.txt
+
+            release_status="$(curl --silent --show-error \
+              --output /tmp/github-release.json \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              "$release_url")"
+            if [ "$release_status" != "200" ]; then
+              echo "GitHub returned HTTP $release_status for the completed draft." >&2
+              exit 1
+            fi
+
+            mkdir /tmp/completed-draft-release-assets
+            "$GH_CLI" release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir /tmp/completed-draft-release-assets
+            python scripts/verify_github_release.py \
+              --metadata /tmp/github-release.json \
+              --tag "$RELEASE_TAG" \
+              --author "$EXPECTED_AUTHOR" \
+              --expected-dir dist \
+              --downloaded-dir /tmp/completed-draft-release-assets \
+              --state draft
+
+            "$GH_CLI" release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft=false
+
+            release_status="$(curl --silent --show-error \
+              --output /tmp/github-release.json \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              "$release_url")"
+            if [ "$release_status" != "200" ]; then
+              echo "GitHub returned HTTP $release_status after publication." >&2
+              exit 1
+            fi
+          fi
+
+          python scripts/verify_github_release.py \
+            --metadata /tmp/github-release.json \
+            --tag "$RELEASE_TAG" \
+            --author "$EXPECTED_AUTHOR" \
+            --expected-dir dist
+
+          mkdir /tmp/github-release-assets
+          "$GH_CLI" release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --clobber
+            --dir /tmp/github-release-assets
+          python scripts/verify_github_release.py \
+            --metadata /tmp/github-release.json \
+            --tag "$RELEASE_TAG" \
+            --author "$EXPECTED_AUTHOR" \
+            --expected-dir dist \
+            --downloaded-dir /tmp/github-release-assets
+
+          for attempt in $(seq 1 12); do
+            if "$GH_CLI" release verify "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --format json > /tmp/github-release-attestation.json; then
+              break
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              echo "GitHub did not produce a valid release attestation in time." >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          for artifact in dist/*.whl dist/*.tar.gz; do
+            "$GH_CLI" release verify-asset "$RELEASE_TAG" "$artifact" \
+              --repo "$GITHUB_REPOSITORY"
+          done
 
   verify-publication:
     needs: [build-and-attest, publish-pypi, publish-github]
@@ -356,10 +740,23 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          test "$RELEASE_TAG" = "v${version}"
+          python scripts/release_platform_versions.py \
+            --manifest platform-manifest.json \
+            --launcher-version "$version" \
+            > /tmp/release-component-versions.txt
+
+          component_args=()
+          while IFS= read -r component_version; do
+            component_args+=(--component-version "$component_version")
+          done < /tmp/release-component-versions.txt
+
           for attempt in $(seq 1 12); do
             if python scripts/generate_platform_manifest.py \
               --output /tmp/published-platform-manifest.json \
-              --report-output /tmp/published-platform-report.md; then
+              --report-output /tmp/published-platform-report.md \
+              "${component_args[@]}"; then
               break
             fi
             if [ "$attempt" -eq 12 ]; then
@@ -371,6 +768,7 @@ jobs:
           python scripts/validate_platform_manifest.py \
             --manifest /tmp/published-platform-manifest.json \
             --report /tmp/published-platform-report.md \
+            --require-compatible \
             --require-network
 
           python - <<'PY'
@@ -452,15 +850,21 @@ jobs:
 
   report-release-failure:
     needs:
+      - stage-flow-admission
+      - verify-flow-admission
       - create-release-tag
       - build-and-attest
+      - preflight-github
       - publish-pypi
       - publish-github
       - verify-publication
     if: >-
       ${{ always() &&
-          (needs.create-release-tag.result == 'failure' ||
+          (needs.stage-flow-admission.result == 'failure' ||
+           needs.verify-flow-admission.result == 'failure' ||
+           needs.create-release-tag.result == 'failure' ||
            needs.build-and-attest.result == 'failure' ||
+           needs.preflight-github.result == 'failure' ||
            needs.publish-pypi.result == 'failure' ||
            needs.publish-github.result == 'failure' ||
            needs.verify-publication.result == 'failure') }}
@@ -473,7 +877,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CREATE_TAG_RESULT: ${{ needs.create-release-tag.result }}
+          FLOW_STAGE_RESULT: ${{ needs.stage-flow-admission.result }}
+          FLOW_ADMISSION_RESULT: ${{ needs.verify-flow-admission.result }}
           BUILD_RESULT: ${{ needs.build-and-attest.result }}
+          GITHUB_PREFLIGHT_RESULT: ${{ needs.preflight-github.result }}
           PYPI_RESULT: ${{ needs.publish-pypi.result }}
           GITHUB_RESULT: ${{ needs.publish-github.result }}
           VERIFY_RESULT: ${{ needs.verify-publication.result }}
@@ -482,9 +889,9 @@ jobs:
           TITLE="Release workflow failed"
           BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
+          flow-stage=${FLOW_STAGE_RESULT}, flow-admission=${FLOW_ADMISSION_RESULT}, create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, preflight-github=${GITHUB_PREFLIGHT_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
 
-          If the annotated tag exists, rerun this exact tag workflow. Do not create a recovery tag."
+          If the annotated tag exists, rerun only the failed jobs in this run with gh run rerun ${{ github.run_id }} --failed. Do not start a new full run or create a recovery tag."
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "in:title \"$TITLE\"" --json number,title \
             --jq '[.[] | select(.title == env.TITLE)][0].number // empty')"

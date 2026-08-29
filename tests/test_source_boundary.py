@@ -14,9 +14,12 @@ from the canonical private manifest. Two properties matter and are pinned here:
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
+import tarfile
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -163,6 +166,89 @@ def test_a_clean_tree_passes(tmp_path: Path, policy: guard.SourcePolicy) -> None
     assert guard.scan(root, policy) == []
 
 
+def _built_artifacts(tmp_path: Path, member: str, content: bytes) -> Path:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    with zipfile.ZipFile(dist / "package.whl", mode="w") as archive:
+        archive.writestr(member, content)
+    info = tarfile.TarInfo(f"package-1.0.0/{member}")
+    info.size = len(content)
+    with tarfile.open(dist / "package.tar.gz", mode="w:gz") as archive:
+        archive.addfile(info, io.BytesIO(content))
+    return dist
+
+
+def test_clean_built_artifacts_pass(tmp_path: Path, policy: guard.SourcePolicy) -> None:
+    dist = _built_artifacts(tmp_path, "package/module.py", b"value = 1\n")
+
+    assert guard.scan_built_artifacts(dist, policy) == []
+
+
+def test_built_artifact_path_uses_rendered_policy(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    prefix = policy.built_artifact_path_prefixes[0]
+    dist = _built_artifacts(tmp_path, f"{prefix}/case.json", b"{}\n")
+
+    violations = guard.scan_built_artifacts(dist, policy)
+
+    assert any("private artifact prefix" in violation for violation in violations)
+
+
+def test_built_artifact_content_uses_rendered_policy(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    banner = policy.content_signatures[0].encode()
+    dist = _built_artifacts(tmp_path, "package/data.bin", banner)
+
+    violations = guard.scan_built_artifacts(dist, policy)
+
+    assert any("private-artifact banner" in violation for violation in violations)
+
+
+def test_built_artifact_rejects_unsafe_member_path(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    dist = _built_artifacts(tmp_path, "../outside.py", b"pass\n")
+
+    violations = guard.scan_built_artifacts(dist, policy)
+
+    assert any("unsafe archive path" in violation for violation in violations)
+
+
+def test_built_artifact_rejects_windows_drive_member_paths(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    with zipfile.ZipFile(dist / "package.whl", mode="w") as archive:
+        archive.writestr("C:/outside.py", b"pass\n")
+    raw = b"pass\n"
+    info = tarfile.TarInfo("C:/outside.py")
+    info.size = len(raw)
+    with tarfile.open(dist / "package.tar.gz", mode="w:gz") as archive:
+        archive.addfile(info, io.BytesIO(raw))
+
+    violations = guard.scan_built_artifacts(dist, policy)
+
+    assert sum("unsafe archive path" in violation for violation in violations) == 2
+
+
+def test_built_artifact_rejects_tar_symlink(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    dist = _built_artifacts(tmp_path, "package/module.py", b"pass\n")
+    with tarfile.open(dist / "package.tar.gz", mode="w:gz") as archive:
+        info = tarfile.TarInfo("package-1.0.0/link")
+        info.type = tarfile.SYMTYPE
+        info.linkname = "/etc/passwd"
+        archive.addfile(info)
+
+    violations = guard.scan_built_artifacts(dist, policy)
+
+    assert any("symlink or special entry" in violation for violation in violations)
+
+
 # --------------------------------------------------------------------------
 # Fail closed: no rules means no run.
 # --------------------------------------------------------------------------
@@ -213,6 +299,14 @@ def test_missing_enforcement_block_fails_closed(tmp_path: Path) -> None:
     completed = _run(["--policy", str(_write_policy(tmp_path, document))])
     assert completed.returncode == 2
     assert "enforcement" in completed.stderr
+
+
+def test_missing_built_artifact_rules_fail_closed(tmp_path: Path) -> None:
+    document = json.loads(guard.POLICY_PATH.read_text(encoding="utf-8"))
+    del document["enforcement"]["built_artifacts"]
+    completed = _run(["--policy", str(_write_policy(tmp_path, document))])
+    assert completed.returncode == 2
+    assert "built_artifacts" in completed.stderr
 
 
 def test_unclassified_repository_fails_closed() -> None:
