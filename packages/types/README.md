@@ -69,6 +69,7 @@ out the pixels. Coordinates are the thing that breaks when a window moves.
 | `ActionResult` | The outcome, with an error taxonomy and a state delta |
 | `Episode` / `Step` | A whole trajectory: observation, action, result |
 | `FailureRecord` | A classified failure, for dataset pipelines |
+| `OracleObservation` | One independent effect read. Production `VERIFIED` needs tier 2 or 3 |
 
 Plus the versioned wire contracts: `ControlOverlayFrameV1`/`V2` and
 `ControlOverlayTimelineV1`/`V2` for PHI-safe execution overlays,
@@ -76,7 +77,8 @@ Plus the versioned wire contracts: `ControlOverlayFrameV1`/`V2` and
 asynchronous qualified execution, `EffectStrengthV1`, and the
 `BusinessDecision*V1` family for signed, finite human choices. What those
 contracts may and may not carry is in
-[docs/CONTRACTS.md](docs/CONTRACTS.md).
+[docs/CONTRACTS.md](docs/CONTRACTS.md). Oracle tiers and the ten-line
+adapter are in [docs/ORACLE.md](docs/ORACLE.md).
 
 ## JSON Schema for everything else
 
@@ -111,7 +113,9 @@ state = from_benchmark_observation(obs.__dict__)
 A partner sends an authorized request, gets an execution ID back, and then
 either reads a terminal receipt or waits for a signed webhook. The contract
 exposes no runner, no customer data, no evidence bytes, and no control-plane
-internals.
+internals. A `verified` receipt needs an oracle at tier 2 or 3 (API, DB,
+file, ack, or a counterparty artifact). Visual and OCR reads are tier 0
+and cannot mint it.
 
 ```python
 from openadapt_types import ExecuteClient

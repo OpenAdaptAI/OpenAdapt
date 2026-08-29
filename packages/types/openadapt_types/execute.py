@@ -31,6 +31,10 @@ from pydantic import (
 
 from openadapt_types.business_decision import BusinessDecisionTaskV1
 from openadapt_types.human_decision import HumanDecisionTaskV1
+from openadapt_types.oracle import (
+    oracle_tier_from_effect_strength,
+    production_seal_allowed,
+)
 
 EXECUTE_REQUEST_SCHEMA = "openadapt.execute-request/v1"
 EXECUTE_ACCEPTED_SCHEMA = "openadapt.execute-accepted/v1"
@@ -72,19 +76,9 @@ _EFFECT_STRENGTH_RANK = {
 
 # Seal oracle ladder. 0 visual, 1 second-session UI, 2 SoR, 3 counterparty.
 # Production Seals require 2 or 3. Tier 3 has no EffectStrengthV1 member yet.
+# Mapping and production_seal_allowed live in oracle.py; this alias is the
+# receipt field so OpenAPI stays an integer enum.
 OracleTierV1: TypeAlias = Literal[0, 1, 2, 3]
-
-
-def oracle_tier_from_effect_strength(
-    strength: EffectStrengthV1 | None,
-) -> OracleTierV1:
-    """Map Execute effect strength onto the Seal oracle ladder."""
-
-    if strength is EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD:
-        return 2
-    if strength is EffectStrengthV1.INDEPENDENT_SESSION:
-        return 1
-    return 0
 
 
 class ExecuteLifecycleStateV1(str, Enum):
@@ -217,6 +211,12 @@ class ExecuteEvidenceReceiptV1(_StrictContract):
                 < _EFFECT_STRENGTH_RANK[self.contracts.minimum_effect_strength]
             ):
                 raise ValueError("observed effect strength is below the required strength")
+            if not production_seal_allowed(
+                oracle_tier_from_effect_strength(
+                    self.contracts.observed_effect_strength
+                )
+            ):
+                raise ValueError("a verified outcome requires oracle tier 2 or 3")
         if self.outcome is ExecuteTerminalOutcomeV1.ROLLED_BACK_VERIFIED:
             if not self.compensation_effect_verified:
                 raise ValueError("rolled_back_verified requires independently verified compensation")

@@ -69,3 +69,12 @@ client = ExecuteClient(
 The client does not poll forever. A workflow can wait for a human decision or
 reconciliation. Use the terminal receipt or signed webhook as the completion
 signal.
+
+## Oracle tiers
+
+`verified` and `rolled_back_verified` require an observed effect strength
+that maps to Seal oracle tier 2 or 3. Tier 0 is visual / OCR. Tier 1 is a
+second-session UI read. Neither can mint production `VERIFIED`.
+
+The partner adapter is `channel` plus `read`. Tiers, the gate, and a
+ten-line file oracle are in [ORACLE.md](ORACLE.md).

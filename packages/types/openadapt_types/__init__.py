@@ -121,7 +121,6 @@ from openadapt_types.execute import (
     EXECUTE_WEBHOOK_SCHEMA,
     EffectStrengthV1,
     OracleTierV1,
-    oracle_tier_from_effect_strength,
     ExecuteAcceptedV1,
     ExecuteAuthorizationContextV1,
     ExecuteDecisionRequiredWebhookV1,
@@ -140,6 +139,19 @@ from openadapt_types.execute import (
 )
 from openadapt_types.execute_client import ExecuteApiError, ExecuteClient
 from openadapt_types.execute_openapi import execute_openapi_document
+from openadapt_types.oracle import (
+    OracleAdapter,
+    OracleChannel,
+    OracleObservation,
+    OracleTier,
+    ProductionSealRefused,
+    Tier2Oracle,
+    issue_production_verified,
+    oracle_tier_from_effect_strength,
+    production_seal_allowed,
+    refuse_production_verified,
+    tier_of,
+)
 from openadapt_types.execution_requirements import (
     CAPABILITY_MATCH_SCHEMA,
     EXECUTION_REQUIREMENTS_SCHEMA,
@@ -301,7 +313,6 @@ __all__ = [  # noqa: RUF022
     "EXECUTE_WEBHOOK_SCHEMA",
     "EffectStrengthV1",
     "OracleTierV1",
-    "oracle_tier_from_effect_strength",
     "ExecuteAcceptedV1",
     "ExecuteAuthorizationContextV1",
     "ExecuteDecisionRequiredWebhookV1",
@@ -320,6 +331,18 @@ __all__ = [  # noqa: RUF022
     "execute_openapi_document",
     "ExecuteApiError",
     "ExecuteClient",
+    # oracle adapter
+    "OracleAdapter",
+    "OracleChannel",
+    "OracleObservation",
+    "OracleTier",
+    "ProductionSealRefused",
+    "Tier2Oracle",
+    "issue_production_verified",
+    "oracle_tier_from_effect_strength",
+    "production_seal_allowed",
+    "refuse_production_verified",
+    "tier_of",
     # runner capability and execution requirements
     "CAPABILITY_MATCH_SCHEMA",
     "EXECUTION_REQUIREMENTS_SCHEMA",
