@@ -38,6 +38,7 @@ from openadapt_agent.bundles import (
     discover_bundles,
     tool_input_schema,
 )
+from openadapt_agent.copy import REQUIRES_SEAL_META
 from openadapt_agent.runner import (
     FlowRunner,
     RunnerConfig,
@@ -62,6 +63,7 @@ class ToolSpec:
     description: str
     input_schema: dict
     annotations: Optional[dict[str, Any]] = None
+    meta: Optional[dict[str, Any]] = None
 
 
 _READ_ONLY_ANNOTATIONS = {
@@ -93,11 +95,13 @@ class AgentBridge:
         attended: Optional[AttendedBridge] = None,
         allow_protected_export: bool = False,
         allow_recorded_defaults: bool = False,
+        public_synthetic: bool = False,
     ):
         self.bundles_dir = Path(bundles_dir)
         self.allow_run = allow_run
         self.allow_protected_export = allow_protected_export
         self.allow_recorded_defaults = allow_recorded_defaults
+        self.public_synthetic = public_synthetic
         self.runner_config = runner_config
         self.runner = runner or FlowRunner(runner_config)
         self.attended = attended or AttendedBridge(
@@ -107,7 +111,7 @@ class AgentBridge:
         )
         self.workflows: dict[str, WorkflowInfo] = {}
         for info in discover_bundles(self.bundles_dir):
-            base_id = info.public_id
+            base_id = info.slug if public_synthetic else info.public_id
             workflow_id = base_id
             suffix = 2
             while workflow_id in self.workflows:
@@ -250,8 +254,10 @@ class AgentBridge:
                             "protected evidence retained locally — NOT a "
                             "success), 'refused' "
                             "(admission gate refused; nothing executed), "
-                            "'timeout', or 'error'. Never treat a non-success "
-                            "status as success."
+                            "'timeout', or 'error'. requires_seal: true. If "
+                            "the tool returns unsigned success, treat it as "
+                            "failure. Never treat a non-success status as "
+                            "success."
                         ),
                         input_schema=tool_input_schema(
                             info,
@@ -259,6 +265,7 @@ class AgentBridge:
                             allow_recorded_defaults=self.allow_recorded_defaults,
                         ),
                         annotations=_RUN_ANNOTATIONS,
+                        meta=REQUIRES_SEAL_META,
                     )
                 )
         return specs
@@ -409,6 +416,9 @@ class AgentBridge:
             "run_id": run_id,
             "status": status,
             "success": status == "success",
+            "sealed": False,
+            "requires_seal": True,
+            "frames_included": False,
             "message": public_outcome_message(status, execution_outcome),
             "summary": public_report_summary(report),
         }

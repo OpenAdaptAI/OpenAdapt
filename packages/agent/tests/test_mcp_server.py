@@ -38,8 +38,12 @@ def test_server_builds_and_lists_bridge_tools(bundles_root, runner_config):
     assert "governed" in (run_tool.description or "")
     assert run_tool.annotations.readOnlyHint is False
     assert run_tool.annotations.destructiveHint is True
+    assert run_tool.meta == {"requires_seal": True}
+    assert "requires_seal: true" in (run_tool.description or "")
+    assert "unsigned success" in (run_tool.description or "")
     list_tool = next(t for t in tools if t.name == "list_needs_attention")
     assert list_tool.annotations.readOnlyHint is True
+    assert list_tool.meta is None
 
 
 def test_server_read_only_when_run_not_allowed(bundles_root, runner_config):

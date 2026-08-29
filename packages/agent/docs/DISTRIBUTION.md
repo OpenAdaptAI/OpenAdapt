@@ -19,7 +19,7 @@ server". Keep them separate.
 | **What it is** | the `openadapt-agent` package and its MCP server *program* | a user's compiled `openadapt-flow` workflow *bundle* |
 | **What it exposes** | PHI-safe workflow and Needs Attention projections plus opt-in governed run and attended-action tools | one customer's specific recorded workflow (its steps, parameters, recorded example values) |
 | **Where it lives** | PyPI + MCP registries (official, Smithery, mcp.so, Glama, PulseMCP) | the operator's own disk, passed at launch via `--bundles` |
-| **Ships in the package?** | yes — code only | **never** — no bundle is embedded in the wheel, `server.json`, or any registry listing |
+| **Ships in the package?** | yes — code only | **never** — no bundle is embedded in the wheel, `server.json`, or any registry listing. `serve --tutorial` generates the public synthetic MockMed bundle at serve time. |
 
 **Design consequence:** the published server takes the bundle directory
 as a launch-time argument (`--bundles <dir>`) and reads nothing about a
@@ -58,13 +58,13 @@ and [`../manifest.json`](../manifest.json).
 - **Display name:** OpenAdapt Agent (openadapt-flow bridge)
 - **PyPI package:** `openadapt-agent`
 - **Version:** `2.0.2` (staged in this repository; `2.0.1` is the newest version published to PyPI)
-- **Description:** Local bridge for governed openadapt-flow workflows and attended actions.
+- **Description:** OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
 - **License:** MIT
 - **Transport:** stdio
-- **Run command (uvx):** `uvx openadapt-agent serve --bundles <BUNDLES_DIR> [--allow-run] [--allow-attended-actions]`
-- **Config:** `--bundles` (required), `--runs-dir`, `--allow-run`, `--allow-attended-actions`, qualified `--config` for Continue/Skip, and optional secret `OPENADAPT_BUNDLE_KEY`
+- **Run command (uvx):** `uvx --from 'openadapt-agent[tutorial]' openadapt-agent serve --allow-run`
+- **Config:** `--allow-run` with no `--bundles` (public synthetic bundle, generated at serve time), `--tutorial` (same path without implying run tools), or `--bundles` (operator's private artifact), `--runs-dir`, `--allow-attended-actions`, qualified `--config` for Continue/Skip, and optional secret `OPENADAPT_BUNDLE_KEY`
 - **Tools:**
   - `list_workflows` / `get_workflow` — PHI-safe structural bundle projections with opaque IDs.
   - `get_run_report` — PHI-safe status and count summary; raw evidence stays local unless protected export was explicitly enabled.

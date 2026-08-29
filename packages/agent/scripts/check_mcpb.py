@@ -22,6 +22,7 @@ _ROOT_FILES = {
 }
 _SOURCE_PREFIX = "src/openadapt_agent/"
 _SOURCE_SUFFIXES = (".py", ".pyi", ".typed")
+_SKILL_FILE = "SKILL.md"
 _FORBIDDEN = (
     "workflow.json",
     ".enc",
@@ -35,6 +36,18 @@ _FORBIDDEN = (
     "oracle_recipe",
     "held_out_corpus",
 )
+
+
+def _is_skill_markdown(name: str) -> bool:
+    """Allow the portable SKILL.md files, never a compiled bundle beside them."""
+    parts = name.split("/")
+    return (
+        len(parts) == 3
+        and parts[0] == "skills"
+        and parts[2] == _SKILL_FILE
+        and parts[1] not in {".", "..", ""}
+        and "\\" not in parts[1]
+    )
 
 
 def check(path: Path) -> None:
@@ -84,7 +97,7 @@ def check(path: Path) -> None:
             problems.append(f"forbidden private/data path: {name}")
         elif name in _ROOT_FILES or (
             name.startswith(_SOURCE_PREFIX) and name.endswith(_SOURCE_SUFFIXES)
-        ):
+        ) or _is_skill_markdown(name):
             continue
         else:
             problems.append(f"unexpected MCPB member: {name}")

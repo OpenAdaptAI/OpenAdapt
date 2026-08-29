@@ -5,8 +5,9 @@ admission record. A missing, expired, revoked, mismatched, or unverifiable
 admission means **not actively admitted**. The validator doesn't restore an
 older admission or assign a fallback lifecycle label.
 
-`openadapt-agent` is the local agent-facing bridge for compiled
-`openadapt-flow` workflows. It exposes two complementary interfaces:
+OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.
+
+`openadapt-agent` exposes two complementary interfaces:
 
 1. MCP tools over local stdio.
 2. Portable Agent Skills.
@@ -78,10 +79,14 @@ attention tools use the same boundary plus typed categories, artifact
 IDs, and non-authorizing capability metadata.
 
 `--allow-run` registers one `run_workflow_<opaque-id>` tool per loadable
-workflow. Every declared parameter is required by default, and recorded
-demonstration values never enter the schema. Missing or unknown
-parameters are rejected before the subprocess starts. A per-call URL is
-accepted only if the operator separately enabled `--allow-url-override`.
+workflow. `--allow-run` with no `--bundles` generates the public synthetic
+MockMed bundle at serve time and registers `run_local_quickstart`.
+`--tutorial` is the same generator without implying run tools. Every declared parameter
+is required by default, and recorded demonstration values never enter the
+schema. Missing or unknown parameters are rejected before the subprocess
+starts. A per-call URL is accepted only if the operator separately enabled
+`--allow-url-override`. The tutorial path still uses Flow's fail-closed
+`run` verb. It does not pass `--approve-unverified-writes`.
 
 Two server-start modes are intentionally separate from ordinary
 operation:
@@ -109,9 +114,15 @@ For a precise Flow report, the bridge reports success only when all conditions h
 1. Flow exits with code 0.
 2. The persisted report has `execution_outcome: VERIFIED`.
 3. The persisted report has a consistent `success: true` value.
+4. The report is not production-eligible. Local MCP never mints a Seal,
+   so production-eligible `VERIFIED` is unsigned success and is failure.
+
+Write tools advertise `requires_seal: true` on MCP `_meta`. If the tool
+returns unsigned success, treat it as failure.
 
 For a legacy report without `execution_outcome`, the bridge preserves the
-compatible rule: exit code 0 plus `success: true`.
+compatible rule: exit code 0 plus `success: true`. Local unsigned replay
+is free. Production success without a Seal is failure.
 
 Exit 1 is a halt. Exit 2 is a governed refusal before execution. A
 timeout is explicitly uncertain rather than a rollback. Report evidence

@@ -37,6 +37,17 @@ def run_tool(bridge: AgentBridge) -> str:
     return f"run_{workflow_id(bridge)}"
 
 
+def test_public_synthetic_run_tool_uses_slug(bundles_root, runner_config):
+    bridge = AgentBridge(
+        bundles_root,
+        runner_config,
+        allow_run=True,
+        public_synthetic=True,
+    )
+    names = [spec.name for spec in bridge.list_tool_specs() if spec.name.startswith("run_")]
+    assert names == ["run_demo_triage"]
+
+
 def test_schema_uses_opaque_id_requires_params_and_exports_no_examples(
     bundles_root,
     runner_config,
@@ -45,6 +56,8 @@ def test_schema_uses_opaque_id_requires_params_and_exports_no_examples(
     workflow = workflow_id(bridge)
     assert re.fullmatch(r"workflow_[0-9a-f]{24}", workflow)
     spec = {item.name: item for item in bridge.list_tool_specs()}[f"run_{workflow}"]
+    assert spec.meta == {"requires_seal": True}
+    assert "requires_seal: true" in spec.description
     schema = spec.input_schema
     assert schema["type"] == "object"
     assert schema["additionalProperties"] is False

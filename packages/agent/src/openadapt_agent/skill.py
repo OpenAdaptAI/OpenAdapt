@@ -12,15 +12,30 @@ agent-facing sections the flow emitter does not cover:
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 from openadapt_agent.bundles import load_workflow_info
+from openadapt_agent.copy import (
+    IDENTITY_SENTENCE,
+    SKILL_HONESTY,
+    SKILL_NAME,
+    SKILL_WHEN_TO_USE,
+)
 
 __all__ = ["emit_agent_skill"]
+
+_FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+_FORBIDDEN_SKILL_NAMES = frozenset({"computer-use", "computer_use", "computeruse"})
 
 _APPENDIX_TEMPLATE = """\
 
 ## Invoking via MCP (openadapt-agent)
+
+{when_to_use}
+
+{honesty}
 
 If the operator runs the local `openadapt-agent` MCP server over this
 skill's bundle directory:
@@ -37,7 +52,8 @@ through the governed `openadapt-flow run` path (fail-closed admission
 gates) rather than the permissive `replay` demo path, and it returns a
 PHI-safe structured outcome instead of raw CLI output. Inspection and
 PHI-safe Needs Attention tools are always available; `run_{workflow_id}` exists only
-when the operator started the server with `--allow-run`.
+when the operator started the server with `--allow-run`. The public
+synthetic tutorial is `openadapt-agent serve --allow-run`.
 
 ## Halt semantics (IMPORTANT)
 
@@ -47,18 +63,20 @@ A run has exactly one of these outcomes — report it faithfully:
   `execution_outcome: VERIFIED` with a consistent success flag. A legacy
   report without the precise field must record `success: true`. Only then may
   you tell the user the workflow completed.
-- **halt** (MCP status `halt`) — `execution_outcome` says whether the run
-  halted, completed without sufficient verification, or completed a rollback.
-  None is a verified success. Protected evidence remains in the local
-  OpenAdapt operator experience; default MCP results contain only opaque IDs,
-  fixed messages, and count/boolean metrics. Surface the exact outcome to the
-  user; do not infer the business effect or retry blindly.
+- **halt** (MCP status `halt`, `execution_outcome: HALTED`) — If the tool
+  returns HALTED, tell the user the record did not change.
+  `execution_outcome` says whether the run halted, completed without
+  sufficient verification, or completed a rollback. None is a verified success.
+  Protected evidence remains in the local OpenAdapt operator
+  experience; default MCP results contain only opaque IDs, fixed messages,
+  and count/boolean metrics. Surface the exact outcome to the user; do not
+  infer the business effect or retry blindly.
 - **governed refusal** (exit code 2 / MCP status `refused`, `openadapt-flow
   run` only) — an admission gate refused the bundle before execution;
   NOTHING was executed. The printed coverage report names the failing
   gate.
 
-Never summarize a halted, refused, or timed-out run as if it succeeded.
+{honesty}
 
 ## Needs Attention
 
@@ -98,6 +116,26 @@ def _format_params(params: dict[str, str]) -> str:
     return ", ".join(f"`{name}`" for name in sorted(params))
 
 
+def _skill_name(slug: str) -> str:
+    compact = slug.replace("_", "-").replace(" ", "-").lower()
+    if compact in _FORBIDDEN_SKILL_NAMES:
+        return SKILL_NAME
+    return slug
+
+
+def apply_skill_frontmatter(text: str, *, name: str, description: str) -> str:
+    """Replace Flow's frontmatter description with the shared identity sentence."""
+    match = _FRONTMATTER.match(text)
+    if match is None:
+        raise ValueError("emitted skill is missing YAML frontmatter")
+    body = text[match.end() :]
+    front = (
+        f"---\nname: {_skill_name(name)}\n"
+        f"description: {json.dumps(description)}\n---\n"
+    )
+    return front + body
+
+
 def emit_agent_skill(bundle_dir: Path | str, out_dir: Path | str) -> Path:
     """Emit flow's skill folder for *bundle_dir*, then append MCP guidance.
 
@@ -112,7 +150,14 @@ def emit_agent_skill(bundle_dir: Path | str, out_dir: Path | str) -> Path:
         workflow_id=info.public_id,
         bundle_ref="<path-to-this-skill-folder>/bundle",
         param_list=_format_params(info.params),
+        when_to_use=SKILL_WHEN_TO_USE,
+        honesty=SKILL_HONESTY,
     )
     skill_md = skill_dir / "SKILL.md"
-    skill_md.write_text(skill_md.read_text(encoding="utf-8") + appendix, encoding="utf-8")
+    rewritten = apply_skill_frontmatter(
+        skill_md.read_text(encoding="utf-8"),
+        name=skill_dir.name,
+        description=IDENTITY_SENTENCE,
+    )
+    skill_md.write_text(rewritten + appendix, encoding="utf-8")
     return skill_dir

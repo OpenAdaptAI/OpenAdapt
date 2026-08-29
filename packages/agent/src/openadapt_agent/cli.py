@@ -44,10 +44,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--bundles",
-        required=True,
+        default=None,
         help=(
             "Bundle directory: either one compiled bundle, or a directory "
-            "whose immediate subdirectories are bundles"
+            "whose immediate subdirectories are bundles. Required unless "
+            "--tutorial is set, or --allow-run is set with no --bundles "
+            "(synthetic tutorial)."
+        ),
+    )
+    p.add_argument(
+        "--tutorial",
+        action="store_true",
+        help=(
+            "Generate and serve the public synthetic tutorial (MockMed). "
+            "The bundle is created at serve time and is not vendored. "
+            "Implied by --allow-run when --bundles is omitted. "
+            "Synthetic only. Cannot be combined with --bundles, --url, "
+            "or --config."
         ),
     )
     p.add_argument(
@@ -184,6 +197,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_agent.bridge import AgentBridge
     from openadapt_agent.flow_service import open_attended_service
     from openadapt_agent.mcp import serve
+    from openadapt_agent.tutorial import TutorialError, prepare_tutorial_session
 
     from openadapt_agent.runner import default_flow_cli
 
@@ -200,33 +214,76 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    if not args.tutorial and not args.bundles:
+        if args.allow_run:
+            # Day-1 partner kit: `openadapt-agent serve --allow-run` hosts
+            # the synthetic tutorial. Registry installs still pass --bundles
+            # and stay read-only until this flag is set.
+            args.tutorial = True
+        else:
+            print(
+                "serve: provide --bundles or --tutorial "
+                "(or --allow-run for the synthetic tutorial)",
+                file=sys.stderr,
+            )
+            return 2
+    if args.tutorial and (args.bundles or args.url or args.config):
+        print(
+            "serve: --tutorial cannot be combined with --bundles, --url, or --config",
+            file=sys.stderr,
+        )
+        return 2
 
-    runner_config = RunnerConfig(
-        flow_cli=(tuple(shlex.split(args.flow_cli)) if args.flow_cli else default_flow_cli()),
-        runs_dir=Path(args.runs_dir),
-        url=args.url,
-        deployment_config=args.config,
-        policy=args.policy,
-        timeout_s=args.timeout,
-        allow_url_override=args.allow_url_override,
-        extra_run_args=tuple(args.extra_run_arg),
-    )
+    extra_run_args = list(args.extra_run_arg)
+    tutorial_session = None
+    bundles_dir = args.bundles
+    url = args.url
+    deployment_config = args.config
+    policy = args.policy
+    public_synthetic = False
     try:
+        if args.tutorial:
+            work_dir = Path(args.runs_dir).expanduser().resolve() / "synthetic-tutorial"
+            tutorial_session = prepare_tutorial_session(
+                work_dir,
+                headed=args.headed,
+            )
+            bundles_dir = str(tutorial_session.bundle_dir)
+            url = tutorial_session.url
+            deployment_config = str(tutorial_session.deployment_config)
+            policy = policy or "clinical-write"
+            public_synthetic = True
+            if "--profile" not in extra_run_args:
+                extra_run_args.extend(["--profile", "standard"])
+            if args.headed and "--headed" not in extra_run_args:
+                extra_run_args.append("--headed")
+
+        runner_config = RunnerConfig(
+            flow_cli=(tuple(shlex.split(args.flow_cli)) if args.flow_cli else default_flow_cli()),
+            runs_dir=Path(args.runs_dir),
+            url=url,
+            deployment_config=deployment_config,
+            policy=policy,
+            timeout_s=args.timeout,
+            allow_url_override=args.allow_url_override,
+            extra_run_args=tuple(extra_run_args),
+        )
         with open_attended_service(
             enabled=args.allow_attended_actions,
-            deployment_config=args.config,
-            url=args.url,
+            deployment_config=deployment_config,
+            url=url,
             headed=args.headed,
             allow_model_grounding=args.allow_model_grounding,
         ) as attended_service:
             bridge = AgentBridge(
-                Path(args.bundles),
+                Path(bundles_dir),
                 runner_config,
                 allow_run=args.allow_run,
                 allow_attended_actions=args.allow_attended_actions,
                 attended_service=attended_service,
                 allow_protected_export=args.allow_protected_export,
                 allow_recorded_defaults=args.allow_synthetic_recorded_defaults,
+                public_synthetic=public_synthetic,
             )
             n = len(bridge.workflows)
             print(
@@ -239,13 +296,20 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 "protected MCP export "
                 f"{'ENABLED' if args.allow_protected_export else 'disabled'}; "
                 "synthetic recorded defaults "
-                f"{'ENABLED' if args.allow_synthetic_recorded_defaults else 'disabled'}",
+                f"{'ENABLED' if args.allow_synthetic_recorded_defaults else 'disabled'}; "
+                f"tutorial {'enabled' if args.tutorial else 'disabled'}",
                 file=sys.stderr,
             )
             serve(bridge)
+    except TutorialError as exc:
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
     except (FileNotFoundError, RuntimeError) as exc:
         print(f"serve: {exc}", file=sys.stderr)
         return 2
+    finally:
+        if tutorial_session is not None:
+            tutorial_session.close()
     return 0
 
 

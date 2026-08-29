@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 
 import pytest
@@ -31,7 +32,15 @@ def test_success_mapping(monkeypatch, runner_config, bundle_dir, success_report)
     stub = FlowCliStub(exit_code=0, report=success_report)
     outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
     assert outcome.status == "success"
-    assert outcome.to_dict()["success"] is True
+    public = outcome.to_dict()
+    assert public["success"] is True
+    assert public["sealed"] is False
+    assert public["requires_seal"] is True
+    assert public["frames_included"] is False
+    blob = json.dumps(public)
+    assert ".png" not in blob
+    assert "image_data" not in blob
+    assert "screenshot_path" not in blob
     assert outcome.summary["steps_ok"] == 2
     assert outcome.report_path and outcome.report_path.endswith("report.json")
     # Governed run verb, params via file (never argv), run dir owned by us.
@@ -52,6 +61,21 @@ def test_halt_maps_to_structured_halt_not_success(
     assert outcome.halt["reason"] == "unmet postcondition"
     assert outcome.halt["observed_texts"] == ["Unexpected dialog: Save changes?"]
     assert "report.json" in outcome.detail
+
+
+def test_halted_execution_outcome_tells_the_caller_the_record_did_not_change(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    halt_report["execution_outcome"] = "HALTED"
+    halt_report["success"] = False
+    stub = FlowCliStub(exit_code=1, report=halt_report)
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    payload = outcome.to_dict()
+    assert payload["status"] == "halt"
+    assert payload["success"] is False
+    assert payload["execution_outcome"] == "HALTED"
+    assert payload["message"].startswith("HALTED.")
+    assert "record did not change" in payload["message"]
 
 
 def test_exit_zero_with_failed_report_is_never_success(
@@ -85,6 +109,29 @@ def test_demo_completed_unverified_is_never_agent_success(
     assert "completed" in outcome.to_dict()["message"]
     assert "stopped safely" not in outcome.to_dict()["message"]
     assert "did not prove VERIFIED success" in outcome.detail
+
+
+def test_production_eligible_verified_without_a_seal_is_failure(
+    monkeypatch, runner_config, bundle_dir, success_report
+):
+    success_report.update(
+        {
+            "execution_profile": "standard",
+            "execution_outcome": "VERIFIED",
+            "production_eligible": True,
+        }
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    payload = outcome.to_dict()
+
+    assert payload["status"] == "error"
+    assert payload["success"] is False
+    assert payload["sealed"] is False
+    assert payload["requires_seal"] is True
+    assert payload["execution_outcome"] == "VERIFIED"
+    assert "Unsigned production success is failure" in payload["message"]
 
 
 def test_precise_verified_requires_consistent_legacy_success(

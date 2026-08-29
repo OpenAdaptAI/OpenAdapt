@@ -55,6 +55,9 @@ dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
 ]
+tutorial = [
+    "openadapt-flow[browser]>=1.26.0,<2",
+]
 
 [project.scripts]
 openadapt-agent = "openadapt_agent.cli:main"

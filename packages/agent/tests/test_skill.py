@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from openadapt_agent.bundles import load_workflow_info
+from openadapt_agent.copy import IDENTITY_SENTENCE, SKILL_HONESTY, SKILL_WHEN_TO_USE
 from openadapt_agent.skill import emit_agent_skill
 
 GOLDEN = Path(__file__).parent / "golden" / "skill_appendix.md"
@@ -47,3 +48,9 @@ def test_appendix_names_the_mcp_tool_and_params(bundle_dir, tmp_path):
     assert "never performs that completed action again" in text
     assert "reject_attention" in text
     assert "Earlier run actions may have effects" in text
+    assert SKILL_WHEN_TO_USE in text
+    assert SKILL_HONESTY in text
+    assert "If the tool returns unsigned success, treat it as failure" in text
+    assert IDENTITY_SENTENCE in text
+    assert "name: computer-use" not in text.lower()
+    assert text.split("---", 2)[1].count(IDENTITY_SENTENCE) == 1

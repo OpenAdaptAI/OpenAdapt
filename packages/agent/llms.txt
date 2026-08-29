@@ -1,10 +1,10 @@
 # openadapt-agent
 
-> The local agent bridge for [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow). It exposes compiled workflows and PHI-safe Needs Attention items to MCP clients and emits Agent Skills without becoming a second automation runtime. Healthy execution uses Flow's governed `run` command; a halted or refused run is returned as that exact non-success outcome. Flow remains the authority for policy, identity, verification, durable pauses, attended decisions, repair, and audit. The Agent target's product state comes from its signed Production admission. Missing, expired, revoked, mismatched, or unverifiable admission evidence produces not actively admitted.
+> OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.
 
 ## What it provides
 
-- `openadapt-agent serve --bundles <dir> [--allow-run]`: a local MCP stdio server. `list_workflows`, `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item` are always available as PHI-safe read-only projections. `run_workflow_<opaque-id>` tools require `--allow-run`.
+- `openadapt-agent serve --allow-run`: generate and serve the public synthetic tutorial at serve time. `openadapt-agent serve --tutorial` is the same path without run tools. `openadapt-agent serve --bundles <dir> [--allow-run]`: serve a private compiled bundle. `list_workflows`, `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item` are always available as PHI-safe read-only projections. `run_workflow_<opaque-id>` tools require `--allow-run`. The synthetic tutorial registers `run_local_quickstart`. If a run returns HALTED, tell the user the record did not change. Never summarize halt, refused, timeout, or error as success.
 - `--allow-attended-actions` adds exact Reject, Teach, and Escalate tools for signed durable pauses. With a qualified Flow `--config`, the same server also exposes Continue and Skip through Flow's deployment-bound live verifier and deterministic resume path.
 - `openadapt-agent emit-skill <bundle> --out <dir>` wraps Flow's skill emitter and appends MCP, halt, and attended-action guidance.
 
@@ -28,7 +28,7 @@ All mutations require an exact capability digest, a stable idempotency key, acti
 ## Public capability vs private artifact
 
 - The **package/MCP server is the public OpenAdapt capability**: inspect and, with explicit operator flags, run or attend a compiled workflow under governance. Install it from PyPI as `openadapt-agent`.
-- A user's **compiled workflow bundle is their private artifact**. It is supplied at server start via `--bundles` and is never embedded in the package, the `server.json`, or any registry listing.
+- A user's **compiled workflow bundle is their private artifact**. It is supplied at server start via `--bundles` and is never embedded in the package, the `server.json`, or any registry listing. `--tutorial` generates the public synthetic tutorial on the fly.
 
 ## Key documents
 

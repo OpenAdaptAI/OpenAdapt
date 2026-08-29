@@ -1,6 +1,10 @@
 
 ## Invoking via MCP (openadapt-agent)
 
+When the user needs a repeating GUI write with no API and must prove persistence, call run_<slug>. If the tool returns HALTED, tell the user the record did not change.
+
+Never summarize halt, refused, timeout, or error as success. A local unsigned replay may complete. If the tool returns unsigned success, treat it as failure. Production success without a Seal is failure.
+
 If the operator runs the local `openadapt-agent` MCP server over this
 skill's bundle directory:
 
@@ -16,7 +20,8 @@ through the governed `openadapt-flow run` path (fail-closed admission
 gates) rather than the permissive `replay` demo path, and it returns a
 PHI-safe structured outcome instead of raw CLI output. Inspection and
 PHI-safe Needs Attention tools are always available; `run_<opaque-workflow-id>` exists only
-when the operator started the server with `--allow-run`.
+when the operator started the server with `--allow-run`. The public
+synthetic tutorial is `openadapt-agent serve --allow-run`.
 
 ## Halt semantics (IMPORTANT)
 
@@ -26,18 +31,20 @@ A run has exactly one of these outcomes — report it faithfully:
   `execution_outcome: VERIFIED` with a consistent success flag. A legacy
   report without the precise field must record `success: true`. Only then may
   you tell the user the workflow completed.
-- **halt** (MCP status `halt`) — `execution_outcome` says whether the run
-  halted, completed without sufficient verification, or completed a rollback.
-  None is a verified success. Protected evidence remains in the local
-  OpenAdapt operator experience; default MCP results contain only opaque IDs,
-  fixed messages, and count/boolean metrics. Surface the exact outcome to the
-  user; do not infer the business effect or retry blindly.
+- **halt** (MCP status `halt`, `execution_outcome: HALTED`) — If the tool
+  returns HALTED, tell the user the record did not change.
+  `execution_outcome` says whether the run halted, completed without
+  sufficient verification, or completed a rollback. None is a verified success.
+  Protected evidence remains in the local OpenAdapt operator
+  experience; default MCP results contain only opaque IDs, fixed messages,
+  and count/boolean metrics. Surface the exact outcome to the user; do not
+  infer the business effect or retry blindly.
 - **governed refusal** (exit code 2 / MCP status `refused`, `openadapt-flow
   run` only) — an admission gate refused the bundle before execution;
   NOTHING was executed. The printed coverage report names the failing
   gate.
 
-Never summarize a halted, refused, or timed-out run as if it succeeded.
+Never summarize halt, refused, timeout, or error as success. A local unsigned replay may complete. If the tool returns unsigned success, treat it as failure. Production success without a Seal is failure.
 
 ## Needs Attention
 

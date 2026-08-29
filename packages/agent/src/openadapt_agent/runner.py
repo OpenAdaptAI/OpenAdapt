@@ -79,6 +79,16 @@ _PUBLIC_MESSAGES = {
 
 def public_outcome_message(status: str, execution_outcome: Optional[str]) -> str:
     """Return fixed public copy for one classified terminal result."""
+    if status == "error" and execution_outcome == "VERIFIED":
+        return (
+            "Unsigned production success is failure. A Seal is required "
+            "before this write can be treated as complete."
+        )
+    if status == "halt" and execution_outcome == "HALTED":
+        return (
+            "HALTED. The independent check did not confirm the write. "
+            "Tell the user the record did not change."
+        )
     if status == "halt" and execution_outcome == "COMPLETED_UNVERIFIED":
         return (
             "The run completed, but its persisted evidence did not prove "
@@ -141,6 +151,9 @@ class RunOutcome:
             "schema_version": 1,
             "status": self.status,
             "success": self.status == "success",
+            "sealed": False,
+            "requires_seal": True,
+            "frames_included": False,
             "workflow_id": self.workflow,
             "run_id": self.run_id,
             "message": public_outcome_message(self.status, self.execution_outcome),
@@ -293,6 +306,11 @@ def classify_report_status(report: object) -> tuple[str, Optional[str]]:
                 return "error", precise
 
     if precise == "VERIFIED":
+        if production_eligible is True:
+            # Local MCP never mints a Seal. Production-eligible VERIFIED
+            # without one is unsigned success, which this adapter treats
+            # as failure.
+            return "error", precise
         return ("success" if success is True else "error"), precise
     if precise in {"HALTED", "FAILED", "ROLLED_BACK"} and success is True:
         return "error", precise
