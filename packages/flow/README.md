@@ -6,11 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Record yourself doing a task in a browser or a desktop app. openadapt-flow
-compiles the recording into a script that runs on your machine and makes zero
-model calls on a healthy run. Before it reports success it reads the system of
-record directly, on a path the app never touches, against the effects you
-declared in the contract. Screen says saved, database holds nothing, the run
-stops.
+compiles the recording into a script that runs on your machine. The default
+healthy path makes no generative-model API call. Before a governed run reports
+`VERIFIED`, Flow checks every declared effect at the required evidence tier.
+The screen says saved, the configured verifier finds no declared effect, and
+the run stops.
 
 It's for work you do the same way every week and have to be able to prove
 afterwards: claims entry, referrals, eligibility checks, invoice posting. If
@@ -24,9 +24,10 @@ you're automating something once, use an agent instead.
 ![One demonstration, two UIs, same compiled script. The right side re-resolves under a theme it has never seen](docs/showcase/demo.gif)
 
 Left: the UI the demo was recorded on. Right: a theme it had never seen, where
-each step re-resolves through OCR or geometry and each fix comes back as a diff
-you can read. No model calls on either side. Both runs are real and their
-artifacts are in [`docs/showcase/`](docs/showcase).
+each step re-resolves through OCR or geometry and each proposed repair appears
+in the run evidence as a diff you can read. Neither run makes a generative-model
+API call. Both runs are real and their artifacts are in
+[`docs/showcase/`](docs/showcase).
 
 ## Try it
 
@@ -85,18 +86,44 @@ delivery is uncertain, so the transaction ends in `RECONCILIATION_REQUIRED` for
 a person to settle. Longer walkthrough, including the `--guided` presentation
 mode and the hand-driven stages: [docs/TUTORIAL.md](docs/TUTORIAL.md).
 
-## Point it at your own app
+## Record and rehearse your workflow
+
+Install the extras for the surface that will record and replay the workflow:
+
+| Surface | Install |
+|---|---|
+| Browser | `pip install 'openadapt-flow[browser]'` |
+| Native Windows | `pip install "openadapt-flow[capture,windows]"` |
+| Native macOS | `pip install 'openadapt-flow[capture,macos]'` |
+| Native Linux | `pip install 'openadapt-flow[capture,linux]'`, plus the AT-SPI packages in [`docs/desktop/LINUX_NATIVE.md`](docs/desktop/LINUX_NATIVE.md) |
+| Network RDP | Install `openadapt-flow[capture]` in the recorded session and `openadapt-flow[rdp]` on the runner |
+| Local RDP or Citrix client window | On macOS: `pip install 'openadapt-flow[capture,macos]'`. On Windows: `pip install "openadapt-flow[capture,windows]"` |
+
+Start with a local browser rehearsal:
 
 ```bash
 openadapt-flow record --backend web --url https://your.app --out rec
 openadapt-flow compile rec --out bundle --name my-task
-openadapt-flow lint bundle
-openadapt-flow certify bundle --policy clinical-write
+openadapt-flow lint bundle --strict
 openadapt-flow replay bundle --backend web --url https://your.app
 ```
 
-A native Windows app works the same way. Capture records the local window;
-an in-guest agent drives it at replay:
+`replay` is the permissive rehearsal path. It stays available while a bundle has
+certification gaps. For governed execution, complete the deployment's identity,
+effect, idempotency, and postcondition contracts, then use the gated path:
+
+```bash
+openadapt-flow certify bundle --config deploy.yaml
+openadapt-flow run bundle --profile standard --config deploy.yaml
+```
+
+`run --profile standard` enforces the policy again. It still refuses the bundle
+if the standalone `certify` command failed. A new recording will usually fail
+`clinical-write` until its contracts are complete. Two built-in policies ship:
+`permissive` and `clinical-write`.
+
+For a native Windows app, Capture records one local window and an in-guest agent
+drives it at replay:
 
 ```bash
 openadapt-flow record --backend windows --window "Target App" --out rec
@@ -104,9 +131,9 @@ openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --agent-url http://localhost:5001
 ```
 
-Citrix and VDI have no DOM and no accessibility tree, so Flow drives one exact
-Workspace window through its pixels and won't send input until the readiness
-text is on screen:
+Citrix and VDI have no DOM or accessibility tree. This macOS example drives one
+exact Workspace window through its pixels and won't send input until the
+readiness text is on screen:
 
 ```bash
 openadapt-flow record --backend citrix --window "Citrix Viewer" \
@@ -122,27 +149,57 @@ halts, and the retained artifact records `ica_hdx_accepted=false`, so a live
 ICA/HDX session is something you qualify in your own deployment rather than
 inherit from ours.
 
-macOS, Linux, and network RDP follow the same three commands with their own
-targeting flags: [docs/SURFACES.md](docs/SURFACES.md) has all six, and
-[docs/PRODUCT_STATUS.md](docs/PRODUCT_STATUS.md) has the evidence under each.
-A compiled bundle is bound to the surface it was recorded on, so `--backend` is
-optional on `replay`.
+macOS, Linux, network RDP, and Windows-hosted Citrix have different target
+flags. Some apply only to `replay` or `run` because Capture can't use them.
+[docs/SURFACES.md](docs/SURFACES.md) has the exact commands for all six
+surfaces, and [docs/PRODUCT_STATUS.md](docs/PRODUCT_STATUS.md) gives the evidence
+for each one. A compiled bundle is bound to its recorded surface, so `--backend`
+is optional on `replay`.
 
 Compiling a bundle is not the same as clearing it to run. `lint` reports what a
-bundle failed to cover and grades each gap. `certify` enforces a policy and
-exits nonzero, refusing the bundle before anyone deploys it. Two policies ship:
-a permissive default and a strict `clinical-write.yaml`.
+bundle failed to cover and grades each gap. Without `--strict`, warnings don't
+make `lint` exit nonzero. `certify` enforces the selected policy and refuses a
+bundle that doesn't meet it.
+
+### Workflows that use more than one application
+
+A URL or window flag selects the execution surface, not the number of screens
+in the task. One bundle can move through screens and same-origin routes inside
+its bound surface. An RDP workflow can also switch among windows inside one
+remote desktop. The public [multi-window fixture](benchmark/rdp_multiapp/README.md)
+is designed to exercise that path through one FreeRDP backend. Its three task
+windows belong to one synthetic fixture process, and the repository does not
+contain a completed campaign result. A real deployment needs its own
+qualification.
+
+The boundary is one backend per bundle. Worklists repeat that bundle over input
+records, and subflows reuse steps inside it. Neither one switches backends.
+Browser recording owns one tab and refuses popups or new tabs. Browser attach
+mode stays on one origin. macOS and Linux bind one exact app and window, while a
+governed Windows run binds its application identity.
+
+If a task crosses a browser and a native app, or otherwise changes backend,
+record and qualify one bundle per surface and orchestrate those bundles outside
+Flow. Qualify each handoff and the end-to-end result verifier before deployment.
+The CLI doesn't compose separately recorded bundles today. Program authors can
+bind individual steps to different HTTP systems, but that is API actuation
+rather than recorded GUI backend switching.
 
 ## How a step finds its target
 
-Compilation stores five things per step: a template crop, an OCR label,
-geometry landmarks, a structural locator, and postconditions derived from what
-the demonstration changed on screen. At replay a ladder tries them in order,
-starting with the structural element match and ending, only if you opt in, at a
-grounding model. A healthy script resolves on the first rung in milliseconds.
-Under drift a lower rung finds the same target and writes the fix back as a
-reviewable diff. When nothing matches, the run halts rather than click
-something plausible.
+An anchored step keeps the evidence available on its execution surface. A
+browser or native step can carry a structural locator alongside template, OCR,
+and geometry evidence. A pixel-only step starts with visual evidence, while a
+pure keyboard or wait step may have no anchor at all. At replay the ladder tries
+structure first when it exists, then the available visual rungs. Model grounding
+stays off unless you enable it in the CLI or deployment config.
+
+A healthy step stops on its first valid match. Under drift, a lower rung can
+resolve the same target. The runtime records the proposed repair under the
+run's `heals/` evidence. Pass `--save-healed-to` to create a complete candidate
+bundle for review; Flow never promotes that candidate into the active workflow
+automatically. When no rung matches, the run halts rather than click something
+plausible.
 
 The runtime drives a pure pixel surface when that is all there is, and uses the
 structured layer as the top rung wherever one exists. On a desktop drift
@@ -177,17 +234,23 @@ and doesn't mean: [docs/LIMITS.md](docs/LIMITS.md).
 ## Against agents and RPA
 
 For a task nobody has automated before, an agent is the right tool. Use one.
-For the 500th referral this month, re-reasoning through the whole task on every
-run costs money and makes no two runs alike, and at the end of it the agent
-still reports success from what it saw on screen.
+For the 500th referral this month, compiled replay follows retained evidence and
+doesn't need a model call on each healthy run. The comparisons below cover two
+exact benchmark configurations, not every agent or RPA product. Both arms drove
+the same interface and used the same OCR success check. Neither arm's own
+success report counted.
 
-Two measured comparisons, both run 2026-07-08 on the same pre-v0.2.0 source
-build:
+Both comparisons ran on 2026-07-08 from a pre-v0.2.0 checkout declaring Flow
+0.1.0. The exact runtime commit wasn't retained, so these aren't current-release
+numbers:
 
 | Task | Compiled replay | Computer-use agent |
 |---|---|---|
-| OpenEMR public demo, 18-step field run ([method](benchmark/openemr/BENCHMARK.md)) | 19/20 effect-verified, 39.2s median, $0 model cost; run 20 was a safe halt | 10/10, 70.4s median, about $0.55/run |
-| MockMed bundled fixture, CI-reproducible ([method](benchmark/BENCHMARK.md)) | 100/100, 4.9s p50, $0 model cost | 20/20, 37.5s p50, about $0.27/run |
+| OpenEMR public demo, 18-step field run ([method](benchmark/openemr/BENCHMARK.md)) | 19/20 under the saved-row OCR check, 39.2s p50, 0 recorded model API calls and $0 in model API charges; run 20 halted safely | 10/10 under the same check, 70.4s p50, about $0.55/run in model API charges |
+| MockMed bundled fixture, CI-reproducible ([method](benchmark/BENCHMARK.md)) | 100/100 under the OCR check, 4.9s p50, 0 recorded model API calls and $0 in model API charges | 20/20 under the same check, 37.5s p50, about $0.27/run in model API charges |
+
+The dollar figures cover model API usage at list price. They don't include
+infrastructure, authoring, review, or maintenance.
 
 The OpenEMR run is the interesting one because the app is not ours: it's the
 official public demo, with fake patients, that other people mutate and that
@@ -198,20 +261,20 @@ Method, caveats, the pinned Frappe lending environment, and EffectBench (the
 standalone Silent Wrong-Effect Rate benchmark) are all in
 [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
-RPA replays deterministically too, so the interesting comparison is at the
-edges. RPA selectors break silently under drift, and RPA reads the session's
-own success signals to decide whether it worked, which is exactly what
-`--break-it` renders worthless. Dimension-by-dimension comparisons against
-UiPath, Power Automate, and browser agents:
-[openadapt.ai/compare](https://openadapt.ai/compare).
+RPA products differ in how they repair selectors and verify effects. Compare
+their evidence contracts. Start with target selection and independent result
+proof, then inspect what happens after uncertain delivery. See the
+dimension-by-dimension comparison with UiPath, Power Automate, and browser
+agents at [openadapt.ai/compare](https://openadapt.ai/compare).
 
 ## What runs where
 
-Record, compile, lint, certify, replay, and run are local. A healthy replay
-makes no model calls, and the run report counts them so you can check. That is
-not the same as no network: the app you're driving, a remote backend, and any
-effect verifier all still talk to whatever they normally talk to. Model
-grounding stays off unless you pass `--allow-model-grounding`.
+Record, compile, lint, certify, replay, and run are local. By default, a healthy
+replay makes no generative-model API call. Grounding, identity, and state
+verification integrations can make calls when enabled. This is not the same as
+no network: the app you're driving, a remote backend, and any effect verifier
+still talk to their configured services. Treat the run's model-call counter as
+diagnostic data, not provider billing telemetry.
 
 For regulated work, PHI scrubbing on the persist and log paths comes from the
 `privacy` extra, backed by
@@ -225,25 +288,34 @@ export OPENADAPT_FLOW_SCRUB=on
 That scrubs the shareable report and the console logs. The bundle and
 `report.json` keep literal identifiers on purpose, because the identity check
 and the audit trail need them. The full map of what is scrubbed and what isn't
-is [docs/PRIVACY.md](docs/PRIVACY.md). At rest, `OPENADAPT_BUNDLE_KEY` seals
-the workflow, the template crops, and durable checkpoints with AES-256-GCM.
-Treat every source bundle as PHI: [docs/phi_at_rest.md](docs/phi_at_rest.md).
+is [docs/PRIVACY.md](docs/PRIVACY.md). To encrypt a bundle at rest, set
+`OPENADAPT_BUNDLE_KEY`, then make a sealed copy:
+
+```bash
+openadapt-flow seal ./bundle --out ./bundle-sealed
+```
+
+The command encrypts `workflow.json` and the template crops with AES-256-GCM.
+An encrypted governed run reuses the key for its durable checkpoints. Other
+bundle files aren't covered by this command, and every source bundle must still
+be treated as PHI. See [docs/phi_at_rest.md](docs/phi_at_rest.md).
 
 OpenAdapt Cloud at `app.openadapt.ai` is an optional managed control plane
 covering browser workflows. Desktop and Citrix runs are self-hosted or on-prem.
 See [docs/HOSTED.md](docs/HOSTED.md).
 
-## Product state
+## Production admission
 
-Flow enters Production only through a signed, expiring, revocable release
-admission. Missing, expired, revoked, or bound to a different release, and it
-is **not actively admitted**. A release admission says nothing about your
-workflow; each workflow carries its own. Current state is machine-readable at
-[openadapt.ai/status.json](https://openadapt.ai/status.json).
+Flow reports `Production` only while a signed, expiring, revocable release
+admission is valid for the exact build. Workflow admission is separate: a
+release admission doesn't qualify a customer's bundle, application,
+environment, or verification contract. The current admission state is
+machine-readable at
+[openadapt.ai/production-lifecycle.json](https://openadapt.ai/production-lifecycle.json).
 
-Every claim this project makes in public is registered in
-[`claims.yaml`](claims.yaml) with a tier and the tests or benchmark artifacts
-that back it, and the build fails when a claim outranks its evidence. See
+The registry in [`claims.yaml`](claims.yaml) assigns each registered public
+capability claim a tier and names the tests or benchmark artifacts behind it.
+The build fails when a registered claim outranks its evidence. See
 [docs/CLAIMS_AND_QUALIFICATION.md](docs/CLAIMS_AND_QUALIFICATION.md) and the
 generated [docs/VERIFICATION.md](docs/VERIFICATION.md). For security review,
 [docs/ENTERPRISE_ARCHITECTURE.md](docs/ENTERPRISE_ARCHITECTURE.md).
