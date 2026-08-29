@@ -128,6 +128,13 @@ _BADGES: Final = frozenset(
         "human decision",
         "halt",
         "escalate",
+        "child bundle",
+        "web",
+        "windows",
+        "macos",
+        "linux",
+        "rdp",
+        "citrix",
     }
 )
 #: The builder also emits two count-templated badges. Only a bounded integer
@@ -140,7 +147,12 @@ _EDGE_LABELS: Final[dict[str, str]] = {
     "branch": "declared branch",
     "exception": "declared exception",
     "loop_body": "declared loop",
+    "handoff": "declared handoff",
 }
+
+#: Closed execution-surface vocabulary (mirrors ir.ExecutionTargetKind).
+_SURFACES: Final = frozenset({"web", "windows", "macos", "linux", "rdp", "citrix"})
+_COMPOSITION_SCHEMAS: Final = frozenset({"openadapt.composition/v1"})
 
 
 # --------------------------------------------------------------------------
@@ -166,6 +178,7 @@ _NODE_PUBLIC: Final = frozenset(
         "outcome",  # closed vocabulary
         "halts",  # REPLACED by _safe_halts (positional, no content)
         "badges",  # closed literal set + bounded count template
+        "surface",  # closed execution-surface vocabulary
     }
 )
 _NODE_LOCAL: Final = frozenset(
@@ -211,6 +224,8 @@ _BUNDLE_PUBLIC: Final = frozenset(
         "name",  # REPLACED by a fixed string
         "schema_version",
         "is_program",
+        "is_composition",  # bool
+        "composition_schema",  # closed literal
         "contains_phi",
         "phi_scrubbed",
         "encrypted",
@@ -222,6 +237,7 @@ _BUNDLE_PUBLIC: Final = frozenset(
         "effect_count",
         "api_binding_count",
         "halt_point_count",
+        "child_count",  # int
         "params",  # rebuilt field-by-field
         "provenance",  # rebuilt field-by-field
     }
@@ -316,6 +332,8 @@ def _safe_title(node: GraphNode) -> str:
         return "Repeat the bounded steps"
     if node.kind == NodeKind.SUBFLOW_CALL:
         return "Run an approved subflow"
+    if node.kind == NodeKind.CHILD_BUNDLE:
+        return "Run an approved child bundle"
     action = (node.action or "").lower()
     if action in {"click", "double_click"}:
         return "Select an interface target"
@@ -452,6 +470,7 @@ def _project_node(node: GraphNode) -> GraphNode:
         outcome=_in_vocabulary(node.outcome, _OUTCOMES),
         halts=_safe_halts(node),
         badges=_safe_badges(node.badges),
+        surface=_in_vocabulary(node.surface, _SURFACES),
     )
 
 
@@ -490,6 +509,10 @@ def _project_bundle(bundle: BundleMeta) -> BundleMeta:
         name=PROJECTED_BUNDLE_NAME,
         schema_version=bundle.schema_version,
         is_program=bundle.is_program,
+        is_composition=bundle.is_composition,
+        composition_schema=_in_vocabulary(
+            bundle.composition_schema, _COMPOSITION_SCHEMAS
+        ),
         contains_phi=bundle.contains_phi,
         phi_scrubbed=bundle.phi_scrubbed,
         encrypted=bundle.encrypted,
@@ -501,6 +524,7 @@ def _project_bundle(bundle: BundleMeta) -> BundleMeta:
         effect_count=bundle.effect_count,
         api_binding_count=bundle.api_binding_count,
         halt_point_count=bundle.halt_point_count,
+        child_count=bundle.child_count,
         params=[
             _project_param(param, index) for index, param in enumerate(bundle.params)
         ],

@@ -32,8 +32,8 @@ imported lazily inside each handler so ``--help`` always works):
 - ``approve`` — mark a durably-paused run's pending escalation approved.
 - ``bench`` — replay a bundle N times against MockMed and aggregate.
 - ``visualize`` — SEE what a demonstration compiled into: emit a program-graph
-  view of a bundle (steps, targets, resolution ladder, identity/effect gates,
-  verification, halt points) as self-contained HTML, Mermaid, or the shared JSON
+  view of a bundle or a composed parent (child bundles, --after DAG,
+  effect-bound handoffs) as self-contained HTML, Mermaid, or the shared JSON
   graph spec that the cloud and desktop surfaces render.
 - ``seal`` — copy a bundle to a new path and atomically seal its workflow and
   template evidence with ``OPENADAPT_BUNDLE_KEY``.
@@ -2670,20 +2670,26 @@ def _cmd_explain(args: argparse.Namespace) -> int:
 
 
 def _cmd_visualize(args: argparse.Namespace) -> int:
+    from openadapt_flow.composition import CompositionError, is_composition_artifact
     from openadapt_flow.ir import Workflow
     from openadapt_flow.visualize import (
         PresentationProfile,
+        build_composition_graph,
         build_program_graph,
         project_program_graph,
         render_html,
         render_mermaid,
     )
 
-    workflow = Workflow.load(Path(args.bundle))
-    spec = project_program_graph(
-        build_program_graph(workflow),
-        PresentationProfile(args.profile),
-    )
+    path = Path(args.bundle)
+    if is_composition_artifact(path):
+        try:
+            spec = build_composition_graph(path)
+        except CompositionError as exc:
+            raise SystemExit(str(exc)) from exc
+    else:
+        spec = build_program_graph(Workflow.load(path))
+    spec = project_program_graph(spec, PresentationProfile(args.profile))
     fmt = args.format
     if fmt == "json":
         output = spec.model_dump_json(indent=2)
@@ -2698,12 +2704,19 @@ def _cmd_visualize(args: argparse.Namespace) -> int:
             out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(output, encoding="utf-8")
         b = spec.bundle
-        print(
-            f"Wrote {fmt} visualization of {b.name} "
-            f"({b.action_count} steps, {b.identity_armed_count} identity gates, "
-            f"{b.irreversible_count} irreversible, {b.halt_point_count} halt "
-            f"point(s)) to {out_path}"
-        )
+        if b.is_composition:
+            handoffs = sum(1 for edge in spec.edges if edge.kind.value == "handoff")
+            print(
+                f"Wrote {fmt} visualization of {b.name} "
+                f"({b.child_count} children, {handoffs} handoff(s)) to {out_path}"
+            )
+        else:
+            print(
+                f"Wrote {fmt} visualization of {b.name} "
+                f"({b.action_count} steps, {b.identity_armed_count} identity gates, "
+                f"{b.irreversible_count} irreversible, {b.halt_point_count} halt "
+                f"point(s)) to {out_path}"
+            )
     else:
         print(output)
     return 0
@@ -5809,12 +5822,15 @@ def build_parser() -> argparse.ArgumentParser:
         "visualize",
         help=(
             "See what a demonstration compiled INTO: emit a program-graph "
-            "view of a bundle (steps, targets, resolution ladder, identity/"
-            "effect gates, verification, and halt points) as self-contained "
-            "HTML, Mermaid, or the shared JSON graph spec"
+            "view of a bundle or a composed parent (child bundles, --after "
+            "DAG, effect-bound handoffs) as self-contained HTML, Mermaid, "
+            "or the shared JSON graph spec"
         ),
     )
-    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "bundle",
+        help="Workflow bundle directory, or a composed parent directory",
+    )
     p.add_argument(
         "--format",
         choices=("html", "mermaid", "json"),

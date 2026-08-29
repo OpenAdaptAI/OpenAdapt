@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from openadapt_flow.runtime.authorization import runtime_param_text
 from openadapt_flow.visualize.spec import (
+    DECLARED_STEPS_END_TITLE,
     BundleMeta,
     EdgeKind,
     EffectInfo,
@@ -363,7 +364,12 @@ def _bundle_meta(
 
 def _build_linear(workflow: "Workflow") -> tuple[list[GraphNode], list[GraphEdge]]:
     """Project a linear ``Workflow.steps`` list to a straight chain of action
-    nodes ending in a ``success`` terminal (the common case today)."""
+    nodes ending in a terminal titled ``End of declared steps``.
+
+    The IR outcome remains ``success`` (the declared end of the compiled
+    steps). The title must not say ``Success``: that would read as a live
+    VERIFIED verdict the visualizer does not have.
+    """
     nodes: list[GraphNode] = []
     edges: list[GraphEdge] = []
     steps = workflow.steps
@@ -378,7 +384,7 @@ def _build_linear(workflow: "Workflow") -> tuple[list[GraphNode], list[GraphEdge
             id=end_id,
             index=len(steps),
             kind=NodeKind.TERMINAL,
-            title="Success",
+            title=DECLARED_STEPS_END_TITLE,
             outcome="success",
         )
     )
@@ -584,9 +590,11 @@ def _state_title(state: "State") -> str:
     from openadapt_flow.ir import StateKind
 
     if state.kind == StateKind.TERMINAL:
-        return {"success": "Success", "halt": "Halt", "escalate": "Escalate"}.get(
-            state.outcome or "", "End"
-        )
+        return {
+            "success": DECLARED_STEPS_END_TITLE,
+            "halt": "Halt",
+            "escalate": "Escalate",
+        }.get(state.outcome or "", "End")
     if state.kind == StateKind.BRANCH:
         return "Branch"
     if state.kind == StateKind.BUSINESS_DECISION and state.decision is not None:

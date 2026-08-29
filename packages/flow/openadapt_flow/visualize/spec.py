@@ -13,14 +13,15 @@ This module deliberately carries NO rendering and NO IR-parsing logic -- it is
 the wire contract. :mod:`openadapt_flow.visualize.builder` projects a
 ``Workflow`` onto it; :mod:`openadapt_flow.visualize.render` (and the cloud /
 desktop components) render it. A matching JSON Schema is emitted to
-``schemas/program-graph-v1.json`` so non-Python surfaces validate the same
-shape.
+``schemas/program-graph-v2.json`` so non-Python surfaces validate the same
+shape. v1 remains as the historical schema (no ``child_bundle`` / ``handoff``).
 
-Forward-compatibility: the spec already models the Phase-2 control-flow node
-kinds (``branch`` / ``loop`` / ``subflow_call`` / ``terminal``) and typed edge
-kinds so richer compiled structure renders without a spec break. A linear
-bundle (today's common case) projects to a straight chain of ``action`` nodes
-ending in a ``success`` terminal.
+Forward-compatibility: the spec models Phase-2 control-flow node kinds
+(``branch`` / ``loop`` / ``subflow_call`` / ``terminal``) and typed edge kinds
+so richer compiled structure renders without a spec break. A linear bundle
+projects to a straight chain of ``action`` nodes ending in a terminal titled
+``End of declared steps``. A composition parent projects to ``child_bundle``
+nodes and ``handoff`` edges; it is not a bigger ProgramGraph.
 """
 
 from __future__ import annotations
@@ -30,9 +31,16 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-#: Spec wire version. Bump only on a BREAKING change to the node/edge shape;
-#: additive optional fields do not bump it (a v1 reader ignores unknown fields).
-SPEC_VERSION = 1
+#: Spec wire version. Bump on a BREAKING change to the node/edge shape
+#: (including a new node kind). Additive optional fields do not bump it
+#: (a reader ignores unknown fields).
+SPEC_VERSION = 2
+
+#: Human title for a terminal whose IR outcome is ``success``. The outcome
+#: names the declared end of the compiled steps; it is not a live VERIFIED
+#: verdict. Tests pin this string so the title cannot silently become
+#: ``Success`` again.
+DECLARED_STEPS_END_TITLE = "End of declared steps"
 
 #: The bundle name every non-local projection carries. The recorded name is
 #: local data, so a projected graph is named only by what it is. Declared here,
@@ -42,29 +50,35 @@ PROJECTED_BUNDLE_NAME = "Compiled program"
 
 
 class NodeKind(str, Enum):
-    """Kind of graph node -- mirrors :class:`openadapt_flow.ir.StateKind` so a
-    Phase-2 program graph projects 1:1, while a linear bundle is all ``action``
-    nodes plus a trailing ``terminal``."""
+    """Kind of graph node.
+
+    Phase-2 program states project 1:1 onto the matching kind. A linear bundle
+    is all ``action`` nodes plus a trailing ``terminal``. A composition parent
+    uses ``child_bundle`` (one node per child) rather than pretending each
+    child is an ``action`` or a ``subflow_call``.
+    """
 
     ACTION = "action"
     BRANCH = "branch"
     BUSINESS_DECISION = "business_decision"
     LOOP = "loop"
     SUBFLOW_CALL = "subflow_call"
+    CHILD_BUNDLE = "child_bundle"
     TERMINAL = "terminal"
 
 
 class EdgeKind(str, Enum):
     """Kind of graph edge. ``sequence`` is the unconditional next-step edge of a
-    linear program; ``branch`` is a guarded transition; ``exception`` routes a
-    failed action to a handler; ``loop_body`` links a loop node to its per-row
-    body. Only ``sequence`` occurs in a linear bundle today; the rest leave room
-    for compiled control flow."""
+    linear program or the composition ``--after`` DAG; ``branch`` is a guarded
+    transition; ``exception`` routes a failed action to a handler;
+    ``loop_body`` links a loop node to its per-row body; ``handoff`` carries
+    effect-bound parameter names between child bundles."""
 
     SEQUENCE = "sequence"
     BRANCH = "branch"
     EXCEPTION = "exception"
     LOOP_BODY = "loop_body"
+    HANDOFF = "handoff"
 
 
 class ResolutionRung(BaseModel):
@@ -173,6 +187,15 @@ class BundleMeta(BaseModel):
         description="True when a Phase-2 ProgramGraph is present (branches/loops); "
         "False for a linear step list.",
     )
+    is_composition: bool = Field(
+        default=False,
+        description="True when this graph is a parent sequencer of child bundles, "
+        "not a Workflow or a ProgramGraph.",
+    )
+    composition_schema: Optional[str] = Field(
+        default=None,
+        description="Composition artifact schema id when is_composition is True.",
+    )
     # PHI / at-rest governance flags (surfaced so a viewer can see them at a glance)
     contains_phi: bool = False
     phi_scrubbed: bool = False
@@ -186,6 +209,7 @@ class BundleMeta(BaseModel):
     effect_count: int = 0
     api_binding_count: int = 0
     halt_point_count: int = 0
+    child_count: int = 0
     params: list[ParamInfo] = Field(default_factory=list)
     provenance: ProvenanceInfo = Field(default_factory=ProvenanceInfo)
 
@@ -238,8 +262,14 @@ class GraphNode(BaseModel):
     #: short human string. Empty when the node has no distinguished halt point.
     halts: list[str] = Field(default_factory=list)
     #: Short capability/risk badges, e.g. "irreversible", "identity gate",
-    #: "effect check", "unarmed", "secret", "API".
+    #: "effect check", "unarmed", "secret", "API", "child bundle".
     badges: list[str] = Field(default_factory=list)
+    # -- child_bundle payload (kind == child_bundle) --
+    surface: Optional[str] = Field(
+        default=None,
+        description="Recorded execution surface of a child bundle "
+        "(web|windows|macos|linux|rdp|citrix)",
+    )
 
 
 class GraphEdge(BaseModel):

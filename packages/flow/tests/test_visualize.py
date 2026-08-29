@@ -30,6 +30,7 @@ from openadapt_flow.ir import (
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind
 from openadapt_flow.visualize import (
+    DECLARED_STEPS_END_TITLE,
     SPEC_VERSION,
     GraphNode,
     PresentationProfile,
@@ -108,6 +109,24 @@ def _mixed_workflow() -> Workflow:
     )
 
 
+def test_linear_terminal_title_is_never_success() -> None:
+    """The declared-end terminal is not a live VERIFIED verdict.
+
+    Docs already call this ``End of declared steps``. The spec title must
+    match. If this assertion fails, the builder has gone back to ``Success``.
+    """
+    spec = build_program_graph(_mixed_workflow())
+    terminal = spec.nodes[-1]
+    assert terminal.kind.value == "terminal"
+    assert terminal.title == DECLARED_STEPS_END_TITLE
+    assert terminal.title != "Success"
+    dumped = spec.model_dump_json()
+    assert '"title":"Success"' not in dumped
+    mermaid = render_mermaid(spec)
+    assert DECLARED_STEPS_END_TITLE in mermaid
+    assert "Success" not in mermaid
+
+
 def test_spec_shape_and_counts() -> None:
     spec = build_program_graph(_mixed_workflow())
     assert spec.spec_version == SPEC_VERSION
@@ -115,6 +134,9 @@ def test_spec_shape_and_counts() -> None:
     assert len(spec.nodes) == 5
     assert spec.nodes[-1].kind.value == "terminal"
     assert spec.nodes[-1].outcome == "success"
+    assert spec.nodes[-1].title == DECLARED_STEPS_END_TITLE
+    assert spec.nodes[-1].title != "Success"
+    assert "Success" not in [n.title for n in spec.nodes]
     b = spec.bundle
     assert b.action_count == 4
     assert b.irreversible_count == 1
@@ -245,6 +267,7 @@ def test_render_html_is_self_contained() -> None:
     assert "Compiled topology" in doc
     assert "Program evidence lanes" in doc
     assert "End of declared steps" in doc
+    assert '"title":"Success"' not in doc.replace(" ", "")
 
 
 def test_render_mermaid_is_valid_flowchart() -> None:
@@ -256,6 +279,8 @@ def test_render_mermaid_is_valid_flowchart() -> None:
     assert sum(1 for ln in lines if ln.strip().startswith("n")) >= len(spec.nodes)
     assert "-->" in src
     assert "classDef irreversible" in src
+    assert DECLARED_STEPS_END_TITLE in src
+    assert "Success" not in src
 
 
 def test_showcase_bundle_projects() -> None:
@@ -275,11 +300,11 @@ def test_showcase_bundle_projects() -> None:
 def test_emitted_spec_validates_against_committed_schema() -> None:
     """The shared JSON Schema stays in sync with the pydantic model, so
     non-Python surfaces can validate the same shape."""
-    schema_path = _REPO / "schemas" / "program-graph-v1.json"
+    schema_path = _REPO / "schemas" / "program-graph-v2.json"
     assert schema_path.exists()
     schema = json.loads(schema_path.read_text())
     # The committed schema must match what the model currently produces
-    # (regenerate schemas/program-graph-v1.json if this fails).
+    # (regenerate schemas/program-graph-v2.json if this fails).
     current = ProgramGraphSpec.model_json_schema()
     for key in ("properties", "$defs"):
         assert schema.get(key, {}).keys() == current.get(key, {}).keys()
@@ -328,8 +353,9 @@ def test_loop_body_is_expanded_inline() -> None:
     """A ``loop`` state's per-row body subflow projects as its own expanded
     action nodes, linked by a ``loop_body`` edge, with the body's return drawn
     as a ``next record`` loop-back edge and the loop's own exit as a
-    ``worklist exhausted`` edge to a single ``success`` terminal -- the real
-    cyclic structure the interpreter walks, not a dangling subflow reference."""
+    ``worklist exhausted`` edge to a terminal titled
+    ``End of declared steps`` -- the real cyclic structure the interpreter
+    walks, not a dangling subflow reference."""
     spec = build_program_graph(_authored_loop_workflow())
     assert spec.bundle.is_program is True
 
@@ -361,6 +387,8 @@ def test_loop_body_is_expanded_inline() -> None:
     assert len(terminals) == 1  # the body's success return is an edge, not a node
     assert terminals[0].id == exhausted[0].target
     assert terminals[0].outcome == "success"
+    assert terminals[0].title == DECLARED_STEPS_END_TITLE
+    assert terminals[0].title != "Success"
 
 
 def test_render_mermaid_shows_loop_structure() -> None:

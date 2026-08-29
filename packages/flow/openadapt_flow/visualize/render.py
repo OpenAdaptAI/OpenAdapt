@@ -145,6 +145,11 @@ def render_mermaid(spec: ProgramGraphSpec) -> str:
                 f"<br/><small>{_mm(' · '.join(badges), 40)}</small>" if badges else ""
             )
             lines.append(f'  {nid}("{label}{suffix}")')
+        elif node.kind.value == "child_bundle":
+            extra = ""
+            if node.surface:
+                extra = f"<br/><small>{_mm(node.surface, 24)}</small>"
+            lines.append(f'  {nid}(["{label}{extra}"])')
         elif node.kind.value == "terminal":
             lines.append(f'  {nid}{{{{"{label}"}}}}')
             if node.outcome in ("halt", "escalate"):

@@ -190,6 +190,7 @@ openadapt-flow compose \
   --out composed
 openadapt-flow certify composed --policy clinical-write
 openadapt-flow run composed --config deploy.yaml
+openadapt-flow visualize composed -o composed.html
 ```
 
 Child A must end `VERIFIED` (or a halt class you named with `--allow-halt`)
@@ -197,6 +198,11 @@ before child B starts. Handoffs copy parameter values that A's confirmed
 effect contract already bound. The parent will not guess a window title or a
 URL. Missing evidence stops the run. Qualify each handoff and the end-to-end
 result verifier before deployment.
+
+`visualize` on that parent draws one node per child, on the surface that child
+was recorded on. Edges follow `--after`. Handoff edges label the effect-bound
+parameters they copy. The parent ends at "End of declared steps", which isn't
+a live `VERIFIED` verdict. See [docs/VISUALIZE.md](docs/VISUALIZE.md).
 
 Compose will not retarget one recording onto a second backend. Program authors
 can bind individual steps to different HTTP systems, but that is API actuation

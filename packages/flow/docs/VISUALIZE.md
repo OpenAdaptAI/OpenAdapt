@@ -29,21 +29,24 @@ surface renders that spec and none of them re-parse the bundle IR:
 - **Desktop** uses a local React view over the qualification graph projection.
 
 The spec is versioned and has a committed JSON Schema
-(`schemas/program-graph-v1.json`) so non-Python surfaces validate the same
-shape. A sample emitted spec lives at
+(`schemas/program-graph-v2.json`) so non-Python surfaces validate the same
+shape. v1 stays in the tree as the historical schema (no `child_bundle` or
+`handoff`). A sample emitted spec lives at
 [`docs/showcase-openemr/program-graph.json`](showcase-openemr/program-graph.json).
 
-### Spec shape (v1)
+### Spec shape (v2)
 
 ```
 ProgramGraphSpec
 ├─ spec_version
 ├─ bundle: BundleMeta      # name, schema version, PHI/encryption flags,
 │                          # provenance/certification, params, rollup counts
-├─ nodes: [GraphNode]      # one per compiled step / program state
+│                          # is_composition / child_count for a parent sequencer
+├─ nodes: [GraphNode]      # one per compiled step / program state / child
 │   ├─ kind                # action | branch | business_decision | loop |
-│   │                      # subflow_call | terminal
+│   │                      # subflow_call | child_bundle | terminal
 │   ├─ title, action, risk # intent, click/type/…, reversible|irreversible
+│   ├─ surface             # recorded backend, on child_bundle nodes
 │   ├─ resolution          # the target-resolution LADDER + which rung is top
 │   ├─ identity            # armed? phi-free? unarmed-reason?
 │   ├─ effects             # system-of-record checks
@@ -51,14 +54,18 @@ ProgramGraphSpec
 │   ├─ guard / wait_until  # control-flow preconditions
 │   ├─ halts               # fail-safe HALT points this node introduces
 │   └─ badges
-└─ edges: [GraphEdge]      # sequence | branch | exception | loop_body
+└─ edges: [GraphEdge]      # sequence | branch | exception | loop_body | handoff
 ```
 
-Nodes = steps. Edges = sequence, with typed room for branches / loops /
-exception paths. Annotations = verification points and halt points. A linear
-bundle (today's common case) projects to a straight chain of `action` nodes
-ending in a `success` terminal; a Phase-2 program graph projects its full state
-machine 1:1, so richer compiled structure renders without a spec break.
+Nodes = steps, or child bundles when the input is a composed parent. Edges =
+sequence, with typed room for branches, loops, exception paths, and handoffs.
+Annotations = verification points and halt points. A linear bundle projects to
+a straight chain of `action` nodes ending in a terminal titled `End of declared
+steps`. That title is the declared end of the compiled steps. It isn't a live
+`VERIFIED` verdict. A Phase-2 program graph projects its full state machine
+1:1. A composition parent is not a bigger ProgramGraph: one `child_bundle` node
+per child, sequence edges for the `--after` DAG, `handoff` edges labelled with
+effect-bound parameter names.
 
 ## CLI
 
@@ -77,6 +84,23 @@ openadapt-flow visualize path/to/bundle --profile remote-safe -o program.html
 ```
 
 The default `operator-local` profile includes local diagnostic detail.
+
+A composed parent takes the same command. Pass the directory `compose` wrote,
+not a child bundle:
+
+```bash
+openadapt-flow visualize path/to/composed -o composed.html
+openadapt-flow visualize path/to/composed --format mermaid
+```
+
+Each child is one node, named as you named it, on the surface sealed into that
+child. Sequence edges follow `--after`, or the order you passed `--child`.
+Handoff edges name the effect-bound parameters they copy. They don't name
+window titles. The parent ends at `End of declared steps`.
+
+One backend per child. The graph doesn't switch backends inside a node, and it
+doesn't merge two recordings into one ProgramGraph. Handoffs are verified
+facts from a predecessor's confirmed effect contract.
 
 `remote-safe`, `public-synthetic`, and `sanitized-derivative` work the other way
 round. Each rebuilds the graph from a closed list of the fields allowed to

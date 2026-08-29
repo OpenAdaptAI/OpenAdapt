@@ -44,16 +44,20 @@
     var b = spec.bundle;
     var head = el("div", "opg-header");
     head.appendChild(el("div", "opg-title", b.name));
-    var sub =
-      "Compiled program · schema v" +
-      b.schema_version +
-      " · " +
-      (b.is_program ? "program graph" : "linear program") +
-      (b.created_at ? " · compiled " + b.created_at.slice(0, 10) : "");
+    var sub = b.is_composition
+      ? "Composition · " +
+        (b.composition_schema || "openadapt.composition/v1") +
+        " · one backend per child"
+      : "Compiled program · schema v" +
+        b.schema_version +
+        " · " +
+        (b.is_program ? "program graph" : "linear program") +
+        (b.created_at ? " · compiled " + b.created_at.slice(0, 10) : "");
     head.appendChild(el("div", "opg-subtitle", sub));
 
     var stats = el("div", "opg-stats");
-    stat(stats, b.action_count, "steps");
+    if (b.is_composition) stat(stats, b.child_count || 0, "children");
+    else stat(stats, b.action_count, "steps");
     stat(stats, b.identity_armed_count, "identity gates");
     if (b.identity_unarmed_count)
       stat(stats, b.identity_unarmed_count, "no gate", "warn");
@@ -212,7 +216,13 @@
     var head = el("div", "opg-node-head");
     head.appendChild(el("span", "opg-idx", String(node.index + 1)));
     head.appendChild(el("span", "opg-node-title", node.title));
-    head.appendChild(el("span", "opg-node-action", node.kind));
+    var kindLabel =
+      node.kind === "child_bundle"
+        ? node.surface
+          ? "child bundle · " + node.surface
+          : "child bundle"
+        : node.kind;
+    head.appendChild(el("span", "opg-node-action", kindLabel));
     card.appendChild(head);
     if (node.badges && node.badges.length) {
       var chips = el("div", "opg-chips");
@@ -317,6 +327,7 @@
   function nodeTone(node) {
     if (node.kind === "terminal")
       return node.outcome === "success" ? "success" : "halt";
+    if (node.kind === "child_bundle") return "governed";
     if (node.risk === "irreversible") return "halt";
     if (node.kind === "branch" || node.kind === "loop") return "branch";
     if ((node.identity && node.identity.armed) || (node.effects || []).length)
@@ -489,7 +500,18 @@
       row.appendChild(evidenceValue(resolutionCount ? resolutionCount + " types" : "None", resolutionCount ? "declared" : "none"));
       var identity = node.identity && node.identity.armed ? "Armed" : node.identity && node.identity.applicable ? "Not armed" : "None";
       row.appendChild(evidenceValue(identity, identity === "Armed" ? "declared" : identity === "Not armed" ? "attention" : "none"));
-      row.appendChild(evidenceValue(node.kind === "action" ? "Declared" : "None", node.kind === "action" ? "declared" : "none"));
+      var actuation =
+        node.kind === "action"
+          ? "Declared"
+          : node.kind === "child_bundle"
+            ? "Child program"
+            : "None";
+      row.appendChild(
+        evidenceValue(
+          actuation,
+          actuation === "None" ? "none" : "declared"
+        )
+      );
       row.appendChild(evidenceValue((node.postconditions || []).length ? node.postconditions.length + " checks" : "None", (node.postconditions || []).length ? "declared" : "none"));
       row.appendChild(evidenceValue((node.effects || []).length ? node.effects.length + " checks" : "None", (node.effects || []).length ? "declared" : "none"));
       row.appendChild(evidenceValue((node.halts || []).length ? String(node.halts.length) : "None", (node.halts || []).length ? "attention" : "none"));
