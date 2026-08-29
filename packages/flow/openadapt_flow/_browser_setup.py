@@ -56,10 +56,12 @@ _LINUX_CHROMIUM_SONAMES = (
     "cups",
     "drm",
     "xkbcommon",
-    "xcomposite",
-    "xdamage",
-    "xfixes",
-    "xrandr",
+    # Linux's ldconfig cache keeps these X11 names case-sensitive. Lowercase
+    # probes return None even after Playwright installs the matching packages.
+    "Xcomposite",
+    "Xdamage",
+    "Xfixes",
+    "Xrandr",
     "gbm",
     "pango-1.0",
     "cairo",

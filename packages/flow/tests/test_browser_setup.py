@@ -244,6 +244,33 @@ def test_lib_probe_reports_only_missing_sonames(monkeypatch):
     assert missing == [s for s in bs._LINUX_CHROMIUM_SONAMES if s not in present]
 
 
+def test_x11_production_probes_preserve_linux_name_case(monkeypatch):
+    """The production probe must pass the exact case-sensitive X11 names."""
+    monkeypatch.setattr(bs.sys, "platform", "linux")
+    calls = []
+
+    def fake_find_library(name):
+        calls.append(name)
+        return f"lib{name}.so"
+
+    monkeypatch.setattr(bs.ctypes.util, "find_library", fake_find_library)
+
+    assert bs._missing_chromium_system_libs() == []
+    for soname in ("Xcomposite", "Xdamage", "Xfixes", "Xrandr"):
+        assert soname in calls
+        assert soname.lower() not in calls
+
+
+@pytest.mark.skipif(bs.sys.platform != "linux", reason="Linux ldconfig only")
+@pytest.mark.parametrize(
+    "soname",
+    ("Xcomposite", "Xdamage", "Xfixes", "Xrandr"),
+)
+def test_x11_probe_resolves_real_playwright_library(soname):
+    """The exact case-sensitive probes resolve Playwright's installed X11 libs."""
+    assert bs.ctypes.util.find_library(soname) is not None
+
+
 def test_missing_system_libs_abort_before_any_download(monkeypatch):
     """Missing libraries -> remedy raised and NO download is attempted."""
     monkeypatch.setattr(bs, "_missing_chromium_system_libs", lambda: ["nss3", "gbm"])
