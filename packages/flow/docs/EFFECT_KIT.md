@@ -39,9 +39,13 @@ from the reference apps.
    typed `ReconciliationTask` (see below) — halt + evidence, never silent.
 4. **Certification measures coverage.** `openadapt-flow lint` reports
    per-consequential-step effect coverage (% of irreversible steps declaring a
-   contract) and warns per gap (`missing_effect_contract`); a policy that sets
-   `require_effects_for_irreversible: true` turns the same gap into a
-   certification **failure** (warn-vs-fail is the policy's choice).
+   contract) and warns per gap (`missing_effect_contract`; `same_channel_oracle`
+   when the declared oracle is the same page session, screenshot, or banner as
+   the acting surface). A policy that sets
+   `require_effects_for_irreversible: true` turns a missing contract into a
+   certification **failure** (warn-vs-fail is the policy's choice). Independent
+   API, SQL, second-session, and file reads are channel-disjoint; on-screen
+   success is not.
 
 ## Substrates
 

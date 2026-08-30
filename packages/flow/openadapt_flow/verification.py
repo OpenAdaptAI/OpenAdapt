@@ -78,6 +78,22 @@ class VerificationTier(IntEnum):
 VERIFIED_EFFECT_TIER = VerificationTier.INDEPENDENT_SESSION
 
 
+def declared_effect_is_independent_read(effect: Any) -> bool:
+    """True when a compiled effect oracle is not the acting surface.
+
+    Static counterpart of :meth:`VerificationTier.is_independent_system_of_record`.
+    An on-screen read-back (same page session, screenshot, or banner) shares
+    the actuation channel. Unbound placeholders are not a read. Independent
+    API, SQL, second-session, and file contracts have no ``readback`` spec.
+    """
+
+    if getattr(effect, "readback", None) is not None:
+        return False
+    if getattr(effect, "needs_operator_confirmation", False):
+        return False
+    return True
+
+
 def verifier_effect_tier(
     verifier: object,
     effect: Any = None,

@@ -31,6 +31,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.risk import classify_step_risk, step_text
 from openadapt_flow.traversal import iter_workflow_steps
+from openadapt_flow.verification import declared_effect_is_independent_read
 
 if TYPE_CHECKING:
     from openadapt_flow.runtime.effects import Effect
@@ -1142,6 +1143,12 @@ def lint_workflow(
       falls back to screen evidence for that write. Always ``warn`` here
       (advice); a policy escalates the same gap to a certification FAILURE via
       ``require_effects_for_irreversible`` (warn-vs-fail is policy-configurable).
+    - ``same_channel_oracle`` — a CONSEQUENTIAL write whose effect oracle is
+      the same channel as the acting surface (same page session, screenshot,
+      or banner). On-screen success and on-screen read-back are this gap;
+      an independent API, SQL, second-session, or file read is clean. Always
+      ``warn`` here. Runtime still refuses ``VERIFIED`` without an independent
+      system-of-record read.
     - ``missing_identifier_crop`` — an IDENTITY-ARMED step with no pixel
       identifier crop (``anchor.identifier_crop``): on a remote-display/pixel
       replay (Citrix/RDP) the pixel-compare identity tier abstains and the
@@ -1216,6 +1223,29 @@ def lint_workflow(
                             "declare an effect contract, or certify with "
                             "require_effects_for_irreversible to make this a "
                             "hard failure"
+                        ),
+                    )
+                )
+            same_channel_paths = [
+                path
+                for path, effects in projection.effect_paths
+                if not any(
+                    declared_effect_is_independent_read(effect) for effect in effects
+                )
+            ]
+            if same_channel_paths:
+                findings.append(
+                    Finding(
+                        severity="warn",
+                        code="same_channel_oracle",
+                        step_id=step.id,
+                        message=(
+                            f"{step.action.value} is an IRREVERSIBLE write "
+                            "whose effect oracle shares the acting surface on "
+                            "executable path(s): "
+                            f"{', '.join(same_channel_paths)} (same page "
+                            "session, screenshot, or banner) — an independent "
+                            "API, SQL, second-session, or file read is required"
                         ),
                     )
                 )
