@@ -152,6 +152,10 @@ def test_proposal_from_a_tiny_fixture_fills_pins_and_break_it(tmp_path: Path) ->
     classes = [case["case_class"] for case in proposal.failure_matrix]
     assert "break_it" in classes
     assert "identity_swap" in classes
+    assert proposal.suggestions == []
+    gate = proposal.oracle_gate or {}
+    assert gate.get("passed") is True
+    assert gate.get("break_it_executed") is True
 
 
 def test_missing_system_of_record_halts(tmp_path: Path) -> None:

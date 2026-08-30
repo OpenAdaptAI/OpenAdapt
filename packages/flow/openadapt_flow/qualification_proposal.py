@@ -20,12 +20,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from openadapt_flow.compiler.induction import Proposer
 from openadapt_flow.compiler.qualification_pins import (
     MinedQualificationPins,
+    load_recording_meta,
     mine_qualification_pins,
 )
+from openadapt_flow.compiler.qualification_proposer import collect_suggestions
 from openadapt_flow.ir import Workflow
 from openadapt_flow.policy_packs import PolicyPackName, load_policy_pack
 from openadapt_flow.qualification import (
@@ -54,6 +57,7 @@ from openadapt_flow.qualification_dev_signer import (
     LocalDevAdmission,
     sign_local_dev_admission,
 )
+from openadapt_flow.qualification_oracle_gate import evaluate_oracle_gate
 from openadapt_flow.traversal import iter_workflow_steps
 from openadapt_flow.verification import VerificationTier
 
@@ -83,6 +87,8 @@ class QualificationProposal(BaseModel):
     pins: list[dict[str, Any]]
     failure_matrix: list[dict[str, Any]]
     created_at: str
+    oracle_gate: Optional[dict[str, Any]] = None
+    suggestions: list[dict[str, Any]] = Field(default_factory=list)
 
     @field_validator("pins")
     @classmethod
@@ -109,6 +115,22 @@ class QualificationProposal(BaseModel):
             ensure_ascii=False,
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
+
+
+def proposer_from_name(name: str | None) -> Optional[Proposer]:
+    """Resolve the optional CLI proposer. ``off`` / None -> absent."""
+
+    if not name or name == "off":
+        return None
+    if name == "llm":
+        from openadapt_flow.compiler.qualification_proposer import (
+            LazyLLMQualificationProposer,
+        )
+
+        return LazyLLMQualificationProposer()
+    raise QualificationProposalError(
+        f"unknown qualification proposer {name!r}; known: off, llm"
+    )
 
 
 def _now() -> str:
@@ -145,8 +167,14 @@ def propose_qualification(
     recording_dir: Path | str | None = None,
     policy_pack: str = "community",
     runtime_version: Optional[str] = None,
+    proposer: Optional[Proposer] = None,
 ) -> QualificationProposal:
-    """Emit a draft contract from the compiled demo. Missing pins HALT."""
+    """Emit a draft contract from the compiled demo. Missing pins HALT.
+
+    The optional ``proposer`` may sketch an identity field or effect contract
+    from sanitized recording metadata. Suggestions are flagged, never trusted,
+    and still face the oracle gates. Tests pass with the proposer absent.
+    """
 
     pack = load_policy_pack(policy_pack)
     mined = mine_qualification_pins(
@@ -154,6 +182,14 @@ def propose_qualification(
         recording_dir=recording_dir,
         runtime_version=runtime_version or _package_version(),
     )
+    suggestions = [
+        item.model_dump(mode="json")
+        for item in collect_suggestions(
+            proposer,
+            workflow,
+            meta=load_recording_meta(recording_dir),
+        )
+    ]
     halt_reason = _halted_from_pins(
         mined, bundle_name=workflow.name, policy_pack=pack.name
     )
@@ -170,6 +206,12 @@ def propose_qualification(
                     "effect pin is missing: this policy pack requires a "
                     "system-of-record oracle on each irreversible write"
                 )
+    gate = evaluate_oracle_gate(workflow)
+    if gate.halt_reason:
+        if halt_reason is None:
+            halt_reason = gate.halt_reason
+        elif gate.halt_reason not in halt_reason:
+            halt_reason = f"{halt_reason}; {gate.halt_reason}"
     status: ProposalStatus = "halted" if halt_reason else "draft"
     return QualificationProposal(
         status=status,
@@ -181,6 +223,8 @@ def propose_qualification(
         pins=[pin.model_dump(mode="json") for pin in mined.pins],
         failure_matrix=[case.model_dump(mode="json") for case in mined.failure_cases],
         created_at=_now(),
+        oracle_gate=gate.model_dump(mode="json"),
+        suggestions=suggestions,
     )
 
 
@@ -190,17 +234,12 @@ def refuse_pin(proposal: QualificationProposal, kind: PinKind) -> QualificationP
     pin = proposal.pin(kind)
     pin["status"] = "missing"
     pin["halt_reason"] = f"operator refused the {kind} pin"
-    return QualificationProposal(
-        schema_version=proposal.schema_version,
-        status="halted",
-        halt_reason=f"operator refused the {kind} pin; refusing to guess",
-        bundle_name=proposal.bundle_name,
-        policy_pack=proposal.policy_pack,
-        recording_present=proposal.recording_present,
-        has_parameters=proposal.has_parameters,
-        pins=list(proposal.pins),
-        failure_matrix=list(proposal.failure_matrix),
-        created_at=proposal.created_at,
+    return proposal.model_copy(
+        update={
+            "status": "halted",
+            "halt_reason": f"operator refused the {kind} pin; refusing to guess",
+            "pins": list(proposal.pins),
+        }
     )
 
 
@@ -311,9 +350,19 @@ def accept_proposal(
     *,
     replace: bool = False,
 ) -> QualificationProposal:
-    """Apply every proposed pin. Refused or missing pins HALT."""
+    """Apply every proposed pin. Refused or missing pins HALT.
+
+    Re-runs the --break-it oracle gate and the channel-disjointness check.
+    A banner-only oracle that would accept the lying backend stays draft/halted.
+    """
 
     _require_draft(proposal)
+    gate = evaluate_oracle_gate(workflow)
+    proposal = proposal.model_copy(update={"oracle_gate": gate.model_dump(mode="json")})
+    if not gate.passed:
+        raise QualificationProposalError(
+            gate.halt_reason or "qualification oracle gate HALTed"
+        ) from None
     pack = load_policy_pack(proposal.policy_pack)
     application = proposal.pin("application")["payload"]
     environment = proposal.pin("environment")["payload"]
@@ -338,19 +387,14 @@ def accept_proposal(
     _apply_failure_matrix(workflow, proposal)
     for pin in proposal.pins:
         pin["status"] = "confirmed"
-    accepted = QualificationProposal(
-        schema_version=proposal.schema_version,
-        status="accepted",
-        halt_reason=None,
-        bundle_name=proposal.bundle_name,
-        policy_pack=proposal.policy_pack,
-        recording_present=proposal.recording_present,
-        has_parameters=proposal.has_parameters,
-        pins=list(proposal.pins),
-        failure_matrix=list(proposal.failure_matrix),
-        created_at=proposal.created_at,
+    return proposal.model_copy(
+        update={
+            "status": "accepted",
+            "halt_reason": None,
+            "pins": list(proposal.pins),
+            "oracle_gate": gate.model_dump(mode="json"),
+        }
     )
-    return accepted
 
 
 def admit_local_dev(

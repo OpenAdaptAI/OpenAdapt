@@ -118,6 +118,15 @@ identity-gate fields, and the effect oracle from the write the demo actually
 observed. `qualify accept` confirms every pin in one command. If a pin isn't
 there, Flow HALTs. It will not guess.
 
+`qualify accept` also runs that proposed oracle against a `--break-it` fault
+before it can succeed. MockMed is the default fixture: the banner says the
+row was saved, the store did not change. If the oracle would have accepted
+the lie, the proposal stays draft or halted. Actor bytes and oracle bytes
+must be disjoint. Re-reading the acting screen or the same-session banner
+HALTs and names the shared channel. An API, SQL, file, or second-session
+read is allowed; Flow will not invent an endpoint. No second read in the
+recording means HALT: do not automate until a second read exists.
+
 `--policy-pack community` is the local/MockMed pack. `cloud` and `regulated`
 bind the stricter shipped policy. They do not skip a pin. On MockMed, add
 `--admit-local` to mint a signed local admission. That test key cannot enter a

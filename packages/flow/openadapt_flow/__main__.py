@@ -48,7 +48,8 @@ imported lazily inside each handler so ``--help`` always works):
   customer-controlled case results, explain refusals, and persist certification.
   ``qualify propose`` (also ``propose-qualification``) fills application,
   environment, identity, and effect pins from the demo; ``qualify accept``
-  confirms them in one command; refusing a pin HALTs.
+  runs the proposed oracle against a ``--break-it`` fault before it can
+  succeed; refusing a pin HALTs.
 - ``scaffold-verifier`` — draft (never approve) an effect-oracle contract
   (``effect_contract.yaml``) from a recording or bundle's write-shaped steps;
   refuses demonstrations with no consequential step.
@@ -3646,6 +3647,7 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
         emit_proposal_json,
         load_proposal,
         propose_qualification,
+        proposer_from_name,
         refuse_pin,
         save_accepted_bundle,
     )
@@ -3658,10 +3660,15 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
         raise SystemExit(f"could not load bundle: {exc}") from exc
 
     if verb == "propose":
+        try:
+            proposer = proposer_from_name(getattr(args, "proposer", "off"))
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
         proposal = propose_qualification(
             workflow,
             recording_dir=getattr(args, "recording", None),
             policy_pack=getattr(args, "policy_pack", "community"),
+            proposer=proposer,
         )
         print(emit_proposal_json(proposal, getattr(args, "out", None)))
         if proposal.status == "halted":
@@ -3673,10 +3680,15 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
         return 0
 
     if verb == "from-demo":
+        try:
+            proposer = proposer_from_name(getattr(args, "proposer", "off"))
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
         proposal = propose_qualification(
             workflow,
             recording_dir=args.recording,
             policy_pack=args.policy_pack,
+            proposer=proposer,
         )
         if proposal.status == "halted":
             print(emit_proposal_json(proposal, getattr(args, "out", None)))
@@ -6257,7 +6269,8 @@ def build_parser() -> argparse.ArgumentParser:
         "propose",
         help=(
             "Draft application, environment, identity, and effect pins from "
-            "the compiled demo. Missing pins HALT; nothing is guessed."
+            "the compiled demo. Missing pins HALT; nothing is guessed. "
+            "Runs the proposed oracle against a --break-it fault."
         ),
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
@@ -6272,12 +6285,24 @@ def build_parser() -> argparse.ArgumentParser:
         default="community",
         help="Which shipped pack to bind (default: community)",
     )
+    q.add_argument(
+        "--proposer",
+        choices=("off", "llm"),
+        default="off",
+        help=(
+            "Optional compile-time sketch proposer. Off by default. "
+            "Suggestions are flagged and still face the oracle gates."
+        ),
+    )
     q.add_argument("--out", default=None, help="Write the draft JSON to this path")
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(
         "accept",
-        help="Confirm every proposed pin in one command. Refusing a pin HALTs.",
+        help=(
+            "Confirm every proposed pin in one command after the proposed "
+            "oracle catches a --break-it fault. Refusing a pin HALTs."
+        ),
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -6334,6 +6359,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--admit-local",
         action="store_true",
         help="Sign a MockMed/local-dev admission that production trust maps refuse",
+    )
+    q.add_argument(
+        "--proposer",
+        choices=("off", "llm"),
+        default="off",
+        help="Optional compile-time sketch proposer. Off by default.",
     )
     q.add_argument("--out", default=None, help="Write the accepted proposal JSON")
     q.set_defaults(func=_cmd_qualify)
@@ -6616,6 +6647,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("community", "cloud", "regulated"),
         default="community",
         help="Which shipped pack to bind (default: community)",
+    )
+    p.add_argument(
+        "--proposer",
+        choices=("off", "llm"),
+        default="off",
+        help="Optional compile-time sketch proposer. Off by default.",
     )
     p.add_argument("--out", default=None, help="Write the draft JSON to this path")
     p.set_defaults(func=_cmd_propose_qualification)

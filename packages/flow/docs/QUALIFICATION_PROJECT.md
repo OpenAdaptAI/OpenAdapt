@@ -51,6 +51,11 @@ openadapt-flow qualify accept bundle --proposal proposal.json
 - A starter failure matrix. It always includes the `--break-it` class
   (optimistic write: the screen claims success, the system of record does
   not). If the demo has parameters, it also adds identity-swap or extra-field.
+  Before `qualify accept` succeeds, Flow executes that `--break-it` fault
+  against the proposed oracle on a persistence fixture (MockMed by default).
+  A banner-only oracle is rejected. Actor and oracle channels must be
+  disjoint; Flow will not invent an endpoint. If the recording has no
+  second read, it HALTs: do not automate until a second read exists.
 
 Automatic vs confirm: Flow proposes every pin it can see in the recording or
 bundle. You confirm all of them with `qualify accept`. `--refuse-pin identity`

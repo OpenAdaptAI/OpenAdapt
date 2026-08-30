@@ -56,6 +56,12 @@ from openadapt_flow.compiler.qualification_pins import (
     MinedQualificationPins,
     mine_qualification_pins,
 )
+from openadapt_flow.compiler.qualification_proposer import (
+    FlaggedSuggestion,
+    LazyLLMQualificationProposer,
+    collect_suggestions,
+    sanitize_recording_metadata,
+)
 
 __all__ = [
     "compile_recording",
@@ -109,4 +115,8 @@ __all__ = [
     "MinedQualificationPins",
     "MinedPin",
     "MinedFailureCase",
+    "FlaggedSuggestion",
+    "LazyLLMQualificationProposer",
+    "collect_suggestions",
+    "sanitize_recording_metadata",
 ]
