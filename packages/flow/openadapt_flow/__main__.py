@@ -9,7 +9,8 @@ imported lazily inside each handler so ``--help`` always works):
 - ``compile`` — compile a recording directory into a workflow bundle.
 - ``induce`` — induce a parameterized PROGRAM bundle from MULTIPLE recordings
   (multi-trace induction); refuses (nonzero exit) when intent is
-  underdetermined rather than guessing a branch.
+  underdetermined rather than guessing a branch, and prints a ``record-next:``
+  worklist of missing demonstrations.
 - ``for-each`` — author a DATA-DRIVEN LOOP bundle: wrap a single-demonstration
   bundle's linear body in a LOOP that runs once per record of a worklist
   (CSV/JSON), binding each record's columns to the workflow's parameters.
@@ -1522,8 +1523,8 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         # Refuse rather than guess: surface the uncertainties honestly and exit
         # nonzero so a CI / deploy gate refuses the underdetermined program.
         print(
-            "\nNOT CERTIFIED — no program bundle written. Resolve the point(s) "
-            "above (e.g. via `disambiguate`) or supply more/consistent traces."
+            "\nNOT CERTIFIED — no program bundle written. See record-next: for "
+            "the missing demonstration(s)."
         )
         return 2
 
@@ -5313,7 +5314,8 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Induce a parameterized PROGRAM bundle from MULTIPLE recordings "
             "(multi-trace induction: infer params / loops / branches). REFUSES "
-            "(nonzero exit, no bundle) when intent is underdetermined"
+            "(nonzero exit, no bundle) when intent is underdetermined, printing "
+            "a record-next worklist of missing demonstrations"
         ),
     )
     p.add_argument(

@@ -37,6 +37,7 @@ from openadapt_flow.ir import (
     StructuralLocator,
     Workflow,
 )
+from tests.test_induction import FakeProposer
 
 # ===========================================================================
 # Helpers
@@ -412,3 +413,112 @@ def test_reversible_loop_still_induces_a_loop():
     result = induce_program([trace(["A", "B"]), trace(["C", "D", "E"])])
     assert result.certified is True
     assert any(d.kind == "loop" for d in result.column_decisions)
+
+
+# ===========================================================================
+# 5. Record-next worklist: missing demos, not a guessed program
+# ===========================================================================
+
+
+def test_each_blocking_uncertainty_emits_a_record_next_line():
+    """Every refuse-class Uncertainty carries a one-line record-next
+    instruction; render() pins the code, not the marketing copy."""
+
+    def optional_trace(with_submit: bool) -> Workflow:
+        steps = [_type("s_patient", "patient", "Alice")]
+        if with_submit:
+            steps.append(
+                Step(
+                    id="s_submit",
+                    intent="submit the prior authorization",
+                    action=ActionKind.CLICK,
+                    anchor=Anchor(
+                        template="templates/submit.png",
+                        region=(0, 0, 80, 20),
+                        click_point=(10, 10),
+                        ocr_text="Submit",
+                    ),
+                    risk="irreversible",
+                )
+            )
+        steps.append(_key("s_done", "Enter"))
+        return Workflow(name="prior-auth", steps=steps)
+
+    optional = induce_program([optional_trace(True), optional_trace(False)])
+    assert optional.certified is False
+    assert any(item.code == "unconfirmed_optional" for item in optional.record_next)
+    assert "record-next:" in optional.render()
+
+    def dialog_trace(with_dialog: bool) -> Workflow:
+        steps = [_type("s_patient", "patient", "Alice")]
+        if with_dialog:
+            steps.append(
+                _key(
+                    "s_confirm",
+                    "Y",
+                    intent="accept the confirmation dialog and approve the write",
+                    risk="irreversible",
+                )
+            )
+        steps.append(_key("s_done", "Enter"))
+        return Workflow(name="confirm-write", steps=steps)
+
+    branch = induce_program([dialog_trace(True), dialog_trace(False)])
+    assert branch.certified is False
+    assert any(item.code == "unconfirmed_branch" for item in branch.record_next)
+    assert "record-next:" in branch.render()
+
+    def loop_trace(n_approvals: int) -> Workflow:
+        steps: list[Step] = [_type("s_login", "clinic", "MockMed")]
+        for i in range(n_approvals):
+            steps.append(
+                _key(
+                    f"s_approve{i}",
+                    "A",
+                    intent="approve the claim",
+                    risk="irreversible",
+                )
+            )
+        steps.append(_key("s_done", "Enter"))
+        return Workflow(name="approve-batch", steps=steps)
+
+    loop = induce_program([loop_trace(2), loop_trace(3)])
+    assert loop.certified is False
+    assert any(item.code == "ambiguous_loop" for item in loop.record_next)
+    assert "record-next:" in loop.render()
+
+
+def test_proposer_hint_class_cannot_flip_certified_true():
+    """A Proposer may attach a hint class on the worklist; it stays flagged
+    and cannot certify a consequential refuse."""
+    proposer = FakeProposer()
+
+    def trace(with_submit: bool) -> Workflow:
+        steps = [_type("s_patient", "patient", "Alice")]
+        if with_submit:
+            steps.append(
+                Step(
+                    id="s_submit",
+                    intent="submit the prior authorization",
+                    action=ActionKind.CLICK,
+                    anchor=Anchor(
+                        template="templates/submit.png",
+                        region=(0, 0, 80, 20),
+                        click_point=(10, 10),
+                        ocr_text="Submit",
+                    ),
+                    risk="irreversible",
+                )
+            )
+        steps.append(_key("s_done", "Enter"))
+        return Workflow(name="prior-auth", steps=steps)
+
+    result = induce_program([trace(True), trace(False)], propose=proposer)
+    assert proposer.calls
+    assert any(kind == "hint" for _, kind, _ in proposer.calls)
+    assert result.uncertainties
+    assert all(u.hint_class for u in result.uncertainties)
+    assert all(item.hint_class for item in result.record_next if item.blocking)
+    assert all(p.trusted is False for p in result.proposed)
+    assert result.certified is False
+    assert result.program is None

@@ -22,7 +22,6 @@ interpreter (``runtime.replayer``) with the faked backend/vision from
 
 from __future__ import annotations
 
-
 import pytest
 
 from openadapt_flow.compiler.induction import (
@@ -39,7 +38,6 @@ from openadapt_flow.ir import (
 )
 from openadapt_flow.runtime.replayer import Replayer
 from tests.test_replayer import FakeBackend, FakeVision, Match, make_png
-
 
 # ===========================================================================
 # Synthetic MockMed corpus: trace-variant generators
@@ -416,6 +414,12 @@ def test_d_contradictory_traces_are_rejected_not_guessed():
     assert u.consequential is True  # both arms are irreversible
     # Routed to the disambiguation flow (#74).
     assert u.question is not None
+    # Worklist of missing demonstrations -- pin the code, not the copy.
+    assert u.record_next
+    assert any(item.code == "ambiguous_branch" for item in result.record_next)
+    rendered = result.render()
+    assert "record-next:" in rendered
+    assert "ambiguous_branch" in rendered
 
 
 def test_d_proposal_is_flagged_but_never_flips_underdetermined_to_certified():
@@ -426,7 +430,12 @@ def test_d_proposal_is_flagged_but_never_flips_underdetermined_to_certified():
     # ...its guess is surfaced (flagged, not trusted)...
     assert result.proposed and all(p.trusted is False for p in result.proposed)
     assert result.uncertainties[0].proposal is not None
+    # ...including an optional hint class on the record-next item...
+    assert any(p.kind == "hint" and p.trusted is False for p in result.proposed)
+    assert result.uncertainties[0].hint_class
+    assert result.record_next and result.record_next[0].hint_class
     # ...but the point stays underdetermined and the program is NOT emitted.
+    # A proposer cannot flip certified=True.
     assert result.certified is False
     assert result.program is None
 
@@ -519,3 +528,72 @@ def test_alignment_failure_on_unrelated_traces_is_refused():
     assert result.certified is False
     assert result.program is None
     assert result.uncertainties[0].kind == "alignment_failure"
+    assert any(item.code == "alignment_failure" for item in result.record_next)
+    assert "record-next:" in result.render()
+
+
+def test_swapped_step_order_is_underdetermined_order():
+    """The same steps in different orders are not a branch -- refuse with
+    underdetermined_order and a record-next worklist item."""
+    a = Workflow(
+        name="w",
+        steps=[
+            _type("s_patient", "patient", "Alice"),
+            _type("s_dose", "dose", "5mg"),
+            _key("s_done", "Enter"),
+        ],
+    )
+    b = Workflow(
+        name="w",
+        steps=[
+            _type("s_dose", "dose", "5mg"),
+            _type("s_patient", "patient", "Alice"),
+            _key("s_done", "Enter"),
+        ],
+    )
+    result = induce_program([a, b])
+    assert result.certified is False
+    assert result.program is None
+    assert any(u.kind == "underdetermined_order" for u in result.uncertainties)
+    assert any(item.code == "underdetermined_order" for item in result.record_next)
+    assert "record-next:" in result.render()
+
+
+def test_emitted_program_notes_uncovered_save_disabled_without_a_guard():
+    """A required Save click that was always enabled is still a program, with a
+    non-blocking 'never saw Save disabled' note -- not a certified guard."""
+
+    def trace(patient: str) -> Workflow:
+        return Workflow(
+            name="save-chart",
+            steps=[
+                _type("s_patient", "patient", patient),
+                Step(
+                    id="s_save",
+                    intent="click Save",
+                    action=ActionKind.CLICK,
+                    risk="irreversible",
+                    anchor=Anchor(
+                        template="templates/save.png",
+                        region=(0, 0, 80, 20),
+                        click_point=(10, 10),
+                        ocr_text="Save",
+                    ),
+                ),
+            ],
+        )
+
+    result = induce_program([trace("Alice"), trace("Bob")])
+    assert result.certified is True
+    assert result.program is not None
+    notes = [item for item in result.record_next if not item.blocking]
+    assert any(item.code == "unobserved_disabled" for item in notes)
+    rendered = result.render()
+    assert "record-next:" in rendered
+    assert "unobserved_disabled" in rendered
+    save = next(
+        s.step
+        for s in result.program.states.values()
+        if s.kind is StateKind.ACTION and s.step is not None and s.step.id == "s_save"
+    )
+    assert save.guard is None  # note, not a certified guard

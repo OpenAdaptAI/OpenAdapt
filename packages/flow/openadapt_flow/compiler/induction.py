@@ -57,12 +57,22 @@ disambiguation flow (:mod:`openadapt_flow.compiler.disambiguation`), leaves
 ``certified=False``, and does not emit a program. A wrong branch on an
 irreversible node is the failure class the whole repo is organized to avoid.
 
+Each Uncertainty also carries a **record-next** worklist item: a one-line
+operator instruction naming the missing demonstration ("Record the path where
+Save is disabled.", "Record one more worklist row.", "Record the consent-dialog
+Skip path."). The instruction is a scenario, never an invented click path, and
+the default path makes ZERO model calls. When a program *is* emitted, uncovered
+branches the traces never showed ("never saw Save disabled") remain
+non-blocking notes -- not certified guards.
+
 **The compile-time model only PROPOSES.** An optional :class:`Proposer` (the
 compile-time StepAnnotator lives behind this interface) may propose an
 interpretation for an ambiguous point, but every proposal is recorded in
 ``proposed`` / attached to the uncertainty and is NEVER silently trusted: a
-proposal cannot flip an ``underdetermined`` point to certified. Deterministic
-structural inference is the core; the model is advisory and flagged.
+proposal cannot flip an ``underdetermined`` point to certified. A Proposer may
+also attach a *hint class* on a record-next item; that hint is flagged and
+cannot certify. Deterministic structural inference is the core; the model is
+advisory and flagged.
 
 Touch-points (kept minimal per the stacking constraint on PR #79):
 
@@ -135,7 +145,7 @@ class Proposal(BaseModel):
     """
 
     target: str = Field(description="Column / state id the proposal concerns")
-    kind: str = Field(description="'guard' | 'param' | 'label'")
+    kind: str = Field(description="'guard' | 'param' | 'label' | 'hint'")
     content: str = Field(description="Human-readable proposed interpretation")
     source: str = "annotator"
     trusted: bool = Field(
@@ -165,13 +175,40 @@ class Proposer(Protocol):
 # ===========================================================================
 
 
+class RecordNext(BaseModel):
+    """One missing demonstration the operator should record next.
+
+    A worklist item, not a guessed click path. ``code`` is the stable
+    uncertainty (or uncovered-note) kind tests pin; ``instruction`` is a
+    one-line scenario. An optional ``hint_class`` from a :class:`Proposer` is
+    flagged and never certifies. ``blocking`` is False for uncovered-branch
+    notes on an emitted program (not certified guards).
+    """
+
+    code: str = Field(description="Uncertainty kind or uncovered-note code")
+    instruction: str = Field(
+        description="One-line operator instruction naming the missing demo."
+    )
+    location: str = ""
+    blocking: bool = True
+    hint_class: Optional[str] = Field(
+        default=None,
+        description="Advisory proposer hint class -- flagged, cannot certify.",
+    )
+
+
 class Uncertainty(BaseModel):
     """A point where intent stays underdetermined -- the reason induction
     REFUSES to emit (RFC §3 [5] quarantine). Routed to the disambiguation flow
-    via :attr:`question`."""
+    via :attr:`question`. ``record_next`` is the one-line demonstration to
+    record; it is a scenario, never an invented click path."""
 
     kind: str = Field(
-        description="'ambiguous_branch' | 'alignment_failure' | 'unobserved'"
+        description=(
+            "'ambiguous_branch' | 'ambiguous_loop' | 'unconfirmed_branch' | "
+            "'unconfirmed_optional' | 'underdetermined_order' | "
+            "'ambiguous_selection' | 'alignment_failure'"
+        )
     )
     location: str = Field(description="Column / position the ambiguity is at")
     detail: str
@@ -186,6 +223,14 @@ class Uncertainty(BaseModel):
     proposal: Optional[Proposal] = Field(
         default=None,
         description="A compile-time-model suggestion -- flagged, NOT trusted.",
+    )
+    record_next: str = Field(
+        default="",
+        description="One-line operator instruction: what demonstration to record next.",
+    )
+    hint_class: Optional[str] = Field(
+        default=None,
+        description="Advisory proposer hint class -- flagged, cannot certify.",
     )
 
 
@@ -228,6 +273,13 @@ class InductionResult(BaseModel):
         description="Compile-time-model suggestions -- flagged, never trusted.",
     )
     uncertainties: list[Uncertainty] = Field(default_factory=list)
+    record_next: list[RecordNext] = Field(
+        default_factory=list,
+        description=(
+            "Worklist of missing demonstrations (blocking uncertainties) and "
+            "uncovered-branch notes on an emitted program (non-blocking)."
+        ),
+    )
 
     @property
     def underdetermined(self) -> bool:
@@ -256,6 +308,15 @@ class InductionResult(BaseModel):
             f"Certification: {verdict}"
             + ("" if self.certified else " -- resolve the point(s) above.")
         )
+        if self.record_next:
+            lines.append("")
+            lines.append("record-next:")
+            for item in self.record_next:
+                prefix = "note " if not item.blocking else ""
+                line = f"  {prefix}{item.code}: {item.instruction}"
+                if item.hint_class:
+                    line += f"  [hint: {item.hint_class} (NOT trusted)]"
+                lines.append(line)
         return "\n".join(lines)
 
 
@@ -528,7 +589,45 @@ def _align(reduced: list[list]) -> list[_Column]:
                     merged.append(col)
                 div_group += 1
         columns = merged
+    _mark_order_splits(columns, len(reduced))
     return columns
+
+
+def _mark_order_splits(columns: list[_Column], n: int) -> None:
+    """Tag complementary same-signature columns as one order-split group.
+
+    SequenceMatcher often reports a reordering as delete+insert of the same
+    align-sig rather than a replace. Those columns must not become optional
+    skips -- they are ``underdetermined_order``.
+    """
+    by_sig: dict[Any, list[_Column]] = {}
+    for col in columns:
+        if col.divergent_group is not None:
+            continue
+        by_sig.setdefault(col.align_sig, []).append(col)
+
+    split_cols: list[_Column] = []
+    for cols in by_sig.values():
+        if len(cols) < 2:
+            continue
+        union: set[int] = set()
+        overlap = False
+        for col in cols:
+            present = set(col.tokens)
+            if union & present:
+                overlap = True
+            union |= present
+        if not overlap and len(union) == n:
+            split_cols.extend(cols)
+
+    if not split_cols:
+        return
+    used = {c.divergent_group for c in columns if c.divergent_group is not None}
+    grp = 0
+    while grp in used:
+        grp += 1
+    for col in split_cols:
+        col.divergent_group = grp
 
 
 # ===========================================================================
@@ -550,6 +649,190 @@ def _step_consequential(step: Step) -> bool:
     record ``effects`` (a transactional write). Reversible, effect-free steps
     are safe to auto-resolve (a wrong guess is recoverable)."""
     return step.risk == "irreversible" or bool(step.effects)
+
+
+# Write-shaped control stems used only to NAME an observed control in a
+# record-next instruction ("Record the path where Save is disabled."). Never
+# used to invent a click path or a certified guard.
+_WRITE_CONTROL_STEMS: tuple[str, ...] = ("save", "submit", "approve", "confirm")
+
+
+def _write_control_label(step: Step) -> Optional[str]:
+    """Observed Save/Submit-shaped label on a demonstrated CLICK, or None.
+
+    Uses the step's own OCR / field / intent text. Does not invent a control
+    the traces never showed.
+    """
+    if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+        return None
+    candidates = [
+        step.anchor.ocr_text if step.anchor is not None else None,
+        _field_key(step),
+        step.intent,
+    ]
+    for text in candidates:
+        if not text:
+            continue
+        low = text.lower()
+        for stem in _WRITE_CONTROL_STEMS:
+            if stem in low:
+                return stem.capitalize()
+    return None
+
+
+def _instruction_for(
+    kind: str,
+    *,
+    field: str = "",
+    labels: Optional[list[str]] = None,
+    dialog_text: str = "",
+    write_label: str = "",
+) -> str:
+    """One-line operator instruction naming the missing demonstration.
+
+    A scenario, never an invented click path. Copy is for operators; tests pin
+    the uncertainty ``code``, not this English.
+    """
+    labels = labels or []
+    if kind == "ambiguous_loop":
+        return "Record one more worklist row."
+    if kind == "unconfirmed_branch":
+        name = dialog_text or field or "the dialog"
+        return f"Record the {name} Skip path."
+    if kind == "unconfirmed_optional":
+        if write_label:
+            return f"Record the path where {write_label} is disabled."
+        name = field or "the step"
+        return f"Record the path where {name} is absent."
+    if kind == "underdetermined_order":
+        return "Record the steps in the intended order."
+    if kind == "ambiguous_branch":
+        if len(labels) >= 2:
+            shown = " vs ".join(labels[:4])
+            return f"Record each of {shown} under a detectable condition."
+        return "Record each divergent path under a detectable condition."
+    if kind == "ambiguous_selection":
+        name = field or "the selection"
+        return f"Record how '{name}' is identified each run."
+    if kind == "alignment_failure":
+        return "Record traces of the same task."
+    return "Record a demonstration that resolves this uncertainty."
+
+
+def _add_uncertainty(
+    result: InductionResult,
+    *,
+    kind: str,
+    location: str,
+    detail: str,
+    consequential: bool = True,
+    question: Optional[DisambiguationQuestion] = None,
+    proposal: Optional[Proposal] = None,
+    field: str = "",
+    labels: Optional[list[str]] = None,
+    dialog_text: str = "",
+    write_label: str = "",
+    propose: Optional[Proposer] = None,
+) -> Uncertainty:
+    """Append an Uncertainty with a record-next instruction.
+
+    If a :class:`Proposer` is supplied it may attach a hint class; that hint
+    is flagged, never trusted, and cannot certify. The default path (no
+    proposer) makes ZERO model calls.
+    """
+    instruction = _instruction_for(
+        kind,
+        field=field,
+        labels=labels,
+        dialog_text=dialog_text,
+        write_label=write_label,
+    )
+    hint_class = None
+    if propose is not None:
+        hint = _maybe_propose(
+            propose,
+            location,
+            "hint",
+            {
+                "kind": kind,
+                "field": field,
+                "labels": list(labels or []),
+                "dialog": dialog_text,
+            },
+            result,
+        )
+        if hint:
+            hint_class = hint
+            hint_proposal = Proposal(
+                target=location, kind="hint", content=hint, trusted=False
+            )
+            result.proposed.append(hint_proposal)
+            if proposal is None:
+                proposal = hint_proposal
+    u = Uncertainty(
+        kind=kind,
+        location=location,
+        detail=detail,
+        consequential=consequential,
+        question=question,
+        proposal=proposal,
+        record_next=instruction,
+        hint_class=hint_class,
+    )
+    result.uncertainties.append(u)
+    return u
+
+
+def _worklist_from_uncertainties(result: InductionResult) -> list[RecordNext]:
+    return [
+        RecordNext(
+            code=u.kind,
+            instruction=u.record_next,
+            location=u.location,
+            blocking=True,
+            hint_class=u.hint_class,
+        )
+        for u in result.uncertainties
+        if u.record_next
+    ]
+
+
+def _note_uncovered(
+    result: InductionResult, *, code: str, instruction: str, location: str
+) -> None:
+    """Non-blocking uncovered-branch note on an emitted program -- not a guard."""
+    result.record_next.append(
+        RecordNext(
+            code=code,
+            instruction=instruction,
+            location=location,
+            blocking=False,
+        )
+    )
+
+
+def _tok_field(tok: Any) -> str:
+    if getattr(tok, "kind", None) == "loop":
+        body = getattr(tok, "body_steps", None) or []
+        return _field_key(body[0]) if body else "loop"
+    return _field_key(tok.step)
+
+
+def _is_order_divergence(group_cols: list) -> bool:
+    """True when traces performed the SAME steps in different order.
+
+    A ``replace`` whose per-trace field sets are equal is an ordering
+    disagreement, not mutually exclusive branches.
+    """
+    fields_by_trace: dict[int, set[str]] = {}
+    for col in group_cols:
+        for t, tok in col.tokens.items():
+            fields_by_trace.setdefault(t, set()).add(_tok_field(tok))
+    sets = list(fields_by_trace.values())
+    # Same steps in every trace at this replace = reordering, not exclusive
+    # arms -- even a single field that SequenceMatcher failed to align
+    # (it sat on opposite sides of a swapped neighbor).
+    return len(sets) >= 2 and bool(sets[0]) and all(s == sets[0] for s in sets)
 
 
 def _confirmation_question(
@@ -644,16 +927,16 @@ def induce_program(
     # these are traces of the SAME task (refuse rather than induce noise).
     shared = sum(1 for c in columns if len(c.tokens) == n)
     if n >= 2 and columns and shared == 0:
-        result.uncertainties.append(
-            Uncertainty(
-                kind="alignment_failure",
-                location="<whole trace>",
-                detail=(
-                    "traces share no aligned steps -- cannot infer a common "
-                    "program (are these the same task?)."
-                ),
-            )
+        _add_uncertainty(
+            result,
+            kind="alignment_failure",
+            location="<whole trace>",
+            detail=(
+                "traces share no aligned steps -- cannot infer a common "
+                "program (are these the same task?)."
+            ),
         )
+        result.record_next = _worklist_from_uncertainties(result)
         return result
 
     decisions: list[ColumnDecision] = []
@@ -680,7 +963,7 @@ def induce_program(
         # --- loop ----------------------------------------------------------
         if col.kind == "loop":
             node, dec = _emit_loop(
-                idx, col, present, n, taken, param_specs, data_sources, result
+                idx, col, present, n, taken, param_specs, data_sources, result, propose
             )
             decisions.append(dec)
             if node is not None:
@@ -691,7 +974,7 @@ def induce_program(
         # --- single step present in ALL traces: literal vs param ----------
         if len(present) == n:
             node, dec = _emit_required_single(
-                idx, col, present, taken, param_specs, result
+                idx, col, present, taken, param_specs, result, propose
             )
             nodes.append(node)
             decisions.append(dec)
@@ -707,7 +990,9 @@ def induce_program(
 
     # Refuse rather than guess: any underdetermined point quarantines the whole
     # program (RFC §3 [5]) -- do NOT emit a program that guesses a branch.
+    # Surface the missing-demonstration worklist instead.
     if result.uncertainties:
+        result.record_next = _worklist_from_uncertainties(result)
         return result
 
     program, subflows = _wire(nodes)
@@ -729,7 +1014,9 @@ def induce_program(
     return result
 
 
-def _emit_loop(idx, col, present, n, taken, param_specs, data_sources, result):
+def _emit_loop(
+    idx, col, present, n, taken, param_specs, data_sources, result, propose=None
+):
     loop_toks = [col.tokens[t] for t in present]
     body_steps = loop_toks[0].body_steps
     field = _field_key(body_steps[0]) if body_steps else f"row_{idx}"
@@ -758,19 +1045,20 @@ def _emit_loop(idx, col, present, n, taken, param_specs, data_sources, result):
             evidence=f"repeated consequential body '{field}' x{counts} at column {idx}",
             consequential=True,
         )
-        result.uncertainties.append(
-            Uncertainty(
-                kind="ambiguous_loop",
-                location=location,
-                detail=(
-                    f"repeated body '{field}' (counts {counts}) contains a "
-                    "consequential action; a worklist loop vs a fixed unrolled "
-                    "sequence is not distinguishable from trace shape -- "
-                    "refusing to guess a loop over an irreversible step."
-                ),
-                consequential=True,
-                question=question,
-            )
+        _add_uncertainty(
+            result,
+            kind="ambiguous_loop",
+            location=location,
+            detail=(
+                f"repeated body '{field}' (counts {counts}) contains a "
+                "consequential action; a worklist loop vs a fixed unrolled "
+                "sequence is not distinguishable from trace shape -- "
+                "refusing to guess a loop over an irreversible step."
+            ),
+            consequential=True,
+            question=question,
+            field=field,
+            propose=propose,
         )
         dec = ColumnDecision(
             index=idx,
@@ -860,7 +1148,7 @@ def _emit_loop(idx, col, present, n, taken, param_specs, data_sources, result):
     return node, dec
 
 
-def _emit_required_single(idx, col, present, taken, param_specs, result):
+def _emit_required_single(idx, col, present, taken, param_specs, result, propose=None):
     toks = [col.tokens[t] for t in present]
     step0 = toks[0].step
     field = _field_key(step0)
@@ -905,19 +1193,20 @@ def _emit_required_single(idx, col, present, taken, param_specs, result):
             evidence=f"selection target '{field}' varies {values} at column {idx}",
             consequential=True,
         )
-        result.uncertainties.append(
-            Uncertainty(
-                kind="ambiguous_selection",
-                location=location,
-                detail=(
-                    f"selection target '{field}' varies across traces {values} "
-                    "-- a which-entity parameter, not a fixed target; refusing "
-                    "to freeze the demo entity (needs entity_ref re-resolution)."
-                ),
-                consequential=True,
-                question=question,
-                proposal=proposal,
-            )
+        _add_uncertainty(
+            result,
+            kind="ambiguous_selection",
+            location=location,
+            detail=(
+                f"selection target '{field}' varies across traces {values} "
+                "-- a which-entity parameter, not a fixed target; refusing "
+                "to freeze the demo entity (needs entity_ref re-resolution)."
+            ),
+            consequential=True,
+            question=question,
+            proposal=proposal,
+            field=field,
+            propose=propose,
         )
         kind, param_name, literal = "ambiguous_selection", None, None
     elif step0.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION) and varies:
@@ -948,6 +1237,27 @@ def _emit_required_single(idx, col, present, taken, param_specs, result):
         id=sid, kind=StateKind.ACTION, step=step, transitions=[exit_tr]
     )
     node.exits = [exit_tr]
+    # Uncovered branches the traces never showed -- non-blocking notes on an
+    # emitted program, never certified guards. Default path: no VLM, no
+    # invented click path; we only name a control the traces already clicked.
+    if kind != "ambiguous_selection":
+        if _looks_like_dialog(step0):
+            dialog_text = _dialog_text(step0)
+            _note_uncovered(
+                result,
+                code="unobserved_skip",
+                instruction=f"never saw the {dialog_text} Skip path",
+                location=sid,
+            )
+        else:
+            write_label = _write_control_label(step0)
+            if write_label:
+                _note_uncovered(
+                    result,
+                    code="unobserved_disabled",
+                    instruction=f"never saw {write_label} disabled",
+                    location=sid,
+                )
     dec = ColumnDecision(
         index=idx,
         kind=kind,
@@ -1017,33 +1327,35 @@ def _emit_optional_single(idx, col, present, n, result, propose):
         # condition is exactly the failure class to avoid -- so ALSO emit an
         # Uncertainty requiring operator confirmation (certified stays False).
         if _step_consequential(do_step):
-            result.uncertainties.append(
-                Uncertainty(
-                    kind="unconfirmed_branch",
-                    location=branch_id,
-                    detail=(
-                        f"optional dialog branch {dialog_text!r} guards a "
-                        "CONSEQUENTIAL action; the guard is PROPOSED, not "
-                        "confirmed -- operator must confirm before certifying."
+            _add_uncertainty(
+                result,
+                kind="unconfirmed_branch",
+                location=branch_id,
+                detail=(
+                    f"optional dialog branch {dialog_text!r} guards a "
+                    "CONSEQUENTIAL action; the guard is PROPOSED, not "
+                    "confirmed -- operator must confirm before certifying."
+                ),
+                consequential=True,
+                question=_confirmation_question(
+                    branch_id,
+                    AmbiguityKind.OPTIONAL_DIALOG,
+                    prompt=(
+                        f"A dialog {dialog_text!r} appeared in some traces "
+                        "and its handling performs a CONSEQUENTIAL action. "
+                        "Confirm the guard condition before this certifies."
+                    ),
+                    evidence=(
+                        f"optional dialog {dialog_text!r} guarding a "
+                        f"consequential action at column {idx}"
                     ),
                     consequential=True,
-                    question=_confirmation_question(
-                        branch_id,
-                        AmbiguityKind.OPTIONAL_DIALOG,
-                        prompt=(
-                            f"A dialog {dialog_text!r} appeared in some traces "
-                            "and its handling performs a CONSEQUENTIAL action. "
-                            "Confirm the guard condition before this certifies."
-                        ),
-                        evidence=(
-                            f"optional dialog {dialog_text!r} guarding a "
-                            f"consequential action at column {idx}"
-                        ),
-                        consequential=True,
-                        dialog_text=dialog_text,
-                    ),
-                    proposal=proposal,
-                )
+                    dialog_text=dialog_text,
+                ),
+                proposal=proposal,
+                field=field,
+                dialog_text=dialog_text,
+                propose=propose,
             )
         dec = ColumnDecision(
             index=idx,
@@ -1087,33 +1399,35 @@ def _emit_optional_single(idx, col, present, n, result, propose):
     # action on an unconfirmed guard is not a safe default. So it becomes a
     # QUESTION (Uncertainty), not a silent skip -- certified stays False.
     if _step_consequential(step0):
-        result.uncertainties.append(
-            Uncertainty(
-                kind="unconfirmed_optional",
-                location=sid,
-                detail=(
-                    f"step '{field}' is present in only {present}/{n} traces and "
-                    "performs a CONSEQUENTIAL action; whether it is truly "
-                    "optional (safe to skip) or under-observed is "
-                    "underdetermined -- refusing to auto-skip an irreversible "
-                    "step."
+        _add_uncertainty(
+            result,
+            kind="unconfirmed_optional",
+            location=sid,
+            detail=(
+                f"step '{field}' is present in only {present}/{n} traces and "
+                "performs a CONSEQUENTIAL action; whether it is truly "
+                "optional (safe to skip) or under-observed is "
+                "underdetermined -- refusing to auto-skip an irreversible "
+                "step."
+            ),
+            consequential=True,
+            question=_confirmation_question(
+                sid,
+                AmbiguityKind.ABSENT_RESULT,
+                prompt=(
+                    f"A CONSEQUENTIAL step '{field}' appeared in only "
+                    f"{present}/{n} traces. Is it genuinely OPTIONAL (skip "
+                    "when its target is absent) or should its absence HALT?"
+                ),
+                evidence=(
+                    f"consequential step '{field}' present in {present}/{n} "
+                    f"traces at column {idx}"
                 ),
                 consequential=True,
-                question=_confirmation_question(
-                    sid,
-                    AmbiguityKind.ABSENT_RESULT,
-                    prompt=(
-                        f"A CONSEQUENTIAL step '{field}' appeared in only "
-                        f"{present}/{n} traces. Is it genuinely OPTIONAL (skip "
-                        "when its target is absent) or should its absence HALT?"
-                    ),
-                    evidence=(
-                        f"consequential step '{field}' present in {present}/{n} "
-                        f"traces at column {idx}"
-                    ),
-                    consequential=True,
-                ),
-            )
+            ),
+            field=field,
+            write_label=_write_control_label(step0) or "",
+            propose=propose,
         )
     else:
         result.inferred.append(
@@ -1165,15 +1479,38 @@ def _handle_divergence(idx, group_cols, workflows, result, propose, decisions):
     if proposal is not None:
         result.proposed.append(proposal)
 
+    order = _is_order_divergence(group_cols)
+    kind = "underdetermined_order" if order else "ambiguous_branch"
+    if order:
+        prompt = (
+            f"Traces show the same steps {labels} in different orders. Record "
+            "the steps in the intended order. (No order was detectable from "
+            "the demonstrations.)"
+        )
+        detail = (
+            f"traces show the same steps {labels} in different orders -- "
+            "cannot decide a sequence; refusing to guess an order"
+            + (" on a consequential" if consequential else "")
+            + " node."
+        )
+        note = f"underdetermined order of {labels}"
+    else:
+        prompt = (
+            f"Traces diverge here between {labels}. Under what condition should "
+            "the workflow take each branch? (No condition was detectable from "
+            "the demonstrations.)"
+        )
+        detail = (
+            f"traces diverge between {labels} with no detectable "
+            "condition -- cannot decide the guard; refusing to guess a "
+            "branch on a" + (" consequential" if consequential else "") + " node."
+        )
+        note = f"underdetermined divergence between {labels}"
     question = DisambiguationQuestion(
         id=f"{AmbiguityKind.OPTIONAL_DIALOG.value}:divergence_{idx}",
         kind=AmbiguityKind.OPTIONAL_DIALOG,
         step_id=f"divergence_{idx}",
-        prompt=(
-            f"Traces diverge here between {labels}. Under what condition should "
-            "the workflow take each branch? (No condition was detectable from "
-            "the demonstrations.)"
-        ),
+        prompt=prompt,
         options=[
             QuestionOption(
                 key="halt",
@@ -1185,26 +1522,23 @@ def _handle_divergence(idx, group_cols, workflows, result, propose, decisions):
         consequential=consequential,
         evidence=f"divergent branch between {labels} at column {idx}",
     )
-    result.uncertainties.append(
-        Uncertainty(
-            kind="ambiguous_branch",
-            location=f"column {idx}",
-            detail=(
-                f"traces diverge between {labels} with no detectable "
-                "condition -- cannot decide the guard; refusing to guess a "
-                "branch on a" + (" consequential" if consequential else "") + " node."
-            ),
-            consequential=consequential,
-            question=question,
-            proposal=proposal,
-        )
+    _add_uncertainty(
+        result,
+        kind=kind,
+        location=f"column {idx}",
+        detail=detail,
+        consequential=consequential,
+        question=question,
+        proposal=proposal,
+        labels=labels,
+        propose=propose,
     )
     decisions.append(
         ColumnDecision(
             index=idx,
-            kind="divergent",
+            kind="underdetermined_order" if order else "divergent",
             align_sig="__divergent__",
-            note=f"underdetermined divergence between {labels}",
+            note=note,
         )
     )
 
@@ -1277,7 +1611,12 @@ def structural_trace_coverage(result: InductionResult, trace: TraceInput) -> flo
 
     # Only EMITTED columns are scorable; refusal markers (a divergence or an
     # ambiguous loop/selection) correspond to no emitted state.
-    _refusal_kinds = {"divergent", "ambiguous_loop", "ambiguous_selection"}
+    _refusal_kinds = {
+        "divergent",
+        "ambiguous_loop",
+        "ambiguous_selection",
+        "underdetermined_order",
+    }
     col_sigs = [
         d.align_sig for d in result.column_decisions if d.kind not in _refusal_kinds
     ]

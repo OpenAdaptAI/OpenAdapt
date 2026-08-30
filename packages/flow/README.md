@@ -110,6 +110,14 @@ openadapt-flow lint bundle --strict
 openadapt-flow replay bundle --backend web --url https://your.app
 ```
 
+To generalize a task from several recordings, induce a program:
+
+```bash
+openadapt-flow induce rec1 rec2 --out program
+```
+
+`induce` emits a program when the traces agree, and a `record-next:` worklist of missing demonstrations when a consequential branch or loop stays underdetermined. The healthy replay path still makes no model call.
+
 `replay` is the permissive rehearsal path. It stays available while a bundle has
 certification gaps. For governed execution, complete the deployment's identity,
 effect, idempotency, and postcondition contracts, then use the gated path:

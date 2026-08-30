@@ -47,30 +47,24 @@ def test_induce_certified_writes_program_bundle(tmp_path: Path, capsys) -> None:
 
 
 def test_induce_refuses_contradiction_nonzero_no_bundle(tmp_path: Path, capsys) -> None:
-    b1 = _bundle(
-        tmp_path,
-        "c1",
-        [
+    def _decide(label: str) -> list[Step]:
+        return [
             Step(
-                id="a",
-                intent="click approve",
+                id="s_patient",
+                intent="type patient",
+                action=ActionKind.TYPE,
+                text="Alice",
+            ),
+            Step(
+                id="s_decide",
+                intent=f"click {label}",
                 action=ActionKind.CLICK,
                 risk="irreversible",
-            )
-        ],
-    )
-    b2 = _bundle(
-        tmp_path,
-        "c2",
-        [
-            Step(
-                id="b",
-                intent="click reject",
-                action=ActionKind.CLICK,
-                risk="irreversible",
-            )
-        ],
-    )
+            ),
+        ]
+
+    b1 = _bundle(tmp_path, "c1", _decide("approve"))
+    b2 = _bundle(tmp_path, "c2", _decide("reject"))
     out = tmp_path / "should_not_exist"
 
     rc = main(["induce", b1, b2, "--out", str(out)])
@@ -78,6 +72,9 @@ def test_induce_refuses_contradiction_nonzero_no_bundle(tmp_path: Path, capsys) 
 
     captured = capsys.readouterr().out
     assert "NOT CERTIFIED" in captured
+    # Pin the stable worklist header + uncertainty code, not the instruction copy.
+    assert "record-next:" in captured
+    assert "ambiguous_branch" in captured
     assert not (out / "workflow.json").is_file()  # nothing written
 
 
@@ -96,3 +93,40 @@ def test_induce_parser_accepts_multiple_recordings() -> None:
     assert args.command == "induce"
     assert args.recording == ["r1", "r2", "r3"]
     assert args.out == "bundle"
+
+
+def test_induce_certified_lists_uncovered_save_as_note(tmp_path: Path, capsys) -> None:
+    """An emitted program still lists a branch the traces never showed as a
+    non-blocking record-next note, not a certified guard."""
+    steps = [
+        Step(
+            id="s_patient",
+            intent="type patient",
+            action=ActionKind.TYPE,
+            text="Alice",
+        ),
+        Step(
+            id="s_save",
+            intent="click Save",
+            action=ActionKind.CLICK,
+            risk="irreversible",
+        ),
+    ]
+    # Identical Save in both traces (patient also identical -- linear program).
+    b1 = _bundle(tmp_path, "t1", steps)
+    b2 = _bundle(tmp_path, "t2", [s.model_copy(deep=True) for s in steps])
+    out = tmp_path / "induced"
+    rc = main(["induce", b1, b2, "--out", str(out)])
+    assert rc == 0
+    captured = capsys.readouterr().out
+    assert "CERTIFIED" in captured
+    assert "record-next:" in captured
+    assert "unobserved_disabled" in captured
+    workflow = Workflow.load(out)
+    assert workflow.program is not None
+    save = next(
+        s
+        for s in workflow.program.states.values()
+        if s.step is not None and s.step.id == "s_save"
+    )
+    assert save.step is not None and save.step.guard is None
