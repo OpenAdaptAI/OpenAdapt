@@ -5,6 +5,10 @@
 # so the same backend / actuation / effects / runtime / policy configuration
 # drives every stage.
 #
+# Start a draft bound to a bundle digest:
+#   python -m openadapt_flow.cli_config init bundle --out deploy.yaml
+# certify and run refuse that draft until `unresolved` is empty.
+#
 # Every section is OPTIONAL. An empty file is a valid deployment: fully local,
 # GUI-only, no effect verification, non-durable, zero outbound calls. Add only
 # the sections your deployment needs.

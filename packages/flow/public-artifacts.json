@@ -657,7 +657,7 @@
     },
     {
       "path": "docs/deployment.example.yaml",
-      "sha256": "ffd73bb4ab46ea0e285bfd9a30c31df05fc927539552232487c81b9cf361c0de"
+      "sha256": "f6dac74406cfecdffae86d40be9e96737466132a27ebbaffb53c340184c321e5"
     },
     {
       "path": "docs/program-workbench.png",

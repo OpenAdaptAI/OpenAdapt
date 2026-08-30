@@ -11,9 +11,19 @@ a TTY), or non-interactively via `--accept-params insurance_no` /
 An explicit `--param` always wins and suppresses the proposal.
 
 Recorded parameter values are the defaults, and `--param` overrides them at
-replay. Drive a real deployment with
-`openadapt-flow run bundle --config deploy.yaml`, which reads the backend,
-effects, actuation, durable, and policy sections from one config.
+replay. Drive a real deployment with a config bound to the bundle digest:
+
+```bash
+python -m openadapt_flow.cli_config init bundle --out deploy.yaml
+# Review and complete every path in `unresolved`. Do not put secrets in the file.
+openadapt-flow certify bundle --config deploy.yaml
+openadapt-flow run bundle --profile standard --config deploy.yaml
+```
+
+`certify` and `run` refuse the draft until those fields are filled.
+`openadapt-flow run bundle --config deploy.yaml` then reads the backend,
+effects, identity, idempotency, actuation, durable, and policy sections from
+one config.
 
 ## Choose an execution profile
 

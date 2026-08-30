@@ -514,25 +514,83 @@ class HumanDecisionsConfig(BaseModel):
     remote: RemoteHumanDecisionConfig = Field(default_factory=RemoteHumanDecisionConfig)
 
 
+class IdentitySection(BaseModel):
+    """Live identity revalidation before actuation.
+
+    Record identifiers stay in customer-controlled env vars. This section
+    never stores a live identity value.
+    """
+
+    require_fresh_frame: bool = True
+    #: NAME of the env var holding the record identifier (never the value).
+    record_id_env: Optional[str] = None
+
+
+class IdempotencySection(BaseModel):
+    """Idempotency key for a governed run. The value is an env reference."""
+
+    #: NAME of the env var holding the idempotency key (never the key itself).
+    key_env: Optional[str] = None
+
+
+#: Sentinel written by ``config init`` for fields the operator must fill.
+UNRESOLVED = "UNRESOLVED"
+
+
 class DeploymentConfig(BaseModel):
     """The whole-deployment configuration (one ``deployment.yaml``)."""
 
     #: Human-readable deployment name (audit / logs only).
     name: str = "deployment"
+    #: Exact sealed bundle content digest this config is bound to, when known.
+    bundle_digest: Optional[str] = None
+    #: Field paths the operator still has to fill. ``load_deployment`` refuses
+    #: a non-empty list so certify/run cannot proceed on a draft.
+    unresolved: list[str] = Field(default_factory=list)
     backend: BackendConfig = Field(default_factory=BackendConfig)
     actuation: ActuationConfig = Field(default_factory=ActuationConfig)
     effects: EffectsConfig = Field(default_factory=EffectsConfig)
+    identity: IdentitySection = Field(default_factory=IdentitySection)
+    idempotency: IdempotencySection = Field(default_factory=IdempotencySection)
     runtime: RuntimeSection = Field(default_factory=RuntimeSection)
     policy: PolicySection = Field(default_factory=PolicySection)
     human_decisions: HumanDecisionsConfig = Field(default_factory=HumanDecisionsConfig)
 
 
-def load_deployment(source: str | Path) -> DeploymentConfig:
+def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
+    """Return why a deployment is not ready for certify or run."""
+
+    reasons: list[str] = []
+    if cfg.unresolved:
+        reasons.append("unresolved: " + ", ".join(cfg.unresolved))
+    for path, value in (
+        ("backend.url", cfg.backend.url),
+        ("backend.agent_url", cfg.backend.agent_url),
+        ("backend.macos_app", cfg.backend.macos_app),
+        ("backend.macos_window_title", cfg.backend.macos_window_title),
+        ("backend.linux_app", cfg.backend.linux_app),
+        ("backend.linux_window_title", cfg.backend.linux_window_title),
+        ("backend.rdp_host", cfg.backend.rdp_host),
+        ("backend.rdp_window", cfg.backend.rdp_window),
+        ("effects.base_url", cfg.effects.base_url),
+        ("policy.policy", cfg.policy.policy),
+        ("identity.record_id_env", cfg.identity.record_id_env),
+        ("idempotency.key_env", cfg.idempotency.key_env),
+    ):
+        if value == UNRESOLVED:
+            reasons.append(f"{path} is {UNRESOLVED}")
+    return reasons
+
+
+def load_deployment(
+    source: str | Path, *, allow_unresolved: bool = False
+) -> DeploymentConfig:
     """Load a :class:`DeploymentConfig` from a YAML file.
 
     Raises:
         FileNotFoundError: If ``source`` is not an existing file.
-        ValueError: If the YAML is malformed or violates the schema.
+        ValueError: If the YAML is malformed, violates the schema, or still
+            has unresolved fields (unless ``allow_unresolved`` is True).
     """
     import yaml
 
@@ -549,9 +607,16 @@ def load_deployment(source: str | Path) -> DeploymentConfig:
             f"{type(data).__name__}"
         )
     try:
-        return DeploymentConfig.model_validate(data)
+        cfg = DeploymentConfig.model_validate(data)
     except Exception as e:
         raise ValueError(f"invalid deployment config {path}: {e}") from e
+    if not allow_unresolved:
+        reasons = incomplete_deployment_reasons(cfg)
+        if reasons:
+            raise ValueError(
+                f"deployment config {path} is incomplete: " + "; ".join(reasons)
+            )
+    return cfg
 
 
 # --------------------------------------------------------------------------

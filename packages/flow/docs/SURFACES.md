@@ -162,8 +162,11 @@ RDP/Citrix flags `--rdp-window` / `--rdp-window-title` scope Capture and enter
 the bundle's existing replay-binding metadata. `--agent-url`, `--linux-app`,
 `--linux-window-title`, and `--rdp-host` are replay targets. The local Capture
 session cannot control them, so `record` refuses them instead of accepting an
-unused flag. Pass them to `replay`/`run`; `run ... --config deploy.yaml
---profile standard|regulated` wires the same selection for a real deployment.
+unused flag. Pass them to `replay`/`run`. Generate a draft with
+`python -m openadapt_flow.cli_config init bundle --out deploy.yaml --backend rdp`
+(or `citrix`, `macos`, `linux`, `windows`, `web`); fill `unresolved`, then
+`run ... --config deploy.yaml --profile standard|regulated` wires the same
+selection for a real deployment.
 
 The browser attach mode keeps the Playwright-native recording contract. It
 binds one same-origin tab and reuses the same event schema, DOM evidence,
