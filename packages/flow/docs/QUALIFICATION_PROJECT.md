@@ -33,7 +33,36 @@ by the executable Flow contract cannot be down-classified during qualification.
 
 ## CLI
 
-Initialize the contract without editing bundle JSON:
+Demo once, get a checked program. After `record` and `compile`, propose the
+pins from the demonstration and confirm them in one command:
+
+```bash
+openadapt-flow qualify propose bundle --recording rec --out proposal.json
+openadapt-flow qualify accept bundle --proposal proposal.json
+```
+
+`propose` (also `openadapt-flow propose-qualification`) mines:
+
+- Application identity (origin or native id, plus the recorded version).
+- Environment fingerprint (surface, origin, viewport, runtime).
+- Identity-gate fields (canonical ladder when the demo armed it; otherwise a
+  structured `record_id` quorum bound to a workflow parameter).
+- Effect oracle from declared or observed system-of-record writes.
+- A starter failure matrix. It always includes the `--break-it` class
+  (optimistic write: the screen claims success, the system of record does
+  not). If the demo has parameters, it also adds identity-swap or extra-field.
+
+Automatic vs confirm: Flow proposes every pin it can see in the recording or
+bundle. You confirm all of them with `qualify accept`. `--refuse-pin identity`
+(or `application` / `environment` / `effect`) HALTs. Flow does not fill a
+missing system-of-record oracle.
+
+`--policy-pack community|cloud|regulated` picks the shipped policy. Community
+allows a MockMed local-dev admission (`--admit-local`). That signer cannot
+enter a production trust map. Cloud and regulated require a production signer
+and still demand the same identity and effect pins.
+
+If you already know the pins, you can still type them by hand:
 
 ```bash
 openadapt-flow qualify init bundle \

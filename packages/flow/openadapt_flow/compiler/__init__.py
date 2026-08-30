@@ -50,6 +50,12 @@ from openadapt_flow.compiler.param_confirm import (
     decisions_interactive,
     load_proposals,
 )
+from openadapt_flow.compiler.qualification_pins import (
+    MinedFailureCase,
+    MinedPin,
+    MinedQualificationPins,
+    mine_qualification_pins,
+)
 
 __all__ = [
     "compile_recording",
@@ -99,4 +105,8 @@ __all__ = [
     "decisions_from_file",
     "decisions_interactive",
     "load_proposals",
+    "mine_qualification_pins",
+    "MinedQualificationPins",
+    "MinedPin",
+    "MinedFailureCase",
 ]

@@ -46,6 +46,9 @@ imported lazily inside each handler so ``--help`` always works):
 - ``certify`` — enforce a safety policy on a bundle (refuse it if it fails).
 - ``qualify`` — create and edit the versioned qualification project, import
   customer-controlled case results, explain refusals, and persist certification.
+  ``qualify propose`` (also ``propose-qualification``) fills application,
+  environment, identity, and effect pins from the demo; ``qualify accept``
+  confirms them in one command; refusing a pin HALTs.
 - ``scaffold-verifier`` — draft (never approve) an effect-oracle contract
   (``effect_contract.yaml``) from a recording or bundle's write-shaped steps;
   refuses demonstrations with no consequential step.
@@ -3233,6 +3236,8 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
     if verb == "schema":
         print(json.dumps(project_schema(), indent=2, sort_keys=True))
         return 0
+    if verb in {"propose", "accept", "admit-local", "from-demo"}:
+        return _cmd_qualify_proposal(args)
 
     workflow = _qualification_workflow(args)
 
@@ -3628,6 +3633,124 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         return 0 if report.passed else 2
 
     raise SystemExit(f"unknown qualify command {verb!r}")
+
+
+def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
+    """Propose, accept, or locally admit pins mined from the compiled demo."""
+
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.qualification_proposal import (
+        QualificationProposalError,
+        accept_proposal,
+        admit_local_dev,
+        emit_proposal_json,
+        load_proposal,
+        propose_qualification,
+        refuse_pin,
+        save_accepted_bundle,
+    )
+
+    verb = args.qualify_cmd
+    bundle = Path(args.bundle)
+    try:
+        workflow = Workflow.load(bundle)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"could not load bundle: {exc}") from exc
+
+    if verb == "propose":
+        proposal = propose_qualification(
+            workflow,
+            recording_dir=getattr(args, "recording", None),
+            policy_pack=getattr(args, "policy_pack", "community"),
+        )
+        print(emit_proposal_json(proposal, getattr(args, "out", None)))
+        if proposal.status == "halted":
+            print(
+                proposal.halt_reason or "qualification proposal HALTed",
+                file=sys.stderr,
+            )
+            return 2
+        return 0
+
+    if verb == "from-demo":
+        proposal = propose_qualification(
+            workflow,
+            recording_dir=args.recording,
+            policy_pack=args.policy_pack,
+        )
+        if proposal.status == "halted":
+            print(emit_proposal_json(proposal, getattr(args, "out", None)))
+            print(
+                proposal.halt_reason or "qualification proposal HALTed",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            accepted = accept_proposal(workflow, proposal)
+            local = None
+            if args.admit_local:
+                local = admit_local_dev(workflow, accepted, bundle_dir=bundle)
+            save_accepted_bundle(
+                workflow,
+                bundle,
+                proposal=accepted,
+                local_admission=local,
+            )
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(emit_proposal_json(accepted, getattr(args, "out", None)))
+        return 0
+
+    if verb == "accept":
+        try:
+            proposal = load_proposal(args.proposal)
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"invalid qualification proposal: {exc}") from exc
+        refused = getattr(args, "refuse_pin", None)
+        if refused:
+            halted = refuse_pin(proposal, refused)
+            print(emit_proposal_json(halted, getattr(args, "out", None)))
+            print(halted.halt_reason, file=sys.stderr)
+            return 2
+        try:
+            accepted = accept_proposal(workflow, proposal, replace=args.replace)
+            local = None
+            if args.admit_local:
+                local = admit_local_dev(workflow, accepted, bundle_dir=bundle)
+            save_accepted_bundle(
+                workflow,
+                bundle,
+                proposal=accepted,
+                local_admission=local,
+            )
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(emit_proposal_json(accepted, getattr(args, "out", None)))
+        return 0
+
+    if verb == "admit-local":
+        try:
+            proposal = load_proposal(args.proposal)
+            local = admit_local_dev(workflow, proposal, bundle_dir=bundle)
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
+        out = (
+            Path(args.out)
+            if args.out
+            else bundle / "qualification-admission.local-dev.json"
+        )
+        out.write_text(local.model_dump_json(indent=2), encoding="utf-8")
+        print(local.model_dump_json(indent=2))
+        return 0
+
+    raise SystemExit(f"unknown qualify command {verb!r}")
+
+
+def _cmd_propose_qualification(args: argparse.Namespace) -> int:
+    """Top-level alias for ``qualify propose``."""
+
+    args.qualify_cmd = "propose"
+    return _cmd_qualify_proposal(args)
 
 
 def _cmd_disambiguate(args: argparse.Namespace) -> int:
@@ -6130,6 +6253,91 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--replace", action="store_true")
     q.set_defaults(func=_cmd_qualify)
 
+    q = qsub.add_parser(
+        "propose",
+        help=(
+            "Draft application, environment, identity, and effect pins from "
+            "the compiled demo. Missing pins HALT; nothing is guessed."
+        ),
+    )
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--recording",
+        default=None,
+        help="Recording directory (meta.json) used to mine application and environment pins",
+    )
+    q.add_argument(
+        "--policy-pack",
+        choices=("community", "cloud", "regulated"),
+        default="community",
+        help="Which shipped pack to bind (default: community)",
+    )
+    q.add_argument("--out", default=None, help="Write the draft JSON to this path")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "accept",
+        help="Confirm every proposed pin in one command. Refusing a pin HALTs.",
+    )
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--proposal", required=True, help="Draft qualification-proposal JSON"
+    )
+    q.add_argument(
+        "--refuse-pin",
+        choices=("application", "environment", "identity", "effect"),
+        default=None,
+        help="Refuse one pin instead of accepting. The command HALTs.",
+    )
+    q.add_argument(
+        "--admit-local",
+        action="store_true",
+        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+    )
+    q.add_argument("--replace", action="store_true", help="Replace an existing project")
+    q.add_argument("--out", default=None, help="Write the accepted proposal JSON")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "admit-local",
+        help=(
+            "Sign a local-dev admission for an accepted proposal. "
+            "The signer cannot enter a production trust map."
+        ),
+    )
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--proposal", required=True, help="Accepted qualification-proposal JSON"
+    )
+    q.add_argument("--out", default=None, help="Write the local-dev admission JSON")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "from-demo",
+        help=(
+            "Propose pins from the demo, accept them, and optionally sign a "
+            "local-dev admission. After record and compile."
+        ),
+    )
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--recording",
+        required=True,
+        help="Recording directory that produced the bundle",
+    )
+    q.add_argument(
+        "--policy-pack",
+        choices=("community", "cloud", "regulated"),
+        default="community",
+    )
+    q.add_argument(
+        "--admit-local",
+        action="store_true",
+        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+    )
+    q.add_argument("--out", default=None, help="Write the accepted proposal JSON")
+    q.set_defaults(func=_cmd_qualify)
+
     for verb in ("inspect", "explain", "report"):
         q = qsub.add_parser(verb, help=f"{verb.title()} qualification coverage")
         q.add_argument("bundle", help="Workflow bundle directory")
@@ -6389,6 +6597,28 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--evidence-root", required=True)
     q.add_argument("--json", action="store_true")
     q.set_defaults(func=_cmd_qualify)
+
+    p = sub.add_parser(
+        "propose-qualification",
+        help=(
+            "Draft a production-shaped qualification contract from a compiled "
+            "demo. Alias of `qualify propose`."
+        ),
+    )
+    p.add_argument("bundle", help="Compiled workflow bundle directory")
+    p.add_argument(
+        "--recording",
+        default=None,
+        help="Recording directory (meta.json) used to mine application and environment pins",
+    )
+    p.add_argument(
+        "--policy-pack",
+        choices=("community", "cloud", "regulated"),
+        default="community",
+        help="Which shipped pack to bind (default: community)",
+    )
+    p.add_argument("--out", default=None, help="Write the draft JSON to this path")
+    p.set_defaults(func=_cmd_propose_qualification)
 
     p = sub.add_parser(
         "disambiguate",

@@ -363,6 +363,11 @@ def load_qualification_signer_trust(
         raise QualificationAdmissionError(
             "qualification signer trust registry is invalid"
         ) from exc
+    from openadapt_flow.qualification_dev_signer import (
+        reject_local_dev_in_production_trust,
+    )
+
+    reject_local_dev_in_production_trust(parsed)
     return parsed
 
 
@@ -393,7 +398,20 @@ def verify_qualification_admission(
     identity, policy, runtime, or environment value from the signed record.
     """
 
+    from openadapt_flow.qualification_dev_signer import (
+        is_local_dev_issuer_workflow,
+        is_local_dev_key_id,
+        reject_local_dev_in_production_trust,
+    )
+
+    reject_local_dev_in_production_trust(trusted_signers)
     payload = envelope.payload
+    if is_local_dev_key_id(payload.issuer.key_id) or is_local_dev_issuer_workflow(
+        payload.issuer.workflow
+    ):
+        raise QualificationAdmissionError(
+            "local-dev qualification signer cannot enter a production trust map"
+        )
     trust = trusted_signers.get(payload.issuer.key_id)
     if trust is None:
         raise QualificationAdmissionError("qualification signer is not trusted")
