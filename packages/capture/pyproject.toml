@@ -41,6 +41,8 @@ dependencies = [
     "matplotlib>=3.10.8",
     # Native macOS window/accessibility observation via permissive PyObjC.
     "pyobjc-framework-ApplicationServices>=12.2.1; sys_platform == 'darwin'",
+    # Desktop-independent, exact-window pixels on macOS 14 and later.
+    "pyobjc-framework-ScreenCaptureKit>=12.2.1; sys_platform == 'darwin'",
     # Native Windows structural observation. Platform-gated so non-Windows
     # installs and imports do not load the Windows UIA stack.
     "pywinauto>=0.6.9; sys_platform == 'win32'",

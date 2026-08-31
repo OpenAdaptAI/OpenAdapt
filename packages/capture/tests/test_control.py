@@ -24,13 +24,19 @@ from PIL import Image
 
 from openadapt_capture import control
 from openadapt_capture import recorder as recorder_module
+from openadapt_capture.authentication import (
+    AuthenticationHandoff,
+    FreshFrameProof,
+)
 from openadapt_capture.capture import CaptureSession
 from openadapt_capture.config import RecordingConfig, config_override
 from openadapt_capture.control import (
     CaptureControlError,
     CaptureControlUnavailable,
     RecorderControlServer,
+    begin_authentication_handoff,
     discover_recorders,
+    end_authentication_handoff,
     status_recording,
     stop_recording,
 )
@@ -335,6 +341,105 @@ def test_wrong_token_and_replaced_instance_fail_closed(tmp_path: Path) -> None:
         assert response["ok"] is False
         assert response["error_code"] == "authentication_failed"
         assert stop_calls == 0
+    finally:
+        server.close()
+
+
+def test_authenticated_handoff_control_is_retry_safe(tmp_path: Path) -> None:
+    state = _terminal_payload(tmp_path / "capture", str(uuid.uuid4()))
+    intervals: dict[str, AuthenticationHandoff] = {}
+
+    def begin(payload: dict, _timeout: float) -> dict:
+        interval_id = str(uuid.UUID(payload["interval_id"]))
+        interval = intervals.setdefault(
+            interval_id,
+            AuthenticationHandoff(
+                interval_id=interval_id,
+                methods=tuple(payload["methods"]),
+                requires_user_presence=payload["requires_user_presence"],
+                saved_account_selected=payload["saved_account_selected"],
+                started_at=1.0,
+                suppressed_sources=(
+                    "audio",
+                    "browser",
+                    "input",
+                    "screen",
+                    "structural",
+                    "window",
+                ),
+            ),
+        )
+        return {
+            **state,
+            "authentication_protected": True,
+            "authentication": {"interval_id": interval.interval_id},
+        }
+
+    def end(payload: dict, _timeout: float) -> dict:
+        interval = intervals[payload["interval_id"]]
+        if interval.outcome is None:
+            interval = AuthenticationHandoff.model_validate(
+                interval.model_copy(
+                    update={
+                        "ended_at": 3.0,
+                        "outcome": payload["outcome"],
+                        "resume_frame": FreshFrameProof(
+                            timestamp=2.0,
+                            source_ordinal=2,
+                            frame_sha256="a" * 64,
+                            capture_source="desktop-screenshot",
+                        ),
+                    }
+                ).model_dump(mode="json")
+            )
+            intervals[interval.interval_id] = interval
+        return {
+            **state,
+            "authentication_protected": False,
+            "authentication": interval.model_dump(mode="json"),
+        }
+
+    server = RecorderControlServer(
+        capture_dir=state["capture_dir"],
+        snapshot=lambda: dict(state),
+        stop=lambda _timeout: dict(state),
+        begin_authentication=begin,
+        end_authentication=end,
+        session_id=state["session_id"],
+        runtime_dir=tmp_path / "runtime",
+    ).start()
+    try:
+        interval_id = str(uuid.uuid4())
+        first = begin_authentication_handoff(
+            methods=("password_manager", "mfa"),
+            requires_user_presence=True,
+            saved_account_selected=True,
+            interval_id=interval_id,
+            session_id=state["session_id"],
+            runtime_dir=tmp_path / "runtime",
+        )
+        retried = begin_authentication_handoff(
+            methods=("password_manager", "mfa"),
+            requires_user_presence=True,
+            saved_account_selected=True,
+            interval_id=interval_id,
+            session_id=state["session_id"],
+            runtime_dir=tmp_path / "runtime",
+        )
+        assert first == retried
+
+        completed = end_authentication_handoff(
+            first,
+            session_id=state["session_id"],
+            runtime_dir=tmp_path / "runtime",
+        )
+        repeated = end_authentication_handoff(
+            first,
+            session_id=state["session_id"],
+            runtime_dir=tmp_path / "runtime",
+        )
+        assert completed == repeated
+        assert completed.outcome == "completed"
     finally:
         server.close()
 
@@ -703,9 +808,11 @@ def test_recorder_failure_keeps_incomplete_state_and_removes_endpoint(
         (capture_dir / control.TERMINAL_STATE_FILENAME).read_text(encoding="utf-8")
     )
     assert terminal["phase"] == "failed"
+    assert terminal["ready"] is False
     assert terminal["complete"] is False
     assert terminal["integrity_verified"] is False
-    assert terminal["error_code"] == "recording_or_finalization_failed"
+    assert terminal["error_code"] == "recording_failed"
+    assert terminal["failure_stage"] == "recording_startup"
 
 
 def test_complete_state_write_failure_cannot_return_success(

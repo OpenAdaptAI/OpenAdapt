@@ -11,6 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
+from openadapt_capture.authentication import (
+    AuthenticationHandoff,
+    AuthenticationHandoffError,
+    frame_sha256,
+    load_authentication_handoffs,
+)
 from openadapt_capture.browser_events import (
     BoundingBox,
     BrowserClickEvent,
@@ -894,6 +900,121 @@ def _validate_database_contract(
     elif capture.video_path is not None:
         raise InvalidCaptureEvent("sealed capture inventories an MP4 but claims no video frames")
 
+    try:
+        authentication_handoffs = capture.authentication_handoffs
+    except AuthenticationHandoffError as exc:
+        raise InvalidCaptureEvent(str(exc)) from exc
+    source_rows = [row for rows in rows_by_kind.values() for row in rows]
+
+    def validate_authentication_frame(proof, label: str):
+        screenshot = screenshots_by_ordinal.get(proof.source_ordinal)
+        if screenshot is None or screenshot.timestamp != proof.timestamp:
+            raise InvalidCaptureEvent(
+                f"authentication {label} proof does not name a retained frame"
+            )
+        if screenshot.png_data:
+            from PIL import Image
+
+            with Image.open(io.BytesIO(screenshot.png_data)) as retained:
+                retained.load()
+                if frame_sha256(retained) != proof.frame_sha256:
+                    raise InvalidCaptureEvent(
+                        f"authentication {label} proof differs from retained pixels"
+                    )
+        if is_v2:
+            window_row = windows_rows_by_ordinal.get(proof.source_ordinal)
+            if window_row is None:
+                raise InvalidCaptureEvent(
+                    f"window authentication {label} proof has no atomic geometry"
+                )
+            state = WindowCaptureStateV2.model_validate(window_row.state)
+            if (
+                proof.capture_source != state.capture_source
+                or proof.window_geometry_generation != state.geometry_generation
+            ):
+                raise InvalidCaptureEvent(
+                    f"authentication {label} proof differs from its window frame"
+                )
+        elif (
+            proof.capture_source != "desktop-screenshot"
+            or proof.window_geometry_generation is not None
+        ):
+            raise InvalidCaptureEvent(
+                f"desktop authentication {label} proof has invalid source metadata"
+            )
+        return screenshot
+
+    for handoff in authentication_handoffs:
+        if handoff.outcome is None or handoff.ended_at is None:
+            raise InvalidCaptureEvent("sealed capture has an open authentication handoff")
+        entry = handoff.entry_frame
+        if entry is None:
+            raise InvalidCaptureEvent(
+                "authentication handoff has no clean entry-frame proof"
+            )
+        entry_screenshot = validate_authentication_frame(entry, "entry")
+        if entry.timestamp > handoff.started_at:
+            raise InvalidCaptureEvent(
+                "authentication entry frame follows the protected start"
+            )
+        if any(
+            row.source_ordinal > entry.source_ordinal
+            and row.timestamp <= handoff.started_at
+            for row in source_rows
+        ):
+            raise InvalidCaptureEvent(
+                "authentication entry proof is not the last pre-handoff frame"
+            )
+        if handoff.outcome == "aborted":
+            if any(
+                row.source_ordinal > entry.source_ordinal
+                for row in source_rows
+            ):
+                raise InvalidCaptureEvent(
+                    "sealed capture retained a sensitive source after an aborted "
+                    "authentication handoff started"
+                )
+            continue
+        proof = handoff.resume_frame
+        if proof is None:
+            raise InvalidCaptureEvent(
+                "closed authentication handoff has no fresh-frame proof"
+            )
+        screenshot = validate_authentication_frame(proof, "resume")
+        if proof.source_ordinal <= entry.source_ordinal:
+            raise InvalidCaptureEvent(
+                "authentication resume frame does not follow its entry frame"
+            )
+        if not (handoff.started_at <= proof.timestamp <= handoff.ended_at):
+            raise InvalidCaptureEvent(
+                "authentication resume frame is outside its protected interval"
+            )
+        leaked_rows = []
+        for row in source_rows:
+            if row is entry_screenshot:
+                continue
+            if row is screenshot:
+                continue
+            if (
+                is_v2
+                and row in rows_by_kind["window"]
+                and row.source_ordinal in {entry.source_ordinal, proof.source_ordinal}
+                and row.timestamp in {entry.timestamp, proof.timestamp}
+            ):
+                continue
+            if (
+                entry.source_ordinal < row.source_ordinal <= proof.source_ordinal
+                or (
+                    row.source_ordinal > proof.source_ordinal
+                    and row.timestamp <= proof.timestamp
+                )
+            ):
+                leaked_rows.append(row)
+        if leaked_rows:
+            raise InvalidCaptureEvent(
+                "sealed capture retained a sensitive source inside an authentication handoff"
+            )
+
     list(capture.actions(include_moves=True))
 
 
@@ -1059,6 +1180,12 @@ class CaptureSession:
     def terminal(self):
         """Return the verified immutable terminal, or None for a legacy load."""
         return self._verified_terminal
+
+    @property
+    def authentication_handoffs(self) -> tuple[AuthenticationHandoff, ...]:
+        """Return sealed source-suppression intervals without credential values."""
+
+        return load_authentication_handoffs(self.capture_dir).intervals
 
     @property
     def id(self) -> str:
@@ -1269,6 +1396,8 @@ class CaptureSession:
         result = self.window_events()
         if not result:
             raise InvalidCaptureEvent("v2 window-scoped capture has no window events")
+        previous_stream_generation: int | None = None
+        previous_stream_sequence: int | None = None
         for event in result:
             state: WindowCaptureStateV2 | None = event.window_capture_v2
             if state is None:
@@ -1283,8 +1412,35 @@ class CaptureSession:
                 or event.height != int(height)
             ):
                 raise InvalidCaptureEvent("stored WindowEvent columns differ from their v2 bounds")
-            if not state.on_screen:
-                raise InvalidCaptureEvent("v2 window event retained an off-screen target")
+            if not state.on_screen and not state.visibility_independent:
+                raise InvalidCaptureEvent(
+                    "v2 window event retained an off-screen target without a "
+                    "visibility-independent provider"
+                )
+            if state.capture_source == "macos-screencapturekit-stream":
+                generation = state.stream_generation
+                sequence = state.stream_sequence
+                if generation is None or sequence is None:
+                    raise InvalidCaptureEvent(
+                        "ScreenCaptureKit frame evidence is incomplete"
+                    )
+                if (
+                    previous_stream_generation is not None
+                    and generation < previous_stream_generation
+                ):
+                    raise InvalidCaptureEvent(
+                        "ScreenCaptureKit stream generation moved backward"
+                    )
+                if (
+                    previous_stream_generation == generation
+                    and previous_stream_sequence is not None
+                    and sequence <= previous_stream_sequence
+                ):
+                    raise InvalidCaptureEvent(
+                        "ScreenCaptureKit stream sequence is not increasing"
+                    )
+                previous_stream_generation = generation
+                previous_stream_sequence = sequence
         return result
 
     def actions(self, include_moves: bool = False) -> Iterator[Action]:

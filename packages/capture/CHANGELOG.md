@@ -2,12 +2,24 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Features
+
+- Add attended authentication handoffs. Capture suppresses sensitive source
+  data, seals a bounded method marker, and retains a fresh exact frame before
+  native input resumes. The same retry-safe operations are available through
+  the authenticated local control channel.
+
 ## v1.3.0 (2026-08-28)
 
 _This release is published under the MIT License._
 
 ### Features
 
+- Capture an exact macOS window through a desktop-independent
+  ScreenCaptureKit filter. Exact-window Quartz and system-utility providers
+  remain as compatibility paths.
 - **capture**: Seal native action geometry at capture time
   ([#94](https://github.com/OpenAdaptAI/openadapt-capture/pull/94),
   [`08727ab`](https://github.com/OpenAdaptAI/openadapt-capture/commit/08727ab0e471d4a6de3c460099b1a8a97758cf6f))
@@ -37,6 +49,14 @@ _This release is published under the MIT License._
 
 ### Bug Fixes
 
+- Refuse ambiguous macOS window selectors instead of choosing a different
+  matching window.
+- Keep FFmpeg outside the recorder's interrupt process group so Ctrl-C can
+  finish the video trailer.
+- Ignore unattributable macOS modifier-flag events without terminating the
+  input observer.
+- Report failed and finalizing sessions with `ready: false`, plus a stable
+  failure stage and error code.
 - **ci**: Allowlist the published extension key by exact value
   ([#112](https://github.com/OpenAdaptAI/openadapt-capture/pull/112),
   [`69a123f`](https://github.com/OpenAdaptAI/openadapt-capture/commit/69a123fccfa6dcbf848e486301832cc826ab679a))

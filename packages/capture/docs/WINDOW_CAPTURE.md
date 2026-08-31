@@ -37,10 +37,24 @@ matching how `openadapt-flow` identifies the same window at replay time. The
 selectors can also be set through config or environment
 (`RECORD_WINDOW_OWNER` / `RECORD_WINDOW_TITLE`).
 
+On macOS, a selector that still matches multiple capturable windows fails.
+Use the complete title. Capture never chooses the largest match when that can
+bind the recording to a different window.
+
 In this mode:
 
-- **Frames are the target window's pixels.** macOS captures the window's own
-  buffer (`CGWindowListCreateImage`, the identical call flow's replay uses);
+- **Frames are the target window's pixels.** On current macOS, one persistent
+  ScreenCaptureKit stream stays bound to a desktop-independent exact-window
+  filter. It accepts complete frames and reuses the last complete pixels only
+  when ScreenCaptureKit reports that the window is idle. Each window event
+  retains the stream generation, sequence, frame status, display time, pixel
+  time, and a capture-evidence digest. The legacy Quartz
+  image API and `/usr/sbin/screencapture -o -l` remain exact-window
+  compatibility paths. A failed provider stays disabled for that recording.
+  This supports an occluded window and a window on another Space. It also
+  supports a window that macOS does not report as on screen. macOS Accessibility
+  must confirm that an off-screen exact window is not minimized. The recorder
+  refuses a minimized window because its backing pixels can be stale.
   Linux X11 reads an XComposite named-window pixmap. It doesn't use a root
   screenshot, so another window cannot replace the target pixels. Windows
   grabs the window's screen region, so keep the window unoccluded.
@@ -71,6 +85,9 @@ In this mode:
   with a warning instead of being recorded in the wrong coordinate space; a
   lost window, capture failure, or unexpected output-frame size fails the
   session instead of producing complete-looking media with an evidence gap.
+
+The persisted frame state names the provider that produced the pixels and
+whether the provider was independent of window visibility.
 
 Linux window mode requires an X11 session with EWMH and XComposite. Capture
 won't start window mode in a native Wayland or XWayland-only session. A future

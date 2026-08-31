@@ -838,6 +838,13 @@ class FFmpegFrameStage:
 
     def _start(self) -> subprocess.Popen[bytes]:
         stderr_file = tempfile.TemporaryFile(mode="w+b")
+        process_group_kwargs: dict[str, object]
+        if os.name == "nt":
+            process_group_kwargs = {
+                "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP,
+            }
+        else:
+            process_group_kwargs = {"start_new_session": True}
         try:
             process = subprocess.Popen(
                 self._encode_command(),
@@ -846,6 +853,7 @@ class FFmpegFrameStage:
                 stderr=stderr_file,
                 bufsize=0,
                 shell=False,
+                **process_group_kwargs,
             )
         except OSError as exc:
             stderr_file.close()

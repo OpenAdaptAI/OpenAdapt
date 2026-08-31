@@ -91,6 +91,8 @@ _CANONICAL_KEY_NAMES = {
     "ctrl_r": "ctrl",
 }
 
+_MODIFIER_KEYCODES = frozenset({54, 55, 56, 57, 58, 59, 60, 61, 62, 63})
+
 
 class DarwinInputObserver(ThreadedInputObserver):
     """Observe macOS keyboard and mouse input without modifying the event stream."""
@@ -387,6 +389,15 @@ class DarwinInputObserver(ThreadedInputObserver):
         timestamp: float | None = None,
     ) -> None:
         quartz = self._quartz
+        if event_type == quartz.kCGEventFlagsChanged and self.observe_keyboard:
+            keycode = self._keycode(event)
+            if keycode not in _MODIFIER_KEYCODES:
+                # Quartz can emit flagsChanged with keycode 0 when it cannot
+                # attribute the flag transition to one physical modifier.
+                # The event must invalidate an in-flight frame, but it cannot
+                # become an honest keyboard action.
+                self._mark_native_activity()
+                return
         injected = self._is_injected(event)
         # Production callbacks always pass the receipt time. Keeping ``None``
         # for direct normalization calls makes the pure helper independently

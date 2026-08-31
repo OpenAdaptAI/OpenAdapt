@@ -42,20 +42,23 @@ One recording has these stages:
 2. Resolve the initial native-window or virtual-desktop coordinate scope.
 3. Create the per-capture SQLite database and media staging path.
 4. Observe native input and screen frames on separate workers.
-5. Reserve each observation in one ordered source journal before any optional
+5. Apply the optional authentication gate before source retention. An open gate
+   drops screen, input, structure, window data, browser-category data, and audio
+   content. A close waits for one fresh frame.
+6. Reserve each observation in one ordered source journal before any optional
    structural lookup. A failed reservation fails the session; later events
    cannot pass it.
-6. For a native window, enqueue each frame and its window geometry as one
+7. For a native window, enqueue each frame and its window geometry as one
    source-ordinal pair. Publish that geometry to input observers only after the
    pair enters the journal.
-7. Bind each actionable input to the last published frame pair and optional
+8. Bind each actionable input to the last published frame pair and optional
    structural observation. Retain one ordinal-later frame after input stops.
-8. Stream RGB frames to a separately provisioned FFmpeg process.
-9. Close, verify, and atomically promote the MP4. Retain an incomplete partial
+9. Stream RGB frames to a separately provisioned FFmpeg process.
+10. Close, verify, and atomically promote the MP4. Retain an incomplete partial
    file on an encoder failure and never report it as complete media.
-10. Post-process raw input into the public action view. A merged action keeps
+11. Post-process raw input into the public action view. A merged action keeps
     its terminal primitive's source binding and refuses mixed geometry epochs.
-11. Reconcile committed rows with producer counts, verify the v2 frame/action
+12. Reconcile committed rows with producer counts, verify the v2 frame/action
     relations, inventory every immutable artifact, and write the completion
     seal.
 
@@ -104,7 +107,42 @@ Each current window frame carries a process-bound window identity, display
 topology digest, and geometry epoch digest. The window and screenshot rows use
 the same source ordinal. An action uses a later ordinal and names the exact pair
 that supplied its coordinates. Capture refuses process replacement, topology
-drift, off-screen state, mixed generations, or a missing pair.
+drift, a minimized or unproven off-screen state, mixed generations, or a
+missing pair. A desktop-independent exact-window provider can capture an
+occluded window or a window on another macOS Space.
+
+## Authentication observation boundary
+
+The default operating procedure authenticates before recording. Some workflows
+need a login step, and long sessions can expire. Capture supports those cases
+with a source-time protected interval.
+
+The controller enters protection before it writes the open marker. It waits for
+each in-flight source operation to finish. Native input holds that boundary from
+receipt-time journal reservation through delivery, so a slow structural query
+cannot cross the marker. Audio uses a process-shared suppression event and
+inserts generated silence to preserve its clock. The parent waits for an audio
+acknowledgement taken under the callback lock before it writes the start time.
+Failure to reach this cut stops the recording. It cannot resume with an
+unmarked gap.
+
+Before the marker starts, the screen worker journals one clean entry frame.
+This frame closes any pending after-frame relationship from normal input. New
+input remains blocked while that frame enters the journal.
+
+Normal close keeps all sources protected while the screen worker acquires a new
+frame. The frame enters the ordered journal before the marker records its
+source ordinal and pixel digest. A window-scoped frame also binds its geometry
+generation. The controller persists the close marker before it reopens input.
+
+`authentication-handoffs.json` is canonical JSON and part of the immutable
+artifact inventory. The marker uses a fixed method vocabulary and accepts no
+free text. A stopped interval becomes `aborted` and has no resume claim.
+
+Capture proves suppression and frame reacquisition. It does not prove semantic
+login success and does not hold credential authority. See
+[`AUTHENTICATION_HANDOFF.md`](AUTHENTICATION_HANDOFF.md) for the API, schema,
+control-channel behavior, and loader checks.
 
 ## Completion and consumer boundary
 

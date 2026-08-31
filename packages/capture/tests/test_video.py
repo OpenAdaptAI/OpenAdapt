@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import multiprocessing
+import os
 import shutil
 import subprocess
 import time
@@ -389,6 +390,10 @@ def test_direct_stream_preserves_pts_timing_without_png_staging(tmp_path, monkey
 
     def popen(command, **kwargs):
         assert kwargs["shell"] is False
+        if os.name == "nt":
+            assert kwargs["creationflags"] == subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            assert kwargs["start_new_session"] is True
         process = _FakeProcess(list(command))
         kwargs["stderr"].flush()
         processes.append(process)

@@ -716,6 +716,21 @@ def test_key_press_release_and_modifier_canonicalization() -> None:
     ]
 
 
+def test_unattributable_flags_changed_is_ignored_without_failing_observer() -> None:
+    quartz = FakeQuartz()
+    events = []
+    observer = make_observer(quartz, events.append)
+
+    observer.start()
+    event = FakeEvent(fields={quartz.kCGKeyboardEventKeycode: 0})
+    assert observer._event_callback(None, quartz.kCGEventFlagsChanged, event, None) is event
+    observer.check_health()
+    observer.stop()
+
+    assert events == []
+    assert observer._input_receipt_count == 1
+
+
 def test_first_observed_modifier_release_does_not_toggle_to_press() -> None:
     quartz = FakeQuartz()
     events = []

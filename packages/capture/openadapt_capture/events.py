@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from openadapt_capture.structural import StructuralObservation
 from openadapt_capture.window_capture import (
     WINDOW_CAPTURE_SCHEMA_VERSION,
+    window_capture_evidence_sha256,
     window_geometry_epoch_sha256,
 )
 
@@ -86,6 +87,17 @@ class WindowCaptureStateV2(BaseModel):
     pid: int = Field(gt=0)
     process_start_time: float = Field(gt=0)
     coordinate_source: str = Field(min_length=1)
+    capture_source: str = Field(default="platform-window-image", min_length=1)
+    visibility_independent: bool = False
+    frame_status: Literal["complete", "idle"] | None = None
+    frame_display_time: int | None = Field(default=None, ge=0)
+    pixel_display_time: int | None = Field(default=None, ge=0)
+    stream_generation: int | None = Field(default=None, ge=1)
+    stream_sequence: int | None = Field(default=None, ge=1)
+    capture_evidence_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
     geometry_generation: int = Field(ge=1)
     geometry_epoch_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     display_topology_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -115,6 +127,55 @@ class WindowCaptureStateV2(BaseModel):
             raise ValueError("window capture geometry must be finite")
         if self.bounds[2] <= 0 or self.bounds[3] <= 0:
             raise ValueError("window capture bounds must have positive dimensions")
+        if not self.on_screen:
+            if not self.visibility_independent:
+                raise ValueError(
+                    "an off-screen window requires a visibility-independent provider"
+                )
+            if self.capture_source not in {
+                "macos-screencapturekit",
+                "macos-screencapturekit-stream",
+                "macos-screencapture-utility",
+            }:
+                raise ValueError(
+                    "an off-screen window requires a proven exact-window capture source"
+                )
+        if self.capture_source == "macos-screencapturekit-stream":
+            if (
+                self.frame_status is None
+                or self.frame_display_time is None
+                or self.pixel_display_time is None
+                or self.stream_generation is None
+                or self.stream_sequence is None
+                or self.capture_evidence_sha256 is None
+            ):
+                raise ValueError(
+                    "a ScreenCaptureKit stream frame requires retained frame evidence"
+                )
+            if self.pixel_display_time > self.frame_display_time:
+                raise ValueError(
+                    "ScreenCaptureKit pixel time cannot follow its frame proof time"
+                )
+            if (
+                self.frame_status == "complete"
+                and self.pixel_display_time != self.frame_display_time
+            ):
+                raise ValueError(
+                    "a complete ScreenCaptureKit frame must bind its pixel time"
+                )
+        elif any(
+            value is not None
+            for value in (
+                self.frame_status,
+                self.frame_display_time,
+                self.pixel_display_time,
+                self.stream_generation,
+                self.stream_sequence,
+            )
+        ):
+            raise ValueError(
+                "non-stream capture sources cannot retain ScreenCaptureKit frame evidence"
+            )
         if any(value <= 0 for value in (*self.viewport, *self.source_viewport)):
             raise ValueError("window capture viewports must be positive")
         left, top, width, height = self.content_rect
@@ -160,6 +221,17 @@ class WindowCaptureStateV2(BaseModel):
             self.model_dump(mode="json", exclude={"geometry_epoch_sha256"})
         ):
             raise ValueError("window geometry epoch digest is invalid")
+        if (
+            self.capture_evidence_sha256 is not None
+            and self.capture_evidence_sha256
+            != window_capture_evidence_sha256(
+                self.model_dump(
+                    mode="json",
+                    exclude={"capture_evidence_sha256"},
+                )
+            )
+        ):
+            raise ValueError("window capture evidence digest is invalid")
         return self
 
 

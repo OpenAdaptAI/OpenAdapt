@@ -34,6 +34,13 @@ from typing import Any, Callable
 
 import psutil
 
+from openadapt_capture.authentication import (
+    AuthenticationHandoff,
+    AuthenticationHandoffError,
+    AuthenticationHandoffHandle,
+    AuthenticationMethod,
+)
+
 CONTROL_SCHEMA_VERSION = "openadapt.capture-control.v1"
 TERMINAL_STATE_SCHEMA_VERSION = "openadapt.capture-terminal.v1"
 TERMINAL_STATE_FILENAME = "capture-state.json"
@@ -69,7 +76,9 @@ class RecorderStatus:
     complete: bool
     integrity_verified: bool
     event_counts: dict[str, int]
+    authentication_protected: bool = False
     error_code: str | None = None
+    failure_stage: str | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "RecorderStatus":
@@ -92,8 +101,14 @@ class RecorderStatus:
                 complete=payload["complete"] is True,
                 integrity_verified=payload["integrity_verified"] is True,
                 event_counts=counts,
+                authentication_protected=payload.get("authentication_protected") is True,
                 error_code=(
                     str(payload["error_code"]) if payload.get("error_code") is not None else None
+                ),
+                failure_stage=(
+                    str(payload["failure_stage"])
+                    if payload.get("failure_stage") is not None
+                    else None
                 ),
             )
         except (KeyError, TypeError, ValueError) as exc:
@@ -916,7 +931,8 @@ def _request(
     command: str,
     *,
     timeout: float,
-) -> RecorderStatus:
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     timeout = float(timeout)
     if not 0 < timeout <= _MAX_TIMEOUT_SECONDS:
         raise ValueError(f"timeout must be between 0 and {_MAX_TIMEOUT_SECONDS} seconds")
@@ -931,6 +947,8 @@ def _request(
         "issued_at": time.time(),
         "timeout_seconds": timeout,
     }
+    if payload is not None:
+        request["payload"] = payload
     request["mac"] = _message_mac(descriptor.token, request)
     try:
         with socket.create_connection(
@@ -974,6 +992,13 @@ def _request(
     if response.get("ok") is not True:
         error_code = str(response.get("error_code") or "control_request_failed")
         raise CaptureControlError(f"Capture control failed: {error_code}")
+    return response
+
+
+def _status_from_response(
+    response: dict[str, Any],
+    descriptor: _ControlDescriptor,
+) -> RecorderStatus:
     status = RecorderStatus.from_payload(response)
     if status.session_id != descriptor.session_id:
         raise CaptureControlAuthenticationError(
@@ -991,7 +1016,10 @@ def status_recording(
     """Return the status of one exact active Capture session."""
 
     descriptor = _select_descriptor(session_id, runtime_dir)
-    return _request(descriptor, "status", timeout=timeout)
+    return _status_from_response(
+        _request(descriptor, "status", timeout=timeout),
+        descriptor,
+    )
 
 
 def stop_recording(
@@ -1009,12 +1037,85 @@ def stop_recording(
     """
 
     descriptor = _select_descriptor(session_id, runtime_dir)
-    status = _request(descriptor, "stop", timeout=timeout)
+    status = _status_from_response(
+        _request(descriptor, "stop", timeout=timeout),
+        descriptor,
+    )
     if not status.complete or not status.integrity_verified or status.phase != "complete":
         raise CaptureControlError(
             f"Capture stop did not produce a verified complete session ({status.phase})."
         )
     return status
+
+
+def begin_authentication_handoff(
+    *,
+    methods: AuthenticationMethod | tuple[AuthenticationMethod, ...],
+    requires_user_presence: bool,
+    saved_account_selected: bool = False,
+    interval_id: str | None = None,
+    session_id: str | None = None,
+    runtime_dir: str | os.PathLike[str] | None = None,
+    timeout: float = 10.0,
+) -> AuthenticationHandoffHandle:
+    """Start a retry-safe protected interval in one exact recorder."""
+
+    if isinstance(methods, str):
+        normalized_methods = (methods,)
+    else:
+        normalized_methods = tuple(methods)
+    selected_interval_id = str(uuid.UUID(interval_id)) if interval_id else str(uuid.uuid4())
+    descriptor = _select_descriptor(session_id, runtime_dir)
+    response = _request(
+        descriptor,
+        "authentication.begin",
+        timeout=timeout,
+        payload={
+            "interval_id": selected_interval_id,
+            "methods": normalized_methods,
+            "requires_user_presence": requires_user_presence,
+            "saved_account_selected": saved_account_selected,
+        },
+    )
+    authentication = response.get("authentication")
+    if not isinstance(authentication, dict) or authentication.get(
+        "interval_id"
+    ) != selected_interval_id:
+        raise CaptureControlAuthenticationError(
+            "The recorder returned an invalid authentication handoff."
+        )
+    return AuthenticationHandoffHandle(selected_interval_id)
+
+
+def end_authentication_handoff(
+    handle: AuthenticationHandoffHandle,
+    *,
+    outcome: str = "completed",
+    session_id: str | None = None,
+    runtime_dir: str | os.PathLike[str] | None = None,
+    timeout: float = 10.0,
+) -> AuthenticationHandoff:
+    """Retain a fresh frame and end one exact protected interval."""
+
+    descriptor = _select_descriptor(session_id, runtime_dir)
+    response = _request(
+        descriptor,
+        "authentication.end",
+        timeout=timeout,
+        payload={"interval_id": handle.interval_id, "outcome": outcome},
+    )
+    authentication = response.get("authentication")
+    try:
+        handoff = AuthenticationHandoff.model_validate(authentication)
+    except Exception as exc:
+        raise CaptureControlAuthenticationError(
+            "The recorder returned an invalid authentication handoff."
+        ) from exc
+    if handoff.interval_id != handle.interval_id or handoff.outcome != outcome:
+        raise CaptureControlAuthenticationError(
+            "The recorder returned a different authentication handoff."
+        )
+    return handoff
 
 
 class _LoopbackServer(socketserver.ThreadingTCPServer):
@@ -1065,6 +1166,8 @@ class RecorderControlServer:
         capture_dir: str,
         snapshot: Callable[[], dict[str, Any]],
         stop: Callable[[float], dict[str, Any]],
+        begin_authentication: Callable[[dict[str, Any], float], dict[str, Any]] | None = None,
+        end_authentication: Callable[[dict[str, Any], float], dict[str, Any]] | None = None,
         session_id: str | None = None,
         runtime_dir: str | os.PathLike[str] | None = None,
     ) -> None:
@@ -1074,6 +1177,8 @@ class RecorderControlServer:
         self.process_started_at = psutil.Process(self.pid).create_time()
         self._snapshot = snapshot
         self._stop = stop
+        self._begin_authentication = begin_authentication
+        self._end_authentication = end_authentication
         self._runtime_dir_arg = runtime_dir
         self._token = secrets.token_urlsafe(48)
         self._server: _LoopbackServer | None = None
@@ -1175,6 +1280,7 @@ class RecorderControlServer:
         ok: bool,
         status: dict[str, Any] | None = None,
         error_code: str | None = None,
+        authentication: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         response: dict[str, Any] = {
             "schema_version": CONTROL_SCHEMA_VERSION,
@@ -1193,11 +1299,15 @@ class RecorderControlServer:
                 "integrity_verified",
                 "event_counts",
                 "error_code",
+                "failure_stage",
+                "authentication_protected",
             ):
                 if key in status:
                     response[key] = status[key]
         if error_code:
             response["error_code"] = error_code
+        if authentication is not None:
+            response["authentication"] = authentication
         response["mac"] = _message_mac(self._token, response)
         return response
 
@@ -1215,6 +1325,14 @@ class RecorderControlServer:
                 status = self._snapshot()
             elif command == "stop":
                 status = self._stop(timeout)
+            elif command == "authentication.begin":
+                if self._begin_authentication is None:
+                    raise CaptureControlAuthenticationError("unsupported_command")
+                status = self._begin_authentication(request.get("payload"), timeout)
+            elif command == "authentication.end":
+                if self._end_authentication is None:
+                    raise CaptureControlAuthenticationError("unsupported_command")
+                status = self._end_authentication(request.get("payload"), timeout)
             else:
                 raise CaptureControlAuthenticationError("unsupported_command")
             complete = status.get("complete") is True
@@ -1233,7 +1351,12 @@ class RecorderControlServer:
                     error_code=str(status.get("error_code") or "finalization_incomplete"),
                 )
             else:
-                response = self._response(request_id, ok=True, status=status)
+                response = self._response(
+                    request_id,
+                    ok=True,
+                    status=status,
+                    authentication=status.get("authentication"),
+                )
         except CaptureControlAuthenticationError:
             # Do not reveal whether a token, session, or process field was wrong.
             response = self._response(
@@ -1246,6 +1369,12 @@ class RecorderControlServer:
                 request_id,
                 ok=False,
                 error_code="invalid_request",
+            )
+        except AuthenticationHandoffError:
+            response = self._response(
+                request_id,
+                ok=False,
+                error_code="authentication_handoff_failed",
             )
         try:
             connection.sendall(_canonical_json(response) + b"\n")
@@ -1283,7 +1412,9 @@ __all__ = [
     "CaptureControlError",
     "CaptureControlUnavailable",
     "RecorderStatus",
+    "begin_authentication_handoff",
     "discover_recorders",
+    "end_authentication_handoff",
     "status_recording",
     "stop_recording",
 ]
