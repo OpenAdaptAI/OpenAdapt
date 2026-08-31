@@ -1912,7 +1912,8 @@ def test_macos_minimized_lookup_sets_bounded_ax_timeout(monkeypatch):
         on_screen=False,
         process_start_time=123.0,
     )
-    deadline = time.monotonic() + 0.05
+    monkeypatch.setattr(window_capture_module.time, "monotonic", lambda: 100.0)
+    deadline = 100.05
 
     assert window_capture_module._macos_window_minimized(
         window,

@@ -6,6 +6,7 @@ import io
 import itertools
 import json
 import multiprocessing
+import os
 import queue
 import threading
 import time
@@ -53,12 +54,13 @@ def _bound_controller(tmp_path):
     return controller
 
 
-def test_empty_manifest_is_created_with_owner_only_permissions(tmp_path) -> None:
+def test_empty_manifest_is_created_canonically(tmp_path) -> None:
     _bound_controller(tmp_path)
 
     marker = tmp_path / AUTHENTICATION_HANDOFF_FILENAME
     assert load_authentication_handoffs(tmp_path).intervals == ()
-    assert marker.stat().st_mode & 0o077 == 0
+    if os.name != "nt":
+        assert marker.stat().st_mode & 0o077 == 0
 
 
 def test_begin_drains_inflight_retention_before_marker_starts(tmp_path) -> None:
