@@ -123,7 +123,9 @@ def execute(
 _EXECUTE_OUTCOMES = {
     "verified": "VERIFIED",
     "halted_before_effect": "HALTED",
-    "reconciliation_required": "HALTED",
+    # Delivery uncertainty is not a general halt.  The exact class must reach
+    # the parent so it cannot be absorbed or retried as a proved pre-effect stop.
+    "reconciliation_required": "RECONCILIATION_REQUIRED",
     "rejected_policy": "HALTED",
     "failed_platform": "FAILED",
     "rolled_back_verified": "ROLLED_BACK",
@@ -253,6 +255,39 @@ def child_run_via_execute_client(
                 effect_facts={},
                 success=False,
                 halt_class=type(exc).__name__,
+                report_path=str(report_path),
+            )
+
+        receipt_bindings = {
+            "execution_id": execution_id,
+            "workflow_digest": request.workflow_digest,
+            "workflow_version": request.workflow_version,
+            "qualification_id": request.qualification_id,
+            "environment_id": request.environment_id,
+        }
+        binding_errors = [
+            name
+            for name, expected in receipt_bindings.items()
+            if str(_attr(receipt, name) or "") != str(expected)
+        ]
+        status_receipt_id = str(_attr(status, "evidence_receipt_id") or "")
+        if status_receipt_id != str(_attr(receipt, "receipt_id") or ""):
+            binding_errors.append("evidence_receipt_id")
+        status_outcome = _enum_value(_attr(status, "terminal_outcome"))
+        receipt_outcome = _enum_value(_attr(receipt, "outcome"))
+        if status_outcome != receipt_outcome:
+            binding_errors.append("terminal_outcome")
+        if binding_errors:
+            payload["reason"] = "Execute receipt binding differs"
+            payload["binding_errors"] = sorted(binding_errors)
+            report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            return ChildRunResult(
+                child=child,
+                outcome="RECONCILIATION_REQUIRED",
+                bound_params={str(k): str(v) for k, v in inputs.items()},
+                effect_facts={},
+                success=False,
+                halt_class="execute_receipt_binding_differs",
                 report_path=str(report_path),
             )
 
@@ -472,6 +507,11 @@ def execute_process_contract(
                         child_admissions=child_admissions,
                         child_digests=child_digests,
                         root_run=root_run,
+                        outcome=(
+                            "RECONCILIATION_REQUIRED"
+                            if pred_result.outcome == "RECONCILIATION_REQUIRED"
+                            else "HALTED"
+                        ),
                     )
 
         child_inputs = dict(parent_inputs)
@@ -565,6 +605,11 @@ def execute_process_contract(
                     child_admissions=child_admissions,
                     child_digests=child_digests,
                     root_run=root_run,
+                    outcome=(
+                        "RECONCILIATION_REQUIRED"
+                        if result.outcome == "RECONCILIATION_REQUIRED"
+                        else "HALTED"
+                    ),
                 )
 
     last = results[-1] if results else None
@@ -586,6 +631,7 @@ def execute_process_contract(
                 "FAILED",
                 "ROLLED_BACK",
                 "COMPLETED_UNVERIFIED",
+                "RECONCILIATION_REQUIRED",
             }
             else "HALTED"
         )

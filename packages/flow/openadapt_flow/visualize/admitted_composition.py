@@ -1,8 +1,8 @@
 """Visualizer for a ProcessContract parent. Own spec, not a ProgramGraph.
 
 When ``openadapt-flow visualize`` is pointed at a process-contract directory,
-emit HTML / Mermaid / JSON of the PARENT: one node per admitted child, DAG
-or list-order edges, handoff edges labelled with effect-bound param names,
+emit HTML / Mermaid / JSON of the PARENT: one node per admitted capability, DAG
+or list-order edges, handoff or artifact edges,
 and a terminal titled "End of declared steps" (never Success).
 
 Do not merge two capabilities into one ProgramGraph. The compose visualizer
@@ -19,6 +19,8 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.admitted_composition import (
+    AdmittedChildSpec,
+    CodeChildSpec,
     ProcessContract,
     ProcessContractError,
     is_process_contract_artifact,
@@ -40,6 +42,7 @@ class ProcessNode(BaseModel):
     id: str
     kind: Literal["admitted_capability", "terminal"]
     title: str
+    capability_type: Optional[Literal["flow", "code", "human"]] = None
     admission_id: Optional[str] = None
     admission_id_short: Optional[str] = None
     digest: Optional[str] = None
@@ -54,7 +57,7 @@ class ProcessEdge(BaseModel):
 
     source: str
     target: str
-    kind: Literal["order", "handoff"]
+    kind: Literal["order", "handoff", "artifact"]
     label: str = ""
 
 
@@ -88,19 +91,43 @@ def build_process_graph(parent_dir: Path | str) -> ProcessContractSpec:
         )
     contract = ProcessContract.load(path)
     order = topological_order(contract)
-    nodes = [
-        ProcessNode(
-            id=spec.name,
-            kind="admitted_capability",
-            title=spec.name,
-            admission_id=spec.admission_id,
-            admission_id_short=_short(spec.admission_id),
-            digest=spec.bundle_content_digest,
-            digest_short=_short(spec.bundle_content_digest),
-            surface=spec.surface,
-        )
-        for spec in (contract.child(name) for name in order)
-    ]
+    nodes: list[ProcessNode] = []
+    for name in order:
+        capability = contract.capability(name)
+        if isinstance(capability, AdmittedChildSpec):
+            nodes.append(
+                ProcessNode(
+                    id=capability.name,
+                    kind="admitted_capability",
+                    title=capability.name,
+                    capability_type="flow",
+                    admission_id=capability.admission_id,
+                    admission_id_short=_short(capability.admission_id),
+                    digest=capability.bundle_content_digest,
+                    digest_short=_short(capability.bundle_content_digest),
+                    surface=capability.surface,
+                )
+            )
+        elif isinstance(capability, CodeChildSpec):
+            nodes.append(
+                ProcessNode(
+                    id=capability.name,
+                    kind="admitted_capability",
+                    title=capability.name,
+                    capability_type="code",
+                    surface=capability.role,
+                )
+            )
+        else:
+            nodes.append(
+                ProcessNode(
+                    id=capability.name,
+                    kind="admitted_capability",
+                    title=capability.name,
+                    capability_type="human",
+                    surface=f"{capability.task_kind} on {capability.substrate}",
+                )
+            )
     nodes.append(
         ProcessNode(
             id=TERMINAL_ID,
@@ -121,6 +148,18 @@ def build_process_graph(parent_dir: Path | str) -> ProcessContractSpec:
                 label=handoff.source,
             )
         )
+    for artifact in contract.artifact_edges:
+        edges.append(
+            ProcessEdge(
+                source=artifact.from_child,
+                target=artifact.to_child,
+                kind="artifact",
+                label=(
+                    f"{artifact.from_output} → {artifact.to_input}; "
+                    f"verified by {artifact.verifier_child}"
+                ),
+            )
+        )
     return ProcessContractSpec(name=contract.name, nodes=nodes, edges=edges)
 
 
@@ -134,6 +173,8 @@ def render_process_mermaid(spec: ProcessContractSpec) -> str:
             lines.append(f'  {nid}["{END_OF_DECLARED_STEPS}"]')
             continue
         bits = [node.title]
+        if node.capability_type:
+            bits.append(node.capability_type)
         if node.admission_id_short:
             bits.append(f"adm {node.admission_id_short}")
         if node.digest_short:
@@ -145,8 +186,8 @@ def render_process_mermaid(spec: ProcessContractSpec) -> str:
     for edge in spec.edges:
         src = _mm_id(edge.source)
         dst = _mm_id(edge.target)
-        if edge.kind == "handoff":
-            label = _mm(edge.label or "handoff")
+        if edge.kind in {"handoff", "artifact"}:
+            label = _mm(edge.label or edge.kind)
             lines.append(f"  {src} -.->|{label}| {dst}")
         else:
             lines.append(f"  {src} --> {dst}")
@@ -173,6 +214,8 @@ def render_process_html(spec: ProcessContractSpec, *, title: str | None = None) 
             )
             continue
         meta = []
+        if node.capability_type:
+            meta.append(f"<li>type {html.escape(node.capability_type)}</li>")
         if node.admission_id_short:
             meta.append(f"<li>admission {html.escape(node.admission_id_short)}</li>")
         if node.digest_short:
@@ -187,11 +230,12 @@ def render_process_html(spec: ProcessContractSpec, *, title: str | None = None) 
         )
     handoff_items = []
     for edge in spec.edges:
-        if edge.kind != "handoff":
+        if edge.kind not in {"handoff", "artifact"}:
             continue
         handoff_items.append(
             "<li>"
-            f"{html.escape(edge.source)}.{html.escape(edge.label)} → "
+            f"{html.escape(edge.kind)}: {html.escape(edge.source)}."
+            f"{html.escape(edge.label)} → "
             f"{html.escape(edge.target)}"
             "</li>"
         )
@@ -226,7 +270,7 @@ pre {{ overflow: auto; background: #111827; color: #f9fafb; padding: 12px;
 <div class="row">
 {"".join(cards)}
 </div>
-<h2>Handoffs</h2>
+<h2>Transfers</h2>
 {handoffs_html}
 <h2>Mermaid</h2>
 <pre>{html.escape(mermaid)}</pre>

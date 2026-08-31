@@ -246,10 +246,9 @@ can bind individual steps to different HTTP systems, but that is API actuation
 rather than recorded GUI backend switching. If you installed the OpenAdapt
 launcher, `openadapt flow compose` is the same command.
 
-A process contract is a later layer. Each child already has its own signed
-qualification admission (`openadapt.qualification-admission/v1`). The parent
-names those admissions, the order or DAG, and which confirmed effect-bound
-facts may copy as handoffs:
+A V0 process contract sequences Flow children that already have signed
+qualification admissions. The parent names the order or DAG and the confirmed
+effect-bound facts that may copy as handoffs:
 
 ```bash
 openadapt-flow process \
@@ -267,6 +266,27 @@ openadapt-flow run process --config deploy.yaml
 compose. `openadapt flow process` is the launcher form. Compose still sequences
 recordings. Don't wrap a `composition.json` and call it admitted. Operator
 detail lives in [docs/PROCESS_CONTRACT.md](docs/PROCESS_CONTRACT.md).
+
+ProcessContract v1 adds sealed Python children, signed human tasks, and
+verified content-addressed artifact edges to that same parent:
+
+```bash
+openadapt-flow process --spec process-v1.json --out process
+openadapt-flow run process \
+  --run-dir runs/process-001 \
+  --code-trust code-signers.json \
+  --code-runtime-environment-digest sha256:... \
+  --allow-trusted-code \
+  --process-receipt-private-key runner-ed25519.key \
+  --config deploy.yaml
+```
+
+An admitted transform doesn't prove its output. The named verifier must confirm
+the exact artifact digest before another child can read it. Human completion
+records authority and intent; the declared verifier still proves the effect.
+`RECONCILIATION_REQUIRED` stops the parent and is never retried as a general
+halt. The [V1 design](docs/design/PROCESS_CONTRACT_V1.md) records the execution,
+authentication, portability, and isolation boundaries.
 
 ## How a step finds its target
 

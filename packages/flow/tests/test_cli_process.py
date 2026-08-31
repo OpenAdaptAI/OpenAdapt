@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from openadapt_flow.__main__ import build_parser, main
-from openadapt_flow.admitted_composition import is_process_contract_artifact
+from openadapt_flow.admitted_composition import (
+    ProcessContract,
+    is_process_contract_artifact,
+)
 from openadapt_flow.cli_process import bind_process_child_run
 from tests.test_admitted_composition_authoring import _two_admitted
 
@@ -61,6 +65,52 @@ def test_cli_process_writes_artifact(tmp_path: Path) -> None:
     )
     assert rc == 0
     assert is_process_contract_artifact(out)
+
+
+def test_cli_process_accepts_a_complete_v1_spec(tmp_path: Path) -> None:
+    spec = tmp_path / "process-v1.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "schema_version": "openadapt.process-contract/v1",
+                "name": "review-process",
+                "human_children": [
+                    {
+                        "name": "review",
+                        "kind": "human",
+                        "task_kind": "review",
+                        "substrate": "browser",
+                        "risk_class": "consequential",
+                        "required_authn": "aal2",
+                    }
+                ],
+            }
+        )
+    )
+    out = tmp_path / "process"
+
+    assert main(["process", "--spec", str(spec), "--out", str(out)]) == 0
+    assert ProcessContract.load(out).schema_version == "openadapt.process-contract/v1"
+
+
+def test_cli_v1_certify_refuses_a_false_parent_shortcut(tmp_path: Path) -> None:
+    ProcessContract(
+        schema_version="openadapt.process-contract/v1",
+        name="review-process",
+        human_children=[
+            {
+                "name": "review",
+                "kind": "human",
+                "task_kind": "review",
+                "substrate": "browser",
+                "risk_class": "consequential",
+                "required_authn": "aal2",
+            }
+        ],
+    ).save(tmp_path)
+
+    with pytest.raises(SystemExit, match="no parent certification shortcut"):
+        main(["certify", str(tmp_path)])
 
 
 def test_cli_process_without_admission_refuses_compose_style_children(

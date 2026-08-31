@@ -96,8 +96,7 @@ def test_emitted_process_spec_validates_against_committed_schema(
     from openadapt_flow.visualize.admitted_composition import ProcessContractSpec
 
     current = ProcessContractSpec.model_json_schema()
-    for key in ("properties", "$defs"):
-        assert schema.get(key, {}).keys() == current.get(key, {}).keys()
+    assert schema == current
     jsonschema = __import__("importlib").import_module("jsonschema")
     spec = build_process_graph(_author(tmp_path))
     jsonschema.validate(json.loads(spec.model_dump_json()), schema)

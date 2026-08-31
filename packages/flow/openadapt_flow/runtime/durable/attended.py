@@ -1122,13 +1122,11 @@ class AttendedActionStore:
         try:
             from openadapt_types import HumanDecisionTaskV1, HumanDecisionTaskV2
 
-            model = (
-                HumanDecisionTaskV2
-                if task.get("schema_version") == "openadapt.human-decision-task/v2"
-                else HumanDecisionTaskV1
-            )
-            validated = model.model_validate(task)
-            return validated.verify_hmac(self._key(create=False))
+            if task.get("schema_version") == "openadapt.human-decision-task/v2":
+                validated_v2 = HumanDecisionTaskV2.model_validate(task)
+                return validated_v2.verify_hmac(self._key(create=False))
+            validated_v1 = HumanDecisionTaskV1.model_validate(task)
+            return validated_v1.verify_hmac(self._key(create=False))
         except (ImportError, ValueError, AttendedActionRefused):
             return False
 

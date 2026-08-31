@@ -5597,8 +5597,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--child",
         action="append",
         metavar="NAME=BUNDLE",
-        required=True,
         help="Named admitted child bundle pointer (repeat; at least two)",
+    )
+    p.add_argument(
+        "--spec",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Complete openadapt.process-contract/v1 JSON document. Use this "
+            "for mixed Flow, code, human, and artifact-edge contracts."
+        ),
     )
     p.add_argument(
         "--admission",
@@ -5870,6 +5878,38 @@ def build_parser() -> argparse.ArgumentParser:
             "(OPENADAPT_EXECUTE_ENVIRONMENT_ID)"
         ),
     )
+    p.add_argument(
+        "--code-trust",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Code-admission Ed25519 signer registry for ProcessContract v1. "
+            "Required when the contract contains a code child."
+        ),
+    )
+    p.add_argument(
+        "--code-runtime-environment-digest",
+        default=None,
+        metavar="SHA256",
+        help="Exact admitted runtime-environment digest for code children",
+    )
+    p.add_argument(
+        "--allow-trusted-code",
+        action="store_true",
+        help="Approve exact admitted code that uses the trusted_local profile",
+    )
+    p.add_argument(
+        "--process-receipt-private-key",
+        default=None,
+        metavar="PATH",
+        help="Raw 32-byte Ed25519 key for the ProcessContract v1 terminal receipt",
+    )
+    p.add_argument(
+        "--process-receipt-issuer-key-id",
+        default="runner-evidence-key",
+    )
+    p.add_argument("--process-environment-id", default="environment-local")
+    p.add_argument("--process-runner-id", default="runner-local")
     p.add_argument(
         "--qualification-authority-file",
         default=None,

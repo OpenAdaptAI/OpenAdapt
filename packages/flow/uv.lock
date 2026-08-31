@@ -2143,6 +2143,7 @@ dependencies = [
     { name = "httpx" },
     { name = "idna" },
     { name = "numpy" },
+    { name = "openadapt-types" },
     { name = "opencv-python" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -2245,9 +2246,10 @@ requires-dist = [
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
-    { name = "openadapt-types", marker = "extra == 'console'", specifier = ">=0.10.0,<0.11.0" },
-    { name = "openadapt-types", marker = "extra == 'dev'", specifier = ">=0.10.0,<0.11.0" },
-    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.10.0,<0.11.0" },
+    { name = "openadapt-types", specifier = ">=0.13.0,<0.14.0" },
+    { name = "openadapt-types", marker = "extra == 'console'", specifier = ">=0.13.0,<0.14.0" },
+    { name = "openadapt-types", marker = "extra == 'dev'", specifier = ">=0.13.0,<0.14.0" },
+    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.13.0,<0.14.0" },
     { name = "opencv-python", specifier = ">=4.9" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
@@ -2314,14 +2316,14 @@ presidio = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.10.0"
+version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/54/4cc84122fe9405fa3dbcd1521d252f92ba5d5c9d1eb367187aef06d0d4a3/openadapt_types-0.10.0.tar.gz", hash = "sha256:ea4d784da2d6dae15508d44a1e207a63539448312b3490d8c38110b4013710e8", size = 151235, upload-time = "2026-08-08T19:07:11.487Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/31/60/5bf6f51cb885390ed0176610f3875bce6ccda2df39417b80b4e3649be453/openadapt_types-0.13.0.tar.gz", hash = "sha256:b044ac809cf8891bd7d4aaf44a8b44b8f1b44f7847717e685375ac313ddd831a", size = 175106, upload-time = "2026-08-31T00:26:26.323Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/6e/1efc97ed73c84205149b7e2a7474638afa0a1c29374b867c5a357bdff59e/openadapt_types-0.10.0-py3-none-any.whl", hash = "sha256:37317cc56968a88869cff8181179211365c3f772302e87ce76f95181565125b9", size = 105149, upload-time = "2026-08-08T19:07:10.104Z" },
+    { url = "https://files.pythonhosted.org/packages/44/76/063d4d6a83bded9a4aabdbc809dca65c528a95cfaaffec67de0919d6f4f3/openadapt_types-0.13.0-py3-none-any.whl", hash = "sha256:6549cf6179c0b851ff1e1f788f4600a741741e4d54a1a0edfdcec49d1ed5d273", size = 123629, upload-time = "2026-08-31T00:26:24.74Z" },
 ]
 
 [[package]]

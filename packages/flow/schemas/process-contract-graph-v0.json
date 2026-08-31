@@ -15,7 +15,8 @@
         "kind": {
           "enum": [
             "order",
-            "handoff"
+            "handoff",
+            "artifact"
           ],
           "title": "Kind",
           "type": "string"
@@ -53,6 +54,23 @@
         "title": {
           "title": "Title",
           "type": "string"
+        },
+        "capability_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "flow",
+                "code",
+                "human"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capability Type"
         },
         "admission_id": {
           "anyOf": [

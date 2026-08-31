@@ -5753,7 +5753,11 @@
     },
     {
       "path": "schemas/process-contract-graph-v0.json",
-      "sha256": "c41ed9c8c53eaea968f136888ab1b599710dabeb26c75a4ba55a0deb87940608"
+      "sha256": "fab42e7b607d61ddbc1d1452615109cc5b0e2a1988b9be8a001bcb20b48e9bc5"
+    },
+    {
+      "path": "schemas/process-contract-v1.json",
+      "sha256": "b8eafabe4dc22777dc7fbee7549ef7f5a2ef90e7f03be7dbb2d66c6299e0fb9f"
     },
     {
       "path": "schemas/program-graph-v1.json",

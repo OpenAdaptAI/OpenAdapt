@@ -470,10 +470,16 @@ def _fake_execute_client(*, outcome: str = "verified", model_used: bool = False)
 
         def get_receipt(self, execution_id: str) -> object:
             digest = "sha256:" + "ab" * 32
+            request = self.requests[-1]
             return ExecuteEvidenceReceiptV1(
                 receipt_id="receipt_intake01",
                 execution_id=execution_id,
-                workflow_digest=digest,
+                workflow_digest=request.workflow_digest,
+                workflow_version=request.workflow_version,
+                qualification_id=request.qualification_id,
+                environment_id=request.environment_id,
+                runner_id="runner_12345678",
+                nonce="nonce_12345678",
                 outcome=terminal,
                 contracts=ExecuteEvidenceContractV1(
                     authorization_passed=passed,
@@ -491,7 +497,10 @@ def _fake_execute_client(*, outcome: str = "verified", model_used: bool = False)
                     model_used=model_used,
                     external_network_used=False,
                 ),
-                delivery_uncertain=False,
+                delivery_uncertain=(
+                    terminal is ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+                ),
+                oracle_tier=2 if passed else 0,
                 evidence_digest=digest,
                 issued_at="2026-01-15T12:00:01Z",
             )
@@ -555,3 +564,27 @@ def test_execute_client_model_call_forbids_parent_verified(
     )
     assert report.model_calls >= 1
     assert report.outcome != "VERIFIED"
+
+
+def test_execute_client_keeps_reconciliation_required_exact_and_stops(
+    tmp_path: Path,
+) -> None:
+    contract, parent = _author_two(tmp_path)
+    client = _fake_execute_client(outcome="reconciliation_required")
+
+    report = execute_process_contract(
+        contract,
+        parent_dir=parent,
+        run_dir=tmp_path / "run",
+        child_run=child_run_via_execute_client(
+            client,
+            environment_id="environment_12345678",
+            actor_id="caller_agent_12345678",
+        ),
+        trusted_signers=_trust(),
+        now=NOW,
+    )
+
+    assert report.outcome == "RECONCILIATION_REQUIRED"
+    assert report.children[0].outcome == "RECONCILIATION_REQUIRED"
+    assert len(client.requests) == 1

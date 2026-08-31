@@ -60,6 +60,42 @@ def _load_trust(parent: Path, args: argparse.Namespace) -> dict:
 def cmd_process(args: argparse.Namespace) -> int:
     children_raw = list(getattr(args, "child", None) or [])
     admissions_raw = list(getattr(args, "admission", None) or [])
+    spec_path = getattr(args, "spec", None)
+    if spec_path:
+        incompatible = any(
+            (
+                children_raw,
+                admissions_raw,
+                getattr(args, "handoff", None),
+                getattr(args, "after", None),
+                getattr(args, "allow_halt", None),
+                getattr(args, "input", None),
+                getattr(args, "name", None),
+            )
+        )
+        if incompatible:
+            raise SystemExit(
+                "--spec contains the complete v1 contract; do not combine it "
+                "with v0 authoring flags"
+            )
+        try:
+            contract = ProcessContract.model_validate_json(
+                Path(spec_path).read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"process v1 spec is invalid: {exc}") from exc
+        if contract.schema_version != "openadapt.process-contract/v1":
+            raise SystemExit("--spec requires openadapt.process-contract/v1")
+        output = Path(args.out)
+        if output.exists() and (not output.is_dir() or any(output.iterdir())):
+            raise SystemExit(f"process output {output} already exists and is not empty")
+        contract.save(output)
+        print(
+            f"Authored ProcessContract v1 at {output}: "
+            f"{len(contract.capability_names)} capability(ies), "
+            f"{len(contract.artifact_edges)} verified artifact edge(s)."
+        )
+        return 0
     if len(children_raw) < 2:
         raise SystemExit("process requires at least two --child NAME=BUNDLE flags")
     seen: set[str] = set()
@@ -125,6 +161,12 @@ def cmd_certify_process(args: argparse.Namespace) -> int:
 
     parent = Path(args.bundle)
     contract = ProcessContract.load(parent)
+    if contract.schema_version == "openadapt.process-contract/v1":
+        raise SystemExit(
+            "process v1 has no parent certification shortcut. Certify each Flow "
+            "child, admit each code manifest, and use process run to verify the "
+            "exact signed admissions and human receipts."
+        )
     policy_source = getattr(args, "policy", None)
     if policy_source is None and getattr(args, "config", None):
         from openadapt_flow.deployment import load_deployment
@@ -311,6 +353,78 @@ def cmd_run_process(args: argparse.Namespace, *, run_child) -> int:
     )
     revoked_raw = os.environ.get("OPENADAPT_REVOKED_ADMISSION_IDS", "")
     revoked = {item.strip() for item in revoked_raw.split(",") if item.strip()}
+    if contract.schema_version == "openadapt.process-contract/v1":
+        from openadapt_flow.runtime.process_v1 import (
+            ProcessV1Error,
+            execute_process_contract_v1,
+            load_code_signer_trust,
+        )
+
+        code_trust_path = getattr(args, "code_trust", None)
+        runtime_digest = getattr(args, "code_runtime_environment_digest", None)
+        receipt_key_path = getattr(args, "process_receipt_private_key", None)
+        if contract.code_children and not code_trust_path:
+            raise SystemExit("process v1 with code children requires --code-trust")
+        if contract.code_children and not runtime_digest:
+            raise SystemExit(
+                "process v1 with code children requires "
+                "--code-runtime-environment-digest"
+            )
+        if not receipt_key_path:
+            raise SystemExit(
+                "process v1 requires --process-receipt-private-key; "
+                "an unsigned parent cannot report VERIFIED"
+            )
+        code_signers: dict[str, bytes] = {}
+        revoked_code: set[str] = set()
+        if code_trust_path:
+            try:
+                code_signers, revoked_code = load_code_signer_trust(code_trust_path)
+            except (OSError, ValueError, ProcessV1Error) as exc:
+                raise SystemExit(
+                    f"code signer trust registry is invalid: {exc}"
+                ) from exc
+        try:
+            receipt_key_file = Path(receipt_key_path)
+            if os.name != "nt" and receipt_key_file.stat().st_mode & 0o077:
+                raise SystemExit(
+                    "process receipt key permissions are too broad; use mode 600"
+                )
+            receipt_key = receipt_key_file.read_bytes()
+        except OSError as exc:
+            raise SystemExit(f"process receipt key could not be read: {exc}") from exc
+        qualification_signers = _load_trust(parent, args) if contract.children else {}
+        try:
+            result = execute_process_contract_v1(
+                contract,
+                parent_dir=parent,
+                run_dir=run_dir,
+                inputs={str(k): v for k, v in inputs.items()},
+                child_run=bind_process_child_run(args, run_child),
+                qualification_signers=qualification_signers,
+                code_signers=code_signers,
+                runtime_environment_digest=str(runtime_digest or "sha256:" + "0" * 64),
+                receipt_private_key=receipt_key,
+                receipt_issuer_key_id=str(args.process_receipt_issuer_key_id),
+                environment_id=str(args.process_environment_id),
+                runner_id=str(args.process_runner_id),
+                allow_trusted_code=bool(getattr(args, "allow_trusted_code", False)),
+                revoked_qualification_admissions=revoked,
+                revoked_code_admissions=revoked_code,
+            )
+        except (OSError, ValueError, ProcessV1Error) as exc:
+            print(f"Process REFUSED: {exc}")
+            return 2
+        if result.state.status == "waiting_human":
+            print(
+                "Process waiting for the trusted human-task adapter: "
+                f"{run_dir / 'human' / str(result.state.waiting_child)}"
+            )
+            return 3
+        print(f"Process {str(result.state.outcome).upper()}: {result.state_path}")
+        if result.receipt_path is not None:
+            print(f"Process receipt: {result.receipt_path}")
+        return 0 if result.state.outcome == "verified" else 1
     report = execute_process_contract(
         contract,
         parent_dir=parent,

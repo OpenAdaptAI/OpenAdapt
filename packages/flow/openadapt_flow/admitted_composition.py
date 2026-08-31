@@ -1,12 +1,13 @@
 """ProcessContract parent artifact over independently admitted capabilities.
 
 A ProcessContract is not compose. Compose (`composition.json`) sequences
-compiled recordings and copies those children. This artifact sequences
-capabilities that each present a valid `QualificationAdmissionEnvelope`
-(`openadapt.qualification-admission/v1`). The parent points at the envelope
-and the admitted bundle; it does not copy recordings.
+compiled recordings and copies those children. V0 sequences Flow capabilities
+that each present a valid `QualificationAdmissionEnvelope`. V1 adds admitted
+code, typed human tasks, and verified artifact edges without creating a second
+parent runtime.
 
-Schema name: ``openadapt.process-contract/v0``. Filename: process-contract.json.
+Schema names: ``openadapt.process-contract/v0`` and
+``openadapt.process-contract/v1``. Filename: process-contract.json.
 
 This module owns the on-disk document and authoring checks. Runtime lives in
 :mod:`openadapt_flow.runtime.admitted_composition`. There is no
@@ -15,6 +16,7 @@ This module owns the on-disk document and authoring checks. Runtime lives in
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Literal, Mapping, Optional, Sequence
 from uuid import UUID
@@ -36,6 +38,9 @@ from openadapt_flow.qualification_admission import QualificationAdmissionEnvelop
 PROCESS_CONTRACT_FILENAME = "process-contract.json"
 PROCESS_CONTRACT_SCHEMA: Literal["openadapt.process-contract/v0"] = (
     "openadapt.process-contract/v0"
+)
+PROCESS_CONTRACT_V1_SCHEMA: Literal["openadapt.process-contract/v1"] = (
+    "openadapt.process-contract/v1"
 )
 _NAME_RE = r"^[A-Za-z][A-Za-z0-9_-]*$"
 _SHA256_RE = r"^[a-f0-9]{64}$"
@@ -84,6 +89,84 @@ class AdmittedChildSpec(BaseModel):
         return _uuid(value, field=str(field))
 
 
+class CodeChildSpec(BaseModel):
+    """One sealed code capability admitted outside the ProcessContract."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=128, pattern=_NAME_RE)
+    kind: Literal["code"] = "code"
+    manifest: str = Field(min_length=1)
+    admission: str = Field(min_length=1)
+    source_archive: str = Field(min_length=1)
+    role: Literal["transform", "verifier"] = "transform"
+    storage_boundary: Literal[
+        "local_protected", "customer_controlled", "hosted_private"
+    ] = "local_protected"
+    data_classification: Literal["public", "internal", "sensitive", "regulated"] = (
+        "regulated"
+    )
+
+    @field_validator("manifest", "admission", "source_archive")
+    @classmethod
+    def _portable_pointer(cls, value: str) -> str:
+        if "\\" in value or "\x00" in value:
+            raise ValueError("code pointers must be portable relative paths")
+        path = Path(value)
+        if path.is_absolute() or ".." in path.parts or value in {"", "."}:
+            raise ValueError("code pointers must be portable relative paths")
+        return value
+
+
+class HumanChildSpec(BaseModel):
+    """One typed human task issued by the existing attended-task contract."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=128, pattern=_NAME_RE)
+    kind: Literal["human"] = "human"
+    task_kind: Literal["authenticate", "actuate", "decide", "review"]
+    substrate: Literal["browser", "windows", "macos", "linux", "rdp", "citrix", "mixed"]
+    risk_class: Literal["read_only", "state_changing", "consequential", "irreversible"]
+    required_authn: Literal["local_session", "aal2", "webauthn"]
+    authentication_template: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _authentication_boundary(self) -> "HumanChildSpec":
+        if self.task_kind == "authenticate" and not self.authentication_template:
+            raise ValueError(
+                "an authenticate child requires a value-free authentication template"
+            )
+        if self.task_kind != "authenticate" and self.authentication_template:
+            raise ValueError(
+                "only an authenticate child can name an authentication template"
+            )
+        if self.authentication_template:
+            value = self.authentication_template
+            path = Path(value)
+            if (
+                "\\" in value
+                or "\x00" in value
+                or path.is_absolute()
+                or ".." in path.parts
+                or value in {"", "."}
+            ):
+                raise ValueError("authentication_template must be a relative path")
+        return self
+
+
+class ArtifactEdgeV1(BaseModel):
+    """A verified, content-addressed artifact transfer between capabilities."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    from_child: str = Field(pattern=_NAME_RE)
+    from_output: str = Field(pattern=_NAME_RE)
+    to_child: str = Field(pattern=_NAME_RE)
+    to_input: str = Field(pattern=_NAME_RE)
+    verifier_child: str = Field(pattern=_NAME_RE)
+
+
 class ProcessContract(BaseModel):
     """Parent sequencer of independently admitted capabilities.
 
@@ -92,11 +175,16 @@ class ProcessContract(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["openadapt.process-contract/v0"] = PROCESS_CONTRACT_SCHEMA
+    schema_version: Literal[
+        "openadapt.process-contract/v0", "openadapt.process-contract/v1"
+    ] = PROCESS_CONTRACT_SCHEMA
     name: str = Field(min_length=1, max_length=256)
-    children: list[AdmittedChildSpec] = Field(min_length=2)
+    children: list[AdmittedChildSpec] = Field(default_factory=list)
+    code_children: list[CodeChildSpec] = Field(default_factory=list)
+    human_children: list[HumanChildSpec] = Field(default_factory=list)
     after: dict[str, list[str]] = Field(default_factory=dict)
     handoffs: list[HandoffBinding] = Field(default_factory=list)
+    artifact_edges: list[ArtifactEdgeV1] = Field(default_factory=list)
     allow_halt: dict[str, list[AllowedHaltClass]] = Field(default_factory=dict)
     inputs: list[str] = Field(
         default_factory=list,
@@ -134,9 +222,36 @@ class ProcessContract(BaseModel):
 
     @model_validator(mode="after")
     def _closed_graph(self) -> "ProcessContract":
-        names = [child.name for child in self.children]
+        if self.schema_version == PROCESS_CONTRACT_SCHEMA:
+            if len(self.children) < 2:
+                raise ValueError("process v0 requires at least two admitted children")
+            if self.code_children or self.human_children or self.artifact_edges:
+                raise ValueError(
+                    "process v0 cannot contain v1 capabilities or artifacts"
+                )
+        names = self.capability_names
+        if self.schema_version == PROCESS_CONTRACT_V1_SCHEMA and not names:
+            raise ValueError("process v1 requires at least one capability")
+        if self.schema_version == PROCESS_CONTRACT_V1_SCHEMA and self.allow_halt:
+            raise ValueError(
+                "process v1 preserves exact terminal outcomes and cannot use allow_halt"
+            )
+        if self.schema_version == PROCESS_CONTRACT_V1_SCHEMA:
+            for child in self.children:
+                for pointer in (child.envelope, child.bundle):
+                    path = Path(pointer)
+                    if (
+                        "\\" in pointer
+                        or "\x00" in pointer
+                        or path.is_absolute()
+                        or ".." in path.parts
+                        or pointer in {"", "."}
+                    ):
+                        raise ValueError(
+                            "process v1 Flow pointers must be portable relative paths"
+                        )
         if len(names) != len(set(names)):
-            raise ValueError("process child names must be unique")
+            raise ValueError("process capability names must be unique")
         known = set(names)
         for child_name, preds in self.after.items():
             if child_name not in known:
@@ -152,6 +267,10 @@ class ProcessContract(BaseModel):
             if child_name not in known:
                 raise ValueError(f"allow_halt refers to unknown child {child_name!r}")
         for handoff in self.handoffs:
+            if self.schema_version == PROCESS_CONTRACT_V1_SCHEMA:
+                raise ValueError(
+                    "process v1 uses verified artifact_edges instead of scalar handoffs"
+                )
             if handoff.from_child not in known:
                 raise ValueError(f"handoff from unknown child {handoff.from_child!r}")
             if handoff.to_child not in known:
@@ -161,7 +280,65 @@ class ProcessContract(BaseModel):
                     f"handoff {handoff.source} cannot target the same child "
                     f"{handoff.from_child!r}"
                 )
+        verifier_names = {
+            child.name for child in self.code_children if child.role == "verifier"
+        }
+        transform_names = {
+            child.name for child in self.code_children if child.role == "transform"
+        }
+        edge_keys: set[tuple[str, str, str, str]] = set()
+        consumer_inputs: set[tuple[str, str]] = set()
+        for edge in self.artifact_edges:
+            if edge.from_child not in known or edge.to_child not in known:
+                raise ValueError("an artifact edge refers to an unknown capability")
+            if edge.from_child == edge.to_child:
+                raise ValueError("an artifact edge cannot target its producer")
+            if edge.verifier_child not in verifier_names:
+                raise ValueError(
+                    "an artifact edge requires a declared code verifier child"
+                )
+            if edge.from_child not in transform_names:
+                raise ValueError(
+                    "the built-in v1 artifact store requires a code transform producer"
+                )
+            edge_key = (
+                edge.from_child,
+                edge.from_output,
+                edge.to_child,
+                edge.to_input,
+            )
+            if edge_key in edge_keys:
+                raise ValueError("process artifact edges must be unique")
+            edge_keys.add(edge_key)
+            consumer_input = (edge.to_child, edge.to_input)
+            if consumer_input in consumer_inputs:
+                raise ValueError(
+                    "two artifact edges cannot bind the same consumer input"
+                )
+            consumer_inputs.add(consumer_input)
         return self
+
+    @property
+    def capability_names(self) -> list[str]:
+        return [
+            *(child.name for child in self.children),
+            *(child.name for child in self.code_children),
+            *(child.name for child in self.human_children),
+        ]
+
+    def capability(
+        self, name: str
+    ) -> AdmittedChildSpec | CodeChildSpec | HumanChildSpec:
+        for flow_child in self.children:
+            if flow_child.name == name:
+                return flow_child
+        for code_child in self.code_children:
+            if code_child.name == name:
+                return code_child
+        for human_child in self.human_children:
+            if human_child.name == name:
+                return human_child
+        raise ProcessContractError(f"process has no capability named {name!r}")
 
     def child(self, name: str) -> AdmittedChildSpec:
         for item in self.children:
@@ -173,7 +350,11 @@ class ProcessContract(BaseModel):
         parent = Path(parent_dir)
         parent.mkdir(parents=True, exist_ok=True)
         path = parent / PROCESS_CONTRACT_FILENAME
-        path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+        payload = self.model_dump(mode="json")
+        if self.schema_version == PROCESS_CONTRACT_SCHEMA:
+            for field in ("code_children", "human_children", "artifact_edges"):
+                payload.pop(field, None)
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return path
 
     @classmethod
@@ -186,6 +367,14 @@ class ProcessContract(BaseModel):
                 f"(no {PROCESS_CONTRACT_FILENAME})"
             )
         return cls.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+class ProcessContractV1(ProcessContract):
+    """Schema-specific projection for portable v1 consumers."""
+
+    schema_version: Literal["openadapt.process-contract/v1"] = (
+        PROCESS_CONTRACT_V1_SCHEMA
+    )
 
 
 def is_process_contract_artifact(path: Path | str) -> bool:
@@ -250,15 +439,11 @@ def topological_order(contract: ProcessContract) -> list[str]:
     parent listed explicit ``after`` predecessors. Cycles refuse.
     """
 
-    names = [child.name for child in contract.children]
-    explicit = {name: list(preds) for name, preds in contract.after.items()}
-    use_linear_default = not any(explicit.values())
+    names = contract.capability_names
+    predecessors = predecessor_map(contract)
     edges: dict[str, set[str]] = {name: set() for name in names}
     incoming: dict[str, int] = {name: 0 for name in names}
-    for index, name in enumerate(names):
-        preds = explicit.get(name, [])
-        if not preds and use_linear_default and index > 0:
-            preds = [names[index - 1]]
+    for name, preds in predecessors.items():
         for pred in preds:
             if name not in edges[pred]:
                 edges[pred].add(name)
@@ -280,9 +465,9 @@ def topological_order(contract: ProcessContract) -> list[str]:
 
 
 def predecessor_map(contract: ProcessContract) -> dict[str, list[str]]:
-    """Return declared-order predecessors for each child."""
+    """Return declared and artifact-derived predecessors for each child."""
 
-    names = [child.name for child in contract.children]
+    names = contract.capability_names
     explicit = {name: list(preds) for name, preds in contract.after.items()}
     use_linear_default = not any(explicit.values())
     preds: dict[str, list[str]] = {name: [] for name in names}
@@ -291,6 +476,15 @@ def predecessor_map(contract: ProcessContract) -> dict[str, list[str]]:
         if not listed and use_linear_default and index > 0:
             listed = [names[index - 1]]
         preds[name] = listed
+    if contract.schema_version == PROCESS_CONTRACT_V1_SCHEMA:
+        for edge in contract.artifact_edges:
+            if edge.from_child not in preds[edge.verifier_child]:
+                preds[edge.verifier_child].append(edge.from_child)
+            if (
+                edge.to_child != edge.verifier_child
+                and edge.verifier_child not in preds[edge.to_child]
+            ):
+                preds[edge.to_child].append(edge.verifier_child)
     return preds
 
 
