@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.13.0 (2026-08-31)
+
+### Features
+
+- Add portable process capability contracts
+  ([#34](https://github.com/OpenAdaptAI/openadapt-types/pull/34),
+  [`07e89a4`](https://github.com/OpenAdaptAI/openadapt-types/commit/07e89a4260e97ff2fbb7aaeee65a9f764dd87000))
+
+
 ## v0.12.0 (2026-08-29)
 
 ### Features
