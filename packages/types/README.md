@@ -70,6 +70,10 @@ out the pixels. Coordinates are the thing that breaks when a window moves.
 | `Episode` / `Step` | A whole trajectory: observation, action, result |
 | `FailureRecord` | A classified failure, for dataset pipelines |
 | `OracleObservation` | One independent effect read. Production `VERIFIED` needs tier 2 or 3 |
+| `ArtifactRefV1` | A path-free reference to an immutable process artifact |
+| `CodeCapabilityManifestV1` | Exact Python, locked dependencies, typed I/O, permissions, and verifier bindings |
+| `ProcessEvidenceReceiptV1` | One signed root over child receipts, human receipts, and the artifact graph |
+| `AuthenticationTaskContractV1` | A value-free login requirement bound to an existing attended task |
 
 Plus the versioned wire contracts: `ControlOverlayFrameV1`/`V2` and
 `ControlOverlayTimelineV1`/`V2` for PHI-safe execution overlays,
@@ -78,7 +82,8 @@ asynchronous qualified execution, `EffectStrengthV1`, and the
 `BusinessDecision*V1` family for signed, finite human choices. What those
 contracts may and may not carry is in
 [docs/CONTRACTS.md](docs/CONTRACTS.md). Oracle tiers and the ten-line
-adapter are in [docs/ORACLE.md](docs/ORACLE.md).
+adapter are in [docs/ORACLE.md](docs/ORACLE.md). Code capabilities and process
+artifacts are in [docs/PROCESS_CAPABILITIES.md](docs/PROCESS_CAPABILITIES.md).
 
 ## JSON Schema for everything else
 
@@ -90,7 +95,7 @@ print(json.dumps(ComputerState.model_json_schema(), indent=2))
 ```
 
 The same schemas ship as JSON under `openadapt_types/schemas/` for TypeScript,
-Rust, and anything else that isn't Python. Seventeen files, including
+Rust, and anything else that isn't Python. Twenty-four files, including
 `execute-v1-openapi.json`, the public OpenAdapt Execute contract.
 
 ## Converting from the older formats

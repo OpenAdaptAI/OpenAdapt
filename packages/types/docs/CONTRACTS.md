@@ -78,3 +78,46 @@ second-session UI read. Neither can mint production `VERIFIED`.
 
 The partner adapter is `channel` plus `read`. Tiers, the gate, and a
 ten-line file oracle are in [ORACLE.md](ORACLE.md).
+
+## Process artifacts and code capabilities
+
+`ArtifactRefV1` identifies an immutable output without putting a local path on
+the wire. It binds the content digest, size, media type, producer, storage
+boundary, data class, and verifier receipt. A pending artifact cannot carry a
+verifier receipt. A terminal artifact state requires one.
+
+`CodeCapabilityManifestV1` describes one exact Python program. It binds the
+source archive, lockfile, direct entry point, typed I/O, declared outputs,
+permissions, effect contract, oracle contract, and qualification campaign.
+The entry point is an argument array. It is never a shell command.
+
+`CodeCapabilityAdmissionEnvelopeV1` grants time-bounded authority to one exact
+manifest. `ProcessEvidenceReceiptV1` binds the terminal process outcome to the
+child receipts, human receipts, artifact graph, and evidence root. A verified
+process requires oracle tier 2 or 3, no uncertain delivery, and no model call
+during the run.
+
+These contracts carry identities and digests. Program bytes, customer paths,
+secret values, evidence bytes, and oracle recipes stay inside the declared
+execution boundary. See [PROCESS_CAPABILITIES.md](PROCESS_CAPABILITIES.md) for
+the package and runtime split.
+
+## Authentication tasks
+
+`AuthenticationTaskContractV1` adds authentication semantics to the existing
+`human_step` task. It binds the attended-task digest, admitted method classes,
+principal class, user-presence rule, MFA rule, verifier, maximum session age,
+and source-time capture policy.
+
+`AuthenticationReceiptV1` carries keyed principal and session bindings. It
+doesn't carry the values used to create them. It also binds the exact process
+execution, step, random challenge, operator authority, verifier evidence, and
+capture-exclusion receipt.
+
+The operator's Done action requests verification. It can't prove that login
+succeeded. The runner accepts the receipt only after every live binding,
+freshness rule, user-presence result, MFA result, and verifier result agrees.
+
+This is a wire contract, not a complete authentication feature. Capture,
+Flow, and the operator surface must share the protected interval before a
+release can claim the complete path.

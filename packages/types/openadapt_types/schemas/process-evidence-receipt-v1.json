@@ -1,0 +1,153 @@
+{
+  "$defs": {
+    "ExecuteTerminalOutcomeV1": {
+      "enum": [
+        "verified",
+        "halted_before_effect",
+        "reconciliation_required",
+        "rejected_policy",
+        "failed_platform",
+        "rolled_back_verified"
+      ],
+      "title": "ExecuteTerminalOutcomeV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Signed root receipt for one process execution.\n\nChild receipts and evidence remain authoritative.  This receipt binds\ntheir digests into one terminal process result without carrying evidence\nbytes or customer data.",
+  "properties": {
+    "app_package_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "App Package Digest",
+      "type": "string"
+    },
+    "artifact_graph_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Artifact Graph Digest",
+      "type": "string"
+    },
+    "child_receipt_digests": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "title": "Child Receipt Digests",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "delivery_uncertain": {
+      "title": "Delivery Uncertain",
+      "type": "boolean"
+    },
+    "environment_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Environment Id",
+      "type": "string"
+    },
+    "evidence_root_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Evidence Root Digest",
+      "type": "string"
+    },
+    "external_network_used": {
+      "title": "External Network Used",
+      "type": "boolean"
+    },
+    "human_receipt_digests": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 1024,
+      "title": "Human Receipt Digests",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "issued_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Issued At",
+      "type": "string"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "model_used": {
+      "title": "Model Used",
+      "type": "boolean"
+    },
+    "oracle_tier": {
+      "enum": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "title": "Oracle Tier",
+      "type": "integer"
+    },
+    "outcome": {
+      "$ref": "#/$defs/ExecuteTerminalOutcomeV1"
+    },
+    "process_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Process Digest",
+      "type": "string"
+    },
+    "process_execution_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Process Execution Id",
+      "type": "string"
+    },
+    "receipt_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Receipt Id",
+      "type": "string"
+    },
+    "runner_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Runner Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.process-evidence-receipt/v1",
+      "default": "openadapt.process-evidence-receipt/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Signature Algorithm",
+      "type": "string"
+    }
+  },
+  "required": [
+    "receipt_id",
+    "process_execution_id",
+    "process_digest",
+    "app_package_digest",
+    "environment_id",
+    "runner_id",
+    "outcome",
+    "oracle_tier",
+    "delivery_uncertain",
+    "model_used",
+    "external_network_used",
+    "child_receipt_digests",
+    "artifact_graph_digest",
+    "evidence_root_digest",
+    "issued_at",
+    "issuer_key_id",
+    "signature"
+  ],
+  "title": "ProcessEvidenceReceiptV1",
+  "type": "object"
+}

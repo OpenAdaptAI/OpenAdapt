@@ -1,0 +1,251 @@
+{
+  "$defs": {
+    "CodeArtifactOutputV1": {
+      "additionalProperties": false,
+      "properties": {
+        "media_type": {
+          "maxLength": 192,
+          "minLength": 3,
+          "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}/[a-z0-9][a-z0-9!#$&^_.+-]{0,127}$",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "relative_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "relative_path",
+        "media_type"
+      ],
+      "title": "CodeArtifactOutputV1",
+      "type": "object"
+    },
+    "CodeIsolationProfile": {
+      "description": "Execution isolation that the runner can prove for one run.",
+      "enum": [
+        "trusted_local",
+        "os_sandbox",
+        "container",
+        "virtual_machine"
+      ],
+      "title": "CodeIsolationProfile",
+      "type": "string"
+    },
+    "CodeNetworkMode": {
+      "enum": [
+        "none",
+        "allowlist"
+      ],
+      "title": "CodeNetworkMode",
+      "type": "string"
+    },
+    "CodePermissionContractV1": {
+      "additionalProperties": false,
+      "description": "Declared and admission-bound permissions for one code capability.",
+      "properties": {
+        "allow_process_spawn": {
+          "default": false,
+          "title": "Allow Process Spawn",
+          "type": "boolean"
+        },
+        "allowed_network_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Allowed Network Hosts",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "isolation_profile": {
+          "$ref": "#/$defs/CodeIsolationProfile"
+        },
+        "memory_limit_mb": {
+          "maximum": 1048576,
+          "minimum": 16,
+          "title": "Memory Limit Mb",
+          "type": "integer"
+        },
+        "network_mode": {
+          "$ref": "#/$defs/CodeNetworkMode",
+          "default": "none"
+        },
+        "output_limit_bytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Output Limit Bytes",
+          "type": "integer"
+        },
+        "readable_mounts": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Readable Mounts",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "secret_names": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Secret Names",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "timeout_seconds": {
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Timeout Seconds",
+          "type": "integer"
+        },
+        "writable_mounts": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Writable Mounts",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "isolation_profile",
+        "timeout_seconds",
+        "memory_limit_mb",
+        "output_limit_bytes"
+      ],
+      "title": "CodePermissionContractV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One immutable Python program with typed I/O and declared permissions.",
+  "properties": {
+    "capability_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Capability Id",
+      "type": "string"
+    },
+    "capability_version_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Capability Version Id",
+      "type": "string"
+    },
+    "effect_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Effect Contract Digest",
+      "type": "string"
+    },
+    "entrypoint": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Entrypoint",
+      "type": "array"
+    },
+    "input_schema_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Input Schema Digest",
+      "type": "string"
+    },
+    "lockfile_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Lockfile Digest",
+      "type": "string"
+    },
+    "lockfile_path": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Lockfile Path",
+      "type": "string"
+    },
+    "oracle_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Oracle Contract Digest",
+      "type": "string"
+    },
+    "output_schema_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Output Schema Digest",
+      "type": "string"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/CodeArtifactOutputV1"
+      },
+      "maxItems": 64,
+      "title": "Outputs",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "permissions": {
+      "$ref": "#/$defs/CodePermissionContractV1"
+    },
+    "qualification_campaign_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Qualification Campaign Digest",
+      "type": "string"
+    },
+    "runtime_kind": {
+      "const": "python",
+      "default": "python",
+      "title": "Runtime Kind",
+      "type": "string"
+    },
+    "runtime_version": {
+      "maxLength": 32,
+      "minLength": 3,
+      "pattern": "^3\\.(10|11|12|13)(?:\\.[0-9]{1,3})?$",
+      "title": "Runtime Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.code-capability-manifest/v1",
+      "default": "openadapt.code-capability-manifest/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_archive_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Source Archive Digest",
+      "type": "string"
+    }
+  },
+  "required": [
+    "capability_id",
+    "capability_version_id",
+    "runtime_version",
+    "source_archive_digest",
+    "lockfile_path",
+    "lockfile_digest",
+    "entrypoint",
+    "input_schema_digest",
+    "output_schema_digest",
+    "outputs",
+    "permissions",
+    "effect_contract_digest",
+    "oracle_contract_digest",
+    "qualification_campaign_digest"
+  ],
+  "title": "CodeCapabilityManifestV1",
+  "type": "object"
+}
