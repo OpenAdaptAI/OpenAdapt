@@ -10,6 +10,7 @@ import {
   buildControlOverlayFrame,
   CONTROL_OVERLAY_FRAME_VERSION,
 } from "./contract";
+import { AUTH_PAUSE_COPY } from "./coach";
 
 it("shows the authoring pause card copy without sending titles", () => {
   const state = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
@@ -258,4 +259,73 @@ it("exports a deterministic presentation frame without the local workflow label"
     presentation: true,
   });
   expect(JSON.stringify(frame)).not.toContain("Jane Doe");
+});
+
+it("keeps coach hints off the closed overlay://frame projection", () => {
+  const recording = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "recording-started",
+  });
+  const coached = reduceControlOverlay(recording, {
+    kind: "coach",
+    payload: {
+      hint: "Open the claim screen",
+      turn: "your_turn",
+      pack_url: "https://openadapt.ai/j/secret",
+    },
+  });
+  const frame = buildControlOverlayFrame(coached, {
+    event_sequence: 1,
+    observed_at_unix_ms: 1,
+    observed_at_monotonic_ms: 1,
+  });
+  const encoded = JSON.stringify(frame);
+
+  expect(coached.phase).toBe("recording");
+  expect(coached.coach?.hint).toBe("Open the claim screen");
+  expect(encoded).not.toContain("Open the claim screen");
+  expect(encoded).not.toContain("your_turn");
+  expect(encoded).not.toContain("openadapt.ai");
+  expect(encoded).not.toContain("overlay://coach");
+  expect(frame.target_tracking).toBeNull();
+  expect(frame.status).not.toBe("VERIFIED");
+});
+
+it("latches a coach auth pause even while capture still reports recording", () => {
+  const recording = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "recording-started",
+  });
+  const paused = reduceControlOverlay(recording, {
+    kind: "coach",
+    payload: { turn: "auth", pause_reason: "auth" },
+  });
+  const stillPaused = reduceControlOverlay(paused, {
+    kind: "recording-status",
+    status: {
+      recording: true,
+      paused: false,
+      controls: { pause: false, resume: false, stop: true },
+    },
+  });
+
+  expect(paused.phase).toBe("paused");
+  expect(stillPaused.phase).toBe("paused");
+  expect(stillPaused.controls.resume).toBe(true);
+  expect(AUTH_PAUSE_COPY).toContain("Type in the application");
+});
+
+it("omits a ghost ring from overlay state when the rect has no binding", () => {
+  const recording = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "recording-started",
+  });
+  const unbound = reduceControlOverlay(recording, {
+    kind: "coach",
+    payload: {
+      hint: "Open the claim screen",
+      target: {
+        coordinate_space: "top_level_viewport_normalized",
+        rect: { x: 0.2, y: 0.2, width: 0.1, height: 0.1 },
+      },
+    },
+  });
+  expect(unbound.coach?.target).toBeNull();
 });

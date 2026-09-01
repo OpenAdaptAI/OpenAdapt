@@ -159,5 +159,6 @@ class TestCommandDispatch:
         assert "replay_progress" not in _TRAY_EVENTS
         assert "log_line" not in _TRAY_EVENTS
         assert "open_window" not in _TRAY_EVENTS
+        assert "coach" not in _TRAY_EVENTS
         # Broadcasting one with no client connected must not raise.
         server._broadcast("replay_progress", {"state": "running"})

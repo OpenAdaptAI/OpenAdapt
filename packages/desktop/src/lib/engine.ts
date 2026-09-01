@@ -108,6 +108,10 @@ export const CMD = {
   PORTAL_DEVICES: "portal_devices",
   PORTAL_REVOKE_DEVICE: "portal_revoke_device",
   PORTAL_NOTIFICATION: "portal_notification",
+  // Local demonstration coach. Payload is never an evidence frame.
+  SET_COACH: "set_coach",
+  GET_COACH: "get_coach",
+  CLEAR_COACH: "clear_coach",
 } as const;
 
 /** Events the engine emits (delivered as Tauri events `engine://<name>`). */
@@ -129,6 +133,8 @@ export const EVT = {
   PORTAL_STATE: "portal_state",
   // Carries only {title, body, open_count, route}; see attentionNotification.ts.
   ATTENTION_NOTIFICATION: "attention_notification",
+  // Local-only coach channel. Never persist this payload into evidence.
+  COACH: "coach",
 } as const;
 
 export type EngineEvent = (typeof EVT)[keyof typeof EVT];
@@ -188,6 +194,14 @@ export async function setControlOverlayInteractive(
 export async function ensureControlOverlayCaptureExcluded(): Promise<void> {
   if (!inTauri()) return;
   await invoke("ensure_control_overlay_capture_excluded");
+}
+
+/** Compact card, taller pause card, or full-monitor click-through stage. */
+export async function setControlOverlayLayout(
+  layout: "compact" | "paused" | "stage",
+): Promise<void> {
+  if (!inTauri()) return;
+  await invoke("set_control_overlay_layout", { layout });
 }
 
 /** Publish the post-composition preference; raw capture stays excluded. */

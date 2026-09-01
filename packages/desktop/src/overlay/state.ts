@@ -5,6 +5,12 @@ import type {
   TargetBackend,
 } from "../lib/types";
 import {
+  coachHoldsPause,
+  EMPTY_COACH,
+  normalizeCoachPayload,
+  type ControlOverlayCoachV1,
+} from "./coach";
+import {
   CONTROL_OVERLAY_STATUS_BY_PHASE,
   type OverlayMode,
   type OverlayPhase,
@@ -42,6 +48,8 @@ export interface ControlOverlayState {
   modelCalls: number | null;
   externalNetworkCalls: "none" | "observed" | "unknown" | null;
   pausePrompt: string | null;
+  /** Local-only. Never projected into overlay://frame. */
+  coach: ControlOverlayCoachV1 | null;
 }
 
 export type ControlOverlayInput =
@@ -59,7 +67,8 @@ export type ControlOverlayInput =
   | { kind: "step"; index: number; total?: number | null }
   | { kind: "control-requested"; action: "pause" | "resume" | "stop" }
   | { kind: "control-failed" }
-  | { kind: "dismiss" };
+  | { kind: "dismiss" }
+  | { kind: "coach"; payload: unknown };
 
 export const EMPTY_OVERLAY_STATE: ControlOverlayState = {
   visible: false,
@@ -77,6 +86,7 @@ export const EMPTY_OVERLAY_STATE: ControlOverlayState = {
   modelCalls: null,
   externalNetworkCalls: null,
   pausePrompt: null,
+  coach: null,
 };
 
 /** Only states with no in-flight observation or actuation may receive input. */
@@ -91,27 +101,67 @@ export function overlayAllowsInteraction(phase: OverlayPhase): boolean {
   );
 }
 
-function recordingState(status: EngineStatus): ControlOverlayState {
+function recordingState(
+  status: EngineStatus,
+  coach: ControlOverlayState["coach"] = null,
+): ControlOverlayState {
   if (!status.recording) return EMPTY_OVERLAY_STATE;
   const capabilities = status.controls ?? {
     pause: false,
     resume: false,
     stop: true,
   };
+  const holdsPause = coachHoldsPause(coach);
   return {
     ...EMPTY_OVERLAY_STATE,
     visible: true,
-    phase: status.paused ? "paused" : "recording",
+    phase: status.paused || holdsPause ? "paused" : "recording",
     localWorkflowLabel: "New demonstration",
     mode: "demonstration",
-    controls: capabilities,
+    controls: holdsPause
+      ? { pause: false, resume: true, stop: true }
+      : capabilities,
     elapsedSeconds:
       typeof status.duration_secs === "number" ? status.duration_secs : null,
     pausePrompt:
       status.paused && typeof status.pause_prompt === "string"
         ? status.pause_prompt
         : null,
+    coach,
   };
+}
+
+function applyCoach(
+  state: ControlOverlayState,
+  payload: unknown,
+): ControlOverlayState {
+  const coach = normalizeCoachPayload(payload, state.coach ?? EMPTY_COACH);
+  if (!state.visible) {
+    return { ...state, coach };
+  }
+  if (coachHoldsPause(coach)) {
+    return {
+      ...state,
+      visible: true,
+      phase: "paused",
+      controls: { pause: false, resume: true, stop: true },
+      coach,
+    };
+  }
+  if (
+    state.phase === "paused" &&
+    state.mode === "demonstration" &&
+    !coachHoldsPause(coach) &&
+    !state.pausePrompt
+  ) {
+    return {
+      ...state,
+      phase: "recording",
+      controls: { pause: false, resume: false, stop: true },
+      coach,
+    };
+  }
+  return { ...state, coach };
 }
 
 function terminalPhase(progress: ReplayProgress): OverlayPhase {
@@ -166,13 +216,16 @@ export function reduceControlOverlay(
         }
         if (state.phase !== "idle") return state;
       }
-      return recordingState(input.status);
+      return recordingState(input.status, state.coach);
     case "recording-started":
-      return recordingState({
-        recording: true,
-        paused: false,
-        controls: { pause: false, resume: false, stop: true },
-      });
+      return recordingState(
+        {
+          recording: true,
+          paused: false,
+          controls: { pause: false, resume: false, stop: true },
+        },
+        state.coach,
+      );
     case "recording-stopped":
       return EMPTY_OVERLAY_STATE;
     case "recording-error":
@@ -294,7 +347,9 @@ export function reduceControlOverlay(
         controls: { pause: false, resume: false, stop: false },
       };
     case "dismiss":
-      return { ...state, visible: false };
+      return { ...state, visible: false, coach: null };
+    case "coach":
+      return applyCoach(state, input.payload);
   }
 }
 

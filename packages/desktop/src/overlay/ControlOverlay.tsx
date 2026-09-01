@@ -9,6 +9,7 @@ import {
   inTauri,
   onEngineEvent,
   setControlOverlayInteractive,
+  setControlOverlayLayout,
   setControlOverlayVisible,
 } from "../lib/engine";
 import type {
@@ -18,6 +19,13 @@ import type {
   RunStep,
   Workflow,
 } from "../lib/types";
+import {
+  AUTH_PAUSE_COPY,
+  EMPTY_COACH,
+  coachHoldsPause,
+  overlayLayoutFor,
+  type CoachOperatorResponse,
+} from "./coach";
 import { buildControlOverlayFrame } from "./contract";
 import {
   EMPTY_OVERLAY_STATE,
@@ -119,6 +127,9 @@ export function ControlOverlay() {
       onEngineEvent<RunnerStatus>(EVT.RUNNER_STATE, (status) =>
         send({ kind: "runner-state", status }),
       ),
+      onEngineEvent(EVT.COACH, (payload) =>
+        send({ kind: "coach", payload }),
+      ),
       onEngineEvent<RunStep | { line: string }>(EVT.LOG_LINE, (payload) => {
         // Only the bounded step ordinal is accepted. Never project the log
         // line, action, target, evidence, or typed value into the overlay.
@@ -137,6 +148,14 @@ export function ControlOverlay() {
 
   const interactive = overlayAllowsInteraction(state.phase);
   const expanded = overlayExpands(state.phase);
+  const coach = state.coach;
+  const layout = overlayLayoutFor(
+    state.visible,
+    interactive,
+    expanded,
+    coach,
+  );
+  const stage = layout === "stage";
 
   useEffect(() => {
     if (!state.visible || state.startedAtUnixMs === null || expanded) return;
@@ -177,6 +196,12 @@ export function ControlOverlay() {
   }, [state.phase, state.visible]);
 
   useEffect(() => {
+    void setControlOverlayLayout(layout).catch((error) => {
+      console.error("Control overlay layout failed", error);
+    });
+  }, [layout]);
+
+  useEffect(() => {
     if (!inTauri()) return;
     // Always broadcast the presentation-safe projection. A future deterministic
     // video compositor can consume this exact event without seeing the local
@@ -189,6 +214,12 @@ export function ControlOverlay() {
     });
     void emit("overlay://frame", safeFrame).catch(() => {});
   }, [state]);
+
+  useEffect(() => {
+    if (!inTauri()) return;
+    // Local operator channel. Never persist, compose, ingest, or seal this.
+    void emit("overlay://coach", coach ?? EMPTY_COACH).catch(() => {});
+  }, [coach]);
 
   const stepLabel = useMemo(() => {
     if (state.currentStep !== null && state.totalSteps !== null) {
@@ -215,6 +246,10 @@ export function ControlOverlay() {
     setControlError(false);
     send({ kind: "control-requested", action });
     try {
+      if (action === "resume" && coachHoldsPause(coach)) {
+        send({ kind: "coach", payload: { operator_response: "continue" } });
+        await engineInvoke(CMD.SET_COACH, { operator_response: "continue" });
+      }
       const result = await engineInvoke<EngineStatus>(
         action === "pause"
           ? CMD.PAUSE_RECORDING
@@ -234,116 +269,204 @@ export function ControlOverlay() {
     }
   }
 
+  async function respond(response: CoachOperatorResponse) {
+    if (!interactive || busy) return;
+    setBusy(true);
+    setControlError(false);
+    send({ kind: "coach", payload: { operator_response: response } });
+    try {
+      await engineInvoke(CMD.SET_COACH, { operator_response: response });
+    } catch {
+      setControlError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const showResume = state.phase === "paused";
+  const coachPaused = coachHoldsPause(coach);
   const pauseAvailable = showResume
     ? state.controls.resume
     : state.controls.pause;
   const controlHelp = pauseAvailable
     ? undefined
     : "This operation does not currently advertise lossless pause or resume support.";
+  const authPause =
+    coachPaused &&
+    (coach?.turn === "auth" ||
+      coach?.pause_reason === "auth" ||
+      coach?.pause_reason === "secret_field");
+  const feedbackPause =
+    coachPaused &&
+    (coach?.turn === "feedback" ||
+      coach?.pause_reason === "wrong_step" ||
+      coach?.pause_reason === "skip" ||
+      coach?.pause_reason === "done");
+  const target = stage ? coach?.target : null;
+  const continueLabel = coachPaused
+    ? "Continue"
+    : showResume
+      ? state.pausePrompt
+        ? "Continue"
+        : "Resume"
+      : "Pause";
 
   return (
-    <section
-      className={`control-overlay phase-${state.phase} ${expanded ? "expanded" : "compact"}`}
-      aria-label="OpenAdapt automation controls"
-    >
-      <div className="overlay-main" data-tauri-drag-region>
-        <div className="overlay-copy" data-tauri-drag-region>
-          <div className="overlay-primary" role="status" aria-live="polite">
-            <span className="overlay-pulse" aria-hidden="true" />
-            <strong>
-              {state.pausePrompt || overlayPlainStatus(state.phase)}
-            </strong>
-            <span className="overlay-step">{stepLabel}</span>
-            {state.profile && (
-              <span className="overlay-profile">{state.profile}</span>
+    <div className={`control-overlay-host${stage ? " stage" : ""}`}>
+      {target && (
+        <div
+          className="overlay-target-ring"
+          aria-hidden="true"
+          style={{
+            left: `${target.rect.x * 100}%`,
+            top: `${target.rect.y * 100}%`,
+            width: `${target.rect.width * 100}%`,
+            height: `${target.rect.height * 100}%`,
+          }}
+        />
+      )}
+      <section
+        className={`control-overlay phase-${state.phase} ${expanded ? "expanded" : "compact"}`}
+        aria-label="OpenAdapt automation controls"
+      >
+        <div className="overlay-main" data-tauri-drag-region>
+          <div className="overlay-copy" data-tauri-drag-region>
+            <div className="overlay-primary" role="status" aria-live="polite">
+              <span className="overlay-pulse" aria-hidden="true" />
+              <strong>
+                {state.pausePrompt || overlayPlainStatus(state.phase)}
+              </strong>
+              <span className="overlay-step">{stepLabel}</span>
+              {state.profile && (
+                <span className="overlay-profile">{state.profile}</span>
+              )}
+              {coach?.turn === "your_turn" && !interactive && (
+                <span className="overlay-turn">Your turn</span>
+              )}
+              <span className="overlay-safety">
+                {overlaySafetyLabel(state.phase)}
+              </span>
+            </div>
+            {coach?.hint && !interactive && (
+              <div className="overlay-hint" data-tauri-drag-region>
+                {coach.hint}
+              </div>
             )}
-            <span className="overlay-safety">
-              {overlaySafetyLabel(state.phase)}
-            </span>
+            {overlayShowsExecutionRail(state.phase) && (
+              <div className="overlay-rail" aria-label="Resolve, act, verify">
+                <span>Resolve</span>
+                <i aria-hidden="true" />
+                <span>Act</span>
+                <i aria-hidden="true" />
+                <span>Verify</span>
+              </div>
+            )}
+            {secondaryItems.length > 0 && (
+              <div className="overlay-secondary" data-tauri-drag-region>
+                {secondaryItems.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
+            )}
+            {authPause && (
+              <p className="overlay-pause-copy">{AUTH_PAUSE_COPY}</p>
+            )}
+            {feedbackPause && (
+              <p className="overlay-pause-copy">Was this the right step?</p>
+            )}
+            {expanded && !coachPaused && (
+              <div className="overlay-details" data-tauri-drag-region>
+                <strong>{state.localWorkflowLabel}</strong>
+                <span>{modeLabel(state.mode, state.profile)}</span>
+              </div>
+            )}
           </div>
-          {overlayShowsExecutionRail(state.phase) && (
-            <div className="overlay-rail" aria-label="Resolve, act, verify">
-              <span>Resolve</span>
-              <i aria-hidden="true" />
-              <span>Act</span>
-              <i aria-hidden="true" />
-              <span>Verify</span>
-            </div>
-          )}
-          {secondaryItems.length > 0 && (
-            <div className="overlay-secondary" data-tauri-drag-region>
-              {secondaryItems.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-          )}
-          {expanded && (
-            <div className="overlay-details" data-tauri-drag-region>
-              <strong>{state.localWorkflowLabel}</strong>
-              <span>{modeLabel(state.mode, state.profile)}</span>
-            </div>
-          )}
         </div>
-      </div>
 
-      {interactive && (
-        <div className="overlay-controls" aria-label="Run controls">
-          <button
-            type="button"
-            className="overlay-button"
-            disabled={busy || !pauseAvailable}
-            title={controlHelp}
-            aria-describedby={!pauseAvailable ? "pause-unavailable" : undefined}
-            aria-label={
-              showResume
-                ? state.pausePrompt
+        {interactive && (
+          <div className="overlay-controls" aria-label="Run controls">
+            {feedbackPause && (
+              <>
+                <button
+                  type="button"
+                  className="overlay-button"
+                  disabled={busy}
+                  aria-label="Mark the last step as wrong"
+                  onClick={() => respond("wrong")}
+                >
+                  That was wrong
+                </button>
+                <button
+                  type="button"
+                  className="overlay-button"
+                  disabled={busy}
+                  aria-label="Skip this suggested step"
+                  onClick={() => respond("skip")}
+                >
+                  Skip
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className="overlay-button"
+              disabled={busy || !pauseAvailable}
+              title={controlHelp}
+              aria-describedby={!pauseAvailable ? "pause-unavailable" : undefined}
+              aria-label={
+                coachPaused
                   ? "Continue OpenAdapt"
-                  : "Resume OpenAdapt"
-                : "Pause OpenAdapt"
-            }
-            onClick={() => control(showResume ? "resume" : "pause")}
-          >
-            {showResume ? (state.pausePrompt ? "Continue" : "Resume") : "Pause"}
-          </button>
-          <button
-            type="button"
-            className="overlay-button stop"
-            disabled={busy || !state.controls.stop}
-            aria-describedby={
-              !state.controls.stop ? "stop-unavailable" : undefined
-            }
-            title={
-              state.controls.stop
-                ? "Finalize this recording"
-                : "Safe interruption is not available for this operation"
-            }
-            aria-label="Stop OpenAdapt"
-            onClick={() => control("stop")}
-          >
-            Stop
-          </button>
-          <button
-            type="button"
-            className="overlay-dismiss"
-            aria-label="Hide OpenAdapt control overlay"
-            onClick={() => send({ kind: "dismiss" })}
-          >
-            ×
-          </button>
-        </div>
-      )}
-      {controlError && (
-        <span className="sr-only" role="alert">
-          The control could not be delivered. Open OpenAdapt Desktop for details.
+                  : showResume
+                    ? state.pausePrompt
+                      ? "Continue OpenAdapt"
+                      : "Resume OpenAdapt"
+                    : "Pause OpenAdapt"
+              }
+              onClick={() =>
+                coachPaused ? respond("continue") : control(showResume ? "resume" : "pause")
+              }
+            >
+              {continueLabel}
+            </button>
+            <button
+              type="button"
+              className="overlay-button stop"
+              disabled={busy || !state.controls.stop}
+              aria-describedby={
+                !state.controls.stop ? "stop-unavailable" : undefined
+              }
+              title={
+                state.controls.stop
+                  ? "Finalize this recording"
+                  : "Safe interruption is not available for this operation"
+              }
+              aria-label="Stop OpenAdapt"
+              onClick={() => control("stop")}
+            >
+              Stop
+            </button>
+            <button
+              type="button"
+              className="overlay-dismiss"
+              aria-label="Hide OpenAdapt control overlay"
+              onClick={() => send({ kind: "dismiss" })}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        {controlError && (
+          <span className="sr-only" role="alert">
+            The control could not be delivered. Open OpenAdapt Desktop for details.
+          </span>
+        )}
+        <span className="sr-only" id="pause-unavailable">
+          Lossless pause and resume are unavailable for this operation.
         </span>
-      )}
-      <span className="sr-only" id="pause-unavailable">
-        Lossless pause and resume are unavailable for this operation.
-      </span>
-      <span className="sr-only" id="stop-unavailable">
-        Safe interruption is unavailable for this operation.
-      </span>
-    </section>
+        <span className="sr-only" id="stop-unavailable">
+          Safe interruption is unavailable for this operation.
+        </span>
+      </section>
+    </div>
   );
 }

@@ -18,30 +18,7 @@ mod tray;
 use std::sync::Arc;
 
 use sidecar::{SidecarHandle, SidecarInner};
-use tauri::{Manager, PhysicalPosition, Position};
-
-fn place_control_overlay(app: &tauri::AppHandle) {
-    let Some(main) = app.get_webview_window("main") else {
-        return;
-    };
-    let Some(overlay) = app.get_webview_window("control-overlay") else {
-        return;
-    };
-    let monitor = main
-        .current_monitor()
-        .ok()
-        .flatten()
-        .or_else(|| app.primary_monitor().ok().flatten());
-    let (Some(monitor), Ok(overlay_size)) = (monitor, overlay.outer_size()) else {
-        return;
-    };
-    let monitor_position = monitor.position();
-    let monitor_size = monitor.size();
-    let margin = (24.0 * monitor.scale_factor()).round() as i32;
-    let x = monitor_position.x + margin;
-    let y = monitor_position.y + monitor_size.height as i32 - overlay_size.height as i32 - margin;
-    let _ = overlay.set_position(Position::Physical(PhysicalPosition::new(x, y)));
-}
+use tauri::Manager;
 
 fn main() {
     let engine = Arc::new(SidecarInner::default());
@@ -101,7 +78,7 @@ fn main() {
             // when a retained target or protected region conflicts. The user
             // can still drag the native capsule, and show/hide transitions
             // never reposition or focus it.
-            place_control_overlay(app.handle());
+            commands::place_control_overlay(app.handle());
 
             // Spawn the frozen Python engine sidecar. Guarded: if the binary is
             // absent (frontend-only dev) the app still runs; the UI shows an
@@ -123,6 +100,7 @@ fn main() {
             commands::set_control_overlay_visible,
             commands::set_control_overlay_interactive,
             commands::ensure_control_overlay_capture_excluded,
+            commands::set_control_overlay_layout,
             ffmpeg::ffmpeg_status,
             ffmpeg::retry_ffmpeg_provisioning,
             // typed convenience commands (forward to the sidecar)

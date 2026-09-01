@@ -226,8 +226,12 @@ class EngineDispatcher:
         self._sync_paused = False
         self._flow_recording: _ActiveFlowRecording | None = None
         self._pending_run_memory: dict[tuple[str, str], tuple[Path, str, bool]] = {}
+        self._coach: dict[str, Any] = {}
         self._handlers: dict[str, Callable[..., dict | None]] = {}
         self._register()
+        from engine.coach import empty_coach
+
+        self._coach = empty_coach()
 
     # ------------------------------------------------------------------ setup
 
@@ -240,6 +244,9 @@ class EngineDispatcher:
             "pause_recording": self.pause_recording,
             "resume_recording": self.resume_recording,
             "get_status": self.get_status,
+            "set_coach": self.set_coach,
+            "get_coach": self.get_coach,
+            "clear_coach": self.clear_coach,
             # library / captures / workflows
             "get_workflows": self.get_workflows,
             "get_first_workflow_state": self.get_first_workflow_state,
@@ -591,6 +598,7 @@ class EngineDispatcher:
         metadata = controller.stop()
         self.emit("recording_stopped", metadata)
         self.emit("status_update", self._status_dict(controller))
+        self.clear_coach()
         stopped = {"capture_id": metadata.get("id"), **metadata}
         correction = self._stopped_teach_correction(stopped)
         if correction is not None:
@@ -653,6 +661,7 @@ class EngineDispatcher:
         }
         self.emit("recording_stopped", metadata)
         self.emit("status_update", self._status_dict(self.services.controller))
+        self.clear_coach()
         metadata["compile"] = self._compile_registered_capture(
             active.capture_id,
             automatic=True,
@@ -678,6 +687,26 @@ class EngineDispatcher:
             if status is not None and (status.get("recording") or status.get("halted")):
                 return status
         return self._status_dict(self.services.controller)
+
+    def set_coach(self, **params: Any) -> dict:
+        """Update the local-only demonstration coach. Never persisted."""
+        from engine.coach import apply_coach_update
+
+        self._coach = apply_coach_update(self._coach, params)
+        self.emit("coach", dict(self._coach))
+        return dict(self._coach)
+
+    def get_coach(self, **params: Any) -> dict:
+        """Return the current local coach payload."""
+        return dict(self._coach)
+
+    def clear_coach(self, **params: Any) -> dict:
+        """Drop the in-memory coach payload and notify local listeners."""
+        from engine.coach import empty_coach
+
+        self._coach = empty_coach()
+        self.emit("coach", dict(self._coach))
+        return dict(self._coach)
 
     def _status_dict(self, controller: Any) -> dict:
         from engine.controller import RecordingState

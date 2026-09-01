@@ -54,6 +54,11 @@ _TRAY_COMMANDS = frozenset(
     }
 )
 
+# Local coding-agent coach. Same loopback socket as the tray, different
+# vocabulary: coach events are never forwarded to tray clients.
+_LOCAL_AGENT_COMMANDS = frozenset({"set_coach", "get_coach", "clear_coach"})
+_SOCKET_COMMANDS = _TRAY_COMMANDS | _LOCAL_AGENT_COMMANDS
+
 # Events the tray's IPCMessageType enum can decode. Anything else is dropped
 # before forwarding so the tray never hits a from_json ValueError.
 _TRAY_EVENTS = frozenset(
@@ -225,7 +230,7 @@ class DesktopSocketServer:
             self._send(conn, "recording_error", {"error": "unauthorized"})
             return
         cmd = frame.get("type")
-        if cmd not in _TRAY_COMMANDS:
+        if cmd not in _SOCKET_COMMANDS:
             logger.warning("Tray sent unsupported command: {c}", c=cmd)
             return
         params = frame.get("data") or {}
@@ -240,6 +245,10 @@ class DesktopSocketServer:
         # so the tray (which only renders events) updates immediately.
         if cmd == "get_status" and result is not None:
             self._send(conn, "status_update", self._tray_event_data("status_update", result))
+        # Coach replies stay on this connection. Never broadcast hint text
+        # to a tray client that cannot decode the type.
+        if cmd in _LOCAL_AGENT_COMMANDS and result is not None:
+            self._send(conn, "coach", result)
 
     # ------------------------------------------------------------- send/emit
 

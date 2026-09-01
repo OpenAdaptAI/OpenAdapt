@@ -5,6 +5,12 @@ body:has(.control-overlay),
   overflow: hidden;
 }
 
+.control-overlay-host {
+  background: transparent;
+  inset: 0;
+  position: absolute;
+}
+
 .control-overlay {
   align-items: stretch;
   background: var(--slate-0);
@@ -29,6 +35,21 @@ body:has(.control-overlay),
 .control-overlay.compact {
   grid-template-columns: minmax(0, 1fr);
   min-height: 72px;
+}
+
+.control-overlay-host.stage .control-overlay {
+  bottom: 24px;
+  left: 24px;
+  right: auto;
+  width: min(440px, calc(100% - 48px));
+}
+
+.overlay-target-ring {
+  border: 2px dashed color-mix(in srgb, var(--run-lift) 85%, white);
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--slate-0) 45%, transparent);
+  pointer-events: none;
+  position: absolute;
 }
 
 .control-overlay.expanded {
@@ -83,7 +104,8 @@ body:has(.control-overlay),
 
 .overlay-step,
 .overlay-profile,
-.overlay-safety {
+.overlay-safety,
+.overlay-turn {
   font-family: var(--font-mono);
   font-size: 10px;
 }
@@ -107,6 +129,30 @@ body:has(.control-overlay),
   color: var(--fog-1);
   letter-spacing: 0.04em;
   padding: 2px 7px;
+}
+
+.overlay-turn {
+  background: color-mix(in srgb, var(--warn-lift) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn-lift) 50%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--fog-1);
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.overlay-hint,
+.overlay-pause-copy {
+  color: var(--fog-1);
+  margin: var(--space-1) 0 0;
+  max-width: 36rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlay-pause-copy {
+  white-space: normal;
 }
 
 .phase-halted .overlay-safety,

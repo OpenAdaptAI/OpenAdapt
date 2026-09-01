@@ -75,3 +75,15 @@ path (or switch to full-window capture) rather than claiming the native overlay
 was recorded directly. Injecting controls into the target application's DOM is
 not the normal path; a clearly labeled demo-only injection may be used only as a
 fallback when post-composition is unavailable.
+
+## Demonstration coach
+
+The overlay can also coach a first demonstration: the person clicks on the live
+system, and a local agent suggests the next move. That design, the
+`overlay://coach` payload, the auth-pause copy, and the loopback IPC recipe
+live in [`COACH_HUD.md`](COACH_HUD.md).
+
+`overlay://coach` is local-only. Do not write it into evidence, `report.json`, a
+Seal, Cloud ingest, PostHog, or this `overlay://frame` contract. Hint text is
+not a Types field. A compositor that consumes `overlay://frame` already has
+the closed vocabulary it needs.

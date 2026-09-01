@@ -56,6 +56,8 @@ export function buildControlOverlayFrame(
     step: { current: state.currentStep, total: state.totalSteps },
     controls,
     status: CONTROL_OVERLAY_STATUS_BY_PHASE[state.phase],
+    // Coach hints, operator responses, and local target rings stay on
+    // overlay://coach. This closed frame must not grow those fields.
     target_tracking: null,
     presentation: true,
   };

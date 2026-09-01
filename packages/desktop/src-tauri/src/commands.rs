@@ -13,11 +13,41 @@
 // so the engine (W1) and tray (W3) agents can align on the same wire.
 
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, State};
+use tauri::{
+    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Position, Size, State,
+};
 use tauri_plugin_shell::ShellExt;
 use url::Url;
 
 use crate::sidecar::SidecarHandle;
+
+const OVERLAY_COMPACT_WIDTH: f64 = 440.0;
+const OVERLAY_COMPACT_HEIGHT: f64 = 104.0;
+const OVERLAY_PAUSED_WIDTH: f64 = 560.0;
+const OVERLAY_PAUSED_HEIGHT: f64 = 168.0;
+
+pub(crate) fn place_control_overlay(app: &AppHandle) {
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    let Some(overlay) = app.get_webview_window("control-overlay") else {
+        return;
+    };
+    let monitor = main
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| app.primary_monitor().ok().flatten());
+    let (Some(monitor), Ok(overlay_size)) = (monitor, overlay.outer_size()) else {
+        return;
+    };
+    let monitor_position = monitor.position();
+    let monitor_size = monitor.size();
+    let margin = (24.0 * monitor.scale_factor()).round() as i32;
+    let x = monitor_position.x + margin;
+    let y = monitor_position.y + monitor_size.height as i32 - overlay_size.height as i32 - margin;
+    let _ = overlay.set_position(Position::Physical(PhysicalPosition::new(x, y)));
+}
 
 /// Generic bridge: forward an arbitrary engine command + params to the sidecar.
 ///
@@ -99,6 +129,59 @@ pub fn ensure_control_overlay_capture_excluded(app: AppHandle) -> Result<(), Str
     window
         .set_content_protected(true)
         .map_err(|error| format!("this platform could not exclude the overlay: {error}"))
+}
+
+/// Resize the overlay between a compact card, a pause card, and a click-through
+/// monitor stage used only to paint a bound target ring. Capture exclusion is
+/// never disabled here.
+#[tauri::command]
+pub fn set_control_overlay_layout(app: AppHandle, layout: String) -> Result<(), String> {
+    let window = app
+        .get_webview_window("control-overlay")
+        .ok_or_else(|| "control overlay window is unavailable".to_string())?;
+    match layout.as_str() {
+        "stage" => {
+            let Some(main) = app.get_webview_window("main") else {
+                return Err("main window is unavailable".to_string());
+            };
+            let monitor = main
+                .current_monitor()
+                .ok()
+                .flatten()
+                .or_else(|| app.primary_monitor().ok().flatten())
+                .ok_or_else(|| "no monitor is available for the overlay stage".to_string())?;
+            let size = monitor.size();
+            let position = monitor.position();
+            window
+                .set_size(Size::Physical(PhysicalSize::new(size.width, size.height)))
+                .map_err(|error| format!("could not stage the control overlay: {error}"))?;
+            window
+                .set_position(Position::Physical(PhysicalPosition::new(
+                    position.x,
+                    position.y,
+                )))
+                .map_err(|error| format!("could not place the overlay stage: {error}"))?;
+        }
+        "paused" => {
+            window
+                .set_size(Size::Logical(LogicalSize::new(
+                    OVERLAY_PAUSED_WIDTH,
+                    OVERLAY_PAUSED_HEIGHT,
+                )))
+                .map_err(|error| format!("could not size the paused overlay: {error}"))?;
+            place_control_overlay(&app);
+        }
+        _ => {
+            window
+                .set_size(Size::Logical(LogicalSize::new(
+                    OVERLAY_COMPACT_WIDTH,
+                    OVERLAY_COMPACT_HEIGHT,
+                )))
+                .map_err(|error| format!("could not size the compact overlay: {error}"))?;
+            place_control_overlay(&app);
+        }
+    }
+    Ok(())
 }
 
 /// Open a URL in the user's default system browser.

@@ -4,6 +4,10 @@ Raw recordings remain immutable. This module validates the canonical Types
 control-overlay timeline v2, binds it to the exact source-media hash,
 composites in memory over a rawvideo pipe, and atomically publishes a separate
 MP4 derivative.
+
+The local coach channel (``overlay://coach``, schema
+``openadapt.control-overlay-coach/v1``) is not a timeline source. Do not
+read, composite, or persist it here.
 """
 
 from __future__ import annotations
