@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.16.0 (2026-09-01)
+
+### Features
+
+- **types**: Add reward contract, certificate, and evidence receipt
+  ([#37](https://github.com/OpenAdaptAI/openadapt-types/pull/37),
+  [`ef42cd7`](https://github.com/OpenAdaptAI/openadapt-types/commit/ef42cd738d31d5c35a766aca8d19760e84801541))
+
+RewardContractV1, RewardCertificateV1, and RewardEvidenceReceiptV1 for training against a verified
+  terminal effect with a certified false-accept bound. RECONCILIATION_REQUIRED and FAILED_PLATFORM
+  are unscored and never 0.0. certified requires oracle tier 2 or 3 plus a current certificate. The
+  reward receipt is not an Execute Seal.
+
+Merged by an agent session, not the founder.
+
+
 ## v0.15.0 (2026-09-01)
 
 ### Features
