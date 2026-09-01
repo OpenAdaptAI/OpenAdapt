@@ -121,3 +121,22 @@ freshness rule, user-presence result, MFA result, and verifier result agrees.
 This is a wire contract, not a complete authentication feature. Capture,
 Flow, and the operator surface must share the protected interval before a
 release can claim the complete path.
+
+## Authoring MCP wire
+
+`AuthoringObserveV1`, `AuthoringCommandV1`, and `AuthoringBindV1` are the
+public hosted-authoring contracts. They do not reuse `ComputerState` or
+`UINode`. Sharing `ElementRole` is the only computer-state type on this
+wire. The projector that drops field values, titles, and screenshots lives
+in Capture. These models refuse those keys.
+
+Observe is a PHI-safe projected tree: roles, automation ids, normalized
+bounds, and `node_id`. It does not carry `value`, `title`, `screenshot`,
+`text`, window titles, URLs, backend pixels, or extra keys. Cap is 200
+nodes and 32 KiB. Windows native, RDP, and Citrix are `coach_only`.
+
+The mailbox envelope is `openadapt.authoring.command/v1`. Hosted `click`
+is `{ node_id }` only. Pause results name a param and never a value.
+Compile returns `needs_human_admit`, never `VERIFIED`. Bind tokens are
+`oab_` plus 43 unreserved characters. Lease secrets are `oals_` plus 64
+hex characters. Cloud `oar_` and pairing `oap_` are refused.
