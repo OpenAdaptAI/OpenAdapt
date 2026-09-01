@@ -27,7 +27,8 @@ yarn-error.log*
 src-tauri/target/
 src-tauri/gen/
 src-tauri/WixTools/
-src-tauri/icons/*.icns
+# icon.icns is the macOS bundle icon. Track it. Ignoring *.icns is why the
+# v0.15.0 DMG shipped Tauri's green minus-bar placeholder.
 
 # IDE
 .vscode/
