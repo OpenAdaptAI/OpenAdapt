@@ -16,13 +16,16 @@ from typing import Any
 from openadapt_capture.structural import (
     MAX_STRUCTURAL_ANCESTRY_DEPTH,
     MAX_STRUCTURAL_TEXT_LENGTH,
+    MAX_STRUCTURAL_TREE_NODES,
     StructuralAncestor,
     StructuralBounds,
     StructuralElement,
     StructuralObservation,
     StructuralObservationRequest,
     StructuralProcessIdentity,
+    StructuralTreeNode,
     StructuralWindowIdentity,
+    omit_tree_value,
 )
 
 _logger = logging.getLogger(__name__)
@@ -98,6 +101,12 @@ class _AXRuntime:
         if error != self.ax.kAXErrorSuccess or not isinstance(values, (list, tuple)):
             return None
         return list(values)
+
+    def children(self, element: Any) -> list[Any]:
+        value = self.attribute(element, "AXChildren")
+        if isinstance(value, (list, tuple)):
+            return list(value)
+        return []
 
     def process_id(self, element: Any) -> int | None:
         result = self.ax.AXUIElementGetPid(element, None)
@@ -209,6 +218,75 @@ def _window(runtime: Any, element: Any) -> StructuralWindowIdentity | None:
     return identity if identity.model_dump(exclude_none=True) else None
 
 
+def _ax_children(runtime: Any, element: Any) -> list[Any]:
+    reader = getattr(runtime, "children", None)
+    if callable(reader):
+        try:
+            children = reader(element)
+        except Exception:
+            return []
+        if isinstance(children, (list, tuple)):
+            return list(children)
+        return []
+    value = runtime.attribute(element, "AXChildren")
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+
+def _ax_bool(runtime: Any, element: Any, name: str) -> bool | None:
+    value = runtime.attribute(element, name)
+    return value if isinstance(value, bool) else None
+
+
+def _ax_value(runtime: Any, element: Any) -> str | None:
+    value = runtime.attribute(element, "AXValue")
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        return _text(value)
+    try:
+        return _text(str(value))
+    except Exception:
+        return None
+
+
+def _as_tree_node(
+    runtime: Any,
+    element: Any,
+    state: dict[str, int | bool],
+) -> StructuralTreeNode | None:
+    remaining = int(state["remaining"])
+    if remaining <= 0:
+        state["truncated"] = True
+        return None
+    state["remaining"] = remaining - 1
+    fields = _element_fields(runtime, element)
+    children: list[StructuralTreeNode] = []
+    for child in _ax_children(runtime, element):
+        node = _as_tree_node(runtime, child, state)
+        if node is not None:
+            children.append(node)
+        if state["truncated"]:
+            break
+    value = None
+    if not omit_tree_value(fields.get("role"), fields.get("control_type")):
+        value = _ax_value(runtime, element)
+    return StructuralTreeNode(
+        provider_runtime_id=fields.get("automation_id"),
+        automation_id=fields.get("automation_id"),
+        role=fields.get("role"),
+        control_type=fields.get("control_type"),
+        name=fields.get("name"),
+        class_name=fields.get("class_name"),
+        value=value,
+        enabled=_ax_bool(runtime, element, "AXEnabled"),
+        focused=_ax_bool(runtime, element, "AXFocused"),
+        bounds=fields.get("bounds"),
+        children=children or None,
+    )
+
+
 class MacOSAXStructuralObserver:
     """Read exact AX evidence for a pointer or focused action."""
 
@@ -263,17 +341,14 @@ class MacOSAXStructuralObserver:
             runtime = getattr(self._thread_state, "runtime", None)
         if runtime is None:
             return None
+        window_tree = request.query_kind == "window_tree"
         if request.x is not None and request.y is not None:
             element = runtime.element_at_point(request.x, request.y)
-            query_kind = "point"
+            query_kind = "window_tree" if window_tree else "point"
         else:
             element = runtime.focused_element()
-            query_kind = "focused"
+            query_kind = "window_tree" if window_tree else "focused"
         if element is None:
-            return None
-        fields = _element_fields(runtime, element)
-        observed_element = StructuralElement(**fields)
-        if not observed_element.model_dump(exclude_none=True):
             return None
         pid = _integer(runtime.process_id(element))
         process = None
@@ -282,6 +357,32 @@ class MacOSAXStructuralObserver:
                 process_id=pid,
                 process_name=self.process_name_resolver(pid),
             )
+        if window_tree:
+            root = runtime.attribute(element, "AXWindow") or element
+            fields = _element_fields(runtime, root)
+            observed_element = StructuralElement(**fields)
+            if not observed_element.model_dump(exclude_none=True):
+                return None
+            tree_state: dict[str, int | bool] = {
+                "remaining": MAX_STRUCTURAL_TREE_NODES,
+                "truncated": False,
+            }
+            tree_root = _as_tree_node(runtime, root, tree_state)
+            return StructuralObservation(
+                provider="macos_ax",
+                event_timestamp=request.event_timestamp,
+                observed_at=self.clock(),
+                query_kind="window_tree",
+                element=observed_element,
+                process=process,
+                window=_window(runtime, element),
+                tree=[tree_root] if tree_root is not None else None,
+                tree_truncated=True if tree_state["truncated"] else None,
+            )
+        fields = _element_fields(runtime, element)
+        observed_element = StructuralElement(**fields)
+        if not observed_element.model_dump(exclude_none=True):
+            return None
         return StructuralObservation(
             provider="macos_ax",
             event_timestamp=request.event_timestamp,

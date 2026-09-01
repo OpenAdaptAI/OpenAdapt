@@ -19,6 +19,7 @@ from typing import Any
 from openadapt_capture.structural import (
     MAX_STRUCTURAL_ANCESTRY_DEPTH,
     MAX_STRUCTURAL_TEXT_LENGTH,
+    MAX_STRUCTURAL_TREE_NODES,
     StructuralAncestor,
     StructuralBounds,
     StructuralCandidateContext,
@@ -26,7 +27,9 @@ from openadapt_capture.structural import (
     StructuralObservation,
     StructuralObservationRequest,
     StructuralProcessIdentity,
+    StructuralTreeNode,
     StructuralWindowIdentity,
+    omit_tree_value,
 )
 
 _logger = logging.getLogger(__name__)
@@ -379,6 +382,101 @@ def _resolve_process_name(process_id: int) -> str | None:
         return None
 
 
+def _runtime_id(info: Any) -> str | None:
+    if info is None:
+        return None
+    rid = _safe_value(info, "runtime_id")
+    if isinstance(rid, (list, tuple)):
+        parts: list[str] = []
+        for item in rid:
+            try:
+                parts.append(str(int(item)))
+            except (TypeError, ValueError):
+                return None
+        return ".".join(parts) if parts else None
+    return _present_string(rid)
+
+
+def _enabled(wrapper: Any) -> bool | None:
+    value = _safe_call(wrapper, "is_enabled")
+    return value if isinstance(value, bool) else None
+
+
+def _focused(wrapper: Any, info: Any) -> bool | None:
+    value = _safe_value(info, "has_keyboard_focus") if info is not None else None
+    if isinstance(value, bool):
+        return value
+    value = _safe_call(wrapper, "has_keyboard_focus")
+    return value if isinstance(value, bool) else None
+
+
+def _is_password(wrapper: Any, fields: dict[str, Any] | None = None) -> bool:
+    info = _element_info(wrapper)
+    if info is not None:
+        for attr in ("is_password", "IsPassword"):
+            if _safe_value(info, attr) is True:
+                return True
+        element = _safe_value(info, "element")
+        if _safe_value(element, "CurrentIsPassword") is True:
+            return True
+    resolved = fields if fields is not None else _element_fields(wrapper)
+    return omit_tree_value(
+        resolved.get("role"),
+        resolved.get("control_type"),
+        resolved.get("class_name"),
+    )
+
+
+def _value(wrapper: Any, fields: dict[str, Any] | None = None) -> str | None:
+    if _is_password(wrapper, fields):
+        return None
+    value = _present_string(_safe_call(wrapper, "get_value"))
+    if value is not None:
+        return value
+    iface = _safe_value(wrapper, "iface_value")
+    return _present_string(_safe_value(iface, "CurrentValue"))
+
+
+def _children(wrapper: Any) -> list[Any]:
+    children = _safe_call(wrapper, "children")
+    if children is None:
+        return []
+    try:
+        return list(children)
+    except TypeError:
+        return []
+
+
+def _as_tree_node(wrapper: Any, state: dict[str, int | bool]) -> StructuralTreeNode | None:
+    remaining = int(state["remaining"])
+    if remaining <= 0:
+        state["truncated"] = True
+        return None
+    state["remaining"] = remaining - 1
+    fields = _element_fields(wrapper)
+    info = _element_info(wrapper)
+    children: list[StructuralTreeNode] = []
+    for child in _children(wrapper):
+        node = _as_tree_node(child, state)
+        if node is not None:
+            children.append(node)
+        if state["truncated"]:
+            break
+    return StructuralTreeNode(
+        provider_runtime_id=_runtime_id(info),
+        automation_id=fields.get("automation_id"),
+        role=fields.get("role"),
+        control_type=fields.get("control_type"),
+        name=fields.get("name"),
+        class_name=fields.get("class_name"),
+        value=_value(wrapper, fields),
+        enabled=_enabled(wrapper),
+        focused=_focused(wrapper, info),
+        bounds=fields.get("bounds"),
+        children=children or None,
+    )
+
+
 def _observe_with_runtime(
     runtime: Any,
     request: StructuralObservationRequest,
@@ -389,12 +487,13 @@ def _observe_with_runtime(
 ) -> StructuralObservation | None:
     """Build one observation while every UIA wrapper stays on its owner thread."""
 
+    window_tree = request.query_kind == "window_tree"
     if request.x is not None and request.y is not None:
         target = runtime.from_point(request.x, request.y)
-        query_kind = "point"
+        query_kind = "window_tree" if window_tree else "point"
     else:
         target = runtime.focused_element()
-        query_kind = "focused"
+        query_kind = "window_tree" if window_tree else "focused"
     if target is None:
         return None
 
@@ -406,7 +505,6 @@ def _observe_with_runtime(
         # element that legitimately exposes nothing. Report no observation.
         return None
 
-    element = _as_element(target)
     process_id = _present_int(_safe_value(info, "process_id"))
     process = None
     if process_id is not None:
@@ -414,6 +512,27 @@ def _observe_with_runtime(
             process_id=process_id,
             process_name=_present_string(process_name_resolver(process_id)),
         )
+
+    if window_tree:
+        root = _safe_call(target, "top_level_parent") or target
+        tree_state: dict[str, int | bool] = {
+            "remaining": MAX_STRUCTURAL_TREE_NODES,
+            "truncated": False,
+        }
+        tree_root = _as_tree_node(root, tree_state)
+        return StructuralObservation(
+            provider="windows_uia",
+            event_timestamp=request.event_timestamp,
+            observed_at=clock(),
+            query_kind="window_tree",
+            element=_as_element(root),
+            process=process,
+            window=_window_identity(target),
+            tree=[tree_root] if tree_root is not None else None,
+            tree_truncated=True if tree_state["truncated"] else None,
+        )
+
+    element = _as_element(target)
     candidate_count, candidate_context = _candidate_cardinality(target)
     return StructuralObservation(
         provider="windows_uia",

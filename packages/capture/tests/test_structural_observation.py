@@ -22,8 +22,11 @@ from openadapt_capture.structural import (
     StructuralElement,
     StructuralObservation,
     StructuralObservationRequest,
+    StructuralTreeNode,
     create_structural_observer,
     observe_structural_action,
+    observe_window_tree,
+    omit_tree_value,
 )
 from openadapt_capture.structural_observer.linux import (
     LinuxATSpiStructuralObserver,
@@ -54,24 +57,37 @@ class _Wrapper:
         parent: "_Wrapper | None" = None,
         top: "_Wrapper | None" = None,
         descendants: list["_Wrapper"] | None = None,
+        children: list["_Wrapper"] | None = None,
         title: str | None = None,
         patterns: tuple[str, ...] = (),
+        runtime_id: object | None = None,
+        enabled: bool | None = True,
+        focused: bool = False,
+        value: str | None = None,
+        is_password: bool = False,
+        class_name: str | None = None,
     ) -> None:
         self.element_info = SimpleNamespace(
             automation_id=automation_id,
             control_type=control_type,
             name=name,
-            class_name=None,
+            class_name=class_name,
             framework_id=None,
             handle=None,
             process_id=process_id,
             rectangle=SimpleNamespace(left=10, top=20, right=110, bottom=60),
+            runtime_id=runtime_id,
+            has_keyboard_focus=focused,
+            is_password=is_password,
         )
         self._role = role
         self._parent = parent
         self._top = top
         self._descendants = descendants or []
+        self._children = children or []
         self._title = title
+        self._enabled = enabled
+        self._value = value
         self.descendant_queries: list[dict[str, object]] = []
         for pattern in patterns:
             setattr(self, f"iface_{pattern}", object())
@@ -88,6 +104,15 @@ class _Wrapper:
     def descendants(self, **kwargs) -> list["_Wrapper"]:
         self.descendant_queries.append(kwargs)
         return self._descendants
+
+    def children(self) -> list["_Wrapper"]:
+        return self._children
+
+    def is_enabled(self) -> bool | None:
+        return self._enabled
+
+    def get_value(self) -> str | None:
+        return self._value
 
     def window_text(self) -> str | None:
         return self._title
@@ -290,6 +315,10 @@ class _AXFakeRuntime:
             (self.window, "AXRole"): "AXWindow",
             (self.window, "AXTitle"): "Orders",
             (self.window, "AXWindowNumber"): 44,
+            (self.target, "AXEnabled"): True,
+            (self.target, "AXValue"): "on",
+            (self.parent, "AXEnabled"): True,
+            (self.window, "AXEnabled"): True,
         }
 
     def attribute(self, element, name):
@@ -308,6 +337,13 @@ class _AXFakeRuntime:
 
     def actions(self, element):
         return ["AXPress"] if element is self.target else None
+
+    def children(self, element):
+        if element is self.window:
+            return [self.parent]
+        if element is self.parent:
+            return [self.target]
+        return []
 
     def bounds(self, element):
         if element is self.target:
@@ -422,8 +458,26 @@ class _ATSpiFakeRuntime:
         return ["click"] if element is self.target else None
 
     def process_id(self, element):
-        assert element is self.target
         return 42
+
+    def children(self, element):
+        if element is self.window:
+            return [self.parent_element]
+        if element is self.parent_element:
+            return [self.target]
+        return []
+
+    def text_value(self, element):
+        if element is self.target:
+            return "Submit"
+        return None
+
+    def runtime_id(self, element):
+        if element is self.target:
+            return "atspi:submit"
+        if element is self.window:
+            return "atspi:window"
+        return None
 
 
 def test_linux_atspi_observer_returns_action_time_evidence() -> None:
@@ -930,3 +984,233 @@ def test_live_native_structural_provider_returns_exact_focused_evidence() -> Non
     assert observation.process is not None
     assert observation.process.process_id is not None
     assert observation.window is not None
+
+
+def test_windows_uia_window_tree_omits_password_values() -> None:
+    field = _Wrapper(
+        automation_id="member-id",
+        control_type="Edit",
+        name="Member",
+        role="Edit",
+        runtime_id=(1, 4),
+        value="queued",
+    )
+    secret = _Wrapper(
+        automation_id="password",
+        control_type="Edit",
+        name="Password",
+        role="Edit",
+        runtime_id=(1, 5),
+        value="typed-secret",
+        is_password=True,
+    )
+    button = _Wrapper(
+        automation_id="btnContinue",
+        control_type="Button",
+        name="Continue",
+        role="Button",
+        runtime_id=(1, 3),
+    )
+    window = _Wrapper(
+        automation_id="main-window",
+        control_type="Window",
+        name="Orders",
+        role="Window",
+        title="Orders - Example",
+        process_id=42,
+        runtime_id=(1, 1),
+        children=[field, secret, button],
+    )
+    field._top = window
+    secret._top = window
+    button._top = window
+    window._top = window
+    observer = WindowsUIAStructuralObserver(
+        runtime=SimpleNamespace(
+            from_point=lambda _x, _y: button,
+            focused_element=lambda: button,
+        ),
+        process_name_resolver=lambda process_id: "example.exe" if process_id == 42 else None,
+        clock=lambda: 101.25,
+    )
+
+    observed = observe_window_tree(
+        observer,
+        StructuralObservationRequest(
+            event_timestamp=101.0,
+            action_name="observe",
+            x=25,
+            y=35,
+        ),
+    )
+
+    assert observed is not None
+    assert observed.query_kind == "window_tree"
+    assert observed.window is not None
+    assert observed.window.title == "Orders - Example"
+    assert observed.tree is not None
+    root = observed.tree[0]
+    children = {child.automation_id: child for child in root.children or []}
+    assert children["member-id"].value == "queued"
+    assert children["member-id"].name == "Member"
+    assert children["password"].value is None
+    assert children["password"].name == "Password"
+    assert children["btnContinue"].provider_runtime_id == "1.3"
+    dumped = root.model_dump_json()
+    assert "typed-secret" not in dumped
+
+
+def test_macos_ax_window_tree_walks_from_the_ax_window() -> None:
+    observer = MacOSAXStructuralObserver(
+        runtime=_AXFakeRuntime(),
+        process_name_resolver=lambda pid: "Example" if pid == 42 else None,
+        clock=lambda: 101.25,
+    )
+    observed = observe_window_tree(
+        observer,
+        StructuralObservationRequest(
+            event_timestamp=101.0,
+            action_name="observe",
+            x=25,
+            y=35,
+        ),
+    )
+    assert observed is not None
+    assert observed.query_kind == "window_tree"
+    assert observed.element.role == "AXWindow"
+    assert observed.tree is not None
+    assert observed.tree[0].role == "AXWindow"
+    assert observed.tree[0].children is not None
+    group = observed.tree[0].children[0]
+    target = group.children[0]
+    assert target.automation_id == "submit-order"
+    assert target.provider_runtime_id == "submit-order"
+    assert target.value == "on"
+
+
+def test_linux_atspi_window_tree_walks_from_the_frame() -> None:
+    observer = LinuxATSpiStructuralObserver(
+        runtime=_ATSpiFakeRuntime(),
+        process_name_resolver=lambda pid: "example" if pid == 42 else None,
+        clock=lambda: 101.5,
+    )
+    observed = observe_window_tree(
+        observer,
+        StructuralObservationRequest(event_timestamp=101.0, action_name="observe"),
+    )
+    assert observed is not None
+    assert observed.query_kind == "window_tree"
+    assert observed.tree is not None
+    assert observed.tree[0].role == "frame"
+    assert observed.tree[0].provider_runtime_id == "atspi:window"
+    target = observed.tree[0].children[0].children[0]
+    assert target.automation_id == "submit-order"
+    assert target.value == "Submit"
+
+
+def test_window_tree_is_rejected_on_point_observations() -> None:
+    with pytest.raises(ValueError, match="window_tree"):
+        StructuralObservation(
+            provider="windows_uia",
+            event_timestamp=101.0,
+            observed_at=101.1,
+            query_kind="point",
+            element=StructuralElement(role="Button"),
+            tree=[StructuralTreeNode(role="Button")],
+        )
+
+
+def test_omit_tree_value_detects_password_and_secure_roles() -> None:
+    assert omit_tree_value("AXSecureTextField")
+    assert omit_tree_value("password text")
+    assert omit_tree_value("PasswordBox")
+    assert omit_tree_value("Edit", is_password=True)
+    assert not omit_tree_value("AXButton")
+    assert not omit_tree_value("Edit")
+
+
+def test_macos_ax_secure_text_field_omits_value() -> None:
+    runtime = _AXFakeRuntime()
+    secure = object()
+    runtime.attributes[runtime.window, "AXChildren"] = [runtime.parent, secure]
+    runtime.attributes[secure, "AXRole"] = "AXSecureTextField"
+    runtime.attributes[secure, "AXIdentifier"] = "password"
+    runtime.attributes[secure, "AXValue"] = "typed-secret"
+    runtime.attributes[secure, "AXEnabled"] = True
+
+    def children(element):
+        if element is runtime.window:
+            return [runtime.parent, secure]
+        if element is runtime.parent:
+            return [runtime.target]
+        return []
+
+    runtime.children = children
+    observer = MacOSAXStructuralObserver(
+        runtime=runtime,
+        process_name_resolver=lambda pid: "Example" if pid == 42 else None,
+        clock=lambda: 101.25,
+    )
+    observed = observe_window_tree(
+        observer,
+        StructuralObservationRequest(
+            event_timestamp=101.0,
+            action_name="observe",
+            x=25,
+            y=35,
+        ),
+    )
+    assert observed is not None
+    assert observed.tree is not None
+    secure_node = observed.tree[0].children[1]
+    assert secure_node.role == "AXSecureTextField"
+    assert secure_node.value is None
+    assert "typed-secret" not in observed.model_dump_json()
+
+
+def test_linux_atspi_password_text_omits_value() -> None:
+    runtime = _ATSpiFakeRuntime()
+    secret = _ATSpiElement("Password", runtime.window)
+
+    def role_name(element):
+        if element is secret:
+            return "password text"
+        return {
+            runtime.target: "push button",
+            runtime.parent_element: "panel",
+            runtime.window: "frame",
+            runtime.application: "application",
+        }[element]
+
+    def children(element):
+        if element is runtime.window:
+            return [runtime.parent_element, secret]
+        if element is runtime.parent_element:
+            return [runtime.target]
+        return []
+
+    def text_value(element):
+        if element is secret:
+            return "typed-secret"
+        if element is runtime.target:
+            return "Submit"
+        return None
+
+    runtime.role_name = role_name
+    runtime.children = children
+    runtime.text_value = text_value
+    observer = LinuxATSpiStructuralObserver(
+        runtime=runtime,
+        process_name_resolver=lambda pid: "example" if pid == 42 else None,
+        clock=lambda: 101.5,
+    )
+    observed = observe_window_tree(
+        observer,
+        StructuralObservationRequest(event_timestamp=101.0, action_name="observe"),
+    )
+    assert observed is not None
+    assert observed.tree is not None
+    secret_node = observed.tree[0].children[1]
+    assert secret_node.role == "password text"
+    assert secret_node.value is None
+    assert "typed-secret" not in observed.model_dump_json()

@@ -16,13 +16,16 @@ from typing import Any
 from openadapt_capture.structural import (
     MAX_STRUCTURAL_ANCESTRY_DEPTH,
     MAX_STRUCTURAL_TEXT_LENGTH,
+    MAX_STRUCTURAL_TREE_NODES,
     StructuralAncestor,
     StructuralBounds,
     StructuralElement,
     StructuralObservation,
     StructuralObservationRequest,
     StructuralProcessIdentity,
+    StructuralTreeNode,
     StructuralWindowIdentity,
+    omit_tree_value,
 )
 
 _logger = logging.getLogger(__name__)
@@ -285,6 +288,24 @@ class _GIAtspiRuntime:
             current = parent
         return None
 
+    def runtime_id(self, element: Any) -> str | None:
+        return _text(_call(element, "get_path", "getPath"))
+
+    def text_value(self, element: Any) -> str | None:
+        text = _call(element, "get_text_iface", "queryText", "get_text")
+        if text is None:
+            return _text(_call(element, "get_description", "getDescription"))
+        count = _integer(_call(text, "get_character_count", "getCharacterCount"))
+        if count is None or count <= 0:
+            return None
+        try:
+            return _text(text.get_text(0, min(count, MAX_STRUCTURAL_TEXT_LENGTH)))
+        except Exception:
+            try:
+                return _text(text.getText(0, min(count, MAX_STRUCTURAL_TEXT_LENGTH)))
+            except Exception:
+                return None
+
     def action_names(self, element: Any) -> list[str] | None:
         action = _call(element, "get_action_iface", "queryAction", "get_action")
         if action is None:
@@ -378,6 +399,96 @@ def _window(runtime: Any, element: Any) -> StructuralWindowIdentity | None:
     return identity if identity.model_dump(exclude_none=True) else None
 
 
+def _window_root(runtime: Any, element: Any) -> Any:
+    current = element
+    candidate = element
+    for _ in range(MAX_STRUCTURAL_ANCESTRY_DEPTH):
+        if (runtime.role_name(current) or "").casefold() in {
+            "alert",
+            "dialog",
+            "frame",
+            "window",
+        }:
+            candidate = current
+            break
+        parent = runtime.parent(current)
+        if parent is None:
+            break
+        current = parent
+    return candidate
+
+
+def _bool_state(runtime: Any, element: Any, name: str) -> bool | None:
+    method = getattr(runtime, "_state_contains", None)
+    if not callable(method):
+        return None
+    try:
+        return bool(method(element, name))
+    except Exception:
+        return None
+
+
+def _tree_value(runtime: Any, element: Any) -> str | None:
+    reader = getattr(runtime, "text_value", None)
+    if not callable(reader):
+        return None
+    try:
+        return _text(reader(element))
+    except Exception:
+        return None
+
+
+def _tree_runtime_id(runtime: Any, element: Any) -> str | None:
+    reader = getattr(runtime, "runtime_id", None)
+    if not callable(reader):
+        return None
+    try:
+        return _text(reader(element))
+    except Exception:
+        return None
+
+
+def _as_tree_node(
+    runtime: Any,
+    element: Any,
+    state: dict[str, int | bool],
+) -> StructuralTreeNode | None:
+    remaining = int(state["remaining"])
+    if remaining <= 0:
+        state["truncated"] = True
+        return None
+    state["remaining"] = remaining - 1
+    fields = _fields(runtime, element)
+    children: list[StructuralTreeNode] = []
+    try:
+        raw_children = runtime.children(element)
+    except Exception:
+        raw_children = []
+    for child in raw_children or []:
+        node = _as_tree_node(runtime, child, state)
+        if node is not None:
+            children.append(node)
+        if state["truncated"]:
+            break
+    return StructuralTreeNode(
+        provider_runtime_id=_tree_runtime_id(runtime, element),
+        automation_id=fields.get("automation_id"),
+        role=fields.get("role"),
+        control_type=fields.get("control_type"),
+        name=fields.get("name"),
+        class_name=fields.get("class_name"),
+        value=(
+            None
+            if omit_tree_value(fields.get("role"), fields.get("control_type"))
+            else _tree_value(runtime, element)
+        ),
+        enabled=_bool_state(runtime, element, "ENABLED"),
+        focused=_bool_state(runtime, element, "FOCUSED"),
+        bounds=fields.get("bounds"),
+        children=children or None,
+    )
+
+
 class LinuxATSpiStructuralObserver:
     """Read exact AT-SPI evidence for a pointer or focused action."""
 
@@ -432,17 +543,14 @@ class LinuxATSpiStructuralObserver:
             runtime = getattr(self._thread_state, "runtime", None)
         if runtime is None:
             return None
+        window_tree = request.query_kind == "window_tree"
         if request.x is not None and request.y is not None:
             element = runtime.element_at_point(request.x, request.y)
-            query_kind = "point"
+            query_kind = "window_tree" if window_tree else "point"
         else:
             element = runtime.focused_element()
-            query_kind = "focused"
+            query_kind = "window_tree" if window_tree else "focused"
         if element is None:
-            return None
-        fields = _fields(runtime, element)
-        observed_element = StructuralElement(**fields)
-        if not observed_element.model_dump(exclude_none=True):
             return None
         pid = _integer(runtime.process_id(element))
         process = None
@@ -451,6 +559,32 @@ class LinuxATSpiStructuralObserver:
                 process_id=pid,
                 process_name=self.process_name_resolver(pid),
             )
+        if window_tree:
+            root = _window_root(runtime, element)
+            fields = _fields(runtime, root)
+            observed_element = StructuralElement(**fields)
+            if not observed_element.model_dump(exclude_none=True):
+                return None
+            tree_state: dict[str, int | bool] = {
+                "remaining": MAX_STRUCTURAL_TREE_NODES,
+                "truncated": False,
+            }
+            tree_root = _as_tree_node(runtime, root, tree_state)
+            return StructuralObservation(
+                provider="linux_atspi",
+                event_timestamp=request.event_timestamp,
+                observed_at=self.clock(),
+                query_kind="window_tree",
+                element=observed_element,
+                process=process,
+                window=_window(runtime, element),
+                tree=[tree_root] if tree_root is not None else None,
+                tree_truncated=True if tree_state["truncated"] else None,
+            )
+        fields = _fields(runtime, element)
+        observed_element = StructuralElement(**fields)
+        if not observed_element.model_dump(exclude_none=True):
+            return None
         return StructuralObservation(
             provider="linux_atspi",
             event_timestamp=request.event_timestamp,

@@ -25,6 +25,12 @@ from openadapt_capture.authentication import (
     FreshFrameProof,
     load_authentication_handoffs,
 )
+from openadapt_capture.authoring_project import (
+    AUTHORING_OBSERVE_SCHEMA_VERSION,
+    AuthoringObserve,
+    AuthoringProjection,
+    project_authoring_observe,
+)
 from openadapt_capture.browser_events import (
     BoundingBox,
     BrowserClickEvent,
@@ -135,9 +141,11 @@ from openadapt_capture.structural import (
     StructuralObservationRequest,
     StructuralObserver,
     StructuralProcessIdentity,
+    StructuralTreeNode,
     StructuralWindowIdentity,
     create_structural_observer,
     observe_structural_action,
+    observe_window_tree,
 )
 
 # Visualization
@@ -188,9 +196,16 @@ __all__ = [
     "StructuralObservationRequest",
     "StructuralObserver",
     "StructuralProcessIdentity",
+    "StructuralTreeNode",
     "StructuralWindowIdentity",
     "create_structural_observer",
     "observe_structural_action",
+    "observe_window_tree",
+    # Authoring observe projector (vendor wire; no values/titles/screenshots)
+    "AUTHORING_OBSERVE_SCHEMA_VERSION",
+    "AuthoringObserve",
+    "AuthoringProjection",
+    "project_authoring_observe",
     # Window-scoped capture
     "WindowTarget",
     "TargetWindow",

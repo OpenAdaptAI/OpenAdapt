@@ -6,6 +6,13 @@
 
 ### Features
 
+- Add `window_tree` structural observations and a fail-closed authoring
+  projector. The raw tree may persist on disk for compile, except password
+  and secure-field values. Native AX, UIA, AT-SPI, and ARIA roles map onto
+  the types ElementRole enum. The vendor-wire payload is
+  `openadapt.authoring.observe/v1` without values, titles, or screenshots.
+  The observe fixture is pinned to openadapt-types PR 35. OS-injected input
+  still does not persist.
 - Add attended authentication handoffs. Capture suppresses sensitive source
   data, seals a bounded method marker, and retains a fresh exact frame before
   native input resumes. The same retry-safe operations are available through
