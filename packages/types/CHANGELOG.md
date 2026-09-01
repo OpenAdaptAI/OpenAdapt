@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.15.0 (2026-09-01)
+
+### Features
+
+- **types**: Add clinic inbox, outbox, and MCP result contracts
+  ([#36](https://github.com/OpenAdaptAI/openadapt-types/pull/36),
+  [`7af28a7`](https://github.com/OpenAdaptAI/openadapt-types/commit/7af28a748901656a03535f1d020011b86d5df5a0))
+
+Public JSON for the workbench-to-OpenAdapt job handoff. Identity is patient_token only. HALTED and
+  RECONCILIATION_REQUIRED do not map to success. needs_human true refuses actuation.
+
+
 ## v0.14.0 (2026-09-01)
 
 ### Features
