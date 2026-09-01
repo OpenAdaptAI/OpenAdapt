@@ -50,8 +50,10 @@ other checklist item is either closed with evidence or is an open *evidence*
 gap that requires new experiments, not a decision.
 
 1. **Authorship — DECIDED 2026-08-13.** Solo: `Richard Abrich, OpenAdapt.AI
-   (MLDSAI Inc.), richard@openadapt.ai`, ORCID `0000-0002-9556-4491` (now in
-   `main.tex`). Revisit a co-author only for the ICML merge, and only for a
+   (MLDSAI Inc.), richard@openadapt.ai`. The ORCID `0000-0002-9556-4491` that
+   previously sat in `main.tex` is not a live record: the checksum digit is
+   wrong, and `orcid.org` 404s. Do not link an ORCID until a real record
+   exists. Revisit a co-author only for the ICML merge, and only for a
    substantive contributor.
 2. **arXiv primary category, cross-lists, and endorsement.** Recommendation and
    justification below. arXiv requires endorsement for a first submission to a

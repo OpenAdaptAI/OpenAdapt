@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +41,40 @@ def require_contains(text: str, expected: str, label: str) -> None:
     normalized_expected = " ".join(expected.split())
     if expected not in text and normalized_expected not in normalized_text:
         raise AssertionError(f"{label}: paper is missing {expected!r}")
+
+
+def orcid_checksum_ok(orcid: str) -> bool:
+    """ISO 7064 Mod 11-2, as ORCID publishes it."""
+    digits = [ch for ch in orcid if ch.isdigit() or ch in "Xx"]
+    if len(digits) != 16:
+        return False
+    total = 0
+    for digit in digits[:-1]:
+        total = (total + int(digit)) * 2
+    remainder = total % 11
+    result = (12 - remainder) % 11
+    last = 10 if digits[-1] in "Xx" else int(digits[-1])
+    return result == last
+
+
+def require_orcid_hrefs_are_live_shape(paper_root: Path) -> None:
+    """Refuse an orcid.org href whose id cannot exist.
+
+    `0000-0002-9556-4491` failed this check (checksum wants 5, ORCID 404s).
+    """
+    pattern = re.compile(
+        r"https://orcid\.org/(0000-\d{4}-\d{4}-\d{3}[\dXx])",
+        re.IGNORECASE,
+    )
+    for tex in sorted(paper_root.rglob("*.tex")):
+        text = tex.read_text(encoding="utf-8")
+        for match in pattern.finditer(text):
+            orcid = match.group(1)
+            if not orcid_checksum_ok(orcid):
+                raise AssertionError(
+                    f"{tex.relative_to(paper_root)}: ORCID {orcid} fails "
+                    "the checksum and will 404 on orcid.org"
+                )
 
 
 def main() -> None:
@@ -1113,6 +1148,8 @@ def main() -> None:
         f"zero false accepts at {pixel['over_halt_rate'] * 100:.0f}\\% over-halt",
         "workshop pixel identity safety and availability",
     )
+
+    require_orcid_hrefs_are_live_shape(Path(__file__).resolve().parent)
 
     print("paper artifact constants: OK")
 
