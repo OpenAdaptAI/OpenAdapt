@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.14.0 (2026-09-01)
+
+### Features
+
+- **types**: Authoring observe, command, and bind schemas
+  ([#35](https://github.com/OpenAdaptAI/openadapt-types/pull/35),
+  [`9a4e46f`](https://github.com/OpenAdaptAI/openadapt-types/commit/9a4e46ffa07734dd05374175da9122677496f131))
+
+Merged by an agent session, not the founder.
+
+
 ## v0.13.0 (2026-08-31)
 
 ### Features
