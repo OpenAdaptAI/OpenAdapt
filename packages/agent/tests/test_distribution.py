@@ -163,6 +163,9 @@ def test_serve_is_the_subcommand_and_bundles_is_required() -> None:
     assert any(a.get("value") == "serve" for a in positional)
     assert "--bundles" in named
     assert named["--bundles"]["isRequired"] is True
+    assert "--authoring" not in named
+    assert not any(a.get("value") == "--authoring" for a in args)
+    assert _server_json()["packages"][0]["transport"]["type"] == "stdio"
 
 
 def test_registry_launch_is_read_only_by_default() -> None:
@@ -216,6 +219,9 @@ def test_llms_txt_lists_the_tool_surface() -> None:
         "run_workflow_<opaque-id>",
         "run_local_quickstart",
         "--tutorial",
+        "--authoring",
+        "observe",
+        "start_record",
         "continue_attention",
         "skip_attention",
         "teach_attention",
@@ -261,6 +267,11 @@ def test_identity_sentence_is_shared() -> None:
     assert THREE_LINE_INSTALL in README.read_text(encoding="utf-8")
     assert "serve --tutorial --allow-run" not in THREE_LINE_INSTALL
     assert "openadapt-agent serve --allow-run" in README.read_text(encoding="utf-8")
+    assert "serve --authoring" in README.read_text(encoding="utf-8")
+    assert "serve --authoring" in LLMS_TXT.read_text(encoding="utf-8")
+    assert "authoring connect" in README.read_text(encoding="utf-8")
+    assert "authoring connect" in LLMS_TXT.read_text(encoding="utf-8")
+    assert "openadapt connect" in README.read_text(encoding="utf-8")
     assert "openadapt quickstart --break-it" in README.read_text(encoding="utf-8")
     assert "If the tool returns unsigned success, treat it as failure" in README.read_text(
         encoding="utf-8"

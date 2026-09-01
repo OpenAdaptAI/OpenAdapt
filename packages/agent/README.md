@@ -42,6 +42,49 @@ uvx openadapt-agent serve --bundles /path/to/bundles          # read-only
 uvx openadapt-agent serve --bundles /path/to/bundles --allow-run
 ```
 
+## Author a first demo (Claude Code)
+
+Local Claude Code (or Cursor, Codex, Grok CLI) is the first authoring UI
+over stdio. Hosted ChatGPT.com / Claude.ai cannot talk to localhost; they
+need the outbound mailbox client below, not `serve --authoring`.
+
+```bash
+claude mcp add openadapt-authoring -- \
+  uvx --from 'openadapt-agent[tutorial]' openadapt-agent \
+  serve --authoring
+```
+
+`--bundles` is omitted. Probe tools are `observe`, `start_record`, `click`,
+and `halt`. `--authoring` does not enable run tools. This process stays
+stdio. Pass `--url` to pin a fresh Playwright Chromium with empty cookies.
+Windows native, Citrix, and RDP are coach-only in v1.
+
+## Connect this computer (ChatGPT.com / Claude.ai)
+
+OpenAdapt is installed on this computer, so an agent can drive only through
+OpenAdapt.
+
+Desktop: the tray is already running. **Connect this computer** on the job
+page (`openadapt://runner`) just works.
+
+Pip: after `pip install openadapt`, start the same mailbox client:
+
+```bash
+openadapt-agent authoring connect \
+  'openadapt://runner?pack=p.…&bind=oab_…&origin=https://openadapt.ai'
+```
+
+That claims `oab_`, polls `/j/{id}/runner/poll` with `wait_seconds: 0`,
+prints Allow (`y/n`) per chat account, and on pause prints `Sign in in
+the app, then press Enter`. Continue records with `record_observed`. It
+never types your password. Pass `--url` for a fresh Playwright Chromium
+with empty cookies.
+
+The job page should offer `openadapt connect <url>` next to Open
+OpenAdapt (meta-package alias; this repo implements
+`openadapt-agent authoring connect`). Overlay chrome, launchd, and the
+OS URL handler stay Desktop-only. See [`docs/MAILBOX_CLI.md`](docs/MAILBOX_CLI.md).
+
 ## Serve a bundle
 
 `--allow-run` with no `--bundles` records, compiles, and certifies the
@@ -150,6 +193,7 @@ Continue and Skip.
 | `run_local_quickstart` | `--allow-run` with no `--bundles` |
 | `reject_attention`, `teach_attention`, `escalate_attention` | `--allow-attended-actions` |
 | `continue_attention`, `skip_attention` | `--allow-attended-actions` plus a qualified deployment `--config` |
+| `observe`, `start_record`, `click`, `halt` | `--authoring` |
 
 ## Run outcomes
 

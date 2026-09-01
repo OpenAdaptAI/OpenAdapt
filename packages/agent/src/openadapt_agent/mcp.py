@@ -1,13 +1,15 @@
-"""MCP (stdio) transport for :class:`openadapt_agent.bridge.AgentBridge`.
+"""MCP (stdio) transport for the local OpenAdapt bridges.
 
 Run directly::
 
     python -m openadapt_agent.mcp --bundles ./bundles [--allow-run] ...
+    python -m openadapt_agent.mcp --authoring
 
 or via the CLI entry point ``openadapt-agent serve``. The server speaks
-MCP over stdio (what Claude Code / Claude Desktop consume). All tool logic
-lives in :mod:`openadapt_agent.bridge`; this module only adapts it to the
-official ``mcp`` SDK's low-level server.
+MCP over stdio (what Claude Code / Claude Desktop consume). Tool logic
+lives in :mod:`openadapt_agent.bridge` and :mod:`openadapt_agent.authoring`;
+this module only adapts them to the official ``mcp`` SDK's low-level
+server. This package does not open an HTTP listener.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
 from openadapt_agent.attended import ATTENDED_TOOLS
+from openadapt_agent.authoring import AuthoringBridge
 from openadapt_agent.bridge import AgentBridge, BridgeError
 
 __all__ = ["build_server", "serve"]
@@ -91,30 +94,50 @@ async def _confirm_attended_action(server: Server, name: str) -> None:
         )
 
 
-def build_server(bridge: AgentBridge) -> Server:
-    """Wrap a bridge in an ``mcp`` low-level Server (no I/O started)."""
+def _server_instructions(authoring: AuthoringBridge | None) -> str:
+    text = (
+        "Local bridge exposing compiled openadapt-flow workflow bundles "
+        "and PHI-safe Needs Attention items as tools. run_* tools execute via the governed "
+        "`openadapt-flow run` CLI and return a structured outcome: only "
+        "status 'success' means the workflow completed and verified. "
+        "'halt' means the run stopped and protected evidence remains in "
+        "the local operator experience; get_run_report returns only a "
+        "PHI-safe status/count summary by default. 'refused' means an "
+        "admission gate refused the bundle and nothing executed. "
+        "Continue/Skip require a human action "
+        "plus protocol-native operator elicitation, an exact signed "
+        "capability, live revalidation, and a stable idempotency key; they "
+        "never re-actuate the human-completed step. "
+        "Reject terminates the run and dispatches no new action, but earlier "
+        "run effects still require review of the protected local outcome. "
+        "Never report a halted, refused, timed-out, or error run as a success. "
+        "If execution_outcome is HALTED, tell the user the record did not change. "
+        "Write tools advertise requires_seal: true. If a write tool returns "
+        "unsigned success, treat it as failure."
+    )
+    if authoring is not None:
+        text += (
+            " --authoring adds first-demo tools observe, start_record, click, "
+            "and halt over this same local stdio process. Local stdio may also "
+            "type through the recorder; hosted MCP has no type tool. Human type "
+            "during pause_for_input is record_observed, never type_text. "
+            "compile returns needs_human_admit; an agent click never paints "
+            "VERIFIED. --authoring does not enable run tools. This process "
+            "must not be port-forwarded or served over HTTP."
+        )
+    return text
+
+
+def build_server(
+    bridge: AgentBridge | None = None,
+    authoring: AuthoringBridge | None = None,
+) -> Server:
+    """Wrap workflow and/or authoring bridges in an MCP Server (no I/O started)."""
+    if bridge is None and authoring is None:
+        raise ValueError("MCP server requires a workflow bridge or an authoring bridge")
     server: Server = Server(
         SERVER_NAME,
-        instructions=(
-            "Local bridge exposing compiled openadapt-flow workflow bundles "
-            "and PHI-safe Needs Attention items as tools. run_* tools execute via the governed "
-            "`openadapt-flow run` CLI and return a structured outcome: only "
-            "status 'success' means the workflow completed and verified. "
-            "'halt' means the run stopped and protected evidence remains in "
-            "the local operator experience; get_run_report returns only a "
-            "PHI-safe status/count summary by default. 'refused' means an "
-            "admission gate refused the bundle and nothing executed. "
-            "Continue/Skip require a human action "
-            "plus protocol-native operator elicitation, an exact signed "
-            "capability, live revalidation, and a stable idempotency key; they "
-            "never re-actuate the human-completed step. "
-            "Reject terminates the run and dispatches no new action, but earlier "
-            "run effects still require review of the protected local outcome. "
-            "Never report a halted, refused, timed-out, or error run as a success. "
-            "If execution_outcome is HALTED, tell the user the record did not change. "
-            "Write tools advertise requires_seal: true. If a write tool returns "
-            "unsigned success, treat it as failure."
-        ),
+        instructions=_server_instructions(authoring),
     )
 
     @server.list_tools()
@@ -131,7 +154,10 @@ def build_server(bridge: AgentBridge) -> Server:
                 ),
                 **({"_meta": spec.meta} if spec.meta is not None else {}),
             )
-            for spec in bridge.list_tool_specs()
+            for spec in (
+                *(bridge.list_tool_specs() if bridge is not None else ()),
+                *(authoring.list_tool_specs() if authoring is not None else ()),
+            )
         ]
 
     @server.call_tool()
@@ -141,7 +167,12 @@ def build_server(bridge: AgentBridge) -> Server:
                 await _confirm_attended_action(server, name)
 
             def call() -> dict[str, Any]:
-                return bridge.dispatch(name, dict(arguments or {}))
+                payload = dict(arguments or {})
+                if authoring is not None and authoring.handles(name):
+                    return authoring.dispatch(name, payload)
+                if bridge is None:
+                    raise BridgeError("unknown tool name")
+                return bridge.dispatch(name, payload)
 
             # CLI runs and filesystem projections are blocking. Live attended
             # actions synchronously submit to their own non-async backend-owner
@@ -180,15 +211,21 @@ def build_server(bridge: AgentBridge) -> Server:
     return server
 
 
-async def _run_stdio(bridge: AgentBridge) -> None:
-    server = build_server(bridge)
+async def _run_stdio(
+    bridge: AgentBridge | None,
+    authoring: AuthoringBridge | None = None,
+) -> None:
+    server = build_server(bridge, authoring=authoring)
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
-def serve(bridge: AgentBridge) -> None:
+def serve(
+    bridge: AgentBridge | None = None,
+    authoring: AuthoringBridge | None = None,
+) -> None:
     """Serve the bridge over stdio until the client disconnects."""
-    anyio.run(_run_stdio, bridge)
+    anyio.run(_run_stdio, bridge, authoring)
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised by smoke test
