@@ -147,6 +147,30 @@ class RewardUncertaintyStateV1(str, Enum):
     ORACLE_UNAVAILABLE = "oracle_unavailable"
 
 
+class RewardCalibrationScopeV1(str, Enum):
+    """What corpus the certificate was calibrated against.
+
+    ``synthetic`` is the only scope anyone can compute today.  ``production``
+    requires the Phase-1 calibration, which is not published.  A consumer
+    must show the scope beside the word certified.
+    """
+
+    SYNTHETIC = "synthetic"
+    PRODUCTION = "production"
+
+
+class RewardCertificateIssuerV1(str, Enum):
+    """Who signed the certificate.
+
+    ``self_signed`` is a certificate the trainer computed for itself.  It may
+    carry only ``synthetic`` scope.  ``organization`` is an organization node
+    that holds the calibration corpus and the signing key.
+    """
+
+    SELF_SIGNED = "self_signed"
+    ORGANIZATION = "organization"
+
+
 class RewardCertificationRefused(ValueError):
     """Raised when a tier-0 or tier-1 reward receipt is marked certified."""
 
@@ -335,9 +359,11 @@ class RewardCertificateV1(_StrictContract):
     delta: StrictFloat = Field(gt=0.0, lt=1.0, allow_inf_nan=False)
     threshold: StrictFloat = Field(allow_inf_nan=False)
     calibration_corpus_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    calibration_scope: RewardCalibrationScopeV1
     issued_at_policy_update: StrictInt = Field(ge=0, le=_MAX_POLICY_UPDATES)
     expiry_policy_updates: StrictInt = Field(ge=1, le=_MAX_POLICY_UPDATES)
     issued_at: StrictStr = Field(pattern=_TIMESTAMP_PATTERN)
+    issuer: RewardCertificateIssuerV1
     issuer_key_id: StrictStr = Field(pattern=_OPAQUE_ID_PATTERN)
     signature_algorithm: Literal["ed25519"] = "ed25519"
     signature: StrictStr = Field(min_length=88, max_length=88)
@@ -350,6 +376,13 @@ class RewardCertificateV1(_StrictContract):
     @model_validator(mode="after")
     def _issue_window(self) -> RewardCertificateV1:
         _parse_timestamp(self.issued_at, "issued_at")
+        if (
+            self.issuer is RewardCertificateIssuerV1.SELF_SIGNED
+            and self.calibration_scope is not RewardCalibrationScopeV1.SYNTHETIC
+        ):
+            raise ValueError(
+                "a self-signed reward certificate may only carry synthetic scope"
+            )
         if self.issued_at_policy_update + self.expiry_policy_updates > _MAX_POLICY_UPDATES:
             raise ValueError("reward certificate expiry overflows the update counter")
         return self
@@ -423,7 +456,10 @@ def score(
     * ``scalar`` is ``None`` for ``RECONCILIATION_REQUIRED`` and
       ``FAILED_PLATFORM``.  A trainer must drop or hold those episodes.
     * ``certified`` is true only at tier 2 or 3 with a certificate that is
-      current at ``policy_update``.
+      current at ``policy_update``, names its calibration corpus by digest,
+      and states its calibration scope.  A self-signed certificate can state
+      only ``synthetic`` scope, so a self-signed certificate alone never
+      yields a production-scope certification.
     * ``development_only`` is true at tier 0 or 1.  A tier-0 reward can train
       a local experiment.  It can never be certified.
     """
@@ -432,7 +468,13 @@ def score(
         raise ValueError("policy_update must be non-negative")
     development_only = int(tier) < REWARD_CERTIFIED_MINIMUM_TIER
     state = certificate_state(certificate, policy_update)
-    certified = not development_only and state is RewardCertificateStateV1.CURRENT
+    certified = (
+        not development_only
+        and certificate is not None
+        and state is RewardCertificateStateV1.CURRENT
+        and bool(certificate.calibration_corpus_digest)
+        and certificate.calibration_scope in RewardCalibrationScopeV1
+    )
     scalar = scoring.scalar_for(RewardOutcomeV1(outcome))
     return RewardScoreV1(scalar, certified, development_only)
 
@@ -470,6 +512,10 @@ class RewardEvidenceReceiptV1(_StrictContract):
     certificate_id: StrictStr | None = Field(default=None, pattern=_OPAQUE_ID_PATTERN)
     certificate_digest: StrictStr | None = Field(default=None, pattern=_SHA256_PATTERN)
     certificate_state: RewardCertificateStateV1
+    calibration_corpus_digest: StrictStr | None = Field(
+        default=None, pattern=_SHA256_PATTERN
+    )
+    calibration_scope: RewardCalibrationScopeV1 | None = None
     uncertainty: RewardUncertaintyStateV1
     certified: StrictBool
     development_only: StrictBool
@@ -505,14 +551,28 @@ class RewardEvidenceReceiptV1(_StrictContract):
             refuse_development_certification(self.oracle_tier)
             if self.certificate_state is not RewardCertificateStateV1.CURRENT:
                 raise ValueError("a certified reward requires a current certificate")
+            if self.calibration_corpus_digest is None:
+                raise ValueError("a certified reward requires a calibration corpus digest")
+            if self.calibration_scope is None:
+                raise ValueError("a certified reward requires a stated calibration scope")
         has_reference = (
-            self.certificate_id is not None or self.certificate_digest is not None
+            self.certificate_id is not None
+            or self.certificate_digest is not None
+            or self.calibration_corpus_digest is not None
+            or self.calibration_scope is not None
         )
         if self.certificate_state is RewardCertificateStateV1.ABSENT:
             if has_reference:
                 raise ValueError("an absent certificate cannot carry a reference")
-        elif self.certificate_id is None or self.certificate_digest is None:
-            raise ValueError("a referenced certificate requires id and digest")
+        elif (
+            self.certificate_id is None
+            or self.certificate_digest is None
+            or self.calibration_corpus_digest is None
+            or self.calibration_scope is None
+        ):
+            raise ValueError(
+                "a referenced certificate requires id, digest, corpus digest, and scope"
+            )
 
         scoring_class = REWARD_SCORING_CLASS[self.reward_outcome]
         if scoring_class is RewardScoringClassV1.UNSCORED:
@@ -550,6 +610,15 @@ class RewardEvidenceReceiptV1(_StrictContract):
     @property
     def scoring_class(self) -> RewardScoringClassV1:
         return REWARD_SCORING_CLASS[self.reward_outcome]
+
+    @property
+    def production_certified(self) -> bool:
+        """True only for a certified receipt whose scope is ``production``."""
+
+        return (
+            self.certified
+            and self.calibration_scope is RewardCalibrationScopeV1.PRODUCTION
+        )
 
     def unsigned_payload(self) -> dict[str, Any]:
         return self.model_dump(

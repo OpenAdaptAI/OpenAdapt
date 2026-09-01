@@ -1,5 +1,14 @@
 {
   "$defs": {
+    "RewardCalibrationScopeV1": {
+      "description": "What corpus the certificate was calibrated against.\n\n``synthetic`` is the only scope anyone can compute today.  ``production``\nrequires the Phase-1 calibration, which is not published.  A consumer\nmust show the scope beside the word certified.",
+      "enum": [
+        "synthetic",
+        "production"
+      ],
+      "title": "RewardCalibrationScopeV1",
+      "type": "string"
+    },
     "RewardCertificateStateV1": {
       "enum": [
         "absent",
@@ -38,6 +47,30 @@
   "additionalProperties": false,
   "description": "A signed statement that one episode's terminal effect was verified.\n\nThis receipt binds a reward contract, a policy checkpoint, an episode,\nand the oracle read.  It is not an Execute Seal.  It carries no\n``execution_id``, ``workflow_digest``, ``qualification_id``, or Execute\ncontract block, and it does not claim that Flow governed the policy.",
   "properties": {
+    "calibration_corpus_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Calibration Corpus Digest"
+    },
+    "calibration_scope": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RewardCalibrationScopeV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "certificate_digest": {
       "anyOf": [
         {

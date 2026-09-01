@@ -1,4 +1,24 @@
 {
+  "$defs": {
+    "RewardCalibrationScopeV1": {
+      "description": "What corpus the certificate was calibrated against.\n\n``synthetic`` is the only scope anyone can compute today.  ``production``\nrequires the Phase-1 calibration, which is not published.  A consumer\nmust show the scope beside the word certified.",
+      "enum": [
+        "synthetic",
+        "production"
+      ],
+      "title": "RewardCalibrationScopeV1",
+      "type": "string"
+    },
+    "RewardCertificateIssuerV1": {
+      "description": "Who signed the certificate.\n\n``self_signed`` is a certificate the trainer computed for itself.  It may\ncarry only ``synthetic`` scope.  ``organization`` is an organization node\nthat holds the calibration corpus and the signing key.",
+      "enum": [
+        "self_signed",
+        "organization"
+      ],
+      "title": "RewardCertificateIssuerV1",
+      "type": "string"
+    }
+  },
   "additionalProperties": false,
   "description": "A signed, expiring bound on one reward contract's false-accept rate.\n\nExpiry counts policy updates, not wall-clock time.  A certificate issued\nat update ``i`` with expiry ``n`` is current for updates ``i`` through\n``i + n - 1``.  Revocation is a separate list keyed by ``certificate_id``\nand is checked by the issuer, as it is for every other admission.",
   "properties": {
@@ -6,6 +26,9 @@
       "pattern": "^sha256:[a-f0-9]{64}$",
       "title": "Calibration Corpus Digest",
       "type": "string"
+    },
+    "calibration_scope": {
+      "$ref": "#/$defs/RewardCalibrationScopeV1"
     },
     "certificate_id": {
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
@@ -45,6 +68,9 @@
       "minimum": 0,
       "title": "Issued At Policy Update",
       "type": "integer"
+    },
+    "issuer": {
+      "$ref": "#/$defs/RewardCertificateIssuerV1"
     },
     "issuer_key_id": {
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
@@ -87,9 +113,11 @@
     "delta",
     "threshold",
     "calibration_corpus_digest",
+    "calibration_scope",
     "issued_at_policy_update",
     "expiry_policy_updates",
     "issued_at",
+    "issuer",
     "issuer_key_id",
     "signature"
   ],

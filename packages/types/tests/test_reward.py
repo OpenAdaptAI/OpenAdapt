@@ -21,6 +21,8 @@ from openadapt_types.reward import (
     REWARD_EVIDENCE_RECEIPT_SCHEMA,
     REWARD_SCORING_CLASS,
     UNSCORED_REWARD_OUTCOMES,
+    RewardCalibrationScopeV1,
+    RewardCertificateIssuerV1,
     RewardCertificateStateV1,
     RewardCertificateV1,
     RewardCertificationRefused,
@@ -89,9 +91,11 @@ def _certificate_payload(**updates: object) -> dict[str, object]:
         "delta": 0.05,
         "threshold": 0.5,
         "calibration_corpus_digest": _DIGEST,
+        "calibration_scope": "synthetic",
         "issued_at_policy_update": 100,
         "expiry_policy_updates": 50,
         "issued_at": "2026-09-01T12:00:00Z",
+        "issuer": "self_signed",
         "issuer_key_id": "key.reference.0001",
         "signature_algorithm": "ed25519",
         "signature": _SIGNATURE,
@@ -121,6 +125,8 @@ def _receipt_payload(**updates: object) -> dict[str, object]:
         "certificate_id": certificate.certificate_id,
         "certificate_digest": certificate.digest,
         "certificate_state": "current",
+        "calibration_corpus_digest": certificate.calibration_corpus_digest,
+        "calibration_scope": certificate.calibration_scope.value,
         "uncertainty": "none",
         "certified": True,
         "development_only": False,
@@ -373,11 +379,13 @@ def test_receipt_certified_requires_a_current_referenced_certificate() -> None:
             certificate_state="absent",
             certificate_id=None,
             certificate_digest=None,
+            calibration_corpus_digest=None,
+            calibration_scope=None,
             certified=True,
         )
     with pytest.raises(ValidationError, match="absent certificate"):
         _receipt(certificate_state="absent", certified=False)
-    with pytest.raises(ValidationError, match="requires id and digest"):
+    with pytest.raises(ValidationError, match="requires id, digest, corpus digest, and scope"):
         _receipt(certificate_digest=None)
 
 
@@ -443,6 +451,39 @@ def test_receipt_uncertainty_states_are_closed() -> None:
     }
     with pytest.raises(ValidationError):
         _receipt(uncertainty="maybe")
+
+
+# --- calibration scope ------------------------------------------------------
+
+
+def test_self_signed_certificate_refuses_production_scope() -> None:
+    with pytest.raises(ValidationError, match="self-signed.*synthetic scope"):
+        _certificate(issuer="self_signed", calibration_scope="production")
+    synthetic = _certificate(issuer="self_signed", calibration_scope="synthetic")
+    assert synthetic.issuer is RewardCertificateIssuerV1.SELF_SIGNED
+    assert synthetic.calibration_scope is RewardCalibrationScopeV1.SYNTHETIC
+    organization = _certificate(issuer="organization", calibration_scope="production")
+    assert organization.calibration_scope is RewardCalibrationScopeV1.PRODUCTION
+
+
+def test_certified_requires_corpus_digest_and_stated_scope() -> None:
+    with pytest.raises(ValidationError, match="stated calibration scope"):
+        _receipt(calibration_scope=None, certified=True)
+    with pytest.raises(ValidationError, match="calibration corpus digest"):
+        _receipt(calibration_corpus_digest=None, certified=True)
+    with pytest.raises(ValidationError, match="corpus digest, and scope"):
+        _receipt(calibration_scope=None, certified=False)
+
+    receipt = _receipt()
+    assert receipt.certified is True
+    assert receipt.calibration_scope is RewardCalibrationScopeV1.SYNTHETIC
+    assert receipt.production_certified is False
+    production = _receipt(calibration_scope="production")
+    assert production.production_certified is True
+
+    scored = score(RewardOutcomeV1.VERIFIED, 2, _certificate(), 120)
+    assert scored.certified is True
+    assert _certificate().calibration_scope is RewardCalibrationScopeV1.SYNTHETIC
 
 
 # --- not an Execute Seal ----------------------------------------------------

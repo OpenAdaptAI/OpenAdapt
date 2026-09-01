@@ -114,8 +114,10 @@ vector, the scalar, and the certificate state.
 
 `reconciliation_required` and `failed_platform` are unscored. They carry no
 scalar and the contract cannot map them to zero. `certified` is true only at
-oracle tier 2 or 3 with a current certificate. Tier 0 and 1 receipts are
-`development_only`.
+oracle tier 2 or 3 with a current certificate, a calibration corpus digest,
+and a stated `calibration_scope`. A self-signed certificate may carry only
+`synthetic` scope, and today that is the only scope anyone can compute. Tier
+0 and 1 receipts are `development_only`.
 
 The reward receipt is not an Execute Seal. It has its own schema id and none
 of the Seal's fields. It says OpenAdapt verified one episode's terminal

@@ -23,16 +23,32 @@ SHA-256 over sorted JSON. Components sort by name, so two authors who list them
 in a different order get the same digest.
 
 `RewardCertificateV1` is the bound: `epsilon`, `delta`, `threshold`, the
-calibration corpus digest, the checker configuration digest, the policy update
-it was issued at, and its expiry in policy updates. It is signed. Expiry
-counts updates, not hours, because on-policy training breaks the
-exchangeability the bound assumes. `is_current(policy_update)` answers whether
-a trainer may still use it.
+calibration corpus digest, the calibration scope, the checker configuration
+digest, the issuer, the policy update it was issued at, and its expiry in
+policy updates. It is signed. Expiry counts updates, not hours, because
+on-policy training breaks the exchangeability the bound assumes.
+`is_current(policy_update)` answers whether a trainer may still use it.
 
 `RewardEvidenceReceiptV1` binds the contract digest, the policy checkpoint and
 update number, the episode, the oracle tier, the evidence digest, the
-component vector, the scalar, the certificate reference and its state, and two
-booleans a trainer must read: `certified` and `development_only`.
+component vector, the scalar, the certificate reference and its state, the
+calibration corpus digest and scope, and two booleans a trainer must read:
+`certified` and `development_only`.
+
+## Synthetic scope is the only scope today
+
+Today the only certificate anyone can compute is against the synthetic
+MockMed/ExtraDup corpus, so its `calibration_scope` is `synthetic`. A
+`production` scope needs the Phase-1 calibration, which is not published.
+Until that changes, the word "certified" in any public text about a reward
+must sit next to the word "synthetic".
+
+The types hold that line. A certificate with `issuer: self_signed` may carry
+only `synthetic` scope; `self_signed` plus `production` does not validate. A
+receipt is `certified` only when the oracle tier is 2 or 3, the certificate is
+current, the calibration corpus digest is present, and the scope is stated.
+`production_certified` is true only when that scope is `production`, which no
+self-signed certificate can reach.
 
 ## Outcome to scalar
 
@@ -58,8 +74,8 @@ failure this contract exists to stop.
 | --- | --- | --- |
 | 0 (visual, OCR) | yes | never |
 | 1 (second session) | yes | never |
-| 2 (API, DB, file, ack) | no | with a current certificate |
-| 3 (counterparty) | no | with a current certificate |
+| 2 (API, DB, file, ack) | no | with a current certificate, corpus digest, and stated scope |
+| 3 (counterparty) | no | with a current certificate, corpus digest, and stated scope |
 
 The tier comes from the oracle channel, as it does for every Seal.
 `refuse_development_certification` raises `RewardCertificationRefused` for
