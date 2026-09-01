@@ -41,6 +41,7 @@ export interface ControlOverlayState {
   evidenceClasses: string[];
   modelCalls: number | null;
   externalNetworkCalls: "none" | "observed" | "unknown" | null;
+  pausePrompt: string | null;
 }
 
 export type ControlOverlayInput =
@@ -75,6 +76,7 @@ export const EMPTY_OVERLAY_STATE: ControlOverlayState = {
   evidenceClasses: [],
   modelCalls: null,
   externalNetworkCalls: null,
+  pausePrompt: null,
 };
 
 /** Only states with no in-flight observation or actuation may receive input. */
@@ -105,6 +107,10 @@ function recordingState(status: EngineStatus): ControlOverlayState {
     controls: capabilities,
     elapsedSeconds:
       typeof status.duration_secs === "number" ? status.duration_secs : null,
+    pausePrompt:
+      status.paused && typeof status.pause_prompt === "string"
+        ? status.pause_prompt
+        : null,
   };
 }
 

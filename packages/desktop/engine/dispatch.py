@@ -121,6 +121,7 @@ class EngineServices:
         flow_bridge: Any = None,
         runner: Any = None,
         portal: Any = None,
+        authoring: Any = None,
     ) -> None:
         self.config = config
         self._db = db
@@ -135,6 +136,7 @@ class EngineServices:
         # The mobile decision portal is likewise built on first use so the
         # engine never binds a socket or spawns a console it was not asked for.
         self.portal = portal
+        self.authoring = authoring
 
     @property
     def db(self) -> Any:
@@ -284,6 +286,11 @@ class EngineDispatcher:
             "login_browser": self.login_browser,
             "login_paste": self.login_paste,
             "connect_uri": self.connect_uri,
+            "claim_runner_uri": self.claim_runner_uri,
+            "authoring_allow": self.authoring_allow,
+            "authoring_deny": self.authoring_deny,
+            "authoring_status": self.authoring_status,
+            "authoring_pin_target": self.authoring_pin_target,
             "logout": self.logout,
             "get_auth_status": self.get_auth_status,
             # config / settings
@@ -567,6 +574,9 @@ class EngineDispatcher:
 
     def stop_recording(self, **params: Any) -> dict:
         """Stop the active recording, retain it, and compile it automatically."""
+        authoring = self.services.authoring
+        if authoring is not None and authoring.is_bound():
+            return authoring.operator_stop()
         controller = self.services.controller
         active = self._flow_recording
         if active is not None:
@@ -654,11 +664,19 @@ class EngineDispatcher:
         return self.get_status()
 
     def resume_recording(self, **params: Any) -> dict:
-        """Resume is not supported (stop/start instead); report current status."""
+        """Overlay Resume during an authoring pause records the typed field."""
+        authoring = self.services.authoring
+        if authoring is not None and authoring.has_pause():
+            return authoring.continue_pause()
         return self.get_status()
 
     def get_status(self, **params: Any) -> dict:
         """Return the current :class:`EngineStatus`-shaped recording status."""
+        authoring = self.services.authoring
+        if authoring is not None:
+            status = authoring.status_dict()
+            if status is not None and (status.get("recording") or status.get("halted")):
+                return status
         return self._status_dict(self.services.controller)
 
     def _status_dict(self, controller: Any) -> dict:
@@ -3260,6 +3278,42 @@ class EngineDispatcher:
             {"status": "connected", "host": host},
         )
         return result
+
+    def _authoring_service(self) -> Any:
+        if self.services.authoring is None:
+            from engine.authoring_runner import AuthoringRunner
+
+            self.services.authoring = AuthoringRunner(
+                self.config,
+                emit=self.emit,
+                audit=self.services.audit,
+            )
+        return self.services.authoring
+
+    def claim_runner_uri(self, **params: Any) -> dict:
+        """Claim one validated ``openadapt://runner`` bind URI."""
+        uri = params.get("uri")
+        if not isinstance(uri, str):
+            raise ValueError("uri is required")
+        result = self._authoring_service().claim_uri(uri)
+        self.emit("authoring_state", self._authoring_service().status())
+        return result
+
+    def authoring_allow(self, **params: Any) -> dict:
+        """Allow the pending connector ``sub`` to drive this job."""
+        return self._authoring_service().allow(replace=params.get("replace") is True)
+
+    def authoring_deny(self, **params: Any) -> dict:
+        """Refuse the pending Allow request."""
+        return self._authoring_service().deny()
+
+    def authoring_status(self, **params: Any) -> dict:
+        """Return the local authoring bind / Allow state."""
+        return self._authoring_service().status()
+
+    def authoring_pin_target(self, **params: Any) -> dict:
+        """Pin the local authoring backend. Titles never go to MCP."""
+        return self._authoring_service().pin_target(**params)
 
     def logout(self, **params: Any) -> dict:
         """Clear only the credential for the selected safe hosted origin."""

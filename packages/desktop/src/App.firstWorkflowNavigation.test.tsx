@@ -68,6 +68,16 @@ import App from "./App";
 import { CMD, engineTry, EVT } from "./lib/engine";
 import type { FirstWorkflowState } from "./lib/types";
 
+function bootDefaults(command: string): unknown {
+  if (command === CMD.GET_AUTH_STATUS) return { authenticated: true };
+  if (command === CMD.GET_NEEDS_ATTENTION) {
+    return { count: 0, open_halts: 0, failed_runs: 0 };
+  }
+  if (command === CMD.GET_SYNC_STATE) return { state: "synced", queued: 0 };
+  if (command === CMD.AUTHORING_STATUS) return { status: "idle" };
+  return undefined;
+}
+
 afterEach(() => {
   cleanup();
   appEventMocks.handlers.clear();
@@ -76,21 +86,18 @@ afterEach(() => {
 
 it("stays in onboarding when its durable stage cannot be saved", async () => {
   let stageAttempts = 0;
-  vi.mocked(engineTry).mockImplementation(async (command) => {
-    if (command === CMD.GET_AUTH_STATUS) return { authenticated: true };
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
     if (command === CMD.GET_WORKFLOWS) return [];
     if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
       return { ok: true, state: null };
     }
-    if (command === CMD.GET_NEEDS_ATTENTION) {
-      return { count: 0, open_halts: 0, failed_runs: 0 };
-    }
-    if (command === CMD.GET_SYNC_STATE) return { state: "synced", queued: 0 };
     if (command === CMD.SET_FIRST_WORKFLOW_STAGE) {
       stageAttempts += 1;
       return { ok: stageAttempts > 1 };
     }
-    return null;
+    return fallback ?? null;
   });
 
   render(<App />);
@@ -121,23 +128,20 @@ it("returns the pre-run action review to the supervised replay", async () => {
     task: "Read one test record",
     updated_at: "2026-08-27T00:00:00Z",
   };
-  vi.mocked(engineTry).mockImplementation(async (command, params) => {
-    if (command === CMD.GET_AUTH_STATUS) return { authenticated: true };
+  vi.mocked(engineTry).mockImplementation(async (command, params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
     if (command === CMD.GET_WORKFLOWS) {
       return [{ id: "workflow-1", name: "Test", steps: 1 }];
     }
     if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
       return { ok: true, state };
     }
-    if (command === CMD.GET_NEEDS_ATTENTION) {
-      return { count: 0, open_halts: 0, failed_runs: 0 };
-    }
-    if (command === CMD.GET_SYNC_STATE) return { state: "synced", queued: 0 };
     if (command === CMD.SET_FIRST_WORKFLOW_STAGE) {
       expect(params).toEqual({ stage: "review", workflow_id: "workflow-1" });
       return { ok: true, state: { ...state, stage: "review" } };
     }
-    return null;
+    return fallback ?? null;
   });
 
   render(<App />);
@@ -157,19 +161,16 @@ it("keeps the first-workflow context after a library visit", async () => {
     task: "Read one test record",
     updated_at: "2026-08-27T00:00:00Z",
   };
-  vi.mocked(engineTry).mockImplementation(async (command) => {
-    if (command === CMD.GET_AUTH_STATUS) return { authenticated: true };
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
     if (command === CMD.GET_WORKFLOWS) {
       return [{ id: "workflow-1", name: "Test workflow", steps: 1 }];
     }
     if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
       return { ok: true, state };
     }
-    if (command === CMD.GET_NEEDS_ATTENTION) {
-      return { count: 0, open_halts: 0, failed_runs: 0 };
-    }
-    if (command === CMD.GET_SYNC_STATE) return { state: "synced", queued: 0 };
-    return null;
+    return fallback ?? null;
   });
 
   render(<App />);
@@ -192,19 +193,16 @@ it("keeps navigation locked while the supervised replay is running", async () =>
     task: "Read one test record",
     updated_at: "2026-08-27T00:00:00Z",
   };
-  vi.mocked(engineTry).mockImplementation(async (command) => {
-    if (command === CMD.GET_AUTH_STATUS) return { authenticated: true };
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
     if (command === CMD.GET_WORKFLOWS) {
       return [{ id: "workflow-1", name: "Test workflow", steps: 1 }];
     }
     if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
       return { ok: true, state };
     }
-    if (command === CMD.GET_NEEDS_ATTENTION) {
-      return { count: 0, open_halts: 0, failed_runs: 0 };
-    }
-    if (command === CMD.GET_SYNC_STATE) return { state: "synced", queued: 0 };
-    return null;
+    return fallback ?? null;
   });
 
   render(<App />);
@@ -229,17 +227,14 @@ it("keeps navigation locked from recording stop through review initialization", 
     task: "Read one test record",
     updated_at: "2026-08-27T00:00:00Z",
   };
-  vi.mocked(engineTry).mockImplementation(async (command) => {
-    if (command === CMD.GET_AUTH_STATUS) return { authenticated: true };
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
     if (command === CMD.GET_WORKFLOWS) return [];
     if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
       return { ok: true, state: firstState };
     }
-    if (command === CMD.GET_NEEDS_ATTENTION) {
-      return { count: 0, open_halts: 0, failed_runs: 0 };
-    }
-    if (command === CMD.GET_SYNC_STATE) return { state: "synced", queued: 0 };
-    return null;
+    return fallback ?? null;
   });
 
   render(<App />);
@@ -274,4 +269,26 @@ it("keeps navigation locked from recording stop through review initialization", 
   await waitFor(() =>
     expect((workflows as HTMLButtonElement).disabled).toBe(false),
   );
+});
+
+it("leaves loading when authoring status is missing", async () => {
+  vi.mocked(engineTry).mockImplementation(async (command) => {
+    if (command === CMD.GET_AUTH_STATUS) return { authenticated: true };
+    if (command === CMD.GET_WORKFLOWS) return [];
+    if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
+      return { ok: true, state: null };
+    }
+    if (command === CMD.GET_NEEDS_ATTENTION) {
+      return { count: 0, open_halts: 0, failed_runs: 0 };
+    }
+    if (command === CMD.GET_SYNC_STATE) return { state: "synced", queued: 0 };
+    if (command === CMD.AUTHORING_STATUS) return null;
+    return null;
+  });
+
+  render(<App />);
+  expect(
+    await screen.findByRole("button", { name: "Start first workflow" }),
+  ).toBeTruthy();
+  expect(screen.queryByText("Loading…")).toBeNull();
 });

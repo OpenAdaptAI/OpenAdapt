@@ -70,6 +70,11 @@ export const CMD = {
   LOGIN_PASTE: "login_paste",
   LOGOUT: "logout",
   GET_AUTH_STATUS: "get_auth_status",
+  CLAIM_RUNNER_URI: "claim_runner_uri",
+  AUTHORING_ALLOW: "authoring_allow",
+  AUTHORING_DENY: "authoring_deny",
+  AUTHORING_STATUS: "authoring_status",
+  AUTHORING_PIN_TARGET: "authoring_pin_target",
   // config / settings (lane, phi_mode, hosted host)
   GET_CONFIG: "get_config",
   SET_CONFIG: "set_config",
@@ -119,6 +124,7 @@ export const EVT = {
   BREAK_COUNT: "break_count",
   SIDECAR_STATE: "sidecar_state",
   PAIRING_STATE: "pairing_state",
+  AUTHORING_STATE: "authoring_state",
   RUNNER_STATE: "runner_state",
   PORTAL_STATE: "portal_state",
   // Carries only {title, body, open_count, route}; see attentionNotification.ts.

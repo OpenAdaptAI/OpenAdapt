@@ -80,6 +80,7 @@ export interface EngineStatus {
   paused: boolean;
   duration_secs?: number | null;
   capture_id?: string | null;
+  pause_prompt?: string | null;
   controls?: {
     pause: boolean;
     resume: boolean;

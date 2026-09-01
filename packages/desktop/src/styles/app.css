@@ -1515,6 +1515,30 @@ select.input:focus {
   font-size: 20px;
 }
 
+.pairing-notice .allow-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pairing-notice .allow-actions button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.pairing-notice .allow-actions input[type="url"] {
+  min-width: 12rem;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
 /* decision portal — pairing panel and paired-device list */
 .pairing-panel {
   display: flex;

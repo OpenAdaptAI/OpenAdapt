@@ -11,6 +11,24 @@ import {
   CONTROL_OVERLAY_FRAME_VERSION,
 } from "./contract";
 
+it("shows the authoring pause card copy without sending titles", () => {
+  const state = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "recording-status",
+    status: {
+      recording: true,
+      paused: true,
+      pause_prompt: "Type in the application. Continue here when done.",
+      controls: { pause: false, resume: true, stop: true },
+    },
+  });
+
+  expect(state.phase).toBe("paused");
+  expect(state.pausePrompt).toBe(
+    "Type in the application. Continue here when done.",
+  );
+  expect(JSON.stringify(state)).not.toContain("title");
+});
+
 it("projects only advertised recording controls", () => {
   const state = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
     kind: "recording-status",

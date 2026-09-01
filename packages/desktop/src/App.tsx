@@ -170,6 +170,15 @@ export default function App() {
   const [sync, setSync] = useState<SyncState>({ state: "synced", queued: 0 });
   const [breaks, setBreaks] = useState(0);
   const [pairing, setPairing] = useState<PairingState | null>(null);
+  const [authoring, setAuthoring] = useState<{
+    status: string;
+    client_display?: string;
+    prompt?: string;
+    error?: string;
+    allowed?: boolean;
+    coach_only?: boolean;
+  } | null>(null);
+  const [authoringUrl, setAuthoringUrl] = useState("");
   const [firstRunPersistencePending, setFirstRunPersistencePending] =
     useState(false);
   const [firstWorkflowRunning, setFirstWorkflowRunning] = useState(false);
@@ -222,36 +231,52 @@ export default function App() {
   }
 
   // Bootstrap: auth status, sidecar liveness, and the status channels.
+  // Authoring bind is optional — a missing status must not leave the shell
+  // on Loading, or first-workflow navigation never mounts.
   useEffect(() => {
     (async () => {
-      setEngineUp(await sidecarRunning());
-      const a = await engineTry<AuthStatus>(
-        CMD.GET_AUTH_STATUS,
-        {},
-        { authenticated: false },
-      );
-      setAuth(a);
-      const [wf, firstWorkflow] = await Promise.all([
-        engineTry<Workflow[]>(CMD.GET_WORKFLOWS, {}, []),
-        engineTry<FirstWorkflowStateResponse>(
-          CMD.GET_FIRST_WORKFLOW_STATE,
+      try {
+        setEngineUp(await sidecarRunning());
+        const a = await engineTry<AuthStatus>(
+          CMD.GET_AUTH_STATUS,
           {},
-          { ok: true, state: null },
-        ),
-      ]);
-      const resumedRoute = routeForFirstWorkflow(firstWorkflow.state);
-      setFirstWorkflowState(firstWorkflow.state);
-      setOnboarded(wf.length > 0 || resumedRoute !== null);
-      if (resumedRoute) setRoute(resumedRoute);
-      const na = await engineTry<NeedsAttention>(
-        CMD.GET_NEEDS_ATTENTION,
-        {},
-        { count: 0, open_halts: 0, failed_runs: 0 },
-      );
-      setBreaks(na.count);
-      const ss = await engineTry<SyncState>(CMD.GET_SYNC_STATE, {}, sync);
-      setSync(ss);
-      setCheckedAuth(true);
+          { authenticated: false },
+        );
+        setAuth(a);
+        const [wf, firstWorkflow] = await Promise.all([
+          engineTry<Workflow[]>(CMD.GET_WORKFLOWS, {}, []),
+          engineTry<FirstWorkflowStateResponse>(
+            CMD.GET_FIRST_WORKFLOW_STATE,
+            {},
+            { ok: true, state: null },
+          ),
+        ]);
+        const resumedRoute = routeForFirstWorkflow(firstWorkflow.state);
+        setFirstWorkflowState(firstWorkflow.state);
+        setOnboarded(wf.length > 0 || resumedRoute !== null);
+        if (resumedRoute) setRoute(resumedRoute);
+        const na = await engineTry<NeedsAttention>(
+          CMD.GET_NEEDS_ATTENTION,
+          {},
+          { count: 0, open_halts: 0, failed_runs: 0 },
+        );
+        setBreaks(na.count);
+        const ss = await engineTry<SyncState>(CMD.GET_SYNC_STATE, {}, sync);
+        setSync(ss);
+        const authoringStatus = await engineTry<{
+          status: string;
+          client_display?: string;
+          prompt?: string;
+          error?: string;
+          allowed?: boolean;
+          coach_only?: boolean;
+        } | null>(CMD.AUTHORING_STATUS, {}, { status: "idle" });
+        if (authoringStatus?.status && authoringStatus.status !== "idle") {
+          setAuthoring(authoringStatus);
+        }
+      } finally {
+        setCheckedAuth(true);
+      }
     })();
 
     const unsubs = [
@@ -312,6 +337,19 @@ export default function App() {
           });
         }
       }),
+      onEngineEvent(
+        EVT.AUTHORING_STATE,
+        (state: {
+          status: string;
+          client_display?: string;
+          prompt?: string;
+          error?: string;
+          allowed?: boolean;
+          coach_only?: boolean;
+        }) => {
+          setAuthoring(state);
+        },
+      ),
     ];
     return () => unsubs.forEach((p) => p.then((u) => u()).catch(() => {}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -341,6 +379,145 @@ export default function App() {
       )}
     </div>
   ) : null;
+  const authoringNotice =
+    authoring &&
+    (authoring.status === "pending_allow" ||
+      authoring.status === "replace_allow" ||
+      authoring.status === "error" ||
+      authoring.status === "bound") ? (
+      <div
+        className={`pairing-notice ${authoring.status === "error" ? "error" : ""}`}
+        role={authoring.status === "error" ? "alert" : "status"}
+      >
+        <span>
+          {authoring.status === "error"
+            ? authoring.error || "The authoring bind could not be completed."
+            : authoring.status === "bound"
+              ? authoring.coach_only
+                ? "This job is coach-only on this window. ChatGPT can suggest; you click."
+                : authoring.allowed
+                  ? "Pin the browser URL or use this window. Titles stay on this computer."
+                  : "This computer is bound. Pin the window, then Allow ChatGPT to drive this job."
+              : authoring.prompt ||
+                (authoring.status === "replace_allow"
+                  ? `A different ${authoring.client_display || "ChatGPT"} account is asking. Allow it to replace the current one?`
+                  : `Allow ${authoring.client_display || "ChatGPT"} to drive this job`)}
+        </span>
+        {(authoring.status === "pending_allow" ||
+          authoring.status === "replace_allow") && (
+          <span className="allow-actions">
+            <button
+              type="button"
+              onClick={() => {
+                void engineTry(
+                  CMD.AUTHORING_ALLOW,
+                  { replace: authoring.status === "replace_allow" },
+                  {},
+                ).then(() =>
+                  engineTry(
+                    CMD.AUTHORING_STATUS,
+                    {},
+                    { status: "bound", allowed: true },
+                  ).then((next) => setAuthoring(next)),
+                );
+              }}
+            >
+              Allow
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void engineTry(CMD.AUTHORING_DENY, {}, {}).then(() =>
+                  engineTry(
+                    CMD.AUTHORING_STATUS,
+                    {},
+                    { status: "bound", allowed: false },
+                  ).then((next) => setAuthoring(next)),
+                );
+              }}
+            >
+              Not now
+            </button>
+          </span>
+        )}
+        {authoring.status === "bound" && (
+          <span className="allow-actions">
+            <input
+              aria-label="Playwright URL"
+              onChange={(event) => setAuthoringUrl(event.target.value)}
+              placeholder="https://"
+              type="url"
+              value={authoringUrl}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                void engineTry(
+                  CMD.AUTHORING_PIN_TARGET,
+                  { backend: "web", url: authoringUrl },
+                  {},
+                ).then((next) =>
+                  setAuthoring((current) =>
+                    current
+                      ? {
+                          ...current,
+                          coach_only:
+                            typeof next === "object" &&
+                            next !== null &&
+                            "coach_only" in next
+                              ? Boolean(
+                                  (next as { coach_only?: boolean }).coach_only,
+                                )
+                              : current.coach_only,
+                        }
+                      : current,
+                  ),
+                );
+              }}
+            >
+              Pin browser
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void engineTry(
+                  CMD.AUTHORING_PIN_TARGET,
+                  { use_frontmost: true },
+                  {},
+                ).then((next) =>
+                  setAuthoring((current) =>
+                    current
+                      ? {
+                          ...current,
+                          coach_only:
+                            typeof next === "object" &&
+                            next !== null &&
+                            "coach_only" in next
+                              ? Boolean(
+                                  (next as { coach_only?: boolean }).coach_only,
+                                )
+                              : true,
+                        }
+                      : current,
+                  ),
+                );
+              }}
+            >
+              Use this window
+            </button>
+          </span>
+        )}
+        {authoring.status === "error" && (
+          <button
+            type="button"
+            aria-label="Dismiss authoring notice"
+            onClick={() => setAuthoring(null)}
+          >
+            ×
+          </button>
+        )}
+      </div>
+    ) : null;
   const firstWorkflowStageNotice = firstWorkflowStageError ? (
     <div className="pairing-notice error" role="alert">
       <span>{firstWorkflowStageError}</span>
@@ -358,6 +535,7 @@ export default function App() {
     return (
       <>
         {pairingNotice}
+        {authoringNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
           <div className="center-stage"><span className="page-sub">Loading…</span></div>
@@ -370,6 +548,7 @@ export default function App() {
     return (
       <>
         {pairingNotice}
+        {authoringNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
           <Login
@@ -390,6 +569,7 @@ export default function App() {
     return (
       <>
         {pairingNotice}
+        {authoringNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
           <Onboarding
@@ -430,6 +610,7 @@ export default function App() {
   return (
     <>
       {pairingNotice}
+      {authoringNotice}
       {firstWorkflowStageNotice}
       <div className="app">
         <header className="desktop-shell">

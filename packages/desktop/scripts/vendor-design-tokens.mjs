@@ -25,10 +25,29 @@ const write = process.argv.includes('--write');
 
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 
-async function fetchCanonical(url) {
-  const response = await fetch(url, { headers: { accept: 'text/plain' } });
+async function fetchCanonical(entry) {
+  // openadapt-web is private, so raw.githubusercontent.com 404s. CI already
+  // passes GITHUB_TOKEN; use the Contents API the same way --write does.
+  const token = process.env.GITHUB_TOKEN;
+  if (token) {
+    const url =
+      `https://api.github.com/repos/${provenance.canonical_repository}` +
+      `/contents/${entry.canonical_path}` +
+      `?ref=${encodeURIComponent(provenance.canonical_branch)}`;
+    const response = await fetch(url, {
+      headers: {
+        accept: 'application/vnd.github.raw',
+        authorization: `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`GET ${url} -> HTTP ${response.status}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+  const response = await fetch(entry.raw_url, { headers: { accept: 'text/plain' } });
   if (!response.ok) {
-    throw new Error(`GET ${url} -> HTTP ${response.status}`);
+    throw new Error(`GET ${entry.raw_url} -> HTTP ${response.status}`);
   }
   return Buffer.from(await response.arrayBuffer());
 }
@@ -59,7 +78,7 @@ for (const [name, entry] of Object.entries(provenance.files)) {
     );
   }
 
-  const canonical = await fetchCanonical(entry.raw_url);
+  const canonical = await fetchCanonical(entry);
   const canonicalSha = sha256(canonical);
 
   if (write) {

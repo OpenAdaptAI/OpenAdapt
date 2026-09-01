@@ -251,7 +251,9 @@ export function ControlOverlay() {
         <div className="overlay-copy" data-tauri-drag-region>
           <div className="overlay-primary" role="status" aria-live="polite">
             <span className="overlay-pulse" aria-hidden="true" />
-            <strong>{overlayPlainStatus(state.phase)}</strong>
+            <strong>
+              {state.pausePrompt || overlayPlainStatus(state.phase)}
+            </strong>
             <span className="overlay-step">{stepLabel}</span>
             {state.profile && (
               <span className="overlay-profile">{state.profile}</span>
@@ -293,10 +295,16 @@ export function ControlOverlay() {
             disabled={busy || !pauseAvailable}
             title={controlHelp}
             aria-describedby={!pauseAvailable ? "pause-unavailable" : undefined}
-            aria-label={showResume ? "Resume OpenAdapt" : "Pause OpenAdapt"}
+            aria-label={
+              showResume
+                ? state.pausePrompt
+                  ? "Continue OpenAdapt"
+                  : "Resume OpenAdapt"
+                : "Pause OpenAdapt"
+            }
             onClick={() => control(showResume ? "resume" : "pause")}
           >
-            {showResume ? "Resume" : "Pause"}
+            {showResume ? (state.pausePrompt ? "Continue" : "Resume") : "Pause"}
           </button>
           <button
             type="button"

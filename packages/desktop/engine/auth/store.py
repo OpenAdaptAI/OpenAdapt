@@ -815,6 +815,89 @@ def clear_runner_credential(host: str) -> None:
     _kr_delete(_keyring(), host + _RUNNER_SUFFIX)
 
 
+_AUTHORING_LEASE_PREFIX = "openadapt-authoring-lease|"
+_AUTHORING_LEASE_KEYS = frozenset(
+    {
+        "pack",
+        "origin",
+        "lease_secret",
+        "lease_s",
+        "claimed_at",
+        "allowed_sub",
+        "allowed_client_id",
+        "allowed_at",
+    }
+)
+_SHA256_HEX_VALUE = re.compile(r"^[a-f0-9]{64}$")
+
+
+def _authoring_lease_account(pack_id: str) -> str:
+    from engine.auth.runner_bind import valid_pack_id
+
+    if not valid_pack_id(pack_id):
+        raise ValueError("pack id is malformed")
+    return _AUTHORING_LEASE_PREFIX + pack_id
+
+
+def store_authoring_lease(pack_id: str, payload: dict) -> bool:
+    """Persist one authoring mailbox lease in the OS keychain."""
+
+    from engine.auth.runner_bind import (
+        AUTHORING_ORIGIN,
+        valid_lease_secret,
+        valid_pack_id,
+    )
+
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != _AUTHORING_LEASE_KEYS
+        or not valid_pack_id(payload.get("pack"))
+        or payload.get("pack") != pack_id
+        or payload.get("origin") != AUTHORING_ORIGIN
+        or not valid_lease_secret(payload.get("lease_secret"))
+        or not isinstance(payload.get("lease_s"), int)
+        or isinstance(payload.get("lease_s"), bool)
+        or payload.get("lease_s") <= 0
+        or not isinstance(payload.get("claimed_at"), str)
+        or payload.get("claimed_at") == ""
+    ):
+        return False
+    for key in ("allowed_sub", "allowed_client_id", "allowed_at"):
+        value = payload.get(key)
+        if value is None:
+            continue
+        if key == "allowed_at" and isinstance(value, str) and value:
+            continue
+        if key != "allowed_at" and isinstance(value, str) and _SHA256_HEX_VALUE.fullmatch(value):
+            continue
+        return False
+    account = _authoring_lease_account(pack_id)
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return _apply_exact(_keyring(), account, encoded)
+
+
+def load_authoring_lease(pack_id: str) -> dict | None:
+    """Load the authoring mailbox lease for ``pack_id``, or None."""
+
+    account = _authoring_lease_account(pack_id)
+    readable, raw = _strict_get(_keyring(), account)
+    if not readable or raw is None:
+        return None
+    try:
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict) or set(payload) != _AUTHORING_LEASE_KEYS:
+        return None
+    return payload
+
+
+def clear_authoring_lease(pack_id: str) -> None:
+    """Delete the authoring mailbox lease for ``pack_id``."""
+
+    _kr_delete(_keyring(), _authoring_lease_account(pack_id))
+
+
 def canonical_host_origin(host: str) -> str:
     """Return a safe web origin for credential binding, or ``""``.
 

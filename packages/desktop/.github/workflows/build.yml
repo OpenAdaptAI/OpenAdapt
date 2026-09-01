@@ -72,7 +72,9 @@ jobs:
       # and the marketing site drift into looking like two products.
       - name: Check the vendored design tokens against openadapt-web
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          # github.token cannot read private OpenAdaptAI/openadapt-web.
+          # ADMIN_TOKEN can; fall back so local/fork runs still try github.token.
+          GITHUB_TOKEN: ${{ secrets.ADMIN_TOKEN || github.token }}
         run: npm run tokens:check
 
   python-distribution:

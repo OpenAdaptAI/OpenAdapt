@@ -1,9 +1,14 @@
-//! Strict operating-system deep-link boundary for one-click Cloud pairing.
+//! Strict operating-system deep-link boundary for Cloud pairing and authoring.
 //!
 //! The protocol handler never opens a URL or constructs a process command. It
-//! accepts one fixed `openadapt://connect` URI, validates every field, and
-//! forwards the original URI as one JSON string to the fixed Python
-//! `connect_uri` sidecar action.
+//! accepts two fixed schemes, validates every field, and forwards the original
+//! URI as one JSON string to one sidecar action:
+//!
+//! - `openadapt://connect` → `connect_uri`
+//! - `openadapt://runner` → `claim_runner_uri`
+//!
+//! Connect is not widened to accept runner fields, and runner is not widened
+//! to accept connect fields.
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -18,6 +23,7 @@ use url::Url;
 use crate::sidecar::SidecarInner;
 
 const MANAGED_HOST: &str = "app.openadapt.ai";
+const AUTHORING_ORIGIN: &str = "https://openadapt.ai";
 const MAX_URI_BYTES: usize = 2048;
 const MAX_RECENT_LINKS: usize = 64;
 
@@ -72,7 +78,12 @@ fn route_urls(
     let action = match single_action(urls) {
         Ok(action) => action,
         Err(error) => {
-            emit_state(&app, "error", Some(error));
+            let event = if urls.iter().any(|url| url.host_str() == Some("runner")) {
+                "engine://authoring_state"
+            } else {
+                "engine://pairing_state"
+            };
+            emit_state(&app, event, "error", Some(error));
             return;
         }
     };
@@ -92,32 +103,48 @@ fn route_urls(
         handled.insert(fingerprint);
     }
 
-    emit_state(&app, "connecting", None);
+    let event = status_event(action.command);
+    let connecting = if action.command == "claim_runner_uri" {
+        "claiming"
+    } else {
+        "connecting"
+    };
+    emit_state(&app, event, connecting, None);
     tauri::async_runtime::spawn(async move {
         let result = engine
             .send_command(action.command, json!({ "uri": action.uri }))
             .await;
         match result {
             Ok(data) => {
-                let _ = app.emit(
-                    "engine://pairing_state",
-                    json!({ "status": "connected", "data": data }),
-                );
+                let connected = if action.command == "claim_runner_uri" {
+                    "bound"
+                } else {
+                    "connected"
+                };
+                let _ = app.emit(event, json!({ "status": connected, "data": data }));
             }
             Err(error) => {
                 eprintln!("[pairing] connection failed: {error}");
-                emit_state(&app, "error", Some(&error));
+                emit_state(&app, event, "error", Some(&error));
             }
         }
     });
 }
 
-fn emit_state(app: &AppHandle, status: &str, error: Option<&str>) {
+fn status_event(command: &str) -> &'static str {
+    if command == "claim_runner_uri" {
+        "engine://authoring_state"
+    } else {
+        "engine://pairing_state"
+    }
+}
+
+fn emit_state(app: &AppHandle, event: &str, status: &str, error: Option<&str>) {
     let payload = match error {
         Some(error) => json!({ "status": status, "error": error }),
         None => json!({ "status": status }),
     };
-    let _ = app.emit("engine://pairing_state", payload);
+    let _ = app.emit(event, payload);
 }
 
 fn fingerprint(uri: &str) -> u64 {
@@ -135,18 +162,31 @@ fn single_action(urls: &[Url]) -> Result<PairingAction, &'static str> {
 
 fn action_for_url(url: &Url) -> Result<PairingAction, &'static str> {
     let uri = url.as_str();
+    let runner = url.host_str() == Some("runner");
+    let invalid = if runner {
+        "Invalid OpenAdapt runner link"
+    } else {
+        "Invalid OpenAdapt connect link"
+    };
     if uri.len() > MAX_URI_BYTES
         || url.scheme() != "openadapt"
-        || url.host_str() != Some("connect")
         || !url.username().is_empty()
         || url.password().is_some()
         || url.port().is_some()
         || !matches!(url.path(), "" | "/")
         || url.fragment().is_some()
     {
-        return Err("Invalid OpenAdapt connect link");
+        return Err(invalid);
     }
 
+    match url.host_str() {
+        Some("connect") => connect_action(url, uri),
+        Some("runner") => runner_action(url, uri),
+        _ => Err("Invalid OpenAdapt connect link"),
+    }
+}
+
+fn connect_action(url: &Url, uri: &str) -> Result<PairingAction, &'static str> {
     let mut fields: HashMap<String, String> = HashMap::new();
     for (key, value) in url.query_pairs() {
         if !matches!(key.as_ref(), "pairing" | "host" | "destination_kind")
@@ -175,12 +215,78 @@ fn action_for_url(url: &Url) -> Result<PairingAction, &'static str> {
     })
 }
 
+fn runner_action(url: &Url, uri: &str) -> Result<PairingAction, &'static str> {
+    let mut fields: HashMap<String, String> = HashMap::new();
+    for (key, value) in url.query_pairs() {
+        if !matches!(key.as_ref(), "pack" | "bind" | "origin")
+            || fields
+                .insert(key.into_owned(), value.into_owned())
+                .is_some()
+        {
+            return Err("Runner link contains unknown or duplicate fields");
+        }
+    }
+
+    let pack = fields
+        .get("pack")
+        .ok_or("Runner link is missing pack, bind, or origin")?;
+    let bind = fields
+        .get("bind")
+        .ok_or("Runner link is missing pack, bind, or origin")?;
+    let origin = fields
+        .get("origin")
+        .ok_or("Runner link is missing pack, bind, or origin")?;
+    if !valid_pack_id(pack) {
+        return Err("Pack id is malformed");
+    }
+    if !valid_bind_token(bind) {
+        return Err("Bind token is malformed");
+    }
+    if origin != AUTHORING_ORIGIN {
+        return Err("Runner link does not name the OpenAdapt authoring origin");
+    }
+
+    Ok(PairingAction {
+        command: "claim_runner_uri",
+        uri: uri.to_owned(),
+    })
+}
+
 fn valid_pairing_secret(value: &str) -> bool {
-    value.len() == 47
-        && value.starts_with("oap_")
-        && value[4..]
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    value.len() == 47 && value.starts_with("oap_") && unreserved_body(&value[4..])
+}
+
+fn valid_bind_token(value: &str) -> bool {
+    if value.starts_with("oar_") || value.starts_with("oap_") {
+        return false;
+    }
+    // Cloud runner bodies are 64 hex. That encoding is never a bind token.
+    if value.len() == 68 && value.starts_with("oab_") && hex_body(&value[4..]) {
+        return false;
+    }
+    value.len() == 47 && value.starts_with("oab_") && unreserved_body(&value[4..])
+}
+
+fn hex_body(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn valid_pack_id(value: &str) -> bool {
+    if let Some(body) = value.strip_prefix("p.") {
+        return body.len() == 12 && unreserved_body(body);
+    }
+    if let Some(body) = value.strip_prefix("v1.") {
+        return (32..=2000).contains(&body.len()) && unreserved_body(body);
+    }
+    false
+}
+
+fn unreserved_body(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
 fn validate_destination(host: &str, destination_kind: Option<&str>) -> Result<(), &'static str> {
@@ -230,6 +336,13 @@ mod tests {
         Url::parse(raw).unwrap()
     }
 
+    const BIND: &str = "oab_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const PACK: &str = "p.abcdefghijkl";
+
+    fn runner_uri() -> String {
+        format!("openadapt://runner?pack={PACK}&bind={BIND}&origin=https%3A%2F%2Fopenadapt.ai")
+    }
+
     #[test]
     fn accepts_only_fixed_connect_action() {
         let url = parse(&format!(
@@ -244,8 +357,30 @@ mod tests {
             format!("https://connect?pairing={SECRET}&host=https://app.openadapt.ai"),
             format!("openadapt://connect/run?pairing={SECRET}&host=https://app.openadapt.ai"),
             format!("openadapt://connect?pairing={SECRET}&host=https://app.openadapt.ai#x"),
+            runner_uri(),
+            format!("openadapt://connect?pack={PACK}&bind={BIND}&origin=https://openadapt.ai"),
         ] {
-            assert!(action_for_url(&parse(&raw)).is_err());
+            assert!(action_for_url(&parse(&raw)).is_err(), "{raw}");
+        }
+    }
+
+    #[test]
+    fn accepts_only_fixed_runner_action() {
+        let url = parse(&runner_uri());
+        let action = action_for_url(&url).unwrap();
+        assert_eq!(action.command, "claim_runner_uri");
+        assert_eq!(action.uri, url.as_str());
+
+        for raw in [
+            format!("openadapt://run?pack={PACK}&bind={BIND}&origin=https://openadapt.ai"),
+            format!(
+                "openadapt://connect/runner?pack={PACK}&bind={BIND}&origin=https://openadapt.ai"
+            ),
+            format!("{}#x", runner_uri()),
+            format!("openadapt://connect?pairing={SECRET}&host=https://app.openadapt.ai"),
+            format!("openadapt://runner?pairing={SECRET}&host=https://app.openadapt.ai"),
+        ] {
+            assert!(action_for_url(&parse(&raw)).is_err(), "{raw}");
         }
     }
 
@@ -259,6 +394,38 @@ mod tests {
             ),
             format!(
                 "openadapt://connect?pairing={SECRET}&host=https://app.openadapt.ai&command=run"
+            ),
+        ] {
+            assert!(action_for_url(&parse(&raw)).is_err(), "{raw}");
+        }
+    }
+
+    #[test]
+    fn runner_rejects_malformed_duplicate_unknown_and_foreign_tokens() {
+        for raw in [
+            format!("openadapt://runner?pack=short&bind={BIND}&origin=https://openadapt.ai"),
+            format!("openadapt://runner?pack={PACK}&bind={BIND}"),
+            format!(
+                "openadapt://runner?pack={PACK}&bind={BIND}&bind={BIND}&origin=https://openadapt.ai"
+            ),
+            format!(
+                "openadapt://runner?pack={PACK}&bind={BIND}&origin=https://openadapt.ai&command=run"
+            ),
+            format!(
+                "openadapt://runner?pack={PACK}&bind=oar_{}&origin=https://openadapt.ai",
+                "a".repeat(64)
+            ),
+            format!("openadapt://runner?pack={PACK}&bind={SECRET}&origin=https://openadapt.ai"),
+            format!(
+                "openadapt://runner?pack={PACK}&bind=oab_{}&origin=https://openadapt.ai",
+                "a".repeat(64)
+            ),
+            format!(
+                "openadapt://runner?pack={PACK}&bind=oals_{}&origin=https://openadapt.ai",
+                "A".repeat(43)
+            ),
+            format!(
+                "openadapt://runner?pack={PACK}&bind={BIND}&origin=https://preview.openadapt.ai"
             ),
         ] {
             assert!(action_for_url(&parse(&raw)).is_err(), "{raw}");
