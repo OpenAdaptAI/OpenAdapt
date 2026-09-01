@@ -77,6 +77,9 @@ out the pixels. Coordinates are the thing that breaks when a window moves.
 | `AuthoringObserveV1` | PHI-safe authoring observe tree for the hosted MCP wire |
 | `AuthoringCommandV1` | Mailbox envelope. Hosted click is `node_id` only; compile is `needs_human_admit` |
 | `AuthoringBindV1` | Bind status plus exact `oab_` / `oals_` parsers. No tree, tokens, or secrets |
+| `ClinicInboxV1` | Workbench job: opaque `patient_token`, artifact path, source, time |
+| `ClinicOutboxV1` | Actuation intent. `needs_human: true` does not dispatch |
+| `ClinicToolResultV1` | MCP result: `VERIFIED`, `HALTED`, or `RECONCILIATION_REQUIRED`. Halt is not success |
 
 Plus the versioned wire contracts: `ControlOverlayFrameV1`/`V2` and
 `ControlOverlayTimelineV1`/`V2` for PHI-safe execution overlays,
@@ -98,7 +101,7 @@ print(json.dumps(ComputerState.model_json_schema(), indent=2))
 ```
 
 The same schemas ship as JSON under `openadapt_types/schemas/` for TypeScript,
-Rust, and anything else that isn't Python. Twenty-seven files, including
+Rust, and anything else that isn't Python. Thirty-one files, including
 `execute-v1-openapi.json`, the public OpenAdapt Execute contract.
 
 ## Converting from the older formats

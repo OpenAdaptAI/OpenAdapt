@@ -140,3 +140,26 @@ is `{ node_id }` only. Pause results name a param and never a value.
 Compile returns `needs_human_admit`, never `VERIFIED`. Bind tokens are
 `oab_` plus 43 unreserved characters. Lease secrets are `oals_` plus 64
 hex characters. Cloud `oar_` and pairing `oap_` are refused.
+
+## Clinic job inbox and MCP tools
+
+`ClinicInboxV1`, `ClinicOutboxV1`, and `ClinicToolResultV1` are the public
+handoff for a compiled clinic program. They are not a workbench. Schema
+packs, extraction, review UI, NL2SQL, and OCR do not belong on this wire.
+
+Inbox fields are `patient_token`, `artifact_path`, `source`, and
+`recorded_at`. Identity is the opaque token. A name, MRN, screenshot, or
+OCR string has no field. `artifact_path` is a relative POSIX path of
+opaque segments; a live filename that could carry a person name is
+refused.
+
+Outbox fields are `action`, `template`, and `needs_human`. `template` is
+an opaque id of a clinic-defined template, not the typed body. When
+`needs_human` is true, `require_actuation_dispatch` refuses. OpenAdapt
+types the template only after a human stamp.
+
+The admitted MCP names are `run_harvest`, `run_attach_fax`, and
+`run_create_triage_task`. Each returns `VERIFIED`, `HALTED`, or
+`RECONCILIATION_REQUIRED`. `is_verified_success` is true only for
+`VERIFIED`. There is no success flag a caller can set to launder a halt.
+There is no tool that decides urgency or writes follow-up copy.
