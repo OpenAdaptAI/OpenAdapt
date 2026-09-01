@@ -35,11 +35,18 @@ presidio = [
     "spacy>=3.7.0",
 ]
 
+# Git/CI gate. Stdlib only; no extra packages. Clinic installs this extra to
+# mean "the scanner, not Presidio".
+scan = []
+
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
 ]
+
+[project.scripts]
+openadapt-privacy-scan = "openadapt_privacy.scan:main"
 
 [project.urls]
 Homepage = "https://github.com/OpenAdaptAI/openadapt-privacy"
@@ -51,6 +58,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt_privacy"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"openadapt_privacy/gitleaks.toml" = "openadapt_privacy/gitleaks.toml"
+"openadapt_privacy/phi-patterns.txt" = "openadapt_privacy/phi-patterns.txt"
 
 [tool.ruff]
 line-length = 100

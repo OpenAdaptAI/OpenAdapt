@@ -32,6 +32,41 @@ unsupported language, or an inconsistent configuration raises
 `PrivacyModelUnavailable` before analysis starts, rather than quietly scrubbing
 worse than you expected.
 
+## Git / CI scan (`[scan]`)
+
+A regex gate for git trees. Clinic CI calls it so an OHIP-shaped number, a
+chart id, an MRN, a UNC path, or an RDP hostname can't land in a commit. It
+doesn't scrub recordings. It does not claim clinical validation.
+
+```bash
+pip install "openadapt-privacy[scan]"
+openadapt-privacy-scan
+openadapt-privacy-scan --self-test
+openadapt-privacy-scan --root /path/to/repo
+```
+
+`[scan]` adds no packages. The scanner is stdlib, so `import openadapt_privacy.scan`
+works on a bare `pip install openadapt-privacy` and does not load Presidio,
+spaCy, or Pillow. `python -m openadapt_privacy.scan` is the same CLI.
+
+```python
+from pathlib import Path
+from openadapt_privacy.scan import scan_tree, self_test
+
+hits = scan_tree(Path("."))   # ["ohip-dashed\tfile.txt:3", ...]
+self_test()                   # 0 ok, 1 a rule stayed silent
+```
+
+`--self-test` plants fixtures under `/tmp` and exits 1 if a rule does not fire.
+Matching OHIP examples are not stored in the library; they're built at runtime.
+
+Forbidden directory names: `recordings`, `captures`, `screenshots`,
+`retinology`, `.private`. Forbidden suffixes include `.rdp`, `.db`, and
+common media (`.png`, `.mp4`, and the rest of the set in `scan.py`).
+
+`openadapt_privacy/gitleaks.toml` and `openadapt_privacy/phi-patterns.txt`
+carry the same rules for gitleaks / git-secrets.
+
 ## Read this before you rely on it
 
 Scrubbing is one control inside a reviewed egress process. It is not a
@@ -218,6 +253,9 @@ given string depends on the text around it, so measure rather than assume.
 
 ```
 openadapt_privacy/
+├── scan.py           # git/CI regex gate (stdlib; no Presidio)
+├── gitleaks.toml     # same rules for gitleaks
+├── phi-patterns.txt  # same rules for git-secrets
 ├── base.py           # ScrubbingProvider, TextScrubbingMixin
 ├── config.py         # PrivacyConfig
 ├── loaders.py        # Recording, Action, Screenshot, RecordingLoader
