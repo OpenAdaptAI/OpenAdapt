@@ -1,0 +1,98 @@
+{
+  "additionalProperties": false,
+  "description": "A signed, expiring bound on one reward contract's false-accept rate.\n\nExpiry counts policy updates, not wall-clock time.  A certificate issued\nat update ``i`` with expiry ``n`` is current for updates ``i`` through\n``i + n - 1``.  Revocation is a separate list keyed by ``certificate_id``\nand is checked by the issuer, as it is for every other admission.",
+  "properties": {
+    "calibration_corpus_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Calibration Corpus Digest",
+      "type": "string"
+    },
+    "certificate_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Certificate Id",
+      "type": "string"
+    },
+    "checker_configuration_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Checker Configuration Digest",
+      "type": "string"
+    },
+    "delta": {
+      "exclusiveMaximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Delta",
+      "type": "number"
+    },
+    "epsilon": {
+      "exclusiveMaximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Epsilon",
+      "type": "number"
+    },
+    "expiry_policy_updates": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "title": "Expiry Policy Updates",
+      "type": "integer"
+    },
+    "issued_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Issued At",
+      "type": "string"
+    },
+    "issued_at_policy_update": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Issued At Policy Update",
+      "type": "integer"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "reward_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Reward Contract Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.reward-certificate/v1",
+      "default": "openadapt.reward-certificate/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Signature Algorithm",
+      "type": "string"
+    },
+    "threshold": {
+      "title": "Threshold",
+      "type": "number"
+    }
+  },
+  "required": [
+    "certificate_id",
+    "reward_contract_digest",
+    "checker_configuration_digest",
+    "epsilon",
+    "delta",
+    "threshold",
+    "calibration_corpus_digest",
+    "issued_at_policy_update",
+    "expiry_policy_updates",
+    "issued_at",
+    "issuer_key_id",
+    "signature"
+  ],
+  "title": "RewardCertificateV1",
+  "type": "object"
+}

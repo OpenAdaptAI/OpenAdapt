@@ -102,6 +102,25 @@ secret values, evidence bytes, and oracle recipes stay inside the declared
 execution boundary. See [PROCESS_CAPABILITIES.md](PROCESS_CAPABILITIES.md) for
 the package and runtime split.
 
+## Reward contracts
+
+`RewardContractV1`, `RewardCertificateV1`, and `RewardEvidenceReceiptV1` let a
+trainer optimize against a verified terminal effect and know the bound the
+checker carries. The contract binds task, environment, required and forbidden
+effect contracts, and the oracle recipe by digest. The certificate carries
+`epsilon`, `delta`, `threshold`, the calibration corpus digest, and an expiry
+denominated in policy updates. The receipt carries the outcome, the component
+vector, the scalar, and the certificate state.
+
+`reconciliation_required` and `failed_platform` are unscored. They carry no
+scalar and the contract cannot map them to zero. `certified` is true only at
+oracle tier 2 or 3 with a current certificate. Tier 0 and 1 receipts are
+`development_only`.
+
+The reward receipt is not an Execute Seal. It has its own schema id and none
+of the Seal's fields. It says OpenAdapt verified one episode's terminal
+effect. It does not say Flow governed the policy. See [REWARD.md](REWARD.md).
+
 ## Authentication tasks
 
 `AuthenticationTaskContractV1` adds authentication semantics to the existing

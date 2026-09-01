@@ -22,7 +22,7 @@ WORDS = (
     "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
     "twenty-one", "twenty-two", "twenty-three", "twenty-four", "twenty-five",
     "twenty-six", "twenty-seven", "twenty-eight", "twenty-nine", "thirty",
-    "thirty-one",
+    "thirty-one", "thirty-two", "thirty-three", "thirty-four", "thirty-five",
 )
 
 # Tied to the sentence itself, so an unrelated "N files" elsewhere in the

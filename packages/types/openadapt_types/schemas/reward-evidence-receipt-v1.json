@@ -1,0 +1,201 @@
+{
+  "$defs": {
+    "RewardCertificateStateV1": {
+      "enum": [
+        "absent",
+        "not_yet_valid",
+        "current",
+        "expired"
+      ],
+      "title": "RewardCertificateStateV1",
+      "type": "string"
+    },
+    "RewardOutcomeV1": {
+      "description": "Terminal outcome of one episode as the reward oracle saw it.\n\nEach member has exactly one scoring class, listed in\n``REWARD_SCORING_CLASS``.  The class decides whether a scalar exists.",
+      "enum": [
+        "verified",
+        "halted_before_effect",
+        "refused",
+        "rejected_policy",
+        "wrong_effect",
+        "reconciliation_required",
+        "failed_platform"
+      ],
+      "title": "RewardOutcomeV1",
+      "type": "string"
+    },
+    "RewardUncertaintyStateV1": {
+      "enum": [
+        "none",
+        "delivery_uncertain",
+        "effect_uncertain",
+        "oracle_unavailable"
+      ],
+      "title": "RewardUncertaintyStateV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A signed statement that one episode's terminal effect was verified.\n\nThis receipt binds a reward contract, a policy checkpoint, an episode,\nand the oracle read.  It is not an Execute Seal.  It carries no\n``execution_id``, ``workflow_digest``, ``qualification_id``, or Execute\ncontract block, and it does not claim that Flow governed the policy.",
+  "properties": {
+    "certificate_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Certificate Digest"
+    },
+    "certificate_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Certificate Id"
+    },
+    "certificate_state": {
+      "$ref": "#/$defs/RewardCertificateStateV1"
+    },
+    "certified": {
+      "title": "Certified",
+      "type": "boolean"
+    },
+    "development_only": {
+      "title": "Development Only",
+      "type": "boolean"
+    },
+    "episode_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Episode Id",
+      "type": "string"
+    },
+    "evidence_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Evidence Digest",
+      "type": "string"
+    },
+    "issued_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Issued At",
+      "type": "string"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "nonce": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Nonce",
+      "type": "string"
+    },
+    "oracle_tier": {
+      "enum": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "title": "Oracle Tier",
+      "type": "integer"
+    },
+    "policy_checkpoint_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Policy Checkpoint Id",
+      "type": "string"
+    },
+    "policy_update": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Policy Update",
+      "type": "integer"
+    },
+    "receipt_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Receipt Id",
+      "type": "string"
+    },
+    "reward_components": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "maxProperties": 64,
+      "title": "Reward Components",
+      "type": "object"
+    },
+    "reward_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Reward Contract Digest",
+      "type": "string"
+    },
+    "reward_outcome": {
+      "$ref": "#/$defs/RewardOutcomeV1"
+    },
+    "scalar_reward": {
+      "anyOf": [
+        {
+          "maximum": 1000000.0,
+          "minimum": -1000000.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scalar Reward"
+    },
+    "schema_version": {
+      "const": "openadapt.reward-evidence-receipt/v1",
+      "default": "openadapt.reward-evidence-receipt/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Signature Algorithm",
+      "type": "string"
+    },
+    "uncertainty": {
+      "$ref": "#/$defs/RewardUncertaintyStateV1"
+    }
+  },
+  "required": [
+    "receipt_id",
+    "reward_contract_digest",
+    "policy_checkpoint_id",
+    "policy_update",
+    "episode_id",
+    "oracle_tier",
+    "reward_outcome",
+    "evidence_digest",
+    "certificate_state",
+    "uncertainty",
+    "certified",
+    "development_only",
+    "issuer_key_id",
+    "nonce",
+    "issued_at",
+    "signature"
+  ],
+  "title": "RewardEvidenceReceiptV1",
+  "type": "object"
+}

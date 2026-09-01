@@ -73,6 +73,7 @@ out the pixels. Coordinates are the thing that breaks when a window moves.
 | `ArtifactRefV1` | A path-free reference to an immutable process artifact |
 | `CodeCapabilityManifestV1` | Exact Python, locked dependencies, typed I/O, permissions, and verifier bindings |
 | `ProcessEvidenceReceiptV1` | One signed root over child receipts, human receipts, and the artifact graph |
+| `RewardEvidenceReceiptV1` | One verified terminal effect for a training episode. Not an Execute Seal |
 | `AuthenticationTaskContractV1` | A value-free login requirement bound to an existing attended task |
 | `AuthoringObserveV1` | PHI-safe authoring observe tree for the hosted MCP wire |
 | `AuthoringCommandV1` | Mailbox envelope. Hosted click is `node_id` only; compile is `needs_human_admit` |
@@ -89,7 +90,9 @@ asynchronous qualified execution, `EffectStrengthV1`, and the
 contracts may and may not carry is in
 [docs/CONTRACTS.md](docs/CONTRACTS.md). Oracle tiers and the ten-line
 adapter are in [docs/ORACLE.md](docs/ORACLE.md). Code capabilities and process
-artifacts are in [docs/PROCESS_CAPABILITIES.md](docs/PROCESS_CAPABILITIES.md).
+artifacts are in [docs/PROCESS_CAPABILITIES.md](docs/PROCESS_CAPABILITIES.md). Reward
+contracts and certificates for training against a verified terminal effect
+are in [docs/REWARD.md](docs/REWARD.md).
 
 ## JSON Schema for everything else
 
@@ -101,7 +104,7 @@ print(json.dumps(ComputerState.model_json_schema(), indent=2))
 ```
 
 The same schemas ship as JSON under `openadapt_types/schemas/` for TypeScript,
-Rust, and anything else that isn't Python. Thirty-one files, including
+Rust, and anything else that isn't Python. Thirty-four files, including
 `execute-v1-openapi.json`, the public OpenAdapt Execute contract.
 
 ## Converting from the older formats
