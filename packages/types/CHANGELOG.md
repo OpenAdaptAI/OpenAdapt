@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.17.0 (2026-09-01)
+
+### Features
+
+- **types**: Add calibration scope and issuer to the reward certificate
+  ([#38](https://github.com/OpenAdaptAI/openadapt-types/pull/38),
+  [`cbadccf`](https://github.com/OpenAdaptAI/openadapt-types/commit/cbadccf3c9a7a9285832919580e210091aff763d))
+
+A self-signed reward certificate may carry only synthetic scope. certified requires oracle tier 2 or
+  3, a current certificate, a calibration corpus digest, and a stated calibration scope. The only
+  computable scope today is synthetic.
+
+Merged by an agent session, not the founder.
+
+
 ## v0.16.0 (2026-09-01)
 
 ### Features
