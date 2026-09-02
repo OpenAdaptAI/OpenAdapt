@@ -468,8 +468,10 @@ openadapt-flow serve-reward --seed-mockmed --port 8788
 
 A reward receipt isn't an Execute Seal. A model rollout isn't a qualified
 program, so it never gets one, and the receipt never says Flow governed the
-policy. Adapters for TRL's `GRPOTrainer` and verl's reward manager are in
-`openadapt_flow.reward.callables`. See
+policy. The adapters for TRL's `GRPOTrainer` and verl's reward manager live in
+`openadapt_evals.reward` (`pip install 'openadapt-evals>=0.96.0'`), because
+TRL trains a `None` reward as 0.0 and the evals adapters drop an unscored
+episode instead. This package keeps the worker and the HTTP client. See
 [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md).
 
 ## Development

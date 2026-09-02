@@ -17,8 +17,10 @@ OpenAI grader route. The OpenAI reinforcement fine-tuning graders guide
 (https://developers.openai.com/api/docs/guides/graders, read 2026-09-01)
 and the RFT guide
 (https://developers.openai.com/api/docs/guides/reinforcement-fine-tuning,
-same date) document five grader types: ``string_check``,
-``text_similarity``, ``score_model``, ``python``, and ``multi``. None of
+same date) together with the graders API reference
+(https://developers.openai.com/api/docs/api-reference/graders, same date)
+document six grader types: ``string_check``, ``text_similarity``,
+``score_model``, ``label_model``, ``python``, and ``multi``. None of
 them calls a user-hosted HTTP endpoint, and the ``python`` grader runs
 with no network access. The only documented custom-grader contract is the
 ``python`` grader's function::

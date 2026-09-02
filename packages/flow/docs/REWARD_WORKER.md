@@ -39,9 +39,10 @@ shape `openadapt_evals.reward.receipts.EpisodeDescriptor` sends:
 `reward_contract_digest`, and optional `task_id`, `environment_id`, and
 `metadata`. The digest must be the contract this worker serves, or the
 episode is refused. The trainer never gets a credential for the system of
-record. `openadapt_flow.reward.callables` carries the adapters for TRL's
-`GRPOTrainer` and verl's reward manager, and `HttpRewardClient` for the trip
-between the two machines.
+record. The trainer-side adapters live in `openadapt_evals.reward`
+(`pip install 'openadapt-evals>=0.96.0'`), not in this package.
+`openadapt_flow.reward.callables` keeps only `HttpRewardClient`, the payload
+builder, and the receipt's scalar, for the trip between the two machines.
 
 The oracle still has to know which record to read. That identity comes from
 one of three places: `metadata.oracle_identity` on the descriptor, an
@@ -183,23 +184,37 @@ sees it.
 
 ## Trainer adapters
 
-`trl_reward_function(scorer, policy_checkpoint_id=..., reward_contract_digest=...)`
-returns a function
-with the signature TRL's `GRPOTrainer` expects for `reward_funcs`:
-`(prompts, completions, completion_ids, trainer_state, **kwargs) ->
-list[float | None]`. The dataset carries `episode_id` and `oracle_identity`
-columns; the policy update is `trainer_state.global_step`. An unscored
-episode returns `None`, which TRL documents as "this reward function does
-not apply to this sample" and excludes.
+The adapters for TRL's `GRPOTrainer` and verl's reward manager live in
+`openadapt_evals.reward`: `CertifiedRewardFunction` (TRL) and
+`CertifiedRewardManager` (verl). Install them on the trainer node:
 
-`verl_compute_score(scorer, policy_checkpoint_id=..., reward_contract_digest=...)`
-returns a
-`compute_score(data_source, solution_str, ground_truth, extra_info)` for
-`custom_reward_function.path`. verl has no None sentinel, so an unscored
-episode returns `{"score": nan, "openadapt_unscored": true, ...}`. NaN on
-purpose: a group that keeps it produces a NaN loss instead of a quiet 0.
-`drop_unscored(rewards, *aligned)` and `scored_groups(groups)` remove those
-samples before the advantage is computed.
+```bash
+pip install 'openadapt-evals>=0.96.0'
+```
+
+Both call `openadapt_types.score`, read the receipt's own fields, and refuse
+the combinations a trainer must never accept: an unscored episode is removed
+from its GRPO group, a `development_only` receipt is never labelled certified
+(and the only certificate scope in use today is synthetic), and in
+`require_certified` mode an expired certificate stops the run. The wiring,
+with a code sample for each trainer, is in the evals package's
+`docs/reward/README.md` and on
+[docs.openadapt.ai](https://docs.openadapt.ai/commercial/seal-reward/).
+
+This package offers no trainer-facing reward function, and that is on
+purpose. TRL lets a reward function return `None` for a sample, but
+`GRPOTrainer` turns that `None` into NaN, combines the per-function rewards
+with `nansum`, and takes the group mean over the result. With one reward
+function the `None` row trains as 0.0, which is what the contract forbids for
+`reconciliation_required` and `failed_platform`. verl's per-sample
+`compute_score` hook must return a number, so it cannot drop a sample either.
+The evals adapters drop an unscored episode the one way a per-completion
+scalar allows: the episode gets the mean reward of its scored group-mates, so
+its advantage is exactly zero and the scored mean is unchanged.
+
+The dependency runs one way. openadapt-evals depends on openadapt-flow, so
+flow cannot import the adapters, and a second copy here would drift from the
+first.
 
 ## Scope
 

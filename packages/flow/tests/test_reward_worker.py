@@ -1,9 +1,8 @@
-"""Reference reward worker: outcome mapping, certificate, boundary, adapters."""
+"""Reference reward worker: outcome mapping, certificate, boundary, client."""
 
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from typing import Any
 
@@ -21,16 +20,15 @@ from openadapt_types.reward import (  # noqa: E402
     RewardOutcomeV1,
 )
 
+import openadapt_flow.reward.callables as callables  # noqa: E402
 from openadapt_flow.reward.calibration import (  # noqa: E402
     clopper_pearson_upper,
     extradup_trials,
 )
 from openadapt_flow.reward.callables import (  # noqa: E402
-    UNSCORED_REWARD,
-    drop_unscored,
-    is_unscored,
-    trl_reward_function,
-    verl_compute_score,
+    HttpRewardClient,
+    episode_from_columns,
+    scalar_of,
 )
 from openadapt_flow.reward.models import (  # noqa: E402
     CERTIFICATE_FILE,
@@ -535,96 +533,132 @@ def test_openai_grader_route_refuses_to_grade_unscored(
     assert "score" not in response.json()
 
 
-# -- trainer callables ----------------------------------------------------------
+# -- trainer client, and no trainer adapter ------------------------------------
 
 
-class _State:
-    global_step = 3
+def test_callables_offer_no_trainer_adapter() -> None:
+    # TRL's GRPOTrainer turns a ``None`` reward into NaN, combines the
+    # per-function rewards with ``nansum``, and takes the group mean over the
+    # result, so with one reward function a ``None`` row trains as 0.0. The
+    # reward contract forbids 0.0 for an unscored episode. verl's per-sample
+    # ``compute_score`` hook has no sentinel at all. The canonical trainer
+    # adapters are ``openadapt_evals.reward.trl.CertifiedRewardFunction`` and
+    # ``openadapt_evals.reward.verl.CertifiedRewardManager``; they drop an
+    # unscored episode by filling it with the mean of its scored group-mates.
+    # flow keeps the worker and the HTTP client only.
+    for name in ("trl_reward_function", "verl_compute_score", "compute_score"):
+        assert not hasattr(callables, name), name
+    for name in ("UNSCORED_REWARD", "is_unscored", "drop_unscored", "scored_groups"):
+        assert not hasattr(callables, name), name
+    assert "openadapt_evals.reward" in (callables.__doc__ or "")
+    assert "0.0" in (callables.__doc__ or "")
 
 
-def test_trl_reward_function_contract(seeded: dict[str, Any], tmp_path: Path) -> None:
+def test_episode_from_columns_matches_the_evals_descriptor_shape(
+    seeded: dict[str, Any],
+) -> None:
     worker = _worker(seeded)
-    reward = trl_reward_function(
-        worker,
-        policy_checkpoint_id="policy_checkpoint_trl_1",
+    payload = episode_from_columns(
+        episode_id="episode_client_0001",
+        policy_checkpoint_id="policy_checkpoint_client",
+        policy_update=3,
         reward_contract_digest=worker.contract.digest,
+        oracle_identity={"patient_id": MOCKMED_HONEST_PATIENT},
     )
-    assert reward.__name__ == "openadapt_verified_effect_reward"
-    rewards = reward(
-        prompts=["p1", "p2"],
-        completions=["c1", "c2"],
-        completion_ids=[[1], [2]],
-        trainer_state=_State(),
-        episode_id=["episode_trl_0001", "episode_trl_0002"],
-        oracle_identity=[
-            {"patient_id": MOCKMED_HONEST_PATIENT},
-            {"patient_id": MOCKMED_LIE_PATIENT},
-        ],
-    )
-    assert rewards == [1.0, 0.0]
-    unreachable = _worker(seeded, oracle=_unreachable(tmp_path))
-    reward2 = trl_reward_function(
-        unreachable,
-        policy_checkpoint_id="policy_checkpoint_trl_2",
-        reward_contract_digest=unreachable.contract.digest,
-    )
-    rewards2 = reward2(
-        prompts=["p"],
-        completions=["c"],
-        trainer_state=_State(),
-        episode_id=["episode_trl_0003"],
-        oracle_identity=[{"patient_id": MOCKMED_HONEST_PATIENT}],
-    )
-    assert rewards2 == [None]
-    kept, (kept_completions,) = drop_unscored([1.0, None, 0.0], ["a", "b", "c"])
-    assert kept == [1.0, 0.0]
-    assert kept_completions == ["a", "c"]
+    # The keys ``openadapt_evals.reward.receipts.EpisodeDescriptor.as_payload``
+    # sends, minus the optional ``task_id`` and ``environment_id``, plus the
+    # descriptor model's own ``schema_version``. The worker accepts both.
+    assert set(payload) == {
+        "schema_version",
+        "episode_id",
+        "policy_checkpoint_id",
+        "policy_update",
+        "reward_contract_digest",
+        "metadata",
+    }
+    assert payload["metadata"] == {
+        "runtime_signal": "completed",
+        "oracle_identity": {"patient_id": MOCKMED_HONEST_PATIENT},
+    }
+    envelope = worker.score_episode(payload)
+    assert scalar_of(envelope) == 1.0
 
 
-def test_verl_compute_score_contract(seeded: dict[str, Any], tmp_path: Path) -> None:
-    worker = _worker(seeded)
-    compute_score = verl_compute_score(
-        worker,
-        policy_checkpoint_id="policy_checkpoint_verl",
-        reward_contract_digest=worker.contract.digest,
+def test_http_reward_client_roundtrip(seeded: dict[str, Any], tmp_path: Path) -> None:
+    import httpx
+
+    app_client, worker = _client(seeded)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        response = app_client.post(
+            request.url.path,
+            content=request.content,
+            headers={
+                "Authorization": request.headers["Authorization"],
+                "content-type": "application/json",
+            },
+        )
+        return httpx.Response(response.status_code, content=response.content)
+
+    client = HttpRewardClient(
+        "http://reward-worker.test/",
+        "test-token",
+        transport=httpx.MockTransport(handler),
     )
-    result = compute_score(
-        data_source="mockmed",
-        solution_str="saved",
-        ground_truth=None,
-        extra_info={
-            "openadapt_episode": {
-                "episode_id": "episode_verl_0001",
-                "oracle_identity": {"patient_id": MOCKMED_HONEST_PATIENT},
-                "policy_update": 0,
-            }
-        },
+    assert client.url == "http://reward-worker.test/v1/rewards"
+
+    def payload(episode_id: str) -> dict[str, Any]:
+        return episode_from_columns(
+            episode_id=episode_id,
+            policy_checkpoint_id="policy_checkpoint_client",
+            policy_update=0,
+            reward_contract_digest=worker.contract.digest,
+            oracle_identity={"patient_id": MOCKMED_HONEST_PATIENT},
+        )
+
+    envelope = client.score_episode(payload("episode_client_http_1"))
+    assert envelope["unscored"] is False
+    assert scalar_of(envelope) == 1.0
+    with pytest.raises(RuntimeError, match="already scored"):
+        client.score_episode(payload("episode_client_http_1"))
+
+    wrong_token = HttpRewardClient(
+        "http://reward-worker.test", "wrong", transport=httpx.MockTransport(handler)
     )
-    assert result["score"] == 1.0
-    assert result["openadapt_unscored"] is False
-    unreachable = _worker(seeded, oracle=_unreachable(tmp_path))
-    compute2 = verl_compute_score(
-        unreachable,
-        policy_checkpoint_id="policy_checkpoint_verl",
-        reward_contract_digest=unreachable.contract.digest,
+    with pytest.raises(httpx.HTTPStatusError):
+        wrong_token.score_episode(payload("episode_client_http_2"))
+
+    # An unscored episode comes back as a receipt with no scalar. The client
+    # reports ``None``; it never invents a reward for it.
+    unreachable_client, unreachable = _client(seeded, oracle=_unreachable(tmp_path))
+
+    def handler2(request: httpx.Request) -> httpx.Response:
+        response = unreachable_client.post(
+            request.url.path,
+            content=request.content,
+            headers={
+                "Authorization": request.headers["Authorization"],
+                "content-type": "application/json",
+            },
+        )
+        return httpx.Response(response.status_code, content=response.content)
+
+    client2 = HttpRewardClient(
+        "http://reward-worker.test",
+        "test-token",
+        transport=httpx.MockTransport(handler2),
     )
-    result2 = compute2(
-        "mockmed",
-        "saved",
-        None,
-        {
-            "openadapt_episode": {
-                "episode_id": "episode_verl_0002",
-                "oracle_identity": {"patient_id": MOCKMED_HONEST_PATIENT},
-            }
-        },
+    envelope2 = client2.score_episode(
+        episode_from_columns(
+            episode_id="episode_client_http_3",
+            policy_checkpoint_id="policy_checkpoint_client",
+            policy_update=0,
+            reward_contract_digest=unreachable.contract.digest,
+            oracle_identity={"patient_id": MOCKMED_HONEST_PATIENT},
+        )
     )
-    assert math.isnan(result2["score"])
-    assert result2["openadapt_unscored"] is True
-    assert is_unscored(UNSCORED_REWARD)
-    assert not is_unscored(0.0)
-    kept, _ = drop_unscored([result["score"], result2["score"]])
-    assert kept == [1.0]
+    assert envelope2["unscored"] is True
+    assert scalar_of(envelope2) is None
 
 
 # -- CLI and boundary -----------------------------------------------------------
