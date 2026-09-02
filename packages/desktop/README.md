@@ -12,16 +12,20 @@ Python to install.
 **There is no trusted signed build to download right now.** The next native
 release is blocked until macOS has Developer ID plus notarization, Windows has
 Authenticode, and the exact Linux bytes verify under GitHub OIDC attestation.
-The latest published prerelease predates that gate and keeps its original
-ad-hoc and unsigned labels. If you want to run an OpenAdapt workflow today, use the
-launcher instead:
+The latest engine wheel is `v0.16.0`. Native is still `desktop-v0.15.0`; skip
+those installers. They keep their original ad-hoc and unsigned labels. If you
+want to run an OpenAdapt workflow today, use the launcher:
 
 ```bash
-pip install 'openadapt[browser]'
-openadapt quickstart
+python -m pip install --upgrade openadapt
+openadapt flow tutorial
 ```
 
-On Windows `cmd.exe`, use double quotes: `pip install "openadapt[browser]"`.
+To see a governed halt on the same certified bundle:
+
+```bash
+openadapt quickstart --break-it
+```
 
 [Documentation](https://docs.openadapt.ai) ·
 [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) ·
