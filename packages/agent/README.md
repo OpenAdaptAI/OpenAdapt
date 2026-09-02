@@ -27,7 +27,7 @@ The server generates the public synthetic tutorial at serve time. It isn't in th
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt quickstart
+openadapt flow tutorial
 openadapt-agent serve --allow-run
 ```
 

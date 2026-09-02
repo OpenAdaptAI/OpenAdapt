@@ -276,6 +276,7 @@ def test_identity_sentence_is_shared() -> None:
     assert "authoring connect" in README.read_text(encoding="utf-8")
     assert "authoring connect" in LLMS_TXT.read_text(encoding="utf-8")
     assert "openadapt connect" in README.read_text(encoding="utf-8")
+    assert "openadapt flow tutorial" in README.read_text(encoding="utf-8")
     assert "openadapt quickstart --break-it" in README.read_text(encoding="utf-8")
     assert "If the tool returns unsigned success, treat it as failure" in README.read_text(
         encoding="utf-8"
