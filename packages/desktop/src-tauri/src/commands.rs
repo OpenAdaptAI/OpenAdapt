@@ -157,8 +157,7 @@ pub fn set_control_overlay_layout(app: AppHandle, layout: String) -> Result<(), 
                 .map_err(|error| format!("could not stage the control overlay: {error}"))?;
             window
                 .set_position(Position::Physical(PhysicalPosition::new(
-                    position.x,
-                    position.y,
+                    position.x, position.y,
                 )))
                 .map_err(|error| format!("could not place the overlay stage: {error}"))?;
         }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 from types import SimpleNamespace
@@ -403,8 +404,11 @@ def test_node_table_is_mode_0600(tmp_path: Path) -> None:
     runner.allow()
     runner._observe()
     assert runner._node_table is not None
-    mode = stat.S_IMODE(runner._node_table._path.stat().st_mode)
-    assert mode == 0o600
+    path = runner._node_table._path
+    assert path.is_file()
+    # NTFS does not report POSIX 0o600. Production already skips fchmod there.
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_projector_drops_value_title_and_six_digit_names(tmp_path: Path) -> None:
