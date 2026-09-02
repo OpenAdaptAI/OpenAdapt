@@ -61,6 +61,9 @@ imported lazily inside each handler so ``--help`` always works):
   UI over bundles / runs / skill libraries; requires the ``console`` extra).
 - ``serve-execute`` — host the public Execute HTTP+MCP contract on this
   machine (self-signed local receipts; not an OpenAdapt production Seal).
+- ``serve-reward`` — score training episodes by reading the system of
+  record through an independent oracle (self-signed reward receipts; not
+  an Execute Seal).
 - ``emit-skill`` — emit an Agent Skills folder for a bundle.
 - ``emit-mcp`` — emit a standalone MCP ``server.py`` for a bundle.
 - ``connector`` — the BYOC (bring-your-own-cloud) outbound-pull daemon:
@@ -7669,6 +7672,55 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_serve_execute)
 
     p = sub.add_parser(
+        "serve-reward",
+        help=(
+            "Score training episodes by reading the system of record through "
+            "an independent oracle. Receipts are self-signed reward receipts, "
+            "not Execute Seals. Needs `pip install 'openadapt-flow[reward]'`"
+        ),
+    )
+    p.add_argument(
+        "--contract",
+        default=None,
+        help=(
+            "Reward contract bundle directory (contract.json, "
+            "required_effects.json, forbidden_effects.json, oracle.json, "
+            "optional certificate.json). Defaults to the seeded MockMed "
+            "tier-2 bundle when --seed-mockmed is given."
+        ),
+    )
+    p.add_argument(
+        "--port",
+        type=int,
+        default=8788,
+        help="Port (default: 8788)",
+    )
+    p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind address (default: 127.0.0.1)",
+    )
+    p.add_argument(
+        "--data-dir",
+        default=None,
+        help="Local data directory (default: ~/.openadapt/reward-ref)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help="Bearer token (default: generated on first start in --data-dir)",
+    )
+    p.add_argument(
+        "--seed-mockmed",
+        action="store_true",
+        help=(
+            "Write the synthetic MockMed reward bundles (tier-2 file oracle "
+            "with a calibrated synthetic certificate; tier-0 screen dump)"
+        ),
+    )
+    p.set_defaults(func=_cmd_serve_reward)
+
+    p = sub.add_parser(
         "business-decisions",
         help="Customer-runner typed-decision relay; it never resumes or acts.",
     )
@@ -7964,6 +8016,61 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
         token=store.token,
         service=store,
     )
+    return 0
+
+
+def _cmd_serve_reward(args: argparse.Namespace) -> int:
+    from importlib.util import find_spec
+
+    missing = [
+        name
+        for name in ("fastapi", "uvicorn", "openadapt_types")
+        if find_spec(name) is None
+    ]
+    if missing:
+        raise SystemExit(
+            f"serve-reward needs {', '.join(missing)} — install the "
+            "reward extra:  pip install 'openadapt-flow[reward]'"
+        )
+    from openadapt_flow.reward import REWARD_NOTICE
+    from openadapt_flow.reward.serve import serve
+    from openadapt_flow.reward.worker import RewardWorker, default_data_dir
+
+    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
+    contract = args.contract
+    seeded_paths: dict[str, Path] = {}
+    if args.seed_mockmed:
+        from openadapt_flow.execute.keys import (
+            fingerprint_of,
+            load_or_create_private_key,
+        )
+        from openadapt_flow.reward.seed import seed_mockmed
+
+        key = load_or_create_private_key(data_dir)
+        issuer_key_id = "self_signed:" + fingerprint_of(key.public_key())
+        seeded_paths = seed_mockmed(data_dir, key, issuer_key_id)
+        if contract is None:
+            contract = str(seeded_paths["tier2"])
+    if contract is None:
+        raise SystemExit("serve-reward needs --contract <bundle dir> or --seed-mockmed")
+    worker = RewardWorker(contract, data_dir, token=args.token)
+    print("openadapt-flow reference reward worker")
+    print(f"  http://{args.host}:{args.port}")
+    print(f"  data dir     {data_dir}")
+    print(f"  contract     {worker.bundle.directory}")
+    print(f"  digest       {worker.contract.digest}")
+    print(
+        f"  oracle       {worker.bundle.oracle.channel.value} "
+        f"(tier {int(worker.bundle.oracle.tier)})"
+    )
+    print(f"  certificate  {'present' if worker.certificate else 'absent'}")
+    print(f"  token        {worker.token}")
+    print("  issuer       self_signed")
+    print(f"  fingerprint  {worker.fingerprint}")
+    print(f"  {REWARD_NOTICE}")
+    for label, path in seeded_paths.items():
+        print(f"  seeded {label:<6} {path}")
+    serve(worker, host=args.host, port=args.port)
     return 0
 
 

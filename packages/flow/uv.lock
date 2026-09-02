@@ -2213,6 +2213,11 @@ privacy = [
 rdp = [
     { name = "aardwolf" },
 ]
+reward = [
+    { name = "fastapi" },
+    { name = "openadapt-types" },
+    { name = "uvicorn" },
+]
 service = [
     { name = "fastapi" },
     { name = "uvicorn", extra = ["standard"] },
@@ -2238,6 +2243,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'console'", specifier = ">=0.110" },
     { name = "fastapi", marker = "extra == 'dev'", specifier = ">=0.110" },
     { name = "fastapi", marker = "extra == 'execute'", specifier = ">=0.110" },
+    { name = "fastapi", marker = "extra == 'reward'", specifier = ">=0.110" },
     { name = "fastapi", marker = "extra == 'service'", specifier = ">=0.110" },
     { name = "fastapi", marker = "extra == 'service-mlx'", specifier = ">=0.110" },
     { name = "httpx", specifier = ">=0.27" },
@@ -2252,11 +2258,12 @@ requires-dist = [
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
-    { name = "openadapt-types", specifier = ">=0.13.0,<0.14.0" },
-    { name = "openadapt-types", marker = "extra == 'console'", specifier = ">=0.13.0,<0.14.0" },
-    { name = "openadapt-types", marker = "extra == 'dev'", specifier = ">=0.13.0,<0.14.0" },
-    { name = "openadapt-types", marker = "extra == 'execute'", specifier = ">=0.13.0,<0.14.0" },
-    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.13.0,<0.14.0" },
+    { name = "openadapt-types", specifier = ">=0.17.0,<0.18.0" },
+    { name = "openadapt-types", marker = "extra == 'console'", specifier = ">=0.17.0,<0.18.0" },
+    { name = "openadapt-types", marker = "extra == 'dev'", specifier = ">=0.17.0,<0.18.0" },
+    { name = "openadapt-types", marker = "extra == 'execute'", specifier = ">=0.17.0,<0.18.0" },
+    { name = "openadapt-types", marker = "extra == 'interop'", specifier = ">=0.17.0,<0.18.0" },
+    { name = "openadapt-types", marker = "extra == 'reward'", specifier = ">=0.17.0,<0.18.0" },
     { name = "opencv-python", specifier = ">=4.9" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
@@ -2281,10 +2288,11 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'console'", specifier = ">=0.29" },
     { name = "uvicorn", marker = "extra == 'dev'", specifier = ">=0.29" },
     { name = "uvicorn", marker = "extra == 'execute'", specifier = ">=0.29" },
+    { name = "uvicorn", marker = "extra == 'reward'", specifier = ">=0.29" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'service'", specifier = ">=0.29" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'service-mlx'", specifier = ">=0.29" },
 ]
-provides-extras = ["browser", "dev", "grounder", "grounding", "console", "execute", "windows", "macos", "linux", "rdp", "privacy", "hosted", "service", "service-mlx", "capture", "interop"]
+provides-extras = ["browser", "dev", "grounder", "grounding", "console", "execute", "windows", "reward", "macos", "linux", "rdp", "privacy", "hosted", "service", "service-mlx", "capture", "interop"]
 
 [[package]]
 name = "openadapt-grounding"
@@ -2324,14 +2332,14 @@ presidio = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.13.0"
+version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/31/60/5bf6f51cb885390ed0176610f3875bce6ccda2df39417b80b4e3649be453/openadapt_types-0.13.0.tar.gz", hash = "sha256:b044ac809cf8891bd7d4aaf44a8b44b8f1b44f7847717e685375ac313ddd831a", size = 175106, upload-time = "2026-08-31T00:26:26.323Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/d5/549afc2b6bdde8a0a80d4eec67644275df251ee1654f3189f0cc66235730/openadapt_types-0.17.0.tar.gz", hash = "sha256:43dc00d82d6d8feb2cfaa16960224a85933440d7dee3b5f3c60618873535287b", size = 212574, upload-time = "2026-09-01T23:50:50.837Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/76/063d4d6a83bded9a4aabdbc809dca65c528a95cfaaffec67de0919d6f4f3/openadapt_types-0.13.0-py3-none-any.whl", hash = "sha256:6549cf6179c0b851ff1e1f788f4600a741741e4d54a1a0edfdcec49d1ed5d273", size = 123629, upload-time = "2026-08-31T00:26:24.74Z" },
+    { url = "https://files.pythonhosted.org/packages/55/9a/bec1d51cba5749732ceeba6e4abf7abe6aeaa22c849a1edb26b97c7ab479/openadapt_types-0.17.0-py3-none-any.whl", hash = "sha256:79738ab529f71241963725c6a40603deae032ff60c61d66baf33d7a248b1afa9", size = 155033, upload-time = "2026-09-01T23:50:49.083Z" },
 ]
 
 [[package]]

@@ -453,6 +453,25 @@ checkpoint and resume; Agent Skill and MCP emission. Those are in
 [docs/CAPABILITIES.md](docs/CAPABILITIES.md), and the whole documentation set
 is at [docs.openadapt.ai](https://docs.openadapt.ai).
 
+## Reward worker for a training loop
+
+`openadapt-flow serve-reward` scores a model's training episode by reading the
+system of record after the episode ends, through the same effect oracles the
+runtime uses. It returns a signed `RewardEvidenceReceiptV1`: the terminal
+effect landed, or it didn't, or the store couldn't be read and the episode is
+unscored. Unscored is never 0.
+
+```bash
+pip install 'openadapt-flow[reward]'
+openadapt-flow serve-reward --seed-mockmed --port 8788
+```
+
+A reward receipt isn't an Execute Seal. A model rollout isn't a qualified
+program, so it never gets one, and the receipt never says Flow governed the
+policy. Adapters for TRL's `GRPOTrainer` and verl's reward manager are in
+`openadapt_flow.reward.callables`. See
+[docs/REWARD_WORKER.md](docs/REWARD_WORKER.md).
+
 ## Development
 
 ```bash

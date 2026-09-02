@@ -44,7 +44,7 @@ dependencies = [
     "cryptography>=42.0",
     # Portable ProcessContract v1 capability, artifact, authentication, and
     # process-receipt contracts. The healthy runtime remains model-neutral.
-    "openadapt-types>=0.13.0,<0.14.0",
+    "openadapt-types>=0.17.0,<0.18.0",
 ]
 
 [project.optional-dependencies]
@@ -72,11 +72,12 @@ dev = [
     # uvicorn for the console's boot smoke test.
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    # Types 0.13 keeps the existing entity and reviewed-copy contracts and adds
-    # the ProcessContract v1 capability, artifact, authentication, and receipt
-    # contracts. A peer must still negotiate each schema; the dependency alone
-    # never upgrades an existing decision surface.
-    "openadapt-types>=0.13.0,<0.14.0",
+    # Types 0.17 keeps the entity, reviewed-copy, ProcessContract, and Execute
+    # contracts and adds the reward contract, certificate (with calibration
+    # scope and issuer), and reward evidence receipt the reward worker signs.
+    # A peer must still negotiate each schema; the dependency alone never
+    # upgrades an existing decision surface.
+    "openadapt-types>=0.17.0,<0.18.0",
     # Engineering-hygiene gates (lint+format, type-check, coverage). Pinned to
     # majors so CI and local dev run the same checkers.
     "ruff==0.16.3",
@@ -99,7 +100,7 @@ grounding = ["openadapt-grounding>=0.1.0"]
 console = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "openadapt-types>=0.13.0,<0.14.0",
+    "openadapt-types>=0.17.0,<0.18.0",
 ]
 # Reference Execute server: `openadapt-flow serve-execute`. Same public
 # request schema as Cloud Execute, hosted in this process with a local
@@ -107,10 +108,18 @@ console = [
 execute = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "openadapt-types>=0.13.0,<0.14.0",
+    "openadapt-types>=0.17.0,<0.18.0",
 ]
 # WindowsBackend: HTTP client for the WAA (Windows Agent Arena) server.
 windows = ["requests>=2.31", "pywin32>=312; platform_system == 'Windows'"]
+# Reference reward worker: `openadapt-flow serve-reward`. Reads the system of
+# record after a training episode and signs a reward receipt with a local key.
+# A reward receipt is not an Execute Seal; the worker never imports Cloud.
+reward = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "openadapt-types>=0.17.0,<0.18.0",
+]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [
@@ -172,7 +181,7 @@ capture = ["openadapt-capture>=1.2.0"]
 # field-exact against the released schemas. The `interop-types` CI job
 # type-checks and tests the boundaries against the real package; each schema is
 # consumed only by an explicitly negotiated peer.
-interop = ["openadapt-types>=0.13.0,<0.14.0"]
+interop = ["openadapt-types>=0.17.0,<0.18.0"]
 
 [project.scripts]
 openadapt-flow = "openadapt_flow.__main__:main"
