@@ -101,6 +101,14 @@ console = [
     "uvicorn>=0.29",
     "openadapt-types>=0.13.0,<0.14.0",
 ]
+# Reference Execute server: `openadapt-flow serve-execute`. Same public
+# request schema as Cloud Execute, hosted in this process with a local
+# self-signed receipt. Not the hosted control plane.
+execute = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "openadapt-types>=0.13.0,<0.14.0",
+]
 # WindowsBackend: HTTP client for the WAA (Windows Agent Arena) server.
 windows = ["requests>=2.31", "pywin32>=312; platform_system == 'Windows'"]
 # Native macOS window capture/input. Imported lazily; other platforms never

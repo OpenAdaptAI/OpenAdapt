@@ -88,6 +88,27 @@ delivery is uncertain, so the transaction ends in `RECONCILIATION_REQUIRED` for
 a person to settle. Longer walkthrough, including the `--guided` presentation
 mode and the hand-driven stages: [docs/TUTORIAL.md](docs/TUTORIAL.md).
 
+## Reference Execute server
+
+You can host the public Execute HTTP contract on this machine, in one process.
+
+```bash
+pip install 'openadapt-flow[execute]'
+openadapt-flow serve-execute --port 8787 --seed-mockmed
+```
+
+That command binds loopback, generates an Ed25519 key on first start, and
+keeps it under `~/.openadapt/execute-ref/`. Health is `GET /health`. Submit
+`openadapt.execute-request/v1` to `POST /v1/executions`, poll
+`GET /v1/executions/{id}` until `terminal`, then read
+`GET /v1/executions/{id}/receipt`. The same process also speaks MCP at
+`POST /mcp`.
+
+Receipts are self-signed with that local key. They aren't OpenAdapt
+production Seals. `GET /seals/{id}` is the local verify page; it shows the
+key fingerprint and a $0 meter. Counterparties that require an OpenAdapt Seal
+still use Cloud.
+
 ## Record and rehearse your workflow
 
 Install the extras for the surface that will record and replay the workflow:

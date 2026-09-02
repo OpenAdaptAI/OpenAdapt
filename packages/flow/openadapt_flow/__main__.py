@@ -58,6 +58,8 @@ imported lazily inside each handler so ``--help`` always works):
   command.
 - ``console`` — serve the localhost-only operator console (a read-first web
   UI over bundles / runs / skill libraries; requires the ``console`` extra).
+- ``serve-execute`` — host the public Execute HTTP+MCP contract on this
+  machine (self-signed local receipts; not an OpenAdapt production Seal).
 - ``emit-skill`` — emit an Agent Skills folder for a bundle.
 - ``emit-mcp`` — emit a standalone MCP ``server.py`` for a bundle.
 - ``connector`` — the BYOC (bring-your-own-cloud) outbound-pull daemon:
@@ -7617,6 +7619,42 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_console)
 
     p = sub.add_parser(
+        "serve-execute",
+        help=(
+            "Host the public Execute v1 HTTP+MCP contract locally. Receipts "
+            "are self-signed with a local key. They are not OpenAdapt "
+            "production Seals. Needs `pip install 'openadapt-flow[execute]'`"
+        ),
+    )
+    p.add_argument(
+        "--port",
+        type=int,
+        default=8787,
+        help="Port (default: 8787)",
+    )
+    p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind address (default: 127.0.0.1)",
+    )
+    p.add_argument(
+        "--data-dir",
+        default=None,
+        help="Local data directory (default: ~/.openadapt/execute-ref)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help="Bearer token (default: generated on first start in --data-dir)",
+    )
+    p.add_argument(
+        "--seed-mockmed",
+        action="store_true",
+        help="Write the synthetic MockMed ok and banner-lie admissions",
+    )
+    p.set_defaults(func=_cmd_serve_execute)
+
+    p = sub.add_parser(
         "business-decisions",
         help="Customer-runner typed-decision relay; it never resumes or acts.",
     )
@@ -7870,6 +7908,48 @@ def _cmd_console(args: argparse.Namespace) -> int:
             decision_supervisor=_decision_supervisor_from_args(args, attended_service),
             port=args.port,
         )
+    return 0
+
+
+def _cmd_serve_execute(args: argparse.Namespace) -> int:
+    from importlib.util import find_spec
+
+    missing = [
+        name
+        for name in ("fastapi", "uvicorn", "openadapt_types")
+        if find_spec(name) is None
+    ]
+    if missing:
+        raise SystemExit(
+            f"serve-execute needs {', '.join(missing)} — install the "
+            "execute extra:  pip install 'openadapt-flow[execute]'"
+        )
+    from openadapt_flow.execute import SELF_SIGNED_NOTICE
+    from openadapt_flow.execute.app import serve
+    from openadapt_flow.execute.service import ExecuteService, default_data_dir
+
+    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
+    store = ExecuteService(
+        data_dir,
+        token=args.token,
+        seed_mockmed=bool(args.seed_mockmed),
+    )
+    print("openadapt-flow reference Execute")
+    print(f"  http://{args.host}:{args.port}")
+    print(f"  data dir     {data_dir}")
+    print(f"  token        {store.token}")
+    print("  issuer       self_signed")
+    print(f"  fingerprint  {store.fingerprint}")
+    print(f"  {SELF_SIGNED_NOTICE}")
+    if args.seed_mockmed:
+        print("  seeded MockMed admissions (ok + banner-lie)")
+    serve(
+        data_dir,
+        host=args.host,
+        port=args.port,
+        token=store.token,
+        service=store,
+    )
     return 0
 
 
