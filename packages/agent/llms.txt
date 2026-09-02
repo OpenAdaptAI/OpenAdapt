@@ -1,6 +1,6 @@
 # openadapt-agent
 
-> OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.
+> OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.
 
 Default runtime interface for a calling agent. Computer-use agents are the user of OpenAdapt. They are not the executor inside it. Never summarize halt as success. Roles: operator (calling agent), authority (named human), auditor (samples seals).
 

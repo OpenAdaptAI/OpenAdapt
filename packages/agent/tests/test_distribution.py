@@ -254,6 +254,10 @@ def _readme_first_paragraph() -> str:
 
 
 def test_identity_sentence_is_shared() -> None:
+    # Contracts, not marketing copy: MCP registry namespace via the PyPI
+    # readme, the 100-char identity sentence shared with server.json / llms.txt
+    # / skill frontmatter, the findable install commands, Seal/unsigned honesty,
+    # and the ban on naming the skill "computer use".
     # MCP registry server.json description maxLength is 100.
     assert len(IDENTITY_SENTENCE) <= 100
     assert _readme_first_paragraph() == IDENTITY_SENTENCE

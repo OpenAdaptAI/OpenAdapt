@@ -58,7 +58,7 @@ and [`../manifest.json`](../manifest.json).
 - **Display name:** OpenAdapt Agent (openadapt-flow bridge)
 - **PyPI package:** `openadapt-agent`
 - **Version:** `2.0.2` (staged in this repository; `2.0.1` is the newest version published to PyPI)
-- **Description:** OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.
+- **Description:** OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
 - **License:** MIT

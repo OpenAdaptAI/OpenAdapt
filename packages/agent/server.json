@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.OpenAdaptAI/openadapt-agent",
   "title": "OpenAdapt Agent (openadapt-flow bridge)",
-  "description": "OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP.",
+  "description": "OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.",
   "websiteUrl": "https://docs.openadapt.ai",
   "repository": {
     "url": "https://github.com/OpenAdaptAI/openadapt-agent",

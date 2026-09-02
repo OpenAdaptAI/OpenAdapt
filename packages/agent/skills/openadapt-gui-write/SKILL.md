@@ -1,6 +1,6 @@
 ---
 name: openadapt-gui-write
-description: "OpenAdapt is a compiled program for GUI writes with no API. This package invokes it over MCP."
+description: "OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP."
 ---
 
 # OpenAdapt GUI write
@@ -9,7 +9,7 @@ When the user needs a repeating GUI write with no API and must prove persistence
 
 Never summarize halt, refused, timeout, or error as success. A local unsigned replay may complete. If the tool returns unsigned success, treat it as failure. Production success without a Seal is failure.
 
-The MCP server is this package. The program is OpenAdapt. The skill name is openadapt-gui-write.
+The MCP server is this package. OpenAdapt compiles the program. The skill name is openadapt-gui-write.
 
 Serve the public synthetic tutorial with:
 

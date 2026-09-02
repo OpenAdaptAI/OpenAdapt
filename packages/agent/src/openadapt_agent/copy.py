@@ -7,8 +7,8 @@ README, server.json, llms.txt, and skill frontmatter share
 from __future__ import annotations
 
 IDENTITY_SENTENCE = (
-    "OpenAdapt is a compiled program for GUI writes with no API. "
-    "This package invokes it over MCP."
+    "OpenAdapt compiles demonstrated GUI workflows into programs. "
+    "This package invokes them over MCP."
 )
 
 SKILL_WHEN_TO_USE = (
