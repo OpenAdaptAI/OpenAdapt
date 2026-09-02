@@ -7705,6 +7705,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pr.set_defaults(func=_cmd_connector)
 
+    from openadapt_flow.cli_admit import register_admit_parser
+
+    register_admit_parser(sub)
+
     return parser
 
 
