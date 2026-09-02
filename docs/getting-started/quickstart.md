@@ -9,7 +9,7 @@ Use Python 3.10, 3.11, or 3.12:
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt quickstart
+openadapt flow tutorial
 ```
 
 The command runs one complete local lifecycle against synthetic MockMed data:
@@ -26,8 +26,8 @@ The healthy run returns `VERIFIED`. It makes no model or Cloud call.
 Inspect the artifacts:
 
 ```bash
-openadapt flow visualize openadapt-quickstart/bundle --out graph.html
-openadapt flow lint openadapt-quickstart/bundle
+openadapt flow visualize <out>/bundle --out graph.html
+openadapt flow lint <out>/bundle
 ```
 
 Run the same certified bundle against a fault-injecting backend:
@@ -56,17 +56,20 @@ The strict lint step returns a nonzero exit code. The bundled manual demo has
 an unarmed irreversible click. The permissive certification is only a smoke
 gate. The Demo replay returns `COMPLETED_UNVERIFIED`, not `VERIFIED`.
 
-Use `openadapt quickstart` for the effect-verified first run. For a real
-workflow, add the application boundary, action risks, identity requirements,
-effect verifier, fault cases, and deployment policy before production use.
+Use `openadapt flow tutorial` for the effect-verified first run.
+`openadapt quickstart --break-it` is the halt demo. For a real workflow, add
+the application boundary, action risks, identity requirements, effect verifier,
+fault cases, and deployment policy before production use.
 
-## Record a browser workflow
+## Record a workflow
+
+Omit `--backend`. No `--url` records this OS. `--url` records the browser.
 
 ```bash
-openadapt flow record --backend web --url https://your-app.example --out rec
+openadapt flow record --out rec
+openadapt flow record --url https://your-app.example --out rec
 openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --backend web \
-  --url https://your-app.example --run-dir run
+openadapt flow replay bundle --url https://your-app.example --run-dir run
 ```
 
 Password fields and fields declared with `--secret` exclude their values at

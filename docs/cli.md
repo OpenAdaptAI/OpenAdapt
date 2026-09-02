@@ -11,17 +11,18 @@ installed `openadapt-flow` engine.
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt quickstart [--headed] [--break-it] [--out NEW_DIRECTORY]
+openadapt flow tutorial [--headed] [--break-it] [--out NEW_DIRECTORY]
 openadapt-agent serve --allow-run
 ```
 
-`quickstart` runs the bundled synthetic MockMed workflow from recording through
-an independently verified Standard-profile result. It refuses to overwrite an
-existing output directory. `--break-it` reruns the same certified bundle
-against a lying backend; the independent oracle must HALT and leave the store
-unchanged. `openadapt-agent serve --allow-run` then generates the public
-MockMed bundle at serve time and hosts it over MCP. A client POSTs authorized
-work and gets a receipt. Frames stay on this machine.
+`openadapt flow tutorial` is the command that writes a `VERIFIED` receipt. It
+runs the bundled synthetic MockMed workflow from recording through an
+independently verified Standard-profile result. `openadapt quickstart --break-it`
+is the halt demo: it reruns the same certified bundle against a lying backend,
+and the independent oracle must HALT and leave the store unchanged.
+`openadapt-agent serve --allow-run` then generates the public MockMed bundle at
+serve time and hosts it over MCP. A client POSTs authorized work and gets a
+receipt. Frames stay on this machine.
 
 ## Flow lifecycle
 
@@ -69,10 +70,12 @@ smoke gate. The replay uses the Demo profile and returns
 ## Record and replay one surface
 
 ```bash
-openadapt flow record --backend web --url https://your-app.example --out rec
-openadapt flow replay bundle --backend web \
-  --url https://your-app.example --run-dir run
+openadapt flow record --out rec
+openadapt flow record --url https://your-app.example --out rec
+openadapt flow replay bundle --url https://your-app.example --run-dir run
 ```
+
+Omit `--backend`. No `--url` records this OS. `--url` records the browser.
 
 Supported selectors are `web`, `windows`, `macos`, `linux`, `rdp`, and
 `citrix`. The required target flags differ by surface. Run these commands for

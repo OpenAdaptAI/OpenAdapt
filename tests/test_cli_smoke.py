@@ -471,7 +471,8 @@ def test_top_level_help_leads_with_flow():
     assert result.exit_code == 0
     # Quick Start headline and Commands listing both lead with flow.
     assert "openadapt flow demo-record" in result.output
-    assert "openadapt quickstart" in result.output
+    assert "openadapt flow tutorial" in result.output
+    assert "openadapt quickstart --break-it" in result.output
     assert "openadapt-agent serve --allow-run" in result.output
     assert "effect-verified first run" in result.output
     assert "Standalone local human GUI capture" in result.output
