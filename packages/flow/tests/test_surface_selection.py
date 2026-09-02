@@ -20,7 +20,9 @@ from openadapt_flow.ir import BackendHints, Workflow
 from openadapt_flow.surface_selection import (
     demo_default_notice,
     execution_mode_for_surface,
+    implicit_record_surface,
     load_last_surface,
+    native_surface_for_this_os,
     store_last_surface,
 )
 
@@ -98,6 +100,33 @@ def cli_state(tmp_path: Path, monkeypatch) -> Path:
     return state
 
 
+def _install_fake_desktop_record(monkeypatch, recorded: dict | None = None):
+    def _fake_capture(out_dir, **kwargs):
+        if recorded is not None:
+            recorded["kwargs"] = kwargs
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "meta.json").write_text("{}")
+        return out_dir
+
+    import openadapt_flow.desktop_record as dr
+
+    monkeypatch.setattr(dr, "record_desktop_capture", _fake_capture)
+
+
+def _install_fake_web_record(monkeypatch, recorded: dict | None = None):
+    def _fake_interactive(url, out, **kwargs):
+        if recorded is not None:
+            recorded["url"] = url
+            recorded["kwargs"] = kwargs
+        Path(out).mkdir(parents=True, exist_ok=True)
+        (Path(out) / "meta.json").write_text("{}")
+        return Path(out)
+
+    import openadapt_flow.interactive_recorder as ir
+
+    monkeypatch.setattr(ir, "record_interactive", _fake_interactive)
+
+
 # ---------------------------------------------------------------------------
 # execution mode + last-used state file
 # ---------------------------------------------------------------------------
@@ -125,6 +154,49 @@ def test_last_surface_invalid_values_ignored(cli_state: Path) -> None:
     assert load_last_surface() is None
 
 
+def test_native_surface_for_this_os_maps_host() -> None:
+    assert native_surface_for_this_os("darwin") == "macos"
+    assert native_surface_for_this_os("win32") == "windows"
+    assert native_surface_for_this_os("linux") == "linux"
+    assert native_surface_for_this_os("linux2") == "linux"
+    with pytest.raises(ValueError, match="no native capture surface"):
+        native_surface_for_this_os("aix")
+
+
+def test_implicit_record_surface_url_selects_web() -> None:
+    surface, from_last = implicit_record_surface(
+        url="https://app.example", last_used="macos", platform="darwin"
+    )
+    assert surface == "web"
+    assert from_last is False
+
+
+def test_implicit_record_surface_defaults_to_this_os() -> None:
+    surface, from_last = implicit_record_surface(
+        url=None, last_used=None, platform="darwin"
+    )
+    assert surface == "macos"
+    assert from_last is False
+    surface, from_last = implicit_record_surface(
+        url=None, last_used="web", platform="win32"
+    )
+    assert surface == "windows"
+    assert from_last is False
+    surface, from_last = implicit_record_surface(
+        url=None, last_used="windows", platform="linux"
+    )
+    assert surface == "linux"
+    assert from_last is False
+
+
+def test_implicit_record_surface_honors_last_used_this_os() -> None:
+    surface, from_last = implicit_record_surface(
+        url=None, last_used="macos", platform="darwin"
+    )
+    assert surface == "macos"
+    assert from_last is True
+
+
 # ---------------------------------------------------------------------------
 # record: explicit surface in production, visible default in demo
 # ---------------------------------------------------------------------------
@@ -142,54 +214,59 @@ def test_record_production_profile_requires_explicit_backend(
         assert "Nothing was recorded." in out
 
 
-def test_record_demo_defaults_to_browser_with_notice(
-    tmp_path: Path, capsys, cli_state: Path
-) -> None:
-    # No last-used target: the demo default is the browser, said out loud.
-    # (The web recorder then fails fast on the missing --url; the notice must
-    # already have been printed.)
-    with pytest.raises(SystemExit):
-        main(["record", "--out", str(tmp_path / "rec"), "--profile", "demo"])
-    out = capsys.readouterr().out
-    assert "NOTE: defaulting to browser (demo convenience)." in out
-
-
-def test_record_demo_uses_last_used_target(
+def test_record_demo_defaults_to_this_os_with_notice(
     tmp_path: Path, capsys, cli_state: Path, monkeypatch
 ) -> None:
-    store_last_surface("macos")
-    recorded: dict = {}
+    # No last-used target and no --url: capture on this OS, said out loud.
+    _install_fake_desktop_record(monkeypatch)
+    rc = main(["record", "--out", str(tmp_path / "rec"), "--profile", "demo"])
+    assert rc == 0
+    this_os = native_surface_for_this_os()
+    out = capsys.readouterr().out
+    assert f"NOTE: defaulting to capture on this OS ({this_os})" in out
+    assert "defaulting to browser" not in out
+    assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == (
+        this_os
+    )
 
-    def _fake_capture(out_dir, **kwargs):
-        recorded["kwargs"] = kwargs
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "meta.json").write_text("{}")
-        return out_dir
 
-    import openadapt_flow.desktop_record as dr
-
-    monkeypatch.setattr(dr, "record_desktop_capture", _fake_capture)
+def test_record_demo_uses_last_used_target_when_this_os(
+    tmp_path: Path, capsys, cli_state: Path, monkeypatch
+) -> None:
+    this_os = native_surface_for_this_os()
+    store_last_surface(this_os)
+    _install_fake_desktop_record(monkeypatch)
     rc = main(["record", "--out", str(tmp_path / "rec"), "--profile", "demo"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "defaulting to backend 'macos' (demo convenience" in out
+    assert f"defaulting to backend '{this_os}' (demo convenience" in out
+    assert "defaulting to browser" not in out
     # The recording is stamped with the exact surface for compile-time binding.
     assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == (
-        "macos"
+        this_os
+    )
+
+
+def test_record_demo_last_used_web_does_not_override_this_os(
+    tmp_path: Path, capsys, cli_state: Path, monkeypatch
+) -> None:
+    store_last_surface("web")
+    _install_fake_desktop_record(monkeypatch)
+    rc = main(["record", "--out", str(tmp_path / "rec"), "--profile", "demo"])
+    assert rc == 0
+    this_os = native_surface_for_this_os()
+    out = capsys.readouterr().out
+    assert f"NOTE: defaulting to capture on this OS ({this_os})" in out
+    assert "defaulting to browser" not in out
+    assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == (
+        this_os
     )
 
 
 def test_record_demo_persists_explicit_backend(
     tmp_path: Path, cli_state: Path, monkeypatch
 ) -> None:
-    def _fake_capture(out_dir, **kwargs):
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "meta.json").write_text("{}")
-        return out_dir
-
-    import openadapt_flow.desktop_record as dr
-
-    monkeypatch.setattr(dr, "record_desktop_capture", _fake_capture)
+    _install_fake_desktop_record(monkeypatch)
     rc = main(
         [
             "record",
@@ -205,14 +282,92 @@ def test_record_demo_persists_explicit_backend(
     assert load_last_surface() == "windows"
 
 
-def test_record_without_profile_keeps_permissive_default_with_notice(
-    tmp_path: Path, capsys, cli_state: Path
+def test_record_without_profile_defaults_to_this_os_ignoring_last_used(
+    tmp_path: Path, capsys, cli_state: Path, monkeypatch
 ) -> None:
     store_last_surface("windows")  # must NOT apply outside --profile demo
-    with pytest.raises(SystemExit, match="--url"):
-        main(["record", "--out", str(tmp_path / "rec")])
+    _install_fake_desktop_record(monkeypatch)
+    rc = main(["record", "--out", str(tmp_path / "rec")])
+    assert rc == 0
+    this_os = native_surface_for_this_os()
+    out = capsys.readouterr().out
+    assert f"NOTE: defaulting to capture on this OS ({this_os})" in out
+    assert "defaulting to browser" not in out
+    assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == (
+        this_os
+    )
+
+
+def test_record_url_without_backend_selects_web(
+    tmp_path: Path, capsys, cli_state: Path, monkeypatch
+) -> None:
+    recorded: dict = {}
+    _install_fake_web_record(monkeypatch, recorded)
+    capture_started = False
+
+    def fail_if_capture_starts(*args, **kwargs):
+        nonlocal capture_started
+        capture_started = True
+        raise AssertionError("desktop capture must not start")
+
+    import openadapt_flow.desktop_record as dr
+
+    monkeypatch.setattr(dr, "record_desktop_capture", fail_if_capture_starts)
+    rc = main(
+        [
+            "record",
+            "--out",
+            str(tmp_path / "rec"),
+            "--url",
+            "http://app.example",
+        ]
+    )
+    assert rc == 0
+    assert capture_started is False
+    assert recorded["url"] == "http://app.example"
     out = capsys.readouterr().out
     assert "NOTE: defaulting to browser (demo convenience)." in out
+    assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == "web"
+
+
+def test_record_explicit_backend_wins_over_url_and_this_os(
+    tmp_path: Path, capsys, cli_state: Path, monkeypatch
+) -> None:
+    _install_fake_desktop_record(monkeypatch)
+    with pytest.raises(SystemExit, match="--url applies only to --backend web"):
+        main(
+            [
+                "record",
+                "--out",
+                str(tmp_path / "rec"),
+                "--backend",
+                "windows",
+                "--url",
+                "http://app.example",
+            ]
+        )
+    out = capsys.readouterr().out
+    assert "demo convenience" not in out
+
+
+def test_record_production_profile_refuses_even_with_url(
+    tmp_path: Path, capsys, cli_state: Path
+) -> None:
+    rc = main(
+        [
+            "record",
+            "--out",
+            str(tmp_path / "rec"),
+            "--profile",
+            "standard",
+            "--url",
+            "http://app.example",
+        ]
+    )
+    assert rc == 2
+    out = capsys.readouterr().out
+    assert "record REFUSED: the standard profile requires an explicit" in out
+    assert "Nothing was recorded." in out
 
 
 # ---------------------------------------------------------------------------
@@ -444,6 +599,9 @@ def test_run_production_profile_requires_explicit_surface(
 def test_notice_texts_are_stable() -> None:
     assert demo_default_notice("web", from_last_used=False).startswith(
         "NOTE: defaulting to browser (demo convenience)."
+    )
+    assert demo_default_notice("macos", from_last_used=False).startswith(
+        "NOTE: defaulting to capture on this OS (macos) (demo convenience)."
     )
     assert demo_default_notice("windows", from_last_used=True).startswith(
         "NOTE: defaulting to backend 'windows' (demo convenience"

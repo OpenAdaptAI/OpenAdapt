@@ -520,7 +520,65 @@ def test_cli_record_desktop_param_must_be_kv(tmp_path: Path) -> None:
 
 def test_cli_record_web_requires_url(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="requires --url"):
-        _run_cli(["record", "--out", str(tmp_path / "r")])
+        _run_cli(["record", "--backend", "web", "--out", str(tmp_path / "r")])
+
+
+def test_cli_record_without_backend_or_url_starts_desktop_capture(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(
+        "openadapt_flow.desktop_record.record_desktop_capture",
+        _fake_desktop_record(captured),
+    )
+    rc = _run_cli(["record", "--out", str(tmp_path / "rec")])
+    assert rc == 0
+    assert captured["window"] is None
+    from openadapt_flow.surface_selection import native_surface_for_this_os
+
+    out = capsys.readouterr().out
+    assert f"capture on this OS ({native_surface_for_this_os()})" in out
+    assert "defaulting to browser" not in out
+
+
+def test_cli_record_url_without_backend_selects_web(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    recorded: dict = {}
+
+    def fake_interactive(url, out, **kwargs):
+        recorded["url"] = url
+        Path(out).mkdir(parents=True, exist_ok=True)
+        (Path(out) / "meta.json").write_text("{}")
+        return Path(out)
+
+    monkeypatch.setattr(
+        "openadapt_flow.interactive_recorder.record_interactive",
+        fake_interactive,
+    )
+    capture_started = False
+
+    def fail_if_capture_starts(*args, **kwargs):
+        nonlocal capture_started
+        capture_started = True
+        raise AssertionError("desktop capture must not start")
+
+    monkeypatch.setattr(
+        "openadapt_flow.desktop_record.record_desktop_capture",
+        fail_if_capture_starts,
+    )
+    rc = _run_cli(
+        ["record", "--url", "http://app.example", "--out", str(tmp_path / "rec")]
+    )
+    assert rc == 0
+    assert capture_started is False
+    assert recorded["url"] == "http://app.example"
+    assert "defaulting to browser" in capsys.readouterr().out
+
+
+def test_cli_record_default_desktop_rejects_secret(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="secret"):
+        _run_cli(["record", "--out", str(tmp_path / "r"), "--secret", "pw"])
 
 
 @pytest.mark.parametrize(

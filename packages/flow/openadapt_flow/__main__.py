@@ -3,8 +3,9 @@
 Subcommands (thin wrappers over the module APIs; sibling modules are
 imported lazily inside each handler so ``--help`` always works):
 
-- ``record`` — open a headed browser on your OWN app (``--url``) and
-  record what you do into the format ``compile`` consumes.
+- ``record`` — record a demonstration into the format ``compile`` consumes.
+  With no ``--backend`` and no ``--url``, capture the desktop on this OS.
+  ``--url`` without ``--backend`` still records the browser.
 - ``demo-record`` — serve MockMed locally and record the canonical demo.
 - ``compile`` — compile a recording directory into a workflow bundle.
 - ``induce`` — induce a parameterized PROGRAM bundle from MULTIPLE recordings
@@ -1001,12 +1002,15 @@ def _cmd_record(args: argparse.Namespace) -> int:
     # target for the chosen backend raises rather than silently record web).
     #
     # Surface-selection neutrality (Section 5): a production posture
-    # (--profile standard/regulated) requires an explicit --backend; only the
-    # Demo/permissive posture may default to the browser, visibly. The
-    # last-used target is a Demo-only convenience from the CLI state file.
+    # (--profile standard/regulated) requires an explicit --backend. The
+    # Demo/permissive posture may omit --backend: capture on this OS unless
+    # --url selected the browser, and say so visibly. The last-used target is
+    # a Demo-only convenience from the CLI state file, and only when it is
+    # this OS.
     from openadapt_flow.surface_selection import (
         demo_default_notice,
         explicit_surface_refusal,
+        implicit_record_surface,
         load_last_surface,
         store_last_surface,
     )
@@ -1018,8 +1022,14 @@ def _cmd_record(args: argparse.Namespace) -> int:
             print(explicit_surface_refusal("record", profile))
             return 2
         last = load_last_surface() if profile == "demo" else None
-        backend = last or "web"
-        print(demo_default_notice(backend, from_last_used=last is not None))
+        try:
+            backend, from_last = implicit_record_surface(
+                url=getattr(args, "url", None),
+                last_used=last,
+            )
+        except ValueError as exc:
+            raise SystemExit(f"record: {exc}") from exc
+        print(demo_default_notice(backend, from_last_used=from_last))
     elif profile == "demo":
         store_last_surface(_report_backend_kind(backend))
     browser_attach_requested = bool(
@@ -4894,22 +4904,25 @@ def _cmd_repair(args: argparse.Namespace) -> int:
 def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     """Add the backend-selector flags (``--backend`` + targets) to a subparser.
 
-    These override the ``backend`` section of a deployment ``--config``. Default
-    (``web`` / no flag) reproduces the historical browser behavior byte-for-byte.
+    These override the ``backend`` section of a deployment ``--config``.
+    There is no universal browser default: ``record`` with no ``--backend``
+    and no ``--url`` captures on this OS; ``--url`` without ``--backend``
+    still selects web. Production profiles still require an explicit target.
     """
     p.add_argument(
         "--backend",
         choices=["web", "windows", "macos", "linux", "rdp", "citrix"],
         default=None,
         help=(
-            "Backend to drive: 'web' (default; Playwright/Chromium), 'windows' "
+            "Backend to drive: 'web' (Playwright/Chromium), 'windows' "
             "(native Windows via the WAA HTTP agent at replay), 'macos' (one "
             "native Mac app window), 'linux' (one exact AT-SPI app window at "
             "replay), 'rdp' (pixel-only network or local remote desktop), or "
             "'citrix' (the local "
             "Citrix Workspace window; its owner defaults by host OS and a "
             "configured rdp_window may override it). Overrides backend.kind "
-            "from --config."
+            "from --config. Omit on record to capture on this OS, or pass "
+            "--url to record the browser."
         ),
     )
     p.add_argument(
@@ -5310,9 +5323,10 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Recording posture (Section 5). standard/regulated REQUIRE an "
             "explicit --backend (no implicit browser default in production). "
-            "demo may omit --backend: it defaults to the browser (or your "
-            "last-used demo target) and prints a visible notice. Omitted: "
-            "the permissive pre-profile default (browser, with notice)."
+            "demo may omit --backend: it defaults to capture on this OS "
+            "(macos/windows/linux), or to the browser when --url is given, "
+            "and prints a visible notice. Omitted: the same permissive "
+            "pre-profile default."
         ),
     )
     _add_backend_flags(p)

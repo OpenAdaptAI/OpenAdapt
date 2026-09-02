@@ -12,12 +12,15 @@ surface among six, not a privileged default.
   in the deployment `--config`. There is no implicit browser default in
   production.
 - Under `--profile demo` (or with no profile, the permissive pre-profile
-  posture), an omitted `--backend` defaults to the browser and prints a
-  visible notice. With `--profile demo`, the CLI also remembers your last
-  explicitly selected target in a per-user state file
+  posture), an omitted `--backend` records capture on this OS (`macos`,
+  `windows`, or `linux`) and prints a visible notice. Pass `--url` without
+  `--backend` to record the browser. An explicit `--backend` still wins.
+  With `--profile demo`, the CLI also remembers your last explicitly
+  selected target in a per-user state file
   (`~/.openadapt/flow_cli.json`, override with `OPENADAPT_FLOW_CLI_STATE`)
-  and offers it as the default next time, again with a visible notice. This
-  convenience is CLI state only; it is never written into a workflow bundle.
+  and offers it as the default next time when that target is this OS, again
+  with a visible notice. This convenience is CLI state only; it is never
+  written into a workflow bundle.
 
 ## Workflows are bound to their surface
 

@@ -2,8 +2,9 @@
 
 The browser is one execution surface among six, not a privileged default.
 Production execution profiles (Standard / Regulated) require the operator to
-select the surface explicitly; only the Demo / permissive posture may fall
-back to the browser, and then it must say so visibly.
+select the surface explicitly. The Demo / permissive posture may omit
+``--backend``: ``record`` then captures on this OS (macos / windows / linux)
+unless ``--url`` selected the browser, and it must say so visibly.
 
 This module owns three small, deliberately CLI-local concerns:
 
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Optional, cast
 
@@ -37,8 +39,52 @@ SURFACES: tuple[ExecutionTargetKind, ...] = (
 
 SURFACE_LIST_TEXT = "web (browser), windows, macos, linux, rdp, citrix"
 
+#: Native desktop surfaces ``record`` can default to on this OS.
+NATIVE_SURFACES: tuple[ExecutionTargetKind, ...] = ("windows", "macos", "linux")
+
 #: Environment variable overriding the CLI state file path (tests, CI).
 CLI_STATE_ENV = "OPENADAPT_FLOW_CLI_STATE"
+
+
+def native_surface_for_this_os(
+    platform: Optional[str] = None,
+) -> ExecutionTargetKind:
+    """Return the native capture surface for this OS.
+
+    ``record`` with no ``--backend`` and no ``--url`` uses this surface.
+    Unknown platforms have no implicit default; pass ``--backend`` explicitly.
+    """
+    plat = sys.platform if platform is None else platform
+    if plat == "darwin":
+        return "macos"
+    if plat == "win32":
+        return "windows"
+    if plat == "linux" or plat.startswith("linux"):
+        return "linux"
+    raise ValueError(
+        f"no native capture surface for platform {plat!r}; pass --backend "
+        f"with one of: {SURFACE_LIST_TEXT}"
+    )
+
+
+def implicit_record_surface(
+    *,
+    url: Optional[str],
+    last_used: Optional[ExecutionTargetKind] = None,
+    platform: Optional[str] = None,
+) -> tuple[ExecutionTargetKind, bool]:
+    """Return ``(surface, from_last_used)`` when ``record`` omitted ``--backend``.
+
+    ``--url`` selects the browser. Otherwise capture on this OS. A Demo
+    last-used target applies only when it is this OS; a last-used browser
+    (or another desktop) does not override the this-OS default.
+    """
+    if url:
+        return "web", False
+    this_os = native_surface_for_this_os(platform)
+    if last_used in NATIVE_SURFACES and last_used == this_os:
+        return last_used, True
+    return this_os, False
 
 
 def execution_mode_for_surface(surface: ExecutionTargetKind) -> ExecutionMode:
@@ -76,9 +122,15 @@ def demo_default_notice(surface: ExecutionTargetKind, *, from_last_used: bool) -
             f"last-used target). Pass --backend to choose explicitly; "
             f"surfaces: {SURFACE_LIST_TEXT}."
         )
+    if surface == "web":
+        return (
+            "NOTE: defaulting to browser (demo convenience). Pass --backend to "
+            f"choose the surface explicitly; surfaces: {SURFACE_LIST_TEXT}."
+        )
     return (
-        "NOTE: defaulting to browser (demo convenience). Pass --backend to "
-        f"choose the surface explicitly; surfaces: {SURFACE_LIST_TEXT}."
+        f"NOTE: defaulting to capture on this OS ({surface}) "
+        f"(demo convenience). Pass --backend to choose the surface "
+        f"explicitly; surfaces: {SURFACE_LIST_TEXT}."
     )
 
 
