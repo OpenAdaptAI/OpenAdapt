@@ -15,6 +15,241 @@
 
 <!-- version list -->
 
+## v1.35.0 (2026-09-02)
+
+### Bug Fixes
+
+- Bind updated process graph schema ([#444](https://github.com/OpenAdaptAI/openadapt-flow/pull/444),
+  [`98588e8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/98588e8ac82355ed33c2984473d2708c8e4c3b30))
+
+- Keep process graph schema in sync ([#444](https://github.com/OpenAdaptAI/openadapt-flow/pull/444),
+  [`98588e8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/98588e8ac82355ed33c2984473d2708c8e4c3b30))
+
+- Pin execute extra to openadapt-types 0.13 so uv lock resolves
+  ([#442](https://github.com/OpenAdaptAI/openadapt-flow/pull/442),
+  [`60f455d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/60f455d5a2948e64636454905007ff37d6d48fbf))
+
+- Populate Execute receipt fields required by types 0.13
+  ([#442](https://github.com/OpenAdaptAI/openadapt-flow/pull/442),
+  [`60f455d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/60f455d5a2948e64636454905007ff37d6d48fbf))
+
+- Preserve X11 library name casing ([#426](https://github.com/OpenAdaptAI/openadapt-flow/pull/426),
+  [`4f4d0a9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/4f4d0a9a27a0af14d35e37d3c6965681729a0ee8))
+
+- Retain fail-closed qualification summaries
+  ([#427](https://github.com/OpenAdaptAI/openadapt-flow/pull/427),
+  [`d5f391c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d5f391c277021302f311731d9198dfbb5d770566))
+
+- Stamp VERIFIED qualification campaigns at the SoR floor
+  ([#435](https://github.com/OpenAdaptAI/openadapt-flow/pull/435),
+  [`0584c24`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0584c24210a73386168371a0a785d5000cdcf5c6))
+
+- **ci**: Format compose help and refresh claims inventory
+  ([#430](https://github.com/OpenAdaptAI/openadapt-flow/pull/430),
+  [`751a888`](https://github.com/OpenAdaptAI/openadapt-flow/commit/751a888f9b40d91fe02d7031b399ebd749b016c1))
+
+- **compiler**: Type REST binding kind as Literal for mypy
+  ([#432](https://github.com/OpenAdaptAI/openadapt-flow/pull/432),
+  [`e47ee6e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e47ee6e38a2f2e384724f840a55aaebc4f4c6b82))
+
+- **hosted**: Bind result-loss delivery identity
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **hosted**: Fence every managed result loss
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **hosted**: Fence managed result-loss terminalization
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **hosted**: Keep proofless v2 refusals non-closing
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **hosted**: Sign unresolved delivery reconciliation
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **paper**: Drop the ORCID that 404s
+  ([#450](https://github.com/OpenAdaptAI/openadapt-flow/pull/450),
+  [`dad7b04`](https://github.com/OpenAdaptAI/openadapt-flow/commit/dad7b04fe46270959f8b1c478213c496a95be084))
+
+- **process**: Bind ExecuteClient and repair CI
+  ([#434](https://github.com/OpenAdaptAI/openadapt-flow/pull/434),
+  [`a43e005`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a43e005c5e7f2a19e4910b908f80bad7a0cb84d4))
+
+- **release**: Create the GitHub Release with the App instead of semantic-release
+  ([#422](https://github.com/OpenAdaptAI/openadapt-flow/pull/422),
+  [`fbfa76b`](https://github.com/OpenAdaptAI/openadapt-flow/commit/fbfa76b3c2b69f2e32885f8581e6ef29b7ef458d))
+
+- **reward**: Trainer adapters live in openadapt_evals.reward; flow keeps the worker and the client
+  ([#453](https://github.com/OpenAdaptAI/openadapt-flow/pull/453),
+  [`a6cdd2c`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a6cdd2c7b59e0ed44abfdbc891310d465c9ac18f))
+
+- **vectors**: Emit valid terminal callback events
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+### Build System
+
+- Pin openadapt-types 0.17 and add the reward extra
+  ([#452](https://github.com/OpenAdaptAI/openadapt-flow/pull/452),
+  [`f90f723`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f90f723bb3cae7b453a902e518dc5b2724c16983))
+
+### Code Style
+
+- Format terminal closure vector checks
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- Match CI formatter ([#444](https://github.com/OpenAdaptAI/openadapt-flow/pull/444),
+  [`98588e8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/98588e8ac82355ed33c2984473d2708c8e4c3b30))
+
+- Ruff-format admit status tests ([#443](https://github.com/OpenAdaptAI/openadapt-flow/pull/443),
+  [`a2181f9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a2181f913d5c5f7560d9dc065289e6b12b4d352c))
+
+### Continuous Integration
+
+- Skip the expensive suite on documentation-only PRs
+  ([`f38761e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f38761e31b62bf4c0d416c93eb0c794510cf8779))
+
+### Documentation
+
+- Clarify governed and multi-app workflow paths
+  ([#428](https://github.com/OpenAdaptAI/openadapt-flow/pull/428),
+  [`b14e9d6`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b14e9d6eb89159343176e9ab5384eb357ad8757e))
+
+- Commit screenshots of the HTML program visualizer
+  ([#434](https://github.com/OpenAdaptAI/openadapt-flow/pull/434),
+  [`a43e005`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a43e005c5e7f2a19e4910b908f80bad7a0cb84d4))
+
+- Drop 29-app failure-discovery from README
+  ([`01459e5`](https://github.com/OpenAdaptAI/openadapt-flow/commit/01459e530e734c556060f5f2f0c40198a1ba4cd6))
+
+- Match four published claims to their artifacts
+  ([#425](https://github.com/OpenAdaptAI/openadapt-flow/pull/425),
+  [`2e498fa`](https://github.com/OpenAdaptAI/openadapt-flow/commit/2e498fa711183e5d348a060a49678071f1b15b15))
+
+- Publish the Contributor License Agreement CONTRIBUTING has promised
+  ([#420](https://github.com/OpenAdaptAI/openadapt-flow/pull/420),
+  [`d5e5615`](https://github.com/OpenAdaptAI/openadapt-flow/commit/d5e5615db77e38f07f13e02d82adf720836aed3b))
+
+- Restore the exact openIMIS licensing wording the AGPL guard pins
+  ([#423](https://github.com/OpenAdaptAI/openadapt-flow/pull/423),
+  [`96cbd46`](https://github.com/OpenAdaptAI/openadapt-flow/commit/96cbd46c3d96211f03b94a5a4177debff1d7b712))
+
+- Rewrite the README around what the tool does
+  ([#423](https://github.com/OpenAdaptAI/openadapt-flow/pull/423),
+  [`96cbd46`](https://github.com/OpenAdaptAI/openadapt-flow/commit/96cbd46c3d96211f03b94a5a4177debff1d7b712))
+
+- Show the mermaid visualize already emits
+  ([#434](https://github.com/OpenAdaptAI/openadapt-flow/pull/434),
+  [`a43e005`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a43e005c5e7f2a19e4910b908f80bad7a0cb84d4))
+
+- Show Windows and Citrix instead of naming six substrates
+  ([#423](https://github.com/OpenAdaptAI/openadapt-flow/pull/423),
+  [`96cbd46`](https://github.com/OpenAdaptAI/openadapt-flow/commit/96cbd46c3d96211f03b94a5a4177debff1d7b712))
+
+- **paper**: Correct the tree map, and name the profile in each main.tex
+  ([#424](https://github.com/OpenAdaptAI/openadapt-flow/pull/424),
+  [`8c1b9dd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8c1b9dd01ba304cf4bd04c5dd82117971a4005e1))
+
+- **paper**: Mark the workshop condensation superseded, and fix the citation claim
+  ([#424](https://github.com/OpenAdaptAI/openadapt-flow/pull/424),
+  [`8c1b9dd`](https://github.com/OpenAdaptAI/openadapt-flow/commit/8c1b9dd01ba304cf4bd04c5dd82117971a4005e1))
+
+### Features
+
+- Add admit status that reports not-admitted
+  ([#443](https://github.com/OpenAdaptAI/openadapt-flow/pull/443),
+  [`a2181f9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a2181f913d5c5f7560d9dc065289e6b12b4d352c))
+
+- Extend ProcessContract with mixed capabilities
+  ([#444](https://github.com/OpenAdaptAI/openadapt-flow/pull/444),
+  [`98588e8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/98588e8ac82355ed33c2984473d2708c8e4c3b30))
+
+- Lint same-channel effect oracles on consequential writes
+  ([`6fe637a`](https://github.com/OpenAdaptAI/openadapt-flow/commit/6fe637a3251c8ecd9973c65b964885a0427423bb))
+
+- MIT reference Execute server with self-signed local receipts
+  ([#442](https://github.com/OpenAdaptAI/openadapt-flow/pull/442),
+  [`60f455d`](https://github.com/OpenAdaptAI/openadapt-flow/commit/60f455d5a2948e64636454905007ff37d6d48fbf))
+
+- Refuse VERIFIED without an independent system-of-record read
+  ([#435](https://github.com/OpenAdaptAI/openadapt-flow/pull/435),
+  [`0584c24`](https://github.com/OpenAdaptAI/openadapt-flow/commit/0584c24210a73386168371a0a785d5000cdcf5c6))
+
+- Version hosted terminal outcome contracts
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **cli**: Default record without --backend to this OS
+  ([`b9d00e3`](https://github.com/OpenAdaptAI/openadapt-flow/commit/b9d00e3f96b1c236339c81ac5d50a24b0c71ab37))
+
+- **cli**: Wire serve-reward and relock openadapt-types 0.17
+  ([#452](https://github.com/OpenAdaptAI/openadapt-flow/pull/452),
+  [`f90f723`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f90f723bb3cae7b453a902e518dc5b2724c16983))
+
+- **cli**: Write a deploy.yaml draft bound to a bundle digest
+  ([`f93b755`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f93b755b9f7551fdc6a0fab5acd069155c5ff5b6))
+
+- **compiler**: Admit REST bindings only after held-out Effect confirmation
+  ([#432](https://github.com/OpenAdaptAI/openadapt-flow/pull/432),
+  [`e47ee6e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e47ee6e38a2f2e384724f840a55aaebc4f4c6b82))
+
+- **compose**: Sequence separately recorded Flow bundles
+  ([#430](https://github.com/OpenAdaptAI/openadapt-flow/pull/430),
+  [`751a888`](https://github.com/OpenAdaptAI/openadapt-flow/commit/751a888f9b40d91fe02d7031b399ebd749b016c1))
+
+- **flow**: Authoring session wraps Recorder; compile wrapper returns needs_human_admit
+  ([`98d754e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/98d754e264249b04e14a722050694f89e870647b))
+
+- **hosted**: Sign complete terminal outcomes
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **hosted**: Version and sign terminal outcomes
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **induce**: Emit a record-next worklist of missing demonstrations
+  ([`1e441db`](https://github.com/OpenAdaptAI/openadapt-flow/commit/1e441db59a62483c5fa1803fdd376cf822c0c26f))
+
+- **process**: Sequence independently admitted capabilities
+  ([#434](https://github.com/OpenAdaptAI/openadapt-flow/pull/434),
+  [`a43e005`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a43e005c5e7f2a19e4910b908f80bad7a0cb84d4))
+
+- **qualify**: Execute --break-it oracle gate before accept
+  ([`5a2ebc8`](https://github.com/OpenAdaptAI/openadapt-flow/commit/5a2ebc8b8d7530ae33f69f0e94212d37125643f0))
+
+- **qualify**: Propose production-shaped pins from a demo
+  ([`a6f8d25`](https://github.com/OpenAdaptAI/openadapt-flow/commit/a6f8d254000ea6710029ed5eb2a8f391ad9dca37))
+
+- **reward**: MIT reference reward worker with self-signed reward receipts
+  ([#452](https://github.com/OpenAdaptAI/openadapt-flow/pull/452),
+  [`f90f723`](https://github.com/OpenAdaptAI/openadapt-flow/commit/f90f723bb3cae7b453a902e518dc5b2724c16983))
+
+- **visualize**: Render composed parents without merging ProgramGraphs
+  ([#433](https://github.com/OpenAdaptAI/openadapt-flow/pull/433),
+  [`924cae9`](https://github.com/OpenAdaptAI/openadapt-flow/commit/924cae97b083b4bc594c78fef3d7190d215ad73b))
+
+### Testing
+
+- Cover compile_recording REST binding admission
+  ([#432](https://github.com/OpenAdaptAI/openadapt-flow/pull/432),
+  [`e47ee6e`](https://github.com/OpenAdaptAI/openadapt-flow/commit/e47ee6e38a2f2e384724f840a55aaebc4f4c6b82))
+
+- Publish consumer-safe terminal vectors
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+- **hosted**: Refuse unsigned v2 runs without a signer
+  ([#412](https://github.com/OpenAdaptAI/openadapt-flow/pull/412),
+  [`275b9e0`](https://github.com/OpenAdaptAI/openadapt-flow/commit/275b9e044a3fd5b32942b9acc8cf3510d9e26673))
+
+
 ## v1.34.0 (2026-08-28)
 
 ### Bug Fixes
