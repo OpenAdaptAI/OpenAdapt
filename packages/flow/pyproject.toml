@@ -80,7 +80,7 @@ dev = [
     "openadapt-types>=0.17.0,<0.18.0",
     # Engineering-hygiene gates (lint+format, type-check, coverage). Pinned to
     # majors so CI and local dev run the same checkers.
-    "ruff==0.16.3",
+    "ruff==0.16.5",
     "mypy>=1.11",
     "pytest-cov>=5.0",
     "jsonschema>=4.21",
