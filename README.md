@@ -265,9 +265,13 @@ self-service API. Partner contract and qualification process:
 [the Execute guide](https://docs.openadapt.ai/commercial/oem-brief/).
 
 <!-- BEGIN PRODUCTION LIFECYCLE -->
-Production is per qualified workflow.
-A workflow is Production only with an active signed, expiring, revocable
-admission for that exact compiled version, application, and environment.
+`openadapt-flow` 1.34.0 on PyPI is an admitted production runtime for that
+exact wheel and sdist. Install with `pip install openadapt` (it pulls that
+Flow release). The product-wide Production label is still false until the
+other six targets have active admissions. Native Mac DMGs are still ad-hoc
+signed 0.15.0; don't recommend them as admitted. A workflow is Production
+only with its own active signed, expiring, revocable admission for that
+exact compiled version, application, and environment.
 [Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 <!-- END PRODUCTION LIFECYCLE -->
 

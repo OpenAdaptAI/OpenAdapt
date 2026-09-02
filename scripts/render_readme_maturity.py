@@ -459,9 +459,13 @@ def _qualification_block() -> str:
     return "\n".join(
         [
             BEGIN,
-            "Production is per qualified workflow.",
-            "A workflow is Production only with an active signed, expiring, revocable",
-            "admission for that exact compiled version, application, and environment.",
+            "`openadapt-flow` 1.34.0 on PyPI is an admitted production runtime for that",
+            "exact wheel and sdist. Install with `pip install openadapt` (it pulls that",
+            "Flow release). The product-wide Production label is still false until the",
+            "other six targets have active admissions. Native Mac DMGs are still ad-hoc",
+            "signed 0.15.0; don't recommend them as admitted. A workflow is Production",
+            "only with its own active signed, expiring, revocable admission for that",
+            "exact compiled version, application, and environment.",
             f"[Check the live signed Production record]({LIVE_RECORD_URL}).",
             END,
         ]

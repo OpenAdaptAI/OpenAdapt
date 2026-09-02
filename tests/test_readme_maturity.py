@@ -173,7 +173,9 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         block = MODULE.render_block(projection, {}, now=NOW)
 
         self.assertIn(MODULE.LIVE_RECORD_URL, block)
-        self.assertIn("Production is per qualified workflow", block)
+        self.assertIn("openadapt-flow", block)
+        self.assertIn("1.34.0", block)
+        self.assertIn("pip install openadapt", block)
         self.assertIn("exact compiled version", block)
         self.assertIn("expiring, revocable", block)
         self.assertNotIn("Production status", block)
@@ -183,6 +185,7 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         self.assertNotIn("silent incorrect", block)
         self.assertNotIn("Beta", block)
         self.assertNotIn("not Production", block)
+        self.assertNotIn("pip install openadapt-flow", block)
 
     def test_an_active_flow_admission_does_not_admit_the_launcher(self) -> None:
         flow = _admission(target="flow", sequence=1)
@@ -194,7 +197,9 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         )
 
         self.assertNotIn(flow["admission_id"], block)
-        self.assertIn("Production is per qualified workflow", block)
+        self.assertIn("openadapt-flow", block)
+        self.assertIn("pip install openadapt", block)
+        self.assertNotIn("OpenAdapt is Production", block)
         self.assertNotIn("Production status", block)
         self.assertNotIn("No current signed admission", block)
 
