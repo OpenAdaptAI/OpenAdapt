@@ -9,15 +9,17 @@
 **Verified last-mile execution for agents.** Give agents verified hands for
 the GUI your APIs can't reach.
 
-A named human authors a demonstration. OpenAdapt compiles it into a program
-that runs again without a generative-model API in the control loop. A calling
-agent invokes that program. Before a governed run reports `VERIFIED`, it
-checks every declared effect at the required evidence tier. Never summarize
-halt as success.
+A person or a local agent they watch authors a demonstration. OpenAdapt
+compiles it into a program that runs again without a generative-model API
+in the control loop. A named human admits that program. A calling agent
+invokes it. Before a governed run reports `VERIFIED`, it checks every
+declared effect at the required evidence tier. Never summarize halt as
+success.
 
 Computer-use agents are the user of OpenAdapt. They are not the executor
-inside it. The person who demonstrated the task is authority, not the daily
-operator.
+inside it. The person who admits the program is authority, not the daily
+operator. When the agent clicks during the demonstration, that person
+watches.
 
 This is the installer and the `openadapt` command. The compiler and the runtime
 live in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), and
