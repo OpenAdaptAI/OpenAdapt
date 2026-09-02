@@ -47,6 +47,58 @@ from the reference apps.
    API, SQL, second-session, and file reads are channel-disjoint; on-screen
    success is not.
 
+## The selector names the subject
+
+An oracle read returns the whole collection. `VerifierOracle.read` and
+`JsonDocumentOracle.read` in `openadapt_flow/reward/oracles.py` stamp the
+episode's `oracle_identity` onto the observation and then hand back every
+record they can see. Nothing filters those records by patient or by account.
+
+So the effect's own `match` is where the subject enters. A `{param: ...}`
+reference resolves against the episode identity before the judge runs, and the
+judge keeps only the records that selector picks. Write the subject into
+`match` and the contract asks about one patient. Leave it out and the contract
+asks about the collection.
+
+Right:
+
+```yaml
+effects:
+  - kind: record_written
+    match:
+      patient_id: {param: patient_id}   # binds to THIS episode's patient
+      type: Triage
+    expected_count: 1
+```
+
+Wrong, and `RewardBundle.load` refuses it:
+
+```yaml
+effects:
+  - kind: record_written
+    match:
+      type: Triage                      # any patient's triage row satisfies it
+    expected_count: 1
+```
+
+The second contract still declares `oracle.identity_keys: [patient_id]`, so
+its receipt names a patient. Put one triage row in the store belonging to
+somebody else and the judge CONFIRMS the effect: the receipt then asserts a
+patient whose record was never read. The load-time guard closes that. A bundle
+whose required effects select no record by a declared identity key fails to
+load, and the error names the missing keys and the selector to add.
+
+`idempotency_key` counts as a selector too, because it filters the matched set
+by `key_field`. `value` does not. On a `field_equals` contract `match` chooses
+the record and `value` asserts its content, so a subject id in `value`
+describes whatever matched instead of choosing what to read.
+
+**`identity_keys` is not `identity_field`.** `identity_keys` is the reward
+contract's list of parameters that name the subject of an episode.
+`identity_field` is the row id an `exact_new_set` effect reads to tell a record
+added by the action from one that was already there, and an
+environment-assigned surrogate key is the right choice for it.
+
 ## Substrates
 
 | `effects.kind` | Verifier | Probe | Proven how |

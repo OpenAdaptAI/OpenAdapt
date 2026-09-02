@@ -173,8 +173,9 @@ def write_bundle(
     certify: bool,
     required_effects: list[dict[str, Any]] | None = None,
     forbidden_effects: list[dict[str, Any]] | None = None,
+    identity_keys: list[str] | None = None,
 ) -> None:
-    """Write one synthetic bundle. Tests pass their own effects."""
+    """Write one synthetic bundle. Tests pass their own effects and keys."""
 
     directory.mkdir(parents=True, exist_ok=True)
     required = _canonical(
@@ -199,7 +200,9 @@ def write_bundle(
             "forbidden_effect_contract_digest": _digest_payload(forbidden),
             "oracle": {
                 "channel": channel,
-                "identity_keys": ["patient_id"],
+                "identity_keys": (
+                    ["patient_id"] if identity_keys is None else list(identity_keys)
+                ),
                 "oracle_contract_digest": _digest_payload(oracle_doc),
             },
             "components": [{"name": "terminal_effect", "weight": 1.0}],

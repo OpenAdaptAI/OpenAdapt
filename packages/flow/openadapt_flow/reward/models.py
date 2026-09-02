@@ -291,13 +291,53 @@ _RECIPE_CHANNEL: dict[str, OracleChannel] = {
 }
 
 
+def _selector_params(effect: Effect) -> set[str]:
+    """Return the run parameters that narrow WHICH records this effect judges.
+
+    A subset of :meth:`Effect.referenced_params`: only the positions that
+    filter the read set. ``match`` and each ``new_records`` selector pick the
+    records; ``idempotency_key`` filters them further by ``key_field``.
+
+    ``Effect.value`` is deliberately excluded. On a ``field_equals`` contract
+    ``match`` chooses the record and ``value`` asserts its content, so a
+    ``value`` bound to the subject's id says "whichever record matched holds
+    this id" rather than "read the subject's record". That is a claim about
+    content, not a scope, and it holds by luck when the collection happens to
+    carry one matching row.
+
+    Keep this in step with :meth:`Effect.referenced_params`: a new selector
+    field on ``Effect`` belongs here too, or ``RewardBundle.load`` will refuse
+    a bundle that does bind its identity.
+    """
+
+    expressions = [
+        *effect.match.values(),
+        *(expr for selector in effect.new_records for expr in selector.values()),
+        effect.idempotency_key,
+    ]
+    return {
+        expression.param
+        for expression in expressions
+        if expression is not None and expression.param is not None
+    }
+
+
 class RewardBundle(_Strict):
     """One reward contract with the bytes behind its digests, checked.
 
     Loading refuses when any digest in the contract disagrees with the
     file it names, when the oracle recipe's channel disagrees with the
-    contract's oracle channel, or when an effect references an identity
-    key the contract does not declare.
+    contract's oracle channel, when an effect references an identity
+    key the contract does not declare, or when the required effects
+    between them select no record by a declared identity key.
+
+    That last rule is what ties a judgement to a subject. An oracle reads a
+    whole collection and does not filter it by ``oracle_identity`` (see
+    :meth:`openadapt_flow.reward.oracles.VerifierOracle.read`), so the
+    required effect's own selector is the only place the subject is applied.
+    A contract that declares ``identity_keys`` and then matches on content
+    alone would accept a write that landed on somebody else, and the receipt
+    would still name the declared subject.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
@@ -355,6 +395,21 @@ class RewardBundle(_Strict):
                     f"effect references identity keys the contract does not "
                     f"declare: {names}"
                 )
+        unbound = declared - set().union(
+            *(_selector_params(effect) for effect in required)
+        )
+        if unbound:
+            names = ", ".join(sorted(unbound))
+            example = ", ".join(
+                f'"{key}": {{"param": "{key}"}}' for key in sorted(unbound)
+            )
+            raise BundleError(
+                f"required_effects select no record by these declared identity "
+                f"keys: {names}. The oracle read is not scoped by identity, so "
+                f"a required effect is the only thing that binds the judgement "
+                f"to the named subject. Add {{{example}}} to the match selector "
+                f"of a required effect."
+            )
         certificate: Optional[RewardCertificateV1] = None
         cert_path = base / CERTIFICATE_FILE
         if cert_path.is_file():

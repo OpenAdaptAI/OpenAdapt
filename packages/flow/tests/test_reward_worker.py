@@ -45,6 +45,7 @@ from openadapt_flow.reward.seed import (  # noqa: E402
     MOCKMED_LIE_PATIENT,
     mockmed_episode,
     seed_mockmed,
+    write_bundle,
 )
 from openadapt_flow.reward.serve import OPENAI_GRADER_ROUTE, create_app  # noqa: E402
 from openadapt_flow.reward.worker import RewardWorker, RewardWorkerError  # noqa: E402
@@ -382,6 +383,106 @@ def test_bundle_refuses_tampered_effects(seeded: dict[str, Any]) -> None:
     path.write_text(json.dumps(effects))
     with pytest.raises(ValueError, match="digest"):
         RewardBundle.load(bundle_dir)
+
+
+def _identity_bundle(
+    seeded: dict[str, Any],
+    name: str,
+    required_effects: list[dict[str, Any]],
+    identity_keys: list[str] | None = None,
+) -> Path:
+    """Write an uncertified bundle whose required effects the caller chooses."""
+
+    from openadapt_flow.execute.keys import fingerprint_of, load_or_create_private_key
+
+    data_dir: Path = seeded["data_dir"]
+    key = load_or_create_private_key(data_dir)
+    directory = data_dir / "contracts" / name
+    write_bundle(
+        directory,
+        contract_id=f"reward_contract_{name.replace('-', '_')}_000000",
+        oracle={
+            "kind": "json_file",
+            "path": str(data_dir / "mockmed" / "records.json"),
+            "records_key": "records",
+        },
+        channel="file",
+        key=key,
+        issuer_key_id="self_signed:" + fingerprint_of(key.public_key()),
+        certify=False,
+        required_effects=required_effects,
+        identity_keys=identity_keys,
+    )
+    return directory
+
+
+def test_bundle_refuses_content_only_required_effect(seeded: dict[str, Any]) -> None:
+    """A declared identity key no required effect selects on is a false receipt.
+
+    The oracle reads the whole collection, so a content-only selector accepts a
+    write that landed on another subject while the receipt names this one.
+    """
+
+    directory = _identity_bundle(
+        seeded,
+        "content-only",
+        [{"kind": "record_written", "match": {"type": "Triage"}, "expected_count": 1}],
+    )
+    with pytest.raises(ValueError, match="patient_id"):
+        RewardBundle.load(directory)
+
+
+def test_bundle_refusal_names_the_unselected_key(seeded: dict[str, Any]) -> None:
+    """Two declared keys, one selected: the message names only the missing one."""
+
+    directory = _identity_bundle(
+        seeded,
+        "half-bound",
+        [
+            {
+                "kind": "record_written",
+                "match": {
+                    "patient_id": {"param": "patient_id"},
+                    "type": "Triage",
+                },
+                "expected_count": 1,
+            }
+        ],
+        identity_keys=["patient_id", "encounter_id"],
+    )
+    with pytest.raises(ValueError) as excinfo:
+        RewardBundle.load(directory)
+    message = str(excinfo.value)
+    assert "encounter_id" in message
+    assert "patient_id" not in message.split(".")[0]
+
+
+def test_bundle_accepts_an_identity_bound_required_effect(
+    seeded: dict[str, Any],
+) -> None:
+    """The shipped MockMed bundle selects its subject, so it still loads."""
+
+    bundle = RewardBundle.load(seeded["tier2"])
+    assert bundle.identity_keys == ("patient_id",)
+    assert RewardBundle.load(seeded["tier0"]).identity_keys == ("patient_id",)
+
+
+def test_idempotency_key_binds_the_identity(seeded: dict[str, Any]) -> None:
+    """An idempotency key filters the read set, so it counts as a selector."""
+
+    directory = _identity_bundle(
+        seeded,
+        "by-key",
+        [
+            {
+                "kind": "record_written",
+                "match": {"type": "Triage"},
+                "idempotency_key": {"param": "patient_id"},
+                "expected_count": 1,
+            }
+        ],
+    )
+    assert RewardBundle.load(directory).identity_keys == ("patient_id",)
 
 
 def test_certificate_bound_is_recomputable(seeded: dict[str, Any]) -> None:

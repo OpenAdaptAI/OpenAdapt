@@ -51,7 +51,10 @@ with `RewardWorker.begin_episode(episode_id, identity)` before the rollout
 ran. The last one also captures the pre-episode baseline, which is what a
 `count_new_only` effect needs to tell this episode's write from a record
 that was already there. Its keys must match the contract's `identity_keys`
-exactly.
+exactly. Matching keys does not mean the oracle read the right record:
+it returns the whole collection, so a required effect must select the
+subject with a `{param: ...}` reference, and `RewardBundle.load` refuses
+a bundle where none does (`docs/EFFECT_KIT.md`).
 
 ## The outcome table
 

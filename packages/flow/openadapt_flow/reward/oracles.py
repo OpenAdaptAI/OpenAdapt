@@ -85,6 +85,9 @@ class JsonDocumentOracle:
         self.records_key = records_key
 
     def read(self, identity: Mapping[str, str]) -> OracleObservation:
+        # ``identity`` is stamped, not applied: this returns the whole
+        # document. See the note on ``VerifierOracle.read`` for what binds a
+        # judgement to a subject and for the guard that enforces it.
         try:
             body = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -117,6 +120,14 @@ class VerifierOracle:
         self.channel = channel
 
     def read(self, identity: Mapping[str, str]) -> OracleObservation:
+        # ``identity`` is stamped onto the observation; it does NOT scope the
+        # read. The verifier returns every record in the collection, so the
+        # judgement is bound to the subject only by the required effect's own
+        # selector (``worker._bind`` resolves ``{"param": ...}`` references
+        # against this identity). ``RewardBundle.load`` compensates: it refuses
+        # a bundle whose required effects select no record by a declared
+        # identity key. Scoping the read itself is the broader fix, tracked in
+        # OpenAdaptAI/openadapt-flow#455.
         try:
             state = self.verifier.capture_post_state(None)
         except Exception:  # noqa: BLE001 - an unreadable store is not a guess
