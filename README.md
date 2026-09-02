@@ -39,7 +39,7 @@ the run tool:
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt quickstart
+openadapt flow tutorial
 openadapt-agent serve --allow-run
 ```
 
@@ -47,10 +47,11 @@ Python 3.10 through 3.12. No account, no API key, no extra. Chromium downloads
 itself the first time a browser action runs. `openadapt-agent` is in the base
 install.
 
-`quickstart` records and compiles a task in MockMed, a synthetic
-practice-management fixture, certifies it against the shipped clinical-write
-policy, runs it under the Standard profile, then confirms the saved record
-through a read-only API that the screen doing the writing never touches:
+`openadapt flow tutorial` is the launcher spelling of `openadapt-flow tutorial`.
+It records and compiles a task in MockMed, a synthetic practice-management
+fixture, certifies it against the shipped clinical-write policy, runs it under
+the Standard profile, then confirms the saved record through a read-only API
+that the screen doing the writing never touches:
 
 ```
 [1/5] Record the demonstration against a real persistence boundary
@@ -61,18 +62,19 @@ through a read-only API that the screen doing the writing never touches:
       VERIFIED in 4.1s; 0 model calls; the system of record holds 1 record(s)
 [5/5] Emit the local run receipt
 
-VERIFIED: openadapt-quickstart/run/REPORT.md
+VERIFIED: <out>/run/REPORT.md
   transaction     VERIFIED
+  metering class  billable (this local tutorial was not reported or charged)
   profile         standard
   model calls     0
   effects         2/2 confirmed at evidence tier 1 (independent system of record)
 ```
 
-Real output from `openadapt` 1.16.0 on macOS, 2026-08-28, with absolute paths
-shortened. You now have `openadapt-quickstart/recording/` (the demonstration
-and its retained target evidence), `openadapt-quickstart/bundle/` (the compiled
-workflow, which you can read), and `openadapt-quickstart/run/` (the ordered
-actions, the evidence, and the outcome).
+That's real output from Flow 1.34.0 (launcher 1.16.0) on macOS, 2026-08-28,
+with the run directory shortened. The tutorial writes the recording, the
+compiled bundle, and the run receipt under its output directory (default
+`tutorials/tutorial-<UTC timestamp>`). `openadapt quickstart` is a wrapper
+around the same engine path. The `VERIFIED` receipt comes from `tutorial`.
 
 Then watch it refuse to lie to you:
 
@@ -105,19 +107,23 @@ Seal; treat unsigned production success as failure.
 Inspect what compiled, and what it failed to cover:
 
 ```bash
-openadapt flow visualize openadapt-quickstart/bundle --out graph.html
-openadapt flow lint openadapt-quickstart/bundle
+openadapt flow visualize <out>/bundle --out graph.html
+openadapt flow lint <out>/bundle
 ```
 
 ## Author a workflow
 
+Do not pass `--backend`. With no `--url`, record captures this OS. Pass
+`--url` when the surface is a browser.
+
 ```bash
-openadapt flow record --backend web --url https://your-app.example --out rec
+openadapt flow record --out rec
+openadapt flow record --url https://your-app.example --out rec
 openadapt flow compile rec --out bundle --name my-workflow
 openadapt flow replay bundle --url https://your-app.example --run-dir run
 ```
 
-These commands record one browser surface and run a permissive local rehearsal.
+These commands record one surface and run a permissive local rehearsal.
 They do not certify the bundle. One bundle uses one execution surface and does
 not switch between browser, native, RDP, or Citrix backends.
 

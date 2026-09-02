@@ -13,7 +13,7 @@ Install the launcher:
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt quickstart
+openadapt flow tutorial
 ```
 
 The launcher installs the compatible `openadapt-flow` engine. Do not install

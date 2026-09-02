@@ -62,7 +62,7 @@ def main():
     \b
     Quick Start:
         python -m pip install --upgrade openadapt
-        openadapt quickstart
+        openadapt flow tutorial
         openadapt-agent serve --allow-run
 
     \b
@@ -74,8 +74,12 @@ def main():
         openadapt flow replay bundle
 
     The manual demo is runnable but not certified for consequential work.
-    Use `openadapt quickstart` for the effect-verified first run.
+    Use `openadapt flow tutorial` for the effect-verified first run.
     `openadapt-agent serve --allow-run` then exposes run_* tools over MCP.
+
+    \b
+    Halt demo:
+        openadapt quickstart --break-it
     """
     pass
 

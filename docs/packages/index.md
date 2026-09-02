@@ -19,7 +19,7 @@ Install the launcher and run the browser tutorial:
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt quickstart
+openadapt flow tutorial
 ```
 
 Install a native or remote capability:
