@@ -64,22 +64,25 @@ uv build --wheel --sdist
 python scripts/check_release_consistency.py --require-dist
 ```
 
-After that pull request merges, dispatch the full matrix on the exact candidate
-ref:
-
-```bash
-gh workflow run ci.yml --ref <candidate-ref>
-```
-
-Wait for all four `test-matrix` jobs and the unchanged required jobs to pass.
-Then create the reviewed version tag from protected main:
+After that pull request merges, start the release from protected `main`:
 
 ```bash
 gh workflow run release.yml --ref main -f version=<reviewed-version>
 ```
 
-The release App can push that annotated tag. It can't push a version commit to
-main. The tag run rebuilds the package, repeats the source, license, and claims
+The release job starts the exact-SHA full CI matrix and the three-OS clean-wheel
+lifecycle when either run is missing. It reuses an existing run for the same
+commit, so retrying the release doesn't start duplicate matrices. Publication
+still requires every job in both runs to pass. If an existing run failed or was
+canceled, rerun that workflow on the same candidate before you retry the
+release.
+
+Keep `main` unchanged while those runs finish. The release job checks `main`
+again immediately before it creates the tag and refuses a candidate that a
+later merge replaced. The release App can push that annotated tag, but it can't
+push a version commit to `main`.
+
+The tag run rebuilds the package, repeats the source, license, and claims
 checks, publishes through PyPI Trusted Publishing, and compares the public
 artifact digests with the local build. If a publication step fails, rerun the
 same tag run. Don't create a recovery tag.

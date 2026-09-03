@@ -431,6 +431,8 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
         "- name: Build and verify the exact release artifacts"
     )
     tag_index = release.index("- name: Create and push one annotated release tag")
+    final_main_check_index = release.index("Refusing a stale release tag.", tag_index)
+    tag_command_index = release.index("git tag --annotate", tag_index)
 
     assert "  workflow_dispatch:" in triggers
     assert "      version:" in triggers
@@ -441,12 +443,15 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
     assert "vars.OPENADAPT_RELEASE_APP_ID" in release
     assert "secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY" in release
     assert "permission-contents: write" in release
+    assert "actions: write" in release
     assert "token: ${{ steps.release-app.outputs.token }}" in release
     assert current_main_index < qualification_index < artifact_index < tag_index
     assert "python scripts/check_release_ci.py" in release
     assert '--repository "${GITHUB_REPOSITORY}"' in release
     assert '--sha "${GITHUB_SHA}"' in release
-    assert "--wait-seconds 2700" in release
+    assert "--dispatch-missing" in release
+    assert '--ref "${GITHUB_REF_NAME}"' in release
+    assert "--wait-seconds 5400" in release
     assert "--poll-seconds 10" in release
     assert (
         "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
@@ -457,6 +462,14 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
     assert "python scripts/check_release_consistency.py" in release
     assert "python scripts/validate_claims.py --check --structure-only" in release
     assert "python scripts/check_release_consistency.py --require-dist" in release
+    assert tag_index < final_main_check_index < tag_command_index
+    assert (
+        release.count(
+            "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
+        )
+        == 2
+    )
+    assert release.count('"${current_main}" != "${GITHUB_SHA}"') == 2
     assert "git tag --annotate" in release
     assert 'git push origin "refs/tags/${release_tag}"' in release
     assert "!inputs.backfill_github_release" in release

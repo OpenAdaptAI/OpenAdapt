@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -10,8 +11,10 @@ import pytest
 from scripts.check_release_ci import (
     EXPECTED_CLEAN_MACHINE_JOBS,
     EXPECTED_MATRIX_JOBS,
+    GitHubJSONFetcher,
     QualificationError,
     QualificationPending,
+    dispatch_missing_qualifications,
     require_exact_full_matrix,
     require_production_qualification,
 )
@@ -116,6 +119,87 @@ def test_production_gate_requires_exact_three_os_clean_machine_lifecycle() -> No
     assert result.full_matrix.run_id == RUN_ID
     assert result.clean_machine.run_id == CLEAN_RUN_ID
     assert result.clean_machine.job_names == EXPECTED_CLEAN_MACHINE_JOBS
+
+
+def test_dispatches_only_missing_exact_sha_qualification() -> None:
+    fake = FakeGitHub(clean_runs=[])
+    dispatched: list[tuple[str, str, str]] = []
+
+    result = dispatch_missing_qualifications(
+        fake,
+        lambda repository, workflow, ref: dispatched.append(
+            (repository, workflow, ref)
+        ),
+        repository=REPOSITORY,
+        sha=SHA,
+        ref="main",
+    )
+
+    assert result == ("quickstart-lifecycle.yml",)
+    assert dispatched == [(REPOSITORY, "quickstart-lifecycle.yml", "main")]
+
+
+def test_does_not_duplicate_running_or_failed_exact_sha_qualification() -> None:
+    fake = FakeGitHub(
+        runs=[_run(status="in_progress", conclusion=None)],
+        clean_runs=[_clean_run(status="completed", conclusion="failure")],
+    )
+    dispatched: list[tuple[str, str, str]] = []
+
+    result = dispatch_missing_qualifications(
+        fake,
+        lambda repository, workflow, ref: dispatched.append(
+            (repository, workflow, ref)
+        ),
+        repository=REPOSITORY,
+        sha=SHA,
+        ref="main",
+    )
+
+    assert result == ()
+    assert dispatched == []
+
+
+def test_dispatch_ref_must_be_protected_main() -> None:
+    with pytest.raises(QualificationError, match="must dispatch ref 'main'"):
+        dispatch_missing_qualifications(
+            FakeGitHub(runs=[], clean_runs=[]),
+            lambda *_: None,
+            repository=REPOSITORY,
+            sha=SHA,
+            ref="release-candidate",
+        )
+
+
+def test_authenticated_dispatch_posts_the_exact_workflow_and_ref(monkeypatch) -> None:
+    requests = []
+
+    class Response:
+        status = 204
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def fake_urlopen(request, *, timeout):
+        requests.append((request, timeout))
+        return Response()
+
+    monkeypatch.setattr("scripts.check_release_ci.urllib.request.urlopen", fake_urlopen)
+
+    GitHubJSONFetcher("test-token").dispatch_workflow(REPOSITORY, "ci.yml", "main")
+
+    assert len(requests) == 1
+    request, timeout = requests[0]
+    assert request.get_method() == "POST"
+    assert request.full_url.endswith(
+        "/repos/OpenAdaptAI/openadapt-flow/actions/workflows/ci.yml/dispatches"
+    )
+    assert json.loads(request.data) == {"ref": "main"}
+    assert request.headers["Authorization"] == "Bearer test-token"
+    assert timeout == 30
 
 
 def test_production_gate_rejects_missing_clean_machine_run() -> None:

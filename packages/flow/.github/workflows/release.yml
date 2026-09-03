@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release-identity
     permissions:
-      actions: read
+      actions: write
       contents: read
     steps:
       - name: Create the exact release App token
@@ -143,7 +143,9 @@ jobs:
           python scripts/check_release_ci.py \
             --repository "${GITHUB_REPOSITORY}" \
             --sha "${GITHUB_SHA}" \
-            --wait-seconds 2700 \
+            --dispatch-missing \
+            --ref "${GITHUB_REF_NAME}" \
+            --wait-seconds 5400 \
             --poll-seconds 10
 
       # The validator needs only PyYAML + stdlib (no package install, no
@@ -175,6 +177,12 @@ jobs:
         run: |
           set -euo pipefail
           release_tag="v${RELEASE_VERSION}"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main="$(git rev-parse refs/remotes/origin/main)"
+          if [ "${current_main}" != "${GITHUB_SHA}" ]; then
+            echo "Refusing a stale release tag. Current main is ${current_main}; the qualified candidate is ${GITHUB_SHA}."
+            exit 1
+          fi
           git config user.name "openadapt-release[bot]"
           git config user.email "openadapt-release[bot]@users.noreply.github.com"
           git tag --annotate "${release_tag}" "${GITHUB_SHA}" --message "${release_tag}"

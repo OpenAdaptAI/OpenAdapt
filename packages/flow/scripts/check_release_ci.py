@@ -1,4 +1,4 @@
-"""Fail-closed GitHub Actions qualification gate for Flow publication."""
+"""Fail-closed GitHub Actions qualification orchestration and publication gate."""
 
 from __future__ import annotations
 
@@ -38,6 +38,12 @@ _REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 JSONFetcher = Callable[[str, Mapping[str, str]], Mapping[str, Any]]
+WorkflowDispatcher = Callable[[str, str, str], None]
+
+QUALIFICATION_WORKFLOWS = (
+    "ci.yml",
+    "quickstart-lifecycle.yml",
+)
 
 
 class QualificationError(RuntimeError):
@@ -93,6 +99,33 @@ class GitHubJSONFetcher:
             raise QualificationError("GitHub API response is not an object")
         return payload
 
+    def dispatch_workflow(self, repository: str, workflow: str, ref: str) -> None:
+        """Start one workflow on a named ref through the authenticated API."""
+
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{repository}/actions/workflows/"
+            f"{workflow}/dispatches",
+            data=json.dumps({"ref": ref}).encode(),
+            method="POST",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {self._token}",
+                "Content-Type": "application/json",
+                "User-Agent": "openadapt-flow-release-gate",
+                "X-GitHub-Api-Version": GITHUB_API_VERSION,
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                if response.status < 200 or response.status >= 300:
+                    raise QualificationError(
+                        f"GitHub API returned HTTP {response.status}"
+                    )
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise QualificationError(
+                f"GitHub workflow dispatch failed for {workflow}: {exc}"
+            ) from exc
+
 
 def _paginate(
     fetch_json: JSONFetcher,
@@ -135,6 +168,44 @@ def _paginate(
         if len(items) > expected_total or not page_items:
             raise QualificationError("GitHub API pagination was incomplete")
     raise QualificationError("GitHub API pagination exceeded its page limit")
+
+
+def dispatch_missing_qualifications(
+    fetch_json: JSONFetcher,
+    dispatch_workflow: WorkflowDispatcher,
+    *,
+    repository: str,
+    sha: str,
+    ref: str,
+) -> tuple[str, ...]:
+    """Start only qualification workflows with no dispatched run for this SHA."""
+
+    if not _REPOSITORY_RE.fullmatch(repository):
+        raise QualificationError(f"invalid GitHub repository: {repository!r}")
+    if not _SHA_RE.fullmatch(sha):
+        raise QualificationError(f"invalid Git commit SHA: {sha!r}")
+    if ref != "main":
+        raise QualificationError("release qualification must dispatch ref 'main'")
+
+    missing: list[str] = []
+    for workflow in QUALIFICATION_WORKFLOWS:
+        runs = _paginate(
+            fetch_json,
+            f"/repos/{repository}/actions/workflows/{workflow}/runs",
+            "workflow_runs",
+            {"head_sha": sha, "event": "workflow_dispatch"},
+        )
+        exact_runs = [
+            run
+            for run in runs
+            if run.get("head_sha") == sha and run.get("event") == "workflow_dispatch"
+        ]
+        if not exact_runs:
+            missing.append(workflow)
+
+    for workflow in missing:
+        dispatch_workflow(repository, workflow, ref)
+    return tuple(missing)
 
 
 def require_exact_full_matrix(
@@ -275,8 +346,7 @@ def require_exact_clean_machine(
     lifecycle_jobs = [
         job
         for job in jobs
-        if isinstance(job.get("name"), str)
-        and str(job["name"]).startswith("lifecycle")
+        if isinstance(job.get("name"), str) and str(job["name"]).startswith("lifecycle")
     ]
     counts = Counter(str(job.get("name")) for job in lifecycle_jobs)
     expected_counts = Counter({name: 1 for name in EXPECTED_CLEAN_MACHINE_JOBS})
@@ -325,6 +395,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--sha", required=True)
     parser.add_argument("--wait-seconds", type=int, default=0)
     parser.add_argument("--poll-seconds", type=int, default=10)
+    parser.add_argument(
+        "--dispatch-missing",
+        action="store_true",
+        help="start each absent exact-SHA qualification workflow before waiting",
+    )
+    parser.add_argument(
+        "--ref",
+        help="branch to dispatch; required with --dispatch-missing and must be main",
+    )
     return parser
 
 
@@ -333,8 +412,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.wait_seconds < 0 or args.poll_seconds <= 0:
         print("wait-seconds must be >= 0 and poll-seconds must be > 0", file=sys.stderr)
         return 2
+    if args.dispatch_missing != bool(args.ref):
+        print("--dispatch-missing and --ref must be used together", file=sys.stderr)
+        return 2
     try:
         fetch_json = GitHubJSONFetcher(os.environ.get("GH_TOKEN", ""))
+        if args.dispatch_missing:
+            dispatched = dispatch_missing_qualifications(
+                fetch_json,
+                fetch_json.dispatch_workflow,
+                repository=args.repository,
+                sha=args.sha,
+                ref=args.ref,
+            )
+            if dispatched:
+                print("Started missing release qualification: " + ", ".join(dispatched))
+            else:
+                print("Exact-SHA release qualification runs already exist.")
     except QualificationError as exc:
         print(f"Refusing to publish: {exc}", file=sys.stderr)
         return 1
