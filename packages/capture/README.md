@@ -47,13 +47,12 @@ capture record ./my-capture --description "Describe the workflow"
 capture info ./my-capture
 ```
 
-`capture status`, `capture stop`, `capture install-ffmpeg`, and the
-`status_recording` / `stop_recording` Python contract below are on `main` and
-ship in 1.3.0. They are not in the published 1.2.2 wheel, so install from
-source until 1.3.0 reaches PyPI:
+The control commands and Python control API require Capture 1.3.0 or newer.
+Use an explicit package range so an older published wheel cannot accept the
+install and then omit those commands:
 
 ```bash
-pip install "openadapt-capture @ git+https://github.com/OpenAdaptAI/openadapt-capture"
+python -m pip install "openadapt-capture>=1.3.0,<1.4"
 ```
 
 ```bash
@@ -112,6 +111,12 @@ capability never reaches command arguments, logs, or the capture directory.
 
 ## Authentication inside a recording
 
+This handoff API requires Capture 1.3.0 or newer:
+
+```bash
+python -m pip install "openadapt-capture>=1.3.0,<1.4"
+```
+
 Authenticate before recording when the demonstration does not need the login.
 When login belongs inside the workflow, start an authentication handoff. Capture
 then drops screen, input, structural, window, browser-category, and microphone
@@ -137,9 +142,11 @@ control functions for the same contract. See
 ## FFmpeg
 
 Recording video needs an FFmpeg executable, and `capture install-ffmpeg` gets
-you one. Video is the default evidence format, so most people need it.
+you one in Capture 1.3.0 or newer. Video is the default evidence format, so
+most people need it.
 
 ```bash
+python -m pip install "openadapt-capture>=1.3.0,<1.4"
 capture install-ffmpeg
 ```
 

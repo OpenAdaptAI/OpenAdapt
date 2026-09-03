@@ -212,17 +212,11 @@ typelib/runtime, and an interactive desktop accessibility bus.
 The native provider describes the local accessibility tree. It does not
 describe controls inside an RDP or Citrix pixel stream.
 
-Authoring adds `query_kind: "window_tree"`. The raw tree may persist on disk
-for compile. Password and secure-field values are omitted from that tree.
-`openadapt_capture.authoring_project` projects the tree into
-`openadapt.authoring.observe/v1` for a vendor wire: no values, titles,
-screenshots, or extra keys. Native AX, UIA, AT-SPI, and ARIA roles map onto
-the types `ElementRole` enum; unmapped roles never reach the wire. The
-observe fixture is pinned to `openadapt-types` PR 35. Names and automation
-ids that fail the coach-hint bar (length, `://`, `@`, six or more digits,
-phone, SSN, email) or the types projected-label grammar are dropped. RDP and
-Citrix observe payloads are coach-only with an empty tree. Capture still
-drops OS-injected input; there is no `record_injected` API.
+`query_kind: "window_tree"` retains a bounded raw accessibility tree for local
+persistence and compilation. Password and secure-field values are omitted.
+Capture does not decide authoring policy or emit a vendor payload. That policy
+belongs with the consumer that owns the remote boundary. Capture still drops
+OS-injected input; there is no `record_injected` API.
 
 ## Video and frame timing
 
@@ -285,7 +279,8 @@ old local captures.
 ## Release qualification
 
 The production release workflow is manual and binds evidence to one exact
-commit. Every job runs on a GitHub-hosted runner. It must:
+commit. The portable qualification jobs run on GitHub-hosted runners. They
+must:
 
 - build and validate one wheel and sdist;
 - install and uninstall that exact wheel in a clean environment on Linux,
@@ -297,9 +292,9 @@ commit. Every job runs on a GitHub-hosted runner. It must:
 - record the exact display topology each trial ran against; and
 - retain machine-readable test and topology evidence.
 
-`scripts/check_release_ci.py` also requires a successful `test.yml` run on the
-same exact commit, which is where the complete headless suite and the
-byte-for-byte synthetic fixture determinism check run.
+`scripts/check_release_ci.py` also requires a successful `test.yml` run and a
+successful live Linux qualification on the same exact commit. `test.yml` runs
+the complete headless suite and the byte-for-byte synthetic fixture check.
 
 The release workflow accepts only a successful, complete job set for its exact
 commit. Missing, stale, skipped, partial, or failed evidence blocks publication.
@@ -307,9 +302,10 @@ commit. Missing, stale, skipped, partial, or failed evidence blocks publication.
 ## Live qualification
 
 `live-qualification.yml` runs the interactive lanes that need a physical
-desktop. It runs weekly and on demand, and it is not a release gate.
+desktop. The release gate requires the exact-commit Linux lane. Weekly runs
+maintain the macOS and Windows evidence when those qualified runners exist.
 
-Those lanes prove, and the release gate therefore does not prove:
+Those lanes prove:
 
 - that global input injected through the operating system reaches the native
   listeners and is written into the capture;
@@ -325,9 +321,12 @@ Injected input reaches no native hook on any of the three hosted operating
 systems. Each lane needs a host with two monitors, a logged-in desktop
 session, and real input and screen permissions.
 
-The lanes stay skipped until a runner carrying the labels each lane names is
-registered and the repository variable
-`CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS` is set to `1`.
+Each lane uses a separate repository variable. Set the applicable variable to
+`1` after the qualified runner is registered:
+
+- `CAPTURE_SELF_HOSTED_QUALIFIED_LINUX_RUNNERS`;
+- `CAPTURE_SELF_HOSTED_QUALIFIED_MACOS_RUNNERS`; or
+- `CAPTURE_SELF_HOSTED_QUALIFIED_WINDOWS_RUNNERS`.
 
 ## Known boundaries
 

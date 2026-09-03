@@ -2,31 +2,23 @@
 
 <!-- version list -->
 
-## Unreleased
+## v1.3.0 (2026-09-03)
 
-### Features
-
-- Add `window_tree` structural observations and a fail-closed authoring
-  projector. The raw tree may persist on disk for compile, except password
-  and secure-field values. Native AX, UIA, AT-SPI, and ARIA roles map onto
-  the types ElementRole enum. The vendor-wire payload is
-  `openadapt.authoring.observe/v1` without values, titles, or screenshots.
-  The observe fixture is pinned to openadapt-types PR 35. OS-injected input
-  still does not persist.
-- Add attended authentication handoffs. Capture suppresses sensitive source
-  data, seals a bounded method marker, and retains a fresh exact frame before
-  native input resumes. The same retry-safe operations are available through
-  the authenticated local control channel.
-
-## v1.3.0 (2026-08-28)
-
-_This release is published under the MIT License._
+_This release uses the MIT License._
 
 ### Features
 
 - Capture an exact macOS window through a desktop-independent
   ScreenCaptureKit filter. Exact-window Quartz and system-utility providers
-  remain as compatibility paths.
+  remain as compatibility paths
+  ([#126](https://github.com/OpenAdaptAI/openadapt-capture/pull/126),
+  [`382ca17`](https://github.com/OpenAdaptAI/openadapt-capture/commit/382ca17837896927d2394ea76e5109cf6e41bd94)).
+- Add attended authentication handoffs. Capture suppresses sensitive source
+  data, seals a bounded method marker, and retains a fresh exact frame before
+  native input resumes. The authenticated local control channel exposes the
+  same retry-safe operations
+  ([#126](https://github.com/OpenAdaptAI/openadapt-capture/pull/126),
+  [`382ca17`](https://github.com/OpenAdaptAI/openadapt-capture/commit/382ca17837896927d2394ea76e5109cf6e41bd94)).
 - **capture**: Seal native action geometry at capture time
   ([#94](https://github.com/OpenAdaptAI/openadapt-capture/pull/94),
   [`08727ab`](https://github.com/OpenAdaptAI/openadapt-capture/commit/08727ab0e471d4a6de3c460099b1a8a97758cf6f))
@@ -41,6 +33,11 @@ _This release is published under the MIT License._
 - Capture native structural observations
   ([#96](https://github.com/OpenAdaptAI/openadapt-capture/pull/96),
   [`7a96690`](https://github.com/OpenAdaptAI/openadapt-capture/commit/7a96690bf8684be3f61fb7c14d783813003e221e))
+- Retain bounded native `window_tree` observations for local persistence and
+  compilation. Capture omits password and secure-field values. Authoring and
+  remote-payload policy stay with the consumer that owns that boundary
+  ([#131](https://github.com/OpenAdaptAI/openadapt-capture/pull/131),
+  [`a6fb0cc`](https://github.com/OpenAdaptAI/openadapt-capture/commit/a6fb0cc177e65358f255ffea8a1525e486c4e1c0)).
 - Install FFmpeg with one command, `capture install-ffmpeg`. The wheel and
   the source archive carry no FFmpeg bytes and nothing downloads unless the
   operator runs that command, which fetches one digest-pinned LGPL-2.1-or-later
@@ -83,11 +80,15 @@ _This release is published under the MIT License._
   more often. A recorder writer used to starve for about twenty-two seconds and
   then exhaust its three retries, which killed the writer process or cost it
   the startup readiness deadline
-  ([#122](https://github.com/OpenAdaptAI/openadapt-capture/pull/122))
+  ([#122](https://github.com/OpenAdaptAI/openadapt-capture/pull/122),
+  [#123](https://github.com/OpenAdaptAI/openadapt-capture/pull/123),
+  [#124](https://github.com/OpenAdaptAI/openadapt-capture/pull/124))
 - **db**: Close each recorder database session before finalization. The setup
   session kept one idle write-log connection open until cyclic garbage
   collection ran, so macOS could fail the final journal change with
-  `database is locked` after an otherwise complete capture.
+  `database is locked` after an otherwise complete capture
+  ([#125](https://github.com/OpenAdaptAI/openadapt-capture/pull/125),
+  [`0c9661a`](https://github.com/OpenAdaptAI/openadapt-capture/commit/0c9661a188a142a78545982d45496fe4359a67aa)).
 - **release**: Let the changelog document the pending release candidate
   ([#110](https://github.com/OpenAdaptAI/openadapt-capture/pull/110),
   [`854f015`](https://github.com/OpenAdaptAI/openadapt-capture/commit/854f015fd994b0aa1992948791c18c2e6c571029))
@@ -120,6 +121,9 @@ _This release is published under the MIT License._
 
 ### Testing
 
+- Make the Capture test suite portable across clean operating-system runners
+  ([#130](https://github.com/OpenAdaptAI/openadapt-capture/pull/130),
+  [`e514cee`](https://github.com/OpenAdaptAI/openadapt-capture/commit/e514cee9de3c150f44115d7ba5fc5797b5e3221f)).
 - **fixtures**: Run the byte check on every matching builder
   ([#109](https://github.com/OpenAdaptAI/openadapt-capture/pull/109),
   [`86e6419`](https://github.com/OpenAdaptAI/openadapt-capture/commit/86e64194edc0134a2c4be412c985b5c5b4774e31))
@@ -135,6 +139,13 @@ _This release is published under the MIT License._
 
 ### Continuous Integration
 
+- Start missing exact-commit release qualification, require the archive job,
+  and recheck protected `main` immediately before the release tag. Clean-wheel
+  qualification now installs and probes the pinned FFmpeg runtime on all three
+  operating systems. The Linux lane also installs the wheel's `linux` extra.
+  Publication requires three live trials on a qualified Linux desktop for the
+  same commit. Separate runner flags prevent a Linux release check from waiting
+  for absent macOS or Windows runners.
 - **windows**: Fail when ffmpeg install is absent
   ([#99](https://github.com/OpenAdaptAI/openadapt-capture/pull/99),
   [`682f77d`](https://github.com/OpenAdaptAI/openadapt-capture/commit/682f77d168bdff60d55285a1682a7c0ebf726847))
@@ -159,6 +170,9 @@ _This release is published under the MIT License._
 
 ### Chores
 
+- **ci**: Update CodeQL to 4.37.9
+  ([#128](https://github.com/OpenAdaptAI/openadapt-capture/pull/128),
+  [#129](https://github.com/OpenAdaptAI/openadapt-capture/pull/129)).
 - **ci**: Update CodeQL actions atomically to 4.37.8
   ([#104](https://github.com/OpenAdaptAI/openadapt-capture/pull/104),
   [`9f76fc1`](https://github.com/OpenAdaptAI/openadapt-capture/commit/9f76fc134cc5a804ab8790762ec2a40156ef35e6))

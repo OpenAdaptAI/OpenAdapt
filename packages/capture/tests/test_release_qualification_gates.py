@@ -7,14 +7,23 @@ from pathlib import Path
 
 import pytest
 
-from scripts.candidate_lifecycle import CandidateLifecycleError, verify_manifest
+from scripts.candidate_lifecycle import (
+    CONSUMER_RELEASES,
+    CandidateLifecycleError,
+    _wheel_requirement,
+    verify_manifest,
+)
 from scripts.check_display_topology import DisplayTopologyError, qualify_topology
 from scripts.check_junit_no_skips import JUnitQualificationError, check_reports
 from scripts.check_release_ci import (
+    EXPECTED_LIVE_QUALIFICATION_JOBS,
     EXPECTED_QUALIFICATION_JOBS,
     ReleaseEvidenceError,
     check_once,
+    dispatch_missing_qualifications,
+    validate_live_linux_jobs,
     validate_qualification_jobs,
+    validate_test_jobs,
 )
 
 
@@ -22,8 +31,7 @@ def _write_manifest(dist: Path, archives: list[Path]) -> Path:
     manifest = dist / "SHA256SUMS"
     manifest.write_text(
         "".join(
-            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
-            for path in archives
+            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in archives
         ),
         encoding="utf-8",
     )
@@ -49,6 +57,20 @@ def test_candidate_manifest_rejects_unaccounted_archive(tmp_path: Path) -> None:
 
     with pytest.raises(CandidateLifecycleError, match="manifest and candidate archives differ"):
         verify_manifest(tmp_path, manifest)
+
+
+def test_linux_extra_is_installed_from_the_exact_candidate_wheel(tmp_path: Path) -> None:
+    wheel = tmp_path / "openadapt_capture-1.3.0-py3-none-any.whl"
+
+    assert _wheel_requirement(wheel, with_linux_extra=True) == f"{wheel.resolve()}[linux]"
+    assert _wheel_requirement(wheel, with_linux_extra=False) == str(wheel.resolve())
+
+
+def test_candidate_contract_names_the_current_flow_and_desktop_releases() -> None:
+    assert CONSUMER_RELEASES == {
+        "openadapt-desktop": "0.16.0",
+        "openadapt-flow": "1.34.0",
+    }
 
 
 def test_display_topology_requires_stable_multiple_monitors() -> None:
@@ -131,6 +153,22 @@ def _successful_jobs() -> list[dict[str, str]]:
     ]
 
 
+def _successful_live_linux_jobs() -> list[dict[str, str]]:
+    required = {
+        "Select live qualification platforms",
+        "Build candidate distributions",
+        "Interactive qualification (Linux X64)",
+    }
+    return [
+        {
+            "name": name,
+            "status": "completed",
+            "conclusion": "success" if name in required else "skipped",
+        }
+        for name in sorted(EXPECTED_LIVE_QUALIFICATION_JOBS)
+    ]
+
+
 def test_release_gate_rejects_missing_qualification_job() -> None:
     jobs = _successful_jobs()[:-1]
 
@@ -144,6 +182,30 @@ def test_release_gate_rejects_skipped_qualification_job() -> None:
 
     with pytest.raises(ReleaseEvidenceError, match="incomplete jobs"):
         validate_qualification_jobs(jobs)
+
+
+def test_release_gate_requires_successful_package_contract() -> None:
+    with pytest.raises(ReleaseEvidenceError, match="one package-contract"):
+        validate_test_jobs([])
+
+    with pytest.raises(ReleaseEvidenceError, match="package-contract is incomplete"):
+        validate_test_jobs(
+            [{"name": "package-contract", "status": "completed", "conclusion": "failure"}]
+        )
+
+    validate_test_jobs(
+        [{"name": "package-contract", "status": "completed", "conclusion": "success"}]
+    )
+
+
+def test_release_gate_requires_successful_live_linux_qualification() -> None:
+    jobs = _successful_live_linux_jobs()
+    validate_live_linux_jobs(jobs)
+
+    linux = next(job for job in jobs if job["name"] == "Interactive qualification (Linux X64)")
+    linux["conclusion"] = "skipped"
+    with pytest.raises(ReleaseEvidenceError, match="live Linux qualification"):
+        validate_live_linux_jobs(jobs)
 
 
 def test_release_gate_binds_both_workflows_and_jobs_to_exact_sha() -> None:
@@ -176,8 +238,33 @@ def test_release_gate_binds_both_workflows_and_jobs_to_exact_sha() -> None:
                     }
                 ]
             }
+        if "/live-qualification.yml/runs?" in url:
+            return {
+                "workflow_runs": [
+                    {
+                        "id": 30,
+                        "head_sha": sha,
+                        "event": "workflow_dispatch",
+                        "created_at": "2026-08-18T00:02:00Z",
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ]
+            }
         if "/actions/runs/20/jobs?" in url:
             return {"jobs": _successful_jobs()}
+        if "/actions/runs/10/jobs?" in url:
+            return {
+                "jobs": [
+                    {
+                        "name": "package-contract",
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ]
+            }
+        if "/actions/runs/30/jobs?" in url:
+            return {"jobs": _successful_live_linux_jobs()}
         raise AssertionError(f"unexpected URL {url}")
 
     assert check_once(
@@ -185,4 +272,76 @@ def test_release_gate_binds_both_workflows_and_jobs_to_exact_sha() -> None:
         sha=sha,
         token="test",
         get_json=get_json,
-    ) == {"test.yml": 10, "production-qualification.yml": 20}
+    ) == {
+        "test.yml": 10,
+        "production-qualification.yml": 20,
+        "live-qualification.yml": 30,
+    }
+
+
+def test_release_orchestrator_starts_only_missing_exact_sha_workflows() -> None:
+    sha = "a" * 40
+    calls: list[tuple[str, str, str, str]] = []
+
+    def get_json(url: str, _token: str):
+        if "/test.yml/runs?" in url:
+            return {"workflow_runs": [{"head_sha": sha, "event": "push", "id": 10}]}
+        if "/production-qualification.yml/runs?" in url:
+            return {"workflow_runs": []}
+        if "/live-qualification.yml/runs?" in url:
+            return {"workflow_runs": []}
+        raise AssertionError(f"unexpected URL {url}")
+
+    def dispatch(repository, requirement, *, ref, sha, token):  # type: ignore[no-untyped-def]
+        calls.append((repository, requirement.file_name, ref, sha))
+        assert token == "token"
+        expected_inputs = {"candidate_sha": "{sha}"}
+        if requirement.file_name == "live-qualification.yml":
+            expected_inputs["platform"] = "linux"
+        assert requirement.dispatch_inputs == expected_inputs
+
+    started = dispatch_missing_qualifications(
+        repository="OpenAdaptAI/openadapt-capture",
+        sha=sha,
+        ref="main",
+        token="token",
+        get_json=get_json,
+        dispatch=dispatch,
+    )
+
+    assert started == ("production-qualification.yml", "live-qualification.yml")
+    assert calls == [
+        ("OpenAdaptAI/openadapt-capture", "production-qualification.yml", "main", sha),
+        ("OpenAdaptAI/openadapt-capture", "live-qualification.yml", "main", sha),
+    ]
+
+
+def test_release_orchestrator_does_not_accept_a_non_linux_live_run() -> None:
+    sha = "a" * 40
+    dispatched: list[str] = []
+
+    def get_json(url: str, _token: str):
+        if "/test.yml/runs?" in url or "/production-qualification.yml/runs?" in url:
+            return {"workflow_runs": [{"head_sha": sha, "event": "workflow_dispatch", "id": 10}]}
+        if "/live-qualification.yml/runs?" in url:
+            return {"workflow_runs": [{"head_sha": sha, "event": "workflow_dispatch", "id": 30}]}
+        if "/actions/runs/30/jobs?" in url:
+            jobs = _successful_live_linux_jobs()
+            next(job for job in jobs if job["name"] == "Interactive qualification (Linux X64)")[
+                "conclusion"
+            ] = "skipped"
+            return {"jobs": jobs}
+        raise AssertionError(f"unexpected URL {url}")
+
+    dispatch_missing_qualifications(
+        repository="OpenAdaptAI/openadapt-capture",
+        sha=sha,
+        ref="main",
+        token="token",
+        get_json=get_json,
+        dispatch=lambda _repository, requirement, **_kwargs: dispatched.append(
+            requirement.file_name
+        ),
+    )
+
+    assert dispatched == ["live-qualification.yml"]

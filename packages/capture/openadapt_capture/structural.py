@@ -99,12 +99,10 @@ class StructuralElement(BaseModel):
 
 
 class StructuralTreeNode(BaseModel):
-    """One node of a raw window accessibility tree retained on disk.
+    """One node of a raw window accessibility tree retained for compilation.
 
-    Non-secret provider values may persist for compile. Password and
-    secure-field values are omitted. This is not the vendor-wire payload;
-    :mod:`openadapt_capture.authoring_project` projects a PHI-safe subset for
-    ``openadapt.authoring.observe/v1``.
+    Non-secret provider values may persist. Password and secure-field values
+    are omitted. Capture does not define or emit a remote authoring payload.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -301,7 +299,7 @@ def observe_window_tree(
     observer: StructuralObserver | None,
     request: StructuralObservationRequest,
 ) -> StructuralObservation | None:
-    """Observe the top-level window tree for authoring or compile."""
+    """Observe the top-level window tree for local persistence and compile."""
 
     if request.query_kind != "window_tree":
         request = replace(request, query_kind="window_tree")

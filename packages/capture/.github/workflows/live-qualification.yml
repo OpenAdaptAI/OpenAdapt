@@ -1,14 +1,10 @@
 # Live interactive qualification of the native recorder.
 #
-# These three lanes were required release-gate jobs in
-# production-qualification.yml until 2026-08-28. They moved here because they
-# demand a physically qualified host and no such runner is registered, so the
-# release gate they guarded could never be satisfied. All three qualification
-# dispatches that have ever run (32522605613, 33110517548, 33111096982) ended
-# with these three jobs cancelled after waiting for a runner that never
-# appeared, one of them for 24 hours.
+# These lanes require physically qualified hosts. The release gate requires
+# the exact-SHA Linux lane. The weekly schedule maintains the macOS and Windows
+# evidence when their qualified runners exist.
 #
-# What these lanes prove, and the release gate therefore no longer proves:
+# The lanes prove:
 #
 #   - global input injected through the operating system reaches the native
 #     listeners and lands in the capture (hosted runners give a session where
@@ -22,11 +18,9 @@
 #   - live native structural observation through AX, UIA and AT-SPI;
 #   - three counted trials of the above per operating system.
 #
-# Nothing runs here until a qualified runner exists. Register a runner with the
-# labels each lane names, then set the repository variable
-# CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS to "1". Until then the weekly schedule
-# reports the lanes as not runnable instead of queueing a job for 24 hours
-# against a runner that is not there.
+# Each operating system has a separate runner variable. A release dispatch
+# selects Linux only. This prevents an available Linux runner from queueing
+# work for missing macOS or Windows runners.
 
 name: Live qualification
 
@@ -35,9 +29,24 @@ on:
     # Monday 07:17 UTC.
     - cron: "17 7 * * 1"
   workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Exact protected-main commit to qualify"
+        type: string
+        required: true
+      platform:
+        description: "Qualified runner platform to use"
+        type: choice
+        required: true
+        default: linux
+        options:
+          - linux
+          - macos
+          - windows
+          - all
 
 concurrency:
-  group: capture-live-qualification-${{ github.ref }}
+  group: capture-live-qualification-${{ inputs.candidate_sha || github.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -45,34 +54,81 @@ permissions:
 
 jobs:
   runner-availability:
-    name: Report live qualification runner availability
+    name: Select live qualification platforms
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      candidate_sha: ${{ steps.select.outputs.candidate_sha }}
+      run_any: ${{ steps.select.outputs.run_any }}
+      run_linux: ${{ steps.select.outputs.run_linux }}
+      run_macos: ${{ steps.select.outputs.run_macos }}
+      run_windows: ${{ steps.select.outputs.run_windows }}
     steps:
-      - name: State whether the qualified lanes can run
+      - name: Bind the candidate and available runners
+        id: select
         shell: bash
         env:
-          QUALIFIED_RUNNERS: ${{ vars.CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS }}
+          REQUESTED_SHA: ${{ inputs.candidate_sha }}
+          REQUESTED_PLATFORM: ${{ inputs.platform }}
+          LINUX_RUNNERS: ${{ vars.CAPTURE_SELF_HOSTED_QUALIFIED_LINUX_RUNNERS }}
+          MACOS_RUNNERS: ${{ vars.CAPTURE_SELF_HOSTED_QUALIFIED_MACOS_RUNNERS }}
+          WINDOWS_RUNNERS: ${{ vars.CAPTURE_SELF_HOSTED_QUALIFIED_WINDOWS_RUNNERS }}
         run: |
           set -euo pipefail
-          if [ "${QUALIFIED_RUNNERS}" = "1" ]; then
-            echo "CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS=1: the interactive lanes run."
-            exit 0
+          candidate_sha="${GITHUB_SHA}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [[ ! "${REQUESTED_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "candidate_sha must be a lowercase 40-character Git commit SHA."
+              exit 1
+            fi
+            if [ "${REQUESTED_SHA}" != "${GITHUB_SHA}" ]; then
+              echo "The dispatch ref does not resolve to candidate_sha."
+              exit 1
+            fi
+            candidate_sha="${REQUESTED_SHA}"
           fi
-          echo "CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS is not \"1\"."
-          echo "No openadapt-capture-qualified runner is declared, so the live"
-          echo "interactive lanes are skipped. The release gate does not depend"
-          echo "on them. See the comment at the top of this workflow for the"
-          echo "list of properties that go unproven while they are skipped."
+
+          run_linux=false
+          run_macos=false
+          run_windows=false
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] || [ "${REQUESTED_PLATFORM}" = "all" ]; then
+            [ "${LINUX_RUNNERS}" = "1" ] && run_linux=true
+            [ "${MACOS_RUNNERS}" = "1" ] && run_macos=true
+            [ "${WINDOWS_RUNNERS}" = "1" ] && run_windows=true
+          elif [ "${REQUESTED_PLATFORM}" = "linux" ] && [ "${LINUX_RUNNERS}" = "1" ]; then
+            run_linux=true
+          elif [ "${REQUESTED_PLATFORM}" = "macos" ] && [ "${MACOS_RUNNERS}" = "1" ]; then
+            run_macos=true
+          elif [ "${REQUESTED_PLATFORM}" = "windows" ] && [ "${WINDOWS_RUNNERS}" = "1" ]; then
+            run_windows=true
+          else
+            echo "The requested qualified runner is not declared available."
+            exit 1
+          fi
+
+          run_any=false
+          if [ "${run_linux}" = true ] || [ "${run_macos}" = true ] || [ "${run_windows}" = true ]; then
+            run_any=true
+          fi
+          {
+            echo "candidate_sha=${candidate_sha}"
+            echo "run_any=${run_any}"
+            echo "run_linux=${run_linux}"
+            echo "run_macos=${run_macos}"
+            echo "run_windows=${run_windows}"
+          } >> "${GITHUB_OUTPUT}"
 
   build-candidate:
     name: Build candidate distributions
-    if: vars.CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS == '1'
+    needs: runner-availability
+    if: needs.runner-availability.outputs.run_any == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout the candidate source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.runner-availability.outputs.candidate_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -99,20 +155,22 @@ jobs:
       - name: Upload the exact candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: capture-candidate-${{ github.sha }}
+          name: capture-candidate-${{ needs.runner-availability.outputs.candidate_sha }}
           path: dist/
           if-no-files-found: error
           retention-days: 7
 
   interactive-linux:
     name: Interactive qualification (Linux X64)
-    if: vars.CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS == '1'
-    needs: build-candidate
+    if: needs.runner-availability.outputs.run_linux == 'true'
+    needs: [runner-availability, build-candidate]
     runs-on: [self-hosted, Linux, X64, openadapt-capture-qualified]
     timeout-minutes: 35
     steps:
       - name: Checkout the exact candidate source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.runner-availability.outputs.candidate_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -127,7 +185,7 @@ jobs:
       - name: Download the exact candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: capture-candidate-${{ github.sha }}
+          name: capture-candidate-${{ needs.runner-availability.outputs.candidate_sha }}
           path: dist
 
       - name: Install the exact wheel into an isolated environment
@@ -196,7 +254,7 @@ jobs:
           set -euo pipefail
           python scripts/aggregate_qualification_trials.py \
             --os linux \
-            --candidate-sha "${GITHUB_SHA}" \
+            --candidate-sha "${{ needs.runner-availability.outputs.candidate_sha }}" \
             --expected-trials 3 \
             evidence/trial-1-linux.xml \
             evidence/trial-2-linux.xml \
@@ -207,20 +265,22 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: capture-interactive-linux-${{ github.sha }}
+          name: capture-interactive-linux-${{ needs.runner-availability.outputs.candidate_sha }}
           path: evidence/
           if-no-files-found: error
           retention-days: 30
 
   interactive-macos:
     name: Interactive qualification (macOS ARM64)
-    if: vars.CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS == '1'
-    needs: build-candidate
+    if: needs.runner-availability.outputs.run_macos == 'true'
+    needs: [runner-availability, build-candidate]
     runs-on: [self-hosted, macOS, ARM64, openadapt-capture-qualified]
     timeout-minutes: 35
     steps:
       - name: Checkout the exact candidate source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.runner-availability.outputs.candidate_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -235,7 +295,7 @@ jobs:
       - name: Download the exact candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: capture-candidate-${{ github.sha }}
+          name: capture-candidate-${{ needs.runner-availability.outputs.candidate_sha }}
           path: dist
 
       - name: Install the exact wheel into an isolated environment
@@ -299,7 +359,7 @@ jobs:
           set -euo pipefail
           python scripts/aggregate_qualification_trials.py \
             --os macos \
-            --candidate-sha "${GITHUB_SHA}" \
+            --candidate-sha "${{ needs.runner-availability.outputs.candidate_sha }}" \
             --expected-trials 3 \
             evidence/trial-1-macos.xml \
             evidence/trial-2-macos.xml \
@@ -310,20 +370,22 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: capture-interactive-macos-${{ github.sha }}
+          name: capture-interactive-macos-${{ needs.runner-availability.outputs.candidate_sha }}
           path: evidence/
           if-no-files-found: error
           retention-days: 30
 
   interactive-windows:
     name: Interactive qualification (Windows X64)
-    if: vars.CAPTURE_SELF_HOSTED_QUALIFIED_RUNNERS == '1'
-    needs: build-candidate
+    if: needs.runner-availability.outputs.run_windows == 'true'
+    needs: [runner-availability, build-candidate]
     runs-on: [self-hosted, Windows, X64, openadapt-capture-qualified]
     timeout-minutes: 35
     steps:
       - name: Checkout the exact candidate source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.runner-availability.outputs.candidate_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -338,7 +400,7 @@ jobs:
       - name: Download the exact candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: capture-candidate-${{ github.sha }}
+          name: capture-candidate-${{ needs.runner-availability.outputs.candidate_sha }}
           path: dist
 
       - name: Install the exact wheel into an isolated environment
@@ -412,7 +474,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           python scripts/aggregate_qualification_trials.py `
             --os windows `
-            --candidate-sha $env:GITHUB_SHA `
+            --candidate-sha "${{ needs.runner-availability.outputs.candidate_sha }}" `
             --expected-trials 3 `
             evidence/trial-1-windows.xml `
             evidence/trial-2-windows.xml `
@@ -424,7 +486,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: capture-interactive-windows-${{ github.sha }}
+          name: capture-interactive-windows-${{ needs.runner-availability.outputs.candidate_sha }}
           path: evidence/
           if-no-files-found: error
           retention-days: 30
