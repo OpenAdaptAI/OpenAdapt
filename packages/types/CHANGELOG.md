@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.17.1 (2026-09-03)
+
+### Bug Fixes
+
+- **types**: Close production admission and authoring contracts
+  ([#39](https://github.com/OpenAdaptAI/openadapt-types/pull/39),
+  [`f8a1ca1`](https://github.com/OpenAdaptAI/openadapt-types/commit/f8a1ca12eac52c564b07d50339525297dd04a4d6))
+
+
 ## v0.17.0 (2026-09-01)
 
 ### Features
