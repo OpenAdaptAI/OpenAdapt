@@ -94,7 +94,8 @@ def test_playwright_installs_and_enclosing_jobs_are_bounded() -> None:
     assert "--ignore=tests/test_install_playwright_browser.py" in test_job
     assert "coverage report --fail-under=85" in test_job
     assert "pytest -q tests/e2e/test_free_path_e2e.py" in e2e_job
-    assert "pytest -q tests/e2e \\" in e2e_job
+    assert "test_paths=(tests/e2e/test_record_compile_replay.py)" in e2e_job
+    assert 'pytest -q "${test_paths[@]}"' in e2e_job
     assert "--ignore=tests/e2e/test_free_path_e2e.py" in e2e_job
     assert "pytest -q --basetemp=runs/ci" in matrix_job
 
@@ -377,7 +378,7 @@ def test_exhaustive_identity_ladder_corpus_runs_in_the_slow_lane_only() -> None:
     linux_step = workflow[linux_start:macos_start]
     assert f'{flag}: "1"' in linux_step
 
-    fast_start = workflow.index("- name: Test (fast unit suite)")
+    fast_start = workflow.index("- name: Test (PR gate or complete post-merge suite)")
     fast_end = workflow.index("- name: Coverage (whole-package visibility)")
     assert flag not in workflow[fast_start:fast_end]
     # exactly one opt-in: the canonical Ubuntu matrix leg
@@ -388,13 +389,13 @@ def test_supported_claims_consume_their_required_jobs_real_junit() -> None:
     """The two required test jobs must fail when cited evidence did not run."""
 
     workflow = CI.read_text(encoding="utf-8")
-    unit_start = workflow.index("- name: Test (fast unit suite)")
+    unit_start = workflow.index("- name: Test (PR gate or complete post-merge suite)")
     unit_end = workflow.index("- name: Coverage (whole-package visibility)")
     unit = workflow[unit_start:unit_end]
     assert "--junitxml=runs/unit-claims-junit.xml" in unit
     assert "--ci-job test --junit runs/unit-claims-junit.xml" in unit
 
-    browser_start = workflow.index("- name: E2E (browser record -> compile -> replay)")
+    browser_start = workflow.index("- name: E2E (PR gate or complete post-merge suite)")
     browser_end = workflow.index("- name: Upload run artifacts", browser_start)
     browser = workflow[browser_start:browser_end]
     assert "--junitxml=runs/e2e-claims-junit.xml" in browser
@@ -402,6 +403,55 @@ def test_supported_claims_consume_their_required_jobs_real_junit() -> None:
 
     claims = VALIDATE_CLAIMS.read_text(encoding="utf-8")
     assert "validate_claims.py --check --structure-only" in claims
+
+
+def test_pr_and_complete_test_tiers_are_event_bound_and_fail_closed() -> None:
+    """Only pull requests get the focused tier; every other event gets full tests."""
+
+    workflow = CI.read_text(encoding="utf-8")
+    unit_start = workflow.index("\n  test:")
+    browser_start = workflow.index("\n  e2e-browser:")
+    linux_start = workflow.index("\n  linux-atspi-x11:")
+    unit = workflow[unit_start:browser_start]
+    browser = workflow[browser_start:linux_start]
+
+    pr_condition = 'if [ "$GITHUB_EVENT_NAME" = pull_request ]; then'
+    campaign = "--ignore=tests/test_qualification_gate_campaign.py"
+
+    assert unit.count("- name: Test (PR gate or complete post-merge suite)") == 1
+    assert unit.count(pr_condition) == 1
+    unit_step = unit[
+        unit.index("- name: Test (PR gate or complete post-merge suite)") : unit.index(
+            "- name: Validate passing unit claim evidence"
+        )
+    ]
+    assert "extra_args=()" in unit_step
+    assert f"extra_args+=({campaign})" in unit_step
+    assert '"${extra_args[@]}"' in unit_step
+    assert "--ignore=tests/e2e" in unit_step
+    assert "--ignore=tests/test_install_playwright_browser.py" in unit_step
+    assert "--junitxml=runs/unit-claims-junit.xml" in unit_step
+    assert "--cov=openadapt_flow --cov-report=" in unit_step
+
+    assert browser.count("- name: E2E (PR gate or complete post-merge suite)") == 1
+    assert browser.count(pr_condition) == 1
+    browser_step = browser[
+        browser.index(
+            "- name: E2E (PR gate or complete post-merge suite)"
+        ) : browser.index("- name: Validate passing browser claim evidence")
+    ]
+    assert (
+        "test_paths=(tests/e2e --ignore=tests/e2e/test_free_path_e2e.py)"
+        in browser_step
+    )
+    assert "test_paths=(tests/e2e/test_record_compile_replay.py)" in browser_step
+    assert 'pytest -q "${test_paths[@]}"' in browser_step
+    assert "--junitxml=runs/e2e-claims-junit.xml" in browser_step
+
+    # The arrays start with the complete selections. Only the exact PR branch
+    # replaces them. A new event cannot silently inherit the reduced selection.
+    for event in ("push", "schedule", "workflow_dispatch"):
+        assert f'GITHUB_EVENT_NAME" = {event}' not in unit + browser
 
 
 def test_validating_refresh_uses_exact_macos_parallels_substrate_and_scope() -> None:
