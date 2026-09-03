@@ -888,10 +888,10 @@ export function Qualification({
                     value={minimumTier}
                     onChange={(event) => setMinimumTier(Number(event.target.value))}
                   >
-                    <option value={1}>Tier 1 · independent system</option>
-                    <option value={2}>Tier 2 · independent session</option>
-                    <option value={3}>Tier 3 · persisted-state reacquisition</option>
-                    <option value={4}>Tier 4 · immediate screen</option>
+                    <option value={1}>System of record · Oracle tier 2</option>
+                    <option value={2}>Independent session · Oracle tier 1</option>
+                    <option value={3}>Persisted-state reacquisition · Oracle tier 0</option>
+                    <option value={4}>Immediate screen · Oracle tier 0</option>
                   </select>
                 </div>
               </div>
@@ -995,7 +995,7 @@ export function Qualification({
               >
                 <div className="field" style={{ marginBottom: 0, minWidth: 280 }}>
                   <label htmlFor="project-minimum-effect-tier">
-                    Workflow minimum verification tier
+                    Workflow minimum verification strength
                   </label>
                   <select
                     id="project-minimum-effect-tier"
@@ -1005,12 +1005,12 @@ export function Qualification({
                       setProjectMinimumTier(Number(event.target.value))
                     }
                   >
-                    <option value={1}>Tier 1 · independent system</option>
-                    <option value={2}>Tier 2 · independent session</option>
+                    <option value={1}>System of record · Oracle tier 2</option>
+                    <option value={2}>Independent session · Oracle tier 1</option>
                     <option value={3}>
-                      Tier 3 · persisted-state reacquisition
+                      Persisted-state reacquisition · Oracle tier 0
                     </option>
-                    <option value={4}>Tier 4 · immediate screen</option>
+                    <option value={4}>Immediate screen · Oracle tier 0</option>
                   </select>
                 </div>
                 <Button
@@ -1752,16 +1752,16 @@ export function Qualification({
                             setVerificationTier(Number(event.target.value))
                           }
                         >
-                          <option value={1}>Tier 1 · independent system</option>
-                          <option value={2}>Tier 2 · independent session</option>
+                          <option value={1}>System of record · Oracle tier 2</option>
+                          <option value={2}>Independent session · Oracle tier 1</option>
                           <option value={3}>
-                            Tier 3 · persisted-state reacquisition
+                            Persisted-state reacquisition · Oracle tier 0
                           </option>
-                          <option value={4}>Tier 4 · immediate screen</option>
+                          <option value={4}>Immediate screen · Oracle tier 0</option>
                         </select>
                         <span className="page-sub">
-                          The project requires Tier{" "}
-                          {project.project.minimum_effect_tier} or stronger.
+                          The project requires its configured verification
+                          strength or stronger.
                           {project.project.minimum_effect_tier < 4
                             ? " Immediate-screen evidence is below the current minimum."
                             : " The current minimum permits immediate-screen evidence."}
@@ -1836,18 +1836,17 @@ export function Qualification({
                             setBindingVerificationTier(Number(event.target.value))
                           }
                         >
-                          <option value={1}>Tier 1 · independent system</option>
-                          <option value={2}>Tier 2 · independent session</option>
+                          <option value={1}>System of record · Oracle tier 2</option>
+                          <option value={2}>Independent session · Oracle tier 1</option>
                           <option value={3}>
-                            Tier 3 · persisted-state reacquisition
+                            Persisted-state reacquisition · Oracle tier 0
                           </option>
-                          <option value={4}>Tier 4 · immediate screen</option>
+                          <option value={4}>Immediate screen · Oracle tier 0</option>
                         </select>
                         <span className="page-sub">
-                          The project requires Tier{" "}
-                          {project.project?.minimum_effect_tier ?? minimumTier} or
-                          stronger. Consequential writes cannot qualify from the
-                          current screen alone.
+                          The project requires its configured verification
+                          strength or stronger. Consequential writes cannot
+                          qualify from the current screen alone.
                         </span>
                       </div>
                       <div className="grid grid-2">

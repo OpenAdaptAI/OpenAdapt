@@ -464,12 +464,12 @@ export function overlaySecondaryItems(
   if (effectTiers.length) {
     const tier = Math.min(...effectTiers);
     const phrase = {
-      1: "independent system interface",
-      2: "separate read-only session",
-      3: "persisted-state reacquisition",
-      4: "immediate screen confirmation",
+      1: "system-of-record check (Oracle tier 2)",
+      2: "separate read-only session (Oracle tier 1)",
+      3: "persisted-state reacquisition (Oracle tier 0)",
+      4: "immediate screen confirmation (Oracle tier 0)",
     }[tier];
-    items.push(`Effect evidence: ${phrase} (Tier ${tier})`);
+    items.push(`Effect evidence: ${phrase}`);
   }
   if (state.modelCalls !== null) {
     items.push(

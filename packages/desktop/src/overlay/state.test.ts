@@ -126,7 +126,7 @@ it("shows only authoritative compact execution details in plain language", () =>
   expect(details).toEqual([
     "Citrix",
     "1:05",
-    "Effect evidence: separate read-only session (Tier 2)",
+    "Effect evidence: separate read-only session (Oracle tier 1)",
     "0 model calls",
     "No external network calls",
   ]);
