@@ -1,6 +1,50 @@
 # CHANGELOG
 
 
+## v0.18.0 (2026-09-03)
+
+### Bug Fixes
+
+- **reward**: Refuse the certificate claims this version cannot check
+  ([#40](https://github.com/OpenAdaptAI/openadapt-types/pull/40),
+  [`b7b40f3`](https://github.com/OpenAdaptAI/openadapt-types/commit/b7b40f395125aae2c084f49c6a10933771c3e9d0))
+
+A reward certificate was trusted on its shape. Four properties it asserted were never checked
+  anywhere:
+
+* `calibration_scope: production`. The validator refused only the pair `self_signed` + `production`,
+  so `issuer="organization"` bought a receipt reading `certified: true, calibration_scope:
+  production, production_certified: true` with no worker, no oracle, and no read.
+
+* `issuer: organization`. There is no issuer key registry, so nothing can resolve `issuer_key_id` to
+  a key anyone trusts. * The contract's own `certificate_policy`. `RewardCertificateV1.satisfies`
+  had exactly one caller, a test. A certificate measured at epsilon 0.248885 against a contract
+  demanding 0.05 still produced `certified`. * Revocation. `grep -i revok` over the reward code in
+  types, evals, and flow returns nothing, and the certificate docstring described revocation as an
+  existing mechanism checked by the issuer.
+
+The narrowing:
+
+* `RewardCalibrationScopeV1` keeps `SYNTHETIC` only, and `RewardCertificateIssuerV1` keeps
+  `SELF_SIGNED` only. Both stay enums, so adding a member back once a registry exists is not a
+  breaking change. * `RewardEvidenceReceiptV1.production_certified` is gone. With one scope it could
+  only ever return False, and its name promised a distinction the type cannot draw. * `score()`
+  takes the contract as a required keyword and drops `scoring`. It reads the scalar from
+  `contract.scoring` and certifies only a certificate that names this contract by digest and clears
+  `contract.certificate_policy`. `RewardScoreV1` gains `certification_refusals`, so a false
+  `certified` says why. * `RewardCertificateV1.unmet(policy)` lists each shortfall; `satisfies` is
+  now `not unmet(...)` and is live code on the certification path. *
+  `RewardEvidenceReceiptV1.certification_refusals(contract, certificate)` lets a reader who holds
+  both recheck a receipt's flag. The receipt carries digests, so it cannot check itself during
+  validation. * The docstrings drop the revocation sentence and say plainly that `signature` is
+  checked for encoding and length only.
+
+Breaking for `score()` callers and for anything that reads `production_certified` or constructs a
+  production-scope certificate. Nothing outside tests constructs one today.
+
+Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+
+
 ## v0.17.1 (2026-09-03)
 
 ### Bug Fixes
