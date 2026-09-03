@@ -75,8 +75,10 @@ class Settings(BaseSettings):
     # Maximum screenshots per second (0 = unlimited / legacy behavior)
     SCREEN_CAPTURE_FPS: float = 10.0
 
-    # Performance plotting
-    PLOT_PERFORMANCE: bool = True
+    # Performance plotting is an opt-in diagnostic. Importing Matplotlib and
+    # building its font cache during the first recorder shutdown can take close
+    # to a minute on a clean Windows install.
+    PLOT_PERFORMANCE: bool = False
 
     # Database
     DB_ECHO: bool = False

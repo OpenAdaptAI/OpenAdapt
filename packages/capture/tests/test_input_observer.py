@@ -181,6 +181,28 @@ def test_delivery_thread_balances_callback_lifecycle_hooks() -> None:
     assert len({thread_id for _name, thread_id in lifecycle}) == 1
 
 
+def test_delivery_setup_can_use_a_larger_bound_than_native_setup() -> None:
+    """A bounded cold service start must not weaken native-hook readiness."""
+    delivery_started = threading.Event()
+
+    class Callback:
+        def _openadapt_delivery_thread_start(self) -> None:
+            time.sleep(0.05)
+            delivery_started.set()
+
+        def __call__(self, _event) -> None:
+            return
+
+    observer = _ReadyObserver(Callback())
+    observer.startup_timeout = 0.02
+    observer.delivery_startup_timeout = 0.2
+
+    observer.start()
+    observer.stop()
+
+    assert delivery_started.is_set()
+
+
 def test_setup_events_are_discarded_when_start_fails() -> None:
     delivered = []
     observer = _SetupEmittingObserver(delivered.append, fail_setup=True)

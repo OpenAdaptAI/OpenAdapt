@@ -68,6 +68,13 @@ def test_external_ffmpeg_keeps_core_recorder_video_first_and_pyav_free() -> None
     assert config.RECORD_IMAGES is False
 
 
+def test_performance_plotting_is_opt_in() -> None:
+    """A clean first shutdown must not build Matplotlib's font cache."""
+    from openadapt_capture.config import Settings
+
+    assert Settings(_env_file=None).PLOT_PERFORMANCE is False
+
+
 def test_default_install_exposes_recorder() -> None:
     """Recorder import never fails because a runtime dependency is undeclared."""
     result = subprocess.run(

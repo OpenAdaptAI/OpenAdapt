@@ -161,6 +161,7 @@ class ThreadedInputObserver(InputObserver):
         observe_mouse: bool,
         capture_mouse_moves: bool,
         startup_timeout: float = 5.0,
+        delivery_startup_timeout: float | None = None,
         shutdown_timeout: float = 5.0,
         delivery_queue_size: int = 4096,
     ) -> None:
@@ -171,6 +172,11 @@ class ThreadedInputObserver(InputObserver):
         self.observe_mouse = observe_mouse
         self.capture_mouse_moves = capture_mouse_moves
         self.startup_timeout = startup_timeout
+        self.delivery_startup_timeout = (
+            startup_timeout
+            if delivery_startup_timeout is None
+            else delivery_startup_timeout
+        )
         self.shutdown_timeout = shutdown_timeout
         if delivery_queue_size <= 0:
             raise ValueError("delivery_queue_size must be positive")
@@ -730,11 +736,11 @@ class ThreadedInputObserver(InputObserver):
             self._commit_delivery_start()
         except BaseException as exc:
             self._abort_start(exc)
-        if not self._delivery_ready.wait(self.startup_timeout):
+        if not self._delivery_ready.wait(self.delivery_startup_timeout):
             self._abort_start(
                 InputObserverError(
                     f"{type(self).__name__} delivery setup did not become ready within "
-                    f"{self.startup_timeout:.1f}s"
+                    f"{self.delivery_startup_timeout:.1f}s"
                 )
             )
         try:

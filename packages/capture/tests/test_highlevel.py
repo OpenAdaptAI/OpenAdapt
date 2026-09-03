@@ -635,15 +635,22 @@ class TestRecordingConfig:
 
         original_video = config.RECORD_VIDEO
         original_audio = config.RECORD_AUDIO
+        original_plot = config.PLOT_PERFORMANCE
 
-        rc = RecordingConfig(capture_video=False, capture_audio=True)
+        rc = RecordingConfig(
+            capture_video=False,
+            capture_audio=True,
+            plot_performance=True,
+        )
         with config_override(rc):
             assert config.RECORD_VIDEO is False
             assert config.RECORD_AUDIO is True
+            assert config.PLOT_PERFORMANCE is True
 
         # Restored
         assert config.RECORD_VIDEO == original_video
         assert config.RECORD_AUDIO == original_audio
+        assert config.PLOT_PERFORMANCE == original_plot
 
     def test_config_override_none_values_unchanged(self):
         """Test that None values in RecordingConfig don't change config."""

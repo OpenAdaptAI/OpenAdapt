@@ -192,6 +192,21 @@ def make_observer(
     )
 
 
+def test_default_startup_bound_allows_cold_windows_uia_initialization() -> None:
+    """The production factory must isolate native and cold UIA bounds."""
+    observer = WindowsInputObserver(
+        lambda _event: None,
+        observe_keyboard=True,
+        observe_mouse=True,
+        capture_mouse_moves=True,
+        _user32=FakeUser32(),
+        _kernel32=FakeKernel32(),
+    )
+
+    assert observer.startup_timeout == 5.0
+    assert observer.delivery_startup_timeout == 20.0
+
+
 def wait_until(predicate, *, timeout: float = 1.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

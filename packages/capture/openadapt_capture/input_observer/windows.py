@@ -379,6 +379,10 @@ class WindowsInputObserver(ThreadedInputObserver):
         observe_mouse: bool,
         capture_mouse_moves: bool,
         startup_timeout: float = 5.0,
+        # A clean Windows install can need more than five seconds for the first
+        # pywinauto/comtypes UIA initialization on the delivery thread. Keep
+        # native hook setup at five seconds and give only UIA the larger bound.
+        delivery_startup_timeout: float = 20.0,
         shutdown_timeout: float = 5.0,
         delivery_queue_size: int = 4096,
         translation_queue_size: int | None = None,
@@ -392,6 +396,7 @@ class WindowsInputObserver(ThreadedInputObserver):
             observe_mouse=observe_mouse,
             capture_mouse_moves=capture_mouse_moves,
             startup_timeout=startup_timeout,
+            delivery_startup_timeout=delivery_startup_timeout,
             shutdown_timeout=shutdown_timeout,
             delivery_queue_size=delivery_queue_size,
         )

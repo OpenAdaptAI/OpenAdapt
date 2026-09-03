@@ -53,6 +53,9 @@ _This release uses the MIT License._
 
 ### Bug Fixes
 
+- Allow the first Windows UI Automation initialization to complete within a
+  bounded cold-start window. Make performance plotting opt-in so the first
+  recorder shutdown does not build a Matplotlib font cache.
 - Refuse ambiguous macOS window selectors instead of choosing a different
   matching window.
 - Keep FFmpeg outside the recorder's interrupt process group so Ctrl-C can
