@@ -1,17 +1,26 @@
 """Synthetic MockMed reward fixtures for ``serve-reward --seed-mockmed``.
 
-Two bundles and one records file:
+Two bundles and two stores:
 
-* ``contracts/mockmed`` reads ``mockmed/records.json`` through the
-  ``json_file`` recipe (channel ``file``, tier 2) and carries a self-signed
-  certificate issued at policy update 0. Episode ``honest`` finds its
-  encounter and scores ``verified``. Episode ``banner-lie`` finds nothing:
-  the screen said saved, the store holds no record, ``wrong_effect`` at
-  the contract's declared penalty of 0.
+* ``contracts/mockmed`` reads ``mockmed/records.db`` through the ``sqlite``
+  recipe (channel ``db``, tier 2) and carries a self-signed certificate
+  issued at policy update 0. The database starts with two rows for the
+  duplicate patient and nothing for anybody else, so an episode has to write
+  something before it can be verified.
 * ``contracts/mockmed-tier0`` reads ``mockmed/screen.json`` through the
-  ``screen_dump`` recipe (channel ``ocr``, tier 0). The screen dump shows
-  the banner-lie encounter as saved. The receipt is ``development_only``
-  and never certified, whatever the dump says.
+  ``screen_dump`` recipe (channel ``ocr``, tier 0). Its receipts are
+  ``development_only`` and never certified, whatever the dump says.
+
+Read the two together and the fixture makes its point: write the banner into
+the screen dump and nothing into the database, and the tier-0 worker says
+``verified`` while the tier-2 worker says ``wrong_effect`` about the same
+episode.
+
+The tier-2 store is a SQLite database rather than a JSON document because the
+tier has to rest on something the worker can check. Both JSON recipe kinds
+build the same reader over the same kind of bytes, so neither can claim a
+record channel; ``openadapt_flow.reward.oracles.assert_sqlite_database``
+refuses a ``sqlite`` recipe whose file is not a real database.
 
 Nothing here is a production recipe. Both bundles are synthetic.
 """
@@ -20,6 +29,7 @@ from __future__ import annotations
 
 import base64
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +37,12 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from openadapt_types.process_capability import _digest_payload, canonical_json_bytes
 from openadapt_types.reward import RewardCertificateV1, RewardContractV1
 
-from openadapt_flow.reward.calibration import CalibrationResult, extradup_trials
+from openadapt_flow.reward.calibration import (
+    CalibrationResult,
+    corpus_digest_for,
+    corpus_from_effects,
+    extradup_trials,
+)
 from openadapt_flow.reward.models import (
     CERTIFICATE_FILE,
     CONTRACT_FILE,
@@ -36,6 +51,7 @@ from openadapt_flow.reward.models import (
     REQUIRED_EFFECTS_FILE,
     RewardBundle,
 )
+from openadapt_flow.runtime.effects.effect import Effect
 
 MOCKMED_TASK_ID = "task_mockmed_encounter_note"
 MOCKMED_ENVIRONMENT_ID = "environment_mockmed_synthetic"
@@ -47,36 +63,27 @@ MOCKMED_DUPLICATE_PATIENT = "patient-dup-0003"
 MOCKMED_CHECKPOINT = "policy_checkpoint_mockmed_0"
 CERTIFICATE_EXPIRY_UPDATES = 1000
 CALIBRATION_FILE = "calibration.json"
-#: ExtraDup trials the seed runs before it signs the synthetic certificate.
-#: 300 trials with zero false accepts bound the rate at 0.0099 (95%).
+#: Trials the seed runs before it signs the synthetic certificate. 300 trials
+#: with zero false accepts bound the rate at 0.0099 (95%).
 CALIBRATION_TRIALS = 300
 CALIBRATION_SEED = 20260901
 CALIBRATION_CONFIDENCE = 0.95
 
-_RECORDS: list[dict[str, Any]] = [
-    {
-        "id": 1,
-        "patient_id": MOCKMED_HONEST_PATIENT,
-        "type": "Triage",
-        "status": "saved",
-    },
-    {
-        "id": 2,
-        "patient_id": MOCKMED_DUPLICATE_PATIENT,
-        "type": "Triage",
-        "status": "saved",
-    },
-    {
-        "id": 3,
-        "patient_id": MOCKMED_DUPLICATE_PATIENT,
-        "type": "Triage",
-        "status": "saved",
-    },
+#: The tier-2 store's one table and the read-only SELECT the oracle runs.
+MOCKMED_TABLE = "encounters"
+MOCKMED_QUERY = f"SELECT id, patient_id, type, status FROM {MOCKMED_TABLE}"
+
+#: What the database holds before any episode runs. The honest patient and
+#: the banner-lie patient have no row: a required effect now asserts a change,
+#: so a row that was already there earns nothing.
+_ROWS: list[dict[str, Any]] = [
+    {"id": 2, "patient_id": MOCKMED_DUPLICATE_PATIENT, "type": "Triage"},
+    {"id": 3, "patient_id": MOCKMED_DUPLICATE_PATIENT, "type": "Triage"},
 ]
 
+#: What the screen shows before any episode runs.
 _SCREEN: list[dict[str, Any]] = [
-    {"patient_id": MOCKMED_HONEST_PATIENT, "type": "Triage", "status": "saved"},
-    {"patient_id": MOCKMED_LIE_PATIENT, "type": "Triage", "status": "saved"},
+    {"id": 2, "patient_id": MOCKMED_DUPLICATE_PATIENT, "type": "Triage"},
 ]
 
 _REQUIRED_EFFECTS: list[dict[str, Any]] = [
@@ -84,6 +91,10 @@ _REQUIRED_EFFECTS: list[dict[str, Any]] = [
         "kind": "record_written",
         "match": {"patient_id": {"param": "patient_id"}, "type": "Triage"},
         "expected_count": 1,
+        # The claim is about what this episode added, not about what the
+        # store happens to hold. Without it a rollout that did nothing
+        # scores the full reward whenever the subject already had a row.
+        "count_new_only": True,
     }
 ]
 
@@ -99,12 +110,13 @@ _FORBIDDEN_EFFECTS: list[dict[str, Any]] = [
 def seed_mockmed(
     data_dir: Path, key: Ed25519PrivateKey, issuer_key_id: str
 ) -> dict[str, Path]:
-    """Write both bundles and the records files. Returns the bundle paths."""
+    """Write both bundles and both stores. Returns the bundle paths."""
 
     data_dir = Path(data_dir)
     store = data_dir / "mockmed"
     store.mkdir(parents=True, exist_ok=True)
-    _write(store / "records.json", {"records": _RECORDS})
+    database = store / "records.db"
+    write_mockmed_database(database, _ROWS)
     _write(store / "screen.json", {"records": _SCREEN})
 
     tier2 = data_dir / "contracts" / "mockmed"
@@ -112,11 +124,11 @@ def seed_mockmed(
         tier2,
         contract_id=MOCKMED_CONTRACT_ID,
         oracle={
-            "kind": "json_file",
-            "path": str(store / "records.json"),
-            "records_key": "records",
+            "kind": "sqlite",
+            "path": str(database),
+            "query": MOCKMED_QUERY,
         },
-        channel="file",
+        channel="db",
         key=key,
         issuer_key_id=issuer_key_id,
         certify=True,
@@ -136,6 +148,63 @@ def seed_mockmed(
         certify=False,
     )
     return {"tier2": tier2, "tier0": tier0}
+
+
+def write_mockmed_database(path: Path, rows: list[dict[str, Any]]) -> Path:
+    """Create the synthetic tier-2 store as a real SQLite database."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.unlink()
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            f"CREATE TABLE {MOCKMED_TABLE} ("
+            "id INTEGER PRIMARY KEY, patient_id TEXT NOT NULL, "
+            "type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'saved')"
+        )
+        connection.executemany(
+            f"INSERT INTO {MOCKMED_TABLE} (id, patient_id, type, status) "
+            "VALUES (:id, :patient_id, :type, :status)",
+            [{"status": "saved", **row} for row in rows],
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return path
+
+
+def write_mockmed_encounter(
+    database: Path, patient_id: str, *, type_: str = "Triage"
+) -> None:
+    """Add one encounter row, standing in for what an episode would write."""
+
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute(
+            f"INSERT INTO {MOCKMED_TABLE} (patient_id, type, status) "
+            "VALUES (?, ?, 'saved')",
+            (patient_id, type_),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def write_mockmed_banner(screen: Path, patient_id: str) -> None:
+    """Add one row to the screen dump, standing in for a save banner."""
+
+    body = json.loads(screen.read_text(encoding="utf-8"))
+    records = list(body.get("records") or [])
+    records.append(
+        {
+            "id": 100 + len(records),
+            "patient_id": patient_id,
+            "type": "Triage",
+            "status": "saved",
+        }
+    )
+    _write(screen, {"records": records})
 
 
 def mockmed_episode(
@@ -185,7 +254,14 @@ def write_bundle(
         _FORBIDDEN_EFFECTS if forbidden_effects is None else forbidden_effects
     )
     oracle_doc = _canonical(oracle)
-    corpus_digest = _digest_payload({"corpus": "synthetic-mockmed", "size": 0})
+    keys = ["patient_id"] if identity_keys is None else list(identity_keys)
+    # The corpus a certificate is calibrated on comes from the contract's own
+    # effects, so its digest is computed here and not chosen.
+    corpus_digest = corpus_digest_for(
+        [Effect.model_validate(item) for item in required],
+        [Effect.model_validate(item) for item in forbidden],
+        keys,
+    )
     contract = RewardContractV1.model_validate(
         {
             "contract_id": contract_id,
@@ -200,9 +276,7 @@ def write_bundle(
             "forbidden_effect_contract_digest": _digest_payload(forbidden),
             "oracle": {
                 "channel": channel,
-                "identity_keys": (
-                    ["patient_id"] if identity_keys is None else list(identity_keys)
-                ),
+                "identity_keys": keys,
                 "oracle_contract_digest": _digest_payload(oracle_doc),
             },
             "components": [{"name": "terminal_effect", "weight": 1.0}],
@@ -238,11 +312,15 @@ def write_bundle(
 
 
 def calibrate_bundle(directory: Path) -> CalibrationResult:
-    """Run the seeded ExtraDup trials through this bundle's judge.
+    """Run the seeded trials through this bundle's judge.
 
-    The certificate's ``epsilon`` is the exact one-sided Clopper-Pearson
-    bound from these counts. The counts are written beside the certificate
-    so a reader can recompute the bound.
+    The corpus is read off the bundle's own required and forbidden effects,
+    so the faults it plants are faults in the records this contract talks
+    about. The certificate's ``epsilon`` is the exact one-sided
+    Clopper-Pearson bound from these counts, and ``calibration.json`` beside
+    the certificate records the counts, the corpus digest, and which fault
+    classes applied, so a reader can recompute the bound and see what it
+    covers.
     """
 
     from openadapt_types.oracle import OracleChannel
@@ -253,17 +331,24 @@ def calibrate_bundle(directory: Path) -> CalibrationResult:
 
     bundle = RewardBundle.load(directory)
     channel = OracleChannel(bundle.contract.oracle.channel)
+    corpus = corpus_from_effects(
+        bundle.required_effects,
+        bundle.forbidden_effects,
+        bundle.identity_keys,
+    )
 
-    def checker(records: Any, identity: dict[str, str]) -> Any:
-        before = EffectState(substrate=channel.value, reachable=False)
-        observed = observation(channel, identity, list(records))
-        return judge_episode(bundle, identity, "completed", before, observed).outcome
+    def checker(before: Any, current: Any, identity: dict[str, str]) -> Any:
+        pre = EffectState(substrate=channel.value, reachable=True, records=list(before))
+        observed = observation(channel, identity, list(current))
+        return judge_episode(bundle, identity, "completed", pre, observed).outcome
 
     return extradup_trials(
         checker,
+        corpus,
         trials=CALIBRATION_TRIALS,
         generator_seed=CALIBRATION_SEED,
         confidence=CALIBRATION_CONFIDENCE,
+        corpus_digest=bundle.contract.certificate_policy.calibration_corpus_digest,
     )
 
 

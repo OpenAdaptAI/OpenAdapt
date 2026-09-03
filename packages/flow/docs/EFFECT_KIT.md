@@ -69,6 +69,7 @@ effects:
       patient_id: {param: patient_id}   # binds to THIS episode's patient
       type: Triage
     expected_count: 1
+    count_new_only: true                # and to THIS episode's write
 ```
 
 Wrong, and `RewardBundle.load` refuses it:
@@ -87,6 +88,40 @@ somebody else and the judge CONFIRMS the effect: the receipt then asserts a
 patient whose record was never read. The load-time guard closes that. A bundle
 whose required effects select no record by a declared identity key fails to
 load, and the error names the missing keys and the selector to add.
+
+## The claim names the change
+
+A required effect that names its subject can still be satisfied by a row that
+was already in the store. `record_written` and `field_equals` are statements
+about the store's current contents, so a rollout that did nothing collects
+the full reward whenever the subject already has a matching row.
+
+`count_new_only` and `exact_new_set` are the two kinds the judge settles
+against the pre-episode baseline, so a reward contract's required effects
+must include at least one of them. `RewardBundle.load` refuses a contract
+where none does. The required effects are judged as a conjunction, so one
+change claim is enough to make `verified` mean the episode added something:
+pair a `count_new_only` write with as many `field_equals` read-backs as the
+contract needs.
+
+The baseline comes from `begin_episode`, which the environment calls before
+the rollout runs. Without it the change claim is INDETERMINATE and the
+episode is unscored, never zero.
+
+## The tier comes from the mechanism, not the recipe name
+
+`json_file` and `screen_dump` build the same reader over a JSON document on
+the worker's own disk, so they read through the same channel, `ocr`, at tier
+0. A contract that declares `file` for a `json_file` recipe fails to load.
+Nothing in a JSON document separates a system-of-record dump from a screen
+scrape, and letting the recipe kind decide would let the same bytes earn tier
+0 under one name and tier 2 under the other.
+
+`sqlite` earns tier 2 because the worker opens a real database read-only and
+runs one SELECT through the engine, and it checks the file header, so a
+screen dump renamed `store.db` is refused. `rest` and `fhir` earn it on the
+network read the worker performs; whether the endpoint is the customer's
+system of record is the bundle author's claim and nobody checks it here.
 
 `idempotency_key` counts as a selector too, because it filters the matched set
 by `key_field`. `value` does not. On a `field_equals` contract `match` chooses

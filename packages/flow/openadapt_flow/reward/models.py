@@ -113,12 +113,15 @@ class EpisodeDescriptorV1(_Strict):
     ``environment_id``, ``metadata``. The digest binds the receipt to the
     contract this worker serves; a different digest is refused.
 
-    The oracle needs to know which record to read. That identity comes from
-    one of three places, checked in this order: the ``oracle_identity``
-    field, ``metadata["oracle_identity"]``, or a registration made by
-    ``RewardWorker.begin_episode`` before the rollout ran. Its keys must be
-    exactly the contract's ``oracle.identity_keys``; an extra key is refused,
-    a missing key is refused.
+    The oracle needs to know which record to read. A registration made by
+    ``RewardWorker.begin_episode`` before the rollout ran decides that, and
+    the descriptor cannot replace it: a descriptor that names a different
+    subject is refused, because the registration was made before anyone knew
+    how the episode would end and the descriptor arrives after. The
+    ``oracle_identity`` field and ``metadata["oracle_identity"]`` still name
+    the subject for an episode with no registration, in that order. Its keys
+    must be exactly the contract's ``oracle.identity_keys``; an extra key is
+    refused, a missing key is refused.
 
     ``runtime_signal`` (or ``metadata["runtime_signal"]``) is what the
     episode runtime reported about its own end. The oracle read decides; the
@@ -279,10 +282,20 @@ class OracleRecipeV1(_Strict):
         return os.environ.get(self.token_env) or None
 
 
-#: The recipe kind sets the channel, and the channel sets the tier. A
-#: payload cannot upgrade a screen dump into a system-of-record read.
+#: The channel each recipe kind reads through, and the channel sets the tier.
+#: A payload cannot upgrade a screen dump into a system-of-record read.
+#:
+#: This table must agree with the adapter
+#: :func:`openadapt_flow.reward.oracles.build_oracle` returns, and that
+#: function refuses to hand back an adapter whose channel differs. Kinds that
+#: share an adapter therefore share a channel: ``json_file`` and
+#: ``screen_dump`` both build :class:`~openadapt_flow.reward.oracles.
+#: JsonDocumentOracle` over a JSON document on the worker's own disk, so both
+#: read through ``ocr`` at tier 0. Nothing in those bytes separates a
+#: system-of-record dump from a screen scrape, and letting the recipe kind
+#: pick would let one document earn two tiers.
 _RECIPE_CHANNEL: dict[str, OracleChannel] = {
-    "json_file": OracleChannel.FILE,
+    "json_file": OracleChannel.OCR,
     "screen_dump": OracleChannel.OCR,
     "rest": OracleChannel.API,
     "sqlite": OracleChannel.DB,
@@ -328,16 +341,27 @@ class RewardBundle(_Strict):
     Loading refuses when any digest in the contract disagrees with the
     file it names, when the oracle recipe's channel disagrees with the
     contract's oracle channel, when an effect references an identity
-    key the contract does not declare, or when the required effects
-    between them select no record by a declared identity key.
+    key the contract does not declare, when the required effects
+    between them select no record by a declared identity key, or when no
+    required effect makes a claim about change.
 
-    That last rule is what ties a judgement to a subject. An oracle reads a
+    The identity rule is what ties a judgement to a subject. An oracle reads a
     whole collection and does not filter it by ``oracle_identity`` (see
     :meth:`openadapt_flow.reward.oracles.VerifierOracle.read`), so the
     required effect's own selector is the only place the subject is applied.
     A contract that declares ``identity_keys`` and then matches on content
     alone would accept a write that landed on somebody else, and the receipt
     would still name the declared subject.
+
+    The change rule is what ties a judgement to an episode. A plain
+    ``record_written`` effect is a statement about the store's current
+    contents, so it is satisfied by a row that was already there before the
+    rollout started, and an episode that did nothing at all earns the full
+    reward. Only ``count_new_only`` and ``exact_new_set`` compare the read
+    against the pre-episode baseline, so at least one required effect must be
+    one of those. The required effects are judged as a conjunction, so one
+    change claim is enough: ``VERIFIED`` then means every required effect
+    held AND the episode added a record.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
@@ -410,6 +434,16 @@ class RewardBundle(_Strict):
                 f"to the named subject. Add {{{example}}} to the match selector "
                 f"of a required effect."
             )
+        if not any(effect.requires_baseline for effect in required):
+            raise BundleError(
+                "required_effects assert only what the store holds now, so "
+                "they are satisfied by a record that was already there and a "
+                "rollout that did nothing scores the full reward. At least "
+                "one required effect must be a claim about change, which the "
+                "judge can only settle against the pre-episode baseline: set "
+                '"count_new_only": true on a record_written effect, or '
+                "declare an exact_new_set effect."
+            )
         certificate: Optional[RewardCertificateV1] = None
         cert_path = base / CERTIFICATE_FILE
         if cert_path.is_file():
@@ -418,6 +452,7 @@ class RewardBundle(_Strict):
                 raise BundleError(
                     "certificate.json binds a different reward contract digest"
                 )
+            _check_corpus_digest(contract, certificate, required, forbidden)
         return cls(
             directory=base,
             contract=contract,
@@ -446,6 +481,47 @@ class RewardBundle(_Strict):
         if missing:
             raise IdentityError(
                 "oracle_identity is missing declared keys: " + ", ".join(missing)
+            )
+
+
+def _check_corpus_digest(
+    contract: RewardContractV1,
+    certificate: RewardCertificateV1,
+    required: tuple[Effect, ...],
+    forbidden: tuple[Effect, ...],
+) -> None:
+    """Refuse a certificate calibrated on a corpus that is not this contract's.
+
+    ``epsilon`` bounds how often the checker accepts an episode it should have
+    refused, and it only bounds that for the records it was measured on. A
+    corpus of triage rows says nothing about a contract that asks for
+    radiology rows: every trial refutes for a reason the planted fault did not
+    cause, the false-accept count is zero, and the bound is the best number
+    the method can produce while bounding nothing.
+
+    So the corpus is derived from the contract's own effects and named by
+    digest, and both the policy and the certificate must name that digest.
+    """
+
+    from openadapt_flow.reward.calibration import corpus_digest_for
+
+    want = corpus_digest_for(required, forbidden, contract.oracle.identity_keys)
+    for label, got in (
+        (
+            "certificate_policy.calibration_corpus_digest",
+            contract.certificate_policy.calibration_corpus_digest,
+        ),
+        (
+            "certificate.calibration_corpus_digest",
+            certificate.calibration_corpus_digest,
+        ),
+    ):
+        if got != want:
+            raise BundleError(
+                f"{label} is {got}, and the corpus derived from this "
+                f"contract's own required and forbidden effects digests to "
+                f"{want}. A bound measured on other records does not apply "
+                f"to these effects."
             )
 
 

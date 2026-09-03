@@ -7794,8 +7794,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--seed-mockmed",
         action="store_true",
         help=(
-            "Write the synthetic MockMed reward bundles (tier-2 file oracle "
-            "with a calibrated synthetic certificate; tier-0 screen dump)"
+            "Write the synthetic MockMed reward bundles (tier-2 read-only "
+            "SQLite oracle with a calibrated synthetic certificate; tier-0 "
+            "screen dump)"
         ),
     )
     p.set_defaults(func=_cmd_serve_reward)
@@ -8150,6 +8151,14 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
     print(f"  {REWARD_NOTICE}")
     for label, path in seeded_paths.items():
         print(f"  seeded {label:<6} {path}")
+    if seeded_paths:
+        print(f"  store        {data_dir / 'mockmed' / 'records.db'}")
+        print(f"  screen       {data_dir / 'mockmed' / 'screen.json'}")
+        print(
+            "  Register each episode with POST /v1/episodes BEFORE the "
+            "rollout runs. A required effect asserts a change, so the worker "
+            "needs the pre-episode baseline and fixes the subject in advance."
+        )
     serve(worker, host=args.host, port=args.port)
     return 0
 

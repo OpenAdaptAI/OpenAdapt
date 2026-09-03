@@ -10,7 +10,18 @@ false, never a guessed empty list.
 The REST, SQL, FHIR, and file-arrival adapters wrap the effect-verifier kit
 (``docs/EFFECT_KIT.md``) so the read logic, the read-only SQL whitelist, and
 the "unreadable means INDETERMINATE" rule are the same code the runtime
-uses. ``json_file`` and ``screen_dump`` are the synthetic MockMed fixtures.
+uses. ``json_file`` and ``screen_dump`` read a JSON document on disk, which
+is what the synthetic tier-0 fixture needs.
+
+The channel belongs to the adapter, not to the recipe kind. Two recipe
+kinds that build the same adapter over the same bytes read through the same
+channel and earn the same tier. ``json_file`` and ``screen_dump`` are that
+pair: both hand :class:`JsonDocumentOracle` a JSON document on the worker's
+own disk, and nothing in the bytes tells a system-of-record dump from a
+screen scrape. So both read through ``ocr`` and both stay at tier 0.
+Claiming tier 2 needs a channel whose mechanism the worker can check: a
+SQLite database file it opens read-only, a REST or FHIR endpoint it calls
+over the network, or a directory it lists.
 """
 
 from __future__ import annotations
@@ -66,22 +77,33 @@ def effect_state_of(observed: OracleObservation, substrate: str) -> EffectState:
 
 
 class JsonDocumentOracle:
-    """Read a JSON document of records from disk.
+    """Read a JSON document of records from disk. Always channel ``ocr``.
 
-    ``channel`` is ``file`` for a system-of-record dump and ``ocr`` for the
-    synthetic screen dump. The same reader, two tiers, on purpose: the tier
-    comes from what the document is, not from how it is parsed.
+    The channel is a class attribute and no caller may set it. Both the
+    ``json_file`` and the ``screen_dump`` recipe kinds build this adapter, so
+    a bundle that could pick the channel could hand the same bytes two
+    different tiers: point ``screen_dump`` at a document and the receipt says
+    tier 0 and ``development_only``; point ``json_file`` at the same document
+    and it says tier 2 and ``certified``.
+
+    Tier 0 is the honest floor for this reader. A JSON document on the
+    worker's own disk carries nothing that separates a system-of-record dump
+    from a screen scrape, and whoever writes the file writes the answer. Use
+    ``sqlite``, ``rest``, ``fhir``, or ``file_arrival`` when the read really
+    is a record channel.
     """
+
+    #: Fixed. See the class docstring for why this is not a constructor
+    #: argument.
+    channel: OracleChannel = OracleChannel.OCR
 
     def __init__(
         self,
         path: Path | str,
         *,
-        channel: OracleChannel = OracleChannel.FILE,
         records_key: Optional[str] = "records",
     ) -> None:
         self.path = Path(path)
-        self.channel = channel
         self.records_key = records_key
 
     def read(self, identity: Mapping[str, str]) -> OracleObservation:
@@ -137,19 +159,50 @@ class VerifierOracle:
         return observation(self.channel, identity, list(state.records))
 
 
-def build_oracle(recipe: OracleRecipeV1, base_dir: Path) -> OracleAdapter:
+class OracleMechanismError(ValueError):
+    """The recipe cannot read through the channel it claims."""
+
+
+#: The first sixteen bytes of every SQLite database file, from the file
+#: format specification. A JSON screen dump renamed ``store.db`` does not
+#: carry them, so the ``db`` channel cannot be claimed by renaming a file.
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+def assert_sqlite_database(path: Path) -> Path:
+    """Refuse a ``sqlite`` recipe path that is not a SQLite database file.
+
+    The ``db`` channel is tier 2. What earns that tier is the mechanism: the
+    worker opens a real database read-only and runs one SELECT through the
+    engine. Checking the file header is what stops the recipe kind from being
+    the whole claim.
+    """
+
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(len(_SQLITE_MAGIC))
+    except OSError as exc:
+        raise OracleMechanismError(
+            f"oracle recipe sqlite cannot open {path}: {exc}"
+        ) from exc
+    if header != _SQLITE_MAGIC:
+        raise OracleMechanismError(
+            f"{path} is not a SQLite database file, so this recipe cannot "
+            "read through the db channel. A JSON document reads through the "
+            "ocr channel at tier 0; use the screen_dump or json_file kind "
+            "for one."
+        )
+    return path
+
+
+def _adapter_for(recipe: OracleRecipeV1, base_dir: Path) -> OracleAdapter:
     """Construct the adapter a recipe names. Secrets come from the environment."""
 
-    if recipe.kind == "json_file":
+    if recipe.kind in {"json_file", "screen_dump"}:
+        # One adapter, one channel. Neither kind may claim the other's tier;
+        # see the JsonDocumentOracle docstring.
         return JsonDocumentOracle(
             recipe.resolve_path(base_dir),
-            channel=OracleChannel.FILE,
-            records_key=recipe.records_key,
-        )
-    if recipe.kind == "screen_dump":
-        return JsonDocumentOracle(
-            recipe.resolve_path(base_dir),
-            channel=OracleChannel.OCR,
             records_key=recipe.records_key,
         )
     if recipe.kind == "rest":
@@ -168,7 +221,7 @@ def build_oracle(recipe: OracleRecipeV1, base_dir: Path) -> OracleAdapter:
     if recipe.kind == "sqlite":
         from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
 
-        database = recipe.resolve_path(base_dir)
+        database = assert_sqlite_database(recipe.resolve_path(base_dir))
 
         def connect() -> sqlite3.Connection:
             uri = f"file:{database}?mode=ro"
@@ -202,3 +255,24 @@ def build_oracle(recipe: OracleRecipeV1, base_dir: Path) -> OracleAdapter:
             channel=OracleChannel.FILE,
         )
     raise ValueError(f"unknown oracle recipe kind {recipe.kind!r}")
+
+
+def build_oracle(recipe: OracleRecipeV1, base_dir: Path) -> OracleAdapter:
+    """Build the adapter and refuse it when its channel is not the recipe's.
+
+    ``OracleRecipeV1.channel`` is a table keyed on the recipe kind, and the
+    contract's declared channel is checked against that table when the bundle
+    loads. Neither of those reads the adapter. This function closes the loop:
+    the adapter the worker actually holds decides, and a table that drifts
+    away from it stops the worker instead of shipping a tier the read cannot
+    support.
+    """
+
+    adapter = _adapter_for(recipe, base_dir)
+    if adapter.channel is not recipe.channel:
+        raise OracleMechanismError(
+            f"oracle recipe {recipe.kind} declares channel "
+            f"{recipe.channel.value} but its adapter reads through "
+            f"{adapter.channel.value}"
+        )
+    return adapter

@@ -3,6 +3,11 @@
 Routes:
 
 * ``GET  /health``: issuer, key fingerprint, contract digest, oracle tier.
+* ``POST /v1/episodes``: register one episode's subject and capture the
+  pre-episode baseline. The environment calls this BEFORE the rollout runs.
+  It is what makes the graded subject a fact settled in advance rather than
+  a field the trainer fills in once it knows how the episode went, and it is
+  what gives a ``count_new_only`` effect something to compare against.
 * ``POST /v1/rewards``: episode descriptor in, self-signed envelope out
   (200, the receipt under ``receipt``). The descriptor is the shape
   ``openadapt_evals.reward.receipts.EpisodeDescriptor`` sends. An unscored
@@ -90,6 +95,37 @@ def create_app(worker: RewardWorker) -> FastAPI:
             "production_seal": False,
             "notice": REWARD_NOTICE,
         }
+
+    @app.post("/v1/episodes", status_code=200, response_model=None)
+    async def begin_episode(
+        request: Request,
+        authorization: Optional[str] = Header(default=None),
+    ) -> JSONResponse:
+        _require_bearer(worker, authorization)
+        payload = await _json_object(request)
+        episode_id = payload.get("episode_id")
+        identity = payload.get("oracle_identity")
+        if not isinstance(episode_id, str) or not episode_id:
+            raise HTTPException(status_code=400, detail="episode_id is required")
+        if not isinstance(identity, dict) or not identity:
+            raise HTTPException(
+                status_code=400, detail="oracle_identity must be a non-empty object"
+            )
+        subject = {str(key): str(value) for key, value in identity.items()}
+        try:
+            state = worker.begin_episode(episode_id, subject)
+        except ValueError as exc:  # IdentityError and friends
+            raise RewardWorkerError(422, "identity_mismatch", str(exc)) from exc
+        return JSONResponse(
+            status_code=200,
+            content={
+                "episode_id": episode_id,
+                "oracle_identity": subject,
+                "baseline_reachable": state.reachable,
+                "baseline_record_count": len(state.records),
+            },
+            headers=_issuer_headers(worker),
+        )
 
     @app.post("/v1/rewards", status_code=200, response_model=None)
     async def create_reward(

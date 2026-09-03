@@ -466,9 +466,20 @@ runtime uses. It returns a signed `RewardEvidenceReceiptV1`: the terminal
 effect landed, or it didn't, or the store couldn't be read and the episode is
 unscored. Unscored is never 0.
 
+The worker is not in a published release yet, and the release carrying it has
+no date. These two commands are what will work once it lands:
+
 ```bash
 pip install 'openadapt-flow[reward]'
 openadapt-flow serve-reward --seed-mockmed --port 8788
+```
+
+To run it today, install from the repository head:
+
+```bash
+git clone https://github.com/OpenAdaptAI/openadapt-flow
+cd openadapt-flow && pip install -e '.[reward]'
+python -m openadapt_flow serve-reward --seed-mockmed --port 8788
 ```
 
 A reward receipt isn't an Execute Seal. A model rollout isn't a qualified

@@ -22,7 +22,9 @@ from openadapt_types.reward import (  # noqa: E402
 
 import openadapt_flow.reward.callables as callables  # noqa: E402
 from openadapt_flow.reward.calibration import (  # noqa: E402
+    CorpusRecipe,
     clopper_pearson_upper,
+    corpus_from_effects,
     extradup_trials,
 )
 from openadapt_flow.reward.callables import (  # noqa: E402
@@ -36,19 +38,25 @@ from openadapt_flow.reward.models import (  # noqa: E402
     RewardBundle,
     assert_no_forbidden_keys,
 )
-from openadapt_flow.reward.oracles import JsonDocumentOracle  # noqa: E402
+from openadapt_flow.reward.oracles import (  # noqa: E402
+    observation,
+)
 from openadapt_flow.reward.seed import (  # noqa: E402
     CALIBRATION_FILE,
     CALIBRATION_TRIALS,
     MOCKMED_DUPLICATE_PATIENT,
     MOCKMED_HONEST_PATIENT,
     MOCKMED_LIE_PATIENT,
+    MOCKMED_QUERY,
     mockmed_episode,
     seed_mockmed,
     write_bundle,
+    write_mockmed_banner,
+    write_mockmed_encounter,
 )
 from openadapt_flow.reward.serve import OPENAI_GRADER_ROUTE, create_app  # noqa: E402
 from openadapt_flow.reward.worker import RewardWorker, RewardWorkerError  # noqa: E402
+from openadapt_flow.runtime.effects.effect import Effect  # noqa: E402
 
 
 @pytest.fixture()
@@ -60,7 +68,12 @@ def seeded(tmp_path: Path) -> dict[str, Any]:
     paths = seed_mockmed(
         data_dir, key, "self_signed:" + fingerprint_of(key.public_key())
     )
-    return {"data_dir": data_dir, **paths}
+    return {
+        "data_dir": data_dir,
+        "database": data_dir / "mockmed" / "records.db",
+        "screen": data_dir / "mockmed" / "screen.json",
+        **paths,
+    }
 
 
 def _worker(
@@ -80,12 +93,49 @@ def _episode(
     )
 
 
+def _run(
+    worker: RewardWorker,
+    seeded: dict[str, Any],
+    patient_id: str,
+    episode_id: str,
+    *,
+    encounters: int = 1,
+    banners: int = 0,
+    discharge: bool = False,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Register the episode, simulate what it wrote, then score it.
+
+    Registration happens first because the required effect is a claim about
+    change: the judge needs the pre-episode baseline, and the subject is
+    fixed before the rollout produces anything.
+    """
+
+    worker.begin_episode(episode_id, {"patient_id": patient_id})
+    for _ in range(encounters):
+        write_mockmed_encounter(seeded["database"], patient_id)
+    if discharge:
+        write_mockmed_encounter(seeded["database"], patient_id, type_="Discharge")
+    for _ in range(banners):
+        write_mockmed_banner(seeded["screen"], patient_id)
+    return worker.score_episode(_episode(worker, patient_id, episode_id, **kwargs))
+
+
 def _receipt(envelope: dict[str, Any]) -> RewardEvidenceReceiptV1:
     return RewardEvidenceReceiptV1.model_validate(envelope["receipt"])
 
 
-def _unreachable(tmp_path: Path) -> JsonDocumentOracle:
-    return JsonDocumentOracle(tmp_path / "absent.json", channel=OracleChannel.FILE)
+class _UnreachableOracle:
+    """A tier-2 channel that cannot be read. Never a guessed empty list."""
+
+    channel = OracleChannel.DB
+
+    def read(self, identity: Any) -> Any:
+        return observation(self.channel, identity, None)
+
+
+def _unreachable(tmp_path: Path) -> _UnreachableOracle:
+    return _UnreachableOracle()
 
 
 # -- outcome mapping ----------------------------------------------------------
@@ -93,9 +143,7 @@ def _unreachable(tmp_path: Path) -> JsonDocumentOracle:
 
 def test_verified_tier2_is_certified(seeded: dict[str, Any]) -> None:
     worker = _worker(seeded)
-    envelope = worker.score_episode(
-        _episode(worker, MOCKMED_HONEST_PATIENT, "episode_honest_01")
-    )
+    envelope = _run(worker, seeded, MOCKMED_HONEST_PATIENT, "episode_honest_01")
     receipt = _receipt(envelope)
     assert receipt.reward_outcome is RewardOutcomeV1.VERIFIED
     assert receipt.oracle_tier == 2
@@ -120,13 +168,12 @@ def test_verified_tier2_expired_certificate_is_not_certified(
     worker = _worker(seeded)
     assert worker.certificate is not None
     expired_update = worker.certificate.expires_at_policy_update
-    envelope = worker.score_episode(
-        _episode(
-            worker,
-            MOCKMED_HONEST_PATIENT,
-            "episode_honest_expired",
-            policy_update=expired_update,
-        )
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_HONEST_PATIENT,
+        "episode_honest_expired",
+        policy_update=expired_update,
     )
     receipt = _receipt(envelope)
     assert receipt.reward_outcome is RewardOutcomeV1.VERIFIED
@@ -138,12 +185,18 @@ def test_verified_tier2_expired_certificate_is_not_certified(
 def test_tier0_is_development_only_never_certified(seeded: dict[str, Any]) -> None:
     worker = _worker(seeded, "tier0")
     assert worker.certificate is None
-    envelope = worker.score_episode(
-        _episode(worker, MOCKMED_LIE_PATIENT, "episode_tier0_lie")
+    # The banner appeared and nothing was written to the database. The screen
+    # dump agrees with the banner, so the OCR channel may say VERIFIED, and it
+    # still cannot be certified.
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_LIE_PATIENT,
+        "episode_tier0_lie",
+        encounters=0,
+        banners=1,
     )
     receipt = _receipt(envelope)
-    # The screen dump says the lie episode saved. The channel is OCR, so the
-    # verdict may be VERIFIED, and it still cannot be certified.
     assert receipt.reward_outcome is RewardOutcomeV1.VERIFIED
     assert receipt.oracle_tier == 0
     assert receipt.development_only is True
@@ -153,9 +206,16 @@ def test_tier0_is_development_only_never_certified(seeded: dict[str, Any]) -> No
 
 
 def test_banner_lie_yields_zero(seeded: dict[str, Any]) -> None:
+    """The same episode the OCR channel calls verified. The store holds nothing."""
+
     worker = _worker(seeded)
-    envelope = worker.score_episode(
-        _episode(worker, MOCKMED_LIE_PATIENT, "episode_banner_lie_01")
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_LIE_PATIENT,
+        "episode_banner_lie_01",
+        encounters=0,
+        banners=1,
     )
     receipt = _receipt(envelope)
     assert receipt.reward_outcome is RewardOutcomeV1.WRONG_EFFECT
@@ -166,8 +226,12 @@ def test_banner_lie_yields_zero(seeded: dict[str, Any]) -> None:
 
 def test_duplicate_create_is_wrong_effect(seeded: dict[str, Any]) -> None:
     worker = _worker(seeded)
-    envelope = worker.score_episode(
-        _episode(worker, MOCKMED_DUPLICATE_PATIENT, "episode_duplicate_01")
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_DUPLICATE_PATIENT,
+        "episode_duplicate_01",
+        encounters=2,
     )
     receipt = _receipt(envelope)
     assert receipt.reward_outcome is RewardOutcomeV1.WRONG_EFFECT
@@ -182,10 +246,11 @@ def test_duplicate_create_is_wrong_effect(seeded: dict[str, Any]) -> None:
 
 def test_same_episode_twice_is_rejected(seeded: dict[str, Any]) -> None:
     worker = _worker(seeded)
-    payload = _episode(worker, MOCKMED_HONEST_PATIENT, "episode_once_only_1")
-    worker.score_episode(payload)
+    _run(worker, seeded, MOCKMED_HONEST_PATIENT, "episode_once_only_1")
     with pytest.raises(RewardWorkerError) as excinfo:
-        worker.score_episode(payload)
+        worker.score_episode(
+            _episode(worker, MOCKMED_HONEST_PATIENT, "episode_once_only_1")
+        )
     assert excinfo.value.status_code == 409
     assert excinfo.value.error == "duplicate_episode"
 
@@ -206,33 +271,7 @@ def test_indeterminate_is_unscored_not_zero(
 
 
 def test_count_new_only_needs_a_baseline(seeded: dict[str, Any]) -> None:
-    from openadapt_flow.execute.keys import fingerprint_of, load_or_create_private_key
-    from openadapt_flow.reward.seed import write_bundle
-
-    key = load_or_create_private_key(seeded["data_dir"])
-    directory = seeded["data_dir"] / "contracts" / "mockmed-new-only"
-    write_bundle(
-        directory,
-        contract_id="reward_contract_mockmed_new_only",
-        oracle={
-            "kind": "json_file",
-            "path": str(seeded["data_dir"] / "mockmed" / "records.json"),
-            "records_key": "records",
-        },
-        channel="file",
-        key=key,
-        issuer_key_id="self_signed:" + fingerprint_of(key.public_key()),
-        certify=False,
-        required_effects=[
-            {
-                "kind": "record_written",
-                "match": {"patient_id": {"param": "patient_id"}, "type": "Triage"},
-                "expected_count": 1,
-                "count_new_only": True,
-            }
-        ],
-    )
-    worker = RewardWorker(directory, seeded["data_dir"], token="test-token")
+    worker = _worker(seeded)
     # No baseline: the delta is unknowable, so the judge is INDETERMINATE and
     # the episode is unscored, never 0.
     envelope = worker.score_episode(
@@ -245,12 +284,7 @@ def test_count_new_only_needs_a_baseline(seeded: dict[str, Any]) -> None:
     # With a baseline registered before the episode, the same store judges,
     # and the descriptor no longer needs to carry the identity.
     worker.begin_episode("episode_new_only_02", {"patient_id": MOCKMED_LIE_PATIENT})
-    store = seeded["data_dir"] / "mockmed" / "records.json"
-    records = json.loads(store.read_text())
-    records["records"].append(
-        {"id": 7, "patient_id": MOCKMED_LIE_PATIENT, "type": "Triage"}
-    )
-    store.write_text(json.dumps(records))
+    write_mockmed_encounter(seeded["database"], MOCKMED_LIE_PATIENT)
     envelope = worker.score_episode(
         {
             "episode_id": "episode_new_only_02",
@@ -266,13 +300,13 @@ def test_halt_signal_with_no_effect_is_halted_before_effect(
     seeded: dict[str, Any],
 ) -> None:
     worker = _worker(seeded)
-    envelope = worker.score_episode(
-        _episode(
-            worker,
-            MOCKMED_LIE_PATIENT,
-            "episode_halted_01",
-            runtime_signal="halted_before_effect",
-        )
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_LIE_PATIENT,
+        "episode_halted_01",
+        encounters=0,
+        runtime_signal="halted_before_effect",
     )
     receipt = _receipt(envelope)
     assert receipt.reward_outcome is RewardOutcomeV1.HALTED_BEFORE_EFFECT
@@ -283,13 +317,12 @@ def test_halt_signal_with_effect_present_is_reconciliation(
     seeded: dict[str, Any],
 ) -> None:
     worker = _worker(seeded)
-    envelope = worker.score_episode(
-        _episode(
-            worker,
-            MOCKMED_HONEST_PATIENT,
-            "episode_halted_lie_01",
-            runtime_signal="halted_before_effect",
-        )
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_HONEST_PATIENT,
+        "episode_halted_lie_01",
+        runtime_signal="halted_before_effect",
     )
     receipt = _receipt(envelope)
     assert receipt.reward_outcome is RewardOutcomeV1.RECONCILIATION_REQUIRED
@@ -298,15 +331,13 @@ def test_halt_signal_with_effect_present_is_reconciliation(
 
 
 def test_forbidden_effect_is_wrong_effect(seeded: dict[str, Any]) -> None:
-    store = seeded["data_dir"] / "mockmed" / "records.json"
-    records = json.loads(store.read_text())
-    records["records"].append(
-        {"id": 9, "patient_id": MOCKMED_HONEST_PATIENT, "type": "Discharge"}
-    )
-    store.write_text(json.dumps(records))
     worker = _worker(seeded)
-    envelope = worker.score_episode(
-        _episode(worker, MOCKMED_HONEST_PATIENT, "episode_forbidden_01")
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_HONEST_PATIENT,
+        "episode_forbidden_01",
+        discharge=True,
     )
     assert _receipt(envelope).reward_outcome is RewardOutcomeV1.WRONG_EFFECT
 
@@ -360,9 +391,7 @@ def test_receipt_carries_no_screenshot_or_rollout_bytes(
     seeded: dict[str, Any],
 ) -> None:
     worker = _worker(seeded)
-    envelope = worker.score_episode(
-        _episode(worker, MOCKMED_HONEST_PATIENT, "episode_no_bytes_01")
-    )
+    envelope = _run(worker, seeded, MOCKMED_HONEST_PATIENT, "episode_no_bytes_01")
     receipt = envelope["receipt"]
     assert FORBIDDEN_RECEIPT_KEYS.isdisjoint(receipt)
     assert FORBIDDEN_RECEIPT_KEYS.isdisjoint(envelope)
@@ -402,11 +431,11 @@ def _identity_bundle(
         directory,
         contract_id=f"reward_contract_{name.replace('-', '_')}_000000",
         oracle={
-            "kind": "json_file",
-            "path": str(data_dir / "mockmed" / "records.json"),
-            "records_key": "records",
+            "kind": "sqlite",
+            "path": str(data_dir / "mockmed" / "records.db"),
+            "query": MOCKMED_QUERY,
         },
-        channel="file",
+        channel="db",
         key=key,
         issuer_key_id="self_signed:" + fingerprint_of(key.public_key()),
         certify=False,
@@ -479,6 +508,7 @@ def test_idempotency_key_binds_the_identity(seeded: dict[str, Any]) -> None:
                 "match": {"type": "Triage"},
                 "idempotency_key": {"param": "patient_id"},
                 "expected_count": 1,
+                "count_new_only": True,
             }
         ],
     )
@@ -506,16 +536,42 @@ def test_certificate_bound_is_recomputable(seeded: dict[str, Any]) -> None:
     )
 
 
+def _mockmed_corpus() -> CorpusRecipe:
+    """The corpus the shipped MockMed contract's own effects describe."""
+
+    return corpus_from_effects(
+        [
+            Effect.model_validate(
+                {
+                    "kind": "record_written",
+                    "match": {
+                        "patient_id": {"param": "patient_id"},
+                        "type": "Triage",
+                    },
+                    "expected_count": 1,
+                    "count_new_only": True,
+                }
+            )
+        ],
+        [],
+        ["patient_id"],
+    )
+
+
 def test_clopper_pearson_upper_matches_known_values() -> None:
     # 0 of 15 is the bound the openadapt-evals proof run reports.
     assert clopper_pearson_upper(0, 15) == pytest.approx(0.181036, abs=1e-6)
     assert clopper_pearson_upper(0, 20) == pytest.approx(0.1391, abs=1e-3)
     assert clopper_pearson_upper(1, 20) == pytest.approx(0.2161, abs=1e-3)
     assert clopper_pearson_upper(20, 20) == 1.0
+    # A checker that accepts everything false-accepts every trial, and the
+    # bound it earns is 1.0, which the certificate model refuses.
     result = extradup_trials(
-        lambda records, identity: RewardOutcomeV1.VERIFIED,
+        lambda before, current, identity: RewardOutcomeV1.VERIFIED,
+        _mockmed_corpus(),
         trials=10,
         generator_seed=1,
+        corpus_digest="sha256:" + "0" * 64,
     )
     assert result.false_accepts == 10
     assert result.epsilon == 1.0
@@ -533,6 +589,25 @@ def _client(
     return client, worker
 
 
+def _http_begin(
+    client: TestClient,
+    seeded: dict[str, Any],
+    patient_id: str,
+    episode_id: str,
+    *,
+    encounters: int = 1,
+) -> None:
+    """Register over HTTP, the way the environment does, then write."""
+
+    response = client.post(
+        "/v1/episodes",
+        json={"episode_id": episode_id, "oracle_identity": {"patient_id": patient_id}},
+    )
+    assert response.status_code == 200, response.text
+    for _ in range(encounters):
+        write_mockmed_encounter(seeded["database"], patient_id)
+
+
 def test_http_reward_roundtrip(seeded: dict[str, Any]) -> None:
     client, worker = _client(seeded)
     bare = TestClient(client.app)
@@ -541,6 +616,8 @@ def test_http_reward_roundtrip(seeded: dict[str, Any]) -> None:
     assert health["execute_seal"] is False
     assert health["oracle_tier"] == 2
     assert bare.post("/v1/rewards", json={}).status_code == 401
+    assert bare.post("/v1/episodes", json={}).status_code == 401
+    _http_begin(client, seeded, MOCKMED_HONEST_PATIENT, "episode_http_01")
     created = client.post(
         "/v1/rewards", json=_episode(worker, MOCKMED_HONEST_PATIENT, "episode_http_01")
     )
@@ -567,6 +644,7 @@ def test_http_matches_the_evals_client_wire_shape(seeded: dict[str, Any]) -> Non
     """
 
     client, worker = _client(seeded)
+    _http_begin(client, seeded, MOCKMED_HONEST_PATIENT, "episode_evals_client_1")
     payload = {
         "episode_id": "episode_evals_client_1",
         "policy_checkpoint_id": "policy_checkpoint_evals",
@@ -597,6 +675,7 @@ def test_http_matches_the_evals_client_wire_shape(seeded: dict[str, Any]) -> Non
 
 def test_openai_grader_route_contract(seeded: dict[str, Any]) -> None:
     client, worker = _client(seeded)
+    _http_begin(client, seeded, MOCKMED_HONEST_PATIENT, "episode_grader_ok_1")
     item = _episode(worker, MOCKMED_HONEST_PATIENT, "episode_grader_ok_1")
     scored = client.post(
         OPENAI_GRADER_ROUTE,
@@ -607,6 +686,9 @@ def test_openai_grader_route_contract(seeded: dict[str, Any]) -> None:
     assert body["score"] == 1.0
     assert 0.0 <= body["score"] <= 1.0
     assert body["certified"] is True
+    _http_begin(
+        client, seeded, MOCKMED_LIE_PATIENT, "episode_grader_lie_1", encounters=0
+    )
     lie = client.post(
         OPENAI_GRADER_ROUTE,
         json={
@@ -659,6 +741,8 @@ def test_episode_from_columns_matches_the_evals_descriptor_shape(
     seeded: dict[str, Any],
 ) -> None:
     worker = _worker(seeded)
+    worker.begin_episode("episode_client_0001", {"patient_id": MOCKMED_HONEST_PATIENT})
+    write_mockmed_encounter(seeded["database"], MOCKMED_HONEST_PATIENT)
     payload = episode_from_columns(
         episode_id="episode_client_0001",
         policy_checkpoint_id="policy_checkpoint_client",
@@ -717,6 +801,7 @@ def test_http_reward_client_roundtrip(seeded: dict[str, Any], tmp_path: Path) ->
             oracle_identity={"patient_id": MOCKMED_HONEST_PATIENT},
         )
 
+    _http_begin(app_client, seeded, MOCKMED_HONEST_PATIENT, "episode_client_http_1")
     envelope = client.score_episode(payload("episode_client_http_1"))
     assert envelope["unscored"] is False
     assert scalar_of(envelope) == 1.0

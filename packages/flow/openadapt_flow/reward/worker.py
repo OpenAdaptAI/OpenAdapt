@@ -3,7 +3,8 @@
 One worker holds one reward contract bundle, one oracle adapter, and one
 local signing key. ``score_episode`` is the whole path:
 
-1. check the episode's identity keys against the contract;
+1. settle which subject is graded and check its keys against the contract,
+   then check that the episode's policy update has not gone backwards;
 2. read the system of record through the oracle (one read, after the
    episode ended; an optional baseline read before it started);
 3. judge every required effect and every forbidden effect with the shared
@@ -271,6 +272,7 @@ class RewardWorker:
             )
         (self.data_dir / "rewards").mkdir(parents=True, exist_ok=True)
         (self.data_dir / "baselines").mkdir(parents=True, exist_ok=True)
+        (self.data_dir / "policy_updates").mkdir(parents=True, exist_ok=True)
 
     # -- public surface -----------------------------------------------------
 
@@ -289,18 +291,50 @@ class RewardWorker:
     def begin_episode(self, episode_id: str, identity: dict[str, str]) -> EffectState:
         """Register the episode's oracle identity and capture the baseline.
 
-        Call it before the rollout runs. The baseline is what lets a
-        ``count_new_only`` effect tell a record this episode wrote from one
-        that was already there; without it that effect judges INDETERMINATE.
+        Call it before the rollout runs. Two things happen here and both
+        matter at scoring time.
+
+        The baseline is what lets a ``count_new_only`` effect tell a record
+        this episode wrote from one that was already there; without it that
+        effect judges INDETERMINATE and the episode is unscored.
+
+        The identity is the subject the episode is about, fixed before the
+        rollout produced anything. :meth:`score_episode` uses this one, not
+        the one the descriptor carries, so the graded subject cannot be
+        chosen after the outcome is known.
+
+        Calling it again for the same episode with the same identity is
+        allowed and re-reads the baseline. Calling it again with a different
+        identity is refused: the subject is not a thing an episode changes
+        its mind about part way through.
         """
 
         self.bundle.check_identity(identity)
-        observed = self.oracle.read(identity)
-        state = effect_state_of(observed, self.bundle.oracle.channel.value)
-        self._write_json(
-            self.data_dir / "baselines" / f"{episode_id}.json",
-            {"identity": dict(identity), "state": state.model_dump(mode="json")},
-        )
+        with self._lock:
+            scored = self._episode_index(episode_id)
+            if scored is not None:
+                raise RewardWorkerError(
+                    409,
+                    "duplicate_episode",
+                    f"episode already scored as receipt {scored}; a scored "
+                    "episode cannot be re-registered",
+                )
+            registered, _ = self._baseline(episode_id)
+            if registered is not None and registered != dict(identity):
+                raise RewardWorkerError(
+                    409,
+                    "identity_conflict",
+                    f"episode {episode_id} is already registered for "
+                    f"{_identity_text(registered)}; re-registering it for "
+                    f"{_identity_text(dict(identity))} would move the subject "
+                    "after the fact",
+                )
+            observed = self.oracle.read(identity)
+            state = effect_state_of(observed, self.bundle.oracle.channel.value)
+            self._write_json(
+                self.data_dir / "baselines" / f"{episode_id}.json",
+                {"identity": dict(identity), "state": state.model_dump(mode="json")},
+            )
         return state
 
     def score_episode(
@@ -328,22 +362,54 @@ class RewardWorker:
                     f"episode already scored as receipt {existing}",
                 )
             registered_identity, before = self._baseline(episode.episode_id)
-            identity = declared_identity or registered_identity
-            if identity is None:
+            identity = self._graded_identity(declared_identity, registered_identity)
+            try:
+                self.bundle.check_identity(identity)
+            except IdentityError as exc:
+                raise RewardWorkerError(422, "identity_mismatch", str(exc)) from exc
+            self._check_policy_update(episode)
+            observed = self.oracle.read(identity)
+            judged = judge_episode(self.bundle, identity, signal, before, observed)
+            envelope = self._issue(episode, observed, before, judged)
+            self._advance_policy_update(episode)
+        return envelope
+
+    def _graded_identity(
+        self,
+        declared: Optional[dict[str, str]],
+        registered: Optional[dict[str, str]],
+    ) -> dict[str, str]:
+        """Pick the subject this episode is graded on. Registration wins.
+
+        The registration was made by the environment before the rollout ran,
+        when nobody knew how the episode would turn out. The descriptor
+        arrives afterwards from the trainer, which by then does know. So the
+        registration decides, and a descriptor that names a different subject
+        is refused rather than quietly overridden: a trainer that believes it
+        is grading one subject while the worker grades another has a bug
+        worth stopping for.
+        """
+
+        if registered is None:
+            if declared is None:
                 raise RewardWorkerError(
                     422,
                     "identity_missing",
                     "the episode names no oracle identity: pass oracle_identity, "
                     "metadata.oracle_identity, or register it with begin_episode",
                 )
-            try:
-                self.bundle.check_identity(identity)
-            except IdentityError as exc:
-                raise RewardWorkerError(422, "identity_mismatch", str(exc)) from exc
-            observed = self.oracle.read(identity)
-            judged = judge_episode(self.bundle, identity, signal, before, observed)
-            envelope = self._issue(episode, observed, before, judged)
-        return envelope
+            return declared
+        if declared is not None and declared != registered:
+            raise RewardWorkerError(
+                422,
+                "identity_conflict",
+                f"the environment registered this episode for "
+                f"{_identity_text(registered)} before the rollout ran, and "
+                f"the descriptor names {_identity_text(declared)}. The "
+                "registration decides which subject is graded; a descriptor "
+                "may repeat it but may not replace it.",
+            )
+        return registered
 
     def _check_binding(self, episode: EpisodeDescriptorV1) -> None:
         if episode.reward_contract_digest != self.contract.digest:
@@ -513,6 +579,69 @@ class RewardWorker:
         payload = json.loads(path.read_text(encoding="utf-8"))
         return str(payload.get("receipt_id") or "") or None
 
+    # -- the policy-update ledger -------------------------------------------
+
+    def _ledger_path(self) -> Path:
+        """One file per contract, beside the episode index."""
+
+        stem = hashlib.sha256(self.contract.digest.encode("utf-8")).hexdigest()[:32]
+        return self.data_dir / "policy_updates" / f"{stem}.json"
+
+    def _ledger(self) -> dict[str, Any]:
+        path = self._ledger_path()
+        if not path.is_file():
+            return {}
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+
+    def _check_policy_update(self, episode: EpisodeDescriptorV1) -> None:
+        """Refuse a descriptor whose policy update goes backwards.
+
+        A certificate expires after a stated number of policy updates, and
+        ``policy_update`` is the only thing that moves the episode towards
+        that expiry. It arrives on the wire from the trainer, so without a
+        record of its own the worker would let a trainer count 0, 999,
+        1000000000, 0 and read the certificate as current again at the end.
+        The ledger keeps the highest update this contract has seen and
+        refuses anything below it, so the counter only moves the way that
+        expires a certificate.
+
+        The mark is per contract, not per policy checkpoint. Keeping it per
+        checkpoint would let a trainer reset the count by starting to call
+        its checkpoint something else, and expiry would never arrive. Policy
+        updates count one training run against one contract, so a new
+        checkpoint at a lower update is going back in time either way. The
+        ledger records which checkpoint set the mark, for the error message.
+        """
+
+        ledger = self._ledger()
+        mark = ledger.get("highest_policy_update")
+        if not isinstance(mark, int) or episode.policy_update >= mark:
+            return
+        owner = str(ledger.get("policy_checkpoint_id") or "an earlier checkpoint")
+        raise RewardWorkerError(
+            422,
+            "policy_update_regressed",
+            f"this contract has already scored policy update {mark} (from "
+            f"{owner}) and the episode names {episode.policy_update}. A "
+            "policy update counter only moves forward; moving it back would "
+            "make an expired certificate read as current.",
+        )
+
+    def _advance_policy_update(self, episode: EpisodeDescriptorV1) -> None:
+        ledger = self._ledger()
+        mark = ledger.get("highest_policy_update")
+        if isinstance(mark, int) and mark >= episode.policy_update:
+            return
+        self._write_json(
+            self._ledger_path(),
+            {
+                "reward_contract_digest": self.contract.digest,
+                "highest_policy_update": episode.policy_update,
+                "policy_checkpoint_id": episode.policy_checkpoint_id,
+            },
+        )
+
     def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
@@ -521,6 +650,10 @@ class RewardWorker:
             encoding="utf-8",
         )
         tmp.replace(path)
+
+
+def _identity_text(identity: dict[str, str]) -> str:
+    return "{" + ", ".join(f"{k}={v}" for k, v in sorted(identity.items())) + "}"
 
 
 def _new_id(prefix: str) -> str:
