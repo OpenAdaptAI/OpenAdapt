@@ -47,8 +47,8 @@ and confirms the write by querying the record store out of band:
 
 ```
 [1/5] Record the demonstration against a real persistence boundary
-[2/5] Compile, mining the effect contract from the observed delta
-      2 system-of-record effect(s) derived from the demonstration's record delta on step_005
+[2/5] Compile and propose a fixture-specific effect contract
+      2 system-of-record effect proposal(s) derived from the fixture's record delta on step_005; review is required for a real deployment
 [3/5] Certify against the clinical-write policy
 [4/5] Admit and execute under the standard profile
       VERIFIED in 4.1s; 0 model calls; the system of record holds 1 record(s)
@@ -59,11 +59,16 @@ VERIFIED: <out>/run/REPORT.md
   metering class  billable (this local tutorial was not reported or charged)
   profile         standard
   model calls     0
-  effects         2/2 confirmed at evidence tier 1 (independent system of record)
+  effects         2/2 confirmed by an independent system-of-record read (Seal Oracle tier 2)
 ```
 
-That's real output from 1.34.0, run on macOS on 2026-08-28, with the run
-directory shortened and the receipt paths cut. Now break it on purpose:
+That output comes from the bundled MockMed fixture. Its compiler can propose
+an effect contract because the fixture exposes an observed record delta. A
+real deployment must review the proposed contract or declare it directly, then
+configure the independent verifier described in
+[`docs/EFFECT_KIT.md`](docs/EFFECT_KIT.md). The sample run used version 1.34.0
+on macOS on 2026-08-28. The path is shorter here, and the receipt paths are
+not shown. Now break it on purpose:
 
 ```bash
 openadapt-flow tutorial --break-it
@@ -479,9 +484,14 @@ episode instead. This package keeps the worker and the HTTP client. See
 ```bash
 git clone https://github.com/OpenAdaptAI/openadapt-flow && cd openadapt-flow
 pip install -e '.[dev]'
-playwright install chromium   # optional; otherwise downloaded on first launch
+python -m playwright install chromium  # optional browser pre-provisioning
 pytest -q
 ```
+
+On Linux, Flow checks the Chromium host libraries before an automatic browser
+download. A minimal host may need a one-time system-library install. Flow stops
+before the download and prints a command for the exact Python environment that
+runs it.
 
 Contributions welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). If you want a
 first one that is genuinely useful: pick a module off the mypy type-debt

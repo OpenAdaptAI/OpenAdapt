@@ -92,11 +92,14 @@ one-command rollback). See [`REPAIR_LIFECYCLE.md`](REPAIR_LIFECYCLE.md).
 
 The base `openadapt-flow` package stays lightweight for native desktop, RDP,
 and Citrix runners. The `browser` extra adds Playwright only for web workflows;
-the first browser command then downloads its matching Chromium build once
-(about 150 MB), with no separate `playwright install chromium` step. Prefer the
-canonical `pip install 'openadapt[browser]'` launcher path for normal use. In
-air-gapped or CI environments that pre-provision the browser, set
-`OPENADAPT_FLOW_NO_AUTO_INSTALL=1` to disable the auto-download.
+the first browser command checks its Linux host libraries and then downloads
+the matching Chromium build once (about 150 MB). A minimal Linux host may need
+Playwright's one-time system-library install. Flow stops before the browser
+download and prints a command bound to the exact Python environment that runs
+it. Playwright requests administrator access if the system package manager
+needs it. Prefer the canonical `pip install 'openadapt[browser]'` launcher path
+for normal use. In air-gapped or CI environments that pre-provision the
+browser, set `OPENADAPT_FLOW_NO_AUTO_INSTALL=1` to disable the auto-download.
 
 The weekly clean-machine test runs this complete install-to-uninstall journey
 on Linux, macOS, and Windows. See the

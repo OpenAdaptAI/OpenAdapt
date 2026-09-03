@@ -1380,10 +1380,20 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
     print(f"  metering class  {metering_class} ({local_charge})")
     print(f"  profile         {result.execution_profile}")
     print(f"  model calls     {result.model_calls}")
+    from openadapt_flow.verification import oracle_tier_from_verification_tier
+
+    effect_summary = (
+        "no qualifying independent proof"
+        if result.effect_tier is None
+        else (
+            "confirmed by an independent system-of-record read "
+            f"(Seal Oracle tier "
+            f"{oracle_tier_from_verification_tier(result.effect_tier)})"
+        )
+    )
     print(
         f"  effects         {result.effects_confirmed}/{result.effects_required} "
-        f"confirmed at evidence tier {result.effect_tier} "
-        "(independent system of record)"
+        f"{effect_summary}"
     )
     print(f"  bundle digest   {result.bundle_digest}")
     if result.receipt_paths:

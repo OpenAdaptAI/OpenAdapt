@@ -567,14 +567,15 @@ def run_tutorial(
                 presentation_delay_s=delay,
             )
 
-        say("[2/5] Compile, mining the effect contract from the observed delta")
+        say("[2/5] Compile and propose a fixture-specific effect contract")
         workflow = compile_recording(
             recording_dir, bundle_dir, name=name, mine_effects=True
         )
         save = consequential_step(workflow)
         say(
-            f"      {len(save.effects)} system-of-record effect(s) derived from "
-            f"the demonstration's record delta on {save.id}"
+            f"      {len(save.effects)} system-of-record effect proposal(s) "
+            f"derived from the fixture's record delta on {save.id}; review "
+            "is required for a real deployment"
         )
 
         say(f"[3/5] Certify against the {TUTORIAL_POLICY} policy")

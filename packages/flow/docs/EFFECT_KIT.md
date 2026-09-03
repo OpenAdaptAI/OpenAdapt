@@ -30,8 +30,8 @@ from the reference apps.
    `deployment.yaml` wires one `EffectVerifier` (REST / GraphQL / FHIR / SQL /
    file / email / document / document-hash, or a registered plugin adapter)
    plus its secret-isolated auth. When more than one reviewed read boundary is
-   available, `candidates:` selects the strongest evidence tier for each resolved
-   effect before input. It does not downgrade after input. An unavailable
+   available, `candidates:` selects the strongest verification class for each
+   resolved effect before input. It does not downgrade after input. An unavailable
    selected proof halts or enters reconciliation.
 3. **The runtime refuses to guess.** Every verdict is CONFIRMED / REFUTED /
    INDETERMINATE; both non-confirmed verdicts HALT. A step that declares
@@ -175,8 +175,8 @@ resume, attended qualified read-back) refuse it rather than judge it against a
 synthesized empty baseline.
 
 **Backward compatibility and the honest boundary.** This kind is **additive
-and opt-in**. Flow contracts are operator-authored — there is no derivation
-step that could turn the guard on for you — so every contract written before
+and opt-in**. Flow contracts are operator-authored. There is no derivation
+step that can turn the guard on for you. Thus, every contract written before
 this option judges **exactly** as it did before, and its `contract_hash` is
 byte-identical (the new fields enter the digest only on the new kind).
 The boundary follows directly: **an existing contract does not detect an
@@ -250,24 +250,29 @@ screen read-back as proof of a consequential write.
 
 For more than one reviewed boundary, use `effects.candidates` instead of
 `effects.kind`. Each candidate has the normal `EffectsConfig` fields. Flow
-constructs every candidate before actuation, then selects the lowest numeric
-`VerificationTier` for each resolved effect; declaration order resolves a tie.
-This makes the choice deterministic and reviewable. A missing secret, an
-invalid config, or an invalid plugin tier refuses the run before input. The
-on-screen candidate is tier 3 only for that exact effect when its read-back
-reopens persisted state through a different path. It is tier 4 for a
-same-surface read-back. After the action, Flow does not fall back to a weaker
+constructs every candidate before actuation, then selects the strongest
+`VerificationTier` enum member for each resolved effect; declaration order
+resolves a tie. `VerificationTier` is a persisted Flow v1 implementation field.
+Do not present its numeric value as a Seal Oracle tier. Public receipts use one
+ladder: Oracle tier 0 is visual evidence, tier 1 is a separate read-only
+session, tier 2 is a system-of-record read, and tier 3 is a counterparty
+acknowledgment. This makes the choice deterministic and reviewable. A missing
+secret, invalid config, or invalid plugin verification class refuses the run
+before input. The on-screen candidate uses
+`PERSISTED_STATE_REACQUISITION` only for that exact effect when its read-back
+reopens persisted state through a different path. It uses `IMMEDIATE_SCREEN`
+for a same-surface read-back. After the action, Flow does not fall back to a weaker
 candidate if the selected verifier is unavailable. It records the unavailable
 proof and halts or creates the normal reconciliation task.
 
 ```yaml
 effects:
   candidates:
-    - kind: document             # independent export arrival (tier 1)
+    - kind: document             # independent system-of-record export
       root: /secure/exports
       file_pattern: "confirmation-*.json"
       document_format: json
-    - kind: onscreen             # lower-tier persisted-state read-back
+    - kind: onscreen             # persisted-state read-back
 ```
 
 The single `kind:` form remains the recommended configuration when one

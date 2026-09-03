@@ -70,6 +70,25 @@ class VerificationTier(IntEnum):
         return int(self) <= int(VerificationTier.INDEPENDENT_SESSION)
 
 
+def oracle_tier_from_verification_tier(
+    tier: VerificationTier | int,
+) -> int:
+    """Map the legacy Flow verifier rank to the public Seal oracle ladder.
+
+    ``VerificationTier`` is a persisted Flow v1 field where lower numbers are
+    stronger. Public receipts use the Seal ladder, where higher numbers are
+    stronger. Keep this conversion at the boundary instead of presenting the
+    two incompatible number systems to an operator.
+    """
+
+    value = VerificationTier(tier)
+    if value is VerificationTier.INDEPENDENT_SYSTEM:
+        return 2
+    if value is VerificationTier.INDEPENDENT_SESSION:
+        return 1
+    return 0
+
+
 #: Production ``VERIFIED`` requires this floor or stronger (lower int).
 #: The Standard *gate* still admits persisted-state read-back so a
 #: pixel-only run can execute with halt-on-doubt; the outcome classifier

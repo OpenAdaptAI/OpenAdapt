@@ -285,10 +285,59 @@ def test_missing_system_libs_abort_before_any_download(monkeypatch):
 
     msg = str(exc.value)
     assert "nss3" in msg
-    assert "playwright install-deps chromium" in msg  # exact primary remedy
+    assert "-m playwright install-deps chromium" in msg
+    assert "sudo python -m playwright" not in msg
+    assert "requests administrator access" in msg
     assert "apt-get install" in msg  # apt alternative line
     assert "Nothing was downloaded" in msg
     assert calls == []
+
+
+def test_linux_remedy_quotes_the_exact_python_environment(monkeypatch):
+    """The remedy survives spaces and does not depend on a PATH entry."""
+    monkeypatch.setattr(bs.sys, "executable", "/opt/OpenAdapt Tool/bin/python3")
+    monkeypatch.setattr(bs, "_missing_chromium_system_libs", lambda: ["nss3"])
+
+    with pytest.raises(RuntimeError) as exc:
+        bs._require_linux_system_libs()
+
+    msg = str(exc.value)
+    assert (
+        "'/opt/OpenAdapt Tool/bin/python3' -m playwright install-deps chromium" in msg
+    )
+    assert "sudo python" not in msg
+
+
+def test_browser_download_failure_uses_the_exact_python_environment(monkeypatch):
+    """The CDN remedy must work when Playwright is not exposed on PATH."""
+    monkeypatch.setattr(bs.sys, "executable", "/opt/OpenAdapt Tool/bin/python3")
+    monkeypatch.setattr(bs, "_chromium_present", lambda: False)
+    monkeypatch.setattr(bs, "_missing_chromium_system_libs", lambda: [])
+
+    def fail_download(*_args, **_kwargs):
+        raise bs.subprocess.CalledProcessError(1, "playwright")
+
+    monkeypatch.setattr(bs.subprocess, "run", fail_download)
+
+    with pytest.raises(RuntimeError) as exc:
+        bs._install_chromium()
+
+    assert "'/opt/OpenAdapt Tool/bin/python3' -m playwright install chromium" in str(
+        exc.value
+    )
+
+
+def test_public_setup_copy_states_the_linux_dependency_boundary():
+    """README and tutorial do not promise an unconditional first download."""
+    root = Path(__file__).parents[1]
+    readme = (root / "README.md").read_text()
+    tutorial = (root / "docs" / "TUTORIAL.md").read_text()
+
+    assert "checks the Chromium host libraries before" in readme
+    assert "A minimal Linux host may need" in tutorial
+    assert "exact Python environment" in readme
+    assert "exact Python environment" in tutorial
+    assert "sudo python -m playwright" not in readme + tutorial
 
 
 def test_present_system_libs_do_not_block_install(monkeypatch):

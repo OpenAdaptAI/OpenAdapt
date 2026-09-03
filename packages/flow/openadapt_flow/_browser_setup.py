@@ -32,6 +32,7 @@ import ctypes.util
 import importlib.util
 import os
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -112,6 +113,11 @@ _LINUX_APT_PACKAGES = (
 )
 
 
+def _playwright_module_command(*args: str) -> str:
+    """Return a copyable Playwright command for this exact Python environment."""
+    return shlex.join([sys.executable, "-m", "playwright", *args])
+
+
 def _missing_chromium_system_libs() -> list[str]:
     """Return the Chromium shared libraries missing on this Linux machine.
 
@@ -139,11 +145,14 @@ def _require_linux_system_libs() -> None:
     if not missing:
         return
     libs = ", ".join(missing)
+    install_deps = _playwright_module_command("install-deps", "chromium")
     raise RuntimeError(
         "Chromium cannot launch on this machine yet: required system "
         f"libraries are missing ({libs}).\n\n"
-        "Install them once with:\n\n"
-        "    sudo python -m playwright install-deps chromium\n\n"
+        "Install them once with the same Python environment that runs "
+        "OpenAdapt. Playwright requests administrator access if the system "
+        "package manager needs it:\n\n"
+        f"    {install_deps}\n\n"
         "or, on Debian/Ubuntu:\n\n"
         f"    sudo apt-get install -y {_LINUX_APT_PACKAGES}\n\n"
         "Then run your command again. Nothing was downloaded."
@@ -205,10 +214,11 @@ def _install_chromium() -> None:
             check=True,
         )
     except (subprocess.CalledProcessError, OSError) as exc:
+        install_browser = _playwright_module_command("install", "chromium")
         raise RuntimeError(
             "openadapt-flow could not automatically download the Chromium "
             "browser it needs. To install it manually, run:\n\n"
-            "    playwright install chromium\n\n"
+            f"    {install_browser}\n\n"
             "If you are behind a corporate proxy or firewall that blocks the "
             "Playwright download CDN, set HTTPS_PROXY first "
             "(for example: export HTTPS_PROXY=http://proxy.example.com:8080) "
