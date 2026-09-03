@@ -103,9 +103,9 @@ python verify-openadapt-native-release.py --directory . --manifest SHA256SUMS
 ```
 
 The final helper refuses missing, extra, linked, non-regular, duplicate, or
-digest-mismatched files. The canonical engine release also publishes an
-attested `openadapt-desktop-verified-release.json`. The `desktop-channel`
-release carries the attested, strictly monotonic
+digest-mismatched files. After a native release succeeds, the canonical engine
+release also publishes an attested `openadapt-desktop-verified-release.json`.
+The `desktop-channel` release then carries the attested, strictly monotonic
 `openadapt-desktop-channel.json` candidate index. This closed chain
 identifies the exact native tag, engine release, source commits, workflow run,
 checksum digest, and complete asset set. A download service must verify this

@@ -19,7 +19,7 @@ imply Production acceptance before central activation.
 
 | Lane | Tag | Trigger | Marked as | Assets |
 | --- | --- | --- | --- | --- |
-| Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from reviewed, green `main` | Regular release ("Latest") | Wheel, sdist, an attested engine-release provenance receipt, PyPI publish attestations, **and a mirrored copy of the matching `desktop-vX.Y.Z` installer set** |
+| Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from reviewed, green `main` | Regular release ("Latest") | Wheel, sdist, an attested engine-release provenance receipt, and PyPI publish attestations. A later successful native release mirrors its matching installer set here. |
 | Native installers | `desktop-vX.Y.Z` | Explicit `Native Installer Release` dispatch from reviewed, green `main` | Published **prerelease candidate** | Candidate installers, platform metadata, SBOM, website manifest, signed build provenance, and `SHA256SUMS` |
 | Candidate native channel | `desktop-channel` | Final candidate-index step in the same native dispatch | Published **prerelease index** | The attested, strictly monotonic `openadapt-desktop-channel.json` descriptor |
 | Production derived cache | `desktop-production-channel` | Separate manual dispatch after central admission activation | Published **prerelease cache** | One append-only descriptor for each exact active central admission |
@@ -32,11 +32,18 @@ attestation over the exact Linux DEB and AppImage bytes; see
 [docs/RELEASE_CANDIDATE_INSTALLERS.md](docs/RELEASE_CANDIDATE_INSTALLERS.md)
 for the verification scope and signing states.
 
+The current `v0.16.0` release contains the engine wheel, sdist, publish
+attestations, and engine provenance receipt. It has no native installers. There
+is no matching `desktop-v0.16.0` release or `desktop-channel` index. The older
+`desktop-v0.15.0` packages remain ad-hoc or unsigned and are not trusted
+downloads.
+
 ## Which release should I download?
 
 - **Python package / CLI**: install from PyPI (`pip install openadapt-desktop`)
   or take the wheel from the newest `vX.Y.Z` release.
-- **Native installer candidate**: use the `vX.Y.Z` engine release selected by the
+- **Native installer candidate**: there is no trusted candidate now. After a
+  native release succeeds, use the `vX.Y.Z` engine release selected by the
   attested `openadapt-desktop-verified-release.json` channel index. The index
   binds the matching `desktop-vX.Y.Z` source release and the identical mirrored
   bytes. Authenticate `SHA256SUMS`, then verify its exact inventory. Do not use
@@ -44,9 +51,9 @@ for the verification scope and signing states.
 
 ### The "Latest" installer path
 
-GitHub's `/releases/latest` excludes prereleases by definition, so it always
-resolves to an engine release. That link is the one cited in launch material, so
-it must not dead-end.
+GitHub's `/releases/latest` excludes prereleases by definition, so it resolves
+to an engine release. It contains only the Python artifacts until the matching
+native release succeeds.
 
 Two mechanisms keep it working. Both run after publication in the same
 reviewed-main `native-release.yml` transaction:
@@ -55,7 +62,7 @@ reviewed-main `native-release.yml` transaction:
    from `desktop-vX.Y.Z` onto `vX.Y.Z`. Before any write, it verifies the exact
    asset inventory against the signed GitHub attestation, workflow, source
    commit, and run attempt.
-   `/releases/latest` therefore carries a verified installer, not just a link.
+   After this job succeeds, `/releases/latest` carries a verified installer.
 2. **`point-engine-release`** prepends a marker-delimited pointer block at the
    top of the engine release notes:
 
@@ -94,9 +101,9 @@ addressed directly instead of by withholding the artifact:
   `<!-- installer-release -->` marker, so the machine-readable selection rule
   below is unchanged and download-page consumers keep resolving `desktop-v*`.
 
-`desktop-vX.Y.Z` therefore remains the canonical installer release. Its build
-provenance, attestations, and supersession notices stay bound to it. `vX.Y.Z`
-carries a byte-identical convenience copy.
+`desktop-vX.Y.Z` remains the canonical installer release. Its build provenance,
+attestations, and supersession notices stay bound to it. After a native release
+succeeds, `vX.Y.Z` carries a byte-identical convenience copy.
 
 ## Freshness automation
 
@@ -255,13 +262,13 @@ channel, the repository can simplify the two upload targets:
 
 1. The native build workflow attaches its attested installer assets to the
    canonical `vX.Y.Z` engine release *instead of* also creating a separate
-   `desktop-v*` prerelease. (Step 1 is already half-done: `vX.Y.Z` carries the
-   assets today via `mirror-installers-to-engine-release`. What remains is
-   retiring the second upload target, not adding the first.)
+   `desktop-v*` prerelease. The current mirror job can prove this path after the
+   first trusted native release succeeds.
 2. The `desktop-v*` prerelease lane retires; existing `desktop-v*` prereleases
    remain as historical, superseded records.
 3. The `<!-- installer-release -->` marker moves to `vX.Y.Z` with the assets,
    and the pointer/mirror jobs retire with the lane.
 
-Until then, the freshness automation above keeps the two lanes at the same
-version.
+Until then, the freshness automation keeps the native source version aligned
+with the engine. The signing gate can still leave an engine release without a
+matching native release.

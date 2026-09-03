@@ -111,6 +111,20 @@ def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:
     assert hard_coded_version_claim.search(normalized) is None
 
 
+def test_release_docs_do_not_claim_installers_before_native_release() -> None:
+    policy = (ROOT / "RELEASES.md").read_text(encoding="utf-8")
+    normalized_policy = " ".join(policy.split())
+    candidates = (ROOT / "docs" / "RELEASE_CANDIDATE_INSTALLERS.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "It has no native installers" in policy
+    assert "there is no trusted candidate now" in policy
+    assert "until the matching native release succeeds" in normalized_policy
+    assert "After a native release succeeds" in candidates
+    assert "vX.Y.Z carries the assets today" not in policy
+
+
 def test_semantic_release_preserves_pre_one_versions() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     release = pyproject["tool"]["semantic_release"]
