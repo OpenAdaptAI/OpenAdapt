@@ -1,26 +1,24 @@
 {
   "$defs": {
     "RewardCalibrationScopeV1": {
-      "description": "What corpus the certificate was calibrated against.\n\n``synthetic`` is the only scope anyone can compute today.  ``production``\nrequires the Phase-1 calibration, which is not published.  A consumer\nmust show the scope beside the word certified.",
+      "description": "What corpus the certificate was calibrated against.\n\n``synthetic`` is the only member.  A production scope would assert that\nthe bound came from the Phase-1 calibration on a real corpus, and nothing\nin this package can check that assertion, so the value does not exist\nhere.  Widening the enum later is backward compatible; a consumer must\nshow the scope beside the word certified either way.",
       "enum": [
-        "synthetic",
-        "production"
+        "synthetic"
       ],
       "title": "RewardCalibrationScopeV1",
       "type": "string"
     },
     "RewardCertificateIssuerV1": {
-      "description": "Who signed the certificate.\n\n``self_signed`` is a certificate the trainer computed for itself.  It may\ncarry only ``synthetic`` scope.  ``organization`` is an organization node\nthat holds the calibration corpus and the signing key.",
+      "description": "Who signed the certificate.\n\n``self_signed`` is the only member: a certificate the holder computed for\nitself.  An organization issuer would assert an identity, and there is no\nissuer key registry to resolve ``issuer_key_id`` against, so that value\ndoes not exist here.  The enum keeps its shape so a registry can add a\nmember without changing the field.",
       "enum": [
-        "self_signed",
-        "organization"
+        "self_signed"
       ],
       "title": "RewardCertificateIssuerV1",
       "type": "string"
     }
   },
   "additionalProperties": false,
-  "description": "A signed, expiring bound on one reward contract's false-accept rate.\n\nExpiry counts policy updates, not wall-clock time.  A certificate issued\nat update ``i`` with expiry ``n`` is current for updates ``i`` through\n``i + n - 1``.  Revocation is a separate list keyed by ``certificate_id``\nand is checked by the issuer, as it is for every other admission.",
+  "description": "An expiring bound on one reward contract's false-accept rate.\n\nExpiry counts policy updates, not wall-clock time.  A certificate issued\nat update ``i`` with expiry ``n`` is current for updates ``i`` through\n``i + n - 1``.  Expiry is the only withdrawal mechanism in this version.\nThere is no revocation list and nothing here checks one.\n\n``signature`` is validated for base64 encoding and ed25519 length only.\nThis package holds no issuer key registry, so it cannot say whether\n``issuer_key_id`` names a key anyone trusts.  A consumer that needs issuer\nidentity verifies the signature itself against a key it already holds.\nUntil such a registry exists, ``issuer`` and ``calibration_scope`` each\ncarry exactly one admissible value.",
   "properties": {
     "calibration_corpus_digest": {
       "pattern": "^sha256:[a-f0-9]{64}$",

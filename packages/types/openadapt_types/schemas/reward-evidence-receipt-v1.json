@@ -1,10 +1,9 @@
 {
   "$defs": {
     "RewardCalibrationScopeV1": {
-      "description": "What corpus the certificate was calibrated against.\n\n``synthetic`` is the only scope anyone can compute today.  ``production``\nrequires the Phase-1 calibration, which is not published.  A consumer\nmust show the scope beside the word certified.",
+      "description": "What corpus the certificate was calibrated against.\n\n``synthetic`` is the only member.  A production scope would assert that\nthe bound came from the Phase-1 calibration on a real corpus, and nothing\nin this package can check that assertion, so the value does not exist\nhere.  Widening the enum later is backward compatible; a consumer must\nshow the scope beside the word certified either way.",
       "enum": [
-        "synthetic",
-        "production"
+        "synthetic"
       ],
       "title": "RewardCalibrationScopeV1",
       "type": "string"

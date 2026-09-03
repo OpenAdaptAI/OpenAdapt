@@ -278,7 +278,9 @@ def test_every_outcome_has_exactly_one_scoring_class() -> None:
 
 @pytest.mark.parametrize("outcome", sorted(UNSCORED_REWARD_OUTCOMES, key=str))
 def test_unscored_outcomes_never_become_zero(outcome: RewardOutcomeV1) -> None:
-    scalar, certified, development_only = score(outcome, 2, _certificate(), 120)
+    scalar, certified, development_only, refusals = score(
+        outcome, 2, _certificate(), 120, contract=_contract()
+    )
     assert scalar is None
     assert certified is True
     assert development_only is False
@@ -286,30 +288,44 @@ def test_unscored_outcomes_never_become_zero(outcome: RewardOutcomeV1) -> None:
 
 
 def test_verified_yields_the_admitted_positive_reward() -> None:
-    scalar, certified, development_only = score(
-        RewardOutcomeV1.VERIFIED, 3, _certificate(), 120
+    scalar, certified, development_only, refusals = score(
+        RewardOutcomeV1.VERIFIED, 3, _certificate(), 120, contract=_contract()
     )
     assert scalar == 1.0
     assert certified and not development_only
+    assert refusals == ()
 
-    custom = RewardScoringPolicyV1(verified_reward=2.5, wrong_effect_reward=-3.0)
-    assert score(RewardOutcomeV1.VERIFIED, 2, None, 0, scoring=custom).scalar == 2.5
-    assert score(RewardOutcomeV1.WRONG_EFFECT, 2, None, 0, scoring=custom).scalar == -3.0
+    custom = _contract_payload()
+    custom["scoring"] = {"verified_reward": 2.5, "wrong_effect_reward": -3.0}
+    contract = RewardContractV1.model_validate(custom)
+    assert score(RewardOutcomeV1.VERIFIED, 2, None, 0, contract=contract).scalar == 2.5
+    assert (
+        score(RewardOutcomeV1.WRONG_EFFECT, 2, None, 0, contract=contract).scalar == -3.0
+    )
 
 
 def test_halt_and_rejection_yield_zero_or_declared_penalty() -> None:
-    assert score(RewardOutcomeV1.HALTED_BEFORE_EFFECT, 2, None, 0).scalar == 0.0
-    assert score(RewardOutcomeV1.REJECTED_POLICY, 2, None, 0).scalar == 0.0
-    assert score(RewardOutcomeV1.REFUSED, 2, None, 0).scalar == 0.0
-    penalised = RewardScoringPolicyV1(
-        halted_before_effect_reward=-0.1, rejected_policy_reward=-0.5
-    )
+    plain = _contract()
     assert (
-        score(RewardOutcomeV1.HALTED_BEFORE_EFFECT, 2, None, 0, scoring=penalised).scalar
+        score(RewardOutcomeV1.HALTED_BEFORE_EFFECT, 2, None, 0, contract=plain).scalar
+        == 0.0
+    )
+    assert score(RewardOutcomeV1.REJECTED_POLICY, 2, None, 0, contract=plain).scalar == 0.0
+    assert score(RewardOutcomeV1.REFUSED, 2, None, 0, contract=plain).scalar == 0.0
+    payload = _contract_payload()
+    payload["scoring"] = {
+        "halted_before_effect_reward": -0.1,
+        "rejected_policy_reward": -0.5,
+    }
+    penalised = RewardContractV1.model_validate(payload)
+    assert (
+        score(
+            RewardOutcomeV1.HALTED_BEFORE_EFFECT, 2, None, 0, contract=penalised
+        ).scalar
         == -0.1
     )
     assert (
-        score(RewardOutcomeV1.REJECTED_POLICY, 2, None, 0, scoring=penalised).scalar
+        score(RewardOutcomeV1.REJECTED_POLICY, 2, None, 0, contract=penalised).scalar
         == -0.5
     )
 
@@ -317,8 +333,8 @@ def test_halt_and_rejection_yield_zero_or_declared_penalty() -> None:
 def test_tier_zero_and_one_are_development_only_and_never_certified() -> None:
     certificate = _certificate()
     for tier in (0, 1):
-        scalar, certified, development_only = score(
-            RewardOutcomeV1.VERIFIED, tier, certificate, 120
+        scalar, certified, development_only, _ = score(
+            RewardOutcomeV1.VERIFIED, tier, certificate, 120, contract=_contract()
         )
         assert scalar == 1.0
         assert certified is False
@@ -330,11 +346,18 @@ def test_tier_zero_and_one_are_development_only_and_never_certified() -> None:
 
 def test_expired_or_absent_certificate_is_not_certified() -> None:
     certificate = _certificate()
-    assert score(RewardOutcomeV1.VERIFIED, 2, certificate, 150).certified is False
-    assert score(RewardOutcomeV1.VERIFIED, 2, certificate, 99).certified is False
-    assert score(RewardOutcomeV1.VERIFIED, 2, None, 120).certified is False
+    contract = _contract()
+    expired = score(RewardOutcomeV1.VERIFIED, 2, certificate, 150, contract=contract)
+    assert expired.certified is False
+    assert "expired" in expired.certification_refusals[0]
+    early = score(RewardOutcomeV1.VERIFIED, 2, certificate, 99, contract=contract)
+    assert early.certified is False
+    assert "not_yet_valid" in early.certification_refusals[0]
+    absent = score(RewardOutcomeV1.VERIFIED, 2, None, 120, contract=contract)
+    assert absent.certified is False
+    assert absent.certification_refusals == ("no reward certificate was presented",)
     with pytest.raises(ValueError, match="non-negative"):
-        score(RewardOutcomeV1.VERIFIED, 2, certificate, -1)
+        score(RewardOutcomeV1.VERIFIED, 2, certificate, -1, contract=contract)
 
 
 # --- receipt ----------------------------------------------------------------
@@ -456,14 +479,29 @@ def test_receipt_uncertainty_states_are_closed() -> None:
 # --- calibration scope ------------------------------------------------------
 
 
-def test_self_signed_certificate_refuses_production_scope() -> None:
-    with pytest.raises(ValidationError, match="self-signed.*synthetic scope"):
-        _certificate(issuer="self_signed", calibration_scope="production")
+def test_production_scope_is_unrepresentable() -> None:
+    """The reviewer's reproduction: `issuer=organization` bought production scope."""
+
+    for issuer in ("self_signed", "organization"):
+        with pytest.raises(ValidationError, match="calibration_scope"):
+            _certificate(issuer=issuer, calibration_scope="production")
+    assert {item.value for item in RewardCalibrationScopeV1} == {"synthetic"}
+
     synthetic = _certificate(issuer="self_signed", calibration_scope="synthetic")
     assert synthetic.issuer is RewardCertificateIssuerV1.SELF_SIGNED
     assert synthetic.calibration_scope is RewardCalibrationScopeV1.SYNTHETIC
-    organization = _certificate(issuer="organization", calibration_scope="production")
-    assert organization.calibration_scope is RewardCalibrationScopeV1.PRODUCTION
+
+
+def test_an_unverifiable_issuer_identity_is_unrepresentable() -> None:
+    with pytest.raises(ValidationError, match="issuer"):
+        _certificate(issuer="organization")
+    assert {item.value for item in RewardCertificateIssuerV1} == {"self_signed"}
+
+
+def test_no_receipt_claims_a_production_scope() -> None:
+    with pytest.raises(ValidationError, match="calibration_scope"):
+        _receipt(calibration_scope="production")
+    assert not hasattr(RewardEvidenceReceiptV1, "production_certified")
 
 
 def test_certified_requires_corpus_digest_and_stated_scope() -> None:
@@ -477,13 +515,96 @@ def test_certified_requires_corpus_digest_and_stated_scope() -> None:
     receipt = _receipt()
     assert receipt.certified is True
     assert receipt.calibration_scope is RewardCalibrationScopeV1.SYNTHETIC
-    assert receipt.production_certified is False
-    production = _receipt(calibration_scope="production")
-    assert production.production_certified is True
 
-    scored = score(RewardOutcomeV1.VERIFIED, 2, _certificate(), 120)
+    scored = score(RewardOutcomeV1.VERIFIED, 2, _certificate(), 120, contract=_contract())
     assert scored.certified is True
     assert _certificate().calibration_scope is RewardCalibrationScopeV1.SYNTHETIC
+
+
+# --- the contract's own certificate policy is enforced ----------------------
+
+
+def test_a_certificate_weaker_than_the_contract_is_not_certified() -> None:
+    """The reviewer's reproduction: epsilon 0.248885 against a contract of 0.05."""
+
+    contract = _contract()
+    weak = _certificate(epsilon=0.248885)
+    assert weak.satisfies(contract.certificate_policy) is False
+    scored = score(RewardOutcomeV1.VERIFIED, 2, weak, 120, contract=contract)
+    assert scored.certified is False
+    assert scored.scalar == 1.0
+    assert scored.certification_refusals == (
+        "certificate epsilon 0.248885 exceeds the contract's 0.0114",
+    )
+
+
+def test_every_shortfall_against_the_contract_policy_is_named() -> None:
+    contract = _contract()
+    assert _certificate().unmet(contract.certificate_policy) == ()
+    cases = {
+        "delta": ({"delta": 0.5}, "certificate delta 0.5 exceeds"),
+        "threshold": ({"threshold": 0.9}, "is not the contract's 0.5"),
+        "corpus": (
+            {"calibration_corpus_digest": _OTHER_DIGEST},
+            "names a calibration corpus the contract does not",
+        ),
+        "expiry": ({"expiry_policy_updates": 51}, "certificate expiry 51 policy updates"),
+    }
+    for updates, fragment in cases.values():
+        certificate = _certificate(**updates)
+        reasons = certificate.unmet(contract.certificate_policy)
+        assert any(fragment in reason for reason in reasons), reasons
+        assert certificate.satisfies(contract.certificate_policy) is False
+        assert (
+            score(
+                RewardOutcomeV1.VERIFIED, 2, certificate, 120, contract=contract
+            ).certified
+            is False
+        )
+
+
+def test_a_certificate_for_another_contract_is_not_certified() -> None:
+    payload = _contract_payload()
+    payload["task_id"] = "task.reference.0002"
+    other = RewardContractV1.model_validate(payload)
+    scored = score(RewardOutcomeV1.VERIFIED, 2, _certificate(), 120, contract=other)
+    assert scored.certified is False
+    assert "different reward contract" in scored.certification_refusals[0]
+
+
+def test_a_receipt_rechecks_its_own_certified_flag() -> None:
+    contract = _contract()
+    assert _receipt().certification_refusals(contract, _certificate()) == ()
+
+    weak = _certificate(epsilon=0.248885)
+    hand_built = _receipt(certificate_digest=weak.digest)
+    refusals = hand_built.certification_refusals(contract, weak)
+    assert refusals == ("certificate epsilon 0.248885 exceeds the contract's 0.0114",)
+
+    payload = _contract_payload()
+    payload["task_id"] = "task.reference.0002"
+    other = RewardContractV1.model_validate(payload)
+    assert _receipt().certification_refusals(other, _certificate()) == (
+        "the receipt names a different reward contract",
+        "the certificate names a different reward contract",
+    )
+    assert _receipt().certification_refusals(contract, None) == (
+        "the receipt references a certificate that was not given",
+        "no reward certificate was presented",
+    )
+
+
+def test_the_package_offers_no_revocation_check() -> None:
+    """The docstrings described revocation as existing.  Nothing implements it."""
+
+    import openadapt_types.reward as module
+
+    assert not [name for name in dir(module) if "revo" in name.lower()]
+    assert not [
+        name
+        for name in RewardCertificateV1.model_fields
+        if "revo" in name.lower()
+    ]
 
 
 # --- not an Execute Seal ----------------------------------------------------

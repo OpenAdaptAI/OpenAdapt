@@ -1,9 +1,9 @@
 """Versioned reward contracts for training against verified terminal effects.
 
-A reward receipt reuses the evidence, signature, admission, and revocation
-mechanisms of the Execute contracts.  It states one thing: OpenAdapt verified
-the terminal effect of one episode against one reward contract.  It does not
-state that Flow governed the policy's actions.  It is not an Execute Seal.
+A reward receipt reuses the evidence and signature mechanisms of the Execute
+contracts.  It states one thing: OpenAdapt verified the terminal effect of one
+episode against one reward contract.  It does not state that Flow governed the
+policy's actions.  It is not an Execute Seal.
 
 An arbitrary model rollout never receives ``ExecuteEvidenceReceiptV1``.  A
 production Flow result requires a qualified deterministic program with zero
@@ -17,6 +17,21 @@ distribution-free bound P(false-accept) <= epsilon at confidence 1 - delta,
 calibrated on a corpus that is referenced by digest only, with an expiry
 denominated in policy updates.  The corpus contents, tuned adversary
 parameters, and deployment thresholds stay private.
+
+What this version does NOT do, stated here so no reader infers it:
+
+* There is no issuer key registry, so nothing here can decide whether an
+  ``issuer_key_id`` names a key anyone trusts.  ``signature`` is checked for
+  its encoding and length only.  A consumer that wants issuer identity must
+  verify the signature itself, against a key it already holds.
+* There is no revocation list and no revocation check.  The only way to
+  withdraw a certificate in this version is to let its policy-update expiry
+  run out, or to stop distributing it.
+
+Because neither exists, the contracts refuse the claims that would depend on
+them.  ``calibration_scope`` accepts ``synthetic`` and nothing else, and
+``issuer`` accepts ``self_signed`` and nothing else.  A production-scope
+certificate is unrepresentable in this version, not merely unissued.
 """
 
 from __future__ import annotations
@@ -150,25 +165,27 @@ class RewardUncertaintyStateV1(str, Enum):
 class RewardCalibrationScopeV1(str, Enum):
     """What corpus the certificate was calibrated against.
 
-    ``synthetic`` is the only scope anyone can compute today.  ``production``
-    requires the Phase-1 calibration, which is not published.  A consumer
-    must show the scope beside the word certified.
+    ``synthetic`` is the only member.  A production scope would assert that
+    the bound came from the Phase-1 calibration on a real corpus, and nothing
+    in this package can check that assertion, so the value does not exist
+    here.  Widening the enum later is backward compatible; a consumer must
+    show the scope beside the word certified either way.
     """
 
     SYNTHETIC = "synthetic"
-    PRODUCTION = "production"
 
 
 class RewardCertificateIssuerV1(str, Enum):
     """Who signed the certificate.
 
-    ``self_signed`` is a certificate the trainer computed for itself.  It may
-    carry only ``synthetic`` scope.  ``organization`` is an organization node
-    that holds the calibration corpus and the signing key.
+    ``self_signed`` is the only member: a certificate the holder computed for
+    itself.  An organization issuer would assert an identity, and there is no
+    issuer key registry to resolve ``issuer_key_id`` against, so that value
+    does not exist here.  The enum keeps its shape so a registry can add a
+    member without changing the field.
     """
 
     SELF_SIGNED = "self_signed"
-    ORGANIZATION = "organization"
 
 
 class RewardCertificationRefused(ValueError):
@@ -341,12 +358,19 @@ class RewardContractV1(_StrictContract):
 
 
 class RewardCertificateV1(_StrictContract):
-    """A signed, expiring bound on one reward contract's false-accept rate.
+    """An expiring bound on one reward contract's false-accept rate.
 
     Expiry counts policy updates, not wall-clock time.  A certificate issued
     at update ``i`` with expiry ``n`` is current for updates ``i`` through
-    ``i + n - 1``.  Revocation is a separate list keyed by ``certificate_id``
-    and is checked by the issuer, as it is for every other admission.
+    ``i + n - 1``.  Expiry is the only withdrawal mechanism in this version.
+    There is no revocation list and nothing here checks one.
+
+    ``signature`` is validated for base64 encoding and ed25519 length only.
+    This package holds no issuer key registry, so it cannot say whether
+    ``issuer_key_id`` names a key anyone trusts.  A consumer that needs issuer
+    identity verifies the signature itself against a key it already holds.
+    Until such a registry exists, ``issuer`` and ``calibration_scope`` each
+    carry exactly one admissible value.
     """
 
     schema_version: Literal["openadapt.reward-certificate/v1"] = (
@@ -376,13 +400,6 @@ class RewardCertificateV1(_StrictContract):
     @model_validator(mode="after")
     def _issue_window(self) -> RewardCertificateV1:
         _parse_timestamp(self.issued_at, "issued_at")
-        if (
-            self.issuer is RewardCertificateIssuerV1.SELF_SIGNED
-            and self.calibration_scope is not RewardCalibrationScopeV1.SYNTHETIC
-        ):
-            raise ValueError(
-                "a self-signed reward certificate may only carry synthetic scope"
-            )
         if self.issued_at_policy_update + self.expiry_policy_updates > _MAX_POLICY_UPDATES:
             raise ValueError("reward certificate expiry overflows the update counter")
         return self
@@ -405,16 +422,44 @@ class RewardCertificateV1(_StrictContract):
 
         return self.state_at(policy_update) is RewardCertificateStateV1.CURRENT
 
+    def unmet(self, policy: RewardCertificatePolicyV1) -> tuple[str, ...]:
+        """Every way this certificate falls short of ``policy``, in order.
+
+        An empty tuple means the certificate is at least as strong as the
+        contract asks.  ``score`` reports these strings so a caller learns
+        why a reward was not certified instead of reading a bare ``False``.
+        """
+
+        reasons: list[str] = []
+        if self.epsilon > policy.epsilon:
+            reasons.append(
+                f"certificate epsilon {self.epsilon} exceeds the contract's "
+                f"{policy.epsilon}"
+            )
+        if self.delta > policy.delta:
+            reasons.append(
+                f"certificate delta {self.delta} exceeds the contract's {policy.delta}"
+            )
+        if self.threshold != policy.threshold:
+            reasons.append(
+                f"certificate threshold {self.threshold} is not the contract's "
+                f"{policy.threshold}"
+            )
+        if self.calibration_corpus_digest != policy.calibration_corpus_digest:
+            reasons.append(
+                "certificate names a calibration corpus the contract does not"
+            )
+        if self.expiry_policy_updates > policy.expiry_policy_updates:
+            reasons.append(
+                f"certificate expiry {self.expiry_policy_updates} policy updates "
+                f"exceeds the contract's {policy.expiry_policy_updates}"
+            )
+        return tuple(reasons)
+
     def satisfies(self, policy: RewardCertificatePolicyV1) -> bool:
         """True when this certificate is at least as strong as the policy asks."""
 
-        return (
-            self.epsilon <= policy.epsilon
-            and self.delta <= policy.delta
-            and self.threshold == policy.threshold
-            and self.calibration_corpus_digest == policy.calibration_corpus_digest
-            and self.expiry_policy_updates <= policy.expiry_policy_updates
-        )
+        return not self.unmet(policy)
 
     def unsigned_payload(self) -> dict[str, Any]:
         return self.model_dump(
@@ -441,6 +486,7 @@ class RewardScoreV1(NamedTuple):
     scalar: float | None
     certified: bool
     development_only: bool
+    certification_refusals: tuple[str, ...] = ()
 
 
 def score(
@@ -449,34 +495,50 @@ def score(
     certificate: RewardCertificateV1 | None,
     policy_update: int,
     *,
-    scoring: RewardScoringPolicyV1 = DEFAULT_REWARD_SCORING,
+    contract: RewardContractV1,
 ) -> RewardScoreV1:
     """Score one episode.  Pure.  Never turns an unscored outcome into 0.0.
 
+    The contract is required, and it supplies both halves of the answer: its
+    ``scoring`` maps the outcome to a scalar, and its ``certificate_policy``
+    is the bar the certificate has to clear.  There is no way to score an
+    episode without naming the contract it was scored against, so a caller
+    cannot certify a reward against a policy nobody read.
+
     * ``scalar`` is ``None`` for ``RECONCILIATION_REQUIRED`` and
       ``FAILED_PLATFORM``.  A trainer must drop or hold those episodes.
-    * ``certified`` is true only at tier 2 or 3 with a certificate that is
-      current at ``policy_update``, names its calibration corpus by digest,
-      and states its calibration scope.  A self-signed certificate can state
-      only ``synthetic`` scope, so a self-signed certificate alone never
-      yields a production-scope certification.
+    * ``certified`` is true only at tier 2 or 3 with a certificate that names
+      this contract by digest, is current at ``policy_update``, and satisfies
+      ``contract.certificate_policy``.  Its scope is ``synthetic``, which is
+      the only scope this version can represent.
     * ``development_only`` is true at tier 0 or 1.  A tier-0 reward can train
       a local experiment.  It can never be certified.
+    * ``certification_refusals`` lists every reason ``certified`` is false.
+      It is empty when ``certified`` is true.
     """
 
     if policy_update < 0:
         raise ValueError("policy_update must be non-negative")
     development_only = int(tier) < REWARD_CERTIFIED_MINIMUM_TIER
     state = certificate_state(certificate, policy_update)
-    certified = (
-        not development_only
-        and certificate is not None
-        and state is RewardCertificateStateV1.CURRENT
-        and bool(certificate.calibration_corpus_digest)
-        and certificate.calibration_scope in RewardCalibrationScopeV1
-    )
-    scalar = scoring.scalar_for(RewardOutcomeV1(outcome))
-    return RewardScoreV1(scalar, certified, development_only)
+    refusals: list[str] = []
+    if development_only:
+        refusals.append(
+            f"oracle tier {int(tier)} is development only; "
+            f"certification needs tier {REWARD_CERTIFIED_MINIMUM_TIER} or above"
+        )
+    if certificate is None:
+        refusals.append("no reward certificate was presented")
+    else:
+        if state is not RewardCertificateStateV1.CURRENT:
+            refusals.append(
+                f"the certificate is {state.value} at policy update {policy_update}"
+            )
+        if certificate.reward_contract_digest != contract.digest:
+            refusals.append("the certificate names a different reward contract")
+        refusals.extend(certificate.unmet(contract.certificate_policy))
+    scalar = contract.scoring.scalar_for(RewardOutcomeV1(outcome))
+    return RewardScoreV1(scalar, not refusals, development_only, tuple(refusals))
 
 
 class RewardEvidenceReceiptV1(_StrictContract):
@@ -611,14 +673,38 @@ class RewardEvidenceReceiptV1(_StrictContract):
     def scoring_class(self) -> RewardScoringClassV1:
         return REWARD_SCORING_CLASS[self.reward_outcome]
 
-    @property
-    def production_certified(self) -> bool:
-        """True only for a certified receipt whose scope is ``production``."""
+    def certification_refusals(
+        self,
+        contract: RewardContractV1,
+        certificate: RewardCertificateV1 | None,
+    ) -> tuple[str, ...]:
+        """Recheck this receipt's ``certified`` flag against its own sources.
 
-        return (
-            self.certified
-            and self.calibration_scope is RewardCalibrationScopeV1.PRODUCTION
+        The receipt carries digests, not the contract and certificate
+        themselves, so it cannot check its own ``certified`` flag while it is
+        being validated.  A reader who holds both re-runs the decision here
+        and gets the same refusal strings ``score`` returns, plus any
+        disagreement between the receipt and the pair it was handed.  An
+        empty tuple means the flag is supported by what the reader has.
+        """
+
+        refusals: list[str] = []
+        if self.reward_contract_digest != contract.digest:
+            refusals.append("the receipt names a different reward contract")
+        if certificate is None:
+            if self.certificate_id is not None:
+                refusals.append("the receipt references a certificate that was not given")
+        elif self.certificate_digest != certificate.digest:
+            refusals.append("the receipt references a different certificate")
+        scored = score(
+            self.reward_outcome,
+            self.oracle_tier,
+            certificate,
+            self.policy_update,
+            contract=contract,
         )
+        refusals.extend(scored.certification_refusals)
+        return tuple(dict.fromkeys(refusals))
 
     def unsigned_payload(self) -> dict[str, Any]:
         return self.model_dump(

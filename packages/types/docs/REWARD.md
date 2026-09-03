@@ -25,9 +25,10 @@ in a different order get the same digest.
 `RewardCertificateV1` is the bound: `epsilon`, `delta`, `threshold`, the
 calibration corpus digest, the calibration scope, the checker configuration
 digest, the issuer, the policy update it was issued at, and its expiry in
-policy updates. It is signed. Expiry counts updates, not hours, because
-on-policy training breaks the exchangeability the bound assumes.
-`is_current(policy_update)` answers whether a trainer may still use it.
+policy updates. It carries a signature. Expiry counts updates, not hours,
+because on-policy training breaks the exchangeability the bound assumes.
+`is_current(policy_update)` answers whether a trainer may still use it, and
+`unmet(policy)` lists every way it falls short of a contract's demands.
 
 `RewardEvidenceReceiptV1` binds the contract digest, the policy checkpoint and
 update number, the episode, the oracle tier, the evidence digest, the
@@ -35,20 +36,54 @@ component vector, the scalar, the certificate reference and its state, the
 calibration corpus digest and scope, and two booleans a trainer must read:
 `certified` and `development_only`.
 
-## Synthetic scope is the only scope today
+## Synthetic scope is the only scope this version can express
 
-Today the only certificate anyone can compute is against the synthetic
-MockMed/ExtraDup corpus, so its `calibration_scope` is `synthetic`. A
-`production` scope needs the Phase-1 calibration, which is not published.
-Until that changes, the word "certified" in any public text about a reward
-must sit next to the word "synthetic".
+The only certificate anyone can compute is against the synthetic
+MockMed/ExtraDup corpus, so `calibration_scope` accepts `synthetic` and
+nothing else. A `production` scope needs the Phase-1 calibration, which is not
+published, so the value does not exist in the enum. It is unrepresentable
+rather than merely unissued, and there is no `production_certified` property
+to read. Any public text that calls a reward certified puts the word
+"synthetic" next to it.
 
-The types hold that line. A certificate with `issuer: self_signed` may carry
-only `synthetic` scope; `self_signed` plus `production` does not validate. A
-receipt is `certified` only when the oracle tier is 2 or 3, the certificate is
-current, the calibration corpus digest is present, and the scope is stated.
-`production_certified` is true only when that scope is `production`, which no
-self-signed certificate can reach.
+`issuer` is narrowed the same way, and for the same reason. It accepts
+`self_signed` only. An `organization` issuer would assert an identity, and
+this package holds no issuer key registry, so `issuer_key_id` resolves to
+nothing here. Both enums keep their shape, so a later registry can add a
+member without changing the field.
+
+Two more things this version does not do, said plainly so no reader assumes
+otherwise. Nothing verifies the signature: `RewardCertificateV1` checks that
+`signature` is 64 base64-encoded bytes and stops there, and a consumer that
+wants issuer identity verifies it against a key it already holds. And there is
+no revocation list. Expiry in policy updates is the only way a certificate
+stops being current.
+
+A receipt is `certified` only when the oracle tier is 2 or 3, the certificate
+is current, the calibration corpus digest is present, and the scope is stated.
+The certificate also has to clear the contract that scored the episode, which
+is what the next section covers.
+
+## The contract's own certificate policy is the bar
+
+Every `RewardContractV1` carries a `certificate_policy`: the `epsilon` and
+`delta` it demands, the `threshold` the bound was calibrated at, the corpus it
+was calibrated on, and the longest expiry it accepts. `score()` requires the
+contract, compares the certificate against that policy, and refuses to certify
+an episode when the certificate is weaker. A certificate measured at epsilon
+0.248885 against a contract demanding 0.05 scores its scalar and reports
+`certified` false.
+
+`score()` also refuses a certificate whose `reward_contract_digest` names some
+other contract, so a strong certificate cannot be carried across to a task it
+never covered. Each refusal comes back as a sentence in
+`certification_refusals`, which is empty when `certified` is true.
+
+The receipt stores digests rather than the contract and the certificate
+themselves, so it cannot check its own flag while pydantic validates it. A
+reader who holds both calls
+`receipt.certification_refusals(contract, certificate)` and gets the same
+answer `score()` gave.
 
 ## Outcome to scalar
 
@@ -74,8 +109,8 @@ failure this contract exists to stop.
 | --- | --- | --- |
 | 0 (visual, OCR) | yes | never |
 | 1 (second session) | yes | never |
-| 2 (API, DB, file, ack) | no | with a current certificate, corpus digest, and stated scope |
-| 3 (counterparty) | no | with a current certificate, corpus digest, and stated scope |
+| 2 (API, DB, file, ack) | no | with a current certificate that clears the contract's policy |
+| 3 (counterparty) | no | with a current certificate that clears the contract's policy |
 
 The tier comes from the oracle channel, as it does for every Seal.
 `refuse_development_certification` raises `RewardCertificationRefused` for
@@ -88,18 +123,25 @@ does not validate.
 ```python
 from openadapt_types import RewardOutcomeV1, score
 
-scalar, certified, development_only = score(
+scalar, certified, development_only, refusals = score(
     RewardOutcomeV1.VERIFIED,
     tier=2,
     certificate=certificate,
     policy_update=120,
+    contract=contract,
 )
 ```
+
+The contract is a required keyword. It supplies the scoring policy that turns
+the outcome into `scalar`, and the certificate policy that decides `certified`,
+so there is no way to score an episode without naming what it was scored
+against.
 
 Per episode, a signed `RewardEvidenceReceiptV1`: ids, digests, the tier, the
 outcome, the component vector, the scalar or its absence, and the certificate
 state. The trainer checks `certified` before it counts the episode toward a
-certified arm and drops the episode when `scalar_reward` is `None`.
+certified arm and drops the episode when `scalar_reward` is `None`. When
+`certified` is false, `refusals` says why.
 
 ## What stays on the organization node
 
