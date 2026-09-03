@@ -2,7 +2,7 @@
 
 > OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.
 
-Default runtime interface for a calling agent. Computer-use agents are the user of OpenAdapt. They are not the executor inside it. Never summarize halt as success. Roles: operator (calling agent), authority (named human), auditor (samples seals).
+Default runtime interface for a calling agent. Computer-use agents are the user of OpenAdapt. They are not the executor inside it. Never summarize halt as success. Roles: operator (calling agent), authority (named human admits; a local agent may click while they watch), auditor (samples seals).
 
 ## What it provides
 

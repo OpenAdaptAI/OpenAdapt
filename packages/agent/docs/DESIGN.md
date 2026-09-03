@@ -17,11 +17,13 @@ and audit. The CLI remains. Headless does not mean the UI is gone.
 | Role | Who | What they do |
 |---|---|---|
 | Operator | Calling agent (Claude Code, MCP client, orchestrator) | Discover, bind parameters, invoke, read outcomes |
-| Authority | Named human | Demonstrate once, certify policy, resolve identity / effect / judgment halts |
+| Authority | Named human | Admit the compiled program (watch if the agent clicked), certify policy, resolve identity / effect / judgment halts |
 | Auditor | Compliance | Sample seals, revoke admission |
 
 Computer-use agents are the user of OpenAdapt. They are not the executor
-inside OpenAdapt. Never summarize halt as success.
+inside OpenAdapt. Never summarize halt as success. A local agent may click
+during the demonstration while the person watches. The calling agent must
+not be the sole source of a production demonstration of a novel GUI path.
 
 Halt packets and typed agent-continue (missing parameter / retryable
 transport only) are not in this package yet. Identity, effect, expired

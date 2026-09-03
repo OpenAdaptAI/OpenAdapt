@@ -9,7 +9,7 @@ OpenAdapt compiles demonstrated GUI workflows into programs. This package invoke
 
 `pip install openadapt` includes this package. Point a local MCP client at `openadapt-agent serve --allow-run` and the calling agent can invoke a compiled GUI program on this computer. Healthy runs make no model calls. Flow still runs the program. Policy, identity, verification, pauses, repair, and audit stay in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). `--allow-run` is an explicit opt-in. Admission stays fail-closed.
 
-The calling agent operates. A named human is authority. Compliance samples Seals, and that is a different job than running the program. Computer-use agents are the user of OpenAdapt. They are not the executor inside OpenAdapt.
+The calling agent operates. A named human is authority. They watch if the agent clicked, then they admit. Compliance samples Seals, and that is a different job than running the program. Computer-use agents are the user of OpenAdapt. They are not the executor inside OpenAdapt.
 
 Don't name this skill computer use.
 
