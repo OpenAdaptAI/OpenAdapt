@@ -85,6 +85,117 @@ def test_zero_exit_with_an_unhandled_async_error_fails(tmp_path, monkeypatch):
         )
 
 
+def test_browser_dependency_setup_does_not_download_chromium(tmp_path, monkeypatch):
+    lifecycle = _module()
+    calls = []
+
+    def capture(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="")
+
+    monkeypatch.setattr(lifecycle, "_run", capture)
+    lifecycle._install_browser_system_dependencies(
+        Path("/venv/bin/python"),
+        cwd=tmp_path,
+        env={},
+        log=tmp_path / "browser-deps.log",
+    )
+
+    assert calls == [
+        [
+            "/venv/bin/python",
+            "-m",
+            "playwright",
+            "install-deps",
+            "chromium",
+        ]
+    ]
+
+
+@pytest.mark.parametrize(("output", "expected"), [("absent\n", False), ("present\n", True)])
+def test_browser_probe_reports_exact_install_state(
+    tmp_path, monkeypatch, output, expected
+):
+    lifecycle = _module()
+    monkeypatch.setattr(
+        lifecycle,
+        "_run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(
+            command, 0, stdout=output
+        ),
+    )
+
+    assert (
+        lifecycle._browser_present(
+            Path("/venv/bin/python"),
+            cwd=tmp_path,
+            env={},
+            log=tmp_path / "browser-probe.log",
+        )
+        is expected
+    )
+
+
+def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypatch):
+    lifecycle = _module()
+    launcher_wheel = tmp_path / "openadapt.whl"
+    launcher_wheel.write_bytes(b"launcher")
+    work_dir = tmp_path / "run"
+
+    class FakeEnvironment:
+        def create(self, root):
+            lifecycle._venv_python(root).parent.mkdir(parents=True)
+            lifecycle._venv_python(root).touch()
+            lifecycle._console(root).touch()
+
+    monkeypatch.setattr(
+        lifecycle.venv,
+        "EnvBuilder",
+        lambda **_kwargs: FakeEnvironment(),
+    )
+
+    commands = []
+
+    def successful_run(command, **_kwargs):
+        commands.append(command)
+        output = (
+            lifecycle._LAZY_BROWSER_INSTALL_NOTICE
+            if "quickstart" in command
+            else ""
+        )
+        return subprocess.CompletedProcess(command, 0, stdout=output)
+
+    monkeypatch.setattr(lifecycle, "_run", successful_run)
+    browser_states = iter([False, True])
+    monkeypatch.setattr(lifecycle, "_browser_present", lambda *_a, **_k: next(browser_states))
+    monkeypatch.setattr(
+        lifecycle,
+        "_inspect_quickstart",
+        lambda _root: {"outcome": "VERIFIED"},
+    )
+
+    summary = lifecycle.run_lifecycle(
+        launcher_wheel,
+        work_dir,
+        flow_wheel=None,
+        browser_system_deps=True,
+        source_revision="abc123",
+    )
+
+    assert summary["browser_preflight"] == {
+        "system_dependencies": "installed-via-playwright",
+        "doctor": "passed-before-browser-download",
+        "chromium_present_before_quickstart": False,
+        "chromium_present_after_quickstart": True,
+        "lazy_install_performed": True,
+        "lazy_install_notice_seen": True,
+    }
+    written = json.loads((work_dir / "summary.json").read_text(encoding="utf-8"))
+    assert written["browser_preflight"] == summary["browser_preflight"]
+    assert any("install-deps" in command for command in commands)
+    assert not any("--with-deps" in command for command in commands)
+
+
 def test_workflow_runs_the_public_command_in_one_bounded_weekly_job():
     document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     triggers = document[True]
@@ -95,7 +206,9 @@ def test_workflow_runs_the_public_command_in_one_bounded_weekly_job():
     steps = jobs["quickstart"]["steps"]
     run = next(step["run"] for step in steps if step.get("name", "").startswith("Run"))
     assert "scripts/quickstart_lifecycle.py" in run
-    assert "--browser-with-deps" in run
+    assert "--browser-system-deps" in run
+    assert "--browser-with-deps" not in run
+    assert jobs["quickstart"]["runs-on"] == "ubuntu-latest"
 
 
 def test_workflow_pins_actions_to_full_commit_shas():
