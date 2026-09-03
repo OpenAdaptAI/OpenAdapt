@@ -168,23 +168,33 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.MaturityError, "digest changed"):
             MODULE.fetch_source_files(source, fetch=lambda _url: b"changed")
 
-    def test_empty_registry_uses_positive_qualification_contract(self) -> None:
+    def test_qualification_block_names_seven_until_revoked_admissions(self) -> None:
         projection = _projection()
         block = MODULE.render_block(projection, {}, now=NOW)
 
         self.assertIn(MODULE.LIVE_RECORD_URL, block)
-        self.assertIn("openadapt-flow", block)
-        self.assertIn("1.34.0", block)
+        self.assertIn("seven active target admissions", block)
+        self.assertIn("remote-safe-synthetic", block)
+        self.assertIn("production_acceptance", block)
+        self.assertIn("MockMed", block)
+        self.assertIn("until revoked", block)
+        self.assertIn("there's no expiry date", block)
         self.assertIn("pip install openadapt", block)
-        self.assertIn("exact compiled version", block)
-        self.assertIn("expiring, revocable", block)
+        self.assertIn("1.16.0", block)
+        self.assertIn("1.34.0", block)
+        self.assertIn("0.16.0 wheel", block)
+        self.assertIn("0.15.0", block)
+        self.assertIn("workflow admission", block)
+        self.assertIn("exact compiled bundle", block)
+        self.assertNotIn("\u2014", block)
+        self.assertNotIn("expiring, revocable", block)
+        self.assertNotIn("OpenAdapt is Production", block)
         self.assertNotIn("Production status", block)
         self.assertNotIn("No current signed admission", block)
         self.assertNotIn("seven product targets", block)
         self.assertNotIn("at least three trials", block)
         self.assertNotIn("silent incorrect", block)
         self.assertNotIn("Beta", block)
-        self.assertNotIn("not Production", block)
         self.assertNotIn("pip install openadapt-flow", block)
 
     def test_an_active_flow_admission_does_not_admit_the_launcher(self) -> None:
@@ -197,13 +207,12 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         )
 
         self.assertNotIn(flow["admission_id"], block)
-        self.assertIn("openadapt-flow", block)
         self.assertIn("pip install openadapt", block)
         self.assertNotIn("OpenAdapt is Production", block)
         self.assertNotIn("Production status", block)
         self.assertNotIn("No current signed admission", block)
 
-    def test_active_launcher_renders_only_a_durable_registry_record(self) -> None:
+    def test_active_launcher_does_not_dump_an_admission_id(self) -> None:
         launcher = _admission(target="openadapt", sequence=1)
         projection = _projection([launcher])
         block = MODULE.render_block(
@@ -212,13 +221,11 @@ class ReadmeMaturityContractTests(unittest.TestCase):
             now=NOW,
         )
 
-        self.assertIn(launcher["admission_id"], block)
-        self.assertIn(launcher["issued_at"], block)
-        self.assertIn(launcher["expires_at"], block)
-        self.assertIn("historical record", block)
-        self.assertIn("missing these required target admissions", block)
-        self.assertIn("`flow`", block)
+        self.assertNotIn(launcher["admission_id"], block)
+        self.assertIn("seven active target admissions", block)
+        self.assertIn("workflow admission", block)
         self.assertNotIn("OpenAdapt is Production", block)
+        self.assertNotIn("historical record", block)
 
     def test_openadapt_only_admission_does_not_imply_combined_production(self) -> None:
         launcher = _admission(target="openadapt", sequence=1)
@@ -230,11 +237,9 @@ class ReadmeMaturityContractTests(unittest.TestCase):
             now=NOW,
         )
 
-        self.assertIn("OpenAdapt target admission record", block)
-        self.assertIn("does not establish combined-product Production", block)
-        self.assertIn("missing these required target admissions", block)
-        for target in MODULE.EXPECTED_TARGETS - {"openadapt"}:
-            self.assertIn(f"`{target}`", block)
+        self.assertNotIn("OpenAdapt is Production", block)
+        self.assertIn("workflow admission", block)
+        self.assertIn("exact compiled bundle", block)
 
     def test_expired_latest_never_falls_back_to_an_older_record(self) -> None:
         old = _admission(
@@ -275,6 +280,37 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         duplicate = f"{MODULE.BEGIN}\n{MODULE.END}\n{MODULE.BEGIN}\n{MODULE.END}"
         with self.assertRaisesRegex(MODULE.MaturityError, "one complete"):
             MODULE.replace_block(duplicate, MODULE._qualification_block())
+
+    def test_readme_claims_refuse_a_missing_target_admission(self) -> None:
+        projection = _projection()
+        with self.assertRaisesRegex(MODULE.MaturityError, "missing agent"):
+            MODULE.require_readme_claims(projection)
+
+    def test_readme_claims_accept_seven_until_revoked_admissions(self) -> None:
+        records = []
+        for target in MODULE.EXPECTED_TARGETS:
+            record = {
+                "target": target,
+                "verdict": "accepted",
+                "evidence_class": "remote-safe-synthetic",
+                "expires_at": None,
+                "release": {
+                    "version": MODULE.README_CLAIMED_VERSIONS.get(target),
+                    "artifacts": [],
+                },
+            }
+            if target == "desktop":
+                record["release"]["artifacts"] = [
+                    {"name": MODULE.DESKTOP_ADMITTED_WHEEL}
+                ]
+            records.append(record)
+        projection = _projection()
+        by_id = {item["id"]: item for item in projection["targets"]}
+        for record in records:
+            item = by_id[record["target"]]
+            item["latest_admission"] = record
+            item["admission_history"] = [record]
+        MODULE.require_readme_claims(projection)
 
 
 if __name__ == "__main__":
