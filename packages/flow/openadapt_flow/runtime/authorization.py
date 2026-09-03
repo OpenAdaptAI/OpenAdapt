@@ -472,13 +472,20 @@ class GovernedRunAuthorization(BaseModel):
             self.production_qualification_runtime_validation_id,
             self.production_qualification_signer_registry_sha256,
             self.production_qualification_signer_registry_revision,
-            self.production_qualification_signer_registry_expires_at,
             self.production_qualification_authority_sha256,
         )
         if any(value is not None for value in production_qualification) and not all(
             value is not None for value in production_qualification
         ):
             raise ValueError("Production qualification binding is incomplete")
+        if all(value is not None for value in production_qualification):
+            admission_id = str(self.production_qualification_admission_id)
+            until_revoked = admission_id.startswith("sha256:")
+            if (
+                not until_revoked
+                and self.production_qualification_signer_registry_expires_at is None
+            ):
+                raise ValueError("Production qualification binding is incomplete")
         requirement_refs = [
             (item.step_id, item.actuation_path, item.effect_index)
             for item in self.qualified_effect_requirements

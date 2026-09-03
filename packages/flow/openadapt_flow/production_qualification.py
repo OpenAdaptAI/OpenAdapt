@@ -1,9 +1,11 @@
-"""Fail-closed v2 qualification authority for Production actuation.
+"""Fail-closed qualification authority for Production actuation.
 
 The qualification project and its persisted certification are evidence.  They
-are not authority to actuate.  A Standard or Regulated run must also carry the
-signed, expiring, revocable v2 admission defined in
-``qualification_admission_v2``.  This module loads that authority from one
+are not authority to actuate.  A Standard or Regulated run must also carry a
+signed, revocable admission: either the v2 envelope in
+``qualification_admission_v2`` or the issued
+``openadapt.qualification-admission/v4`` object verified against the pinned
+``.github`` signer registry.  This module loads that authority from one
 private local handoff and re-verifies it at every input edge.
 
 The handoff keeps two trust sources separate:
@@ -23,7 +25,7 @@ import json
 import os
 import stat
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal, Union
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -44,11 +46,22 @@ from openadapt_flow.qualification_admission_v2 import (
     verify_qualification_admission,
     verify_qualification_admission_for_actuation,
 )
+from openadapt_flow.qualification_admission_v4 import (
+    QualificationAdmissionV4Error,
+    VerifiedQualificationAdmissionV4,
+    bind_live_v4_admission,
+    extract_live_v4_binding,
+    revocation_is_monotonic_successor,
+    verify_qualification_admission_v4,
+)
 
 MAX_AUTHORITY_BYTES = 512 * 1024
 AUTHORITY_SCHEMA: Final[Literal["openadapt.production-qualification-authority/v1"]] = (
     "openadapt.production-qualification-authority/v1"
 )
+AUTHORITY_SCHEMA_V4: Final[
+    Literal["openadapt.production-qualification-authority/v4"]
+] = "openadapt.production-qualification-authority/v4"
 
 
 class ProductionQualificationAuthorityError(ValueError):
@@ -119,6 +132,55 @@ class ProductionQualificationAuthority(BaseModel):
                 ),
             }
         )
+
+
+class ProductionQualificationAuthorityV4(BaseModel):
+    """Private handoff for one issued ``openadapt.qualification-admission/v4``."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.production-qualification-authority/v4"] = (
+        AUTHORITY_SCHEMA_V4
+    )
+    qualification_admission: dict[str, Any]
+    qualification_admission_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    qualification_signer_registry: dict[str, Any]
+    qualification_signer_registry_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    decision_receipt: dict[str, Any]
+    revocation_state: dict[str, Any]
+
+    def model_post_init(self, __context: object) -> None:
+        try:
+            verified = verify_qualification_admission_v4(
+                self.qualification_admission,
+                registry=self.qualification_signer_registry,
+                decision_receipt=self.decision_receipt,
+                revocation_state=self.revocation_state,
+            )
+        except QualificationAdmissionV4Error as exc:
+            raise ValueError("qualification admission v4 is not active") from exc
+        if verified.admission_artifact_sha256 != self.qualification_admission_sha256:
+            raise ValueError("qualification admission digest does not match")
+        if verified.registry_sha256 != self.qualification_signer_registry_sha256:
+            raise ValueError("qualification signer registry digest does not match")
+
+    def immutable_binding_sha256(self) -> str:
+        """Identify the immutable v4 admission and pinned signer registry."""
+
+        return contract_sha256(
+            {
+                "schema_version": self.schema_version,
+                "qualification_admission_sha256": (self.qualification_admission_sha256),
+                "qualification_signer_registry_sha256": (
+                    self.qualification_signer_registry_sha256
+                ),
+            }
+        )
+
+
+ProductionAuthority = Union[
+    ProductionQualificationAuthority, ProductionQualificationAuthorityV4
+]
 
 
 def _read_private_json(path: Path) -> object:
@@ -216,12 +278,26 @@ def _read_private_json(path: Path) -> object:
 
 def load_production_qualification_authority(
     path: Path | str,
-) -> ProductionQualificationAuthority:
+) -> ProductionAuthority:
     """Load one exact private Production qualification authority file."""
 
     raw = _read_private_json(Path(path))
+    if not isinstance(raw, dict):
+        raise ProductionQualificationAuthorityError(
+            "qualification authority file has an invalid exact binding"
+        )
+    schema = raw.get("schema_version")
+    model: type[BaseModel]
+    if schema == AUTHORITY_SCHEMA_V4:
+        model = ProductionQualificationAuthorityV4
+    elif schema == AUTHORITY_SCHEMA:
+        model = ProductionQualificationAuthority
+    else:
+        raise ProductionQualificationAuthorityError(
+            "qualification authority file has an invalid exact binding"
+        )
     try:
-        authority = ProductionQualificationAuthority.model_validate(raw)
+        authority = model.model_validate(raw)
     except (TypeError, ValueError, ValidationError) as exc:
         raise ProductionQualificationAuthorityError(
             "qualification authority file has an invalid exact binding"
@@ -230,16 +306,29 @@ def load_production_qualification_authority(
         raise ProductionQualificationAuthorityError(
             "qualification authority file is not in canonical schema form"
         )
-    return authority
+    return authority  # type: ignore[return-value]
 
 
 def _workflow_binding_refusal(
-    authority: ProductionQualificationAuthority,
+    authority: ProductionAuthority,
     workflow: Workflow,
 ) -> str | None:
-    """Bind the signed v2 authority to contracts reproduced from the bundle."""
+    """Bind the signed authority to contracts reproduced from the bundle."""
 
     manifest = workflow.manifest
+    if isinstance(authority, ProductionQualificationAuthorityV4):
+        if manifest is None or not getattr(manifest, "content_digest", None):
+            return "Production qualification requires a sealed bundle"
+        try:
+            bind_live_v4_admission(
+                authority.qualification_admission,
+                extract_live_v4_binding(workflow),
+            )
+        except QualificationAdmissionV4Error:
+            return (
+                "Production qualification does not bind the sealed workflow contracts"
+            )
+        return None
     project = workflow.qualification
     if manifest is None or not manifest.content_digest:
         return "Production qualification requires a sealed bundle"
@@ -272,7 +361,7 @@ def _workflow_binding_refusal(
 
 
 class ProductionQualificationGuard:
-    """Re-read and verify one v2 authority at every Production input edge."""
+    """Re-read and verify one Production authority at every input edge."""
 
     def __init__(
         self,
@@ -283,18 +372,58 @@ class ProductionQualificationGuard:
         self.path = Path(path)
         self.remote_permit_revalidation = bool(remote_permit_revalidation)
         initial = load_production_qualification_authority(self.path)
+        self._schema_version = initial.schema_version
         self._admission_sha256 = initial.qualification_admission_sha256
-        self._expected = initial.expected
         self._registry_sha256 = initial.qualification_signer_registry_sha256
-        self._revoked_ids = frozenset(initial.revoked_admission_ids)
+        self._revoked_ids: frozenset[str]
+        self._revocation_state_sha256: str | None
+        if isinstance(initial, ProductionQualificationAuthorityV4):
+            self._expected = None
+            self._revoked_ids = frozenset()
+            self._revocation_state_sha256 = str(
+                initial.revocation_state.get("revocation_state_sha256")
+            )
+            self._revocation_revision = initial.revocation_state.get("revision")
+            self._revocation_observed_at = initial.revocation_state.get("observed_at")
+        else:
+            self._expected = initial.expected
+            self._revoked_ids = frozenset(initial.revoked_admission_ids)
+            self._revocation_state_sha256 = None
+            self._revocation_revision = None
+            self._revocation_observed_at = None
 
-    def _load_current(self) -> ProductionQualificationAuthority:
+    def _load_current(self) -> ProductionAuthority:
         current = load_production_qualification_authority(self.path)
+        if current.schema_version != self._schema_version:
+            raise ProductionQualificationAuthorityError(
+                "qualification authority changed after run admission"
+            )
         if (
             current.qualification_admission_sha256 != self._admission_sha256
-            or current.expected != self._expected
             or current.qualification_signer_registry_sha256 != self._registry_sha256
         ):
+            raise ProductionQualificationAuthorityError(
+                "qualification authority changed after run admission"
+            )
+        if isinstance(current, ProductionQualificationAuthorityV4):
+            current_revocation = str(
+                current.revocation_state.get("revocation_state_sha256")
+            )
+            if (
+                self._revocation_state_sha256 is not None
+                and current_revocation != self._revocation_state_sha256
+                and not revocation_is_monotonic_successor(
+                    previous_digest=self._revocation_state_sha256,
+                    previous_revision=self._revocation_revision,
+                    previous_observed_at=self._revocation_observed_at,
+                    current=current.revocation_state,
+                )
+            ):
+                raise ProductionQualificationAuthorityError(
+                    "qualification revocation state rolled back"
+                )
+            return current
+        if current.expected != self._expected:
             raise ProductionQualificationAuthorityError(
                 "qualification authority changed after run admission"
             )
@@ -311,13 +440,43 @@ class ProductionQualificationGuard:
         workflow: Workflow,
         *,
         for_actuation: bool,
-    ) -> VerifiedQualificationAdmission:
+    ) -> VerifiedQualificationAdmission | VerifiedQualificationAdmissionV4:
         """Verify signature, time, revocation, live values, and bundle binding."""
 
         current = self._load_current()
         refusal = _workflow_binding_refusal(current, workflow)
         if refusal is not None:
             raise ProductionQualificationAuthorityError(refusal)
+        if isinstance(current, ProductionQualificationAuthorityV4):
+            try:
+                verified = verify_qualification_admission_v4(
+                    current.qualification_admission,
+                    registry=current.qualification_signer_registry,
+                    decision_receipt=current.decision_receipt,
+                    revocation_state=current.revocation_state,
+                    expected_live=extract_live_v4_binding(workflow),
+                    previous_revocation_digest=self._revocation_state_sha256,
+                    previous_revocation_revision=(
+                        self._revocation_revision
+                        if isinstance(self._revocation_revision, int)
+                        else None
+                    ),
+                    previous_revocation_observed_at=(
+                        self._revocation_observed_at
+                        if isinstance(self._revocation_observed_at, str)
+                        else None
+                    ),
+                )
+            except QualificationAdmissionV4Error as exc:
+                raise ProductionQualificationAuthorityError(
+                    "Production qualification admission is not active"
+                ) from exc
+            self._revocation_state_sha256 = str(
+                current.revocation_state.get("revocation_state_sha256")
+            )
+            self._revocation_revision = current.revocation_state.get("revision")
+            self._revocation_observed_at = current.revocation_state.get("observed_at")
+            return verified
         revoked = frozenset(current.revoked_admission_ids)
         try:
             if for_actuation and not self.remote_permit_revalidation:
@@ -358,6 +517,29 @@ class ProductionQualificationGuard:
 
         verified = self.verify(workflow, for_actuation=False)
         current = self._load_current()
+        if isinstance(verified, VerifiedQualificationAdmissionV4):
+            return {
+                "production_qualification_admission_id": (verified.admission_id_sha256),
+                "production_qualification_admission_sha256": (
+                    verified.admission_artifact_sha256
+                ),
+                "production_qualification_evidence_identity_sha256": (
+                    verified.evidence_identity_sha256
+                ),
+                "production_qualification_runtime_validation_id": (
+                    verified.admitted_runtime_sha256
+                ),
+                "production_qualification_signer_registry_sha256": (
+                    verified.registry_sha256
+                ),
+                "production_qualification_signer_registry_revision": (
+                    verified.registry_revision
+                ),
+                "production_qualification_signer_registry_expires_at": None,
+                "production_qualification_authority_sha256": (
+                    current.immutable_binding_sha256()
+                ),
+            }
         return {
             "production_qualification_admission_id": verified.admission_id,
             "production_qualification_admission_sha256": (
@@ -384,10 +566,68 @@ class ProductionQualificationGuard:
         }
 
 
+def managed_qualification_edge_refusal(
+    authorization: object,
+    workflow: object,
+) -> str | None:
+    """Recheck the Cloud admission at a consequential input edge.
+
+    Local tutorial and in-process Standard runs without managed dispatch keep
+    the existing no-guard path. A managed Standard or Regulated dispatch must
+    re-verify revocation, run binding, and admission identity here, not only
+    at ``_cmd_run`` entry.
+    """
+
+    admission = getattr(authorization, "qualification_admission", None)
+    if admission is None:
+        return (
+            "Standard and Regulated actuation requires a signed qualification admission"
+        )
+    try:
+        if isinstance(admission, dict):
+            from openadapt_flow.qualification_admission_v4 import (
+                validate_qualification_admission_v4,
+            )
+
+            trusted = validate_qualification_admission_v4(admission)
+            bind_live_v4_admission(trusted, extract_live_v4_binding(workflow))
+            return None
+        from openadapt_flow.qualification_admission import (
+            expected_from_payload,
+            load_qualification_signer_trust,
+            verify_qualification_admission,
+        )
+
+        signer_trust = load_qualification_signer_trust(
+            os.environ.get("OPENADAPT_QUALIFICATION_SIGNERS_JSON", "")
+        )
+        verify_qualification_admission(
+            admission,
+            trusted_signers=signer_trust,
+            expected=expected_from_payload(admission.payload),
+        )
+    except (
+        QualificationAdmissionError,
+        QualificationAdmissionV4Error,
+        KeyError,
+        TypeError,
+        AttributeError,
+        ValueError,
+    ):
+        return (
+            "the Production qualification authority is invalid, expired, "
+            "revoked, or does not match this exact run"
+        )
+    return None
+
+
 __all__ = [
     "AUTHORITY_SCHEMA",
+    "AUTHORITY_SCHEMA_V4",
     "ProductionQualificationAuthority",
     "ProductionQualificationAuthorityError",
+    "ProductionQualificationAuthorityV4",
     "ProductionQualificationGuard",
     "load_production_qualification_authority",
+    "managed_qualification_edge_refusal",
 ]

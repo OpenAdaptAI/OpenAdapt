@@ -1330,7 +1330,11 @@ class HostedRunnerAdapter:
             os.chmod(self._release_state_path, 0o600)
 
     def _verify_product_release(
-        self, dispatch: HostedDispatch, config: RunnerConfig
+        self,
+        dispatch: HostedDispatch,
+        config: RunnerConfig,
+        *,
+        now: datetime | None = None,
     ) -> ProductReleaseAdmissionPayload:
         trust_files = config.product_release_admission
         if trust_files is None:
@@ -1390,6 +1394,7 @@ class HostedRunnerAdapter:
             flow_receipt = assert_hosted_flow_release(
                 local_flow_release,
                 dispatch.flow_release_verification_receipt,
+                now=now,
             )
             admitted_flow = admitted["flow"]
             if (

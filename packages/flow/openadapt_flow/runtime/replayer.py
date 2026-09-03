@@ -9339,9 +9339,19 @@ class Replayer:
             return None
         guard = self.production_qualification_guard
         if guard is None:
-            # A local Standard/Regulated run keeps the run-gate contracts it
-            # always had; a v2 authority becomes mandatory once an admission
-            # issuer provisions one for the runner.
+            if self.managed_dispatch_binding is None:
+                # ``openadapt flow run --profile standard|regulated`` refuses
+                # before constructing this replayer when the signed admission is
+                # missing. The tutorial and in-process tests still use the
+                # Standard evidence gate without that CLI actuation path.
+                return None
+            from openadapt_flow.production_qualification import (
+                managed_qualification_edge_refusal,
+            )
+
+            refusal = managed_qualification_edge_refusal(authorization, workflow)
+            if refusal is not None:
+                return "Production qualification could not be verified before execution"
             return None
         try:
             expected = guard.authorization_binding(workflow)
@@ -9400,6 +9410,30 @@ class Replayer:
                     "Production qualification could not be revalidated before "
                     f"delivery ({type(exc).__name__})"
                 )
+        if (
+            refusal is None
+            and self.production_qualification_guard is None
+            and self.managed_dispatch_binding is not None
+        ):
+            from openadapt_flow.production_qualification import (
+                managed_qualification_edge_refusal,
+            )
+
+            try:
+                edge_refusal = managed_qualification_edge_refusal(
+                    self.governed_authorization, workflow
+                )
+            except Exception as exc:  # noqa: BLE001 - authority boundary
+                refusal = (
+                    "Production qualification could not be revalidated before "
+                    f"delivery ({type(exc).__name__})"
+                )
+            else:
+                if edge_refusal is not None:
+                    refusal = (
+                        "Production qualification could not be revalidated before "
+                        "delivery"
+                    )
         if refusal is None and self.qualification_campaign_guard is not None:
             try:
                 refusal = self.qualification_campaign_guard.refusal(workflow)

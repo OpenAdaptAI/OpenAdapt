@@ -1845,6 +1845,34 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     )
 
 
+def _refuse_unverified_managed_qualification_admission(
+    authorization: object,
+    workflow: object | None = None,
+) -> int | None:
+    """Verify the signed admission already bound on a Cloud authorization."""
+
+    from openadapt_flow.production_qualification import (
+        managed_qualification_edge_refusal,
+    )
+
+    admission = getattr(authorization, "qualification_admission", None)
+    if admission is None:
+        print(
+            "run REFUSED: Standard and Regulated actuation requires a signed "
+            "qualification admission. Nothing was executed."
+        )
+        return 2
+    refusal = managed_qualification_edge_refusal(authorization, workflow)
+    if refusal is not None:
+        print(
+            "run REFUSED: the Production qualification authority is invalid, "
+            "expired, revoked, or does not match this exact run. Nothing was "
+            "executed."
+        )
+        return 2
+    return None
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute a bundle under a named deployment profile -- FAIL-CLOSED.
 
@@ -1860,6 +1888,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.composition import is_composition_artifact
     from openadapt_flow.execution_profiles import (
         execution_profile_contract,
+        requires_signed_qualification_admission,
         resolve_execution_profile,
     )
     from openadapt_flow.ir import Workflow
@@ -1971,6 +2000,54 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return refused
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
+    will_actuate = not bool(getattr(args, "dry_run", False))
+    authority_file = getattr(args, "qualification_authority_file", None)
+    dispatch_file = getattr(args, "managed_dispatch_file", None)
+    managed_binding = None
+    authorization = None
+    if dispatch_file:
+        try:
+            managed_binding = read_managed_dispatch_envelope(Path(dispatch_file))
+            authorization = managed_binding.authorization
+        except ManagedDispatchEnvelopeError:
+            print(
+                "run REFUSED: managed dispatch binding is invalid. Nothing was executed."
+            )
+            return 2
+    if (
+        requires_signed_qualification_admission(
+            selected_profile, will_actuate=will_actuate
+        )
+        and qualification_case is None
+    ):
+        dispatch_admission = (
+            None if authorization is None else authorization.qualification_admission
+        )
+        if not authority_file and dispatch_admission is None:
+            print(
+                "run REFUSED: Standard and Regulated actuation requires a signed "
+                "qualification admission. Nothing was executed."
+            )
+            return 2
+        if authority_file:
+            try:
+                ProductionQualificationGuard(
+                    authority_file,
+                    remote_permit_revalidation=bool(dispatch_file),
+                ).verify(workflow, for_actuation=False)
+            except ProductionQualificationAuthorityError:
+                print(
+                    "run REFUSED: the Production qualification authority is invalid, "
+                    "expired, revoked, or does not match this exact run. Nothing was "
+                    "executed."
+                )
+                return 2
+        elif dispatch_admission is not None:
+            refused = _refuse_unverified_managed_qualification_admission(
+                authorization, workflow
+            )
+            if refused is not None:
+                return refused
     policy_source = args.policy or cfg.policy.policy
 
     report = evaluate_run_gate(
@@ -1999,7 +2076,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
         # turn a locally refused bundle into an admitted one.
         return 2
 
-    dispatch_file = getattr(args, "managed_dispatch_file", None)
     if qualification_case is not None and dispatch_file:
         print(
             "run REFUSED: a qualification evidence run cannot accept a managed "
@@ -2012,18 +2088,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if qualification_case is not None
         else _resolve_worklists(getattr(args, "worklist", None), workflow)
     )
-    managed_binding = None
-    authorization = None
     local_authorization = None
     if dispatch_file:
-        try:
-            managed_binding = read_managed_dispatch_envelope(Path(dispatch_file))
-            authorization = managed_binding.authorization
-        except ManagedDispatchEnvelopeError:
-            print(
-                "run REFUSED: managed dispatch binding is invalid. Nothing was executed."
-            )
-            return 2
+        assert managed_binding is not None
+        assert authorization is not None
         local_authorization = build_runtime_authorization(
             workflow,
             report,
@@ -2277,7 +2345,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         authority_file = getattr(args, "qualification_authority_file", None)
         if not authority_file:
             print(
-                "Resume REFUSED: Production actuation requires the private v2 "
+                "Resume REFUSED: Production actuation requires the private "
                 "qualification authority again. Nothing was executed."
             )
             return 3
@@ -5934,8 +6002,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "Private owner-only v2 Production qualification authority; when "
-            "supplied it is verified and re-read at every input edge"
+            "Private owner-only Production qualification authority (v2 envelope "
+            "or issued openadapt.qualification-admission/v4). Required for "
+            "Standard and Regulated actuation; verified and re-read at every "
+            "input edge"
         ),
     )
     p.add_argument(
@@ -5971,7 +6041,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help=(
-            "Private owner-only v2 Production qualification authority for the "
+            "Private owner-only Production qualification authority for the "
             "resumed input edge"
         ),
     )
