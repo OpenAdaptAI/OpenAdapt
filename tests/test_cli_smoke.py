@@ -32,7 +32,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from openadapt.cli import _supported_flow_version
+from openadapt.cli import _correct_released_flow_x11_sonames, _supported_flow_version
 from openadapt.cli import main as cli_main
 
 try:
@@ -285,26 +285,26 @@ def test_launcher_flow_and_substrate_extras_metadata():
     extras = metadata["optional-dependencies"]
 
     assert (
-        metadata["dependencies"].count("openadapt-flow[browser,hosted]>=1.35.0,<2.0.0")
+        metadata["dependencies"].count("openadapt-flow[browser,hosted]>=1.29.0,<2.0.0")
         == 1
     )
     assert metadata["dependencies"].count("openadapt-agent>=2.0.1,<3") == 1
-    assert extras["flow"] == ["openadapt-flow>=1.35.0,<2.0.0"]
+    assert extras["flow"] == ["openadapt-flow>=1.29.0,<2.0.0"]
     assert extras["agent"] == ["openadapt-agent>=2.0.1,<3"]
-    assert extras["browser"] == ["openadapt-flow[browser]>=1.35.0,<2.0.0"]
-    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.35.0,<2.0.0"]
+    assert extras["browser"] == ["openadapt-flow[browser]>=1.29.0,<2.0.0"]
+    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
     assert extras["capture"] == [
         "openadapt-capture>=1.2.0,<2.0.0",
-        "openadapt-flow[capture]>=1.35.0,<2.0.0",
+        "openadapt-flow[capture]>=1.29.0,<2.0.0",
     ]
-    assert extras["windows"] == ["openadapt-flow[windows]>=1.35.0,<2.0.0"]
+    assert extras["windows"] == ["openadapt-flow[windows]>=1.29.0,<2.0.0"]
     assert extras["macos"] == [
-        "openadapt-flow[macos]>=1.35.0,<2.0.0; sys_platform == 'darwin'"
+        "openadapt-flow[macos]>=1.29.0,<2.0.0; sys_platform == 'darwin'"
     ]
     assert extras["linux"] == [
-        "openadapt-flow[linux]>=1.35.0,<2.0.0; sys_platform == 'linux'"
+        "openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux'"
     ]
-    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.35.0,<2.0.0"]
+    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.29.0,<2.0.0"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
         "openadapt[macos]; sys_platform == 'darwin'",
@@ -312,12 +312,35 @@ def test_launcher_flow_and_substrate_extras_metadata():
     ]
 
 
-@pytest.mark.parametrize("version", ["1.35.0", "1.35.1", "1.99.0"])
-def test_launcher_accepts_flow_versions_with_the_case_correct_browser_probe(version):
+def test_released_flow_x11_sonames_are_case_corrected(monkeypatch):
+    import openadapt_flow._browser_setup as browser_setup
+
+    monkeypatch.setattr(
+        browser_setup,
+        "_LINUX_CHROMIUM_SONAMES",
+        ("nss3", "xcomposite", "xdamage", "xfixes", "xrandr", "gbm"),
+        raising=False,
+    )
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    _correct_released_flow_x11_sonames()
+
+    assert browser_setup._LINUX_CHROMIUM_SONAMES == (
+        "nss3",
+        "Xcomposite",
+        "Xdamage",
+        "Xfixes",
+        "Xrandr",
+        "gbm",
+    )
+
+
+@pytest.mark.parametrize("version", ["1.29.0", "1.35.1", "1.99.0"])
+def test_launcher_accepts_flow_versions_in_the_supported_range(version):
     assert _supported_flow_version(version)
 
 
-@pytest.mark.parametrize("version", ["1.34.9", "2.0.0", "invalid"])
+@pytest.mark.parametrize("version", ["1.28.9", "2.0.0", "invalid"])
 def test_launcher_rejects_flow_versions_outside_the_supported_range(version):
     assert not _supported_flow_version(version)
 
@@ -359,9 +382,7 @@ def test_doctor_rdp_reports_transport_ready(monkeypatch):
 
 
 @pytest.mark.parametrize("backend_args", [[], ["--backend", "web"]])
-def test_doctor_fails_for_missing_chromium_system_libraries(
-    monkeypatch, backend_args
-):
+def test_doctor_fails_for_missing_chromium_system_libraries(monkeypatch, backend_args):
     """Default and web checks must stop before a Chromium download can fail."""
     monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
     monkeypatch.setattr(
@@ -567,7 +588,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
     assert "Preflight passed" not in result.output
 
 
-@pytest.mark.parametrize("flow_version", ["1.34.9", "2.0.0", "2.1.0", "invalid"])
+@pytest.mark.parametrize("flow_version", ["1.28.9", "2.0.0", "2.1.0", "invalid"])
 def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
     monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
     monkeypatch.setattr("importlib.metadata.version", lambda _name: flow_version)
@@ -576,7 +597,7 @@ def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
 
     assert result.exit_code != 0
     assert "[UNSUPPORTED]" in result.output
-    assert ">=1.35.0,<2.0.0" in result.output
+    assert ">=1.29.0,<2.0.0" in result.output
     assert "Preflight passed" not in result.output
 
 

@@ -112,7 +112,9 @@ def test_browser_dependency_setup_does_not_download_chromium(tmp_path, monkeypat
     ]
 
 
-@pytest.mark.parametrize(("output", "expected"), [("absent\n", False), ("present\n", True)])
+@pytest.mark.parametrize(
+    ("output", "expected"), [("absent\n", False), ("present\n", True)]
+)
 def test_browser_probe_reports_exact_install_state(
     tmp_path, monkeypatch, output, expected
 ):
@@ -159,15 +161,15 @@ def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypat
     def successful_run(command, **_kwargs):
         commands.append(command)
         output = (
-            lifecycle._LAZY_BROWSER_INSTALL_NOTICE
-            if "quickstart" in command
-            else ""
+            lifecycle._LAZY_BROWSER_INSTALL_NOTICE if "quickstart" in command else ""
         )
         return subprocess.CompletedProcess(command, 0, stdout=output)
 
     monkeypatch.setattr(lifecycle, "_run", successful_run)
     browser_states = iter([False, True])
-    monkeypatch.setattr(lifecycle, "_browser_present", lambda *_a, **_k: next(browser_states))
+    monkeypatch.setattr(
+        lifecycle, "_browser_present", lambda *_a, **_k: next(browser_states)
+    )
     monkeypatch.setattr(
         lifecycle,
         "_inspect_quickstart",

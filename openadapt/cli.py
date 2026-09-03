@@ -89,6 +89,28 @@ def main():
 # Flow Commands (the demonstration compiler — flagship path)
 # =============================================================================
 
+_FLOW_X11_SONAME_CASE = {
+    "xcomposite": "Xcomposite",
+    "xdamage": "Xdamage",
+    "xfixes": "Xfixes",
+    "xrandr": "Xrandr",
+}
+
+
+def _correct_released_flow_x11_sonames() -> None:
+    """Correct the four case-sensitive X11 probes in released Flow builds."""
+    if sys.platform != "linux":
+        return
+    try:
+        import openadapt_flow._browser_setup as browser_setup
+    except ImportError:
+        return
+    sonames = getattr(browser_setup, "_LINUX_CHROMIUM_SONAMES", None)
+    if not isinstance(sonames, (list, tuple)):
+        return
+    corrected = tuple(_FLOW_X11_SONAME_CASE.get(name, name) for name in sonames)
+    browser_setup._LINUX_CHROMIUM_SONAMES = corrected
+
 
 def _invoke_flow(argv: list[str]) -> int:
     """Invoke the canonical engine once and return its exit code."""
@@ -100,6 +122,7 @@ def _invoke_flow(argv: list[str]) -> int:
         click.echo("Engine only: pip install openadapt-flow", err=True)
         return 1
 
+    _correct_released_flow_x11_sonames()
     return int(flow_main(argv))
 
 
@@ -282,7 +305,7 @@ def quickstart(
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
-_SUPPORTED_FLOW_RANGE = ">=1.35.0,<2.0.0"
+_SUPPORTED_FLOW_RANGE = ">=1.29.0,<2.0.0"
 _RDP_INSTALL_COMMAND = "python -m pip install 'openadapt[rdp]'"
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -297,7 +320,7 @@ def _supported_flow_version(value: str) -> bool:
     if match is None:
         return False
     parsed = tuple(int(part) for part in match.groups())
-    return (1, 35, 0) <= parsed < (2, 0, 0)
+    return (1, 29, 0) <= parsed < (2, 0, 0)
 
 
 @main.command("deploy")
@@ -1055,6 +1078,7 @@ def doctor(backend: str | None):
                 "Playwright. Run `python -m pip install --upgrade openadapt`."
             )
         else:
+            _correct_released_flow_x11_sonames()
             try:
                 from openadapt_flow._browser_setup import (
                     _chromium_present,
