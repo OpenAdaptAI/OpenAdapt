@@ -30,8 +30,10 @@ classifiers = [
 # Base install: the CLI, the flagship demonstration compiler, and the browser
 # driver used by the bundled tutorial. `pip install openadapt` must make the
 # public `openadapt quickstart` command work without a second package install.
-# Playwright downloads Chromium lazily on the first browser action. All other
-# capabilities (capture, ml, evals, ...) remain opt-in extras.
+# OpenAdapt asks Playwright to download Chromium on the first browser action.
+# Linux system libraries remain host prerequisites; `openadapt doctor` and Flow
+# check them before the browser download. All other capabilities (capture, ml,
+# evals, ...) remain opt-in extras.
 dependencies = [
     "click>=8.0.0",
     "openadapt-flow[browser,hosted]>=1.29.0,<2.0.0",
@@ -45,7 +47,8 @@ dependencies = [
 browser = [
     # Kept as a compatibility alias for existing install commands. The base
     # launcher now selects this Flow contract because the bundled quickstart
-    # uses the browser. Chromium remains lazy on first use.
+    # uses the browser. OpenAdapt requests Chromium on first browser use after
+    # the host dependency check passes.
     "openadapt-flow[browser]>=1.29.0,<2.0.0",
 ]
 # Local human desktop recording. Flow owns the supported capture adapter

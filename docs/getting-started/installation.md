@@ -13,12 +13,26 @@ Install the launcher:
 
 ```bash
 python -m pip install --upgrade openadapt
+openadapt doctor --backend web
 openadapt flow tutorial
 ```
 
 The launcher installs the compatible `openadapt-flow` engine. Do not install
-the launcher and engine separately. The first browser action downloads the
-matching Chromium build once.
+the launcher and engine separately. On the first browser action, OpenAdapt asks
+Playwright to download its matching Chromium build. The download needs network
+access.
+
+On Linux, `doctor` checks Chromium's system libraries before that download. If
+it lists missing libraries, install them and run the check again:
+
+```bash
+python -m playwright install-deps chromium
+openadapt doctor --backend web
+```
+
+Playwright asks for administrator access when the package manager needs it.
+Use the interpreter-specific command from `doctor` if an isolated tool runner
+installed OpenAdapt.
 
 The tutorial uses the bundled synthetic MockMed application. It records,
 compiles, certifies, and replays one workflow. A separate read-only interface
@@ -28,8 +42,9 @@ profile with no model or Cloud call.
 ## Capability-specific installs
 
 The base install includes the launcher, the Flow engine, and the Playwright
-driver for the browser tutorial. Chromium downloads only on the first browser
-action. Add the applicable capability for a native or remote workflow:
+driver for the browser tutorial. OpenAdapt requests the Chromium download only
+when a browser action needs it. Add the applicable capability for a native or
+remote workflow:
 
 ```bash
 python -m pip install 'openadapt[capture]'          # local human demonstration

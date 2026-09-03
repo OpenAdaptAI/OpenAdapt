@@ -38,7 +38,7 @@ jobs:
           python scripts/quickstart_lifecycle.py
           --launcher-wheel "lifecycle-dist/*.whl"
           --work-dir "runs/launcher-lifecycle"
-          --browser-with-deps
+          --browser-system-deps
           --source-revision "${{ github.sha }}"
 
       - name: Upload lifecycle evidence

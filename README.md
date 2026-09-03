@@ -41,13 +41,27 @@ the run tool:
 
 ```bash
 python -m pip install --upgrade openadapt
+openadapt doctor --backend web
 openadapt flow tutorial
 openadapt-agent serve --allow-run
 ```
 
-Python 3.10 through 3.12. No account, no API key, no extra. Chromium downloads
-itself the first time a browser action runs. `openadapt-agent` is in the base
-install.
+Python 3.10 through 3.12. The local tutorial needs no account or API key. The
+base install includes Playwright and `openadapt-agent`. On the first browser
+action, OpenAdapt asks Playwright to download its matching Chromium build. That
+download needs network access.
+
+Minimal Linux hosts can lack Chromium's shared libraries. `openadapt doctor`
+lists the missing libraries before any browser download. If it finds any, run:
+
+```bash
+python -m playwright install-deps chromium
+openadapt doctor --backend web
+```
+
+Playwright asks for administrator access when the package manager needs it.
+Use the interpreter-specific command from `doctor` if you installed OpenAdapt
+with an isolated tool runner.
 
 `openadapt flow tutorial` is the launcher spelling of `openadapt-flow tutorial`.
 It records and compiles a task in MockMed, a synthetic practice-management
