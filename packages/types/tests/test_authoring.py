@@ -42,6 +42,7 @@ from openadapt_types import (
     ElementRole,
     UINode,
     parse_authoring_bind_token,
+    parse_authoring_command,
     parse_authoring_lease_secret,
     parse_authoring_runner_uri,
 )
@@ -252,6 +253,76 @@ def test_command_click_is_node_id_only() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         AuthoringCommandV1.model_validate(
             _command_payload(args={"node_id": VALID_NODE, "value": "typed"})
+        )
+
+
+@pytest.mark.parametrize(
+    "command_id",
+    [
+        "cmd_81JABCDEFGHJKMNPQRSTVWXYZ0",
+        "cmd_01IABCDEFGHJKMNPQRSTVWXYZ0",
+        "cmd_01LABCDEFGHJKMNPQRSTVWXYZ0",
+        "cmd_01Jabcdefghjkmnpqrstvwxyz0",
+        "cmd_" + "0" * 25,
+        "cmd_" + "0" * 27,
+        "01JABCDEFGHJKMNPQRSTVWXYZ0",
+    ],
+)
+def test_command_id_is_a_canonical_crockford_ulid(command_id: str) -> None:
+    with pytest.raises(ValidationError):
+        AuthoringCommandV1.model_validate(_command_payload(command_id=command_id))
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("enqueued_at", "2026-02-30T12:00:00Z"),
+        ("expires_at", "2026-08-31 12:15:00Z"),
+        ("expires_at", "2026-08-31T12:15:00"),
+        ("expires_at", 1788178500000),
+    ],
+)
+def test_command_times_are_real_rfc3339_instants(field: str, value: object) -> None:
+    with pytest.raises(ValidationError):
+        AuthoringCommandV1.model_validate(_command_payload(**{field: value}))
+
+
+def test_command_expiry_uses_instants_and_is_bounded_to_lease() -> None:
+    command = AuthoringCommandV1.model_validate(
+        _command_payload(
+            enqueued_at="2026-08-31T12:00:00+01:00",
+            expires_at="2026-08-31T11:15:00Z",
+        )
+    )
+    assert command.expires_at == "2026-08-31T11:15:00Z"
+    with pytest.raises(ValidationError, match="900 seconds"):
+        AuthoringCommandV1.model_validate(
+            _command_payload(expires_at="2026-08-31T12:15:01Z")
+        )
+    with pytest.raises(ValidationError, match="after enqueued_at"):
+        AuthoringCommandV1.model_validate(
+            _command_payload(
+                enqueued_at="2026-08-31T12:00:00+01:00",
+                expires_at="2026-08-31T11:00:00Z",
+            )
+        )
+
+
+def test_parse_command_refuses_expired_and_extra_wire_fields() -> None:
+    command = parse_authoring_command(
+        _command_payload(),
+        at="2026-08-31T12:14:59Z",
+    )
+    assert command.command_id == VALID_COMMAND_ID
+    with pytest.raises(ValueError, match="expired"):
+        parse_authoring_command(
+            _command_payload(),
+            at="2026-08-31T12:15:00Z",
+        )
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        parse_authoring_command(
+            _command_payload(client_display="ChatGPT"),
+            at="2026-08-31T12:14:59Z",
         )
 
 

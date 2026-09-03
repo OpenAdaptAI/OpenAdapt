@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from math import isfinite
 from typing import Any, Literal
@@ -72,7 +73,7 @@ _BIND_HEX_BODY_RE = re.compile(_BIND_HEX_BODY_PATTERN)
 _LEASE_BASE64URL_BODY_RE = re.compile(_LEASE_BASE64URL_BODY_PATTERN)
 
 _NODE_ID_PATTERN = r"^n_[0-9a-f]{8}$"
-_COMMAND_ID_PATTERN = r"^cmd_[0-9A-HJKMNP-TV-Z]{26}$"
+_COMMAND_ID_PATTERN = r"^cmd_[0-7][0-9A-HJKMNP-TV-Z]{25}$"
 _WORKFLOW_ID_PATTERN = r"^wf_[A-Za-z0-9_-]{8,64}$"
 _PACK_ID_PATTERN = r"^(p\.[A-Za-z0-9_-]{12}|v1\.[A-Za-z0-9_-]{38,512})$"
 _PROCESS_NAME_PATTERN = r"^[A-Za-z0-9 ._-]{1,64}$"
@@ -302,6 +303,30 @@ def _finite_unit(value: object) -> float:
     if not isfinite(number):
         raise ValueError("normalized bounds must be finite")
     return number
+
+
+def _parse_rfc3339(value: str, field_name: str) -> datetime:
+    """Parse the closed authoring timestamp profile as an absolute instant."""
+
+    if re.fullmatch(_TIMESTAMP_PATTERN, value) is None:
+        raise ValueError(f"{field_name} must be an RFC 3339 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an RFC 3339 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include an offset")
+    return parsed
+
+
+def _coerce_check_time(value: str | datetime | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    if isinstance(value, str):
+        return _parse_rfc3339(value, "at")
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("at must be an offset-aware datetime or RFC 3339 timestamp")
+    return value
 
 
 class AuthoringNormalizedBoundsV1(_StrictContract):
@@ -633,8 +658,12 @@ class AuthoringCommandV1(_StrictContract):
             and self.args.pack_id != self.pack_id
         ):
             raise ValueError("bind_pack args pack_id must match the envelope")
-        if self.expires_at <= self.enqueued_at:
+        enqueued_at = _parse_rfc3339(self.enqueued_at, "enqueued_at")
+        expires_at = _parse_rfc3339(self.expires_at, "expires_at")
+        if expires_at <= enqueued_at:
             raise ValueError("expires_at must be after enqueued_at")
+        if expires_at - enqueued_at > timedelta(seconds=AUTHORING_LEASE_S):
+            raise ValueError("expires_at must be no more than 900 seconds after enqueued_at")
         if self.status is AuthoringCommandStatusV1.ERROR:
             if not isinstance(self.result, AuthoringErrorResultV1):
                 raise ValueError("error status requires an error result")
@@ -655,6 +684,31 @@ class AuthoringCommandV1(_StrictContract):
         if not isinstance(self.result, expected_result):
             raise ValueError("command result does not match tool")
         return self
+
+
+def require_authoring_command_active(
+    command: AuthoringCommandV1,
+    *,
+    at: str | datetime | None = None,
+) -> AuthoringCommandV1:
+    """Refuse a mailbox command at or after its expiry instant."""
+
+    check_time = _coerce_check_time(at)
+    expires_at = _parse_rfc3339(command.expires_at, "expires_at")
+    if check_time >= expires_at:
+        raise ValueError("authoring command has expired")
+    return command
+
+
+def parse_authoring_command(
+    value: object,
+    *,
+    at: str | datetime | None = None,
+) -> AuthoringCommandV1:
+    """Strictly parse one command and enforce its current-time expiry."""
+
+    command = AuthoringCommandV1.model_validate(value)
+    return require_authoring_command_active(command, at=at)
 
 
 class AuthoringCommandLookupV1(_StrictContract):

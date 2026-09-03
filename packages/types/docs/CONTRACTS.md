@@ -40,6 +40,23 @@ free-form notes, and live record values stay on the customer runner. An
 accepted answer only selects a compiled branch. The next action must still pass
 its live-state, identity, policy, and effect contracts.
 
+## Production admission registry
+
+`ProductionAdmissionRegistryStateV1` is the one current signed registry state.
+Each admission reference is either `active` or `revoked`. The registry does not
+add a second permit, lease, authority file, or revocation history.
+
+A consumer first verifies the registry signature and checks its saved minimum
+registry revision. It then hashes and parses the exact referenced admission
+bytes. The consumer checks the target, claim, repository, release kind,
+artifact set, artifact digests, and artifact authorities against the exact
+policy target. It saves the newest verified registry revision. This check
+rejects an older active registry after a later signed revocation.
+
+`expires_at: null` means that the admission stays active until the signed
+registry revokes it. When an expiry is present, it must follow `not_before`,
+and the consumer enforces it at read time. The policy does not cap this expiry.
+
 ## OpenAdapt Execute v1
 
 OpenAdapt Execute is the public asynchronous contract for a qualified
@@ -161,6 +178,12 @@ is `{ node_id }` only. Pause results name a param and never a value.
 Compile returns `needs_human_admit`, never `VERIFIED`. Bind tokens are
 `oab_` plus 43 unreserved characters. Lease secrets are `oals_` plus 64
 hex characters. Cloud `oar_` and pairing `oap_` are refused.
+
+Command ids are `cmd_` plus one canonical Crockford ULID. Command times use
+RFC 3339 with seconds and an offset. A command can live for at most 900
+seconds. `parse_authoring_command` checks the full closed envelope and refuses
+it at or after `expires_at`. `client_display` stays in the closed bind result
+and bind status. It is not a command-envelope field.
 
 ## Clinic job inbox and MCP tools
 

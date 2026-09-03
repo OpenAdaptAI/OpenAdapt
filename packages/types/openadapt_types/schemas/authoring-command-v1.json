@@ -179,7 +179,7 @@
         "command_id": {
           "anyOf": [
             {
-              "pattern": "^cmd_[0-9A-HJKMNP-TV-Z]{26}$",
+              "pattern": "^cmd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
               "type": "string"
             },
             {
@@ -640,7 +640,7 @@
       "type": "string"
     },
     "command_id": {
-      "pattern": "^cmd_[0-9A-HJKMNP-TV-Z]{26}$",
+      "pattern": "^cmd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
       "title": "Command Id",
       "type": "string"
     },
