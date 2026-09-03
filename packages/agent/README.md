@@ -54,9 +54,11 @@ uvx openadapt-agent serve --bundles /path/to/bundles --allow-run
 
 ## ChatGPT.com and Claude.ai
 
-Hosted ChatGPT.com and Claude.ai can't talk to localhost stdio. Don't tell those tabs to run `openadapt-agent serve`.
+Hosted ChatGPT.com and Claude.ai can't talk to localhost stdio. Don't tell those tabs to run `openadapt-agent serve`. Send them to https://openadapt.ai/start.
 
-On the job page `https://openadapt.ai/j/{id}`, Desktop **Connect this computer** claims `openadapt://runner`. Copy from that page and paste into the chat. Don't send them to `/start`.
+Those tabs still can't click the user's GUI.
+
+Once a job exists at `https://openadapt.ai/j/{id}`, Desktop **Connect this computer** claims `openadapt://runner`. Copy from that page and paste into the chat.
 
 Pip users start the mailbox client:
 
@@ -182,7 +184,11 @@ A first-party copy lives at [`skills/openadapt-gui-write/SKILL.md`](skills/opena
 
 ## Product state
 
-An exact Agent release enters Production only through an active signed admission. That admission expires and can be revoked. A missing, expired, revoked, mismatched, or unverifiable admission produces **not actively admitted**. The validator doesn't restore an older admission or assign a fallback lifecycle label. Check the [current signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
+An exact Agent release enters Production only through an active signed admission. That admission expires and can be revoked. A missing, expired, revoked, mismatched, or unverifiable admission produces **not actively admitted**. The validator doesn't restore an older admission or assign a fallback lifecycle label.
+
+Check the [current signed Production record](https://openadapt.ai/production-lifecycle.json). That ledger currently has seven target admissions. Evidence class is `remote-safe-synthetic`.
+
+Standard and Regulated also need an active workflow admission for the exact bundle version. Demo and the synthetic tutorial may run without one. The public workflow ledger is [production-workflow-admissions.json](https://openadapt.ai/production-workflow-admissions.json). It lists seven synthetic admissions (`0.0.0-synthetic`). That isn't a customer job.
 
 ## Package history
 

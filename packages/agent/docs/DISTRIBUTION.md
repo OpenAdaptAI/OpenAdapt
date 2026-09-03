@@ -2,10 +2,18 @@
 
 The Agent target's product state comes from its signed Production admission.
 A missing, expired, revoked, mismatched, or unverifiable admission means **not
-actively admitted**. This document describes how the package is made
-installable and discoverable as an MCP server, the security-relevant
-distinction between the *public capability* and a *user's private
-bundle*, and the exact founder-owned steps to publish and list it. The
+actively admitted**. The live target ledger is
+https://openadapt.ai/production-lifecycle.json (seven target admissions,
+`remote-safe-synthetic`). The live workflow ledger is
+https://openadapt.ai/production-workflow-admissions.json (seven synthetic
+admissions, `0.0.0-synthetic`). That isn't a customer job. Standard and
+Regulated need an active workflow admission for the exact bundle version.
+Demo and the synthetic tutorial may run without one.
+
+This document describes how the package is made installable and
+discoverable as an MCP server, the security-relevant distinction
+between the *public capability* and a *user's private bundle*, and the
+exact founder-owned steps to publish and list it. The
 publish/submission steps are **not automated here** — they mint public,
 first-party identities and are outward-facing founder actions.
 

@@ -2,7 +2,7 @@
 
 > OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.
 
-Default runtime interface for a calling agent. Computer-use agents are the user of OpenAdapt. They are not the executor inside it. Never summarize halt as success. Roles: operator (calling agent), authority (named human admits; a local agent may click while they watch), auditor (samples seals).
+Default runtime interface for a calling agent. Computer-use agents are the user of OpenAdapt. They are not the executor inside it. Never summarize halt as success. Roles: operator (calling agent), authority (named human admits; a local agent may click while they watch), auditor (samples seals). Hosted ChatGPT.com and Claude.ai can't click the user's GUI; send them to https://openadapt.ai/start. Unsigned success is failure. Standard and Regulated need a workflow admission; Demo and the synthetic tutorial may run without one. Target admissions: https://openadapt.ai/production-lifecycle.json (seven, remote-safe-synthetic). Workflow admissions: https://openadapt.ai/production-workflow-admissions.json (seven, 0.0.0-synthetic, not a customer job).
 
 ## What it provides
 

@@ -5,6 +5,16 @@ admission record. A missing, expired, revoked, mismatched, or unverifiable
 admission means **not actively admitted**. The validator doesn't restore an
 older admission or assign a fallback lifecycle label.
 
+The live target ledger is
+https://openadapt.ai/production-lifecycle.json. It currently has seven
+target admissions. Evidence class is `remote-safe-synthetic`. The live
+workflow ledger is
+https://openadapt.ai/production-workflow-admissions.json. It currently
+lists seven synthetic admissions (`0.0.0-synthetic`). That isn't a
+customer job. Standard and Regulated need an active workflow admission
+for the exact bundle version. Demo and the synthetic tutorial may run
+without one.
+
 OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.
 
 `openadapt-agent` is the default runtime interface for a calling agent. It
@@ -183,7 +193,9 @@ returns unsigned success, treat it as failure.
 
 For a legacy report without `execution_outcome`, the bridge preserves the
 compatible rule: exit code 0 plus `success: true`. Local unsigned replay
-is free. Production success without a Seal is failure.
+is free. Production success without a Seal is failure. Standard and
+Regulated need an active workflow admission for the exact bundle version.
+Demo and the synthetic tutorial may run without one.
 
 Exit 1 is a halt. Exit 2 is a governed refusal before execution. A
 timeout is explicitly uncertain rather than a rollback. Report evidence
@@ -318,7 +330,9 @@ identity fails closed.
 This process must not be port-forwarded or exposed as an unauthenticated
 network service. An HTTP / Streamable-HTTP **listener** in this MIT package
 remains forbidden, including when `--authoring` is set. Hosted ChatGPT.com
-/ Claude.ai cannot talk to localhost. Pip users run `openadapt-agent
+/ Claude.ai cannot talk to localhost. Send those tabs to
+https://openadapt.ai/start. They still can't click the user's GUI.
+Pip users run `openadapt-agent
 authoring connect` — an **outbound** mailbox client (claim `oab_`, poll
 `wait_seconds: 0`, Allow-per-`sub`) copied from Desktop
 `engine/authoring_runner.py` when that engine is not importable. Overlay

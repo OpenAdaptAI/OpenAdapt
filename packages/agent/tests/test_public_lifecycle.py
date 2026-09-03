@@ -30,3 +30,7 @@ def test_agent_target_has_no_static_lifecycle() -> None:
 
     assert "not actively admitted" in public_text
     assert "signed production record" in public_text
+    assert "https://openadapt.ai/production-lifecycle.json" in public_text
+    assert "https://openadapt.ai/production-workflow-admissions.json" in public_text
+    assert "remote-safe-synthetic" in public_text
+    assert "0.0.0-synthetic" in public_text
