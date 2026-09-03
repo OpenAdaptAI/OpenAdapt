@@ -1,16 +1,16 @@
 {
   "schema_version": "openadapt.production-readme-source/v1",
   "repository": "OpenAdaptAI/openadapt-ops",
-  "source_commit": "9e7bec32d9165a075828f28f00aa27888b775db4",
+  "source_commit": "db99c71dc3e105d0bd74f0a1e8aa0ee0464e18ee",
   "files": {
     "projection": {
       "path": "docs/production-lifecycle.json",
-      "url": "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-ops/9e7bec32d9165a075828f28f00aa27888b775db4/docs/production-lifecycle.json",
-      "sha256": "sha256:0fedb6fa123646ce779d0ed68a1d2e34acb3f0d0806fa123842ea18093f59a58"
+      "url": "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-ops/db99c71dc3e105d0bd74f0a1e8aa0ee0464e18ee/docs/production-lifecycle.json",
+      "sha256": "sha256:da7d59c495ae503f7a15329a6375276ced7b5a6fe606bffa560bd077eb58491b"
     },
     "schema": {
       "path": "docs/schemas/production-lifecycle-public.schema.json",
-      "url": "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-ops/9e7bec32d9165a075828f28f00aa27888b775db4/docs/schemas/production-lifecycle-public.schema.json",
+      "url": "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-ops/db99c71dc3e105d0bd74f0a1e8aa0ee0464e18ee/docs/schemas/production-lifecycle-public.schema.json",
       "sha256": "sha256:c6db48d6089314d745c2cf1af7bced511f359c7fee9cacc2e35b758fc22d7073"
     }
   }
