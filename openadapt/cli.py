@@ -27,6 +27,7 @@ Usage:
 
 import platform
 import re
+import shlex
 import sys
 from pathlib import Path
 from typing import Optional
@@ -281,8 +282,11 @@ def quickstart(
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
-_SUPPORTED_FLOW_RANGE = ">=1.29.0,<2.0.0"
+_SUPPORTED_FLOW_RANGE = ">=1.35.0,<2.0.0"
 _RDP_INSTALL_COMMAND = "python -m pip install 'openadapt[rdp]'"
+_CHROMIUM_SYSTEM_LIBS_COMMAND = (
+    f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
+)
 
 
 def _supported_flow_version(value: str) -> bool:
@@ -293,7 +297,7 @@ def _supported_flow_version(value: str) -> bool:
     if match is None:
         return False
     parsed = tuple(int(part) for part in match.groups())
-    return (1, 29, 0) <= parsed < (2, 0, 0)
+    return (1, 35, 0) <= parsed < (2, 0, 0)
 
 
 @main.command("deploy")
@@ -1045,24 +1049,67 @@ def doctor(backend: str | None):
     else:
         playwright = find_spec("playwright") is not None
         if not playwright:
+            failures.append("playwright")
             click.echo(
                 "  [MISSING] Browser: the base install does not contain "
                 "Playwright. Run `python -m pip install --upgrade openadapt`."
             )
         else:
             try:
-                from openadapt_flow._browser_setup import _chromium_present
-
-                chromium = _chromium_present()
-            except Exception:
-                chromium = False
-            if chromium:
-                click.echo("  [OK] Browser: Playwright and Chromium are ready.")
-            else:
-                click.echo(
-                    "  [READY] Browser: Playwright is installed; the matching "
-                    "Chromium downloads automatically on the first web action."
+                from openadapt_flow._browser_setup import (
+                    _chromium_present,
+                    _missing_chromium_system_libs,
                 )
+            except (ImportError, AttributeError):
+                failures.append("browser-diagnostics")
+                click.echo(
+                    "  [MISSING] Browser: the installed Flow version cannot check "
+                    "Chromium dependencies. Run `python -m pip install --upgrade "
+                    "openadapt`."
+                )
+            else:
+                try:
+                    missing_system_libs = _missing_chromium_system_libs()
+                except Exception:
+                    failures.append("browser-system-library-check")
+                    click.echo(
+                        "  [ERROR] Browser: OpenAdapt could not check Chromium's "
+                        "system libraries. Reinstall OpenAdapt, then run this "
+                        "command again."
+                    )
+                else:
+                    if missing_system_libs:
+                        failures.append("browser-system-libraries")
+                        click.echo(
+                            "  [MISSING] Browser: Chromium needs these system "
+                            f"libraries: {', '.join(missing_system_libs)}"
+                        )
+                        click.echo(
+                            "  Install them once: " + _CHROMIUM_SYSTEM_LIBS_COMMAND
+                        )
+                    else:
+                        try:
+                            chromium = _chromium_present()
+                        except Exception:
+                            failures.append("chromium-check")
+                            click.echo(
+                                "  [ERROR] Browser: OpenAdapt could not inspect "
+                                "the installed Chromium build. Reinstall "
+                                "OpenAdapt, then run this command again."
+                            )
+                        else:
+                            if chromium:
+                                click.echo(
+                                    "  [OK] Browser: Playwright, Chromium, and its "
+                                    "system libraries are ready."
+                                )
+                            else:
+                                click.echo(
+                                    "  [READY] Browser: Playwright and Chromium's "
+                                    "system libraries are ready. OpenAdapt will try "
+                                    "to download the matching Chromium build on the "
+                                    "first web action."
+                                )
 
     # Core packages: installed by the base `pip install openadapt`. Only
     # these are treated as required; a missing one is a real problem.
@@ -1079,8 +1126,9 @@ def doctor(backend: str | None):
         if find_spec(pkg) is not None:
             click.echo(f"  [OK] {pkg}")
         else:
+            failures.append(f"core:{pkg}")
             click.echo(
-                f"  [MISSING] {pkg} (core dependency — reinstall with "
+                f"  [MISSING] {pkg} (core dependency; reinstall with "
                 f"`pip install openadapt`)"
             )
 
@@ -1102,7 +1150,7 @@ def doctor(backend: str | None):
             click.echo(f"  [OK] {pkg}")
         else:
             click.echo(
-                f"  [--] {pkg} (optional — install with "
+                f"  [--] {pkg} (optional; install with "
                 f"`pip install openadapt[{extra}]`)"
             )
 

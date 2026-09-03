@@ -32,6 +32,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
+from openadapt.cli import _supported_flow_version
 from openadapt.cli import main as cli_main
 
 try:
@@ -226,11 +227,23 @@ def test_distribution_metadata_matches_engine_python_range():
     assert {term.strip() for term in actual.split(",")} == {">=3.10", "<3.13"}
 
 
-def test_doctor_lists_quickstart_dependencies_as_core_not_extras():
+def test_doctor_lists_quickstart_dependencies_as_core_not_extras(monkeypatch):
     """`openadapt doctor` must treat Flow and Playwright as base dependencies.
 
     The other capabilities stay optional and must not cause a failure.
     """
+    core = {"openadapt_flow", "openadapt_agent", "playwright"}
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in core else None,
+    )
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup._missing_chromium_system_libs", lambda: []
+    )
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup._chromium_present", lambda: False
+    )
+
     runner = CliRunner()
     result = runner.invoke(cli_main, ["doctor"])
     assert result.exit_code == 0, result.output
@@ -272,26 +285,26 @@ def test_launcher_flow_and_substrate_extras_metadata():
     extras = metadata["optional-dependencies"]
 
     assert (
-        metadata["dependencies"].count("openadapt-flow[browser,hosted]>=1.29.0,<2.0.0")
+        metadata["dependencies"].count("openadapt-flow[browser,hosted]>=1.35.0,<2.0.0")
         == 1
     )
     assert metadata["dependencies"].count("openadapt-agent>=2.0.1,<3") == 1
-    assert extras["flow"] == ["openadapt-flow>=1.29.0,<2.0.0"]
+    assert extras["flow"] == ["openadapt-flow>=1.35.0,<2.0.0"]
     assert extras["agent"] == ["openadapt-agent>=2.0.1,<3"]
-    assert extras["browser"] == ["openadapt-flow[browser]>=1.29.0,<2.0.0"]
-    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
+    assert extras["browser"] == ["openadapt-flow[browser]>=1.35.0,<2.0.0"]
+    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.35.0,<2.0.0"]
     assert extras["capture"] == [
         "openadapt-capture>=1.2.0,<2.0.0",
-        "openadapt-flow[capture]>=1.29.0,<2.0.0",
+        "openadapt-flow[capture]>=1.35.0,<2.0.0",
     ]
-    assert extras["windows"] == ["openadapt-flow[windows]>=1.29.0,<2.0.0"]
+    assert extras["windows"] == ["openadapt-flow[windows]>=1.35.0,<2.0.0"]
     assert extras["macos"] == [
-        "openadapt-flow[macos]>=1.29.0,<2.0.0; sys_platform == 'darwin'"
+        "openadapt-flow[macos]>=1.35.0,<2.0.0; sys_platform == 'darwin'"
     ]
     assert extras["linux"] == [
-        "openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux'"
+        "openadapt-flow[linux]>=1.35.0,<2.0.0; sys_platform == 'linux'"
     ]
-    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.29.0,<2.0.0"]
+    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.35.0,<2.0.0"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
         "openadapt[macos]; sys_platform == 'darwin'",
@@ -299,8 +312,22 @@ def test_launcher_flow_and_substrate_extras_metadata():
     ]
 
 
+@pytest.mark.parametrize("version", ["1.35.0", "1.35.1", "1.99.0"])
+def test_launcher_accepts_flow_versions_with_the_case_correct_browser_probe(version):
+    assert _supported_flow_version(version)
+
+
+@pytest.mark.parametrize("version", ["1.34.9", "2.0.0", "invalid"])
+def test_launcher_rejects_flow_versions_outside_the_supported_range(version):
+    assert not _supported_flow_version(version)
+
+
 def test_doctor_does_not_require_browser_for_citrix(monkeypatch):
-    monkeypatch.setattr("importlib.util.find_spec", lambda _name: None)
+    core = {"openadapt_flow", "openadapt_agent", "playwright"}
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in core else None,
+    )
     result = CliRunner().invoke(cli_main, ["doctor", "--backend", "citrix"])
     assert result.exit_code == 0, result.output
     assert "browser support is not required" in result.output
@@ -319,15 +346,104 @@ def test_doctor_rdp_fails_without_transport_dependency(monkeypatch):
 
 
 def test_doctor_rdp_reports_transport_ready(monkeypatch):
+    installed = {"aardwolf", "openadapt_flow", "openadapt_agent", "playwright"}
     monkeypatch.setattr(
         "importlib.util.find_spec",
-        lambda name: object() if name in {"aardwolf", "openadapt_flow"} else None,
+        lambda name: object() if name in installed else None,
     )
 
     result = CliRunner().invoke(cli_main, ["doctor", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "RDP transport dependency is installed" in result.output
+
+
+@pytest.mark.parametrize("backend_args", [[], ["--backend", "web"]])
+def test_doctor_fails_for_missing_chromium_system_libraries(
+    monkeypatch, backend_args
+):
+    """Default and web checks must stop before a Chromium download can fail."""
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup._missing_chromium_system_libs",
+        lambda: ["Xcomposite", "Xdamage", "Xfixes", "Xrandr"],
+    )
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup._chromium_present",
+        lambda: pytest.fail("Chromium must not be inspected before its libraries"),
+    )
+
+    result = CliRunner().invoke(cli_main, ["doctor", *backend_args])
+
+    assert result.exit_code != 0
+    assert "Xcomposite, Xdamage, Xfixes, Xrandr" in result.output
+    assert "-m playwright install-deps chromium" in result.output
+    assert "System check failed" in result.output
+
+
+def test_doctor_reports_lazy_browser_download_after_host_is_ready(monkeypatch):
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup._missing_chromium_system_libs", lambda: []
+    )
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup._chromium_present", lambda: False
+    )
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", "web"])
+
+    assert result.exit_code == 0, result.output
+    assert "system libraries are ready" in result.output
+    assert "will try to download" in result.output
+
+
+def test_doctor_fails_when_chromium_cannot_be_inspected(monkeypatch):
+    monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup._missing_chromium_system_libs", lambda: []
+    )
+
+    def fail_inspection():
+        raise RuntimeError("driver failed")
+
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup._chromium_present", fail_inspection
+    )
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", "web"])
+
+    assert result.exit_code != 0
+    assert "could not inspect the installed Chromium build" in result.output
+    assert "System check failed" in result.output
+
+
+def test_doctor_fails_without_playwright_for_web(monkeypatch):
+    installed = {"openadapt_flow", "openadapt_agent"}
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in installed else None,
+    )
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", "web"])
+
+    assert result.exit_code != 0
+    assert "base install does not contain Playwright" in result.output
+    assert "System check failed" in result.output
+
+
+@pytest.mark.parametrize("missing", ["openadapt_flow", "openadapt_agent", "playwright"])
+def test_doctor_fails_when_a_core_package_is_missing(monkeypatch, missing):
+    core = {"openadapt_flow", "openadapt_agent", "playwright"}
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in core - {missing} else None,
+    )
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", "citrix"])
+
+    assert result.exit_code != 0
+    assert f"[MISSING] {missing} (core dependency" in result.output
+    assert "System check failed" in result.output
 
 
 def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
@@ -347,7 +463,7 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
             else None
         ),
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
     result = CliRunner().invoke(
         cli_main,
         ["deploy", "--backend", "rdp", "--secret-ref", "env:BYOC_CONNECTOR_TOKEN"],
@@ -370,19 +486,19 @@ def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch)
         "importlib.util.find_spec",
         lambda name: object() if name in {"openadapt_flow", "aardwolf"} else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert "python -m pip install 'openadapt-flow[console]==1.29.0'" in result.output
+    assert "python -m pip install 'openadapt-flow[console]==1.35.0'" in result.output
     assert "openadapt flow console --bundles" not in result.output
     assert "Re-run this preflight" in result.output
 
 
 def test_deploy_console_requires_openadapt_types(monkeypatch):
-    """Flow 1.30 imports openadapt-types when the operator console starts."""
+    """The supported Flow console imports openadapt-types when it starts."""
     monkeypatch.setattr(
         "importlib.util.find_spec",
         lambda name: (
@@ -391,13 +507,13 @@ def test_deploy_console_requires_openadapt_types(monkeypatch):
             else None
         ),
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.30.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert "python -m pip install 'openadapt-flow[console]==1.30.0'" in result.output
+    assert "python -m pip install 'openadapt-flow[console]==1.35.0'" in result.output
     assert "openadapt flow console --bundles" not in result.output
 
 
@@ -422,7 +538,7 @@ def test_deploy_preflight_fails_without_web_runtime(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "web"])
 
@@ -440,7 +556,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.29.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
@@ -451,7 +567,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
     assert "Preflight passed" not in result.output
 
 
-@pytest.mark.parametrize("flow_version", ["1.28.9", "2.0.0", "2.1.0", "invalid"])
+@pytest.mark.parametrize("flow_version", ["1.34.9", "2.0.0", "2.1.0", "invalid"])
 def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
     monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
     monkeypatch.setattr("importlib.metadata.version", lambda _name: flow_version)
@@ -460,7 +576,7 @@ def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
 
     assert result.exit_code != 0
     assert "[UNSUPPORTED]" in result.output
-    assert ">=1.29.0,<2.0.0" in result.output
+    assert ">=1.35.0,<2.0.0" in result.output
     assert "Preflight passed" not in result.output
 
 

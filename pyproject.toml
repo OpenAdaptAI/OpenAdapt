@@ -30,11 +30,13 @@ classifiers = [
 # Base install: the CLI, the flagship demonstration compiler, and the browser
 # driver used by the bundled tutorial. `pip install openadapt` must make the
 # public `openadapt quickstart` command work without a second package install.
-# Playwright downloads Chromium lazily on the first browser action. All other
-# capabilities (capture, ml, evals, ...) remain opt-in extras.
+# OpenAdapt asks Playwright to download Chromium on the first browser action.
+# Linux system libraries remain host prerequisites; `openadapt doctor` and Flow
+# check them before the browser download. All other capabilities (capture, ml,
+# evals, ...) remain opt-in extras.
 dependencies = [
     "click>=8.0.0",
-    "openadapt-flow[browser,hosted]>=1.29.0,<2.0.0",
+    "openadapt-flow[browser,hosted]>=1.35.0,<2.0.0",
     # Day-1 partner kit: `pip install openadapt` must expose
     # `openadapt-agent serve --allow-run` without a second package.
     "openadapt-agent>=2.0.1,<3",
@@ -45,8 +47,9 @@ dependencies = [
 browser = [
     # Kept as a compatibility alias for existing install commands. The base
     # launcher now selects this Flow contract because the bundled quickstart
-    # uses the browser. Chromium remains lazy on first use.
-    "openadapt-flow[browser]>=1.29.0,<2.0.0",
+    # uses the browser. OpenAdapt requests Chromium on first browser use after
+    # the host dependency check passes.
+    "openadapt-flow[browser]>=1.35.0,<2.0.0",
 ]
 # Local human desktop recording. Flow owns the supported capture adapter
 # contract; the direct floor prevents an already-installed pre-1.0 Capture
@@ -54,22 +57,22 @@ browser = [
 # separately provisioned executable, not a Python-package dependency.
 capture = [
     "openadapt-capture>=1.2.0,<2.0.0",
-    "openadapt-flow[capture]>=1.29.0,<2.0.0",
+    "openadapt-flow[capture]>=1.35.0,<2.0.0",
 ]
 # Replay substrate dependencies stay separate from capture: recording observes
 # the human on the local interactive desktop, while replay may target a WAA
 # agent, a native app, or a remote framebuffer.
 windows = [
-    "openadapt-flow[windows]>=1.29.0,<2.0.0",
+    "openadapt-flow[windows]>=1.35.0,<2.0.0",
 ]
 macos = [
-    "openadapt-flow[macos]>=1.29.0,<2.0.0; sys_platform == 'darwin'",
+    "openadapt-flow[macos]>=1.35.0,<2.0.0; sys_platform == 'darwin'",
 ]
 linux = [
-    "openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux'",
+    "openadapt-flow[linux]>=1.35.0,<2.0.0; sys_platform == 'linux'",
 ]
 rdp = [
-    "openadapt-flow[rdp]>=1.29.0,<2.0.0",
+    "openadapt-flow[rdp]>=1.35.0,<2.0.0",
 ]
 ml = [
     "openadapt-ml>=0.2.0",
@@ -87,13 +90,13 @@ retrieval = [
     "openadapt-retrieval>=0.1.0",
 ]
 privacy = [
-    "openadapt-flow[privacy]>=1.29.0,<2.0.0",
+    "openadapt-flow[privacy]>=1.35.0,<2.0.0",
 ]
 # `flow` now ships in the base install (see `dependencies` above). This
 # extra is kept for backward compatibility so `pip install openadapt[flow]`
 # and the `all` bundle still resolve.
 flow = [
-    "openadapt-flow>=1.29.0,<2.0.0",
+    "openadapt-flow>=1.35.0,<2.0.0",
 ]
 # `openadapt-agent` also ships in the base install. Keep the extra so
 # `pip install openadapt[agent]` still resolves.

@@ -94,9 +94,25 @@ openadapt doctor --backend web
 openadapt deploy --backend web
 ```
 
-`doctor` checks the local capability dependencies. `deploy` performs a
-read-only deployment preflight and prints the applicable Flow and Desktop
-path. Neither command certifies a customer workflow.
+`doctor` checks the required launcher packages. For the default and `web`
+checks, it also uses Flow's Chromium library probe. A missing core package or
+Chromium system library returns a nonzero exit status. On Linux, install missing
+browser libraries with:
+
+```bash
+python -m playwright install-deps chromium
+```
+
+Playwright asks for administrator access when the package manager needs it.
+The command printed by `doctor` uses the exact Python interpreter that runs the
+launcher, including an interpreter inside an isolated tool environment.
+
+An absent Chromium binary does not fail the check when its host libraries are
+ready. OpenAdapt will ask Playwright to download the matching build on the first
+browser action, so that action needs network access.
+
+`deploy` performs a read-only deployment preflight and prints the applicable
+Flow and Desktop path. Neither command certifies a customer workflow.
 
 ## Hosted connection
 
