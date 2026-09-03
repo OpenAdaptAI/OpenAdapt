@@ -47,6 +47,7 @@ from generate_platform_manifest import (  # noqa: E402
     _compatibility_status,
     _dependency_edges,
     _parse_component_versions,
+    _release_ref_candidates,
     _runtime_unit_requirements,
     _version_satisfies,
 )
@@ -421,6 +422,19 @@ def test_release_train_uses_explicit_published_version_inputs() -> None:
     }
     with pytest.raises(DriftError, match="ROLE=VERSION"):
         _parse_component_versions(["unknown=1.0.0"])
+
+
+def test_desktop_release_ref_candidates_include_python_package_tag() -> None:
+    """Desktop 0.16.0 published v0.16.0 and no desktop-v0.16.0 tag.
+
+    The generator must bind a tag that exists. It must not invent
+    desktop-vX.Y.Z when that native tag was never published.
+    """
+    assert _release_ref_candidates("desktop", "0.16.0") == (
+        "desktop-v0.16.0",
+        "v0.16.0",
+    )
+    assert _release_ref_candidates("privacy", "1.1.0") == ("v1.1.0",)
 
 
 def test_schema_ranges_are_closed_and_exact(manifest: dict) -> None:

@@ -70,7 +70,7 @@ GITHUB_TREE_URL_TEMPLATE = (
 )
 DESKTOP_NATIVE_LOCK_URL_TEMPLATE = (
     "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/"
-    "desktop-v{version}/uv.lock"
+    "{release_ref}/uv.lock"
 )
 HTTP_TIMEOUT_SECONDS = 30
 
@@ -254,8 +254,14 @@ def _fetch_text(url: str) -> str:
         ) from exc
 
 
-def _fetch_json_optional(url: str) -> dict | list | None:
-    """Fetch JSON, returning ``None`` only for a real HTTP 404."""
+def _fetch_json_optional(
+    url: str, *, missing_status_codes: tuple[int, ...] = (404,)
+) -> dict | list | None:
+    """Fetch JSON, returning ``None`` for configured missing-resource statuses.
+
+    GitHub's commit-by-ref endpoint returns 422 (not 404) when the tag does
+    not exist. Callers that probe candidate tags must pass that code.
+    """
 
     headers = {"User-Agent": "openadapt-platform-manifest-generator"}
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
@@ -266,7 +272,7 @@ def _fetch_json_optional(url: str) -> dict | list | None:
         with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as exc:
-        if exc.code == 404:
+        if exc.code in missing_status_codes:
             return None
         raise DriftError(f"FATAL: could not fetch {url}: {exc}") from exc
     except (urllib.error.URLError, TimeoutError) as exc:
@@ -470,32 +476,52 @@ def _openadapt_dependency_constraints(
     )
 
 
-def _release_ref(role: str, version: str) -> str:
-    prefix = "desktop-v" if role == "desktop" else "v"
-    return f"{prefix}{version}"
+def _release_ref_candidates(role: str, version: str) -> tuple[str, ...]:
+    """Return published Git tags that may identify this component version.
+
+    Desktop historically tagged native sidecars ``desktop-vX.Y.Z`` and Python
+    packages ``vX.Y.Z``. A release may publish only one of those. Other
+    components use ``vX.Y.Z``. The generator binds the first tag that exists;
+    it does not invent a tag name.
+    """
+    if role == "desktop":
+        return (f"desktop-v{version}", f"v{version}")
+    return (f"v{version}",)
 
 
 def _source_provenance(role: str, version: str) -> dict:
     repository = COMPONENT_REPOSITORIES[role]
-    release_ref = _release_ref(role, version)
-    url = GITHUB_COMMIT_URL_TEMPLATE.format(
-        repository=repository, release_ref=release_ref
-    )
-    doc = _fetch_json(url)
-    commit = doc.get("sha")
-    tree = doc.get("commit", {}).get("tree", {}).get("sha")
-    if not isinstance(commit, str) or not isinstance(tree, str):
-        raise DriftError(
-            f"FATAL: {url} did not resolve an exact commit and tree for "
-            f"{repository}@{release_ref}."
+    candidates = _release_ref_candidates(role, version)
+    for release_ref in candidates:
+        url = GITHUB_COMMIT_URL_TEMPLATE.format(
+            repository=repository, release_ref=release_ref
         )
-    return {
-        "repository": repository,
-        "release_ref": release_ref,
-        "commit": commit,
-        "tree": tree,
-        "url": f"https://github.com/{repository}/tree/{release_ref}",
-    }
+        doc = _fetch_json_optional(url, missing_status_codes=(404, 422))
+        if doc is None:
+            continue
+        if not isinstance(doc, dict):
+            raise DriftError(
+                f"FATAL: {url} did not return a commit object for "
+                f"{repository}@{release_ref}."
+            )
+        commit = doc.get("sha")
+        tree = doc.get("commit", {}).get("tree", {}).get("sha")
+        if not isinstance(commit, str) or not isinstance(tree, str):
+            raise DriftError(
+                f"FATAL: {url} did not resolve an exact commit and tree for "
+                f"{repository}@{release_ref}."
+            )
+        return {
+            "repository": repository,
+            "release_ref": release_ref,
+            "commit": commit,
+            "tree": tree,
+            "url": f"https://github.com/{repository}/tree/{release_ref}",
+        }
+    raise DriftError(
+        f"FATAL: {repository} has no published release tag for {version}. "
+        f"Tried {', '.join(candidates)}."
+    )
 
 
 def _pypi_component(role: str, requested_version: str | None = None) -> dict:
@@ -659,12 +685,11 @@ def _runtime_unit_requirements(
 
 
 def _desktop_sidecar_lock(
-    version: str, required_packages: set[str]
+    source_ref: str, required_packages: set[str]
 ) -> tuple[str, str, str, dict[str, str]]:
     """Read the immutable package closure used by the native sidecar build."""
 
-    source_ref = f"desktop-v{version}"
-    url = DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(version=version)
+    url = DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(release_ref=source_ref)
     lock_text = _fetch_text(url)
     try:
         lock = tomllib.loads(lock_text)
@@ -698,7 +723,7 @@ def _runtime_units(components: dict[str, dict]) -> dict[str, dict]:
     requirements = _runtime_unit_requirements(components)
     sidecar_ref, sidecar_lock_url, sidecar_lock_sha256, sidecar_resolved = (
         _desktop_sidecar_lock(
-            components["desktop"]["version"],
+            components["desktop"]["provenance"]["release_ref"],
             set(requirements["desktop_sidecar"]),
         )
     )

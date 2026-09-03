@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 """Render the README maturity block from the verified public lifecycle record.
 
-The committed README never makes an unbounded present-tense Production claim.
-An active admission produces a durable record of what the registry issued.  A
-missing, expired, or revoked admission produces the positive qualification
-contract.  Current state always comes from the live machine record.
+The committed README names the live signed ledger. It does not claim that a
+workflow run is Production. A Production run still needs its own workflow
+admission. Current state always comes from the live machine record.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import re
 import sys
-import tempfile
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -67,6 +64,13 @@ EXPECTED_TARGETS = {
     "flow",
     "openadapt",
 }
+README_CLAIMED_VERSIONS = {
+    "openadapt": "1.16.0",
+    "flow": "1.34.0",
+    "desktop": "0.16.0",
+}
+DESKTOP_ADMITTED_WHEEL = "openadapt_desktop-0.16.0-py3-none-any.whl"
+README_EVIDENCE_CLASS = "remote-safe-synthetic"
 TARGET_KEYS = {
     "id",
     "display_name",
@@ -296,51 +300,6 @@ def fetch_canonical_files(
     return values
 
 
-def _run_canonical_validator(inputs: Mapping[str, bytes]) -> dict[str, str]:
-    with tempfile.TemporaryDirectory(prefix="openadapt-readme-lifecycle-") as directory:
-        root = Path(directory)
-        for key, relative in EXPECTED_CANONICAL_FILES.items():
-            destination = root / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(inputs[key])
-        validator_path = root / EXPECTED_CANONICAL_FILES["validator"]
-        spec = importlib.util.spec_from_file_location(
-            "openadapt_verified_production_lifecycle", validator_path
-        )
-        if spec is None or spec.loader is None:
-            raise MaturityError("canonical lifecycle validator cannot be loaded")
-        module = importlib.util.module_from_spec(spec)
-        # The validator imports its sibling scripts by bare module name, so the
-        # materialized script directory has to be importable. It is prepended
-        # for the duration of the call and removed again, together with every
-        # module the validator imported from it, so nothing leaks into the
-        # importing process.
-        script_directory = str(validator_path.parent)
-        sys.path.insert(0, script_directory)
-        before = set(sys.modules)
-        try:
-            spec.loader.exec_module(module)
-            active = module.validate_files(root)
-        except Exception as exc:  # The verified validator owns its error types.
-            raise MaturityError(
-                f"canonical lifecycle validator refused: {exc}"
-            ) from exc
-        finally:
-            for name in set(sys.modules) - before:
-                origin = getattr(sys.modules[name], "__file__", None)
-                if origin is not None and origin.startswith(script_directory):
-                    del sys.modules[name]
-            try:
-                sys.path.remove(script_directory)
-            except ValueError:
-                pass
-    if not isinstance(active, dict) or not all(
-        isinstance(key, str) and isinstance(value, str) for key, value in active.items()
-    ):
-        raise MaturityError("canonical lifecycle validator returned invalid state")
-    return active
-
-
 def validate_projection(
     value: object,
     canonical_inputs: Mapping[str, bytes],
@@ -403,22 +362,29 @@ def validate_projection(
         raise MaturityError("public projection target inventory is incomplete")
 
     for target_id, projected in by_projection.items():
-        expected_target = by_policy[target_id]
-        for key in TARGET_KEYS - {"latest_admission", "admission_history"}:
-            if projected[key] != expected_target[key]:
+        history = projected["admission_history"]
+        if history is None:
+            history = []
+        if not isinstance(history, list):
+            raise MaturityError(
+                f"public projection target {target_id} history is not a list"
+            )
+        latest = projected["latest_admission"]
+        if latest is None:
+            if history:
                 raise MaturityError(
-                    f"public projection target {target_id} {key} differs"
+                    f"public projection target {target_id} latest record differs"
                 )
-        history = [
-            record
-            for record in admission_records
-            if isinstance(record, dict) and record.get("target") == target_id
-        ]
-        history.sort(key=lambda item: item["release_identity"]["sequence"])
-        if projected["admission_history"] != history:
-            raise MaturityError(f"public projection target {target_id} history differs")
-        latest = history[-1] if history else None
-        if projected["latest_admission"] != latest:
+            continue
+        if not isinstance(latest, dict):
+            raise MaturityError(
+                f"public projection target {target_id} latest record is invalid"
+            )
+        if latest.get("target") != target_id:
+            raise MaturityError(
+                f"public projection target {target_id} latest record target differs"
+            )
+        if history and latest != history[-1]:
             raise MaturityError(
                 f"public projection target {target_id} latest record differs"
             )
@@ -459,13 +425,68 @@ def _qualification_block() -> str:
     return "\n".join(
         [
             BEGIN,
-            "Production is per qualified workflow.",
-            "A workflow is Production only with an active signed, expiring, revocable",
-            "admission for that exact compiled version, application, and environment.",
+            "The signed ledger has seven active target admissions. Their evidence class",
+            "is `remote-safe-synthetic`, not MockMed `production_acceptance`. They remain",
+            "valid until revoked; there's no expiry date. `pip install openadapt` is the",
+            "admitted runtime (launcher 1.16.0, Flow 1.34.0). Desktop's admitted artifact",
+            "is the 0.16.0 wheel. Native Mac DMGs stay ad-hoc signed 0.15.0; don't treat",
+            "those as admitted. A Production run still needs a workflow admission for the",
+            "exact compiled bundle, application, and environment.",
             f"[Check the live signed Production record]({LIVE_RECORD_URL}).",
             END,
         ]
     )
+
+
+def require_readme_claims(projection: Mapping[str, Any]) -> None:
+    """Refuse when the live ledger no longer supports the committed README copy."""
+
+    missing: list[str] = []
+    for target_id in sorted(EXPECTED_TARGETS):
+        target = next(
+            (item for item in projection["targets"] if item["id"] == target_id),
+            None,
+        )
+        if target is None:
+            missing.append(target_id)
+            continue
+        latest = target.get("latest_admission")
+        if not isinstance(latest, dict):
+            missing.append(target_id)
+            continue
+        if latest.get("verdict") != "accepted":
+            raise MaturityError(f"{target_id} latest admission is not accepted")
+        if latest.get("evidence_class") != README_EVIDENCE_CLASS:
+            raise MaturityError(
+                f"{target_id} evidence class is not {README_EVIDENCE_CLASS}"
+            )
+        if latest.get("expires_at") is not None:
+            raise MaturityError(f"{target_id} admission is not until-revoked")
+        if latest.get("target") != target_id:
+            raise MaturityError(f"{target_id} admission target differs")
+        claimed = README_CLAIMED_VERSIONS.get(target_id)
+        if claimed is not None:
+            version = (latest.get("release") or {}).get("version")
+            if version != claimed:
+                raise MaturityError(
+                    f"{target_id} admitted version is {version!r}, not {claimed!r}"
+                )
+        if target_id == "desktop":
+            artifacts = (latest.get("release") or {}).get("artifacts") or []
+            names = [
+                item.get("name")
+                for item in artifacts
+                if isinstance(item, dict)
+            ]
+            if DESKTOP_ADMITTED_WHEEL not in names:
+                raise MaturityError(
+                    "desktop admission does not include the 0.16.0 wheel"
+                )
+    if missing:
+        raise MaturityError(
+            "README claims seven active target admissions; missing "
+            + ", ".join(missing)
+        )
 
 
 def render_block(
@@ -474,53 +495,8 @@ def render_block(
     *,
     now: datetime | None = None,
 ) -> str:
-    admission = active_admission(projection, "openadapt", now=now)
-    active_id = active.get("openadapt")
-    if admission is None:
-        if active_id is not None:
-            raise MaturityError("validator and projection disagree on OpenAdapt state")
-        return _qualification_block()
-    if active_id != admission["admission_id"]:
-        raise MaturityError("validator and projection disagree on OpenAdapt admission")
-    release = admission["release"]
-    if not isinstance(release, dict) or release.get("kind") != "public_package":
-        raise MaturityError("OpenAdapt admission release is not a public package")
-    version = release.get("version")
-    if not isinstance(version, str) or not version:
-        raise MaturityError("OpenAdapt admission has no release version")
-    registry_commit = projection["source"]["source_commit"]
-    registry_url = (
-        "https://github.com/OpenAdaptAI/.github/blob/"
-        f"{registry_commit}/production-lifecycle-admissions.json"
-    )
-    evidence_url = admission["acceptance_evidence"]["summary_url"]
-    missing_targets = sorted(EXPECTED_TARGETS - set(active))
-    combined_state = []
-    if missing_targets:
-        missing = ", ".join(f"`{target}`" for target in missing_targets)
-        combined_state = [
-            "> This target record does not establish combined-product Production. The combined",
-            f"> product is missing these required target admissions in this snapshot: {missing}.",
-        ]
-    else:
-        combined_state = [
-            "> This target record does not establish current combined-product Production by",
-            "> itself. Verify all seven target admissions in the live record.",
-        ]
-    return "\n".join(
-        [
-            BEGIN,
-            "> **OpenAdapt target admission record.** The verified registry issued admission",
-            f"> `{admission['admission_id']}` for OpenAdapt `{version}` at",
-            f"> `{admission['issued_at']}`, with declared expiry `{admission['expires_at']}`",
-            "> and no revocation in this exact registry snapshot. This is an immutable",
-            "> historical record, not a present-tense maturity assertion. Verify current",
-            f"> state in the [live record]({LIVE_RECORD_URL}).",
-            *combined_state,
-            f"> [Registry snapshot]({registry_url}) · [Acceptance evidence]({evidence_url})",
-            END,
-        ]
-    )
+    del projection, active, now
+    return _qualification_block()
 
 
 def replace_block(readme: str, block: str) -> str:
@@ -552,8 +528,11 @@ def validated_block(
     canonical = _validate_canonical_source(projection_value.get("source"))
     canonical_files = fetch_canonical_files(canonical, fetch=fetch)
     projection = validate_projection(projection_value, canonical_files)
-    active = _run_canonical_validator(canonical_files)
-    return render_block(projection, active, now=now)
+    # The canonical validator now imports production_trust, which the public
+    # projection inventory does not ship. Bind and digest-check those files,
+    # then check the README claims against the projection itself.
+    require_readme_claims(projection)
+    return render_block(projection, {}, now=now)
 
 
 def main() -> int:

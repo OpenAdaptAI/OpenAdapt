@@ -19,7 +19,8 @@ it must agree with. Other repositories contribute source data only:
 - PyPI is the authority for published versions, artifact URLs, and digests.
 - Each exact public release tag is the authority for its release source commit
   and tree. This reference is not, by itself, a build-provenance attestation.
-- The exact `desktop-vX.Y.Z` tag and its `uv.lock` are the authority for the
+- The exact published Desktop release tag (`desktop-vX.Y.Z` when that native
+  tag exists, otherwise `vX.Y.Z`) and its `uv.lock` are the authority for the
   package versions frozen into `openadapt-engine`.
 - `https://openadapt.ai/status.json` (maintained in `openadapt-web`,
   `public/status.json`) is the authority for substrate availability, release
@@ -185,7 +186,8 @@ Validated today:
   `public/status.json` and `data/published-version-claims.json` in
   `openadapt-web`.
 - Native sidecar agreement: the Desktop sidecar's resolved OpenAdapt package
-  versions and lock digest match the exact `desktop-vX.Y.Z` tag's `uv.lock`.
+  versions and lock digest match the exact published Desktop release tag's
+  `uv.lock` (`desktop-vX.Y.Z` when present, otherwise `vX.Y.Z`).
 - Compatibility honesty: the validator recomputes every dependency edge among
   the seven selected components. Optional-extra markers remain visible. The
   Desktop edges resolve against its exact sidecar lock; other edges resolve

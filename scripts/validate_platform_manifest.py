@@ -93,7 +93,7 @@ from generate_platform_manifest import (
     _github_tree_entries,
     _openadapt_dependency_constraints,
     _openadapt_requirements,
-    _release_ref,
+    _release_ref_candidates,
     _runtime_unit_requirements,
     _schema_compatibility,
     _substrates_from_status,
@@ -219,16 +219,16 @@ def check_structure(manifest: dict, report: Report) -> None:
             report.error(f"component {role} source must be 'pypi'")
         provenance = component.get("provenance", {})
         expected_repository = COMPONENT_REPOSITORIES.get(role)
-        expected_ref = _release_ref(role, str(component.get("version")))
+        expected_refs = _release_ref_candidates(role, str(component.get("version")))
         if provenance.get("repository") != expected_repository:
             report.error(
                 f"component {role} provenance repository is "
                 f"{provenance.get('repository')!r}, expected {expected_repository!r}"
             )
-        if provenance.get("release_ref") != expected_ref:
+        if provenance.get("release_ref") not in expected_refs:
             report.error(
                 f"component {role} release_ref is "
-                f"{provenance.get('release_ref')!r}, expected {expected_ref!r}"
+                f"{provenance.get('release_ref')!r}, expected one of {expected_refs!r}"
             )
         for digest in ("commit", "tree"):
             if not re.fullmatch(r"[0-9a-f]{40}", str(provenance.get(digest, ""))):
@@ -433,14 +433,16 @@ def check_structure(manifest: dict, report: Report) -> None:
         )
 
     sidecar = runtime_units.get("desktop_sidecar", {})
-    expected_sidecar_ref = f"desktop-v{sidecar.get('version')}"
+    expected_sidecar_ref = (
+        components.get("desktop", {}).get("provenance", {}).get("release_ref")
+    )
     if sidecar.get("source_ref") != expected_sidecar_ref:
         report.error(
             f"desktop_sidecar source_ref is {sidecar.get('source_ref')!r}, "
             f"expected {expected_sidecar_ref!r}"
         )
     expected_lock_url = DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(
-        version=sidecar.get("version")
+        release_ref=expected_sidecar_ref
     )
     if sidecar.get("lock_url") != expected_lock_url:
         report.error(
@@ -882,9 +884,17 @@ def check_source_provenance(
 ) -> None:
     for role, component in manifest.get("components", {}).items():
         provenance = component.get("provenance", {})
+        release_ref = provenance.get("release_ref")
+        expected_refs = _release_ref_candidates(role, str(component.get("version")))
+        if release_ref not in expected_refs:
+            report.error(
+                f"{role} source provenance uses release_ref {release_ref!r}, "
+                f"expected one of {expected_refs!r}"
+            )
+            continue
         url = GITHUB_COMMIT_URL_TEMPLATE.format(
             repository=COMPONENT_REPOSITORIES[role],
-            release_ref=_release_ref(role, str(component.get("version"))),
+            release_ref=release_ref,
         )
         try:
             doc = _fetch_json(url)
@@ -1016,13 +1026,14 @@ def check_desktop_sidecar_lock(
     unit = manifest.get("runtime_units", {}).get("desktop_sidecar", {})
     version = unit.get("version")
     source_ref = unit.get("source_ref")
-    expected_ref = f"desktop-v{version}"
-    if source_ref != expected_ref:
+    expected_refs = _release_ref_candidates("desktop", str(version))
+    if source_ref not in expected_refs:
         report.error(
-            f"desktop_sidecar source_ref is {source_ref!r}, expected {expected_ref!r}"
+            f"desktop_sidecar source_ref is {source_ref!r}, "
+            f"expected one of {expected_refs!r}"
         )
         return
-    url = DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(version=version)
+    url = DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(release_ref=source_ref)
     try:
         lock_text = _fetch_text(url)
         resolved = _locked_openadapt_versions(

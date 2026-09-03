@@ -265,9 +265,13 @@ self-service API. Partner contract and qualification process:
 [the Execute guide](https://docs.openadapt.ai/commercial/oem-brief/).
 
 <!-- BEGIN PRODUCTION LIFECYCLE -->
-Production is per qualified workflow.
-A workflow is Production only with an active signed, expiring, revocable
-admission for that exact compiled version, application, and environment.
+The signed ledger has seven active target admissions. Their evidence class
+is `remote-safe-synthetic`, not MockMed `production_acceptance`. They remain
+valid until revoked; there's no expiry date. `pip install openadapt` is the
+admitted runtime (launcher 1.16.0, Flow 1.34.0). Desktop's admitted artifact
+is the 0.16.0 wheel. Native Mac DMGs stay ad-hoc signed 0.15.0; don't treat
+those as admitted. A Production run still needs a workflow admission for the
+exact compiled bundle, application, and environment.
 [Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 <!-- END PRODUCTION LIFECYCLE -->
 
