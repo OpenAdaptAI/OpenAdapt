@@ -997,6 +997,18 @@ def _replay_desktop(
     )
 
 
+def _record_until_stop(args: argparse.Namespace):
+    """Poll ``--until-cmd`` until it exits 0. Ctrl-C remains the fallback."""
+
+    raw = getattr(args, "until_cmd", None)
+    if not raw:
+        return None
+    from openadapt_flow.desktop_record import UntilCommand, parse_until_cmd
+
+    print("Recording until the check succeeds. Ctrl-C still stops.")
+    return UntilCommand(parse_until_cmd(raw))
+
+
 def _cmd_record(args: argparse.Namespace) -> int:
     # The interactive (web) recorder installs in-page DOM listeners against a
     # headed Playwright page. The DESKTOP recorder (--backend windows) captures
@@ -1095,6 +1107,7 @@ def _cmd_record(args: argparse.Namespace) -> int:
             headless=args.headless,
             cdp_endpoint=getattr(args, "browser_cdp_endpoint", None),
             browser_page_url=getattr(args, "browser_page_url", None),
+            stop_when=_record_until_stop(args),
             surface="web",
         )
     except BrowserAttachError as exc:
@@ -1277,6 +1290,7 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
         replay_window=getattr(args, "rdp_window", None),
         replay_window_title=getattr(args, "rdp_window_title", None),
         readiness_text=getattr(args, "rdp_readiness_text", None),
+        stop=_record_until_stop(args),
     )
     _stamp_recording_surface(out, backend)
     print(f"Recording written to {out}")
@@ -5364,6 +5378,16 @@ def build_parser() -> argparse.ArgumentParser:
             "Task description for a desktop "
             "(--backend windows/macos/linux/rdp/citrix) capture session "
             "(stored in the recording metadata)."
+        ),
+    )
+    p.add_argument(
+        "--until-cmd",
+        default=None,
+        metavar="CMD",
+        help=(
+            "Run CMD on an interval while recording. Exit 0 stops the record. "
+            "The command is not captured as clicks. Ctrl-C still stops. "
+            "A non-zero exit keeps recording (probe failure is not done)."
         ),
     )
     p.add_argument(

@@ -44,6 +44,8 @@ from __future__ import annotations
 
 import functools
 import json
+import shlex
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -93,23 +95,102 @@ def _default_recorder_factory(
     capture session and surfaced by the capture adapter into ``meta.json``.
     """
     try:
+        from loguru import logger
         from openadapt_capture import Recorder as CaptureRecorder
+        from openadapt_capture import recorder as capture_recorder
     except ImportError as exc:  # pragma: no cover - exercised via install state
         raise ImportError(
             "openadapt-capture is required to record a desktop workflow but is "
             "not installed. Install the optional extra:\n\n"
             "    pip install 'openadapt-flow[capture]'\n"
         ) from exc
-    return CaptureRecorder(
-        task_description=task_description, capture_dir=capture_dir, window=window
-    )
+    import inspect
+
+    params = inspect.signature(CaptureRecorder.__init__).parameters
+    if "window" not in params:
+        raise SystemExit(
+            "record: this openadapt-capture does not accept window=. "
+            "Need openadapt-capture>=1.2.2. Run: pip install -U "
+            "'openadapt-capture==1.2.2'"
+        )
+    if hasattr(capture_recorder, "LOG_LEVEL"):
+        capture_recorder.LOG_LEVEL = "WARNING"
+    logger.remove()
+    logger.add(sys.stderr, level="WARNING")
+    kwargs: dict[str, Any] = {
+        "task_description": task_description,
+        "capture_dir": capture_dir,
+        "window": window,
+    }
+    if "plot_performance" in params:
+        kwargs["plot_performance"] = False
+    return CaptureRecorder(**kwargs)
+
+
+def parse_until_cmd(raw: str) -> list[str]:
+    """Split ``--until-cmd`` into argv. Empty input is a usage error."""
+
+    argv = shlex.split(raw)
+    if not argv:
+        raise SystemExit("record: --until-cmd is empty. Nothing was recorded.")
+    return argv
+
+
+class UntilCommand:
+    """Poll a command. Exit 0 stops the record. Other exits keep recording.
+
+    The command is not part of the demonstration. Ctrl-C still stops.
+    Probe failures must not stop the record (fail closed on the check, not
+    on the capture).
+    """
+
+    def __init__(
+        self,
+        argv: list[str],
+        *,
+        interval_s: float = 2.0,
+        timeout_s: float = 30.0,
+        run: Optional[Callable[..., Any]] = None,
+        announce: bool = True,
+    ) -> None:
+        if not argv:
+            raise ValueError("until-cmd argv must not be empty")
+        self.argv = list(argv)
+        self.interval_s = interval_s
+        self.timeout_s = timeout_s
+        self._run = run or subprocess.run
+        self._announce = announce
+        self._next = 0.0
+        self._fired = False
+
+    def __call__(self) -> bool:
+        if self._fired:
+            return True
+        now = time.monotonic()
+        if now < self._next:
+            return False
+        self._next = now + self.interval_s
+        try:
+            result = self._run(
+                self.argv,
+                capture_output=True,
+                timeout=self.timeout_s,
+            )
+        except Exception:
+            return False
+        if int(getattr(result, "returncode", 1)) != 0:
+            return False
+        self._fired = True
+        if self._announce:
+            print("\n[record] check succeeded; stopping.")
+        return True
 
 
 def _wait_for_stop(stop: Optional[Callable[[], bool]]) -> None:
     """Block until the operator interrupts (Ctrl-C) or ``stop()`` returns True.
 
-    ``stop`` is a test/programmatic hook; in the interactive CLI it is None and
-    the loop runs until KeyboardInterrupt.
+    ``stop`` is a test/programmatic hook or ``--until-cmd``. Ctrl-C remains
+    the fallback when the check has not succeeded yet.
     """
     try:
         while True:
@@ -117,7 +198,9 @@ def _wait_for_stop(stop: Optional[Callable[[], bool]]) -> None:
                 return
             time.sleep(0.2)
     except KeyboardInterrupt:
-        print("\n[record] stopping…")
+        print("\n[record] stopping (Ctrl-C).")
+        if stop is not None:
+            print("[record] If you set --until-cmd, run that check before compile.")
 
 
 def record_desktop_capture(
@@ -236,9 +319,16 @@ def record_desktop_capture(
                 "  Window-scoped capture is active (recording that window's "
                 "own pixels; target selectors are not printed).\n"
             )
+        until_line = ""
+        if stop is not None:
+            until_line = (
+                "  Recording stops when the check succeeds.\n"
+                "  Ctrl-C still stops (fallback).\n"
+            )
         print(
             f"Recording desktop workflow (task: {task_description!r}).\n"
             f"{scope_line}"
+            f"{until_line}"
             "  Perform your workflow on the target desktop now.\n"
             "  Press Ctrl-C here to finish."
         )

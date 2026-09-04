@@ -18,7 +18,11 @@ from typing import Any, Optional
 import pytest
 from PIL import Image, ImageDraw
 
-from openadapt_flow.desktop_record import record_desktop_capture
+from openadapt_flow.desktop_record import (
+    UntilCommand,
+    parse_until_cmd,
+    record_desktop_capture,
+)
 
 VIEWPORT = (800, 600)
 SEARCH = (120, 90)
@@ -956,3 +960,79 @@ def test_record_desktop_no_window_ok_on_any_platform(
         announce=False,
     )
     assert out == tmp_path / "rec"
+
+
+def test_parse_until_cmd_rejects_empty() -> None:
+    with pytest.raises(SystemExit, match="--until-cmd is empty"):
+        parse_until_cmd("   ")
+
+
+def test_until_command_stops_only_on_exit_zero() -> None:
+    calls: list[list[str]] = []
+
+    class _Result:
+        def __init__(self, code: int) -> None:
+            self.returncode = code
+
+    def run(argv: list[str], **kwargs: Any) -> _Result:
+        calls.append(list(argv))
+        return _Result(1 if len(calls) < 2 else 0)
+
+    stop = UntilCommand(
+        ["python3", "check_awake.py"],
+        interval_s=0.0,
+        run=run,
+        announce=False,
+    )
+    assert stop() is False
+    assert stop() is True
+    assert stop() is True
+    assert calls == [
+        ["python3", "check_awake.py"],
+        ["python3", "check_awake.py"],
+    ]
+
+
+def test_until_command_probe_error_keeps_recording() -> None:
+    def run(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("probe down")
+
+    stop = UntilCommand(
+        ["python3", "check_awake.py"],
+        interval_s=0.0,
+        run=run,
+        announce=False,
+    )
+    assert stop() is False
+
+
+def test_cli_record_macos_until_cmd_stops_capture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_record(out_dir, **kwargs):
+        captured["stop"] = kwargs.get("stop")
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        return Path(out_dir)
+
+    monkeypatch.setattr(
+        "openadapt_flow.desktop_record.record_desktop_capture", fake_record
+    )
+    rc = _run_cli(
+        [
+            "record",
+            "--backend",
+            "macos",
+            "--macos-app",
+            "Google Chrome",
+            "--out",
+            str(tmp_path / "rec"),
+            "--until-cmd",
+            "python3 check_awake.py",
+        ]
+    )
+    assert rc == 0
+    stop = captured["stop"]
+    assert isinstance(stop, UntilCommand)
+    assert stop.argv == ["python3", "check_awake.py"]
