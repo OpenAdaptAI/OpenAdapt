@@ -35,7 +35,7 @@ openadapt-agent serve --allow-run
 
 Local unsigned replay is free. If the tool returns unsigned success, treat it as failure. Production success without a Seal is failure. HALTED does not mint a Seal.
 
-A first demo over stdio uses a second MCP server. `--authoring` does not enable run tools.
+A first demo over stdio uses a second MCP server. `--authoring` does not enable run tools. First-demo compile needs a human ok before the tool is callable, and that ok is the whole approval.
 
 ```bash
 claude mcp add openadapt-authoring -- \
@@ -124,7 +124,7 @@ The client gets `list_workflows`, `get_workflow`, `get_run_report`, `list_needs_
 | `run_local_quickstart` | `--allow-run` with no `--bundles` |
 | `reject_attention`, `teach_attention`, `escalate_attention` | `--allow-attended-actions` |
 | `continue_attention`, `skip_attention` | `--allow-attended-actions` plus a qualified deployment `--config` |
-| `observe`, `start_record`, `click`, `halt` | `--authoring` |
+| `observe`, `start_record`, `click`, `halt`, `compile`, `admit` | `--authoring` |
 
 `--headed` keeps the attended web session visible. The MCP server is stdio. The target app still has a window.
 

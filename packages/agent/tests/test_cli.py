@@ -206,6 +206,7 @@ def test_authoring_serve_registers_probe_tools_without_run(monkeypatch, capsys):
     names = [spec.name for spec in authoring.list_tool_specs()]
     assert names[:4] == ["observe", "start_record", "click", "halt"]
     assert "type" in names
+    assert "admit" in names
     assert captured["session_kwargs"]["out_dir"].name == "authoring"
     err = capsys.readouterr().err
     assert "authoring tools enabled" in err

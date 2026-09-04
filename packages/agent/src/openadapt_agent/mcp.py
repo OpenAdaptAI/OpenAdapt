@@ -121,9 +121,10 @@ def _server_instructions(authoring: AuthoringBridge | None) -> str:
             "and halt over this same local stdio process. Local stdio may also "
             "type through the recorder; hosted MCP has no type tool. Human type "
             "during pause_for_input is record_observed, never type_text. "
-            "compile returns needs_human_admit; an agent click never paints "
-            "VERIFIED. --authoring does not enable run tools. This process "
-            "must not be port-forwarded or served over HTTP."
+            "compile returns needs_human_admit; admit is the one-token human "
+            "ok. An agent click never paints VERIFIED. --authoring does not "
+            "enable run tools. This process must not be port-forwarded or "
+            "served over HTTP."
         )
     return text
 

@@ -60,6 +60,7 @@ AUTHORING_LOCAL_TOOLS = (
     "continue_input",
     "stop_record",
     "compile",
+    "admit",
     "get_command_result",
     "set_coach",
     "get_coach",
@@ -191,6 +192,8 @@ _TYPE_FIELDS = frozenset({"text", "param", "node_id"})
 _PAUSE_FIELDS = frozenset({"node_id", "param", "secret"})
 _RESULT_FIELDS = frozenset({"command_id"})
 _COACH_FIELDS = frozenset({"hint"})
+_ADMIT_FIELDS = frozenset({"confirm"})
+_ADMIT_ACCEPT = frozenset({"", "ok", "yes", "y", "enter"})
 
 _DESKTOP_IPC_RELATIVE = Path(".openadapt") / "desktop_ipc.json"
 
@@ -685,6 +688,14 @@ def _require_object(arguments: Optional[dict[str, Any]], allowed: set[str]) -> d
     return payload
 
 
+def _confirm_is_acceptance(value: Any) -> bool:
+    if value is None or value is True:
+        return True
+    if isinstance(value, str) and value.strip().lower() in _ADMIT_ACCEPT:
+        return True
+    return False
+
+
 def _invoke(session: object, method: str, **kwargs: Any) -> Any:
     func = getattr(session, method, None)
     aliases = {
@@ -864,10 +875,42 @@ class AuthoringBridge:
                 name="compile",
                 description=(
                     "Wrap Flow compile_recording and return needs_human_admit. "
+                    "A named human then calls admit with a one-token ok. "
                     "An agent click never paints VERIFIED. Refuses a session "
                     "that had a secret pause and no TYPE/param event."
                 ),
                 input_schema=_EMPTY_OBJECT,
+                annotations={
+                    "readOnlyHint": False,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
+            ),
+            ToolSpec(
+                name="admit",
+                description=(
+                    "One-step human admit of the pre-filled draft (schema, "
+                    "authority, effect contract, environment, digest). The "
+                    "human does not fill those fields. Missing confirm, empty, "
+                    "ok, yes, y, enter, or true accepts. Any other confirm "
+                    "refuses. Does not mint a Seal or write an unsigned ledger "
+                    "row when the Flow session has no admit."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "confirm": {
+                            "type": ["string", "boolean"],
+                            "description": (
+                                "Optional one-token ok. Omit, empty, ok, yes, "
+                                "y, enter, or true accepts. Anything else "
+                                "refuses."
+                            ),
+                        }
+                    },
+                    "additionalProperties": False,
+                },
                 annotations={
                     "readOnlyHint": False,
                     "destructiveHint": False,
@@ -948,6 +991,7 @@ class AuthoringBridge:
             "continue_input": self._continue_input,
             "stop_record": self._stop_record,
             "compile": self._compile,
+            "admit": self._admit,
             "set_coach": self._set_coach,
             "get_coach": self._get_coach,
             "bind_status": self._bind_status,
@@ -1244,6 +1288,51 @@ class AuthoringBridge:
             "status": "needs_human_admit",
             "recording_retained": True,
         }
+        if isinstance(workflow_id, str) and workflow_id:
+            public["workflow_id"] = workflow_id
+        summary = _safe_label(result.get("summary"))
+        if summary:
+            public["summary"] = summary
+        return public
+
+    def _admit(self, arguments: Optional[dict[str, Any]]) -> dict[str, Any]:
+        payload = _require_object(arguments, _ADMIT_FIELDS)
+        confirm = payload.get("confirm") if "confirm" in payload else None
+        if not _confirm_is_acceptance(confirm):
+            raise AuthoringError(
+                "admit refused: confirm is not a one-token ok",
+                code="admit_refused",
+            )
+        admit_fn = getattr(self.session, "admit", None)
+        if not callable(admit_fn):
+            raise AuthoringError(
+                "authoring session does not implement admit; "
+                "refusing rather than minting a Seal, writing an unsigned "
+                "ledger row, or claiming Production",
+                code="admit_unavailable",
+            )
+        try:
+            try:
+                raw = admit_fn(confirm=confirm)
+            except TypeError:
+                try:
+                    raw = admit_fn(confirm)
+                except TypeError:
+                    raw = admit_fn()
+        except Exception as exc:
+            mapped = self._map_session_error(exc)
+            if mapped.get("error"):
+                return mapped
+            raise
+        if isinstance(raw, Mapping) and (raw.get("status") == "error" or raw.get("error")):
+            error = raw.get("error")
+            return {
+                "status": "error",
+                "error": error if isinstance(error, str) and error else "admit_refused",
+            }
+        result = _public_result(raw)
+        public = {"status": "admitted"}
+        workflow_id = result.get("workflow_id")
         if isinstance(workflow_id, str) and workflow_id:
             public["workflow_id"] = workflow_id
         return public

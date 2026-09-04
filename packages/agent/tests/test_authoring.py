@@ -156,13 +156,25 @@ class FakeAuthoringSession:
             "success": True,
         }
 
+    def admit(self, confirm=None):
+        self.calls.append(("admit", confirm))
+        return {
+            "status": "admitted",
+            "workflow_id": "wf_demo0001",
+            "execution_outcome": "VERIFIED",
+            "success": True,
+            "title": "Chart — Jane Roe",
+        }
+
 
 def test_probe_tool_names_match_hosted_surface():
     names = [spec.name for spec in AuthoringBridge(FakeAuthoringSession()).list_tool_specs()]
     for probe in AUTHORING_PROBE_TOOLS:
         assert probe in names
     assert "type" in names
+    assert "admit" in names
     assert names.index("observe") < names.index("type")
+    assert names.index("compile") < names.index("admit")
 
 
 def test_observe_drops_values_titles_screenshots_and_unsafe_names():
@@ -265,6 +277,70 @@ def test_compile_returns_needs_human_admit_never_verified():
     assert "success" not in result
 
 
+def test_admit_empty_confirm_and_ok_work_without_type_text():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    empty = bridge.dispatch("admit", {})
+    assert empty == {"status": "admitted", "workflow_id": "wf_demo0001"}
+    assert ("admit", None) in session.calls
+    ok = bridge.dispatch("admit", {"confirm": "ok"})
+    assert ok["status"] == "admitted"
+    assert ("admit", "ok") in session.calls
+    blank = bridge.dispatch("admit", {"confirm": ""})
+    assert blank["status"] == "admitted"
+    assert ("admit", "") in session.calls
+    true_ok = bridge.dispatch("admit", {"confirm": True})
+    assert true_ok["status"] == "admitted"
+    assert ("admit", True) in session.calls
+    for token in ("yes", "y", "enter", "OK"):
+        accepted = bridge.dispatch("admit", {"confirm": token})
+        assert accepted["status"] == "admitted"
+        assert ("admit", token) in session.calls
+    assert session.typed_via_backend == []
+    assert all(
+        call[0] != "type_text" if isinstance(call, tuple) else call != "type_text"
+        for call in session.calls
+    )
+    compiled = bridge.dispatch("compile", {})
+    assert compiled["status"] == "needs_human_admit"
+    assert "VERIFIED" not in json.dumps(compiled)
+    assert "VERIFIED" not in json.dumps(empty)
+    assert "title" not in json.dumps(empty)
+
+
+def test_admit_garbage_confirm_refuses():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    with pytest.raises(AuthoringError, match="one-token ok"):
+        bridge.dispatch("admit", {"confirm": "ship-it"})
+    with pytest.raises(AuthoringError, match="one-token ok"):
+        bridge.dispatch("admit", {"confirm": False})
+    assert all(call != ("admit", "ship-it") for call in session.calls)
+    assert all(call != ("admit", False) for call in session.calls)
+    assert session.typed_via_backend == []
+
+
+def test_admit_fails_closed_without_session_admit():
+    class NoAdmitSession:
+        def compile(self):
+            return {
+                "status": "needs_human_admit",
+                "workflow_id": "wf_demo0001",
+                "execution_outcome": "VERIFIED",
+            }
+
+    bridge = AuthoringBridge(NoAdmitSession())
+    compiled = bridge.dispatch("compile", {})
+    assert compiled["status"] == "needs_human_admit"
+    assert "VERIFIED" not in json.dumps(compiled)
+    with pytest.raises(AuthoringError, match="does not implement admit") as exc_info:
+        bridge.dispatch("admit", {"confirm": "ok"})
+    message = str(exc_info.value)
+    assert "Seal" in message
+    assert "unsigned" in message
+    assert "Production" in message
+
+
 def test_windows_native_is_coach_only():
     session = FakeAuthoringSession(backend="windows")
     bridge = AuthoringBridge(session)
@@ -312,6 +388,7 @@ def test_mcp_lists_authoring_probe_tools_without_run_tools(bundles_root, runner_
     names = anyio.run(list_names)
     assert names[:4] == list(AUTHORING_PROBE_TOOLS)
     assert "type" in names
+    assert "admit" in names
     assert not any(name.startswith("run_") for name in names)
 
     combined = build_server(
