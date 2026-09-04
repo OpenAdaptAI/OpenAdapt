@@ -103,6 +103,9 @@ def test_authoring_help_says_run_tools_stay_off_and_stdio_only(capsys):
     assert "--authoring" in out
     assert "Does not enable run tools" in out
     assert "HTTP" in out
+    assert "empty cookies" in out
+    assert "pause_for_input" in out
+    assert "already signed into" in out
 
 
 def test_authoring_does_not_imply_allow_run_without_bundles(capsys):

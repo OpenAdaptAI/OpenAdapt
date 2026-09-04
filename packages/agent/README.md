@@ -43,7 +43,7 @@ claude mcp add openadapt-authoring -- \
   serve --authoring
 ```
 
-`--bundles` is omitted. Probe tools are `observe`, `start_record`, `click`, and `halt`. This process stays stdio. Pass `--url` to pin a fresh Playwright Chromium with empty cookies. Windows native, Citrix, and RDP stay coach-only here, as does any macOS or Linux session without a unique frontmost window.
+`--bundles` is omitted. Probe tools are `observe`, `start_record`, `click`, and `halt`. This process stays stdio. Pass `--url --headed` to pin a fresh Playwright Chromium with empty cookies. Sign in in that window with `pause_for_input`; `continue_input` records it. `--url` is not the Chrome you already signed into, and it does not attach over CDP. Omit `--url` after you sign in in Chrome, and the unique frontmost window pins on macOS (no DOM identity). Windows native, Citrix, and RDP stay coach-only here, as does any macOS or Linux session without a unique frontmost window.
 
 Private customer bundles still use `--bundles`. Those stay on the operator's disk and are never shipped here.
 

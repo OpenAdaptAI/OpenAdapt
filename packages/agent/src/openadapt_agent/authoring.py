@@ -305,11 +305,14 @@ def pin_local_backend(
     not speak that protocol from this MIT package. Otherwise:
 
     - ``url`` launches Playwright Chromium with empty cookies (no debug-port
-      attach, not the person's already-logged-in Chrome).
+      attach, not the person's already-logged-in Chrome). ``headed`` must be
+      true so a person can sign in in that window via ``pause_for_input``.
     - Windows native / RDP / Citrix → coach-only; never the in-guest Windows
       agent HTTP helper.
     - macOS / Linux → unique frontmost window via Flow backends when those
       constructors are importable (F1). Non-unique Linux titles are coach-only.
+      Omit ``url`` after the person signs in in Chrome if DOM identity is not
+      required.
     """
 
     if backend is not None:
@@ -317,6 +320,15 @@ def pin_local_backend(
         return backend, kind, None
     plat = platform or sys.platform
     if url:
+        if not headed:
+            raise AuthoringError(
+                "--url launches Playwright Chromium with empty cookies, not "
+                "the Chrome window you already signed into. Pass --headed and "
+                "pause_for_input so a person can sign in in that window, then "
+                "continue_input. Or pass no --url and pin the unique "
+                "frontmost Chrome window after they sign in (macOS; no DOM "
+                "identity)."
+            )
         return _pin_web(url, headed=headed)
     if plat == "win32" or plat.startswith("win"):
         return None, "windows", None
@@ -324,10 +336,11 @@ def pin_local_backend(
     if native is not None:
         return native
     raise AuthoringError(
-        "stdio --authoring needs a locally pinned window: pass --url for "
-        "Playwright Chromium with empty cookies, or run Desktop so overlay "
-        "stays single-owner. Native pin uses Flow backends after a unique "
-        "frontmost window (openadapt_flow.authoring / F1)"
+        "stdio --authoring needs a locally pinned window: pass --url --headed "
+        "for Playwright Chromium with empty cookies (pause_for_input to sign "
+        "in there), omit --url after a unique frontmost Chrome window "
+        "(macOS; no DOM identity), or run Desktop so overlay stays "
+        "single-owner. Debug-port attach is out of v1."
     )
 
 

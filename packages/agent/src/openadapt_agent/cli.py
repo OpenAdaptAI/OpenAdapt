@@ -64,10 +64,13 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Register first-demo authoring tools over local stdio: observe, "
             "start_record, click, halt. Local Claude Code path is the first "
-            "authoring UI. Pass --url to pin Playwright Chromium with empty "
-            "cookies. Local stdio may also type through the recorder; hosted "
-            "MCP remains pause-only. Does not enable run tools. This process "
-            "stays stdio and must not be served over HTTP."
+            "authoring UI. Pass --url --headed to pin Playwright Chromium "
+            "with empty cookies; pause_for_input is how a person signs in "
+            "there. --url is not the Chrome window you already signed into. "
+            "Omit --url to pin a unique frontmost Chrome window after login "
+            "(macOS; no DOM identity). Local stdio may also type through the "
+            "recorder; hosted MCP remains pause-only. Does not enable run "
+            "tools. This process stays stdio and must not be served over HTTP."
         ),
     )
     p.add_argument(

@@ -446,6 +446,7 @@ def test_authoring_sources_stay_stdio_without_http_listener():
         assert "FastAPI" not in text
         assert "win_agent" not in text
         assert "parallels_vm" not in text
+        assert "connect_over_cdp" not in text
 
 
 def test_observe_wire_omits_extra_keys_and_invalid_node_ids():
@@ -650,6 +651,53 @@ def test_flow_shaped_session_maps_f1_signatures_and_stale_node():
     assert "VERIFIED" not in json.dumps(compiled)
     assert session.calls[-1][0] == "compile"
     assert session.calls[-1][2] == "authoring"
+
+
+def test_login_pause_records_observed_and_compile_needs_human_admit():
+    session = FlowShapedSession()
+    bridge = AuthoringBridge(session, out_dir="/tmp/authoring-login")
+    assert bridge.dispatch("start_record", {}) == {"status": "recording"}
+    paused = bridge.dispatch(
+        "pause_for_input",
+        {"node_id": "n_9f2c001a", "param": "password", "secret": True},
+    )
+    assert paused == {"status": "paused", "param": "password", "secret": True}
+    assert session.typed_via_backend == []
+    continued = bridge.dispatch("continue_input", {})
+    assert continued == {"recorded": True, "param": "password"}
+    assert session.observed_events == [
+        {"kind": "type", "param": "password", "secret": True}
+    ]
+    compiled = bridge.dispatch("compile", {})
+    assert compiled["status"] == "needs_human_admit"
+    assert "VERIFIED" not in json.dumps(compiled)
+
+
+def test_url_without_headed_fails_loud_empty_cookies():
+    with pytest.raises(AuthoringError, match="empty cookies") as exc_info:
+        pin_local_backend(url="https://example.invalid/app", headed=False)
+    message = str(exc_info.value)
+    assert "already signed into" in message
+    assert "pause_for_input" in message
+    assert "no --url" in message
+
+
+def test_headed_url_pins_playwright_not_cdp(monkeypatch):
+    launched: dict = {}
+
+    def fake_pin_web(url, *, headed):
+        launched["url"] = url
+        launched["headed"] = headed
+        return object(), "web", lambda: None
+
+    monkeypatch.setattr("openadapt_agent.authoring._pin_web", fake_pin_web)
+    backend, kind, close = pin_local_backend(
+        url="https://example.invalid/app", headed=True
+    )
+    assert kind == "web"
+    assert launched == {"url": "https://example.invalid/app", "headed": True}
+    assert callable(close)
+    assert backend is not None
 
 
 def test_coach_hint_and_bind_status_are_local():
