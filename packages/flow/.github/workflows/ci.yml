@@ -60,8 +60,14 @@ on:
 
 # Cancel any superseded in-flight run for the same ref (e.g. a force-push or a
 # rapid second push to a PR branch) instead of letting both run to completion.
+#
+# The group includes the event, so a release-qualification `workflow_dispatch`
+# run is not cancelled by an ordinary push to the same ref. The release gate
+# requires the latest exact-SHA dispatched run to conclude `success`, and this
+# matrix takes about 50 minutes while merges to `main` land every 30, so a
+# shared group made qualifying `main` a race the release could not win.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 # GitHub Actions are pinned to full commit SHAs (not mutable tags) as a
