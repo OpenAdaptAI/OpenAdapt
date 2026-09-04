@@ -93,7 +93,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "a2a361f21e93a7fab511f539efd74ddb84fbeea99cf9cc21efa76e341a6cc231"
+      "sha256": "f48bbee282d3ef293c81af185e2827fcf440ff4719dfc9f91a17d344c49c3108"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
@@ -125,7 +125,7 @@
     },
     {
       "path": ".github/workflows/validate-claims.yml",
-      "sha256": "5cfeab8e231b79bbeacb106f069a331ee46f007631b9d28f9aca4239553afdbc"
+      "sha256": "8739e95a294523fe5696e9c01602aaf52ee4941210db25ce625b0cf844d2a950"
     },
     {
       "path": ".pre-commit-config.yaml",
@@ -5834,6 +5834,22 @@
     {
       "path": "tests/fixtures/theme-region-stable-overhalt-v1.16.1.json",
       "sha256": "4bf055e6c11f837ed6daa4a5b89ab28dd431a7eccd2ce3044758ba260eed52cd"
+    },
+    {
+      "path": "tests/fixtures/v4-qualification/decision-receipt.json",
+      "sha256": "6ffe691f8e40e06b73e24391d180424ed86bb289ddae001cf7b49de2e745312a"
+    },
+    {
+      "path": "tests/fixtures/v4-qualification/qualification-admission.json",
+      "sha256": "dcdb32a762aca87fbb1a7c9df5d346403b167ec5850d35fe47fd64d942684a04"
+    },
+    {
+      "path": "tests/fixtures/v4-qualification/revocation-state.json",
+      "sha256": "18633b8cc243f686706606162bfa249a29733811563f63b9e68cc7c4a3507676"
+    },
+    {
+      "path": "tests/fixtures/v4-qualification/signer-registry.json",
+      "sha256": "7a81bf3d213c74673f3c6b5fa179234cbee534c9432aaea6ae09e455562f96b6"
     },
     {
       "path": "tests/golden/tutorial_run.json",

@@ -90,14 +90,16 @@ def test_playwright_installs_and_enclosing_jobs_are_bounded() -> None:
     # The privileged cleanup proof runs before browser delivery and does not
     # depend on an apt mirror. The full suite excludes only that duplicate.
     assert "Linux retained installer process group (non-injecting)" in test_job
-    assert "pytest -q tests/test_install_playwright_browser.py" in test_job
+    assert (
+        "pytest -vv --durations=20 tests/test_install_playwright_browser.py" in test_job
+    )
     assert "--ignore=tests/test_install_playwright_browser.py" in test_job
     assert "coverage report --fail-under=85" in test_job
-    assert "pytest -q tests/e2e/test_free_path_e2e.py" in e2e_job
+    assert "pytest -vv --durations=20 tests/e2e/test_free_path_e2e.py" in e2e_job
     assert "test_paths=(tests/e2e/test_record_compile_replay.py)" in e2e_job
-    assert 'pytest -q "${test_paths[@]}"' in e2e_job
+    assert 'pytest -vv --durations=20 "${test_paths[@]}"' in e2e_job
     assert "--ignore=tests/e2e/test_free_path_e2e.py" in e2e_job
-    assert "pytest -q --basetemp=runs/ci" in matrix_job
+    assert "pytest -vv --durations=20 --basetemp=runs/ci" in matrix_job
 
 
 def test_standard_browser_step_covers_cleanup_and_launch_worst_cases() -> None:
@@ -183,7 +185,10 @@ def test_windows_required_job_proves_retained_installer_job_object() -> None:
     windows_job = workflow[windows_start:wheel_start]
 
     assert "Windows retained installer Job Object (non-injecting)" in windows_job
-    assert "pytest -q tests/test_install_playwright_browser.py" in windows_job
+    assert (
+        "pytest -vv --durations=20 tests/test_install_playwright_browser.py"
+        in windows_job
+    )
 
 
 def test_required_linux_atspi_qualification_is_bounded() -> None:
@@ -350,7 +355,7 @@ def test_macos_deselects_only_redundant_platform_neutral_heavy_nodes() -> None:
 
     assert "if: runner.os == 'Linux'" in linux_step
     assert "--deselect" not in linux_step
-    assert "pytest -q --basetemp=runs/ci" in linux_step
+    assert "pytest -vv --durations=20 --basetemp=runs/ci" in linux_step
     assert "if: runner.os == 'macOS'" in macos_step
     for node in nodes:
         assert macos_step.count(f"--deselect={node}") == 1
@@ -406,7 +411,7 @@ def test_supported_claims_consume_their_required_jobs_real_junit() -> None:
 
 
 def test_pr_and_complete_test_tiers_are_event_bound_and_fail_closed() -> None:
-    """Only pull requests get the focused tier; every other event gets full tests."""
+    """PR and main-push stay focused. Only schedule and dispatch get the rest."""
 
     workflow = CI.read_text(encoding="utf-8")
     unit_start = workflow.index("\n  test:")
@@ -415,18 +420,25 @@ def test_pr_and_complete_test_tiers_are_event_bound_and_fail_closed() -> None:
     unit = workflow[unit_start:browser_start]
     browser = workflow[browser_start:linux_start]
 
-    pr_condition = 'if [ "$GITHUB_EVENT_NAME" = pull_request ]; then'
+    complete_condition = (
+        'if [ "$GITHUB_EVENT_NAME" = schedule ] || '
+        '[ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then'
+    )
     campaign = "--ignore=tests/test_qualification_gate_campaign.py"
 
     assert unit.count("- name: Test (PR gate or complete post-merge suite)") == 1
-    assert unit.count(pr_condition) == 1
+    assert unit.count(complete_condition) == 1
     unit_step = unit[
         unit.index("- name: Test (PR gate or complete post-merge suite)") : unit.index(
             "- name: Validate passing unit claim evidence"
         )
     ]
+    assert f"extra_args=({campaign})" in unit_step
     assert "extra_args=()" in unit_step
-    assert f"extra_args+=({campaign})" in unit_step
+    assert unit_step.index(f"extra_args=({campaign})") < unit_step.index(
+        complete_condition
+    )
+    assert unit_step.index(complete_condition) < unit_step.index("extra_args=()")
     assert '"${extra_args[@]}"' in unit_step
     assert "--ignore=tests/e2e" in unit_step
     assert "--ignore=tests/test_install_playwright_browser.py" in unit_step
@@ -434,24 +446,25 @@ def test_pr_and_complete_test_tiers_are_event_bound_and_fail_closed() -> None:
     assert "--cov=openadapt_flow --cov-report=" in unit_step
 
     assert browser.count("- name: E2E (PR gate or complete post-merge suite)") == 1
-    assert browser.count(pr_condition) == 1
+    assert browser.count(complete_condition) == 1
     browser_step = browser[
         browser.index(
             "- name: E2E (PR gate or complete post-merge suite)"
         ) : browser.index("- name: Validate passing browser claim evidence")
     ]
-    assert (
-        "test_paths=(tests/e2e --ignore=tests/e2e/test_free_path_e2e.py)"
-        in browser_step
-    )
-    assert "test_paths=(tests/e2e/test_record_compile_replay.py)" in browser_step
-    assert 'pytest -q "${test_paths[@]}"' in browser_step
+    focused = "test_paths=(tests/e2e/test_record_compile_replay.py)"
+    complete = "test_paths=(tests/e2e --ignore=tests/e2e/test_free_path_e2e.py)"
+    assert focused in browser_step
+    assert complete in browser_step
+    assert browser_step.index(focused) < browser_step.index(complete_condition)
+    assert browser_step.index(complete_condition) < browser_step.index(complete)
+    assert 'pytest -vv --durations=20 "${test_paths[@]}"' in browser_step
     assert "--junitxml=runs/e2e-claims-junit.xml" in browser_step
 
-    # The arrays start with the complete selections. Only the exact PR branch
-    # replaces them. A new event cannot silently inherit the reduced selection.
-    for event in ("push", "schedule", "workflow_dispatch"):
-        assert f'GITHUB_EVENT_NAME" = {event}' not in unit + browser
+    # The arrays start focused. Only named slow events expand them. A new
+    # event cannot silently inherit the complete selection.
+    assert 'GITHUB_EVENT_NAME" = pull_request' not in unit + browser
+    assert 'GITHUB_EVENT_NAME" = push' not in unit + browser
 
 
 def test_validating_refresh_uses_exact_macos_parallels_substrate_and_scope() -> None:

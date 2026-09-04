@@ -86,7 +86,7 @@ jobs:
       - name: Also run the validator's own tests
         run: |
           pip install "pytest>=8"
-          pytest -q tests/test_validate_claims.py
+          pytest -vv --durations=20 tests/test_validate_claims.py
 
   # --- Infra-gated: scoped validating evidence on its exact substrate -------
   # These selected tests require macOS, local Parallels, a running configured
@@ -171,7 +171,7 @@ jobs:
           OAFLOW_CITRIX_PIXEL_E2E: "1"
         run: |
           mkdir -p runs
-          python -m pytest -q \
+          python -m pytest -vv --durations=20 \
             tests/e2e/test_citrix_pixel_e2e.py \
             tests/e2e/test_parallels_desktop_e2e.py \
             --junitxml=runs/validating-junit.xml --basetemp=runs/ci

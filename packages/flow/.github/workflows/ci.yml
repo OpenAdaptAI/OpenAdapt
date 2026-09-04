@@ -18,12 +18,12 @@ name: CI
 #       windows-mock (non-injecting Win32 ABI + fake behavior contract).
 #     The separate Validate claims workflow contributes its required CheckRun
 #     context named `gate`, bringing the app-pinned routine total to 13.
-#   - push to main: run the complete unit and browser suites, plus the same
-#     required safety, packaging, and platform-contract gates, against the
-#     exact merge commit.
+#   - push to main: the same required gate as a PR, against the exact merge
+#     commit. This does not re-run the qualification campaign or the extra
+#     browser scenarios; those stay on schedule and dispatch.
 #   - schedule: run those gates plus the complete Python 3.10-3.12 / macOS
-#     matrix weekly. Release candidates can dispatch the same matrix on demand;
-#     routine PRs and exact-main pushes already exercise the required gates.
+#     matrix weekly, including the qualification campaign and extra e2e files.
+#     Release candidates can dispatch the same matrix on demand.
 #   - workflow_dispatch: run the same complete matrix on an exact ref as the
 #     explicit release-qualification lane.
 # There is intentionally NO bare `push:` -- a bare push trigger fires a SECOND
@@ -185,7 +185,7 @@ jobs:
         if: needs.scope.outputs.code_changed == 'true'
         run: |
           python scripts/check_consistency.py
-          pytest -q tests/test_consistency.py
+          pytest -vv --durations=20 tests/test_consistency.py
 
   # --- STRICT type check on the safety-critical path (required on PRs) ------
   # A second, STRICTER mypy pass scoped to the safety modules ONLY: the
@@ -368,7 +368,7 @@ jobs:
 
       - name: Test openadapt-types boundary (no skips)
         if: needs.scope.outputs.code_changed == 'true'
-        run: pytest -q tests/test_interop_types.py tests/test_runtime_control_overlay.py
+        run: pytest -vv --durations=20 tests/test_interop_types.py tests/test_runtime_control_overlay.py
 
       - name: Type-check boundary against released schema
         if: needs.scope.outputs.code_changed == 'true'
@@ -404,11 +404,11 @@ jobs:
   # It MUST stay a single, non-matrix job named exactly `test` so its reported
   # context is exactly `test` -- a matrix would report `test (3.12)` etc. and
   # the required `test` check would never report, permanently blocking merges.
-  # PRs exclude only the long deterministic qualification campaign. The exact
-  # merge commit, scheduled runs, and explicit dispatches run it here. Every
-  # lane excludes the browser/OCR record->compile->replay suite (tests/e2e),
-  # which has its own required `e2e-browser` check. This keeps PR feedback
-  # bounded while the exact main commit retains complete-suite evidence.
+  # PRs and exact-main pushes exclude the long deterministic qualification
+  # campaign. Scheduled runs and explicit dispatches run it here. Every lane
+  # excludes the browser/OCR record->compile->replay suite (tests/e2e), which
+  # has its own required `e2e-browser` check. This keeps merge feedback
+  # bounded. Complete-suite evidence stays on the weekly/dispatch matrix.
   test:
     needs: [scope]
     runs-on: ubuntu-latest
@@ -447,7 +447,7 @@ jobs:
       # on GitHub Linux and does not depend on an apt mirror.
       - name: Linux retained installer process group (non-injecting)
         if: needs.scope.outputs.code_changed == 'true'
-        run: pytest -q tests/test_install_playwright_browser.py
+        run: pytest -vv --durations=20 tests/test_install_playwright_browser.py
 
       # Cache the Playwright browser binaries (chromium) so the lightweight
       # browser-backed unit tests don't re-download ~150MB every run. Keyed on
@@ -489,11 +489,11 @@ jobs:
         if: needs.scope.outputs.code_changed == 'true'
         run: |
           mkdir -p runs
-          extra_args=()
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            extra_args+=(--ignore=tests/test_qualification_gate_campaign.py)
+          extra_args=(--ignore=tests/test_qualification_gate_campaign.py)
+          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            extra_args=()
           fi
-          pytest -q --ignore=tests/e2e \
+          pytest -vv --durations=20 --ignore=tests/e2e \
             --ignore=tests/test_install_playwright_browser.py \
             "${extra_args[@]}" \
             --basetemp=runs/ci \
@@ -543,10 +543,10 @@ jobs:
   # HEADLESS Playwright browser against the bundled MockMed app, so it needs no
   # OS-level input permissions and runs deterministically on a Linux runner --
   # which is exactly why it is a REQUIRED PR check here, not a weekly-only one.
-  # PRs run the golden task and the canonical record/compile/replay contract.
-  # The exact merge commit, schedules, and explicit dispatches run all other
-  # browser scenarios. Desktop/Citrix/Parallels tests self-skip when their
-  # macOS/VM backends are absent on this Linux runner.
+  # PRs and exact-main pushes run the golden task and the canonical
+  # record/compile/replay contract. Schedules and explicit dispatches run all
+  # other browser scenarios. Desktop/Citrix/Parallels tests self-skip when
+  # their macOS/VM backends are absent on this Linux runner.
   # The GOLDEN TASK (tests/e2e/test_free_path_e2e.py) runs as the job's FIRST
   # step and is excluded from the later complete-suite run, so the core loop
   # answers first without costing a second run of it.
@@ -609,17 +609,17 @@ jobs:
         if: needs.scope.outputs.code_changed == 'true'
         run: |
           mkdir -p runs
-          pytest -q tests/e2e/test_free_path_e2e.py --basetemp=runs/ci-golden
+          pytest -vv --durations=20 tests/e2e/test_free_path_e2e.py --basetemp=runs/ci-golden
 
       - name: E2E (PR gate or complete post-merge suite)
         if: needs.scope.outputs.code_changed == 'true'
         run: |
           mkdir -p runs
-          test_paths=(tests/e2e --ignore=tests/e2e/test_free_path_e2e.py)
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            test_paths=(tests/e2e/test_record_compile_replay.py)
+          test_paths=(tests/e2e/test_record_compile_replay.py)
+          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            test_paths=(tests/e2e --ignore=tests/e2e/test_free_path_e2e.py)
           fi
-          pytest -q "${test_paths[@]}" \
+          pytest -vv --durations=20 "${test_paths[@]}" \
             --junitxml=runs/e2e-claims-junit.xml \
             --basetemp=runs/ci
 
@@ -805,7 +805,7 @@ jobs:
           OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE: "1"
         run: |
           mkdir -p runs
-          pytest -q --basetemp=runs/ci
+          pytest -vv --durations=20 --basetemp=runs/ci
 
       # The gate-standard qualification campaign is deselected on macOS for the
       # same reason as the identity harness above: it is platform-neutral by
@@ -821,7 +821,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           mkdir -p runs
-          pytest -q --basetemp=runs/ci \
+          pytest -vv --durations=20 --basetemp=runs/ci \
             --deselect=tests/test_identity_ladder.py::test_harness_zero_false_accept_all_configs \
             --deselect=tests/test_qualification_gate_campaign.py
 
@@ -866,12 +866,12 @@ jobs:
       - name: Windows live execution-context probe (read-only)
         if: needs.scope.outputs.code_changed == 'true'
         run: |
-          pytest -q tests/test_windows_context_identity_native.py
+          pytest -vv --durations=20 tests/test_windows_context_identity_native.py
 
       - name: Windows retained installer Job Object (non-injecting)
         if: needs.scope.outputs.code_changed == 'true'
         run: |
-          pytest -q tests/test_install_playwright_browser.py
+          pytest -vv --durations=20 tests/test_install_playwright_browser.py
 
       # The remaining WindowsBackend + RDP backend suites mock the WAA/RDP
       # servers with stdlib HTTP + fakes (no live VM, no Playwright browser),
@@ -882,8 +882,8 @@ jobs:
       - name: Windows ABI and mock backend tests (non-injecting)
         if: needs.scope.outputs.code_changed == 'true'
         run: |
-          pytest -q tests/test_windows_backend.py tests/test_rdp_backend.py tests/test_win32_window_client.py tests/test_remote_display_backend.py
-          pytest -q tests/test_hosted.py -k client_run_id
+          pytest -vv --durations=20 tests/test_windows_backend.py tests/test_rdp_backend.py tests/test_win32_window_client.py tests/test_remote_display_backend.py
+          pytest -vv --durations=20 tests/test_hosted.py -k client_run_id
 
   # --- Clean-wheel install + CLI smoke (REQUIRED on PRs) -------------------
   # Builds the wheel, installs it in a FRESH venv (no source tree), and proves

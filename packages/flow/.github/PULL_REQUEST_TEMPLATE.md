@@ -16,7 +16,7 @@
 - [ ] PR title uses Conventional Commit format
 - [ ] `ruff check openadapt_flow` and `ruff format --check openadapt_flow` pass
 - [ ] `mypy` passes
-- [ ] `pytest -q` passes locally
+- [ ] `pytest -vv` passes locally
 - [ ] Tests added/updated for behavior changes
 - [ ] Docs updated (README/DESIGN/docs) if behavior or contracts changed
 - [ ] If this touches the identity gate / resolution ladder / halt logic, I
