@@ -11,7 +11,7 @@ import inspect
 import io
 import json
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 import pytest
 from PIL import Image
@@ -124,6 +124,8 @@ def test_authoring_module_does_not_spawn_win_agent_or_copy_replay_mcp() -> None:
     assert "parallels_vm" not in src
     assert "emit.mcp_tool" not in src
     assert "emit/mcp_tool" not in src
+    assert "qualification_admission" not in src
+    assert "bundle_sealing" not in src
 
 
 def test_open_session_constructs_authoring_session(tmp_path: Path) -> None:
@@ -134,12 +136,175 @@ def test_open_session_constructs_authoring_session(tmp_path: Path) -> None:
     )
     assert isinstance(session, AuthoringSession)
     assert session.backend_kind == "macos"
+    observed = session.observe()
+    assert observed["agent_drive"] is True
+    assert observed["coach_only"] is False
+    assert observed["window"]["process_name"] == "App"
 
 
 def test_unknown_backend_kind_is_not_silently_web(tmp_path: Path) -> None:
     with pytest.raises(AuthoringError, match="unknown backend_kind") as excinfo:
         AuthoringSession(ScriptedBackend(), tmp_path / "rec", backend_kind="turbo")
     assert excinfo.value.code == "unknown_backend"
+
+
+# -- observe (PHI-safe tree; pixels stay on the session) ---------------------
+
+
+class _TreeBackend(ScriptedBackend):
+    """Backend that supplies an authoring tree, including forbidden keys."""
+
+    def authoring_tree(self) -> dict[str, Any]:
+        return {
+            "window": {
+                "process_name": "Chromium",
+                "title": "Patient Jane Roe MRN-9911",
+                "bounds": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+            },
+            "tree": [
+                {
+                    "node_id": "n_9f2c001a",
+                    "role": "button",
+                    "name": "Save",
+                    "automation_id": "btnContinue",
+                    "enabled": True,
+                    "focused": False,
+                    "bounds": {"x": 0.72, "y": 0.88, "w": 0.14, "h": 0.05},
+                    "backend_pixels": {"x": 920, "y": 640, "w": 180, "h": 36},
+                    "value": "4111111111111111",
+                    "title": "Chart Jane Roe",
+                    "screenshot": "iVBORw0KGgo=",
+                    "url": "https://example.invalid/chart",
+                },
+                {
+                    "node_id": "n_abcdef01",
+                    "role": "text_input",
+                    "name": "SSN 123-45-6789",
+                    "enabled": True,
+                    "focused": False,
+                    "bounds": {"x": 0.10, "y": 0.10, "w": 0.20, "h": 0.05},
+                    "backend_pixels": {"x": 10, "y": 10, "w": 20, "h": 20},
+                    "value": "123-45-6789",
+                },
+            ],
+        }
+
+
+def test_observe_drops_titles_values_screenshots_urls_and_pixels(
+    tmp_path: Path,
+) -> None:
+    session = AuthoringSession(
+        _TreeBackend(),
+        tmp_path / "rec",
+        backend_kind="web",
+        settle_interval_s=0.01,
+        settle_stable_frames=1,
+        settle_timeout_s=0.2,
+    )
+    observed = session.observe()
+    blob = json.dumps(observed)
+    assert observed["schema_version"] == "openadapt.authoring.observe/v1"
+    assert observed["mode"] == "authoring"
+    assert observed["backend"] == "web"
+    assert observed["provider"] == "playwright_ax"
+    assert observed["agent_drive"] is True
+    assert observed["coach_only"] is False
+    assert observed["recording"] is False
+    assert observed["window"]["process_name"] == "Chromium"
+    assert "title" not in observed["window"]
+    assert "value" not in blob
+    assert "screenshot" not in blob
+    assert "title" not in blob
+    assert "backend_pixels" not in blob
+    assert "Jane Roe" not in blob
+    assert "4111111111111111" not in blob
+    assert "123-45-6789" not in blob
+    assert "https://" not in blob
+    node = next(item for item in observed["tree"] if item["node_id"] == "n_9f2c001a")
+    assert node["name"] == "Save"
+    assert node["automation_id"] == "btnContinue"
+    assert node["enabled"] is True
+    ssn = next(item for item in observed["tree"] if item["node_id"] == "n_abcdef01")
+    assert "name" not in ssn
+
+
+def test_observe_remembers_pixels_for_later_click(tmp_path: Path) -> None:
+    backend = _TreeBackend()
+    session = AuthoringSession(
+        backend,
+        tmp_path / "rec",
+        backend_kind="web",
+        settle_interval_s=0.01,
+        settle_stable_frames=1,
+        settle_timeout_s=0.2,
+    )
+    session.observe()
+    session.start_record()
+    session.click(node_id="n_9f2c001a")
+    session.stop_record()
+    assert ("click", 1010, 658, False) in backend.calls
+
+
+def test_observe_empty_tree_is_not_a_raw_fallback(tmp_path: Path) -> None:
+    session, _backend = _session(tmp_path)
+    observed = session.observe()
+    assert observed["tree"] == []
+    assert observed["reason"] == "empty_projection"
+    assert observed["agent_drive"] is True
+    assert observed["window"]["process_name"] == "Chromium"
+    assert "value" not in json.dumps(observed)
+    assert "screenshot" not in json.dumps(observed)
+
+
+class _PageTreeBackend(ScriptedBackend):
+    """Playwright-shaped backend: observe reads page.evaluate, not a raw dump."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.page = self
+
+    def evaluate(self, script: str, args: Any = None) -> Any:
+        self.calls.append(("evaluate", args))
+        if args is not None:
+            return None
+        return {
+            "tree": [
+                {
+                    "role": "button",
+                    "name": "Save",
+                    "enabled": True,
+                    "focused": False,
+                    "bounds": {"x": 0.1, "y": 0.1, "w": 0.1, "h": 0.1},
+                    "backend_pixels": {"x": 128, "y": 80, "w": 128, "h": 80},
+                    "value": "must-not-leak",
+                }
+            ],
+            "truncated": False,
+        }
+
+
+def test_observe_playwright_page_tree_strips_pixels_and_values(
+    tmp_path: Path,
+) -> None:
+    backend = _PageTreeBackend()
+    session = AuthoringSession(
+        backend,
+        tmp_path / "rec",
+        backend_kind="web",
+        settle_interval_s=0.01,
+        settle_stable_frames=1,
+        settle_timeout_s=0.2,
+    )
+    observed = session.observe()
+    blob = json.dumps(observed)
+    assert observed["tree"][0]["name"] == "Save"
+    assert observed["tree"][0]["node_id"].startswith("n_")
+    assert "backend_pixels" not in blob
+    assert "must-not-leak" not in blob
+    session.start_record()
+    session.click(node_id=observed["tree"][0]["node_id"])
+    session.stop_record()
+    assert ("click", 192, 120, False) in backend.calls
 
 
 # -- scripted actuate through Recorder ---------------------------------------
@@ -510,6 +675,92 @@ def test_compile_accepts_secret_pause_after_continue(tmp_path: Path) -> None:
     result = session.compile(tmp_path / "bundle", name="secret-ok")
     assert result["status"] == NEEDS_HUMAN_ADMIT
     assert "VERIFIED" not in json.dumps(result)
+
+
+# -- one-OK admit (local operator; not a Seal) -------------------------------
+
+
+class _DraftWorkflow:
+    """Stand-in for compile_recording so admit tests do not run OCR."""
+
+    recording_id = "demo0001"
+    manifest = type("Manifest", (), {"content_digest": "ab" * 32})()
+
+
+def _compiled_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> AuthoringSession:
+    import openadapt_flow.authoring as authoring_mod
+
+    session, _backend = _session(tmp_path)
+    session.start_record()
+    session.click(10, 20)
+    session.stop_record()
+    monkeypatch.setattr(
+        authoring_mod, "compile_recording", lambda *args, **kwargs: _DraftWorkflow()
+    )
+    result = session.compile(tmp_path / "bundle", name="draft")
+    assert result["status"] == NEEDS_HUMAN_ADMIT
+    assert result["workflow_id"] == "wf_demo0001"
+    return session
+
+
+@pytest.mark.parametrize("confirm", [None, "", "ok", "yes", True, "OK", "Yes"])
+def test_admit_one_ok_variants(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, confirm: object
+) -> None:
+    session = _compiled_session(tmp_path, monkeypatch)
+    accepted = session.admit(confirm)
+    assert accepted["status"] == "accepted"
+    assert accepted["workflow_id"] == "wf_demo0001"
+    assert accepted["digest"] == "ab" * 32
+    assert "VERIFIED" not in json.dumps(accepted)
+    assert "operator" not in accepted
+    record = json.loads((tmp_path / "bundle" / "admit.json").read_text())
+    assert record["status"] == "accepted"
+    assert record["kind"] == "local_operator_accept"
+    assert record["workflow_id"] == "wf_demo0001"
+    assert "operator" in record
+    assert "Seal" not in json.dumps(record)
+    assert "schema" not in record
+    assert "authority" not in record
+    assert "effect" not in record
+    assert "environment" not in record
+
+
+def test_admit_refuses_non_ok_confirm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _compiled_session(tmp_path, monkeypatch)
+    with pytest.raises(AuthoringError) as excinfo:
+        session.admit("no")
+    assert excinfo.value.code == "admit_refused"
+    with pytest.raises(AuthoringError) as excinfo:
+        session.admit(False)
+    assert excinfo.value.code == "admit_refused"
+    assert not (tmp_path / "bundle" / "admit.json").exists()
+
+
+def test_admit_requires_compiled_draft(tmp_path: Path) -> None:
+    session, _backend = _session(tmp_path)
+    session.start_record()
+    session.click(10, 20)
+    session.stop_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.admit("ok")
+    assert excinfo.value.code == "not_compiled"
+
+
+def test_admit_does_not_require_schema_or_digest_from_the_operator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _compiled_session(tmp_path, monkeypatch)
+    accepted = session.admit()
+    assert accepted == {
+        "status": "accepted",
+        "workflow_id": "wf_demo0001",
+        "digest": "ab" * 32,
+    }
 
 
 # -- Synthetic CI gate (MockMed Playwright fixture; not a user-facing job) --
