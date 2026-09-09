@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import math
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -33,7 +34,11 @@ from openadapt_flow.runtime.resolver import (
 )
 
 VIEWPORT: tuple[int, int] = (1280, 800)
-_MASKED_SCREENSHOT_ATTEMPTS = 3
+# Secret-masked screenshots must not keep bytes from a changing frame tree.
+# Login pages often attach and detach iframes for a few seconds after a click.
+# Retry until the tree is quiet. Still refuse if it never settles.
+_MASKED_SCREENSHOT_TIMEOUT_S = 8.0
+_MASKED_SCREENSHOT_RETRY_SLEEP_S = 0.05
 
 _MODIFIER_ALIASES = {
     "meta": "Meta",
@@ -2292,18 +2297,26 @@ class PlaywrightBackend:
 
     def screenshot(self) -> bytes:
         """Return a stable current full-viewport frame as PNG bytes."""
-        if self._screenshot_guard is not None:
-            self._screenshot_guard()
         base_options: dict[str, Any] = {}
         if self._screenshot_scale == "css":
             base_options["scale"] = "css"
         if not self._screenshot_mask_selectors:
+            if self._screenshot_guard is not None:
+                self._screenshot_guard()
             return self.page.screenshot(type="png", full_page=False, **base_options)
 
-        for _attempt in range(_MASKED_SCREENSHOT_ATTEMPTS):
+        deadline = time.monotonic() + _MASKED_SCREENSHOT_TIMEOUT_S
+        while True:
+            # A retry can observe a different secret boundary even after the
+            # frame tree settles. Rebind or refuse before every capture.
+            if self._screenshot_guard is not None:
+                self._screenshot_guard()
             generation = self._screenshot_frame_generation
             frames = tuple(self.page.frames)
             if generation != self._screenshot_frame_generation:
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)
                 continue
             options = dict(base_options)
             options["mask"] = [
@@ -2319,8 +2332,15 @@ class PlaywrightBackend:
                 self.page.evaluate("() => null")
             except Exception:
                 if generation != self._screenshot_frame_generation:
+                    if time.monotonic() >= deadline:
+                        break
+                    time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)
                     continue
                 raise
+            # A closed root can appear during capture without changing the
+            # frame tree. Its privacy refusal must escape the retry handler.
+            if self._screenshot_guard is not None:
+                self._screenshot_guard()
             current_frames = tuple(self.page.frames)
             if generation == self._screenshot_frame_generation and self._same_frames(
                 frames, current_frames
@@ -2328,6 +2348,9 @@ class PlaywrightBackend:
                 return png
             # ``png`` is intentionally discarded here. It never reaches the
             # recorder, disk, or a compiled bundle.
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)
         raise ScreenshotMaskStabilityError(
             "the browser frame tree changed during every secret-masked "
             "screenshot attempt; recording was refused"

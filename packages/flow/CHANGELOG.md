@@ -15,6 +15,22 @@
 
 <!-- version list -->
 
+## v1.35.1 (2026-09-08)
+
+### Bug Fixes
+
+- Repeat secret-boundary checks before and after each screenshot attempt while login frames change.
+- Keep the execution target bound when an authenticated attended decision resumes a run.
+- Verify encrypted repair crops and hashed identity without writing decrypted bundle files.
+- Keep repair reflow targets intact and test ambiguity inside the admitted search area.
+- Preserve in-scope OCR rivals when local image segmentation omits a candidate.
+- Isolate optional desktop recorder dependencies in the unit-test fixture.
+
+### Features
+
+- Add privacy-filtered observation and one-step admission to `AuthoringSession` ([#468](https://github.com/OpenAdaptAI/openadapt-flow/pull/468)).
+- Stop recording when the supplied `--until-cmd` succeeds ([#467](https://github.com/OpenAdaptAI/openadapt-flow/pull/467)).
+
 ## v1.35.0 (2026-09-02)
 
 ### Bug Fixes

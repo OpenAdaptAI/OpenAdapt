@@ -112,6 +112,8 @@ def fake_resolve(frame_png: bytes):
         if row - clusters[-1][-1] > 3:
             clusters.append([])
         clusters[-1].append(row)
+    if len(clusters) > 1:
+        raise RuntimeError("ambiguous: two indistinguishable row targets")
     best = max(clusters, key=len)
     keep = set(best)
     cx = [px for px, py in zip(xs, ys) if py in keep]

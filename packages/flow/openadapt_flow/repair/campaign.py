@@ -26,6 +26,7 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 from PIL import Image, ImageDraw
 
@@ -41,6 +42,8 @@ from openadapt_flow.runtime.healing.perturbation import (
     DriftKind,
     ResolveFn,
     SampleBandFn,
+    anchor_band_verdict,
+    identity_row_region,
     perturbation_set,
     replay_patch,
 )
@@ -69,6 +72,8 @@ class FaultCase:
     #: Where the (possibly counterfeit) target sits in this frame. Used only
     #: for diagnostics; ANY confident act on a fault frame is a failure.
     target_point: Point
+    candidate_points: tuple[Point, ...] = ()
+    construction_error: Optional[str] = None
 
 
 def _open(png: bytes) -> Image.Image:
@@ -87,19 +92,35 @@ def _band_region(region: Region, size: tuple[int, int]) -> Region:
     return (0, region[1], width, region[3])
 
 
-def _fault_ambiguity(image: Image.Image, region: Region) -> Image.Image:
-    """Duplicate the target ON ITS OWN ROW so the frame holds two identical,
-    identically-banded hits (the truly dangerous ambiguity)."""
-    x, y, w, h = region
-    crop = image.crop((x, y, x + w, y + h))
+def _fault_ambiguity(
+    image: Image.Image, anchor: Anchor
+) -> tuple[Image.Image, tuple[Point, Point]]:
+    """Replace the original with two complete identity-bearing rows in scope.
+
+    Both targets must fit inside the recorded padded search region, and neither
+    may remain at the expected location. Copying only a distant widget left one
+    valid local target and did not create an ambiguity condition.
+    """
+    from openadapt_flow.vision.match import LOCALITY_MIN_PX
+
+    _, top, width, height = identity_row_region(anchor, image.size)
+    up = min(anchor.search_pad, top)
+    down = min(anchor.search_pad, image.height - top - height)
+    locality_radius = max(LOCALITY_MIN_PX, min(anchor.region[2:]))
+    if min(up, down) <= locality_radius or up + down < height:
+        raise ValueError(
+            "two complete identity-bearing targets do not fit outside the "
+            "expected-location radius inside the declared search scope"
+        )
+    row = image.crop((0, top, width, top + height))
     out = image.copy()
-    # Paste at the horizontally mirrored column; when that overlaps the
-    # original column, shift right instead (wrapped inside the frame).
-    dx = max(0, min(image.width - w, image.width - w - x))
-    if abs(dx - x) < w + 8:
-        dx = (x + 2 * w + 16) % max(1, image.width - w)
-    out.paste(crop, (dx, y))
-    return out
+    # Remove the expected target before pasting, so locality cannot distinguish
+    # an unchanged original from a new sibling. The two row strips do not overlap.
+    out.paste((255, 255, 255), (0, top, width, top + height))
+    out.paste(row, (0, top - up))
+    out.paste(row, (0, top + down))
+    x, y = anchor.click_point
+    return out, ((x, y - up), (x, y + down))
 
 
 def _fault_wrong_entity(image: Image.Image, region: Region) -> Image.Image:
@@ -166,7 +187,6 @@ def fault_battery(
     region = anchor.region
     point = anchor.click_point
     builders = {
-        FaultKind.AMBIGUITY: _fault_ambiguity,
         FaultKind.WRONG_ENTITY: _fault_wrong_entity,
         FaultKind.STALE_TARGET: _fault_stale_target,
         FaultKind.UNEXPECTED_DIALOG: _fault_unexpected_dialog,
@@ -174,13 +194,24 @@ def fault_battery(
     }
     cases: list[FaultCase] = []
     for kind in kinds:
-        drifted = builders[kind](image, region)
+        candidate_points: tuple[Point, ...] = ()
+        construction_error = None
+        if kind == FaultKind.AMBIGUITY:
+            try:
+                drifted, candidate_points = _fault_ambiguity(image, anchor)
+            except ValueError as exc:
+                drifted = image
+                construction_error = str(exc)
+        else:
+            drifted = builders[kind](image, region)
         cases.append(
             FaultCase(
                 label=kind.value,
                 kind=kind,
                 frame_png=_dump(drifted),
                 target_point=point,
+                candidate_points=candidate_points,
+                construction_error=construction_error,
             )
         )
     return cases
@@ -226,6 +257,7 @@ def run_replay_campaign(
         resolve=resolve,
         sample_band=sample_band,
         band_verifier=band_verifier,
+        identity_anchor=anchor,
     )
     case_results = [
         CampaignCaseResult(
@@ -265,10 +297,37 @@ def run_fault_campaign(
     identity band verifies (or there is no identity band to check at all,
     which on an adversarial frame is a silent wrong action).
     """
-    expected_band = anchor.context_text
     case_results: list[CampaignCaseResult] = []
     for case in fault_battery(frame_png, anchor, kinds=kinds):
         label = f"{step_id}:{case.label}"
+        construction_error = case.construction_error
+        if construction_error is None and case.candidate_points:
+            try:
+                for point in case.candidate_points:
+                    observed = sample_band(case.frame_png, point) or ""
+                    if (
+                        anchor_band_verdict(anchor, observed, band_verifier)
+                        != "verified"
+                    ):
+                        construction_error = (
+                            "both ambiguity candidates must independently verify "
+                            "the recorded identity"
+                        )
+                        break
+            except Exception as exc:
+                construction_error = (
+                    f"ambiguity identity check raised {type(exc).__name__}"
+                )
+        if construction_error is not None:
+            case_results.append(
+                CampaignCaseResult(
+                    label=label,
+                    kind=case.kind.value,
+                    passed=False,
+                    detail=f"invalid fault fixture: {construction_error}",
+                )
+            )
+            continue
         try:
             located_point = resolve(case.frame_png)
         except Exception as exc:
@@ -291,7 +350,9 @@ def run_fault_campaign(
                 )
             )
             continue
-        if not expected_band:
+        observed = sample_band(case.frame_png, located_point) or ""
+        status = anchor_band_verdict(anchor, observed, band_verifier)
+        if status == "unarmed":
             case_results.append(
                 CampaignCaseResult(
                     label=label,
@@ -304,8 +365,6 @@ def run_fault_campaign(
                 )
             )
             continue
-        observed = sample_band(case.frame_png, located_point) or ""
-        status = band_verifier(expected_band, observed)
         if status == "verified":
             case_results.append(
                 CampaignCaseResult(

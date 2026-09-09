@@ -164,8 +164,12 @@ def _campaign_inputs(
                 f"refused (fail closed): no evidence frame for changed step "
                 f"{step_id!r} at {frame_path}"
             )
-        template_path = bundle / step.anchor.template
-        template = template_path.read_bytes() if template_path.is_file() else None
+        # Encrypted bundles retain plaintext crops only in the loaded workflow.
+        # Do not write a decrypted derivative or silently drop the template rung.
+        template = workflow.decrypted_template(step.anchor.template)
+        if template is None:
+            template_path = bundle / step.anchor.template
+            template = template_path.read_bytes() if template_path.is_file() else None
         inputs.append((step_id, step.anchor, frame_path.read_bytes(), template))
     if not inputs:
         raise RepairLifecycleError(
@@ -195,7 +199,7 @@ def _run_campaign(candidate: RepairCandidate, kind: str) -> CampaignResult:
             return None if resolved is None else resolved[0].point
 
         viewport = resolver_mod.png_size(frame_png)
-        sample_band = band_sampler(viewport, vision)
+        sample_band = band_sampler(viewport, vision, anchor=anchor)
         if kind == "replay":
 
             def safe_resolve(png: bytes) -> Optional[Point]:

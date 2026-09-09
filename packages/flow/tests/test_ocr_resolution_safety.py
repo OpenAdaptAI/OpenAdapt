@@ -288,14 +288,13 @@ def test_repeated_ocr_target_uses_unique_recorded_region(
     recorded_first: bool,
 ) -> None:
     """Recorded locality can uniquely identify a repeated target label."""
-    local_region = (0, 0, 570, 480)
     recorded = _match((125, 106), (95, 96, 60, 20))
     sibling = _match((400, 300), (370, 290, 60, 20))
     candidates = [recorded, sibling] if recorded_first else [sibling, recorded]
     anchor = _anchor()
     anchor.search_pad = 400
     vision = _CandidateVision(
-        candidates={("Delete", local_region): candidates},
+        candidates={("Delete", None): candidates},
     )
 
     result = resolve(anchor, _png(), vision, viewport=VIEWPORT)
@@ -307,10 +306,9 @@ def test_repeated_ocr_target_uses_unique_recorded_region(
 
 def test_repeated_ocr_target_without_unique_retained_evidence_halts() -> None:
     """Repeated labels still refuse when neither locality nor context wins."""
-    local_region = (40, 50, 170, 112)
     vision = _CandidateVision(
         candidates={
-            ("Delete", local_region): [
+            ("Delete", None): [
                 _match((60, 70), (30, 60, 60, 20)),
                 _match((190, 140), (160, 130, 60, 20)),
             ]
@@ -324,9 +322,96 @@ def test_repeated_ocr_target_without_unique_retained_evidence_halts() -> None:
     assert grounder.calls == 0
 
 
+@pytest.mark.parametrize("reverse_candidates", [False, True])
+def test_local_ocr_full_frame_enumeration_exposes_crop_omitted_rival(
+    reverse_candidates: bool,
+) -> None:
+    """Cropping can omit a rival that full-frame OCR sees in the same scope."""
+    local_region = (40, 50, 170, 112)
+    candidates = [
+        _match((60, 70), (30, 60, 60, 20)),
+        _match((190, 140), (160, 130, 60, 20)),
+    ]
+    if reverse_candidates:
+        candidates.reverse()
+    vision = _CandidateVision(
+        candidates={
+            ("Delete", local_region): candidates[:1],
+            ("Delete", None): candidates,
+        },
+    )
+    grounder = _Grounder()
+
+    with pytest.raises(AmbiguousOcrMatchError):
+        resolve(_anchor(), _png(), vision, grounder, viewport=VIEWPORT)
+
+    assert vision.text_calls == [("Delete", None)]
+    assert grounder.calls == 0
+
+
+def test_full_frame_ocr_filters_outside_candidates_before_local_selection() -> None:
+    """Full-frame recognition does not expand the declared local target scope."""
+    vision = _CandidateVision(
+        candidates={
+            ("Delete", None): [
+                _match((190, 140), (160, 130, 60, 20)),
+                _match((400, 300), (370, 290, 60, 20)),
+            ]
+        },
+    )
+
+    result = resolve(_anchor(), _png(), vision, viewport=VIEWPORT)
+
+    assert result is not None
+    assert result[0].point == (190, 140)
+    assert result[0].resolution_evidence_regions == ((0, 0, *VIEWPORT),)
+    assert vision.text_calls == [("Delete", None)]
+
+
+def test_full_frame_ocr_reuses_unique_global_candidate_after_local_miss() -> None:
+    """A unique moved target remains valid when no candidate lies locally."""
+    vision = _CandidateVision(
+        candidates={("Delete", None): [_match((400, 300), (370, 290, 60, 20))]},
+    )
+
+    result = resolve(_anchor(), _png(), vision, viewport=VIEWPORT)
+
+    assert result is not None
+    assert result[0].point == (400, 300)
+    assert result[0].resolution_evidence_regions == ((0, 0, *VIEWPORT),)
+    assert vision.text_calls == [("Delete", None)]
+
+
+def test_full_frame_ocr_repeated_target_uses_unique_retained_landmark() -> None:
+    """A retained relation can select one of the complete local candidates."""
+    landmark = Landmark(
+        relation="left_of",
+        ocr_text="Case A17",
+        distance_px=80,
+        dx_px=80,
+        dy_px=0,
+    )
+    vision = _CandidateVision(
+        candidates={
+            ("Delete", None): [
+                _match((60, 70), (30, 60, 60, 20)),
+                _match((190, 140), (160, 130, 60, 20)),
+            ]
+        },
+        text_results={
+            ("Case A17", None): _match((110, 140), (80, 130, 60, 20)),
+        },
+    )
+
+    result = resolve(_anchor(landmarks=[landmark]), _png(), vision, viewport=VIEWPORT)
+
+    assert result is not None
+    assert result[0].point == (190, 140)
+    assert result[0].resolution_evidence_regions == ((0, 0, *VIEWPORT),)
+
+
 def test_repeated_target_locality_landmark_conflict_halts() -> None:
     """Independent retained evidence selecting different labels is terminal."""
-    local_region = (40, 50, 170, 112)
     locality = _match((125, 106), (95, 96, 60, 20))
     landmark_supported = _match((190, 140), (160, 130, 60, 20))
     landmark = Landmark(
@@ -337,7 +422,7 @@ def test_repeated_target_locality_landmark_conflict_halts() -> None:
         dy_px=0,
     )
     vision = _CandidateVision(
-        candidates={("Delete", local_region): [locality, landmark_supported]},
+        candidates={("Delete", None): [locality, landmark_supported]},
         text_results={
             ("Case A17", None): _match((110, 140), (80, 130, 60, 20)),
         },

@@ -3314,6 +3314,13 @@ class BoundAttendedExecutor:
             resume_replayer,
             approval=approval,
             key=self.key,
+            # The loaded bundle binds the target configuration; resume still
+            # requires fresh backend environment evidence before any input.
+            execution_target_kind=(
+                workflow.qualification.environment.target_kind
+                if workflow.qualification is not None
+                else None
+            ),
         )
         return AttendedExecutionResult(
             status="completed" if resumed.success else "halted",
@@ -3705,6 +3712,11 @@ class BoundAttendedExecutor:
             resume_replayer,
             approval=approval,
             key=self.key,
+            execution_target_kind=(
+                workflow.qualification.environment.target_kind
+                if workflow.qualification is not None
+                else None
+            ),
         )
         receipt_digest = _digest(receipt)
         target = target_state_id or "<return>"

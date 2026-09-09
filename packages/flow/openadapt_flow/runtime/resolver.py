@@ -151,6 +151,7 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         "template_ambiguity_suspicion_score": AMBIGUITY_SUSPICION_SCORE,
         "template_scales": list(DEFAULT_TEMPLATE_SCALES),
         "ambiguity": "unique-or-independent-retained-evidence",
+        "ocr_candidates": "full-frame-enumeration-then-local-region-filter",
         "identity_armed_template_landmark_binding": "corroborate-and-snap",
     }
     return hashlib.sha256(
@@ -804,12 +805,13 @@ def resolve(
                 )
                 return resolution, tuple(match.region)
 
-    # Rung 3: OCR text match. Search the same anchor-bounded padded region as
-    # the local template rung first. Only after a local miss may the resolver
-    # search the full frame. On the real vision namespace, candidate enumeration
-    # lets repeated labels be disambiguated only by independent retained
-    # locality/landmark evidence. Older injected vision namespaces retain the
-    # strict ``raise_on_ambiguity`` contract for API compatibility.
+    # Rung 3: OCR text match. Recognize the full frame once: cropped OCR can
+    # omit a competing label that the same engine sees in full-frame context.
+    # Filter those candidates to the local template rung's padded region first;
+    # only a local miss may select from the full list. Repeated labels require
+    # independent retained locality/landmark evidence. Older injected vision
+    # namespaces retain the strict ``raise_on_ambiguity`` contract for API
+    # compatibility.
     #
     # A sole target label remains valid under legitimate layout reflow even
     # when old fixed-offset landmark geometry has gone stale. Landmarks are
@@ -819,13 +821,31 @@ def resolve(
         search_region = pad_region(anchor.region, anchor.search_pad, viewport)
         ocr_regions: tuple[Region | None, ...] = (search_region, None)
         find_candidates = getattr(vision, "find_text_candidates", None)
-        for ocr_region in ocr_regions:
-            if find_candidates is not None:
-                candidates = find_candidates(
+        full_frame_candidates = (
+            list(
+                find_candidates(
                     screen_png,
                     anchor.ocr_text,
-                    region=ocr_region,
+                    region=None,
                     min_ratio=OCR_MIN_RATIO,
+                )
+            )
+            if find_candidates is not None
+            else []
+        )
+        for ocr_region in ocr_regions:
+            if find_candidates is not None:
+                candidates = (
+                    full_frame_candidates
+                    if ocr_region is None
+                    else [
+                        candidate
+                        for candidate in full_frame_candidates
+                        if _point_in_region(
+                            (int(candidate.point[0]), int(candidate.point[1])),
+                            ocr_region,
+                        )
+                    ]
                 )
                 if not candidates:
                     continue
@@ -841,11 +861,9 @@ def resolve(
                     point=point,
                     confidence=float(match.confidence),
                     elapsed_ms=elapsed_ms(),
-                    resolution_evidence_regions=(
-                        full_frame_region
-                        if ocr_region is None or anchor.landmarks
-                        else ocr_region,
-                    ),
+                    # Full-frame pixels influenced OCR segmentation even
+                    # when the selected candidate belongs to the local scope.
+                    resolution_evidence_regions=(full_frame_region,),
                 )
                 return resolution, tuple(match.region)
             try:

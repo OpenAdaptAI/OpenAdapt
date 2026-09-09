@@ -869,6 +869,7 @@ def test_default_recorder_factory_passes_window(monkeypatch) -> None:
     """The default factory forwards the window spec to openadapt_capture.Recorder."""
     import sys
     import types
+    from unittest.mock import Mock
 
     from openadapt_flow import desktop_record
 
@@ -880,7 +881,16 @@ def test_default_recorder_factory_passes_window(monkeypatch) -> None:
             seen["capture_dir"] = capture_dir
             seen["window"] = window
 
+    # This unit test owns every lazy import. Depending on a real recorder
+    # submodule makes it pass only after the capture adapter tests import it,
+    # and a real Loguru logger would remove the rest of the suite's handlers.
+    fake_logger = Mock()
+    monkeypatch.setitem(
+        sys.modules, "loguru", types.SimpleNamespace(logger=fake_logger)
+    )
+    fake_capture_recorder = types.SimpleNamespace(LOG_LEVEL="DEBUG")
     fake_module = types.ModuleType("openadapt_capture")
+    fake_module.recorder = fake_capture_recorder  # type: ignore[attr-defined]
     fake_module.Recorder = _FakeCaptureRecorder  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "openadapt_capture", fake_module)
 
@@ -888,6 +898,9 @@ def test_default_recorder_factory_passes_window(monkeypatch) -> None:
     desktop_record._default_recorder_factory("t", "/tmp/cap", window=spec)
     assert seen["window"] == spec
     assert seen["capture_dir"] == "/tmp/cap"
+    assert fake_capture_recorder.LOG_LEVEL == "WARNING"
+    fake_logger.remove.assert_called_once_with()
+    fake_logger.add.assert_called_once_with(sys.stderr, level="WARNING")
 
 
 def test_record_desktop_window_forwarded_to_factory(
