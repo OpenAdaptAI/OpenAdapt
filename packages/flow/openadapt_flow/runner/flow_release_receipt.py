@@ -75,7 +75,7 @@ class FlowReleaseVerificationReceipt(_Closed):
     workflow_bundle_sha256: str = Field(pattern=_SHA256_RE)
     admitted_runtime_sha256: str = Field(pattern=_SHA256_RE)
     verified_at: str
-    expires_at: str
+    expires_at: str | None
     registry_source_commit: str = Field(pattern=_COMMIT_RE)
     registry_revision: StrictInt = Field(ge=1, le=_MAX_SAFE_INTEGER)
     registry_head_sha256: str = Field(pattern=_SHA256_RE)
@@ -96,7 +96,8 @@ class FlowReleaseVerificationReceipt(_Closed):
         if self.verification_id_sha256 != expected:
             raise ValueError("Flow receipt verification digest is invalid")
         _utc_seconds(self.verified_at, label="Flow receipt verified_at")
-        _utc_seconds(self.expires_at, label="Flow receipt expires_at")
+        if self.expires_at is not None:
+            _utc_seconds(self.expires_at, label="Flow receipt expires_at")
         return self
 
     def require_current(self, *, now: datetime | None = None) -> None:
@@ -106,7 +107,11 @@ class FlowReleaseVerificationReceipt(_Closed):
         current = current.astimezone(timezone.utc)
         if _utc_seconds(self.verified_at, label="Flow receipt verified_at") > current:
             raise ValueError("Flow receipt verification is in the future")
-        if _utc_seconds(self.expires_at, label="Flow receipt expires_at") <= current:
+        if (
+            self.expires_at is not None
+            and _utc_seconds(self.expires_at, label="Flow receipt expires_at")
+            <= current
+        ):
             raise ValueError("Flow receipt is expired")
 
 

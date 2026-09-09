@@ -63,8 +63,14 @@ def test_flow_release_fixture_has_exact_identity_and_object_digest() -> None:
     assert assert_hosted_flow_release(identity, artifact, now=NOW) == receipt
 
 
-def test_flow_release_receipt_refuses_object_and_identity_drift() -> None:
-    raw = FIXTURE.read_bytes()
+@pytest.mark.parametrize("expires_at", ["2026-09-27T00:00:00Z", None])
+def test_flow_release_receipt_refuses_object_and_identity_drift(
+    expires_at: str | None,
+) -> None:
+    payload = _with_verification_id(
+        json.loads(FIXTURE.read_bytes()) | {"expires_at": expires_at}
+    )
+    raw = canonical_json(payload)
     with pytest.raises(ValidationError, match="bytes or digest differ"):
         FlowReleaseVerificationReceiptArtifactBytes(
             artifact_bytes_base64=b64encode(raw).decode("ascii"),
@@ -78,13 +84,24 @@ def test_flow_release_receipt_refuses_object_and_identity_drift() -> None:
 
     artifact = _artifact(raw)
     identity = artifact.identity(now=NOW)
-    drifted = identity.model_copy(update={"release_sha256": "sha256:" + "0" * 64})
-    with pytest.raises(ValueError, match="differs from the verified Flow release"):
-        assert_hosted_flow_release(drifted, artifact, now=NOW)
+    for field, value in {
+        "verification_receipt_object_sha256": "sha256:" + "0" * 64,
+        "release_sha256": "sha256:" + "0" * 64,
+        "source_commit": "0" * 40,
+        "version": "1.35.1",
+    }.items():
+        drifted = identity.model_copy(update={field: value})
+        with pytest.raises(ValueError, match="differs from the verified Flow release"):
+            assert_hosted_flow_release(drifted, artifact, now=NOW)
 
 
-def test_flow_release_receipt_refuses_self_binding_tag_and_time_drift() -> None:
-    original = json.loads(FIXTURE.read_text(encoding="utf-8"))
+@pytest.mark.parametrize("expires_at", ["2026-09-27T00:00:00Z", None])
+def test_flow_release_receipt_refuses_self_binding_tag_and_time_drift(
+    expires_at: str | None,
+) -> None:
+    original = _with_verification_id(
+        json.loads(FIXTURE.read_text(encoding="utf-8")) | {"expires_at": expires_at}
+    )
     changed = dict(original)
     changed["source_commit"] = "0" * 40
     with pytest.raises(ValidationError, match="verification digest is invalid"):
@@ -124,3 +141,75 @@ def test_flow_release_receipt_refuses_integers_above_wire_safe_range(
 
     with pytest.raises(ValidationError, match="less than or equal to"):
         FlowReleaseVerificationReceipt.model_validate(changed)
+
+
+@pytest.mark.parametrize("now", [NOW, datetime(2036, 8, 28, tzinfo=timezone.utc)])
+def test_flow_release_receipt_preserves_until_revoked_expiry(now: datetime) -> None:
+    # The canonical release verifier retains a signed admission's null expiry.
+    payload = _with_verification_id(
+        json.loads(FIXTURE.read_bytes()) | {"expires_at": None}
+    )
+    raw = canonical_json(payload)
+    artifact = _artifact(raw)
+
+    receipt = artifact.decode(now=now)
+    assert receipt.expires_at is None
+    assert canonical_json(receipt.model_dump(mode="json")) == raw
+    identity = artifact.identity(now=now)
+    assert identity.verification_receipt_object_sha256 == artifact.artifact_sha256
+    assert assert_hosted_flow_release(identity, artifact, now=now) == receipt
+
+
+def test_flow_release_receipt_requires_explicit_expiry() -> None:
+    payload = json.loads(FIXTURE.read_bytes())
+    payload.pop("expires_at")
+    raw = canonical_json(_with_verification_id(payload))
+
+    with pytest.raises(ValidationError, match="expires_at\n +Field required"):
+        _artifact(raw).decode(now=NOW)
+
+
+@pytest.mark.parametrize(
+    "expires_at",
+    [
+        "",
+        "null",
+        "2026-09-27",
+        "2026-09-27T00:00:00",
+        "2026-09-27T00:00:00+00:00",
+        "2026-09-27T00:00:00.000Z",
+        "2026-02-30T00:00:00Z",
+        0,
+        False,
+        {},
+        [],
+    ],
+)
+def test_flow_release_receipt_refuses_malformed_expiry(expires_at: object) -> None:
+    payload = _with_verification_id(
+        json.loads(FIXTURE.read_bytes()) | {"expires_at": expires_at}
+    )
+    with pytest.raises(ValidationError):
+        _artifact(canonical_json(payload)).decode(now=NOW)
+
+
+@pytest.mark.parametrize(
+    ("expires_at", "expired"),
+    [
+        ("2026-08-27T23:59:59Z", True),
+        ("2026-08-28T00:00:00Z", True),
+        ("2026-08-28T00:00:01Z", False),
+    ],
+)
+def test_flow_release_receipt_enforces_finite_expiry_boundary(
+    expires_at: str, expired: bool
+) -> None:
+    payload = _with_verification_id(
+        json.loads(FIXTURE.read_bytes()) | {"expires_at": expires_at}
+    )
+    artifact = _artifact(canonical_json(payload))
+    if expired:
+        with pytest.raises(ValueError, match="expired"):
+            artifact.decode(now=NOW)
+    else:
+        assert artifact.decode(now=NOW).expires_at == expires_at
