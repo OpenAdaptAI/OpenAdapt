@@ -53,7 +53,19 @@ def results(tmp_path_factory: pytest.TempPathFactory) -> dict:
     work_root = root / "run"
     code = _run_main(output, work_root)
     assert code == 0, f"campaign refused acceptance (exit {code})"
-    return json.loads(output.read_text(encoding="utf-8"))
+    measured = json.loads(output.read_text(encoding="utf-8"))
+    for trial in measured["trials"]:
+        if trial["condition"] == "moderate_display_drift":
+            report_path = (
+                work_root
+                / "trials"
+                / trial["condition"]
+                / f"trial-{trial['trial']:02d}"
+                / "run"
+                / "report.json"
+            )
+            trial["native_report"] = json.loads(report_path.read_text(encoding="utf-8"))
+    return measured
 
 
 def _run_main(output: Path, work_root: Path) -> int:
@@ -339,7 +351,7 @@ def test_halt_conditions_prove_no_effect_on_the_system_of_record(
 
 
 def test_verified_conditions_prove_one_exact_write(results: dict) -> None:
-    verified_conditions = ("healthy", "row_reordered", "moderate_display_drift")
+    verified_conditions = ("healthy", "row_reordered")
     by_id: dict[str, list[dict]] = {}
     for trial in results["trials"]:
         by_id.setdefault(trial["condition"], []).append(trial)
@@ -363,3 +375,245 @@ def test_resolution_never_uses_a_model_rung(results: dict) -> None:
             assert not any(marker in lowered for marker in forbidden), (
                 f"{trial['condition']}: resolution used {rung}"
             )
+
+
+def _assert_moderate_display_contract(trial: dict) -> None:
+    # The original campaign declares verified_or_safe_halt for this condition.
+    # Each alternative still needs its independent effect and native evidence.
+    assert trial["expectation"] == "verified_or_safe_halt"
+    assert trial["passed"] is True
+    report = trial["native_report"]
+    assert report["success"] is trial["runtime_success"]
+    assert report["transaction_outcome"] == trial["transaction_outcome"]
+    assert report["idempotent_replay"] is False
+    assert report["model_calls"] == trial["model_calls"] == 0
+    assert trial["uncertainty_events"] == trial["delivery_uncertainty"] == []
+    for step in report["results"]:
+        assert step["input_retried"] is False
+        assert step["delivery_uncertainty"] is None
+
+    oracle = trial["oracle"]
+    assert oracle["wrong_record_write"] is False
+    assert oracle["duplicate_effect"] is False
+    saves = [event for event in oracle["events"] if event["kind"] == "save_note"]
+    assert oracle["save_entries"] == len(saves)
+    assert sum(row["action"] == "save_note" for row in oracle["ledger"]) == len(saves)
+    if trial["runtime_success"] is True:
+        assert trial["transaction_outcome"] == "VERIFIED"
+        assert trial["save_delivery_attempts"] == len(saves) == 1
+        assert oracle["exact_single_write"] is True
+        assert oracle["no_consequential_input"] is False
+        assert oracle["rows"] == [
+            {"record_id": mod.fx.TARGET_RECORD, "note": mod.fx.NOTE_VALUE}
+        ]
+        assert saves[0]["detail"] == mod.fx.TARGET_RECORD
+    else:
+        assert trial["runtime_success"] is False
+        assert trial["transaction_outcome"] in {
+            "HALTED_BEFORE_EFFECT",
+            "RECONCILIATION_REQUIRED",
+        }
+        assert trial["save_delivery_attempts"] == len(saves) == 0
+        assert oracle["rows"] == []
+        assert oracle["exact_single_write"] is False
+        assert oracle["no_consequential_input"] is True
+        refusals = [
+            {
+                "step_id": step["step_id"],
+                "stage": evidence["stage"],
+                "code": evidence["code"],
+                "delivery_attempted": step["delivery_attempted"],
+            }
+            for step in report["results"]
+            if (evidence := step["safety_refusal_evidence"]) is not None
+        ]
+        assert trial["safety_refusals"] == refusals
+        assert refusals
+        for refusal in refusals:
+            assert refusal["stage"] and refusal["code"]
+            assert refusal["delivery_attempted"] is False
+        assert all(
+            step["delivery_attempted"] is False
+            for step in report["results"]
+            if step["risk"] == "irreversible"
+        )
+        assert trial["errors"] == [
+            step["error"] for step in report["results"] if step["error"]
+        ]
+        assert trial["errors"]
+
+
+def test_moderate_display_drift_proves_its_declared_alternative(results: dict) -> None:
+    for trial in results["trials"]:
+        if trial["condition"] == "moderate_display_drift":
+            _assert_moderate_display_contract(trial)
+
+
+def _moderate_display_observation(*, verified: bool) -> dict:
+    """Small unit inputs for the evidence assertions, never campaign evidence."""
+    outcome = "VERIFIED" if verified else "RECONCILIATION_REQUIRED"
+    refusal = (
+        None
+        if verified
+        else {"stage": "identity_verification", "code": "identity_conflict"}
+    )
+    error = None if verified else "Identity check refused before Save"
+    event = {"kind": "save_note", "detail": mod.fx.TARGET_RECORD}
+    return {
+        "expectation": "verified_or_safe_halt",
+        "passed": True,
+        "runtime_success": verified,
+        "transaction_outcome": outcome,
+        "model_calls": 0,
+        "save_delivery_attempts": int(verified),
+        "uncertainty_events": [],
+        "delivery_uncertainty": [],
+        "safety_refusals": []
+        if verified
+        else [{"step_id": "save", **refusal, "delivery_attempted": False}],
+        "errors": [] if verified else [error],
+        "oracle": {
+            "rows": [{"record_id": mod.fx.TARGET_RECORD, "note": mod.fx.NOTE_VALUE}]
+            if verified
+            else [],
+            "events": [event] if verified else [],
+            "ledger": [{"action": "save_note"}] if verified else [],
+            "save_entries": int(verified),
+            "exact_single_write": verified,
+            "no_consequential_input": not verified,
+            "wrong_record_write": False,
+            "duplicate_effect": False,
+        },
+        "native_report": {
+            "success": verified,
+            "transaction_outcome": outcome,
+            "idempotent_replay": False,
+            "model_calls": 0,
+            "results": [
+                {
+                    "step_id": "save",
+                    "risk": "irreversible",
+                    "input_retried": False,
+                    "delivery_uncertainty": None,
+                    "delivery_attempted": verified,
+                    "safety_refusal_evidence": refusal,
+                    "error": error,
+                }
+            ],
+        },
+    }
+
+
+@pytest.mark.parametrize("verified", [True, False])
+def test_moderate_display_contract_accepts_proven_alternatives(verified: bool) -> None:
+    _assert_moderate_display_contract(_moderate_display_observation(verified=verified))
+
+
+@pytest.mark.parametrize(
+    ("verified", "path", "value"),
+    [
+        pytest.param(False, ("runtime_success",), True, id="false-success"),
+        pytest.param(
+            True, ("oracle", "exact_single_write"), False, id="missing-effect-proof"
+        ),
+        pytest.param(True, ("oracle", "rows"), [], id="missing-actual-effect"),
+        pytest.param(
+            True,
+            ("oracle", "rows"),
+            [{"record_id": "wrong", "note": mod.fx.NOTE_VALUE}],
+            id="wrong-record-effect",
+        ),
+        pytest.param(True, ("save_delivery_attempts",), 2, id="duplicate-save"),
+        pytest.param(
+            False,
+            ("oracle", "rows"),
+            [{"record_id": mod.fx.TARGET_RECORD, "note": mod.fx.NOTE_VALUE}],
+            id="halt-after-write",
+        ),
+        pytest.param(
+            False, ("save_delivery_attempts",), 1, id="halt-after-save-attempt"
+        ),
+        pytest.param(
+            False,
+            ("oracle", "events"),
+            [{"kind": "save_note", "detail": mod.fx.TARGET_RECORD}],
+            id="halt-after-oracle-input",
+        ),
+        pytest.param(
+            False,
+            ("native_report", "results", 0, "delivery_attempted"),
+            True,
+            id="halt-after-native-delivery",
+        ),
+        pytest.param(
+            False,
+            ("native_report", "results", 0, "input_retried"),
+            True,
+            id="blind-retry",
+        ),
+        pytest.param(False, ("native_report", "idempotent_replay"), True, id="replay"),
+        pytest.param(False, ("safety_refusals",), [], id="missing-refusal"),
+        pytest.param(
+            False, ("safety_refusals", 0, "code"), "different", id="altered-refusal"
+        ),
+        pytest.param(
+            False,
+            ("native_report", "transaction_outcome"),
+            "VERIFIED",
+            id="altered-outcome",
+        ),
+        pytest.param(False, ("errors",), [], id="missing-error"),
+    ],
+)
+def test_moderate_display_contract_rejects_unproven_alternatives(
+    verified: bool, path: tuple, value: object
+) -> None:
+    trial = _moderate_display_observation(verified=verified)
+    target = trial
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    with pytest.raises(AssertionError):
+        _assert_moderate_display_contract(trial)
+
+
+@pytest.mark.parametrize(
+    ("verified", "changes"),
+    [
+        pytest.param(
+            True,
+            [
+                (("transaction_outcome",), "COMPLETED_UNVERIFIED"),
+                (("native_report", "transaction_outcome"), "COMPLETED_UNVERIFIED"),
+            ],
+            id="matching-unverified-success",
+        ),
+        pytest.param(
+            False,
+            [
+                (("transaction_outcome",), "VERIFIED"),
+                (("native_report", "transaction_outcome"), "VERIFIED"),
+            ],
+            id="matching-verified-halt",
+        ),
+        pytest.param(
+            False,
+            [
+                (("safety_refusals", 0, "delivery_attempted"), True),
+                (("native_report", "results", 0, "delivery_attempted"), True),
+            ],
+            id="matching-dispatched-refusal",
+        ),
+    ],
+)
+def test_moderate_display_contract_rejects_consistent_unsafe_claims(
+    verified: bool, changes: list
+) -> None:
+    trial = _moderate_display_observation(verified=verified)
+    for path, value in changes:
+        target = trial
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+    with pytest.raises(AssertionError):
+        _assert_moderate_display_contract(trial)
