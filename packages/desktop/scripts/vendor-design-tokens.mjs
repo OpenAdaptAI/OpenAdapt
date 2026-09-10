@@ -26,28 +26,19 @@ const write = process.argv.includes('--write');
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 
 async function fetchCanonical(entry) {
-  // openadapt-web is private, so raw.githubusercontent.com 404s. CI already
-  // passes GITHUB_TOKEN; use the Contents API the same way --write does.
-  const token = process.env.GITHUB_TOKEN;
-  if (token) {
-    const url =
-      `https://api.github.com/repos/${provenance.canonical_repository}` +
-      `/contents/${entry.canonical_path}` +
-      `?ref=${encodeURIComponent(provenance.canonical_branch)}`;
-    const response = await fetch(url, {
-      headers: {
-        accept: 'application/vnd.github.raw',
-        authorization: `Bearer ${token}`,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`GET ${url} -> HTTP ${response.status}`);
-    }
-    return Buffer.from(await response.arrayBuffer());
+  // Web publishes byte-identical canonical files during its build. Public
+  // reads also work for Dependabot and fork PRs without private-repo tokens.
+  const url = write
+    ? `https://api.github.com/repos/${provenance.canonical_repository}` +
+      `/contents/${entry.canonical_path}?ref=${encodeURIComponent(provenance.canonical_branch)}`
+    : `https://openadapt.ai/${entry.canonical_path}`;
+  const headers = { accept: write ? 'application/vnd.github.raw' : 'text/plain' };
+  if (write && process.env.GITHUB_TOKEN) {
+    headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
-  const response = await fetch(entry.raw_url, { headers: { accept: 'text/plain' } });
+  const response = await fetch(url, { headers });
   if (!response.ok) {
-    throw new Error(`GET ${entry.raw_url} -> HTTP ${response.status}`);
+    throw new Error(`GET ${url} -> HTTP ${response.status}`);
   }
   return Buffer.from(await response.arrayBuffer());
 }
@@ -90,7 +81,7 @@ for (const [name, entry] of Object.entries(provenance.files)) {
 
   if (canonicalSha !== vendoredSha) {
     failures.push(
-      `${name}: drifted from ${provenance.canonical_repository}@${provenance.canonical_branch}.\n` +
+      `${name}: drifted from the published ${provenance.canonical_repository} palette.\n` +
         `  canonical ${entry.canonical_path} is ${canonicalSha}\n` +
         `  the vendored copy is      ${vendoredSha}\n` +
         `  Run: node scripts/vendor-design-tokens.mjs --write`,
@@ -113,4 +104,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`\nVendored design tokens match ${provenance.canonical_repository}@${provenance.canonical_branch}.`);
+console.log(`\nVendored design tokens match the published ${provenance.canonical_repository} palette.`);

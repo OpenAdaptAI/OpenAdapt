@@ -141,7 +141,7 @@ jobs:
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
         id: release
-        uses: python-semantic-release/python-semantic-release@39dd2052f2ce8282a5d932c31d58a2ca06d2550e # v10.6.1
+        uses: python-semantic-release/python-semantic-release@9a026e9303981c866c3425723009becb2437c757 # v10.6.2
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
 
@@ -151,7 +151,7 @@ jobs:
 
       - name: Publish to GitHub Releases
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
+        uses: python-semantic-release/publish-action@6d89e2de8d40ecb3717316ecbbf15a6fa8ea9039 # v10.6.2
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
 

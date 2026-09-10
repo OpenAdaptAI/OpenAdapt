@@ -120,7 +120,7 @@ packages = ["engine"]
 
 # python-semantic-release 10.6.2 still accepts click 8.1.8, which pip-audit
 # reports as PYSEC-2026-2132 (fix: 8.3.3). The GitHub Action is SHA-pinned at
-# v10.6.1 and does not use this lock; the constraint keeps the local extra
+# v10.6.2 and does not use this lock; the constraint keeps the local extra
 # from regressing the audited tree.
 [tool.uv]
 constraint-dependencies = ["click>=8.3.3"]

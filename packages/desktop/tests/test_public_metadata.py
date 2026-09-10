@@ -180,7 +180,7 @@ def test_release_workflow_uses_matching_pinned_actions() -> None:
 
     assert uses
     assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in uses)
-    assert "# v10.6.1" in workflow
+    assert "# v10.6.2" in workflow
     assert "# v9.15.2" not in workflow
     assert "token: ${{ secrets.ADMIN_TOKEN }}" in workflow
     assert workflow.count("github_token: ${{ secrets.ADMIN_TOKEN }}") == 2
@@ -223,7 +223,7 @@ def test_dev_semantic_release_floor_matches_the_pinned_v10_action() -> None:
         lock,
         flags=re.MULTILINE,
     )
-    assert "# v10.6.1" in workflow
+    assert "# v10.6.2" in workflow
     assert "python-semantic-release>=9" not in "\n".join(dev)
     assert "  push:" not in workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
     uv = pyproject["tool"]["uv"]
