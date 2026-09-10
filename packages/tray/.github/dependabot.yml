@@ -2,14 +2,27 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
-    directories:
-      - "/"
-      - "/scripts/release"
+    directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+  - package-ecosystem: "pip"
+    directory: "/scripts/release"
+    schedule:
+      interval: "weekly"
+    # Each release-tool update requires the matching reviewed wrapper contract.
+    open-pull-requests-limit: 1
+    labels:
+      - "dependencies"
+    ignore:
+      # PSR 10.6.2 requires Click <8.2.dev0. Remove this ignore when a reviewed
+      # PSR update supports newer Click. Patch updates in 8.1 remain eligible.
+      - dependency-name: "click"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

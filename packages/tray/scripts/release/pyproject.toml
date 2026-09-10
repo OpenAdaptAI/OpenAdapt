@@ -2,10 +2,10 @@
 # while Tray requires Click 8.3.3 or later. This is a virtual tool project.
 [dependency-groups]
 release = [
-    "uv==0.12.7",
+    "uv==0.12.10",
     "hatchling==1.32.0",
     "python-semantic-release==10.6.2",
-    "GitPython==3.1.61",
+    "GitPython==3.1.62",
     "click==8.1.8",
 ]
 
