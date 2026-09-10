@@ -5,7 +5,7 @@ release = [
     "uv==0.12.5",
     "hatchling==1.31.0",
     "python-semantic-release==10.6.2",
-    "GitPython==3.1.59",
+    "GitPython==3.1.61",
     "click==8.1.8",
 ]
 

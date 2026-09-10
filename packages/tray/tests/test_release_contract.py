@@ -157,7 +157,7 @@ def test_release_uses_the_reviewed_locked_psr_runtime() -> None:
     assert "python scripts/run_semantic_release.py" in workflow
     assert "GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}" in workflow
     assert '"python-semantic-release==10.6.2"' in tools
-    assert '"GitPython==3.1.59"' in tools
+    assert '"GitPython==3.1.61"' in tools
     assert tools.count('"hatchling==1.31.0"') == 1
     assert pyproject.count('"hatchling==1.31.0"') == 1
     assert '"click==8.1.8"' in tools
@@ -166,7 +166,7 @@ def test_release_uses_the_reviewed_locked_psr_runtime() -> None:
     assert re.search(
         r'(?ms)^name = "python-semantic-release"\nversion = "10\.6\.2"$', lock
     )
-    assert re.search(r'(?ms)^name = "gitpython"\nversion = "3\.1\.59"$', lock)
+    assert re.search(r'(?ms)^name = "gitpython"\nversion = "3\.1\.61"$', lock)
     assert re.search(r'(?ms)^name = "hatchling"\nversion = "1\.31\.0"$', lock)
 
 
