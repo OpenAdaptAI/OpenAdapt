@@ -258,8 +258,15 @@ class _GIAtspiRuntime:
         return found[0] if len(found) == 1 else None
 
     def parent(self, element: Any) -> Any:
-        value = getattr(element, "parent", None)
-        return value if value is not None else _call(element, "get_parent", "getParent")
+        # GI exposes a `parent` struct field that can raise when read. The
+        # public accessor returns the accessible parent across the native ABI.
+        value = _call(element, "get_parent", "getParent")
+        if value is not None:
+            return value
+        try:
+            return getattr(element, "parent", None)
+        except Exception:
+            return None
 
     def attributes(self, element: Any) -> dict[str, str]:
         raw = _call(element, "getAttributes", "get_attributes")

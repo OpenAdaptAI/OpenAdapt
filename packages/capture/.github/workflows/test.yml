@@ -12,7 +12,8 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Exercise the oldest Python on pre-2.80 GLib without adding a matrix leg.
+    runs-on: ${{ matrix.python-version == '3.10' && 'ubuntu-22.04' || 'ubuntu-latest' }}
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
@@ -56,8 +57,22 @@ jobs:
           set -e
           sudo apt-get install -y ffmpeg libportaudio2
 
+      - name: Install native AT-SPI build and smoke dependencies
+        if: matrix.python-version == '3.10'
+        run: |
+          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
+            gir1.2-atspi-2.0 gir1.2-gtk-3.0 at-spi2-core dbus-x11 xvfb
+          pkg-config --modversion glib-2.0 gobject-introspection-1.0
+
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --locked --extra dev ${{ matrix.python-version == '3.10' && '--extra linux' || '' }}
+
+      - name: Verify native AT-SPI dependency compatibility
+        if: matrix.python-version == '3.10'
+        env:
+          OPENADAPT_TEST_LINUX_ATSPI: "1"
+          NO_AT_BRIDGE: "0"
+        run: dbus-run-session -- xvfb-run -a uv run --no-sync pytest tests/test_linux_atspi_integration.py -v --timeout=60
 
       - name: Run tests
         run: uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py --timeout=120

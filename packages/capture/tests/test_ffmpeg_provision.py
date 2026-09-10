@@ -511,7 +511,7 @@ def _wheel_with(tmp_path: Path, extra: dict[str, bytes]) -> Path:
         archive.writestr(
             "openadapt_capture-1.2.3.dist-info/METADATA",
             "Name: openadapt-capture\nProvides-Extra: linux\n"
-            "Requires-Dist: pygobject<3.50,>=3.46; sys_platform == 'linux' "
+            "Requires-Dist: pygobject<3.51,>=3.46; sys_platform == 'linux' "
             "and extra == 'linux'\n",
         )
         for name, content in extra.items():

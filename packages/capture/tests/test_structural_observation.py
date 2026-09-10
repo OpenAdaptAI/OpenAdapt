@@ -1214,3 +1214,19 @@ def test_linux_atspi_password_text_omits_value() -> None:
     assert secret_node.role == "password text"
     assert secret_node.value is None
     assert "typed-secret" not in observed.model_dump_json()
+
+
+@pytest.mark.parametrize("has_parent", [True, False])
+def test_atspi_parent_uses_accessor_before_unreadable_gi_field(has_parent: bool) -> None:
+    parent = object() if has_parent else None
+
+    class Accessible:
+        @property
+        def parent(self):
+            raise RuntimeError("unable to get the value")
+
+        def get_parent(self):
+            return parent
+
+    runtime = _GIAtspiRuntime.__new__(_GIAtspiRuntime)
+    assert runtime.parent(Accessible()) is parent

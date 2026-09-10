@@ -73,8 +73,10 @@ share = [
 
 # Native Linux AT-SPI observation. The host must also provide the AT-SPI
 # typelib/runtime (for example gir1.2-atspi-2.0 on Debian/Ubuntu).
+# PyGObject 3.50.x retains GLib >=2.64 and gobject-introspection >=1.64;
+# 3.52+ requires GLib/girepository-2.0 >=2.80, which older LTS hosts lack.
 linux = [
-    "PyGObject>=3.46,<3.50; sys_platform == 'linux'",
+    "PyGObject>=3.46,<3.51; sys_platform == 'linux'",
 ]
 
 # Everything

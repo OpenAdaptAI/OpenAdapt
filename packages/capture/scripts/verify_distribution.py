@@ -206,7 +206,7 @@ def verify_distribution(path: Path) -> None:
         f"{path}: the Linux AT-SPI package extra is missing"
     )
     assert any(
-        line.startswith("requires-dist: pygobject<3.50,>=3.46;")
+        line.startswith("requires-dist: pygobject<3.51,>=3.46;")
         and "extra == 'linux'" in line
         for line in metadata_lines
     ), f"{path}: the Linux extra does not carry the reviewed PyGObject range"

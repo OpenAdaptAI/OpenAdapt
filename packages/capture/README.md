@@ -217,6 +217,13 @@ the current names), then:
 pip install "openadapt-capture[linux]"
 ```
 
+The Linux extra supports PyGObject 3.46 through 3.50.x. That keeps the native
+build compatible with GLib 2.64+ and gobject-introspection 1.64+.
+[PyGObject 3.50.2's build requirements](https://github.com/GNOME/pygobject/blob/3.50.2/meson.build)
+still use those libraries; 3.52+ needs GLib and `girepository-2.0` 2.80+.
+Pip doesn't inspect system library versions, so the upper bound prevents an
+upgrade that older Linux hosts can't build.
+
 The provider describes the local accessibility tree. It cannot see controls on
 the far side of an RDP or Citrix pixel boundary, and those demonstrations fall
 back to window-scoped pixels and coordinates for Flow's visual compiler.

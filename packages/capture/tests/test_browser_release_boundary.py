@@ -94,8 +94,10 @@ def test_distribution_validator_requires_the_reviewed_linux_package_extra(
         verify_distribution(wheel)
 
 
-def test_distribution_validator_rejects_an_unbounded_pygobject_extra(
+@pytest.mark.parametrize("requirement", ["PyGObject>=3.46", "PyGObject>=3.46,<3.59"])
+def test_distribution_validator_rejects_an_unreviewed_pygobject_extra(
     tmp_path,
+    requirement,
 ) -> None:
     wheel = tmp_path / "openadapt_capture-1.2.2-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
@@ -106,7 +108,7 @@ def test_distribution_validator_rejects_an_unbounded_pygobject_extra(
             "openadapt_capture-1.2.2.dist-info/METADATA",
             "Name: openadapt-capture\n"
             "Provides-Extra: linux\n"
-            "Requires-Dist: PyGObject>=3.46; extra == 'linux'\n",
+            f"Requires-Dist: {requirement}; extra == 'linux'\n",
         )
 
     with pytest.raises(AssertionError, match="reviewed PyGObject range"):
