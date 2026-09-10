@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -2836,3 +2837,16 @@ def test_production_workflow_keeps_normal_publication_unadmitted() -> None:
         assert "write-channel" not in text
     assert "unadmitted release candidate" in normal_release_text
     assert "unadmitted release candidate" in native_release_text
+
+
+def test_frontend_and_native_plugins_share_the_same_protocol_version() -> None:
+    """A JS plugin update must ship with its matching native IPC implementation."""
+    root = Path(__file__).resolve().parents[1]
+    npm = json.loads((root / "package-lock.json").read_text(encoding="utf-8"))
+    cargo = tomllib.loads((root / "src-tauri/Cargo.lock").read_text(encoding="utf-8"))
+    native_versions = {package["name"]: package["version"] for package in cargo["package"]}
+    for name, package in npm["packages"].items():
+        prefix = "node_modules/@tauri-apps/plugin-"
+        if name.startswith(prefix):
+            native_name = "tauri-plugin-" + name.removeprefix(prefix)
+            assert package["version"] == native_versions[native_name], native_name

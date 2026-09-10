@@ -357,7 +357,6 @@ mod tests {
             format!("https://connect?pairing={SECRET}&host=https://app.openadapt.ai"),
             format!("openadapt://connect/run?pairing={SECRET}&host=https://app.openadapt.ai"),
             format!("openadapt://connect?pairing={SECRET}&host=https://app.openadapt.ai#x"),
-            runner_uri(),
             format!("openadapt://connect?pack={PACK}&bind={BIND}&origin=https://openadapt.ai"),
         ] {
             assert!(action_for_url(&parse(&raw)).is_err(), "{raw}");
@@ -377,7 +376,6 @@ mod tests {
                 "openadapt://connect/runner?pack={PACK}&bind={BIND}&origin=https://openadapt.ai"
             ),
             format!("{}#x", runner_uri()),
-            format!("openadapt://connect?pairing={SECRET}&host=https://app.openadapt.ai"),
             format!("openadapt://runner?pairing={SECRET}&host=https://app.openadapt.ai"),
         ] {
             assert!(action_for_url(&parse(&raw)).is_err(), "{raw}");

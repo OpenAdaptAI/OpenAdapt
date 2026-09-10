@@ -1381,9 +1381,9 @@ requires-dist = [
     { name = "onnxruntime", marker = "(platform_machine != 'x86_64' and extra == 'build') or (sys_platform != 'darwin' and extra == 'build')", specifier = "==1.27.0" },
     { name = "openadapt-capture", specifier = ">=1.2.1" },
     { name = "openadapt-desktop", extras = ["enterprise"], marker = "extra == 'full'" },
-    { name = "openadapt-flow", extras = ["browser", "console"], marker = "extra == 'build'", specifier = "==1.34.0" },
+    { name = "openadapt-flow", extras = ["browser", "console"], marker = "extra == 'build'", specifier = "==1.35.1" },
     { name = "openadapt-privacy", specifier = ">=1.0.0" },
-    { name = "openadapt-types", specifier = "==0.10.0" },
+    { name = "openadapt-types", specifier = "==0.17.0" },
     { name = "packaging", specifier = ">=24" },
     { name = "playwright", marker = "extra == 'build'", specifier = ">=1.44" },
     { name = "psutil" },
@@ -1402,22 +1402,23 @@ provides-extras = ["enterprise", "full", "build", "dev"]
 
 [[package]]
 name = "openadapt-flow"
-version = "1.34.0"
+version = "1.35.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
     { name = "idna" },
     { name = "numpy" },
+    { name = "openadapt-types" },
     { name = "opencv-python" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/18/27/aa3986b135964f7a6f4992a08873922d36bbb64a83a126f272497668fec4/openadapt_flow-1.34.0.tar.gz", hash = "sha256:a941a70015fe91897e655bfc9bf83e6cf8fbcf8bd4e4c7206ffb133c505203f8", size = 20440838, upload-time = "2026-08-28T14:23:46.17Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/9b/54d64f124c0789c4e8f82a54a298e4e33681c4f02e056c49931939ae384f/openadapt_flow-1.35.1.tar.gz", hash = "sha256:c5c6c437472b23999223b0d2473dbf21de2ca05274c270ae3854adeda6b07dca", size = 21135866, upload-time = "2026-09-09T17:16:21.203Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/4b/22e115d8fde6f562c7debf896351d7a8a3bc14483ca246abc3ca180d9077/openadapt_flow-1.34.0-py3-none-any.whl", hash = "sha256:56d32818989cb3a92830080ead39e10b08718c55e00988117f22cbfeaac98854", size = 1928194, upload-time = "2026-08-28T14:23:44.184Z" },
+    { url = "https://files.pythonhosted.org/packages/84/4d/2bfa44495c907e691fe9bcc256230b919b97430bd430d72c8291b9365fc1/openadapt_flow-1.35.1-py3-none-any.whl", hash = "sha256:cfbc89acc6a2e3bcb5502a4d1fb29e985a03149a7f14c32c259254676bb3f11d", size = 2129416, upload-time = "2026-09-09T17:16:19.067Z" },
 ]
 
 [package.optional-dependencies]
@@ -1446,14 +1447,14 @@ wheels = [
 
 [[package]]
 name = "openadapt-types"
-version = "0.10.0"
+version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/54/4cc84122fe9405fa3dbcd1521d252f92ba5d5c9d1eb367187aef06d0d4a3/openadapt_types-0.10.0.tar.gz", hash = "sha256:ea4d784da2d6dae15508d44a1e207a63539448312b3490d8c38110b4013710e8", size = 151235, upload-time = "2026-08-08T19:07:11.487Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/d5/549afc2b6bdde8a0a80d4eec67644275df251ee1654f3189f0cc66235730/openadapt_types-0.17.0.tar.gz", hash = "sha256:43dc00d82d6d8feb2cfaa16960224a85933440d7dee3b5f3c60618873535287b", size = 212574, upload-time = "2026-09-01T23:50:50.837Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/6e/1efc97ed73c84205149b7e2a7474638afa0a1c29374b867c5a357bdff59e/openadapt_types-0.10.0-py3-none-any.whl", hash = "sha256:37317cc56968a88869cff8181179211365c3f772302e87ce76f95181565125b9", size = 105149, upload-time = "2026-08-08T19:07:10.104Z" },
+    { url = "https://files.pythonhosted.org/packages/55/9a/bec1d51cba5749732ceeba6e4abf7abe6aeaa22c849a1edb26b97c7ab479/openadapt_types-0.17.0-py3-none-any.whl", hash = "sha256:79738ab529f71241963725c6a40603deae032ff60c61d66baf33d7a248b1afa9", size = 155033, upload-time = "2026-09-01T23:50:49.083Z" },
 ]
 
 [[package]]

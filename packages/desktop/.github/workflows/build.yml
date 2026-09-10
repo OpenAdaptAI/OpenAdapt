@@ -279,6 +279,14 @@ jobs:
           --target ${{ matrix.target }}
           --config src-tauri/tauri.adhoc.conf.json
 
+      # Reuse the installer build's compiled dependencies. These tests protect
+      # the native URL and deep-link dispatch boundaries before artifact upload.
+      - name: Test native command and deep-link contracts
+        run: >-
+          cargo test --locked --release
+          --manifest-path src-tauri/Cargo.toml
+          --target ${{ matrix.target }}
+
       - name: Smoke-test macOS DMG install, launch, and uninstall
         if: runner.os == 'macOS'
         shell: bash

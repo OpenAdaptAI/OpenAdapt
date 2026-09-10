@@ -40,9 +40,9 @@ dependencies = [
     "openadapt-privacy>=1.0.0",
     # Exact cross-surface status/target contract used by the presentation
     # exporter and by the generated TypeScript projection checked into src/.
-    # 0.10.0 carries the portable business-decision V2 contract used by the
+    # 0.17.0 retains the portable business-decision V2 contract used by the
     # Desktop phone portal and Flow's governed runner.
-    "openadapt-types==0.10.0",
+    "openadapt-types==0.17.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "PyYAML>=6.0,<7",
@@ -88,7 +88,7 @@ build = [
     # purpose (see the pin below and the embedded ``-m playwright`` process
     # mode). Without it the driver becomes build-only and the artifact gate
     # correctly refuses the archive.
-    "openadapt-flow[browser,console]==1.34.0",
+    "openadapt-flow[browser,console]==1.35.1",
     # Desktop deliberately embeds the optional browser driver so selecting a
     # web workflow is one click. It does NOT bundle Chromium: that larger
     # runtime is fetched only after the operator chooses the browser surface.

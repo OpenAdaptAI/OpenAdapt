@@ -328,6 +328,11 @@ def _verify_bundled_capture(executable: Path, root: Path, env: dict[str, str]) -
 
     probe_env = dict(env)
     probe_env["OPENADAPT_DATA_DIR"] = str(root / "capture-contract-data")
+    # This probe verifies the frozen capture producer, not a user's hosted
+    # login. A local Keychain prompt must not block the unattended smoke test.
+    probe_env["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
+    probe_env["OPENADAPT_CONFIG_TOML"] = str(root / "doctor-config.toml")
+    probe_env.pop("OPENADAPT_INGEST_TOKEN", None)
     output, _ = _run([str(executable), "doctor"], env=probe_env, timeout=300)
 
     line = next(
