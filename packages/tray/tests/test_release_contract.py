@@ -158,8 +158,8 @@ def test_release_uses_the_reviewed_locked_psr_runtime() -> None:
     assert "GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}" in workflow
     assert '"python-semantic-release==10.6.2"' in tools
     assert '"GitPython==3.1.61"' in tools
-    assert tools.count('"hatchling==1.31.0"') == 1
-    assert pyproject.count('"hatchling==1.31.0"') == 1
+    assert tools.count('"hatchling==1.32.0"') == 1
+    assert pyproject.count('"hatchling==1.32.0"') == 1
     assert '"click==8.1.8"' in tools
     assert '"click>=8.3.3"' in pyproject
     assert '"python-semantic-release==' not in pyproject
@@ -167,7 +167,7 @@ def test_release_uses_the_reviewed_locked_psr_runtime() -> None:
         r'(?ms)^name = "python-semantic-release"\nversion = "10\.6\.2"$', lock
     )
     assert re.search(r'(?ms)^name = "gitpython"\nversion = "3\.1\.61"$', lock)
-    assert re.search(r'(?ms)^name = "hatchling"\nversion = "1\.31\.0"$', lock)
+    assert re.search(r'(?ms)^name = "hatchling"\nversion = "1\.32\.0"$', lock)
 
 
 def test_locked_wrapper_preserves_psr_github_outputs(tmp_path: Path) -> None:
