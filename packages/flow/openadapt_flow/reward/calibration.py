@@ -26,6 +26,7 @@ import json
 import math
 import random
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
 
 from openadapt_types.process_capability import _digest_payload
@@ -55,6 +56,19 @@ def binomial_cdf(k: int, n: int, p: float) -> float:
     return min(1.0, total)
 
 
+def confidence_delta(confidence: float) -> float:
+    """Complement the declared decimal confidence without subtraction drift.
+
+    JSON records 0.95 as 0.95. Binary subtraction would instead produce
+    0.050000000000000044, which exceeds a strict certificate policy of 0.05.
+    The bound and its certificate must use the same declared probability.
+    """
+
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must lie in (0, 1)")
+    return float(Decimal("1") - Decimal(str(confidence)))
+
+
 def clopper_pearson_upper(
     failures: int, trials: int, *, confidence: float = 0.95
 ) -> float:
@@ -67,9 +81,7 @@ def clopper_pearson_upper(
         raise ValueError("trials must be positive")
     if not 0 <= failures <= trials:
         raise ValueError("failures must lie in [0, trials]")
-    if not 0.0 < confidence < 1.0:
-        raise ValueError("confidence must lie in (0, 1)")
-    alpha = 1.0 - confidence
+    alpha = confidence_delta(confidence)
     if failures == trials:
         return 1.0
     if failures == 0:

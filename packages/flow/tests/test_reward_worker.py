@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,7 @@ import openadapt_flow.reward.callables as callables  # noqa: E402
 from openadapt_flow.reward.calibration import (  # noqa: E402
     CorpusRecipe,
     clopper_pearson_upper,
+    confidence_delta,
     corpus_from_effects,
     extradup_trials,
 )
@@ -153,7 +156,7 @@ def test_verified_tier2_is_certified(seeded: dict[str, Any]) -> None:
     assert receipt.reward_components == {"terminal_effect": 1.0}
     assert receipt.certificate_state.value == "current"
     assert receipt.calibration_scope is RewardCalibrationScopeV1.SYNTHETIC
-    assert receipt.production_certified is False
+    assert receipt.certification_refusals(worker.contract, worker.certificate) == ()
     assert receipt.reward_contract_digest == worker.contract.digest
     assert envelope["unscored"] is False
     assert envelope["execute_seal"] is False
@@ -180,6 +183,52 @@ def test_verified_tier2_expired_certificate_is_not_certified(
     assert receipt.certified is False
     assert receipt.certificate_state.value == "expired"
     assert receipt.scalar_reward == 1.0
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    [
+        ("epsilon", math.nextafter(0.05, 1.0), "epsilon"),
+        ("delta", math.nextafter(0.05, 1.0), "delta"),
+        ("threshold", 0.6, "threshold"),
+        ("expiry_policy_updates", 1001, "expiry"),
+    ],
+)
+def test_current_certificate_must_satisfy_full_policy(
+    seeded: dict[str, Any], field: str, value: float, reason: str
+) -> None:
+    from openadapt_types.process_capability import canonical_json_bytes
+
+    from openadapt_flow.execute.keys import load_or_create_private_key
+
+    path = seeded["tier2"] / CERTIFICATE_FILE
+    payload = json.loads(path.read_text())
+    if field == "expiry_policy_updates":
+        value = payload[field] + 1
+    payload[field] = value
+    unsigned = {
+        k: v
+        for k, v in payload.items()
+        if k not in {"signature", "signature_algorithm"}
+    }
+    key = load_or_create_private_key(seeded["data_dir"])
+    payload["signature"] = base64.b64encode(
+        key.sign(canonical_json_bytes(unsigned))
+    ).decode("ascii")
+    path.write_text(json.dumps(payload))
+    worker = _worker(seeded)
+    receipt = _receipt(_run(worker, seeded, MOCKMED_HONEST_PATIENT, "strict_policy"))
+    assert receipt.reward_outcome is RewardOutcomeV1.VERIFIED
+    assert receipt.scalar_reward == 1.0
+    assert receipt.certificate_state.value == "current"
+    assert receipt.certified is False
+    assert any(
+        reason in refusal
+        for refusal in receipt.certification_refusals(
+            worker.contract, worker.certificate
+        )
+    )
+    assert worker.verify_receipt(receipt)
 
 
 def test_tier0_is_development_only_never_certified(seeded: dict[str, Any]) -> None:
@@ -530,6 +579,9 @@ def test_certificate_bound_is_recomputable(seeded: dict[str, Any]) -> None:
         calibration["calibration_trials"],
         confidence=calibration["calibration_confidence"],
     )
+    bundle = RewardBundle.load(bundle_dir)
+    assert certificate.delta == bundle.contract.certificate_policy.delta == 0.05
+    assert certificate.unmet(bundle.contract.certificate_policy) == ()
     assert certificate.epsilon == recomputed
     assert certificate.epsilon == pytest.approx(
         1.0 - 0.05 ** (1.0 / CALIBRATION_TRIALS)
@@ -556,6 +608,24 @@ def _mockmed_corpus() -> CorpusRecipe:
         [],
         ["patient_id"],
     )
+
+
+@pytest.mark.parametrize(
+    ("confidence", "delta"), [(0.95, 0.05), (0.99, 0.01), (0.9, 0.1)]
+)
+def test_confidence_delta_preserves_declared_decimal(
+    confidence: float, delta: float
+) -> None:
+    assert confidence_delta(confidence) == delta
+    assert clopper_pearson_upper(0, 20, confidence=confidence) == 1 - delta ** (1 / 20)
+
+
+@pytest.mark.parametrize("confidence", [0.0, 1.0, -0.1, math.nan, math.inf])
+def test_confidence_delta_refuses_invalid_probability(confidence: float) -> None:
+    with pytest.raises(ValueError, match="confidence must lie"):
+        confidence_delta(confidence)
+    with pytest.raises(ValueError, match="confidence must lie"):
+        clopper_pearson_upper(0, 20, confidence=confidence)
 
 
 def test_clopper_pearson_upper_matches_known_values() -> None:

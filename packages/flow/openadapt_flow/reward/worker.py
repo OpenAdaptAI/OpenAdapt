@@ -471,7 +471,7 @@ class RewardWorker:
             tier,
             self.certificate,
             episode.policy_update,
-            scoring=self.contract.scoring,
+            contract=self.contract,
         )
         state = certificate_state(self.certificate, episode.policy_update)
         receipt_id = _new_id("reward_receipt")

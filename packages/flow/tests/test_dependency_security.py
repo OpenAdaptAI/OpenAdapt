@@ -28,8 +28,9 @@ def _locked_version(name: str) -> tuple[int, ...]:
 def test_mlx_research_extra_keeps_transformers_in_patched_range() -> None:
     """Do not reintroduce the three model-loading/Trainer RCE advisories."""
 
-    assert (5, 5) <= _locked_version("transformers") < (5, 13)
-    assert (0, 6, 4) <= _locked_version("mlx-vlm") < (0, 7)
+    assert (5, 14) <= _locked_version("transformers") < (5, 17)
+    assert (0, 6, 17) <= _locked_version("mlx-vlm") < (0, 7)
+    assert (3, 1) <= _locked_version("jinja2") < (4,)
 
 
 def test_transformers_is_confined_to_the_mlx_research_extra() -> None:
@@ -48,7 +49,7 @@ def test_transformers_is_confined_to_the_mlx_research_extra() -> None:
         for dependency in root["optional-dependencies"]["service-mlx"]
     }
     assert "transformers" not in core_names
-    assert {"mlx-vlm", "transformers"} <= mlx_names
+    assert {"mlx-vlm", "transformers", "jinja2"} <= mlx_names
 
 
 def test_core_runtime_excludes_imagehash_scipy_closure() -> None:

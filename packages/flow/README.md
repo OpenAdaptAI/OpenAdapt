@@ -466,15 +466,14 @@ runtime uses. It returns a signed `RewardEvidenceReceiptV1`: the terminal
 effect landed, or it didn't, or the store couldn't be read and the episode is
 unscored. Unscored is never 0.
 
-The worker is not in a published release yet, and the release carrying it has
-no date. These two commands are what will work once it lands:
+The reward worker ships in version 1.35.1. You can install that release:
 
 ```bash
-pip install 'openadapt-flow[reward]'
+pip install 'openadapt-flow[reward]==1.35.1'
 openadapt-flow serve-reward --seed-mockmed --port 8788
 ```
 
-To run it today, install from the repository head:
+For development, install from the repository head:
 
 ```bash
 git clone https://github.com/OpenAdaptAI/openadapt-flow

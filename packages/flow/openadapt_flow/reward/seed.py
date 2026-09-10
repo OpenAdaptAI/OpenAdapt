@@ -39,6 +39,7 @@ from openadapt_types.reward import RewardCertificateV1, RewardContractV1
 
 from openadapt_flow.reward.calibration import (
     CalibrationResult,
+    confidence_delta,
     corpus_digest_for,
     corpus_from_effects,
     extradup_trials,
@@ -305,7 +306,7 @@ def write_bundle(
             issued_at_policy_update=0,
             expiry_policy_updates=CERTIFICATE_EXPIRY_UPDATES,
             epsilon=calibration.epsilon,
-            delta=1.0 - calibration.confidence,
+            delta=confidence_delta(calibration.confidence),
         )
         _write(directory / CERTIFICATE_FILE, certificate.model_dump(mode="json"))
         _write(directory / CALIBRATION_FILE, calibration.as_metadata())
