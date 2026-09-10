@@ -1153,13 +1153,23 @@ mod tests {
 
         let prepared = prepare_install(temp.path(), &archive, &artifact).unwrap();
         assert_eq!(
-            fs::read(prepared.staging_dir.join("bin/ffmpeg")).unwrap(),
-            ffmpeg
+            prepared.paths.ffmpeg,
+            prepared.staging_dir.join(if cfg!(windows) {
+                "bin/ffmpeg.exe"
+            } else {
+                "bin/ffmpeg"
+            })
         );
         assert_eq!(
-            fs::read(prepared.staging_dir.join("bin/ffprobe")).unwrap(),
-            ffprobe
+            prepared.paths.ffprobe,
+            prepared.staging_dir.join(if cfg!(windows) {
+                "bin/ffprobe.exe"
+            } else {
+                "bin/ffprobe"
+            })
         );
+        assert_eq!(fs::read(&prepared.paths.ffmpeg).unwrap(), ffmpeg);
+        assert_eq!(fs::read(&prepared.paths.ffprobe).unwrap(), ffprobe);
         assert_eq!(
             fs::read(prepared.staging_dir.join("LICENSES/FFmpeg.txt")).unwrap(),
             license
