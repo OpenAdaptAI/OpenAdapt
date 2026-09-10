@@ -43,7 +43,9 @@ dependencies = [
     # older version that still satisfies Flow's transitive requirement.
     "cryptography>=50.0.0",
     # Official Model Context Protocol SDK (stdio server transport).
-    "mcp>=1.28,<2",
+    "mcp>=1.28,<3",
+    # MCP 2 low-level handlers require explicit input-schema validation.
+    "jsonschema>=4.20.0",
     # Structured concurrency runtime the mcp SDK already uses; we call
     # anyio.run / to_thread directly.
     "anyio>=4.0",

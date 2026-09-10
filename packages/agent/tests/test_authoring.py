@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import anyio
-import mcp.types as types
 import pytest
 
 from openadapt_agent.authoring import (
@@ -374,16 +373,17 @@ def test_unknown_fields_and_missing_click_target_are_refused():
         bridge.dispatch("click", {})
 
 
-def test_mcp_lists_authoring_probe_tools_without_run_tools(bundles_root, runner_config):
+def test_mcp_lists_authoring_probe_tools_without_run_tools(
+    bundles_root, runner_config, mcp_client
+):
     from openadapt_agent.bridge import AgentBridge
 
     authoring = AuthoringBridge(FakeAuthoringSession())
     server = build_server(authoring=authoring)
 
     async def list_names():
-        handler = server.request_handlers[types.ListToolsRequest]
-        result = await handler(types.ListToolsRequest(method="tools/list"))
-        return [tool.name for tool in result.root.tools]
+        async with mcp_client(server) as client:
+            return [tool.name for tool in (await client.list_tools()).tools]
 
     names = anyio.run(list_names)
     assert names[:4] == list(AUTHORING_PROBE_TOOLS)
@@ -397,9 +397,8 @@ def test_mcp_lists_authoring_probe_tools_without_run_tools(bundles_root, runner_
     )
 
     async def combined_names():
-        handler = combined.request_handlers[types.ListToolsRequest]
-        result = await handler(types.ListToolsRequest(method="tools/list"))
-        return [tool.name for tool in result.root.tools]
+        async with mcp_client(combined) as client:
+            return [tool.name for tool in (await client.list_tools()).tools]
 
     both = anyio.run(combined_names)
     assert "list_workflows" in both
@@ -407,18 +406,14 @@ def test_mcp_lists_authoring_probe_tools_without_run_tools(bundles_root, runner_
     assert not any(name.startswith("run_") for name in both)
 
 
-def test_mcp_observe_call_is_projected():
+def test_mcp_observe_call_is_projected(mcp_client):
     server = build_server(authoring=AuthoringBridge(FakeAuthoringSession()))
 
     async def call_observe():
-        handler = server.request_handlers[types.CallToolRequest]
-        return await handler(
-            types.CallToolRequest(
-                params=types.CallToolRequestParams(name="observe", arguments={})
-            )
-        )
+        async with mcp_client(server) as client:
+            return await client.call_tool("observe", {})
 
-    result = anyio.run(call_observe).root
+    result = anyio.run(call_observe)
     payload = json.loads(result.content[0].text)
     assert payload["schema_version"] == "openadapt.authoring.observe/v1"
     assert "screenshot" not in result.content[0].text

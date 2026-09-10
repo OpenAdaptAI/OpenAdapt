@@ -12,11 +12,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Cover both dependency edges without doubling the hosted matrix.
+          # Cover SDK 1, SDK 2's floor, and current dependencies in three jobs.
           - python-version: "3.10"
             dependency-set: floor
           - python-version: "3.11"
-            dependency-set: current
+            dependency-set: mcp2-floor
           - python-version: "3.12"
             dependency-set: current
     steps:
@@ -36,6 +36,9 @@ jobs:
           pip install -e ".[dev]"
           "openadapt-flow==1.26.0"
           "mcp==1.28.0"
+      - name: Install MCP 2 floor
+        if: matrix.dependency-set == 'mcp2-floor'
+        run: pip install -e ".[dev]" "mcp==2.0.0"
       - name: Install current allowed dependencies
         if: matrix.dependency-set == 'current'
         run: pip install -e ".[dev]"

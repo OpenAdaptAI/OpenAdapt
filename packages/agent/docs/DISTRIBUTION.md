@@ -49,6 +49,13 @@ Continue and Skip available. Clients without MCP form elicitation use Flow's
 attended console/CLI, where all five capabilities remain available. This
 matches the security model in [`DESIGN.md`](DESIGN.md).
 
+The server supports MCP Python SDK 1.28 through 2.x. Attended tools require
+form elicitation over the `initialize` handshake. With the SDK 2 Python
+`Client`, set `mode="legacy"` for this connection. Its default discovery path
+negotiates protocol 2026-07-28, which can't carry server-initiated confirmation
+requests. Tool discovery still works on that protocol; attended decisions
+refuse before submission. See the SDK's [client migration guide](https://github.com/modelcontextprotocol/python-sdk/blob/v2.2.0/docs/migration.md#client-defaults-to-modeauto).
+
 > There is intentionally **no** hosted, multi-tenant "official OpenAdapt
 > workflow server" that exposes OpenAdapt-operated workflows to the
 > public. v2 is stdio-only, single-user, local. A hosted control plane is

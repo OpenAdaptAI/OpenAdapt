@@ -20,6 +20,7 @@ from typing import Any
 
 import anyio
 import mcp.types as types
+from jsonschema import ValidationError, validate
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
@@ -61,13 +62,16 @@ _CONFIRMATION_COPY = {
 }
 
 
-async def _confirm_attended_action(server: Server, name: str) -> None:
+async def _confirm_attended_action(context: Any, name: str) -> None:
     """Require a second, protocol-native human confirmation before mutation."""
-    context = server.request_context
     session = context.session
     params = session.client_params
     elicitation = params.capabilities.elicitation if params is not None else None
-    if elicitation is None or elicitation.form is None:
+    if (
+        elicitation is None
+        or elicitation.form is None
+        or not getattr(session, "can_send_request", True)
+    ):
         raise BridgeError(
             "attended actions require an MCP client with form elicitation so "
             "the local operator can confirm this exact decision; use Flow's "
@@ -136,12 +140,13 @@ def build_server(
     """Wrap workflow and/or authoring bridges in an MCP Server (no I/O started)."""
     if bridge is None and authoring is None:
         raise ValueError("MCP server requires a workflow bridge or an authoring bridge")
-    server: Server = Server(
-        SERVER_NAME,
-        instructions=_server_instructions(authoring),
-    )
 
-    @server.list_tools()
+    def _tool_specs():
+        return (
+            *(bridge.list_tool_specs() if bridge is not None else ()),
+            *(authoring.list_tool_specs() if authoring is not None else ()),
+        )
+
     async def _list_tools() -> list[types.Tool]:
         return [
             types.Tool(
@@ -155,17 +160,25 @@ def build_server(
                 ),
                 **({"_meta": spec.meta} if spec.meta is not None else {}),
             )
-            for spec in (
-                *(bridge.list_tool_specs() if bridge is not None else ()),
-                *(authoring.list_tool_specs() if authoring is not None else ()),
-            )
+            for spec in _tool_specs()
         ]
 
-    @server.call_tool()
-    async def _call_tool(name: str, arguments: dict[str, Any] | None):
+    async def _call_tool(
+        context: Any, name: str, arguments: dict[str, Any] | None
+    ) -> types.CallToolResult:
         try:
+            spec = next((spec for spec in _tool_specs() if spec.name == name), None)
+            if spec is None:
+                raise BridgeError("unknown or unavailable tool name")
+            # MCP 2 removed the low-level decorator's schema validation.
+            # Keep it explicit on both SDKs, before confirmation or dispatch.
+            # ValidationError text contains input values, so never return it.
+            try:
+                validate(arguments or {}, spec.input_schema)
+            except ValidationError:
+                raise BridgeError("tool arguments do not match the input schema") from None
             if name in ATTENDED_TOOLS:
-                await _confirm_attended_action(server, name)
+                await _confirm_attended_action(context, name)
 
             def call() -> dict[str, Any]:
                 payload = dict(arguments or {})
@@ -207,8 +220,35 @@ def build_server(
                 ],
                 isError=True,
             )
-        return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+        # Both SDKs accept wire aliases in constructors. Always return the
+        # explicit result type: MCP 2 no longer wraps a bare content list.
+        return types.CallToolResult(
+            content=[types.TextContent(type="text", text=json.dumps(result, indent=2))]
+        )
 
+    if hasattr(Server, "list_tools"):
+        server = Server(SERVER_NAME, instructions=_server_instructions(authoring))
+        server.list_tools()(_list_tools)
+
+        async def _call_v1(name: str, arguments: dict[str, Any] | None):
+            return await _call_tool(server.request_context, name, arguments)
+
+        # The common handler enforces the same schema without reflecting inputs.
+        server.call_tool(validate_input=False)(_call_v1)
+    else:
+
+        async def _list_v2(context: Any, params: Any) -> types.ListToolsResult:
+            return types.ListToolsResult(tools=await _list_tools())
+
+        async def _call_v2(context: Any, params: types.CallToolRequestParams):
+            return await _call_tool(context, params.name, params.arguments)
+
+        server = Server(
+            SERVER_NAME,
+            instructions=_server_instructions(authoring),
+            on_list_tools=_list_v2,
+            on_call_tool=_call_v2,
+        )
     return server
 
 

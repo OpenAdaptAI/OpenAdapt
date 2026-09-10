@@ -126,3 +126,29 @@ def halt_report() -> dict:
         "model_calls": 0,
         "total_ms": 2222.0,
     }
+
+
+@pytest.fixture()
+def mcp_client():
+    """Exercise the real SDK session and server over its in-memory transport."""
+    from contextlib import asynccontextmanager
+
+    import anyio
+    from mcp import ClientSession
+    from mcp.shared.memory import create_client_server_memory_streams
+
+    @asynccontextmanager
+    async def connect(server, *, modern=False, **kwargs):
+        with anyio.fail_after(10):
+            async with create_client_server_memory_streams() as (client, transport):
+                async with anyio.create_task_group() as tasks:
+                    tasks.start_soon(server.run, *transport, server.create_initialization_options())
+                    async with ClientSession(*client, **kwargs) as session:
+                        if modern:
+                            await session.discover()
+                        else:
+                            await session.initialize()
+                        yield session
+                    tasks.cancel_scope.cancel()
+
+    return connect
