@@ -29,7 +29,9 @@ def test_release_versions_are_synchronized() -> None:
 def test_release_uv_pin_is_declared_once() -> None:
     """The reviewed lock must supply the only uv used during a release."""
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert pyproject.count('"uv==0.12.5"') == 1
+    tools = (ROOT / "scripts/release/pyproject.toml").read_text(encoding="utf-8")
+    assert tools.count('"uv==0.12.5"') == 1
+    assert '"uv==' not in pyproject
 
     build_command = re.search(r'(?s)build_command = """(.*?)"""', pyproject)
     assert build_command
@@ -145,19 +147,24 @@ def test_release_actions_are_pinned_to_commits() -> None:
 def test_release_uses_the_reviewed_locked_psr_runtime() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    tools = (ROOT / "scripts/release/pyproject.toml").read_text(encoding="utf-8")
+    lock = (ROOT / "scripts/release/uv.lock").read_text(encoding="utf-8")
 
     assert "python-semantic-release/python-semantic-release@" not in workflow
     assert 'version: "0.12.5"' in workflow
-    assert "uv sync --locked --extra release" in workflow
-    assert "uv run --locked --extra release" in workflow
+    assert "uv sync --locked --project scripts/release --python 3.12" in workflow
+    assert "uv run --locked --project scripts/release" in workflow
     assert "python scripts/run_semantic_release.py" in workflow
     assert "GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}" in workflow
-    assert '"python-semantic-release==10.6.1"' in pyproject
-    assert '"GitPython==3.1.59"' in pyproject
-    assert pyproject.count('"hatchling==1.31.0"') == 2
+    assert '"python-semantic-release==10.6.2"' in tools
+    assert '"GitPython==3.1.59"' in tools
+    assert tools.count('"hatchling==1.31.0"') == 1
+    assert pyproject.count('"hatchling==1.31.0"') == 1
+    assert '"click==8.1.8"' in tools
+    assert '"click>=8.3.3"' in pyproject
+    assert '"python-semantic-release==' not in pyproject
     assert re.search(
-        r'(?ms)^name = "python-semantic-release"\nversion = "10\.6\.1"$', lock
+        r'(?ms)^name = "python-semantic-release"\nversion = "10\.6\.2"$', lock
     )
     assert re.search(r'(?ms)^name = "gitpython"\nversion = "3\.1\.59"$', lock)
     assert re.search(r'(?ms)^name = "hatchling"\nversion = "1\.31\.0"$', lock)

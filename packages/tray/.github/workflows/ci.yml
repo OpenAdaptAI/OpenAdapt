@@ -36,8 +36,13 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check .
 
-      - name: Build distributions
-        run: uv build
+      - name: Verify the locked release tools
+        run: |
+          uv sync --locked --project scripts/release --python 3.12
+          uv run --locked --project scripts/release python scripts/check_release_runtime.py
+
+      - name: Build distributions with the locked release backend
+        run: uv run --locked --project scripts/release uv build --no-build-isolation
 
       - name: Verify the public distribution boundary
         run: python scripts/check_source_boundary.py --require-dist

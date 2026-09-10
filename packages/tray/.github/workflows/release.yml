@@ -34,14 +34,14 @@ jobs:
           version: "0.12.5"
 
       - name: Install the locked release runtime
-        run: uv sync --locked --extra release
+        run: uv sync --locked --project scripts/release --python 3.12
 
       - name: Run the locked Python Semantic Release CLI
         id: release
         env:
           GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
         run: >-
-          uv run --locked --extra release
+          uv run --locked --project scripts/release
           python scripts/run_semantic_release.py
 
       - name: Verify release workspace

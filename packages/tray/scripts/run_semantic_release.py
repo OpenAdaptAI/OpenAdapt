@@ -11,8 +11,9 @@ from importlib import metadata
 from pathlib import Path
 
 REQUIRED_RUNTIME = {
-    "python-semantic-release": "10.6.1",
+    "python-semantic-release": "10.6.2",
     "GitPython": "3.1.59",
+    "click": "8.1.8",
 }
 REQUIRED_ENVIRONMENT = ("GH_TOKEN", "GITHUB_OUTPUT")
 

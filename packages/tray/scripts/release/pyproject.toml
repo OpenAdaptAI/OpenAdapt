@@ -1,0 +1,13 @@
+# Separate from the application: PSR 10.6.2 requires Click below 8.2,
+# while Tray requires Click 8.3.3 or later. This is a virtual tool project.
+[dependency-groups]
+release = [
+    "uv==0.12.5",
+    "hatchling==1.31.0",
+    "python-semantic-release==10.6.2",
+    "GitPython==3.1.59",
+    "click==8.1.8",
+]
+
+[tool.uv]
+default-groups = ["release"]
