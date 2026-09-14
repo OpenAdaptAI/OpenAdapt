@@ -89,7 +89,7 @@
     },
     {
       "path": ".github/workflows/canvas-nodom-ladder.yml",
-      "sha256": "db5bdaf110b2d8acc15003eb5442ba9c2714a809fad3ac087cdc6ff5547e05a4"
+      "sha256": "631569233910131ff7d417655907561005f0c61008f022149b13d2c2328b9bd4"
     },
     {
       "path": ".github/workflows/ci.yml",

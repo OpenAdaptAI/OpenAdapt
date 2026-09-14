@@ -93,6 +93,7 @@ jobs:
         with:
           name: canvas-nodom-ladder-qualification
           path: runs/canvas-ladder/results.json
+          retention-days: 7
           if-no-files-found: error
 
       - name: Tear down
