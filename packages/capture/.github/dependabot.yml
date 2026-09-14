@@ -15,3 +15,8 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      # CodeQL persists version-specific state between init and analyze.
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
