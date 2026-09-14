@@ -22,7 +22,7 @@
     "jsdom": "^30.0.1",
     "typescript": "^5.5.4",
     "vite": "^8.2.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
