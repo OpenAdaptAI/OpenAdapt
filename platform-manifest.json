@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "2.0.0",
-  "generated_at": "2026-09-02T19:12:23+00:00",
+  "generated_at": "2026-09-14T21:32:21+00:00",
   "generation": {
     "files": [
       {
@@ -15,8 +15,11 @@
     ]
   },
   "release_selection": {
-    "mode": "latest-published",
-    "component_versions": {}
+    "mode": "explicit-published",
+    "component_versions": {
+      "flow": "1.35.1",
+      "types": "0.17.0"
+    }
   },
   "components": {
     "launcher": {
@@ -277,7 +280,7 @@
     },
     "flow": {
       "package": "openadapt-flow",
-      "version": "1.34.0",
+      "version": "1.35.1",
       "source": "pypi",
       "requires_python": "<3.13,>=3.10",
       "requires": {
@@ -291,7 +294,7 @@
           ">=1.0.0"
         ],
         "openadapt-types": [
-          "<0.11.0,>=0.10.0"
+          "<0.18.0,>=0.17.0"
         ]
       },
       "dependency_constraints": [
@@ -315,42 +318,60 @@
         },
         {
           "package": "openadapt-types",
-          "requires": "<0.11.0,>=0.10.0",
+          "requires": "<0.18.0,>=0.17.0",
+          "extras": null,
+          "marker": null
+        },
+        {
+          "package": "openadapt-types",
+          "requires": "<0.18.0,>=0.17.0",
           "extras": null,
           "marker": "extra == \"console\""
         },
         {
           "package": "openadapt-types",
-          "requires": "<0.11.0,>=0.10.0",
+          "requires": "<0.18.0,>=0.17.0",
           "extras": null,
           "marker": "extra == \"dev\""
         },
         {
           "package": "openadapt-types",
-          "requires": "<0.11.0,>=0.10.0",
+          "requires": "<0.18.0,>=0.17.0",
+          "extras": null,
+          "marker": "extra == \"execute\""
+        },
+        {
+          "package": "openadapt-types",
+          "requires": "<0.18.0,>=0.17.0",
           "extras": null,
           "marker": "extra == \"interop\""
+        },
+        {
+          "package": "openadapt-types",
+          "requires": "<0.18.0,>=0.17.0",
+          "extras": null,
+          "marker": "extra == \"reward\""
         }
       ],
       "provenance": {
         "repository": "OpenAdaptAI/openadapt-flow",
-        "release_ref": "v1.34.0",
-        "commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
-        "tree": "7a0263eda60b23f685cbd8abb4174da2db88fd4b",
-        "url": "https://github.com/OpenAdaptAI/openadapt-flow/tree/v1.34.0"
+        "release_ref": "v1.35.1",
+        "commit": "44e99a48ebf048c18892aa17cef6ae594db0d0c2",
+        "tree": "59c064f72276e8e1978b8c4f8ab8437ec42ff3e2",
+        "url": "https://github.com/OpenAdaptAI/openadapt-flow/tree/v1.35.1"
       },
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_flow-1.34.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/23/4b/22e115d8fde6f562c7debf896351d7a8a3bc14483ca246abc3ca180d9077/openadapt_flow-1.34.0-py3-none-any.whl",
-          "sha256": "56d32818989cb3a92830080ead39e10b08718c55e00988117f22cbfeaac98854"
+          "filename": "openadapt_flow-1.35.1-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/84/4d/2bfa44495c907e691fe9bcc256230b919b97430bd430d72c8291b9365fc1/openadapt_flow-1.35.1-py3-none-any.whl",
+          "sha256": "cfbc89acc6a2e3bcb5502a4d1fb29e985a03149a7f14c32c259254676bb3f11d"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_flow-1.34.0.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/18/27/aa3986b135964f7a6f4992a08873922d36bbb64a83a126f272497668fec4/openadapt_flow-1.34.0.tar.gz",
-          "sha256": "a941a70015fe91897e655bfc9bf83e6cf8fbcf8bd4e4c7206ffb133c505203f8"
+          "filename": "openadapt_flow-1.35.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/a9/9b/54d64f124c0789c4e8f82a54a298e4e33681c4f02e056c49931939ae384f/openadapt_flow-1.35.1.tar.gz",
+          "sha256": "c5c6c437472b23999223b0d2473dbf21de2ca05274c270ae3854adeda6b07dca"
         }
       ]
     },
@@ -578,20 +599,20 @@
       },
       "selected": {
         "openadapt": "1.16.0",
-        "openadapt-flow": "1.34.0"
+        "openadapt-flow": "1.35.1"
       }
     },
     "customer_runner": {
       "kind": "customer-controlled-runner",
-      "version": "1.34.0",
+      "version": "1.35.1",
       "source_component": "flow",
       "entry_point": "openadapt-flow",
       "requirements": {
-        "openadapt-flow": "==1.34.0",
-        "openadapt-types": "<0.11.0,>=0.10.0"
+        "openadapt-flow": "==1.35.1",
+        "openadapt-types": "<0.18.0,>=0.17.0"
       },
       "selected": {
-        "openadapt-flow": "1.34.0",
+        "openadapt-flow": "1.35.1",
         "openadapt-types": "0.17.0"
       }
     },
@@ -627,7 +648,7 @@
       },
       "selected": {
         "openadapt-agent": "2.0.1",
-        "openadapt-flow": "1.34.0"
+        "openadapt-flow": "1.35.1"
       }
     }
   },
@@ -704,7 +725,7 @@
       "target_role": "flow",
       "target_package": "openadapt-flow",
       "requires": "<2,>=1.18.1",
-      "resolved": "1.34.0",
+      "resolved": "1.35.1",
       "activations": [
         {
           "extras": null,
@@ -736,7 +757,7 @@
       "scope": "selected-platform",
       "source_role": "flow",
       "source_package": "openadapt-flow",
-      "source_version": "1.34.0",
+      "source_version": "1.35.1",
       "target_role": "capture",
       "target_package": "openadapt-capture",
       "requires": ">=1.2.0",
@@ -752,7 +773,7 @@
       "scope": "selected-platform",
       "source_role": "flow",
       "source_package": "openadapt-flow",
-      "source_version": "1.34.0",
+      "source_version": "1.35.1",
       "target_role": "privacy",
       "target_package": "openadapt-privacy",
       "requires": ">=1.0.0",
@@ -768,12 +789,16 @@
       "scope": "selected-platform",
       "source_role": "flow",
       "source_package": "openadapt-flow",
-      "source_version": "1.34.0",
+      "source_version": "1.35.1",
       "target_role": "types",
       "target_package": "openadapt-types",
-      "requires": "<0.11.0,>=0.10.0",
+      "requires": "<0.18.0,>=0.17.0",
       "resolved": "0.17.0",
       "activations": [
+        {
+          "extras": null,
+          "marker": null
+        },
         {
           "extras": null,
           "marker": "extra == \"console\""
@@ -784,7 +809,15 @@
         },
         {
           "extras": null,
+          "marker": "extra == \"execute\""
+        },
+        {
+          "extras": null,
           "marker": "extra == \"interop\""
+        },
+        {
+          "extras": null,
+          "marker": "extra == \"reward\""
         }
       ]
     },
@@ -820,7 +853,7 @@
       "target_role": "flow",
       "target_package": "openadapt-flow",
       "requires": "<2.0.0,>=1.29.0",
-      "resolved": "1.34.0",
+      "resolved": "1.35.1",
       "activations": [
         {
           "extras": null,
@@ -908,19 +941,19 @@
       ],
       "minimum": 1,
       "maximum": 2,
-      "source_commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
+      "source_commit": "44e99a48ebf048c18892aa17cef6ae594db0d0c2",
       "source_files": [
         {
           "path": "openadapt_flow/bundle_validation.py",
-          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/30fc60e55778a0e0f92b9776117cafcfe2512249/openadapt_flow/bundle_validation.py",
+          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/44e99a48ebf048c18892aa17cef6ae594db0d0c2/openadapt_flow/bundle_validation.py",
           "git_blob": "2202f276d9ceb2578d58a77a864d2075fd49435c",
           "sha256": "fe1e5ec441183adf1aa2209f1669f779043fb4ad1f41a651ca0f96123778240f"
         },
         {
           "path": "openadapt_flow/ir.py",
-          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/30fc60e55778a0e0f92b9776117cafcfe2512249/openadapt_flow/ir.py",
-          "git_blob": "b6a8ffb2226f1265240211d7a911bdbe5b71e5e7",
-          "sha256": "e1e5345dd173b694587dde515b59cd60de0cf6028c1f35d589706b84ad792598"
+          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/44e99a48ebf048c18892aa17cef6ae594db0d0c2/openadapt_flow/ir.py",
+          "git_blob": "d5b6d126c4ee4b051901de6b55781a80dd5ec133",
+          "sha256": "560cd522489c2fbe41e55300528d198a8411e54fd1bd3f3d03e9160073479276"
         }
       ]
     },
@@ -1037,11 +1070,11 @@
       ],
       "minimum": 2,
       "maximum": 2,
-      "source_commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
+      "source_commit": "44e99a48ebf048c18892aa17cef6ae594db0d0c2",
       "source_files": [
         {
           "path": "openadapt_flow/console/decision_relay.py",
-          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/30fc60e55778a0e0f92b9776117cafcfe2512249/openadapt_flow/console/decision_relay.py",
+          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/44e99a48ebf048c18892aa17cef6ae594db0d0c2/openadapt_flow/console/decision_relay.py",
           "git_blob": "297d2f71727f83496221091a4237d704c25665d6",
           "sha256": "d5320404d4342dbb52be1f2ead1cdb5cf0e22877feaaa1e47974b301df697292"
         }
@@ -1055,11 +1088,11 @@
       ],
       "minimum": 1,
       "maximum": 1,
-      "source_commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
+      "source_commit": "44e99a48ebf048c18892aa17cef6ae594db0d0c2",
       "source_files": [
         {
           "path": "openadapt_flow/console/human_decisions.py",
-          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/30fc60e55778a0e0f92b9776117cafcfe2512249/openadapt_flow/console/human_decisions.py",
+          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/44e99a48ebf048c18892aa17cef6ae594db0d0c2/openadapt_flow/console/human_decisions.py",
           "git_blob": "caaf87396aca4770eace5eead3fdf6515e31fbfc",
           "sha256": "02651ad8888a5c17bfff6fb47165ba861193243dc0f7c951f8b94f544ca19477"
         }
@@ -1075,11 +1108,11 @@
       ],
       "minimum": 1,
       "maximum": 3,
-      "source_commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
+      "source_commit": "44e99a48ebf048c18892aa17cef6ae594db0d0c2",
       "source_files": [
         {
           "path": "openadapt_flow/runtime_validation.py",
-          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/30fc60e55778a0e0f92b9776117cafcfe2512249/openadapt_flow/runtime_validation.py",
+          "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/44e99a48ebf048c18892aa17cef6ae594db0d0c2/openadapt_flow/runtime_validation.py",
           "git_blob": "839e07ab733d5afc78aa5625541ee746b16f2c6a",
           "sha256": "18675d6b4c40458394febb36cbe28e99f410cb65b4cab138b68df3cacc6f7dd4"
         }
@@ -1116,18 +1149,9 @@
     }
   },
   "compatibility_status": {
-    "status": "dependency-incompatible",
+    "status": "dependency-compatible",
     "basis": "published-metadata-and-desktop-lock",
-    "failures": [
-      {
-        "scope": "selected-platform",
-        "source_role": "flow",
-        "target_role": "types",
-        "package": "openadapt-types",
-        "requires": "<0.11.0,>=0.10.0",
-        "resolved": "0.17.0"
-      }
-    ]
+    "failures": []
   },
   "supported_os": [
     "windows",
@@ -1174,10 +1198,10 @@
       "repository": "OpenAdaptAI/openadapt-flow",
       "path": "public-demo/evidence-packs",
       "description": "Versioned public evidence packs with per-pack manifest files, replay evidence, and fault-case results.",
-      "source_commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
+      "source_commit": "44e99a48ebf048c18892aa17cef6ae594db0d0c2",
       "source_object_type": "tree",
       "source_object_sha": "2eac2252f62349e873b461866546dd0295169a19",
-      "url": "https://github.com/OpenAdaptAI/openadapt-flow/tree/30fc60e55778a0e0f92b9776117cafcfe2512249/public-demo/evidence-packs"
+      "url": "https://github.com/OpenAdaptAI/openadapt-flow/tree/44e99a48ebf048c18892aa17cef6ae594db0d0c2/public-demo/evidence-packs"
     },
     {
       "id": "flow-effectbench-task-pack",
@@ -1186,10 +1210,10 @@
       "repository": "OpenAdaptAI/openadapt-flow",
       "path": "benchmark/effectbench/task_pack/manifest.json",
       "description": "Effect-verification benchmark task pack manifest used by the flow qualification harness.",
-      "source_commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
+      "source_commit": "44e99a48ebf048c18892aa17cef6ae594db0d0c2",
       "source_object_type": "blob",
       "source_object_sha": "1c568d2289342e10e3556c5c46cd08a0e370ac84",
-      "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/30fc60e55778a0e0f92b9776117cafcfe2512249/benchmark/effectbench/task_pack/manifest.json"
+      "url": "https://github.com/OpenAdaptAI/openadapt-flow/blob/44e99a48ebf048c18892aa17cef6ae594db0d0c2/benchmark/effectbench/task_pack/manifest.json"
     }
   ],
   "signature": {

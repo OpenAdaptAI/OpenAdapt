@@ -22,3 +22,8 @@ updates:
       # ships a fixed release.
       - dependency-name: "peter-evans/repository-dispatch"
         versions: ["4.x"]
+    groups:
+      # CodeQL persists version-specific state between init and analyze.
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
