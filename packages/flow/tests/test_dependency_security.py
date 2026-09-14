@@ -28,8 +28,8 @@ def _locked_version(name: str) -> tuple[int, ...]:
 def test_mlx_research_extra_keeps_transformers_in_patched_range() -> None:
     """Do not reintroduce the three model-loading/Trainer RCE advisories."""
 
-    assert (5, 14) <= _locked_version("transformers") < (5, 17)
-    assert (0, 6, 17) <= _locked_version("mlx-vlm") < (0, 7)
+    assert (5, 14) <= _locked_version("transformers") < (5, 18)
+    assert (0, 6, 17) <= _locked_version("mlx-vlm") < (0, 8)
     assert (3, 1) <= _locked_version("jinja2") < (4,)
 
 

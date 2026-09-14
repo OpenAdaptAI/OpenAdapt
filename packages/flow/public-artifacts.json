@@ -93,7 +93,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "50810ca5284b7b108049b18c7b6752d2e7c544dc35f65b3e246ad7fe2f24199a"
+      "sha256": "94ae0b4008bbc2ea38d0a9629e2d778c001ac0710b6187b2163c542faefbd6dc"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
@@ -121,7 +121,7 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "2a75f50086116e3e63d3d5b48d322763a5104d589522bd0ec9d1dc8205f8fe94"
+      "sha256": "79848b6aace7a48fe62714f5d8b65a3290ac6775292afe60451c6a124c1cb2f2"
     },
     {
       "path": ".github/workflows/validate-claims.yml",

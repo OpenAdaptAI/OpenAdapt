@@ -23,7 +23,7 @@ def test_lint_job_rejects_a_stale_dependency_lock() -> None:
     lint_job = workflow[lint_start:compatibility_start]
 
     assert (
-        "uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d" in lint_job
+        "uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4" in lint_job
     )
     assert 'version: "0.12.5"' in lint_job
     assert "run: uv lock --locked" in lint_job
