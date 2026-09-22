@@ -5,6 +5,7 @@ import hashlib
 import json
 import sys
 import zipfile
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -293,10 +294,40 @@ def test_v1_refuses_source_change_before_code_runs(tmp_path: Path) -> None:
         )
 
 
-def test_v1_runs_an_admitted_flow_child(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("clock_field", "offset", "error"),
+    [
+        pytest.param("not_before", timedelta(), None, id="active"),
+        pytest.param("expires_at", timedelta(seconds=-1), None, id="before-expiry"),
+        pytest.param(
+            "not_before", timedelta(seconds=-1), "not active", id="not-active"
+        ),
+        pytest.param("expires_at", timedelta(), "expired", id="at-expiry"),
+        pytest.param("expires_at", timedelta(days=1), "expired", id="after-expiry"),
+    ],
+)
+def test_v1_runs_only_an_active_admitted_flow_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    clock_field: str,
+    offset: timedelta,
+    error: str | None,
+) -> None:
     intake, intake_envelope_path, _, _ = _two_admitted(tmp_path)
     envelope = json.loads(intake_envelope_path.read_text())
     payload = envelope["payload"]
+    # The signed fixture has a fixed validity window. Control only the runtime
+    # clock so the real signature and admission checks remain in the test.
+    current = (
+        datetime.fromisoformat(payload[clock_field].replace("Z", "+00:00")) + offset
+    )
+
+    class AdmissionClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return current.astimezone(tz)
+
+    monkeypatch.setattr("openadapt_flow.runtime.process_v1.datetime", AdmissionClock)
     contract = ProcessContract(
         schema_version="openadapt.process-contract/v1",
         name="flow-process",
@@ -330,24 +361,33 @@ def test_v1_runs_an_admitted_flow_child(tmp_path: Path) -> None:
             success=True,
         )
 
-    result = execute_process_contract_v1(
-        contract,
-        parent_dir=tmp_path,
-        run_dir=tmp_path / "run-flow",
-        inputs={},
-        child_run=flow_run,
-        qualification_signers=_trust(),
-        code_signers={},
-        runtime_environment_digest=_digest(b"unused"),
-        receipt_private_key=key,
-        receipt_issuer_key_id="receipt-signer-0001",
-        environment_id="environment-local-0001",
-        runner_id="runner-local-0001",
-        allow_trusted_code=False,
+    expectation = (
+        pytest.raises(ProcessV1Error, match=f"admission refused: .*{error}")
+        if error
+        else nullcontext()
     )
+    with expectation:
+        result = execute_process_contract_v1(
+            contract,
+            parent_dir=tmp_path,
+            run_dir=tmp_path / "run-flow",
+            inputs={},
+            child_run=flow_run,
+            qualification_signers=_trust(),
+            code_signers={},
+            runtime_environment_digest=_digest(b"unused"),
+            receipt_private_key=key,
+            receipt_issuer_key_id="receipt-signer-0001",
+            environment_id="environment-local-0001",
+            runner_id="runner-local-0001",
+            allow_trusted_code=False,
+        )
 
-    assert result.state.outcome == "verified"
-    assert seen == ["intake"]
+    if error:
+        assert seen == []
+    else:
+        assert result.state.outcome == "verified"
+        assert seen == ["intake"]
 
 
 def _human_provider(child, task, authentication, request_dir):
