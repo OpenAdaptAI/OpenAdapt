@@ -55,8 +55,10 @@ classifiers = [
 dependencies = [
     "click>=8.0.0",
     "openadapt-flow[browser,hosted]>=1.29.0,<2.0.0; python_version < '3.13'",
-    # Day-1 partner kit: `pip install openadapt` must expose
-    # `openadapt-agent serve --allow-run` without a second package.
+    # Day-1 partner kit: `pip install openadapt` must expose the
+    # `openadapt-agent` command without a second package. 2.0.1 serves only
+    # `--bundles`; the bundle-free tutorial `serve --allow-run` needs a later
+    # agent release (see `_AGENT_TUTORIAL_SERVE_MINIMUM` in openadapt/cli.py).
     "openadapt-agent>=2.0.1,<3; python_version < '3.13'",
 ]
 
