@@ -159,6 +159,7 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     # The halted rerun ends RECONCILIATION_REQUIRED. Nothing may claim the
     # store is unchanged or that a retry is safe.
     assert "unchanged" not in result.output
+    # vocab-allow: no-change-claim -- asserts that the claim is absent
     assert "nothing was written" not in result.output
     assert (
         "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)"

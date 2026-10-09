@@ -55,7 +55,8 @@ Every run ends with one of these results:
 | Result | What it means |
 |---|---|
 | Done and checked | It saved the entry and read the record back to confirm it. |
-| Stopped before saving | Something didn't match, so it stopped before it changed anything and asked a person. Nothing was written. |
+| Stopped before saving | Something didn't match, so it stopped before it changed anything and asked a person. Nothing was written. <!-- vocab-allow: no-change-claim -- defines the result that only a proven no-effect outcome gets --> |
+| Blocked before saving | A rule, an approval, or the right-record check blocked the run before it saved anything. Nothing was written. <!-- vocab-allow: no-change-claim -- defines the result that only a proven no-effect outcome gets --> |
 | Check the record | A save may have gone through. A person checks the record before anything is retried. |
 | Finished, not checked | It did the steps but didn't confirm the saved result, as in a practice run. |
 | Didn't finish | It couldn't complete the task. Its run report says what's known about whether anything was written. |
@@ -322,13 +323,20 @@ outcomes are not interchangeable:
 | `COMPLETED_UNVERIFIED` | A Demo run finished without production-grade effect evidence. |
 | `ROLLED_BACK` | A duplicate or collateral write was compensated and re-verified. |
 
-The plain results at the top of this page map to these outcomes. Done and
-checked is `VERIFIED`. Stopped before saving is `HALTED_BEFORE_EFFECT`. Check
-the record is `RECONCILIATION_REQUIRED`. Finished, not checked is
-`COMPLETED_UNVERIFIED`. Didn't finish is `FAILED_PLATFORM`. `CANCELED` and
-`REJECTED_POLICY` also end before any business effect. A surface derives the
-plain result from the transaction outcome, never from a coarse `HALTED` label
-alone.
+The plain results at the top of this page map to these outcomes:
+
+| Plain result | Transaction outcome |
+|---|---|
+| Done and checked | `VERIFIED` |
+| Stopped before saving | `HALTED_BEFORE_EFFECT`, `CANCELED` |
+| Blocked before saving | `REJECTED_POLICY` |
+| Check the record | `RECONCILIATION_REQUIRED`, `ROLLED_BACK`, and a `HALTED` run with no transaction outcome |
+| Finished, not checked | `COMPLETED_UNVERIFIED` |
+| Didn't finish | `FAILED_PLATFORM` |
+
+A surface derives the plain result from the transaction outcome, never from a
+coarse `HALTED` label alone. A value a surface doesn't recognize reads as
+Check the record.
 
 A resumed `RECONCILIATION_REQUIRED` run has to reacquire and reconcile the live
 state before it does anything else.
