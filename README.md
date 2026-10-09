@@ -12,10 +12,15 @@ It handles this last manual step in EMRs, payer portals, and desktop apps,
 including apps your staff reach through Citrix or remote desktop. When
 something doesn't match, it stops and asks a person instead of guessing.
 
+To watch it work first, open the [live demo](https://app.openadapt.ai/demo).
+It shows recorded runs that use synthetic data.
+
 <!--
   IMAGE PLACEHOLDER for the design wave. Replace this comment with the image.
   File: media/before-after-referral.png, 1600x800, solid light background so it
   reads in GitHub dark mode. Label it "Illustration".
+  Reference it by its absolute raw.githubusercontent.com URL. PyPI shows this
+  README too, and a relative image path doesn't render there.
   Left column, "Today": a staff member keys a referral into a generic EMR
   window and trusts the "Saved" banner.
   Right column, "With OpenAdapt": the same screens, the saved record read back
@@ -36,11 +41,12 @@ Here's one example: a faxed referral that staff enter into the EMR.
 | Your staff's part | Type every referral. | Review the runs that OpenAdapt stops on. |
 | What you set up | Nothing new. | No EMR integration. The record check needs a second way to read the record, such as a report, an API, or a read-only login. |
 
-Sources for the "Today" times: UCSF Pediatric Access Center, JAMIA Open 2020
+Sources for the "Today" times:
+[UCSF Pediatric Access Center, JAMIA Open 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/)
 (mean 719 seconds per faxed referral, including a call to the patient), and
-Calderdale and Huddersfield NHS Foundation Trust, HFMA case study 2024 (10
-minutes per referral). No OpenAdapt customer has measured an "after" time yet,
-so the table doesn't claim a time saving.
+[Calderdale and Huddersfield NHS Foundation Trust, HFMA case study 2024](https://www.hfma.org.uk/system/files/2024-04/Using%20digital%20technologies%20to%20process%20admin%20tasks%20Case%20Study%20v7.pdf)
+(10 minutes per referral). No OpenAdapt customer has measured an "after" time
+yet, so the table doesn't claim a time saving.
 
 ## What you see and control
 
@@ -231,8 +237,8 @@ openadapt flow lint <out>/bundle
 
 ## Give an agent the run tool
 
-`openadapt-agent` serves compiled programs to an MCP client. Launcher 1.16.0
-on PyPI doesn't install it, so install it by name:
+`openadapt-agent` serves compiled programs to an MCP client. Launcher releases
+after 1.16.0 install it with `openadapt`. With 1.16.0, install it by name:
 
 ```bash
 python -m pip install --upgrade openadapt-agent
@@ -318,9 +324,10 @@ outcomes are not interchangeable:
 The plain results at the top of this page map to these outcomes. Done and
 checked is `VERIFIED`. Stopped before saving is `HALTED_BEFORE_EFFECT`. Check
 the record is `RECONCILIATION_REQUIRED`. Finished, not checked is
-`COMPLETED_UNVERIFIED`. Didn't finish is `FAILED_PLATFORM`. A surface derives
-the plain result from the transaction outcome, never from a coarse `HALTED`
-label alone.
+`COMPLETED_UNVERIFIED`. Didn't finish is `FAILED_PLATFORM`. `CANCELED` and
+`REJECTED_POLICY` also end before any business effect. A surface derives the
+plain result from the transaction outcome, never from a coarse `HALTED` label
+alone.
 
 A resumed `RECONCILIATION_REQUIRED` run has to reacquire and reconcile the live
 state before it does anything else.
@@ -384,8 +391,8 @@ paywalled.
 
 | Evidence | Result |
 |---|---|
-| Public OpenEMR field test, measured 2026-07-08 on Flow 0.1.0 | Compiled replay passed the saved-row OCR check on 19 of 20 runs at a 39.2 s median with 0 model API calls, and run 20 halted safely. A computer-use agent finished 10 of 10 at about $0.55 a run at July 2026 list prices. This was a shared public demo and a small sample. |
-| Fault test on a test record system | 72 of 90 runs left the record wrong: missing, partial, duplicated, or on the wrong record. A check that trusted the success banner passed 54 of those 72. One separate read of the record passed 9 of the 72. We injected these faults into our own engine, so this is a coverage test over a fixed fault list, not a real-world error rate. |
+| Public OpenEMR field test, measured 2026-07-08 on a Flow 0.1.0 development checkout | Compiled replay passed the saved-row OCR check on 19 of 20 runs at a 39.2 s median with 0 model API calls, and run 20 halted safely. A computer-use agent finished 10 of 10 at about $0.55 a run at July 2026 list prices. This was a shared public demo and a small sample. |
+| Fault test on a local test record system, measured 2026-07-21 | 72 of 90 runs left the record wrong: missing, partial, duplicated, or on the wrong record. A check that trusted the success banner passed 54 of those 72. One separate read of the record passed 9 of the 72, all of one kind: a write to a billing table that the read didn't cover. Every check also stopped 9 of the 18 runs that had saved correctly, because the client never got the reply. We chose these faults and injected them on our own test server, so this is a coverage test over a fixed fault list, not a real-world error rate. |
 | Founding-team heart-care RVU audit (preliminary) | About $75,000/year in estimated recovered billables, and several hours of monthly audit work. These figures are preliminary and under review pending final customer confirmation. |
 
 Each result belongs to its named task and environment. Qualifying a new
