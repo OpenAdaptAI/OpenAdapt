@@ -12,17 +12,29 @@ installed `openadapt-flow` engine.
 ```bash
 python -m pip install --upgrade openadapt
 openadapt flow tutorial [--headed] [--break-it] [--out NEW_DIRECTORY]
-openadapt-agent serve --allow-run
 ```
 
 `openadapt flow tutorial` is the command that writes a `VERIFIED` receipt. It
 runs the bundled synthetic MockMed workflow from recording through an
 independently verified Standard-profile result. `openadapt quickstart --break-it`
-is the halt demo: it reruns the same certified bundle against a lying backend,
-and the independent oracle must HALT and leave the store unchanged.
-`openadapt-agent serve --allow-run` then generates the public MockMed bundle at
-serve time and hosts it over MCP. A client POSTs authorized work and gets a
-receipt. Frames stay on this machine.
+is the halt demo. It reruns the same certified bundle against a backend that
+rejects the write after the app shows success. The independent read finds no
+saved record, and the run halts with transaction outcome
+`RECONCILIATION_REQUIRED`, so nothing is retried until a person checks the
+record.
+
+The engine supports Python 3.10 through 3.12. On Python 3.13 or newer, pip
+installs only the launcher (from the release after 1.16.0) and every engine
+command prints the fix: `uv tool install --python 3.12 openadapt`.
+
+To serve compiled programs to an MCP client, install the agent bridge by name.
+Launcher 1.16.0 on PyPI doesn't include it, and `openadapt-agent` 2.0.1
+requires `--bundles`:
+
+```bash
+python -m pip install --upgrade openadapt-agent
+openadapt-agent serve --bundles <bundle or directory of bundles> --allow-run
+```
 
 ## Flow lifecycle
 

@@ -5,7 +5,12 @@
 > launcher install contract close to the package that implements it.
 
 OpenAdapt supports Python 3.10, 3.11, and 3.12. Use a virtual environment for
-an isolated install.
+an isolated install. On Python 3.13 or newer, the engine doesn't install yet.
+Use uv, which downloads Python 3.12 for you:
+
+```bash
+uv tool install --python 3.12 openadapt
+```
 
 ## Install and run the browser tutorial
 

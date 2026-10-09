@@ -43,11 +43,19 @@ class _FlowFirstGroup(click.Group):
     The demonstration compiler is the flagship, so it should lead the
     command listing instead of sorting alphabetically behind ``capture``.
     Everything else keeps its normal alphabetical order.
+
+    On an interpreter the engine doesn't support, the help starts with the
+    remedy, so a bare ``openadapt`` explains the problem before anything else.
     """
 
     def list_commands(self, ctx):
         commands = super().list_commands(ctx)
         return sorted(commands, key=lambda name: (name != "flow", name))
+
+    def format_help(self, ctx, formatter):
+        if not _python_supported():
+            formatter.write(_python_remedy() + "\n\n")
+        super().format_help(ctx, formatter)
 
 
 @click.group(cls=_FlowFirstGroup)
@@ -61,10 +69,13 @@ def main():
     training/evaluation commands are research.
 
     \b
-    Quick Start:
+    Quick Start (Python 3.10-3.12):
         python -m pip install --upgrade openadapt
         openadapt flow tutorial
-        openadapt-agent serve --allow-run
+
+    \b
+    Halt demo:
+        openadapt quickstart --break-it
 
     \b
     Manual Demo Lifecycle:
@@ -76,11 +87,10 @@ def main():
 
     The manual demo is runnable but not certified for consequential work.
     Use `openadapt flow tutorial` for the effect-verified first run.
-    `openadapt-agent serve --allow-run` then exposes run_* tools over MCP.
 
     \b
-    Halt demo:
-        openadapt quickstart --break-it
+    Give an MCP client your compiled workflows:
+        openadapt-agent serve --bundles DIR --allow-run
     """
     pass
 
@@ -112,8 +122,73 @@ def _correct_released_flow_x11_sonames() -> None:
     browser_setup._LINUX_CHROMIUM_SONAMES = corrected
 
 
+# Flow prints its own follow-up commands with the `openadapt-flow` executable
+# name. A `uv tool install openadapt` (what https://openadapt.ai/install.sh
+# runs) puts only `openadapt` on PATH, so a printed `openadapt-flow record ...`
+# fails there. `openadapt flow <verb>` works for every install method.
+_FLOW_COMMAND = re.compile(
+    r"(?<![\w./\[-])(?<!uvx )openadapt-flow (?=([a-z][a-z-]*)\b)"
+)
+# Verbs to rewrite when Flow's parser can't be read. Only real Flow verbs are
+# rewritten, so a package name or a sentence that mentions Flow stays as is.
+_FALLBACK_FLOW_VERBS = frozenset(
+    {"compile", "explain", "lint", "record", "replay", "tutorial", "visualize"}
+)
+
+
+def _flow_verbs() -> frozenset[str]:
+    """Return the installed Flow's top-level subcommand names."""
+    try:
+        import argparse
+
+        from openadapt_flow.__main__ import build_parser
+
+        parser = build_parser()
+        for action in parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                return frozenset(action.choices)
+    except Exception:
+        pass
+    return _FALLBACK_FLOW_VERBS
+
+
+def _launcher_spelling(text: str, verbs: frozenset[str]) -> str:
+    """Rewrite printed `openadapt-flow <verb>` commands to `openadapt flow`."""
+
+    def replace(match: re.Match) -> str:
+        return "openadapt flow " if match.group(1) in verbs else match.group(0)
+
+    return _FLOW_COMMAND.sub(replace, text)
+
+
+class _LauncherSpellingStream:
+    """Text stream that rewrites Flow's printed commands to launcher form.
+
+    Everything except ``write`` delegates to the wrapped stream, so
+    ``isatty``, ``fileno``, ``encoding``, and ``flush`` behave as before.
+    """
+
+    def __init__(self, stream, verbs: frozenset[str]):
+        self._stream = stream
+        self._verbs = verbs
+
+    def write(self, text):
+        self._stream.write(_launcher_spelling(text, self._verbs))
+        return len(text)
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
 def _invoke_flow(argv: list[str]) -> int:
     """Invoke the canonical engine once and return its exit code."""
+    if not _python_supported():
+        _echo_python_remedy()
+        return 1
     try:
         from openadapt_flow.__main__ import main as flow_main
     except ImportError:
@@ -123,7 +198,15 @@ def _invoke_flow(argv: list[str]) -> int:
         return 1
 
     _correct_released_flow_x11_sonames()
-    return int(flow_main(argv))
+    if argv[:1] != ["tutorial"]:
+        return int(flow_main(argv))
+    # The tutorial is the first-run path and ends by printing next steps.
+    # Rewrite only its human-readable output; other verbs can print
+    # machine-readable output that must stay byte-for-byte.
+    from contextlib import redirect_stdout
+
+    with redirect_stdout(_LauncherSpellingStream(sys.stdout, _flow_verbs())):
+        return int(flow_main(argv))
 
 
 def _run_flow(argv: list[str]) -> None:
@@ -139,29 +222,100 @@ def _run_flow(argv: list[str]) -> None:
 
 
 _DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
-_PYTHON_REMEDY = (
-    "OpenAdapt needs Python 3.10\u20133.12. Easiest fix: "
-    "curl -LsSf https://astral.sh/uv/install.sh | sh && "
-    "uv venv --python 3.12 && uv pip install openadapt\n"
+
+# Oldest and newest interpreter the engine supports. openadapt-flow,
+# openadapt-agent, and Flow's OCR dependency publish Requires-Python <3.13, so
+# pyproject.toml installs them only below 3.13 while the launcher itself
+# installs on any Python >=3.10. Without that split, pip on 3.13 and 3.14
+# silently backtracked to openadapt 1.3.0, an unrelated pre-compiler CLI.
+# tests/test_python_support.py keeps this range, the dependency markers, the
+# classifiers, and the CI guard matrix in step.
+_SUPPORTED_PYTHON = ((3, 10), (3, 12))
+_PYTHON_FIX = (
+    "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "
+    "have it:\n"
+    "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
+    "  uv tool install --python 3.12 openadapt\n"
+    "Then run: openadapt quickstart --break-it\n"
     "Or use the installer script: https://raw.githubusercontent.com/"
     "OpenAdaptAI/openadapt-flow/main/scripts/install.sh"
 )
 
 
+def _python_minor() -> tuple[int, int]:
+    """Return this interpreter's ``(major, minor)`` version."""
+    return (sys.version_info[0], sys.version_info[1])
+
+
+def _python_supported() -> bool:
+    """Return whether this interpreter is in the engine's supported range."""
+    oldest, newest = _SUPPORTED_PYTHON
+    return oldest <= _python_minor() <= newest
+
+
+def _python_remedy() -> str:
+    """Return the plain-language fix for this interpreter."""
+    current = "{}.{}".format(*_python_minor())
+    if _python_supported():
+        # A supported interpreter can still refuse installs (PEP 668).
+        reason = (
+            "OpenAdapt needs Python 3.10\u20133.12 in its own environment. "
+            f"This Python {current} is managed by your operating system, so "
+            "pip can't add packages to it."
+        )
+    else:
+        reason = (
+            "OpenAdapt needs Python 3.10\u20133.12. This is Python "
+            f"{current}, which the OpenAdapt engine doesn't support yet, so "
+            "only the launcher is installed."
+        )
+    return f"{reason}\n{_PYTHON_FIX}"
+
+
 def _echo_python_remedy() -> None:
     """Print the plain-language fix for an unsupported interpreter."""
-    click.echo(_PYTHON_REMEDY, err=True)
+    click.echo(_python_remedy(), err=True)
 
 
 def _require_supported_python() -> None:
-    """Stop before delegation when pip cannot resolve this launcher.
+    """Stop before delegation when this interpreter cannot run the engine.
 
-    The requires-python bound means a >=3.13 interpreter fails pip
-    resolution with raw resolver noise; give the remedy here instead.
+    On Python 3.13 and newer pip installs the launcher without the engine
+    (see `_SUPPORTED_PYTHON`). Any command that needs the engine stops here
+    with the remedy instead of an ImportError or a misleading reinstall hint.
     """
-    if sys.version_info >= (3, 13):
+    if not _python_supported():
         _echo_python_remedy()
         raise click.exceptions.Exit(1)
+
+
+# openadapt-agent 2.0.1 requires `serve --bundles`. The bundle-free
+# `serve --allow-run` that generates and serves the synthetic tutorial ships
+# after it, so the quickstart offers that command only when it will work.
+_AGENT_TUTORIAL_SERVE_MINIMUM = (2, 0, 2)
+
+
+def _release_tuple(value: str) -> Optional[tuple[int, int, int]]:
+    """Parse a stable ``X.Y.Z`` release, ignoring post and local suffixes."""
+    match = re.fullmatch(
+        r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?(?:\+[a-zA-Z0-9.-]+)?", value
+    )
+    if match is None:
+        return None
+    major, minor, patch = (int(part) for part in match.groups())
+    return major, minor, patch
+
+
+def _agent_serves_tutorial() -> bool:
+    """Return whether the installed agent bridge can serve the tutorial."""
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+
+    try:
+        installed = _release_tuple(dist_version("openadapt-agent"))
+    except PackageNotFoundError:
+        return False
+    return installed is not None and installed >= _AGENT_TUTORIAL_SERVE_MINIMUM
 
 
 def _is_externally_managed_error(error: BaseException) -> bool:
@@ -283,7 +437,12 @@ def quickstart(
             "the screen claimed success and the system of record disagreed."
         )
         click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
-        click.echo("The independent oracle kept the store unchanged.")
+        # The halted rerun's transaction outcome is RECONCILIATION_REQUIRED,
+        # so say what the engine does next, not that nothing was written.
+        click.echo(
+            "The engine reported a halt and retries nothing until a person "
+            "checks the record."
+        )
     click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
     if not break_it:
         click.echo(
@@ -294,9 +453,12 @@ def quickstart(
         "See a fail-safe halt: openadapt flow replay "
         f"{root / 'bundle'} --drift modal --run-dir {root}-halt"
     )
-    click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
-    click.echo("  openadapt-agent serve --allow-run")
-    click.echo("A client POSTs authorized work and gets a receipt. Frames stay here.")
+    if _agent_serves_tutorial():
+        click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
+        click.echo("  openadapt-agent serve --allow-run")
+        click.echo(
+            "A client sends authorized work and gets a receipt. Frames stay here."
+        )
     click.echo(
         "Connect this computer when you want Cloud history and collaboration: "
         "https://app.openadapt.ai/dashboard/settings/ingest"
@@ -314,13 +476,8 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
-    match = re.fullmatch(
-        r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?(?:\+[a-zA-Z0-9.-]+)?", value
-    )
-    if match is None:
-        return False
-    parsed = tuple(int(part) for part in match.groups())
-    return (1, 29, 0) <= parsed < (2, 0, 0)
+    parsed = _release_tuple(value)
+    return parsed is not None and (1, 29, 0) <= parsed < (2, 0, 0)
 
 
 @main.command("deploy")
@@ -378,6 +535,14 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
 
     click.echo("\nHealth checks:")
     failures = []
+    if not _python_supported():
+        failures.append("python")
+        click.echo(
+            f"  [UNSUPPORTED] Python {platform.python_version()}; the OpenAdapt "
+            "engine supports Python 3.10\u20133.12"
+        )
+        for line in _PYTHON_FIX.splitlines():
+            click.echo(f"     {line}")
     flow_importable = find_spec("openadapt_flow") is not None
     flow_version_ready = flow_version != "not installed" and _supported_flow_version(
         flow_version
@@ -537,6 +702,7 @@ def connect(pairing, uri, host, device_name, destination_kind, trusted_host):
     """
     if bool(pairing) == bool(uri):
         raise click.UsageError("Pass exactly one of --pairing or --uri.")
+    _require_supported_python()
     try:
         from openadapt_flow import hosted
 
@@ -1045,6 +1211,17 @@ def doctor(backend: str | None):
 
     click.echo(f"\nPython: {platform.python_version()}")
     click.echo(f"Platform: {platform.system()} {platform.release()}")
+    if not _python_supported():
+        # Every later check would report the engine as missing and suggest a
+        # reinstall that can't help on this interpreter. Say what will.
+        click.echo(
+            "  [UNSUPPORTED] The OpenAdapt engine supports Python 3.10\u20133.12."
+        )
+        click.echo(_python_remedy())
+        raise click.ClickException(
+            "System check failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
+            "as shown above, and then run this command again."
+        )
 
     from importlib.util import find_spec
 

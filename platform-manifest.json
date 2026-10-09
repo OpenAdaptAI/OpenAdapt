@@ -1120,7 +1120,7 @@
     }
   },
   "compatibility": {
-    "python": ">=3.10,<3.13",
+    "python": ">=3.10",
     "launcher_requires": {
       "openadapt-agent": [
         ">=2.0.1,<3"
