@@ -318,6 +318,39 @@ def _agent_serves_tutorial() -> bool:
     return installed is not None and installed >= _AGENT_TUTORIAL_SERVE_MINIMUM
 
 
+def _transaction_outcome(run_dir: Path) -> Optional[str]:
+    """Return the transaction outcome a run recorded, or None if unreadable."""
+    import json
+
+    try:
+        report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    outcome = report.get("transaction_outcome") if isinstance(report, dict) else None
+    return outcome if isinstance(outcome, str) else None
+
+
+def _halted_rerun_result(run_dir: Path) -> str:
+    """Say what the halted rerun left behind, from its transaction outcome.
+
+    Only HALTED_BEFORE_EFFECT proves that nothing was written. Any other
+    value, a missing report, or an unknown outcome means a save may have gone
+    through, so the line tells the reader to check the record and never says
+    that a retry is safe.
+    """
+    outcome = _transaction_outcome(run_dir)
+    if outcome == "HALTED_BEFORE_EFFECT":
+        return (
+            "Result: stopped before saving (transaction outcome "
+            "HALTED_BEFORE_EFFECT). The engine proved nothing was written."
+        )
+    return (
+        f"Result: check the record (transaction outcome {outcome or 'unknown'}). "
+        "A save may have gone through, so nothing is retried until a person "
+        "checks the record."
+    )
+
+
 def _is_externally_managed_error(error: BaseException) -> bool:
     """Match pip's PEP 668 externally-managed-environment failure text."""
     return "externally-managed-environment" in str(error)
@@ -437,12 +470,7 @@ def quickstart(
             "the screen claimed success and the system of record disagreed."
         )
         click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
-        # The halted rerun's transaction outcome is RECONCILIATION_REQUIRED,
-        # so say what the engine does next, not that nothing was written.
-        click.echo(
-            "The engine reported a halt and retries nothing until a person "
-            "checks the record."
-        )
+        click.echo(_halted_rerun_result(root / "run-broken"))
     click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
     if not break_it:
         click.echo(

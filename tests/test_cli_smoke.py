@@ -116,13 +116,31 @@ def test_quickstart_forwards_the_headed_tutorial_option(monkeypatch):
     assert calls[0][-1] == "--headed"
 
 
+def _engine_writing_broken_report(calls, report_text):
+    """Fake engine that records argv and writes the halted rerun's report."""
+
+    def invoke(argv):
+        calls.append(list(argv))
+        if report_text is not None:
+            broken = Path(argv[argv.index("--out") + 1]) / "run-broken"
+            broken.mkdir(parents=True)
+            (broken / "report.json").write_text(report_text, encoding="utf-8")
+        return 0
+
+    return invoke
+
+
 def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     monkeypatch,
 ):
     calls = []
     monkeypatch.setattr(
         "openadapt.cli._invoke_flow",
-        lambda argv: calls.append(list(argv)) or 0,
+        _engine_writing_broken_report(
+            calls,
+            '{"execution_outcome": "HALTED", '
+            '"transaction_outcome": "RECONCILIATION_REQUIRED"}',
+        ),
     )
 
     runner = CliRunner()
@@ -141,7 +159,62 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     # The halted rerun ends RECONCILIATION_REQUIRED. Nothing may claim the
     # store is unchanged or that a retry is safe.
     assert "unchanged" not in result.output
-    assert "retries nothing until a person checks the record" in result.output
+    assert "nothing was written" not in result.output
+    assert (
+        "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)"
+        in result.output
+    )
+    assert "nothing is retried until a person checks the record" in result.output
+
+
+@pytest.mark.parametrize(
+    ("report_text", "expected"),
+    [
+        (
+            '{"transaction_outcome": "HALTED_BEFORE_EFFECT"}',
+            "Result: stopped before saving (transaction outcome "
+            "HALTED_BEFORE_EFFECT). The engine proved nothing was written.",
+        ),
+        (
+            '{"transaction_outcome": "RECONCILIATION_REQUIRED"}',
+            "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)",
+        ),
+        # A value this launcher doesn't know, a coarse HALTED with no
+        # transaction outcome, an unreadable report, or no report at all
+        # can't prove that nothing was written.
+        (
+            '{"transaction_outcome": "SOMETHING_NEW"}',
+            "Result: check the record (transaction outcome SOMETHING_NEW)",
+        ),
+        (
+            '{"execution_outcome": "HALTED"}',
+            "Result: check the record (transaction outcome unknown)",
+        ),
+        ("not json", "Result: check the record (transaction outcome unknown)"),
+        ("[]", "Result: check the record (transaction outcome unknown)"),
+        (None, "Result: check the record (transaction outcome unknown)"),
+    ],
+)
+def test_quickstart_derives_the_halted_rerun_result_from_its_report(
+    monkeypatch, report_text, expected
+):
+    calls = []
+    monkeypatch.setattr(
+        "openadapt.cli._invoke_flow",
+        _engine_writing_broken_report(calls, report_text),
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            cli_main, ["quickstart", "--break-it", "--out", "break-run"]
+        )
+
+    assert result.exit_code == 0, result.output
+    assert expected in result.output
+    if "HALTED_BEFORE_EFFECT" not in expected:
+        assert "nothing was written" not in result.output
+        assert "A save may have gone through" in result.output
 
 
 def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):
