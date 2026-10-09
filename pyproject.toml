@@ -1,7 +1,7 @@
 [project]
 name = "openadapt"
 version = "1.16.0"
-description = "Compile a demonstrated GUI workflow into a deterministic, locally executable program. Zero model calls on healthy runs; halts instead of guessing."
+description = "Enters approved information into the apps your team already uses, checks that it saved, and stops for a person when something doesn't match."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -16,14 +16,19 @@ keywords = [
     "desktop",
     "rdp",
     "citrix",
+    "emr",
+    "data-entry",
 ]
 classifiers = [
     "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Healthcare Industry",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
