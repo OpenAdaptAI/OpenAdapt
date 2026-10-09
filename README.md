@@ -100,8 +100,9 @@ openadapt quickstart --break-it
 
 This runs a synthetic clinic task twice on your computer. The first run is
 done and checked. In the second run, the test server rejects the save after
-the app shows that it saved, and the run stops. On Python 3.13 or newer,
-install with `uv tool install --python 3.12 openadapt` instead.
+the app shows that it saved. The record check finds no saved record, so the
+run stops and leaves the record for a person to check. On Python 3.13 or
+newer, install with `uv tool install --python 3.12 openadapt` instead.
 
 The [developer guide](#developer-guide) below covers authoring your own
 workflow, and [Evidence](#evidence) lists what we've measured so far.
