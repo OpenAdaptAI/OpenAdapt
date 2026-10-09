@@ -86,7 +86,7 @@ To hand off a task your team repeats, tell us about it at
 We scope services per workflow. Hosted plans are on the
 [pricing page](https://openadapt.ai/pricing). If your own AI product decides
 what to enter, OpenAdapt can make that final entry for it and return the
-result. See [OpenAdapt Execute](#openadapt-execute).
+result. See [OpenAdapt Execute](https://openadapt.ai/execute).
 
 ### Run it yourself
 
